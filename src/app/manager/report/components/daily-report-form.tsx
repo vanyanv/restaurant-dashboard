@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { ChevronRight, ChevronLeft, Check } from "lucide-react"
 import { toast } from "sonner"
+import { StoreSelector } from "./store-selector"
 
 interface DailyReportFormProps {
   managerId: string
@@ -21,6 +22,7 @@ interface DailyReportFormProps {
 type FormSection = "basic" | "till" | "checklist" | "prep"
 
 interface FormData {
+  storeId: string
   date: string
   shift: "MORNING" | "EVENING" | ""
   managerName: string
@@ -58,6 +60,7 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
   const [isLoadingReport, setIsLoadingReport] = useState(false)
   
   const [formData, setFormData] = useState<FormData>({
+    storeId: "",
     date: new Date().toISOString().split('T')[0],
     shift: "",
     managerName: managerName,
@@ -76,8 +79,8 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
   })
 
   // Function to load existing report
-  const loadExistingReport = async (date: string, shift: string) => {
-    if (!date || !shift) {
+  const loadExistingReport = async (storeId: string, date: string, shift: string) => {
+    if (!storeId || !date || !shift) {
       setExistingReport(null)
       return
     }
@@ -121,14 +124,14 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
     }
   }
 
-  // Load existing report when date and shift change
+  // Load existing report when store, date and shift change
   useEffect(() => {
-    if (formData.date && formData.shift) {
-      loadExistingReport(formData.date, formData.shift)
+    if (formData.storeId && formData.date && formData.shift) {
+      loadExistingReport(formData.storeId, formData.date, formData.shift)
     } else {
       setExistingReport(null)
     }
-  }, [formData.date, formData.shift])
+  }, [formData.storeId, formData.date, formData.shift])
 
   // Auto-save functionality
   useEffect(() => {
@@ -150,7 +153,7 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
   const getSectionProgress = () => {
     switch (currentSection) {
       case "basic":
-        return formData.shift && formData.managerName ? 100 : 50
+        return formData.storeId && formData.shift && formData.managerName ? 100 : 33
       case "till":
         const tillFields = [formData.startingAmount, formData.endingAmount, formData.cashTips]
         return (tillFields.filter(Boolean).length / tillFields.length) * 100
@@ -173,7 +176,7 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
       let sectionProgress = 0
       switch (section) {
         case "basic":
-          sectionProgress = formData.shift && formData.managerName ? 100 : 50
+          sectionProgress = formData.storeId && formData.shift && formData.managerName ? 100 : 33
           break
         case "till":
           const tillFields = [formData.startingAmount, formData.endingAmount, formData.cashTips]
@@ -227,16 +230,12 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
   const handleSubmit = async () => {
     setIsSubmitting(true)
     try {
-      // Get manager's assigned store (assuming first one for now)
-      const storesResponse = await fetch("/api/manager/stores")
-      const stores = await storesResponse.json()
-      
-      if (!stores || stores.length === 0) {
-        toast.error("No store assigned to you. Please contact your owner.")
+      if (!formData.storeId) {
+        toast.error("Please select a store")
         return
       }
 
-      const storeId = stores[0].id
+      const storeId = formData.storeId
 
       // Calculate prep completion percentages
       const checklistProgress = (Object.values(formData.checklist).filter(Boolean).length / checklistTasks.length) * 100
@@ -279,6 +278,7 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
       
       // Reset form
       setFormData({
+        storeId: formData.storeId, // Keep store selection
         date: new Date().toISOString().split('T')[0],
         shift: "",
         managerName: managerName,
@@ -306,6 +306,11 @@ export function DailyReportForm({ managerId, managerName }: DailyReportFormProps
 
   const renderBasicInfo = () => (
     <div className="space-y-6">
+      <StoreSelector
+        value={formData.storeId}
+        onChange={(storeId) => setFormData(prev => ({ ...prev, storeId }))}
+      />
+      
       <div>
         <Label htmlFor="date" className="text-lg font-medium">Date</Label>
         <Input

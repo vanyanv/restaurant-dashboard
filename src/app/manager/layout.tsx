@@ -32,10 +32,12 @@ export default async function ManagerLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Mobile-first layout - no sidebar */}
-      <main className="w-full">
-        {children}
-      </main>
+      <div className="flex">
+        {/* Sidebar will be added here if needed */}
+        <main className="flex-1 w-full">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

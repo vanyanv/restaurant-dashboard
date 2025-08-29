@@ -3,6 +3,7 @@
 import * as React from "react"
 import { ChevronsUpDown, Plus } from "lucide-react"
 import Image from "next/image"
+import logo from "/public/logo.png"
 
 import {
   DropdownMenu,
@@ -47,7 +48,7 @@ export function TeamSwitcher({
             >
               {typeof activeTeam.logo === 'string' ? (
                 <Image 
-                  src="/logo.png" 
+                  src={logo}
                   alt="Logo" 
                   width={120} 
                   height={70} 
@@ -77,7 +78,7 @@ export function TeamSwitcher({
               >
                 {typeof team.logo === 'string' ? (
                   <Image 
-                    src="/logo.png" 
+                    src={logo}
                     alt="Logo" 
                     width={40} 
                     height={24} 

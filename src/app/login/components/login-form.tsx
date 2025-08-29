@@ -5,6 +5,7 @@ import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
+import logo from "/public/logo.png"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -63,7 +64,7 @@ export function LoginForm({
       <Card>
         <CardHeader className="text-center">
           <Image 
-            src="/logo.png" 
+            src={logo}
             alt="ChrisNEddys Restaurant Dashboard" 
             width={240} 
             height={140} 
