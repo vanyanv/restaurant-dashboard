@@ -45,13 +45,14 @@ interface PageProps {
   }>
 }
 
-export default async function StoreDetailPage({ params }: PageProps) {
-  const { id } = await params
+export default async function StoreDashboardDetailPage({ params }: PageProps) {
   const session = await getServerSession(authOptions)
   
   if (!session) {
     redirect("/login")
   }
+
+  const { id } = await params
 
   const [store, allStores, storeManagers] = await Promise.all([
     getStoreById(id),
@@ -76,7 +77,7 @@ export default async function StoreDetailPage({ params }: PageProps) {
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />
               <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/stores">Stores</BreadcrumbLink>
+                <BreadcrumbLink href="/dashboard/store">Store Dashboard</BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
@@ -88,15 +89,19 @@ export default async function StoreDetailPage({ params }: PageProps) {
       </header>
 
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        {/* Header with Store Selector and Actions */}
+        {/* Header with Store Selector */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard/stores">
+            <Link href="/dashboard/store">
               <Button variant="outline" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <StoreSelector stores={allStores} currentStoreId={store.id} />
+            <StoreSelector 
+              stores={allStores} 
+              currentStoreId={store.id}
+              redirectTo="/dashboard/store"
+            />
           </div>
           {session.user.role === "OWNER" && (
             <Link href={`/dashboard/stores/${store.id}/edit`}>
@@ -209,7 +214,7 @@ export default async function StoreDetailPage({ params }: PageProps) {
                 <UserX className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">No managers assigned to this store</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Managers can be assigned from the Store Management page
+                  Managers can be assigned from the Manager Assignment page
                 </p>
               </div>
             ) : (

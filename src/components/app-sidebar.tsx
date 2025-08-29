@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-  ChefHat,
   Store,
   Users,
   BarChart3,
@@ -33,16 +32,35 @@ const data = {
   teams: [
     {
       name: "ChrisNEddys",
-      logo: ChefHat,
+      logo: "/logo.png",
       plan: "Restaurant Chain",
     }
   ],
   navMain: [
     {
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: BarChart3,
+      isActive: true,
+      items: [
+        {
+          title: "Overview",
+          url: "/dashboard",
+        },
+        {
+          title: "Store Dashboard",
+          url: "/dashboard/store",
+        },
+        {
+          title: "Analytics",
+          url: "/dashboard/analytics",
+        },
+      ],
+    },
+    {
       title: "Store Management",
       url: "/dashboard/stores",
       icon: Store,
-      isActive: true,
       items: [
         {
           title: "All Stores",
@@ -74,25 +92,6 @@ const data = {
         {
           title: "Create Manager",
           url: "/dashboard/managers/new",
-        },
-      ],
-    },
-    {
-      title: "Analytics",
-      url: "/dashboard/analytics",
-      icon: BarChart3,
-      items: [
-        {
-          title: "Revenue Overview",
-          url: "/dashboard/analytics",
-        },
-        {
-          title: "Performance Reports",
-          url: "/dashboard/analytics/reports",
-        },
-        {
-          title: "Store Comparison",
-          url: "/dashboard/analytics/comparison",
         },
       ],
     },

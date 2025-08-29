@@ -18,12 +18,13 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function EditStorePage({ params }: PageProps) {
+  const { id } = await params
   const session = await getServerSession(authOptions)
   
   if (!session) {
@@ -31,10 +32,10 @@ export default async function EditStorePage({ params }: PageProps) {
   }
 
   if (session.user.role !== "OWNER") {
-    redirect(`/dashboard/stores/${params.id}`)
+    redirect(`/dashboard/stores/${id}`)
   }
 
-  const store = await getStoreById(params.id)
+  const store = await getStoreById(id)
 
   if (!store) {
     notFound()

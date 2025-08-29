@@ -57,7 +57,7 @@ export async function createStore(formData: FormData) {
     return { success: true, store }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { error: error.errors[0].message }
+      return { error: error.issues[0].message }
     }
     console.error("Create store error:", error)
     return { error: "Failed to create store" }
@@ -74,8 +74,12 @@ export async function getStores() {
 
     const stores = await prisma.store.findMany({
       where: session.user.role === "OWNER" 
-        ? { ownerId: session.user.id }
+        ? { 
+            ownerId: session.user.id,
+            isActive: true
+          }
         : {
+            isActive: true,
             managers: {
               some: {
                 managerId: session.user.id,
@@ -301,7 +305,7 @@ export async function updateStore(storeId: string, formData: FormData) {
     return { success: true, store: updatedStore }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return { error: error.errors[0].message }
+      return { error: error.issues[0].message }
     }
     console.error("Update store error:", error)
     return { error: "Failed to update store" }
@@ -353,6 +357,7 @@ export async function deleteStore(storeId: string) {
     })
 
     revalidatePath("/dashboard/stores")
+    revalidatePath("/dashboard")
     return { success: true }
   } catch (error) {
     console.error("Delete store error:", error)

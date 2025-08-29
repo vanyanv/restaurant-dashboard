@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { ChefHat } from "lucide-react"
+import Image from "next/image"
+import logoImage from "/public/logo.png"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +12,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -58,13 +58,15 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center">
-              <ChefHat className="h-8 w-8 text-primary" />
-            </div>
-          </div>
-          <CardTitle className="text-2xl">ChrisNEddys Dashboard</CardTitle>
-          <CardDescription>
+          <Image 
+            src={logoImage} 
+            alt="ChrisNEddys Restaurant Dashboard" 
+            width={240} 
+            height={140} 
+            className="object-contain mx-auto mb-6"
+            priority
+          />
+          <CardDescription className="text-base">
             Sign in to manage your restaurant locations
           </CardDescription>
         </CardHeader>

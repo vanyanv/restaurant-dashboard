@@ -71,7 +71,8 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24 hours
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -87,10 +88,17 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as Role
       }
       return session
-    }
+    },
   },
   pages: {
     signIn: "/login",
-    error: "/login"
+    error: "/login",
+    signOut: "/login"
+  },
+  events: {
+    async signOut(message) {
+      // Log logout events for security monitoring
+      console.log(`User signed out: ${message.token?.id || 'unknown'}`)
+    }
   }
 }

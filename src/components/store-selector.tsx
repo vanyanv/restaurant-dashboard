@@ -34,10 +34,12 @@ interface StoreData {
 
 interface StoreSelectorProps {
   stores: StoreData[]
-  currentStoreId?: string
+  currentStoreId?: string | null
   onStoreSelect?: (storeId: string) => void
   showAllOption?: boolean
   className?: string
+  redirectTo?: string
+  placeholder?: string
 }
 
 export function StoreSelector({ 
@@ -45,7 +47,9 @@ export function StoreSelector({
   currentStoreId, 
   onStoreSelect,
   showAllOption = true,
-  className 
+  className,
+  redirectTo,
+  placeholder = "Select store..."
 }: StoreSelectorProps) {
   const [open, setOpen] = useState(false)
   const router = useRouter()
@@ -57,9 +61,9 @@ export function StoreSelector({
     } else {
       // Default behavior - navigate to store page
       if (storeId === "all") {
-        router.push("/dashboard/stores")
+        router.push(redirectTo ? `${redirectTo}s` : "/dashboard/stores")
       } else {
-        router.push(`/dashboard/stores/${storeId}`)
+        router.push(redirectTo ? `${redirectTo}/${storeId}` : `/dashboard/stores/${storeId}`)
       }
     }
   }
@@ -68,7 +72,7 @@ export function StoreSelector({
   
   const displayText = currentStoreId === "all" 
     ? "All Stores" 
-    : currentStore?.name || "Select store..."
+    : currentStore?.name || placeholder
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
