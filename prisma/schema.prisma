@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+}
+
+enum Shift {
+  MORNING
+  EVENING
+  BOTH
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          Role
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  ownedStores   Store[]   @relation("StoreOwner")
+  managedStores StoreManager[]
+  reports       DailyReport[]
+  
+  @@index([email])
+}
+
+model Store {
+  id          String    @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  ownerId     String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  owner       User      @relation("StoreOwner", fields: [ownerId], references: [id])
+  managers    StoreManager[]
+  reports     DailyReport[]
+  prepTasks   PrepTask[]
+  
+  @@index([ownerId])
+}
+
+model StoreManager {
+  id          String    @id @default(cuid())
+  storeId     String
+  managerId   String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  
+  // Relations
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  manager     User      @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  
+  @@unique([storeId, managerId])
+  @@index([storeId])
+  @@index([managerId])
+}
+
+model DailyReport {
+  id                   String    @id @default(cuid())
+  storeId              String
+  date                 DateTime  @db.Date
+  shift                Shift
+  
+  // Financial data
+  startingAmount       Float
+  endingAmount         Float
+  totalSales           Float?
+  cashSales            Float?
+  cardSales            Float?
+  tipCount             Float
+  
+  // Prep completion
+  morningPrepCompleted Int       // Percentage 0-100
+  eveningPrepCompleted Int       // Percentage 0-100
+  
+  // Additional info
+  managerId            String
+  notes                String?
+  weatherCondition     String?
+  customerCount        Int?
+  
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  
+  // Relations
+  store                Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  manager              User      @relation(fields: [managerId], references: [id])
+  prepTaskStatus       PrepTaskStatus[]
+  
+  @@unique([storeId, date, shift])
+  @@index([storeId])
+  @@index([date])
+  @@index([managerId])
+}
+
+model PrepTask {
+  id          String    @id @default(cuid())
+  storeId     String
+  taskName    String
+  description String?
+  shift       Shift
+  isActive    Boolean   @default(true)
+  orderIndex  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  status      PrepTaskStatus[]
+  
+  @@index([storeId])
+}
+
+model PrepTaskStatus {
+  id            String        @id @default(cuid())
+  reportId      String
+  taskId        String
+  isCompleted   Boolean       @default(false)
+  completedAt   DateTime?
+  notes         String?
+  
+  // Relations
+  report        DailyReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  task          PrepTask      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  @@unique([reportId, taskId])
+  @@index([reportId])
+  @@index([taskId])
+}

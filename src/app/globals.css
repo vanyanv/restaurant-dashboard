@@ -1,26 +1,159 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ChrisNEddys Restaurant Theme - Red & Orange */
+  
+  /* Main Colors */
+  --background: 24 100% 98.8%;        /* Warm off-white: #FFFBF8 */
+  --foreground: 220 26% 14%;          /* Dark charcoal: #1F2937 */
+  --card: 0 0% 100%;                  /* Pure white: #FFFFFF */
+  --card-foreground: 220 26% 14%;     /* Dark charcoal: #1F2937 */
+  
+  /* Popover */
+  --popover: 0 0% 100%;               /* Pure white: #FFFFFF */
+  --popover-foreground: 220 26% 14%;  /* Dark charcoal: #1F2937 */
+  
+  /* Primary - Restaurant Red */
+  --primary: 0 72% 51%;               /* Restaurant red: #DC2626 */
+  --primary-foreground: 0 0% 100%;    /* White text on red */
+  
+  /* Secondary - Light Orange/Red */
+  --secondary: 24 95% 95%;            /* Very light warm orange: #FEF2F2 */
+  --secondary-foreground: 0 72% 51%;  /* Restaurant red text */
+  
+  /* Muted */
+  --muted: 220 14% 96%;               /* Light gray: #F9FAFB */
+  --muted-foreground: 220 9% 46%;     /* Medium gray: #6B7280 */
+  
+  /* Accent - Orange */
+  --accent: 20 91% 48%;               /* Restaurant orange: #EA580C */
+  --accent-foreground: 0 0% 100%;     /* White text on orange */
+  
+  /* Destructive */
+  --destructive: 0 84% 60%;           /* Bright red: #EF4444 */
+  --destructive-foreground: 0 0% 100%; /* White text */
+  
+  /* UI Elements */
+  --border: 220 13% 91%;              /* Light border: #E5E7EB */
+  --input: 220 13% 91%;               /* Input border: #E5E7EB */
+  --ring: 0 72% 51%;                  /* Focus ring: same as primary */
+  --radius: 0.5rem;
+  
+  /* Chart Colors - Restaurant themed */
+  --chart-1: 0 72% 51%;               /* Red: #DC2626 */
+  --chart-2: 20 91% 48%;              /* Orange: #EA580C */
+  --chart-3: 43 96% 56%;              /* Golden yellow: #F59E0B */
+  --chart-4: 142 71% 45%;             /* Fresh green: #10B981 */
+  --chart-5: 221 83% 53%;             /* Blue accent: #3B82F6 */
+  
+  /* Sidebar */
+  --sidebar: 0 0% 100%;               /* White sidebar */
+  --sidebar-foreground: 220 26% 14%;  /* Dark text */
+  --sidebar-primary: 0 72% 51%;       /* Red primary */
+  --sidebar-primary-foreground: 0 0% 100%; /* White text */
+  --sidebar-accent: 24 95% 95%;       /* Light accent */
+  --sidebar-accent-foreground: 0 72% 51%; /* Red text */
+  --sidebar-border: 220 13% 91%;      /* Light border */
+  --sidebar-ring: 0 72% 51%;          /* Red ring */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.dark {
+  /* ChrisNEddys Restaurant Theme - Dark Mode */
+  
+  /* Main Colors */
+  --background: 0 0% 6%;               /* Deep black: #0F0F0F */
+  --foreground: 0 0% 95%;              /* Off-white text: #F2F2F2 */
+  --card: 0 0% 9%;                     /* Dark card: #171717 */
+  --card-foreground: 0 0% 95%;         /* Off-white text */
+  
+  /* Popover */
+  --popover: 0 0% 9%;                  /* Dark popover: #171717 */
+  --popover-foreground: 0 0% 95%;      /* Off-white text */
+  
+  /* Primary - Brighter red for dark mode */
+  --primary: 0 76% 60%;                /* Bright red: #E53E3E */
+  --primary-foreground: 0 0% 100%;     /* White text */
+  
+  /* Secondary */
+  --secondary: 0 20% 12%;              /* Dark red-tinted: #201515 */
+  --secondary-foreground: 0 76% 70%;   /* Lighter red text */
+  
+  /* Muted */
+  --muted: 0 0% 12%;                   /* Dark muted: #1F1F1F */
+  --muted-foreground: 0 0% 63%;        /* Medium gray text: #A1A1A1 */
+  
+  /* Accent - Brighter orange for dark mode */
+  --accent: 20 95% 58%;                /* Bright orange: #FB923C */
+  --accent-foreground: 0 0% 100%;      /* White text */
+  
+  /* Destructive */
+  --destructive: 0 88% 65%;            /* Bright red: #F87171 */
+  --destructive-foreground: 0 0% 100%; /* White text */
+  
+  /* UI Elements */
+  --border: 0 0% 15%;                  /* Dark border: #262626 */
+  --input: 0 0% 15%;                   /* Dark input border */
+  --ring: 0 76% 60%;                   /* Red focus ring */
+  
+  /* Chart Colors - Dark mode adjusted */
+  --chart-1: 0 76% 60%;                /* Bright red: #E53E3E */
+  --chart-2: 20 95% 58%;               /* Bright orange: #FB923C */
+  --chart-3: 43 96% 65%;               /* Bright yellow: #FCD34D */
+  --chart-4: 142 71% 55%;              /* Bright green: #34D399 */
+  --chart-5: 221 83% 63%;              /* Bright blue: #60A5FA */
+  
+  /* Sidebar */
+  --sidebar: 0 0% 8%;                  /* Dark sidebar: #141414 */
+  --sidebar-foreground: 0 0% 95%;      /* Light text */
+  --sidebar-primary: 0 76% 60%;        /* Bright red */
+  --sidebar-primary-foreground: 0 0% 100%; /* White text */
+  --sidebar-accent: 0 20% 12%;         /* Dark accent */
+  --sidebar-accent-foreground: 0 76% 70%; /* Light red text */
+  --sidebar-border: 0 0% 15%;          /* Dark border */
+  --sidebar-ring: 0 76% 60%;           /* Red ring */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: hsl(var(--border));
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: system-ui, sans-serif;
 }
