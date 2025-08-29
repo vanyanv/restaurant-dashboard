@@ -1,0 +1,6 @@
+# Restaurant Dashboard - Private Application
+User-agent: *
+Disallow: /
+
+# This is a private restaurant management dashboard
+# No public pages should be indexed by search engines
