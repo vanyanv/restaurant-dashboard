@@ -8,7 +8,8 @@
     "start": "next start",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
-    "postinstall": "prisma generate --no-engine"
+    "postinstall": "prisma generate --no-engine",
+    "diagnose:auth": "node scripts/diagnose-auth.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
