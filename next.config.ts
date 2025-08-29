@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/': ['./prisma/**/*'],
   },
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs']
+  },
   images: {
     formats: ['image/webp', 'image/avif'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
@@ -16,6 +19,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Production optimizations
+  compress: true,
+  generateEtags: true,
+  poweredByHeader: false,
 };
 
 export default nextConfig;
