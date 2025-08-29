@@ -7,6 +7,8 @@ import { Store, MapPin, Phone, Plus, Users, BarChart3, Edit, Trash2, Eye } from 
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
 import { DeleteStoreButton } from "./delete-store-button"
+import { StarRatingCompact } from "@/components/ui/star-rating"
+import { YelpSyncButton, YelpSyncAllButton } from "@/components/yelp-sync-button"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -65,14 +67,19 @@ export default async function StoresPage() {
               Manage your restaurant locations and their details
             </p>
           </div>
-          {session.user.role === "OWNER" && (
-            <Link href="/dashboard/stores/new">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add New Store
-              </Button>
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {session.user.role === "OWNER" && stores.length > 0 && (
+              <YelpSyncAllButton />
+            )}
+            {session.user.role === "OWNER" && (
+              <Link href="/dashboard/stores/new">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add New Store
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Store Selector */}
@@ -113,6 +120,7 @@ export default async function StoresPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Store Name</TableHead>
+                  <TableHead>Rating</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Managers</TableHead>
@@ -131,6 +139,13 @@ export default async function StoresPage() {
                         </div>
                         {store.name}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <StarRatingCompact
+                        rating={store.yelpRating}
+                        reviewCount={store.yelpReviewCount}
+                        url={store.yelpUrl}
+                      />
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">

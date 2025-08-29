@@ -4,7 +4,6 @@ import { useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import logoImage from "/public/logo.png"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,7 +43,12 @@ export function LoginForm({
         // Check if sign in was successful
         const session = await getSession()
         if (session) {
-          router.push("/dashboard")
+          // Redirect based on user role
+          if (session.user.role === "MANAGER") {
+            router.push("/manager/report")
+          } else {
+            router.push("/dashboard")
+          }
         }
       }
     } catch (error) {
@@ -59,7 +63,7 @@ export function LoginForm({
       <Card>
         <CardHeader className="text-center">
           <Image 
-            src={logoImage} 
+            src="/logo.png" 
             alt="ChrisNEddys Restaurant Dashboard" 
             width={240} 
             height={140} 

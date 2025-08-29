@@ -14,8 +14,16 @@ const createReportSchema = z.object({
   cashSales: z.number().nullable().optional(),
   cardSales: z.number().nullable().optional(),
   tipCount: z.number(),
+  cashTips: z.number().nullable().optional(),
   morningPrepCompleted: z.number().min(0).max(100),
   eveningPrepCompleted: z.number().min(0).max(100),
+  // New prep completion checkboxes
+  prepMeat: z.boolean().optional(),
+  prepSauce: z.boolean().optional(),
+  prepOnionsSliced: z.boolean().optional(),
+  prepOnionsDiced: z.boolean().optional(),
+  prepTomatoesSliced: z.boolean().optional(),
+  prepLettuce: z.boolean().optional(),
   customerCount: z.number().nullable().optional(),
   notes: z.string().optional()
 })
@@ -91,36 +99,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Store not found or access denied" }, { status: 404 })
     }
 
-    // Check if report already exists for this date and shift
-    const existingReport = await prisma.dailyReport.findUnique({
+    // Use upsert to create or update existing report
+    const report = await prisma.dailyReport.upsert({
       where: {
         storeId_date_shift: {
           storeId: validatedData.storeId,
           date: new Date(validatedData.date),
           shift: validatedData.shift
         }
-      }
-    })
-
-    if (existingReport) {
-      return NextResponse.json(
-        { error: "Report already exists for this date and shift" },
-        { status: 400 }
-      )
-    }
-
-    const report = await prisma.dailyReport.create({
-      data: {
+      },
+      create: {
         ...validatedData,
         date: new Date(validatedData.date),
         managerId: session.user.id
+      },
+      update: {
+        ...validatedData,
+        date: new Date(validatedData.date),
+        managerId: session.user.id,
+        updatedAt: new Date() // Explicitly update timestamp
       },
       include: {
         store: true
       }
     })
 
-    return NextResponse.json(report, { status: 201 })
+    return NextResponse.json(report, { status: 200 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

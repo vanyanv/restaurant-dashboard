@@ -17,14 +17,11 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
-interface PageProps {
-  params: Promise<{
-    id: string
-  }>
-}
-
-export default async function EditStorePage({ params }: PageProps) {
-  const { id } = await params
+export default async function EditStorePage(props: {
+  params: Promise<{ id: string }>
+}) {
+  const params = await props.params
+  const { id } = params
   const session = await getServerSession(authOptions)
   
   if (!session) {

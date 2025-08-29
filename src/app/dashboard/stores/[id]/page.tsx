@@ -20,6 +20,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
+import { StarRatingLarge } from "@/components/ui/star-rating"
+import { YelpSyncButton } from "@/components/yelp-sync-button"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -39,14 +41,11 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-interface PageProps {
-  params: Promise<{
-    id: string
-  }>
-}
-
-export default async function StoreDetailPage({ params }: PageProps) {
-  const { id } = await params
+export default async function StoreDetailPage(props: {
+  params: Promise<{ id: string }>
+}) {
+  const params = await props.params
+  const { id } = params
   const session = await getServerSession(authOptions)
   
   if (!session) {
@@ -98,14 +97,25 @@ export default async function StoreDetailPage({ params }: PageProps) {
             </Link>
             <StoreSelector stores={allStores} currentStoreId={store.id} />
           </div>
-          {session.user.role === "OWNER" && (
-            <Link href={`/dashboard/stores/${store.id}/edit`}>
-              <Button>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit Store
-              </Button>
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {session.user.role === "OWNER" && (
+              <YelpSyncButton
+                storeId={store.id}
+                storeName={store.name}
+                hasAddress={!!store.address}
+                lastSync={store.yelpLastSearch}
+                size="default"
+              />
+            )}
+            {session.user.role === "OWNER" && (
+              <Link href={`/dashboard/stores/${store.id}/edit`}>
+                <Button>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit Store
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Store Information Header */}
@@ -132,6 +142,14 @@ export default async function StoreDetailPage({ params }: PageProps) {
                       </div>
                     )}
                   </CardDescription>
+                  <div className="mt-3">
+                    <StarRatingLarge
+                      rating={store.yelpRating}
+                      reviewCount={store.yelpReviewCount}
+                      url={store.yelpUrl}
+                      lastUpdated={store.yelpUpdatedAt}
+                    />
+                  </div>
                 </div>
               </div>
               <Badge variant={store.isActive ? "default" : "secondary"} className="text-sm">
@@ -152,7 +170,22 @@ export default async function StoreDetailPage({ params }: PageProps) {
         </Card>
 
         {/* Key Metrics */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Yelp Rating</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {store.yelpRating ? store.yelpRating.toFixed(1) : "—"}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {store.yelpReviewCount ? `${store.yelpReviewCount.toLocaleString()} reviews` : "No Yelp data"}
+              </p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Assigned Managers</CardTitle>

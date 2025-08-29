@@ -48,10 +48,6 @@ const data = {
           url: "/dashboard",
         },
         {
-          title: "Store Dashboard",
-          url: "/dashboard/store",
-        },
-        {
           title: "Analytics",
           url: "/dashboard/analytics",
         },
@@ -69,10 +65,6 @@ const data = {
         {
           title: "Create Store",
           url: "/dashboard/stores/new",
-        },
-        {
-          title: "Store Analytics",
-          url: "/dashboard/stores/analytics",
         },
       ],
     },

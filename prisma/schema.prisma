@@ -45,6 +45,15 @@ model Store {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
+  // Yelp integration fields
+  yelpBusinessId   String?   // Yelp's unique business ID
+  yelpRating       Float?    // 1-5 star rating
+  yelpReviewCount  Int?      // Total number of reviews
+  yelpUrl          String?   // Link to Yelp business page
+  yelpUpdatedAt    DateTime? // Last time Yelp data was fetched
+  yelpSearchTerm   String?   // Store name + address used for search
+  yelpLastSearch   DateTime? // Prevent excessive API calls
+  
   // Relations
   owner       User      @relation("StoreOwner", fields: [ownerId], references: [id])
   managers    StoreManager[]
@@ -52,6 +61,7 @@ model Store {
   prepTasks   PrepTask[]
   
   @@index([ownerId])
+  @@index([yelpBusinessId])
 }
 
 model StoreManager {
@@ -83,10 +93,19 @@ model DailyReport {
   cashSales            Float?
   cardSales            Float?
   tipCount             Float
+  cashTips             Float?    // New field for cash tips
   
   // Prep completion
   morningPrepCompleted Int       // Percentage 0-100
   eveningPrepCompleted Int       // Percentage 0-100
+  
+  // Specific prep completion checkboxes
+  prepMeat             Boolean   @default(false)
+  prepSauce            Boolean   @default(false)
+  prepOnionsSliced     Boolean   @default(false)
+  prepOnionsDiced      Boolean   @default(false)
+  prepTomatoesSliced   Boolean   @default(false)
+  prepLettuce          Boolean   @default(false)
   
   // Additional info
   managerId            String

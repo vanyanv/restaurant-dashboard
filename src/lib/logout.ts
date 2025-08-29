@@ -13,13 +13,17 @@ export async function performLogout(): Promise<void> {
         const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
         document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
       })
+      
+      // Immediate redirect using window.location for instant response
+      window.location.href = "/login"
     }
     
-    // Sign out with NextAuth
-    await signOut({ 
+    // Sign out with NextAuth (but don't wait for redirect)
+    signOut({ 
       callbackUrl: "/login",
-      redirect: true 
+      redirect: false  // We handle redirect ourselves above
     })
+    
   } catch (error) {
     console.error("Logout error:", error)
     

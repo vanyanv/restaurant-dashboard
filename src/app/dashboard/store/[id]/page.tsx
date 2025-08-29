@@ -39,20 +39,17 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-interface PageProps {
-  params: Promise<{
-    id: string
-  }>
-}
-
-export default async function StoreDashboardDetailPage({ params }: PageProps) {
+export default async function StoreDashboardDetailPage(props: {
+  params: Promise<{ id: string }>
+}) {
+  const params = await props.params
   const session = await getServerSession(authOptions)
   
   if (!session) {
     redirect("/login")
   }
 
-  const { id } = await params
+  const { id } = params
 
   const [store, allStores, storeManagers] = await Promise.all([
     getStoreById(id),
@@ -103,14 +100,22 @@ export default async function StoreDashboardDetailPage({ params }: PageProps) {
               redirectTo="/dashboard/store"
             />
           </div>
-          {session.user.role === "OWNER" && (
-            <Link href={`/dashboard/stores/${store.id}/edit`}>
-              <Button>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit Store
+          <div className="flex items-center gap-2">
+            <Link href={`/dashboard/analytics/${store.id}`}>
+              <Button variant="outline">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Analytics
               </Button>
             </Link>
-          )}
+            {session.user.role === "OWNER" && (
+              <Link href={`/dashboard/stores/${store.id}/edit`}>
+                <Button>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit Store
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Store Information Header */}
