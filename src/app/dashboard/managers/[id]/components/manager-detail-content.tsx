@@ -75,7 +75,7 @@ export function ManagerDetailContent({ manager, availableStores }: ManagerDetail
       } else {
         toast.success("Manager removed from store successfully!")
         // Update state
-        setAssignments(prev => prev.filter(a => a.store.id !== storeId))
+        setAssignments((prev: any) => prev.filter((a: any) => a.store.id !== storeId))
       }
     } catch (error) {
       toast.error("Failed to remove manager from store")
