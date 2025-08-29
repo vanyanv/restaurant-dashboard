@@ -33,16 +33,12 @@ import {
 import { toast } from "sonner"
 import { assignManager, unassignManager } from "@/app/actions/manager-actions"
 import { format } from "date-fns"
-
-interface ManagerDetailProps {
-  manager: any
-  availableStores: any[]
-}
+import { ManagerDetailProps, StoreAssignment } from "@/types/manager"
 
 export function ManagerDetailContent({ manager, availableStores }: ManagerDetailProps) {
   const [selectedStoreId, setSelectedStoreId] = useState<string>("")
   const [isAssigning, setIsAssigning] = useState(false)
-  const [assignments, setAssignments] = useState(manager.managedStores)
+  const [assignments, setAssignments] = useState<StoreAssignment[]>(manager.managedStores)
 
   const handleAssignStore = async () => {
     if (!selectedStoreId) return
@@ -75,7 +71,7 @@ export function ManagerDetailContent({ manager, availableStores }: ManagerDetail
       } else {
         toast.success("Manager removed from store successfully!")
         // Update state
-        setAssignments((prev: any) => prev.filter((a: any) => a.store.id !== storeId))
+        setAssignments(prev => prev.filter(a => a.store.id !== storeId))
       }
     } catch (error) {
       toast.error("Failed to remove manager from store")

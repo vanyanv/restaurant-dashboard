@@ -17,28 +17,21 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { format, startOfWeek, endOfWeek, subDays } from "date-fns"
+import { StoreWithReports, ManagerDashboardStats, ManagerDashboardData } from "@/types/manager"
 
 interface ManagerDashboardProps {
   managerId: string
-}
-
-interface StoreWithReports {
-  id: string
-  name: string
-  address: string | null
-  recentReports: any[]
-  completionRate: number
-  lastReportDate: string | null
 }
 
 export function ManagerDashboardContent({ managerId }: ManagerDashboardProps) {
   const [stores, setStores] = useState<StoreWithReports[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedStore, setSelectedStore] = useState<string | null>(null)
-  const [weeklyStats, setWeeklyStats] = useState({
+  const [weeklyStats, setWeeklyStats] = useState<ManagerDashboardStats>({
     totalReports: 0,
     avgPrepCompletion: 0,
-    missedShifts: 0
+    missedShifts: 0,
+    expectedReports: 0
   })
 
   useEffect(() => {
@@ -94,6 +87,7 @@ export function ManagerDashboardContent({ managerId }: ManagerDashboardProps) {
               acc + (r.morningPrepCompleted || r.eveningPrepCompleted || 0), 0
             ) / weeklyReports.length
           : 0,
+        expectedReports: 14,
         missedShifts: 14 - weeklyReports.length // Assuming 2 shifts per day
       })
 
