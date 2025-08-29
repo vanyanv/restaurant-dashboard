@@ -30,42 +30,72 @@ declare module "next-auth/jwt" {
 }
 
 export const authOptions: NextAuthOptions = {
+  // Explicitly set the secret for production
+  secret: process.env.NEXTAUTH_SECRET,
+  
   providers: [
     CredentialsProvider({
-      name: "credentials",
+      id: "credentials",
+      name: "credentials", 
+      type: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email
+        try {
+          console.log('🔐 Starting authentication for:', credentials?.email)
+          
+          if (!credentials?.email || !credentials?.password) {
+            console.error('❌ Missing credentials')
+            return null
           }
-        })
 
-        if (!user) {
+          // Add database connection check
+          try {
+            await prisma.$connect()
+            console.log('✅ Database connected successfully')
+          } catch (dbError) {
+            console.error('❌ Database connection failed:', dbError)
+            throw new Error('Database connection failed')
+          }
+
+          const user = await prisma.user.findUnique({
+            where: {
+              email: credentials.email
+            }
+          })
+
+          if (!user) {
+            console.error('❌ User not found:', credentials.email)
+            return null
+          }
+
+          console.log('✅ User found:', user.email, 'Role:', user.role)
+
+          const isPasswordValid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          )
+
+          if (!isPasswordValid) {
+            console.error('❌ Invalid password for user:', credentials.email)
+            return null
+          }
+
+          console.log('✅ Authentication successful for:', user.email)
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+          }
+        } catch (error) {
+          console.error('❌ Authentication error:', error)
           return null
-        }
-
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
-
-        if (!isPasswordValid) {
-          return null
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
+        } finally {
+          await prisma.$disconnect()
         }
       }
     })
@@ -75,7 +105,11 @@ export const authOptions: NextAuthOptions = {
     maxAge: 24 * 60 * 60, // 24 hours
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
+      if (process.env.NEXTAUTH_DEBUG === 'true') {
+        console.log('🔑 JWT Callback - User:', user ? 'Present' : 'Not present', 'Trigger:', trigger)
+      }
+      
       if (user) {
         token.id = user.id
         token.role = user.role
@@ -83,6 +117,10 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
+      if (process.env.NEXTAUTH_DEBUG === 'true') {
+        console.log('🔐 Session Callback - Token ID:', token.id, 'Role:', token.role)
+      }
+      
       if (session.user) {
         session.user.id = token.id as string
         session.user.role = token.role as Role
@@ -98,7 +136,27 @@ export const authOptions: NextAuthOptions = {
   events: {
     async signOut(message) {
       // Log logout events for security monitoring
-      console.log(`User signed out: ${message.token?.id || 'unknown'}`)
+      console.log(`👋 User signed out: ${message.token?.id || 'unknown'}`)
+    },
+    async signIn(message) {
+      console.log(`✅ User signed in: ${message.user.email} (${message.user.id})`)
+    }
+  },
+  // Enable debug mode in development
+  debug: process.env.NEXTAUTH_DEBUG === 'true',
+  
+  // Add logger for production debugging
+  logger: {
+    error(code, metadata) {
+      console.error('NextAuth Error:', code, metadata)
+    },
+    warn(code) {
+      console.warn('NextAuth Warning:', code)
+    },
+    debug(code, metadata) {
+      if (process.env.NEXTAUTH_DEBUG === 'true') {
+        console.log('NextAuth Debug:', code, metadata)
+      }
     }
   }
 }
