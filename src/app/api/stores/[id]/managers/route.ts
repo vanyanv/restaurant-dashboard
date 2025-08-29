@@ -15,7 +15,7 @@ const unassignManagerSchema = z.object({
 // Get managers assigned to a specific store
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -24,7 +24,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const storeId = params.id
+    const { id: storeId } = await context.params
 
     // Verify user has access to this store
     const store = await prisma.store.findFirst({
@@ -90,7 +90,7 @@ export async function GET(
 // Assign manager to store
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -103,7 +103,7 @@ export async function POST(
       return NextResponse.json({ error: "Only owners can assign managers" }, { status: 403 })
     }
 
-    const storeId = params.id
+    const { id: storeId } = await context.params
     const body = await req.json()
     const validatedData = assignManagerSchema.parse(body)
 
@@ -217,7 +217,7 @@ export async function POST(
 // Unassign manager from store
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -230,7 +230,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Only owners can unassign managers" }, { status: 403 })
     }
 
-    const storeId = params.id
+    const { id: storeId } = await context.params
     const { searchParams } = new URL(req.url)
     const managerId = searchParams.get('managerId')
 
