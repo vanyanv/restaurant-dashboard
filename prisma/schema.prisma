@@ -55,11 +55,13 @@ model Store {
   yelpLastSearch   DateTime? // Prevent excessive API calls
   
   // Relations
-  owner       User      @relation("StoreOwner", fields: [ownerId], references: [id])
-  managers    StoreManager[]
-  reports     DailyReport[]
-  prepTasks   PrepTask[]
-  
+  owner           User      @relation("StoreOwner", fields: [ownerId], references: [id])
+  managers        StoreManager[]
+  reports         DailyReport[]
+  prepTasks       PrepTask[]
+  otterStore      OtterStore?
+  otterSummaries  OtterDailySummary[]
+
   @@index([ownerId])
   @@index([yelpBusinessId])
 }
@@ -125,6 +127,60 @@ model DailyReport {
   @@index([storeId])
   @@index([date])
   @@index([managerId])
+}
+
+model OtterStore {
+  id           String    @id @default(cuid())
+  storeId      String    @unique
+  otterStoreId String    @unique
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+model OtterDailySummary {
+  id            String   @id @default(cuid())
+  storeId       String
+  date          DateTime @db.Date
+  platform      String
+  paymentMethod String
+
+  // FP financials (first-party only)
+  fpGrossSales     Float?
+  fpNetSales       Float?
+  fpDiscounts      Float?
+  fpFees           Float?
+  fpLostRevenue    Float?
+  fpTaxCollected   Float?
+  fpTaxRemitted    Float?
+  fpTips           Float?
+  fpServiceCharges Float?
+  fpLoyalty        Float?
+
+  // 3P financials (third-party only)
+  tpGrossSales         Float?
+  tpNetSales           Float?
+  tpFees               Float?
+  tpTaxCollected       Float?
+  tpTaxRemitted        Float?
+  tpDiscounts          Float?
+  tpRefundsAdjustments Float?
+  tpServiceCharges     Float?
+  tpTipForRestaurant   Float?
+  tpLoyaltyDiscount    Float?
+
+  // Till (FP cash rows only)
+  tillPaidIn  Float?
+  tillPaidOut Float?
+
+  syncedAt DateTime @default(now()) @updatedAt
+
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, platform, paymentMethod])
+  @@index([storeId])
+  @@index([date])
 }
 
 model PrepTask {

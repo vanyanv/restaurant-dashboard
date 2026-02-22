@@ -205,6 +205,137 @@ export async function getStoreAnalytics() {
   }
 }
 
+export async function getOtterAnalytics(storeId?: string, days: number = 30) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user) {
+      return null
+    }
+
+    const stores = await getStores()
+    if (stores.length === 0) {
+      return null
+    }
+
+    const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
+
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - days)
+    startDate.setHours(0, 0, 0, 0)
+
+    const summaries = await prisma.otterDailySummary.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate },
+      },
+      orderBy: { date: "asc" },
+    })
+
+    if (summaries.length === 0) {
+      return null
+    }
+
+    // Gross sales per row = FP gross + 3P gross
+    const totalRevenue = summaries.reduce(
+      (sum, r) => sum + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0),
+      0
+    )
+
+    const totalTips = summaries.reduce(
+      (sum, r) => sum + (r.fpTips ?? 0) + (r.tpTipForRestaurant ?? 0),
+      0
+    )
+
+    // Group by date for trend chart
+    const byDate = summaries.reduce<Record<string, number>>((acc, r) => {
+      const dateStr = r.date.toISOString().split("T")[0]
+      acc[dateStr] =
+        (acc[dateStr] ?? 0) + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0)
+      return acc
+    }, {})
+
+    const revenueTrends = Object.entries(byDate)
+      .map(([date, revenue]) => ({ date, revenue }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    // Week-over-week growth
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+
+    const currentWeekRevenue = summaries
+      .filter((r) => r.date >= sevenDaysAgo)
+      .reduce((sum, r) => sum + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0), 0)
+
+    const previousWeekRevenue = summaries
+      .filter((r) => r.date >= fourteenDaysAgo && r.date < sevenDaysAgo)
+      .reduce((sum, r) => sum + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0), 0)
+
+    const revenueGrowth =
+      previousWeekRevenue > 0
+        ? ((currentWeekRevenue - previousWeekRevenue) / previousWeekRevenue) * 100
+        : 0
+
+    // Per-platform breakdown
+    const platforms = ["css-pos", "bnm-web", "doordash", "ubereats", "grubhub"]
+    const platformBreakdown = platforms.map((platform) => {
+      const rows = summaries.filter((r) => r.platform === platform)
+      const isFP = platform === "css-pos" || platform === "bnm-web"
+      const grossSales = rows.reduce(
+        (sum, r) => sum + (isFP ? (r.fpGrossSales ?? 0) : (r.tpGrossSales ?? 0)),
+        0
+      )
+      const netSales = rows.reduce(
+        (sum, r) => sum + (isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0)),
+        0
+      )
+      const fees = rows.reduce(
+        (sum, r) => sum + (isFP ? (r.fpFees ?? 0) : (r.tpFees ?? 0)),
+        0
+      )
+      const discounts = rows.reduce(
+        (sum, r) => sum + (isFP ? (r.fpDiscounts ?? 0) : (r.tpDiscounts ?? 0)),
+        0
+      )
+      return { platform, grossSales, netSales, fees, discounts }
+    }).filter((p) => p.grossSales > 0 || p.netSales > 0)
+
+    // Cash vs card split (FP only)
+    const cashRows = summaries.filter((r) => r.paymentMethod === "CASH")
+    const cardRows = summaries.filter((r) => r.paymentMethod === "CARD")
+    const cashSales = cashRows.reduce((sum, r) => sum + (r.fpGrossSales ?? 0), 0)
+    const cardSales = cardRows.reduce((sum, r) => sum + (r.fpGrossSales ?? 0), 0)
+
+    // Last sync time
+    const otterStores = await prisma.otterStore.findMany({
+      where: { storeId: { in: storeIds } },
+      select: { lastSyncAt: true },
+      orderBy: { lastSyncAt: "desc" },
+    })
+    const lastSyncAt = otterStores[0]?.lastSyncAt ?? null
+
+    return {
+      totalRevenue,
+      averageTips: summaries.length > 0 ? totalTips / summaries.length : 0,
+      trends: {
+        revenueGrowth: Math.round(revenueGrowth * 100) / 100,
+        currentWeekRevenue,
+        previousWeekRevenue,
+      },
+      revenueTrends,
+      platformBreakdown,
+      paymentSplit: { cashSales, cardSales },
+      storeCount: storeIds.length,
+      lastSyncAt,
+    }
+  } catch (error) {
+    console.error("Get Otter analytics error:", error)
+    return null
+  }
+}
+
 export async function getStoreById(storeId: string) {
   try {
     const session = await getServerSession(authOptions)
