@@ -6,7 +6,6 @@ import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "recharts"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -68,7 +67,7 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
   }
 
   const chartHeight = compact
-    ? "h-[250px] md:h-[280px] lg:h-[300px]"
+    ? "h-[200px] md:h-[220px] lg:h-[240px]"
     : "h-[280px] md:h-[340px] lg:h-[380px]"
 
   if (initialLoading) {
@@ -84,12 +83,11 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
   if (!data || data.length === 0) return null
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
+    <Card className={cn("py-3 gap-3", className)}>
+      <CardHeader className="pb-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <CardTitle className="text-base">Revenue Trend</CardTitle>
-            <CardDescription>Gross vs net revenue across all stores</CardDescription>
+            <CardTitle className="text-sm">Revenue Trend</CardTitle>
           </div>
           <ToggleGroup
             type="single"

@@ -135,7 +135,7 @@ export function FinancialSummaryTable({
   return (
     <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
       {/* Table Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-border bg-muted/30">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 py-2 border-b border-border bg-muted/30">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <TableProperties className="h-4 w-4 text-muted-foreground" />
@@ -180,13 +180,13 @@ export function FinancialSummaryTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              <th className="sticky left-0 z-20 bg-muted/95 backdrop-blur-sm px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground min-w-[160px]">
+              <th className="sticky left-0 z-20 bg-muted/95 backdrop-blur-sm px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground min-w-[160px]">
                 {viewBy === "location" ? "Location" : "Channel"}
               </th>
               {COLUMNS.map((col) => (
                 <th
                   key={col.key}
-                  className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap min-w-[110px]"
+                  className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap min-w-[100px]"
                 >
                   {col.shortLabel ?? col.label}
                 </th>
@@ -203,7 +203,7 @@ export function FinancialSummaryTable({
                   idx % 2 === 1 && "bg-muted/15"
                 )}
               >
-                <td className="sticky left-0 z-10 bg-card group-hover:bg-primary/[0.03] px-4 py-3 transition-colors">
+                <td className="sticky left-0 z-10 bg-card group-hover:bg-primary/[0.03] px-3 py-2 transition-colors">
                   <div className="flex items-center gap-1">
                     <span className="absolute left-0 top-0 h-full w-[3px] bg-transparent group-hover:bg-primary transition-colors" />
                     {viewBy === "location" ? (
@@ -224,7 +224,7 @@ export function FinancialSummaryTable({
                   </div>
                 </td>
                 {COLUMNS.map((col) => (
-                  <td key={col.key} className="px-4 py-3 text-right">
+                  <td key={col.key} className="px-3 py-2 text-right">
                     <CellValue
                       value={row[col.key] as number | null}
                       negative={col.negative}
@@ -248,13 +248,13 @@ export function FinancialSummaryTable({
 
           <tfoot>
             <tr className="border-t-2 border-foreground/15 bg-muted/30">
-              <td className="sticky left-0 z-10 bg-muted/90 backdrop-blur-sm px-4 py-3">
+              <td className="sticky left-0 z-10 bg-muted/90 backdrop-blur-sm px-3 py-2">
                 <span className="text-xs font-bold uppercase tracking-widest text-foreground">
                   Total
                 </span>
               </td>
               {COLUMNS.map((col) => (
-                <td key={col.key} className="px-4 py-3 text-right">
+                <td key={col.key} className="px-3 py-2 text-right">
                   <CellValue
                     value={totals[col.key] as number | null}
                     negative={col.negative}
@@ -269,7 +269,7 @@ export function FinancialSummaryTable({
       </div>
 
       {/* Row count footer */}
-      <div className="px-4 py-2 border-t border-border/50 bg-muted/20">
+      <div className="px-3 py-1.5 border-t border-border/50 bg-muted/20">
         <span className="text-[11px] text-muted-foreground">
           {filteredRows.length} of {displayedRows.length}{" "}
           {viewBy === "location" ? "location" : "channel"}
@@ -284,7 +284,7 @@ export function FinancialSummaryTableSkeleton() {
   return (
     <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
       {/* Header skeleton */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
           <div className="h-4 w-4 rounded bg-muted animate-pulse" />
           <div className="space-y-1.5">
@@ -300,11 +300,11 @@ export function FinancialSummaryTableSkeleton() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              <th className="px-4 py-3 text-left">
+              <th className="px-3 py-2 text-left">
                 <div className="h-3 w-16 rounded bg-muted animate-pulse" />
               </th>
               {Array.from({ length: 8 }).map((_, i) => (
-                <th key={i} className="px-4 py-3 text-right">
+                <th key={i} className="px-3 py-2 text-right">
                   <div className="ml-auto h-3 w-16 rounded bg-muted animate-pulse" />
                 </th>
               ))}
@@ -313,11 +313,11 @@ export function FinancialSummaryTableSkeleton() {
           <tbody>
             {Array.from({ length: 3 }).map((_, rowIdx) => (
               <tr key={rowIdx} className="border-b border-border/40">
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   <div className="h-4 w-28 rounded bg-muted animate-pulse" />
                 </td>
                 {Array.from({ length: 8 }).map((_, cellIdx) => (
-                  <td key={cellIdx} className="px-4 py-3 text-right">
+                  <td key={cellIdx} className="px-3 py-2 text-right">
                     <div className="ml-auto h-4 w-16 rounded bg-muted animate-pulse" />
                   </td>
                 ))}

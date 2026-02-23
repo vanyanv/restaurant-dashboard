@@ -85,23 +85,23 @@ export function KpiCards({ kpis, comparison }: KpiCardsProps) {
             onAnimationComplete={() => { hasAnimated.current = true }}
           >
             <Card
-              className="relative overflow-hidden border-t-[3px]"
+              className="relative overflow-hidden border-t-[3px] py-3"
               style={{
                 borderTopColor: card.borderColor,
                 backgroundColor: card.bgTint,
               }}
             >
-              <CardContent className="p-4 sm:p-5">
+              <CardContent className="p-3">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   {card.label}
                 </span>
-                <div className="mt-1.5 font-mono-numbers text-2xl font-bold tracking-tight sm:text-[28px]">
+                <div className="mt-1 font-mono-numbers text-xl font-bold tracking-tight sm:text-2xl">
                   {getValue(card.key)}
                 </div>
                 {hasGrowth && (
                   <div
                     className={cn(
-                      "mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                      "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
                       isPositive
                         ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
                         : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"

@@ -233,6 +233,7 @@ export async function getOtterAnalytics(
       rangeEnd = new Date(options.endDate + "T23:59:59")
     } else {
       rangeEnd = new Date()
+      rangeEnd.setHours(23, 59, 59, 999)
       rangeStart = new Date()
       if (days === 1) {
         rangeStart.setHours(0, 0, 0, 0)
@@ -492,6 +493,7 @@ export async function getRevenueTrendData(
     const days = options?.days ?? 7
 
     const rangeEnd = new Date()
+    rangeEnd.setHours(23, 59, 59, 999)
     const rangeStart = new Date()
     rangeStart.setDate(rangeEnd.getDate() - days)
     rangeStart.setHours(0, 0, 0, 0)
@@ -571,6 +573,7 @@ export async function getDashboardAnalytics(
       rangeEnd = new Date(options.endDate + "T23:59:59")
     } else {
       rangeEnd = new Date()
+      rangeEnd.setHours(23, 59, 59, 999)
       rangeStart = new Date()
       if (days === 1) {
         rangeStart.setHours(0, 0, 0, 0)
@@ -764,6 +767,7 @@ export async function getMenuCategoryAnalytics(
       rangeEnd = new Date(options.endDate + "T23:59:59")
     } else {
       rangeEnd = new Date()
+      rangeEnd.setHours(23, 59, 59, 999)
       rangeStart = new Date()
       if (days === 1) {
         rangeStart.setHours(0, 0, 0, 0)

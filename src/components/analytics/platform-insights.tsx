@@ -113,12 +113,10 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
   if (channels.length === 0) return null
 
   return (
-    <div className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">Platform Insights</h3>
-        <p className="text-xs text-muted-foreground">
-          Performance by sales channel
-        </p>
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <h3 className="text-xs font-semibold text-foreground">Platform Insights</h3>
+        <span className="text-[11px] text-muted-foreground">Performance by sales channel</span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {channels.map((ch) => (
@@ -127,7 +125,7 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
             className="relative overflow-hidden border-l-[3px]"
             style={{ borderLeftColor: ch.color }}
           >
-            <CardContent className="p-3 sm:p-4">
+            <CardContent className="p-2.5 sm:p-3">
               <div className="flex items-center gap-1.5">
                 <span className="text-muted-foreground" style={{ color: ch.color }}>
                   {getChannelIcon(ch.platform, ch.paymentMethod)}
@@ -136,7 +134,7 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
                   {ch.label}
                 </span>
               </div>
-              <div className="mt-2 space-y-1.5">
+              <div className="mt-1 space-y-1">
                 <div className="flex items-baseline justify-between">
                   <span className="text-[11px] text-muted-foreground">AOV</span>
                   <span className="text-sm font-semibold tabular-nums">{formatCurrency(ch.aov)}</span>

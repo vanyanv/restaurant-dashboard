@@ -2,18 +2,11 @@
 
 import { useTransition, useState, useCallback, useEffect } from "react"
 import dynamic from "next/dynamic"
-import Link from "next/link"
-import { BarChart3, ArrowRight } from "lucide-react"
-import { getDashboardAnalytics, getOtterAnalytics } from "@/app/actions/store-actions"
+import { BarChart3 } from "lucide-react"
+import { getDashboardAnalytics, getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
 
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb"
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { OtterSyncButton } from "@/components/otter-sync-button"
 import {
@@ -34,7 +27,7 @@ import type { DashboardData, StoreAnalyticsData, MenuCategoryData } from "@/type
 
 const RevenueTrendChart = dynamic(
   () => import("@/components/charts/revenue-trend-chart").then(m => ({ default: m.RevenueTrendChart })),
-  { loading: () => <ChartSkeleton height="h-[250px] md:h-[280px] lg:h-[300px]" showToggle />, ssr: false }
+  { loading: () => <ChartSkeleton height="h-[200px] md:h-[220px] lg:h-[240px]" showToggle />, ssr: false }
 )
 
 interface DashboardContentProps {
@@ -82,12 +75,14 @@ export function DashboardContent({
       }
 
       startTransition(async () => {
-        const [dashResult, otterResult] = await Promise.all([
+        const [dashResult, otterResult, menuResult] = await Promise.all([
           getDashboardAnalytics({ startDate, endDate }),
           getOtterAnalytics(undefined, { startDate, endDate }),
+          getMenuCategoryAnalytics(undefined, { startDate, endDate }),
         ])
         if (dashResult) setData(dashResult)
         setOtterData(otterResult)
+        if (menuResult) setMenuData(menuResult)
       })
     },
     []
@@ -98,27 +93,14 @@ export function DashboardContent({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Navigation Header */}
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbPage>Sales Summary</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-
       {/* Sticky Header */}
       <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="h-4" />
             <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-primary" />
+              <BarChart3 className="h-4 w-4 text-primary" />
               <h1 className="text-lg font-semibold tracking-tight">
                 Sales Summary
               </h1>
@@ -134,7 +116,7 @@ export function DashboardContent({
                 </span>
               )}
               <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
-              <span>{getLastSyncText(data?.lastSyncAt)}</span>
+              <span suppressHydrationWarning>{getLastSyncText(data?.lastSyncAt)}</span>
             </div>
           </div>
 
@@ -156,7 +138,7 @@ export function DashboardContent({
         </div>
 
         {/* Mobile date info */}
-        <div className="sm:hidden px-4 pb-2 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="sm:hidden px-3 pb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
           {data?.dateRange && (
             <span>
               {formatDateRange(
@@ -166,26 +148,28 @@ export function DashboardContent({
             </span>
           )}
           <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
-          <span>{getLastSyncText(data?.lastSyncAt)}</span>
+          <span suppressHydrationWarning>{getLastSyncText(data?.lastSyncAt)}</span>
         </div>
       </div>
 
       {/* Dashboard Content */}
-      <div className="flex-1 p-4 sm:p-6 space-y-6">
-        {/* 1. KPI Cards */}
-        {isPending && !otterData ? (
-          <KpiCardsSkeleton />
-        ) : hasOtterData ? (
-          <KpiCards kpis={otterData.kpis} comparison={otterData.comparison} />
-        ) : null}
+      <div className="flex-1 p-3 sm:p-4 space-y-3">
+        {/* 1. KPI Cards + Day Highlights */}
+        <div className="space-y-1.5">
+          {isPending && !otterData ? (
+            <KpiCardsSkeleton />
+          ) : hasOtterData ? (
+            <KpiCards kpis={otterData.kpis} comparison={otterData.comparison} />
+          ) : null}
 
-        {/* 2. Day Highlights (best/worst day) */}
-        {hasOtterData && otterData.dailyTrends.length > 1 && (
-          <DayHighlights dailyTrends={otterData.dailyTrends} />
-        )}
+          {/* 2. Day Highlights (best/worst day) */}
+          {hasOtterData && otterData.dailyTrends.length > 1 && (
+            <DayHighlights dailyTrends={otterData.dailyTrends} />
+          )}
+        </div>
 
         {/* 3. Revenue Trend + Menu Category (side-by-side on desktop) */}
-        <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
+        <div className="grid gap-3 md:gap-4 lg:grid-cols-5">
           <RevenueTrendChart compact className="lg:col-span-3" />
           {isPending ? (
             <MenuCategoryTableSkeleton className="lg:col-span-2" />
@@ -225,16 +209,6 @@ export function DashboardContent({
           <PlatformInsights data={otterData.platformBreakdown} />
         )}
 
-        {/* Link to detailed analytics */}
-        <div className="flex justify-center pt-2 pb-4">
-          <Link
-            href="/dashboard/analytics"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View detailed analytics
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
       </div>
     </div>
   )

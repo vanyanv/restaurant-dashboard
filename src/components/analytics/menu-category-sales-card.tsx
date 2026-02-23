@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatDateRange } from "@/lib/dashboard-utils"
 import { getMenuCategoryAnalytics } from "@/app/actions/store-actions"
 import type { MenuCategoryData, MenuCategoryWithItems } from "@/types/analytics"
 import { cn } from "@/lib/utils"
@@ -49,11 +50,9 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
     setSelectedStore(value)
     startTransition(async () => {
       const storeId = value === "all" ? undefined : value
-      // Always fetch today's data regardless of dashboard date range
-      const today = new Date().toISOString().split("T")[0]
       const result = await getMenuCategoryAnalytics(
         storeId,
-        { startDate: today, endDate: today },
+        data.dateRange ? { startDate: data.dateRange.startDate, endDate: data.dateRange.endDate } : { days: 1 },
       )
       if (result) setData(result)
     })
@@ -71,10 +70,17 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
   const totalSales = data.totals.totalSales
 
   return (
-    <Card className={cn("flex flex-col", className)}>
-      <CardHeader className="pb-2">
+    <Card className={cn("flex flex-col py-3 gap-3", className)}>
+      <CardHeader className="pb-0">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base">Menu Categories</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm">Menu Categories</CardTitle>
+            {data.dateRange && (
+              <span className="text-[11px] text-muted-foreground">
+                {formatDateRange(data.dateRange.startDate, data.dateRange.endDate)}
+              </span>
+            )}
+          </div>
           {stores.length > 1 && (
             <Select value={selectedStore} onValueChange={handleStoreChange}>
               <SelectTrigger className="h-7 w-[140px] text-xs">
@@ -94,7 +100,7 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
         </div>
       </CardHeader>
       <CardContent className={cn("flex-1 px-0 pb-0", isPending && "opacity-50 pointer-events-none")}>
-        <div className="max-h-[340px] lg:max-h-[280px] overflow-y-auto">
+        <div className="max-h-[220px] lg:max-h-[200px] overflow-y-auto">
           {data.categories.length === 0 ? (
             <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
               No menu data available
