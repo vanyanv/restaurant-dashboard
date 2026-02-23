@@ -2,13 +2,20 @@
 
 import { useTransition, useState, useCallback, useEffect } from "react"
 import dynamic from "next/dynamic"
-import { BarChart3 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { BarChart3, Store } from "lucide-react"
 import { getDashboardAnalytics, getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
 
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { OtterSyncButton } from "@/components/otter-sync-button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select"
 import {
   FinancialSummaryTable,
   FinancialSummaryTableSkeleton,
@@ -43,6 +50,7 @@ export function DashboardContent({
   initialMenuData,
   userRole,
 }: DashboardContentProps) {
+  const router = useRouter()
   const [data, setData] = useState(initialData)
   const [otterData, setOtterData] = useState(initialOtterData)
   const [menuData, setMenuData] = useState(initialMenuData)
@@ -62,8 +70,22 @@ export function DashboardContent({
       const diffDays = Math.round(
         (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
       )
-      const presetDays = diffDays === 0 ? 1 : diffDays
-      const presets = [1, 3, 7, 14, 30, 90]
+
+      let presetDays: number
+      if (diffDays === 0) {
+        const today = new Date().toISOString().split("T")[0]
+        if (startDate === today) {
+          presetDays = 1
+        } else {
+          const yday = new Date()
+          yday.setDate(yday.getDate() - 1)
+          presetDays = startDate === yday.toISOString().split("T")[0] ? -1 : diffDays
+        }
+      } else {
+        presetDays = diffDays
+      }
+
+      const presets = [1, -1, 3, 7, 14, 30, 90]
       const matchedPreset = presets.find((p) => p === presetDays)
 
       if (matchedPreset) {
@@ -120,6 +142,23 @@ export function DashboardContent({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Mobile: store quick-nav */}
+            {data?.rows && data.rows.filter(r => r.storeId !== "total").length > 1 && (
+              <Select onValueChange={(storeId) => router.push(`/dashboard/analytics/${storeId}`)}>
+                <SelectTrigger className="sm:hidden h-8 w-8 px-0 justify-center [&>svg:last-child]:hidden">
+                  <Store className="h-3.5 w-3.5" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.rows
+                    .filter((r) => r.storeId !== "total")
+                    .map((r) => (
+                      <SelectItem key={r.storeId} value={r.storeId}>
+                        {r.storeName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             <DateRangePicker
               days={days}
               customRange={customRange}

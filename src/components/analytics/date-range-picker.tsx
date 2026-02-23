@@ -11,11 +11,27 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 
+/** Format a Date as yyyy-MM-dd using local calendar date (avoids UTC day rollover). */
+function localDateStr(d: Date): string {
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
 const PRESETS = [
   { label: "Today", value: "1" },
+  { label: "Yday", value: "-1" },
   { label: "3D", value: "3" },
   { label: "7D", value: "7" },
   { label: "14D", value: "14" },
@@ -43,6 +59,14 @@ export function DateRangePicker({
 
   const handlePresetChange = (value: string) => {
     if (!value) return
+    if (value === "-1") {
+      // "Yesterday" — single day
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const dateStr = localDateStr(yesterday)
+      onRangeChange(dateStr, dateStr)
+      return
+    }
     const d = Number(value)
     const end = new Date()
     const start = new Date()
@@ -52,10 +76,7 @@ export function DateRangePicker({
     } else {
       start.setDate(end.getDate() - d)
     }
-    onRangeChange(
-      start.toISOString().split("T")[0],
-      end.toISOString().split("T")[0]
-    )
+    onRangeChange(localDateStr(start), localDateStr(end))
   }
 
   const handleCalendarSelect = (range: DateRange | undefined) => {
@@ -71,12 +92,31 @@ export function DateRangePicker({
 
   return (
     <div className="flex items-center gap-2">
+      {/* Mobile: compact dropdown */}
+      <Select
+        value={activePreset ?? "custom"}
+        onValueChange={(v) => v !== "custom" && handlePresetChange(v)}
+        disabled={isPending}
+      >
+        <SelectTrigger className="sm:hidden h-8 w-[85px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PRESETS.map((p) => (
+            <SelectItem key={p.value} value={p.value}>
+              {p.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* Desktop: toggle group */}
       <ToggleGroup
         type="single"
         value={activePreset}
         onValueChange={handlePresetChange}
         disabled={isPending}
-        className="flex overflow-x-auto"
+        className="hidden sm:flex overflow-x-auto"
       >
         {PRESETS.map((p) => (
           <ToggleGroupItem

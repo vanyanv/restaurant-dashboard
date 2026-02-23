@@ -1,3 +1,24 @@
+/** Build UTC midnight ISO strings for a local calendar date (matches Otter's format). */
+export function utcDayRange(date: Date): { minDate: string; maxDate: string } {
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  return {
+    minDate: `${yyyy}-${mm}-${dd}T00:00:00.000Z`,
+    maxDate: `${yyyy}-${mm}-${dd}T23:59:59.999Z`,
+  }
+}
+
+/** Build UTC range spanning multiple local calendar days. */
+export function utcMultiDayRange(
+  start: Date,
+  end: Date
+): { minDate: string; maxDate: string } {
+  const s = utcDayRange(start)
+  const e = utcDayRange(end)
+  return { minDate: s.minDate, maxDate: e.maxDate }
+}
+
 const OTTER_BASE_URL = "https://api.tryotter.com/analytics/table/metrics_explorer"
 
 const OTTER_HEADERS = {
@@ -69,10 +90,7 @@ export function buildMenuCategorySyncBody(
   otterStoreIds: string[],
   date: Date
 ): object {
-  const dayStart = new Date(date)
-  dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(date)
-  dayEnd.setHours(23, 59, 59, 999)
+  const { minDate, maxDate } = utcDayRange(date)
 
   return {
     columns: MENU_ITEM_COLUMNS,
@@ -82,7 +100,7 @@ export function buildMenuCategorySyncBody(
     ],
     sortBy: [{ type: "metric", key: "fp_order_items_quantity_sold", sortOrder: "DESC" }],
     filterSet: [
-      { filterType: "dateRangeFilter", minDate: dayStart.toISOString(), maxDate: dayEnd.toISOString() },
+      { filterType: "dateRangeFilter", minDate, maxDate },
       { filterType: "categoryFilter", dimensionName: "is_parent", op: "IN", values: ["true"] },
     ],
     scopeSet: [{ key: "store", values: otterStoreIds }],
@@ -98,10 +116,7 @@ export function buildMenuItemSyncBody(
   otterStoreId: string,
   date: Date
 ): object {
-  const dayStart = new Date(date)
-  dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(date)
-  dayEnd.setHours(23, 59, 59, 999)
+  const { minDate, maxDate } = utcDayRange(date)
 
   return {
     columns: MENU_ITEM_COLUMNS,
@@ -111,7 +126,7 @@ export function buildMenuItemSyncBody(
     ],
     sortBy: [{ type: "metric", key: "fp_order_items_quantity_sold", sortOrder: "DESC" }],
     filterSet: [
-      { filterType: "dateRangeFilter", minDate: dayStart.toISOString(), maxDate: dayEnd.toISOString() },
+      { filterType: "dateRangeFilter", minDate, maxDate },
       { filterType: "categoryFilter", dimensionName: "is_parent", op: "IN", values: ["true"] },
     ],
     scopeSet: [{ key: "store", values: [otterStoreId] }],
@@ -196,8 +211,7 @@ export function buildDailySyncBody(
   startDate: Date,
   endDate: Date
 ): object {
-  const minDate = startDate.toISOString()
-  const maxDate = endDate.toISOString()
+  const { minDate, maxDate } = utcMultiDayRange(startDate, endDate)
 
   return {
     columns: [...FP_COLUMNS, ...THIRD_PARTY_COLUMNS, ...TILL_COLUMNS, ORDER_COUNT_COLUMN],

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { queryMetrics } from "@/lib/otter"
+import { queryMetrics, utcMultiDayRange } from "@/lib/otter"
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const now = new Date()
     const sevenDaysAgo = new Date(now)
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const { minDate, maxDate } = utcMultiDayRange(sevenDaysAgo, now)
 
     const body = {
       columns: [
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       ],
       groupBy: [{ key: "store" }],
       sortBy: [{ type: "metric", key: "fp_sales_financials_gross_sales", sortOrder: "DESC" }],
-      filterSet: [{ filterType: "dateRangeFilter", minDate: sevenDaysAgo.toISOString(), maxDate: now.toISOString() }],
+      filterSet: [{ filterType: "dateRangeFilter", minDate, maxDate }],
       scopeSet: [{ key: "store", values: otterStoreIds }],
       includeMetricsFilters: true,
       localTime: true,

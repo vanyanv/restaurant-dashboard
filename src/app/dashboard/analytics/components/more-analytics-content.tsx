@@ -86,8 +86,22 @@ export function MoreAnalyticsContent({
       const diffDays = Math.round(
         (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
       )
-      const presetDays = diffDays === 0 ? 1 : diffDays
-      const presets = [1, 3, 7, 14, 30, 90]
+
+      let presetDays: number
+      if (diffDays === 0) {
+        const today = new Date().toISOString().split("T")[0]
+        if (startDate === today) {
+          presetDays = 1
+        } else {
+          const yday = new Date()
+          yday.setDate(yday.getDate() - 1)
+          presetDays = startDate === yday.toISOString().split("T")[0] ? -1 : diffDays
+        }
+      } else {
+        presetDays = diffDays
+      }
+
+      const presets = [1, -1, 3, 7, 14, 30, 90]
       const matchedPreset = presets.find((p) => p === presetDays)
 
       if (matchedPreset) {

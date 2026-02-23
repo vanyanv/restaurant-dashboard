@@ -229,8 +229,8 @@ export async function getOtterAnalytics(
     let rangeEnd: Date
 
     if (options?.startDate && options?.endDate) {
-      rangeStart = new Date(options.startDate + "T00:00:00")
-      rangeEnd = new Date(options.endDate + "T23:59:59")
+      rangeStart = new Date(options.startDate + "T00:00:00Z")
+      rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
       rangeEnd = new Date()
       rangeEnd.setHours(23, 59, 59, 999)
@@ -569,8 +569,8 @@ export async function getDashboardAnalytics(
     let rangeEnd: Date
 
     if (options?.startDate && options?.endDate) {
-      rangeStart = new Date(options.startDate + "T00:00:00")
-      rangeEnd = new Date(options.endDate + "T23:59:59")
+      rangeStart = new Date(options.startDate + "T00:00:00Z")
+      rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
       rangeEnd = new Date()
       rangeEnd.setHours(23, 59, 59, 999)
@@ -763,8 +763,8 @@ export async function getMenuCategoryAnalytics(
     let rangeEnd: Date
 
     if (options?.startDate && options?.endDate) {
-      rangeStart = new Date(options.startDate + "T00:00:00")
-      rangeEnd = new Date(options.endDate + "T23:59:59")
+      rangeStart = new Date(options.startDate + "T00:00:00Z")
+      rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
       rangeEnd = new Date()
       rangeEnd.setHours(23, 59, 59, 999)
