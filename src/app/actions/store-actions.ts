@@ -205,7 +205,10 @@ export async function getStoreAnalytics() {
   }
 }
 
-export async function getOtterAnalytics(storeId?: string, days: number = 30) {
+export async function getOtterAnalytics(
+  storeId?: string,
+  options?: { days?: number; startDate?: string; endDate?: string }
+): Promise<import("@/types/analytics").StoreAnalyticsData | null> {
   try {
     const session = await getServerSession(authOptions)
 
@@ -220,14 +223,34 @@ export async function getOtterAnalytics(storeId?: string, days: number = 30) {
 
     const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    startDate.setHours(0, 0, 0, 0)
+    // Determine date range
+    const days = options?.days ?? 30
+    let rangeStart: Date
+    let rangeEnd: Date
 
+    if (options?.startDate && options?.endDate) {
+      rangeStart = new Date(options.startDate + "T00:00:00")
+      rangeEnd = new Date(options.endDate + "T23:59:59")
+    } else {
+      rangeEnd = new Date()
+      rangeStart = new Date()
+      if (days === 1) {
+        rangeStart.setHours(0, 0, 0, 0)
+      } else {
+        rangeStart.setDate(rangeEnd.getDate() - days)
+        rangeStart.setHours(0, 0, 0, 0)
+      }
+    }
+
+    const dayCount = Math.max(1, Math.ceil(
+      (rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)
+    ))
+
+    // Fetch current period
     const summaries = await prisma.otterDailySummary.findMany({
       where: {
         storeId: { in: storeIds },
-        date: { gte: startDate },
+        date: { gte: rangeStart, lte: rangeEnd },
       },
       orderBy: { date: "asc" },
     })
@@ -236,77 +259,196 @@ export async function getOtterAnalytics(storeId?: string, days: number = 30) {
       return null
     }
 
-    // Gross sales per row = FP gross + 3P gross
-    const totalRevenue = summaries.reduce(
-      (sum, r) => sum + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0),
-      0
-    )
+    // Fetch previous period for comparison
+    const prevEnd = new Date(rangeStart)
+    prevEnd.setDate(prevEnd.getDate() - 1)
+    const prevStart = new Date(prevEnd)
+    prevStart.setDate(prevStart.getDate() - dayCount)
+    prevStart.setHours(0, 0, 0, 0)
 
-    const totalTips = summaries.reduce(
-      (sum, r) => sum + (r.fpTips ?? 0) + (r.tpTipForRestaurant ?? 0),
-      0
-    )
+    const prevSummaries = await prisma.otterDailySummary.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: prevStart, lte: prevEnd },
+      },
+    })
 
-    // Group by date for trend chart
-    const byDate = summaries.reduce<Record<string, number>>((acc, r) => {
+    // Helper: sum a field across rows
+    const sum = (rows: typeof summaries, fn: (r: (typeof summaries)[0]) => number) =>
+      rows.reduce((acc, r) => acc + fn(r), 0)
+
+    const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
+    const gross = (r: (typeof summaries)[0]) => (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0)
+    const net = (r: (typeof summaries)[0]) => (r.fpNetSales ?? 0) + (r.tpNetSales ?? 0)
+
+    // KPIs
+    const totalOrders = sum(summaries, (r) => (r.fpOrderCount ?? 0) + (r.tpOrderCount ?? 0))
+    const grossRevenue = sum(summaries, gross)
+    const kpis = {
+      grossRevenue,
+      netRevenue: sum(summaries, net),
+      totalOrders,
+      averageOrderValue: totalOrders > 0 ? grossRevenue / totalOrders : 0,
+      totalFees: sum(summaries, (r) => (r.fpFees ?? 0) + (r.tpFees ?? 0)),
+      totalTips: sum(summaries, (r) => (r.fpTips ?? 0) + (r.tpTipForRestaurant ?? 0)),
+      totalDiscounts: sum(summaries, (r) => (r.fpDiscounts ?? 0) + (r.tpDiscounts ?? 0)),
+      totalTaxCollected: sum(summaries, (r) => (r.fpTaxCollected ?? 0) + (r.tpTaxCollected ?? 0)),
+      totalTaxRemitted: sum(summaries, (r) => (r.fpTaxRemitted ?? 0) + (r.tpTaxRemitted ?? 0)),
+      totalServiceCharges: sum(summaries, (r) => (r.fpServiceCharges ?? 0) + (r.tpServiceCharges ?? 0)),
+      totalLoyalty: sum(summaries, (r) => (r.fpLoyalty ?? 0) + (r.tpLoyaltyDiscount ?? 0)),
+      totalRefundsAdjustments: sum(summaries, (r) => r.tpRefundsAdjustments ?? 0),
+      totalLostRevenue: sum(summaries, (r) => r.fpLostRevenue ?? 0),
+      tillPaidIn: sum(summaries, (r) => r.tillPaidIn ?? 0),
+      tillPaidOut: sum(summaries, (r) => r.tillPaidOut ?? 0),
+      tillNet: sum(summaries, (r) => (r.tillPaidIn ?? 0) - (r.tillPaidOut ?? 0)),
+    }
+
+    // Period-over-period comparison
+    const currentGross = kpis.grossRevenue
+    const previousGross = sum(prevSummaries, gross)
+    const currentNet = kpis.netRevenue
+    const previousNet = sum(prevSummaries, net)
+
+    const comparison = {
+      currentGross,
+      previousGross,
+      currentNet,
+      previousNet,
+      grossGrowth: previousGross > 0
+        ? ((currentGross - previousGross) / previousGross) * 100
+        : 0,
+      netGrowth: previousNet > 0
+        ? ((currentNet - previousNet) / previousNet) * 100
+        : 0,
+    }
+
+    // Daily trends (grouped by date)
+    const byDate: Record<string, { grossRevenue: number; netRevenue: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
+    for (const r of summaries) {
       const dateStr = r.date.toISOString().split("T")[0]
-      acc[dateStr] =
-        (acc[dateStr] ?? 0) + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0)
-      return acc
-    }, {})
+      if (!byDate[dateStr]) {
+        byDate[dateStr] = { grossRevenue: 0, netRevenue: 0, fpGross: 0, tpGross: 0, cashSales: 0, cardSales: 0 }
+      }
+      const d = byDate[dateStr]
+      const isFP = isFPPlatform(r.platform)
+      const rowGross = Number(isFP ? (r.fpGrossSales ?? 0) : (r.tpGrossSales ?? 0))
+      const rowNet = Number(isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0))
+      d.grossRevenue += rowGross
+      d.netRevenue += rowNet
+      if (isFP) {
+        d.fpGross += rowGross
+        if (r.paymentMethod === "CASH") d.cashSales += r.fpGrossSales ?? 0
+        if (r.paymentMethod === "CARD") d.cardSales += r.fpGrossSales ?? 0
+      } else {
+        d.tpGross += rowGross
+      }
+    }
 
-    const revenueTrends = Object.entries(byDate)
-      .map(([date, revenue]) => ({ date, revenue }))
+    const dailyTrends = Object.entries(byDate)
+      .map(([date, vals]) => ({ date, ...vals }))
       .sort((a, b) => a.date.localeCompare(b.date))
 
-    // Week-over-week growth
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    const fourteenDaysAgo = new Date()
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+    // Platform trends (per-date per-platform gross sales)
+    const byDatePlatform: Record<string, Record<string, number>> = {}
+    for (const r of summaries) {
+      const dateStr = r.date.toISOString().split("T")[0]
+      if (!byDatePlatform[dateStr]) byDatePlatform[dateStr] = {}
+      const isFP = isFPPlatform(r.platform)
+      const rowGross = isFP ? (r.fpGrossSales ?? 0) : (r.tpGrossSales ?? 0)
+      byDatePlatform[dateStr][r.platform] = (byDatePlatform[dateStr][r.platform] ?? 0) + rowGross
+    }
+    const platformTrends: import("@/types/analytics").PlatformTrendPoint[] = []
+    for (const [date, platforms] of Object.entries(byDatePlatform)) {
+      for (const [platform, grossSales] of Object.entries(platforms)) {
+        if (grossSales > 0) platformTrends.push({ date, platform, grossSales })
+      }
+    }
+    platformTrends.sort((a, b) => a.date.localeCompare(b.date))
 
-    const currentWeekRevenue = summaries
-      .filter((r) => r.date >= sevenDaysAgo)
-      .reduce((sum, r) => sum + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0), 0)
+    // Platform breakdown with all metrics — dynamic channel grouping
+    // FP platforms: group by platform + paymentMethod (e.g., "css-pos/CASH", "css-pos/CARD")
+    // 3P platforms: group by platform only (paymentMethod = null)
+    const channelKeys = new Set<string>()
+    for (const r of summaries) {
+      const isFP = isFPPlatform(r.platform)
+      const pm = isFP && r.paymentMethod && r.paymentMethod !== "N/A" ? r.paymentMethod : null
+      channelKeys.add(`${r.platform}|||${pm ?? ""}`)
+    }
 
-    const previousWeekRevenue = summaries
-      .filter((r) => r.date >= fourteenDaysAgo && r.date < sevenDaysAgo)
-      .reduce((sum, r) => sum + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0), 0)
+    const platformBreakdown: import("@/types/analytics").PlatformBreakdown[] = []
+    for (const key of channelKeys) {
+      const [platform, pmRaw] = key.split("|||")
+      const isFP = isFPPlatform(platform)
+      const paymentMethod = pmRaw || null
+      const rows = summaries.filter((r) => {
+        if (r.platform !== platform) return false
+        if (isFP) {
+          const rpm = r.paymentMethod && r.paymentMethod !== "N/A" ? r.paymentMethod : null
+          return rpm === paymentMethod
+        }
+        return true
+      })
+      const grossSalesVal = sum(rows, (r) => isFP ? (r.fpGrossSales ?? 0) : (r.tpGrossSales ?? 0))
+      const netSalesVal = sum(rows, (r) => isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0))
+      const feesVal = sum(rows, (r) => isFP ? (r.fpFees ?? 0) : (r.tpFees ?? 0))
+      const discountsVal = sum(rows, (r) => isFP ? (r.fpDiscounts ?? 0) : (r.tpDiscounts ?? 0))
+      const taxCollectedVal = sum(rows, (r) => isFP ? (r.fpTaxCollected ?? 0) : (r.tpTaxCollected ?? 0))
+      const taxRemittedVal = sum(rows, (r) => isFP ? (r.fpTaxRemitted ?? 0) : (r.tpTaxRemitted ?? 0))
+      const tipsVal = sum(rows, (r) => isFP ? (r.fpTips ?? 0) : (r.tpTipForRestaurant ?? 0))
+      const serviceChargesVal = sum(rows, (r) => isFP ? (r.fpServiceCharges ?? 0) : (r.tpServiceCharges ?? 0))
+      const loyaltyVal = sum(rows, (r) => isFP ? (r.fpLoyalty ?? 0) : (r.tpLoyaltyDiscount ?? 0))
+      const refundsAdjVal = sum(rows, (r) => isFP ? 0 : (r.tpRefundsAdjustments ?? 0))
+      const orderCountVal = sum(rows, (r) => isFP ? (r.fpOrderCount ?? 0) : (r.tpOrderCount ?? 0))
+      const paidInVal = sum(rows, (r) => r.tillPaidIn ?? 0)
+      const paidOutVal = sum(rows, (r) => r.tillPaidOut ?? 0)
+      const theoreticalDepositVal =
+        netSalesVal + taxCollectedVal - Math.abs(taxRemittedVal) + tipsVal + serviceChargesVal - Math.abs(feesVal)
+      const expectedDepositVal = theoreticalDepositVal + paidInVal - Math.abs(paidOutVal)
 
-    const revenueGrowth =
-      previousWeekRevenue > 0
-        ? ((currentWeekRevenue - previousWeekRevenue) / previousWeekRevenue) * 100
-        : 0
+      const entry = {
+        platform,
+        paymentMethod,
+        grossSales: grossSalesVal,
+        netSales: netSalesVal,
+        fees: feesVal,
+        discounts: discountsVal,
+        taxCollected: taxCollectedVal,
+        taxRemitted: taxRemittedVal,
+        tips: tipsVal,
+        serviceCharges: serviceChargesVal,
+        loyalty: loyaltyVal,
+        refundsAdjustments: refundsAdjVal,
+        orderCount: orderCountVal,
+        paidIn: paidInVal,
+        paidOut: paidOutVal,
+        theoreticalDeposit: theoreticalDepositVal,
+        cashDrawerRecon: null as number | null,
+        expectedDeposit: expectedDepositVal,
+      }
+      if (entry.grossSales > 0 || entry.netSales > 0) {
+        platformBreakdown.push(entry)
+      }
+    }
 
-    // Per-platform breakdown
-    const platforms = ["css-pos", "bnm-web", "doordash", "ubereats", "grubhub"]
-    const platformBreakdown = platforms.map((platform) => {
-      const rows = summaries.filter((r) => r.platform === platform)
-      const isFP = platform === "css-pos" || platform === "bnm-web"
-      const grossSales = rows.reduce(
-        (sum, r) => sum + (isFP ? (r.fpGrossSales ?? 0) : (r.tpGrossSales ?? 0)),
-        0
-      )
-      const netSales = rows.reduce(
-        (sum, r) => sum + (isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0)),
-        0
-      )
-      const fees = rows.reduce(
-        (sum, r) => sum + (isFP ? (r.fpFees ?? 0) : (r.tpFees ?? 0)),
-        0
-      )
-      const discounts = rows.reduce(
-        (sum, r) => sum + (isFP ? (r.fpDiscounts ?? 0) : (r.tpDiscounts ?? 0)),
-        0
-      )
-      return { platform, grossSales, netSales, fees, discounts }
-    }).filter((p) => p.grossSales > 0 || p.netSales > 0)
+    // Sort: FP channels first, then 3P alphabetically
+    platformBreakdown.sort((a, b) => {
+      const aFP = isFPPlatform(a.platform) ? 0 : 1
+      const bFP = isFPPlatform(b.platform) ? 0 : 1
+      if (aFP !== bFP) return aFP - bFP
+      const cmp = a.platform.localeCompare(b.platform)
+      if (cmp !== 0) return cmp
+      return (a.paymentMethod ?? "").localeCompare(b.paymentMethod ?? "")
+    })
 
     // Cash vs card split (FP only)
-    const cashRows = summaries.filter((r) => r.paymentMethod === "CASH")
-    const cardRows = summaries.filter((r) => r.paymentMethod === "CARD")
-    const cashSales = cashRows.reduce((sum, r) => sum + (r.fpGrossSales ?? 0), 0)
-    const cardSales = cardRows.reduce((sum, r) => sum + (r.fpGrossSales ?? 0), 0)
+    const cashSales = sum(
+      summaries.filter((r) => r.paymentMethod === "CASH"),
+      (r) => r.fpGrossSales ?? 0
+    )
+    const cardSales = sum(
+      summaries.filter((r) => r.paymentMethod === "CARD"),
+      (r) => r.fpGrossSales ?? 0
+    )
 
     // Last sync time
     const otterStores = await prisma.otterStore.findMany({
@@ -317,21 +459,428 @@ export async function getOtterAnalytics(storeId?: string, days: number = 30) {
     const lastSyncAt = otterStores[0]?.lastSyncAt ?? null
 
     return {
-      totalRevenue,
-      averageTips: summaries.length > 0 ? totalTips / summaries.length : 0,
-      trends: {
-        revenueGrowth: Math.round(revenueGrowth * 100) / 100,
-        currentWeekRevenue,
-        previousWeekRevenue,
-      },
-      revenueTrends,
+      kpis,
+      comparison,
+      dailyTrends,
       platformBreakdown,
       paymentSplit: { cashSales, cardSales },
-      storeCount: storeIds.length,
+      platformTrends,
+      dateRange: {
+        startDate: rangeStart.toISOString().split("T")[0],
+        endDate: rangeEnd.toISOString().split("T")[0],
+      },
+      dayCount,
       lastSyncAt,
     }
   } catch (error) {
     console.error("Get Otter analytics error:", error)
+    return null
+  }
+}
+
+export async function getRevenueTrendData(
+  options?: { days?: number }
+): Promise<{ dailyTrends: import("@/types/analytics").DailyTrend[] } | null> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return null
+
+    const stores = await getStores()
+    if (stores.length === 0) return null
+
+    const storeIds = stores.map((s) => s.id)
+    const days = options?.days ?? 7
+
+    const rangeEnd = new Date()
+    const rangeStart = new Date()
+    rangeStart.setDate(rangeEnd.getDate() - days)
+    rangeStart.setHours(0, 0, 0, 0)
+
+    const summaries = await prisma.otterDailySummary.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: {
+        date: true,
+        platform: true,
+        paymentMethod: true,
+        fpGrossSales: true,
+        fpNetSales: true,
+        tpGrossSales: true,
+        tpNetSales: true,
+      },
+      orderBy: { date: "asc" },
+    })
+
+    if (summaries.length === 0) return null
+
+    const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
+
+    const byDate: Record<string, { grossRevenue: number; netRevenue: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
+    for (const r of summaries) {
+      const dateStr = r.date.toISOString().split("T")[0]
+      if (!byDate[dateStr]) {
+        byDate[dateStr] = { grossRevenue: 0, netRevenue: 0, fpGross: 0, tpGross: 0, cashSales: 0, cardSales: 0 }
+      }
+      const d = byDate[dateStr]
+      const isFP = isFPPlatform(r.platform)
+      const rowGross = Number(isFP ? (r.fpGrossSales ?? 0) : (r.tpGrossSales ?? 0))
+      const rowNet = Number(isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0))
+      d.grossRevenue += rowGross
+      d.netRevenue += rowNet
+      if (isFP) {
+        d.fpGross += rowGross
+        if (r.paymentMethod === "CASH") d.cashSales += r.fpGrossSales ?? 0
+        if (r.paymentMethod === "CARD") d.cardSales += r.fpGrossSales ?? 0
+      } else {
+        d.tpGross += rowGross
+      }
+    }
+
+    const dailyTrends = Object.entries(byDate)
+      .map(([date, vals]) => ({ date, ...vals }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+
+    return { dailyTrends }
+  } catch (error) {
+    console.error("Get revenue trend data error:", error)
+    return null
+  }
+}
+
+export async function getDashboardAnalytics(
+  options?: { days?: number; startDate?: string; endDate?: string }
+): Promise<import("@/types/analytics").DashboardData | null> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return null
+
+    const stores = await getStores()
+    if (stores.length === 0) return null
+
+    const storeIds = stores.map((s) => s.id)
+
+    // Determine date range
+    const days = options?.days ?? 1
+    let rangeStart: Date
+    let rangeEnd: Date
+
+    if (options?.startDate && options?.endDate) {
+      rangeStart = new Date(options.startDate + "T00:00:00")
+      rangeEnd = new Date(options.endDate + "T23:59:59")
+    } else {
+      rangeEnd = new Date()
+      rangeStart = new Date()
+      if (days === 1) {
+        rangeStart.setHours(0, 0, 0, 0)
+      } else {
+        rangeStart.setDate(rangeEnd.getDate() - days)
+        rangeStart.setHours(0, 0, 0, 0)
+      }
+    }
+
+    const dayCount = Math.max(1, Math.ceil(
+      (rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)
+    ))
+
+    const summaries = await prisma.otterDailySummary.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: rangeStart, lte: rangeEnd },
+      },
+    })
+
+    // Build per-store summary rows
+    const storeMap = new Map(stores.map((s) => [s.id, s.name]))
+    const byStore: Record<string, typeof summaries> = {}
+    for (const row of summaries) {
+      if (!byStore[row.storeId]) byStore[row.storeId] = []
+      byStore[row.storeId].push(row)
+    }
+
+    const buildRow = (
+      storeId: string,
+      storeName: string,
+      rows: typeof summaries
+    ): import("@/types/analytics").StoreSummaryRow => {
+      const s = (fn: (r: (typeof rows)[0]) => number) =>
+        rows.reduce((acc, r) => acc + fn(r), 0)
+
+      const grossSales = s((r) => (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0))
+      const fulfilledOrders = s((r) => (r.fpOrderCount ?? 0) + (r.tpOrderCount ?? 0))
+      const discounts = s((r) => (r.fpDiscounts ?? 0) + (r.tpDiscounts ?? 0))
+      const loyalty = s((r) => (r.fpLoyalty ?? 0) + (r.tpLoyaltyDiscount ?? 0))
+      const refundsAdjustments = s((r) => r.tpRefundsAdjustments ?? 0)
+      const netSales = s((r) => (r.fpNetSales ?? 0) + (r.tpNetSales ?? 0))
+      const serviceCharges = s((r) => (r.fpServiceCharges ?? 0) + (r.tpServiceCharges ?? 0))
+      const commissionFees = s((r) => (r.fpFees ?? 0) + (r.tpFees ?? 0))
+      const taxCollected = s((r) => (r.fpTaxCollected ?? 0) + (r.tpTaxCollected ?? 0))
+      const taxRemitted = s((r) => (r.fpTaxRemitted ?? 0) + (r.tpTaxRemitted ?? 0))
+      const tips = s((r) => (r.fpTips ?? 0) + (r.tpTipForRestaurant ?? 0))
+      const paidIn = s((r) => r.tillPaidIn ?? 0)
+      const paidOut = s((r) => r.tillPaidOut ?? 0)
+
+      // Theoretical Deposit = Net Sales + Tax Collected - Tax Remitted + Tips + Service Charges - Commission & Fees
+      const theoreticalDeposit =
+        netSales + taxCollected - Math.abs(taxRemitted) + tips + serviceCharges - Math.abs(commissionFees)
+
+      // Cash Drawer Recon — not available from Otter (drawer_reconciliation always null)
+      const cashDrawerRecon = null
+
+      // Expected Deposit = Theoretical Deposit + Paid In - Paid Out
+      const expectedDeposit = theoreticalDeposit + paidIn - Math.abs(paidOut)
+
+      return {
+        storeId,
+        storeName,
+        grossSales,
+        fulfilledOrders,
+        discounts,
+        loyalty,
+        refundsAdjustments,
+        netSales,
+        serviceCharges,
+        commissionFees,
+        taxCollected,
+        taxRemitted,
+        tips,
+        paidIn,
+        paidOut,
+        theoreticalDeposit,
+        cashDrawerRecon,
+        expectedDeposit,
+      }
+    }
+
+    const rows: import("@/types/analytics").StoreSummaryRow[] = []
+    for (const storeId of storeIds) {
+      const name = storeMap.get(storeId) ?? "Unknown"
+      const storeRows = byStore[storeId] ?? []
+      rows.push(buildRow(storeId, name, storeRows))
+    }
+
+    // Totals row
+    const totals = buildRow("total", "TOTAL", summaries)
+
+    // Build per-channel summary rows
+    const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
+    const PLATFORM_LABELS: Record<string, string> = {
+      "css-pos": "Otter POS",
+      "bnm-web": "Otter Online Ordering",
+      doordash: "DoorDash",
+      ubereats: "Uber Eats",
+      grubhub: "Grubhub",
+      caviar: "Caviar",
+    }
+
+    const channelKeySet = new Set<string>()
+    for (const row of summaries) {
+      const isFP = isFPPlatform(row.platform)
+      const pm = isFP && row.paymentMethod && row.paymentMethod !== "N/A"
+        ? row.paymentMethod
+        : ""
+      channelKeySet.add(`${row.platform}|||${pm}`)
+    }
+
+    const channelRows: import("@/types/analytics").StoreSummaryRow[] = []
+    for (const key of channelKeySet) {
+      const [platform, pmRaw] = key.split("|||")
+      const isFP = isFPPlatform(platform)
+      const paymentMethod = pmRaw || null
+      const channelSummaries = summaries.filter((r) => {
+        if (r.platform !== platform) return false
+        if (isFP) {
+          const rpm = r.paymentMethod && r.paymentMethod !== "N/A" ? r.paymentMethod : null
+          return rpm === paymentMethod
+        }
+        return true
+      })
+      const baseLabel = PLATFORM_LABELS[platform] ?? platform
+      const channelLabel = paymentMethod ? `${baseLabel} (${paymentMethod})` : baseLabel
+      const channelRow = buildRow(key, channelLabel, channelSummaries)
+      if (channelRow.grossSales !== 0 || channelRow.netSales !== 0) {
+        channelRows.push(channelRow)
+      }
+    }
+
+    // Sort: FP platforms first, then 3P alphabetically
+    channelRows.sort((a, b) => {
+      const [aPlatform] = a.storeId.split("|||")
+      const [bPlatform] = b.storeId.split("|||")
+      const aFP = isFPPlatform(aPlatform) ? 0 : 1
+      const bFP = isFPPlatform(bPlatform) ? 0 : 1
+      if (aFP !== bFP) return aFP - bFP
+      const cmp = aPlatform.localeCompare(bPlatform)
+      if (cmp !== 0) return cmp
+      return a.storeName.localeCompare(b.storeName)
+    })
+
+    // Last sync time
+    const otterStores = await prisma.otterStore.findMany({
+      where: { storeId: { in: storeIds } },
+      select: { lastSyncAt: true },
+      orderBy: { lastSyncAt: "desc" },
+    })
+    const lastSyncAt = otterStores[0]?.lastSyncAt ?? null
+
+    return {
+      rows,
+      totals,
+      channelRows,
+      dateRange: {
+        startDate: rangeStart.toISOString().split("T")[0],
+        endDate: rangeEnd.toISOString().split("T")[0],
+      },
+      dayCount,
+      lastSyncAt,
+    }
+  } catch (error) {
+    console.error("Get dashboard analytics error:", error)
+    return null
+  }
+}
+
+export async function getMenuCategoryAnalytics(
+  storeId?: string,
+  options?: { days?: number; startDate?: string; endDate?: string }
+): Promise<import("@/types/analytics").MenuCategoryData | null> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return null
+
+    const stores = await getStores()
+    if (stores.length === 0) return null
+
+    const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
+
+    // Determine date range
+    const days = options?.days ?? 30
+    let rangeStart: Date
+    let rangeEnd: Date
+
+    if (options?.startDate && options?.endDate) {
+      rangeStart = new Date(options.startDate + "T00:00:00")
+      rangeEnd = new Date(options.endDate + "T23:59:59")
+    } else {
+      rangeEnd = new Date()
+      rangeStart = new Date()
+      if (days === 1) {
+        rangeStart.setHours(0, 0, 0, 0)
+      } else {
+        rangeStart.setDate(rangeEnd.getDate() - days)
+        rangeStart.setHours(0, 0, 0, 0)
+      }
+    }
+
+    const [categories, items] = await Promise.all([
+      prisma.otterMenuCategory.findMany({
+        where: {
+          storeId: { in: storeIds },
+          date: { gte: rangeStart, lte: rangeEnd },
+        },
+      }),
+      prisma.otterMenuItem.findMany({
+        where: {
+          storeId: { in: storeIds },
+          date: { gte: rangeStart, lte: rangeEnd },
+        },
+      }),
+    ])
+
+    if (categories.length === 0) return null
+
+    // Aggregate categories by name (sum across dates/stores)
+    const categoryMap = new Map<string, import("@/types/analytics").MenuCategoryRow>()
+    for (const c of categories) {
+      const existing = categoryMap.get(c.category)
+      if (existing) {
+        existing.fpQuantitySold += c.fpQuantitySold
+        existing.fpTotalInclModifiers += c.fpTotalInclModifiers
+        existing.fpTotalSales += c.fpTotalSales
+        existing.tpQuantitySold += c.tpQuantitySold
+        existing.tpTotalInclModifiers += c.tpTotalInclModifiers
+        existing.tpTotalSales += c.tpTotalSales
+        existing.totalQuantitySold += c.fpQuantitySold + c.tpQuantitySold
+        existing.totalSales += c.fpTotalSales + c.tpTotalSales
+      } else {
+        categoryMap.set(c.category, {
+          category: c.category,
+          fpQuantitySold: c.fpQuantitySold,
+          fpTotalInclModifiers: c.fpTotalInclModifiers,
+          fpTotalSales: c.fpTotalSales,
+          tpQuantitySold: c.tpQuantitySold,
+          tpTotalInclModifiers: c.tpTotalInclModifiers,
+          tpTotalSales: c.tpTotalSales,
+          totalQuantitySold: c.fpQuantitySold + c.tpQuantitySold,
+          totalSales: c.fpTotalSales + c.tpTotalSales,
+        })
+      }
+    }
+
+    // Aggregate items by (category, itemName)
+    const itemKey = (cat: string, item: string) => `${cat}|||${item}`
+    const itemMap = new Map<string, import("@/types/analytics").MenuItemRow>()
+    for (const i of items) {
+      const key = itemKey(i.category, i.itemName)
+      const existing = itemMap.get(key)
+      if (existing) {
+        existing.fpQuantitySold += i.fpQuantitySold
+        existing.fpTotalInclModifiers += i.fpTotalInclModifiers
+        existing.fpTotalSales += i.fpTotalSales
+        existing.tpQuantitySold += i.tpQuantitySold
+        existing.tpTotalInclModifiers += i.tpTotalInclModifiers
+        existing.tpTotalSales += i.tpTotalSales
+        existing.totalQuantitySold += i.fpQuantitySold + i.tpQuantitySold
+        existing.totalSales += i.fpTotalSales + i.tpTotalSales
+      } else {
+        itemMap.set(key, {
+          itemName: i.itemName,
+          category: i.category,
+          fpQuantitySold: i.fpQuantitySold,
+          fpTotalInclModifiers: i.fpTotalInclModifiers,
+          fpTotalSales: i.fpTotalSales,
+          tpQuantitySold: i.tpQuantitySold,
+          tpTotalInclModifiers: i.tpTotalInclModifiers,
+          tpTotalSales: i.tpTotalSales,
+          totalQuantitySold: i.fpQuantitySold + i.tpQuantitySold,
+          totalSales: i.fpTotalSales + i.tpTotalSales,
+        })
+      }
+    }
+
+    // Nest items under categories
+    const result: import("@/types/analytics").MenuCategoryWithItems[] = []
+    for (const cat of categoryMap.values()) {
+      const catItems = Array.from(itemMap.values())
+        .filter((i) => i.category === cat.category)
+        .sort((a, b) => b.totalQuantitySold - a.totalQuantitySold)
+      result.push({ ...cat, items: catItems })
+    }
+
+    // Sort by totalQuantitySold descending
+    result.sort((a, b) => b.totalQuantitySold - a.totalQuantitySold)
+
+    // Compute totals
+    const totals = {
+      fpQuantitySold: result.reduce((s, c) => s + c.fpQuantitySold, 0),
+      fpTotalSales: result.reduce((s, c) => s + c.fpTotalSales, 0),
+      tpQuantitySold: result.reduce((s, c) => s + c.tpQuantitySold, 0),
+      tpTotalSales: result.reduce((s, c) => s + c.tpTotalSales, 0),
+      totalQuantitySold: result.reduce((s, c) => s + c.totalQuantitySold, 0),
+      totalSales: result.reduce((s, c) => s + c.totalSales, 0),
+    }
+
+    return {
+      categories: result,
+      totals,
+      dateRange: {
+        startDate: rangeStart.toISOString().split("T")[0],
+        endDate: rangeEnd.toISOString().split("T")[0],
+      },
+    }
+  } catch (error) {
+    console.error("Get menu category analytics error:", error)
     return null
   }
 }
