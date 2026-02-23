@@ -32,7 +32,7 @@ const CHUNK_DAYS = 30
 const INTER_CHUNK_DELAY_MS = 2000
 const INTER_API_DELAY_MS = 200
 const MAX_RETRIES = 3
-const BATCH_SIZE = 100
+const BATCH_SIZE = 25
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -150,6 +150,8 @@ async function main() {
     const date = new Date(dateStr)
     const platform = (row["pos_summary_ofo"] as string | null) ?? "unknown"
     const paymentMethod = (row["multi_value_pos_payment_method"] as string | null) ?? "N/A"
+    const isFP = platform === "css-pos" || platform === "bnm-web"
+    const orderCount = (row["order_count"] as number | null) ?? null
 
     const data = {
       fpGrossSales: row["fp_sales_financials_gross_sales"] as number | null,
@@ -174,6 +176,8 @@ async function main() {
       tpLoyaltyDiscount: row["third_party_loyalty_discount"] as number | null,
       tillPaidIn: row["enriched_till_report_paid_in"] as number | null,
       tillPaidOut: row["enriched_till_report_paid_out"] as number | null,
+      fpOrderCount: isFP ? orderCount : null,
+      tpOrderCount: isFP ? null : orderCount,
     }
 
     return () =>

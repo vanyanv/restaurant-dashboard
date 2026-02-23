@@ -76,11 +76,11 @@ export async function POST(request: NextRequest) {
 
     const detected = results[0]
 
-    // Upsert OtterStore record
+    // Upsert OtterStore record (keyed by otterStoreId since a store can have multiple Otter UUIDs)
     const record = await prisma.otterStore.upsert({
-      where: { storeId },
+      where: { otterStoreId: detected.uuid },
       create: { storeId, otterStoreId: detected.uuid },
-      update: { otterStoreId: detected.uuid },
+      update: { storeId },
     })
 
     return NextResponse.json({

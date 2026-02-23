@@ -59,7 +59,7 @@ model Store {
   managers        StoreManager[]
   reports         DailyReport[]
   prepTasks       PrepTask[]
-  otterStore      OtterStore?
+  otterStores     OtterStore[]
   otterSummaries      OtterDailySummary[]
   otterMenuCategories OtterMenuCategory[]
   otterMenuItems      OtterMenuItem[]
@@ -133,7 +133,7 @@ model DailyReport {
 
 model OtterStore {
   id           String    @id @default(cuid())
-  storeId      String    @unique
+  storeId      String
   otterStoreId String    @unique
   lastSyncAt   DateTime?
   createdAt    DateTime  @default(now())

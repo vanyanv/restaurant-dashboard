@@ -234,9 +234,9 @@ async function upsertOtterStore(detectedUUID: string): Promise<void> {
     console.log(`  otterStoreId: ${detectedUUID}`)
 
     const record = await prisma.otterStore.upsert({
-      where: { storeId: HOLLYWOOD_STORE_ID },
+      where: { otterStoreId: detectedUUID },
       create: { storeId: HOLLYWOOD_STORE_ID, otterStoreId: detectedUUID },
-      update: { otterStoreId: detectedUUID },
+      update: { storeId: HOLLYWOOD_STORE_ID },
     })
 
     console.log("\nOtterStore upserted successfully:")
