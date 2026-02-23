@@ -223,7 +223,7 @@ async function upsertOtterStore(detectedUUID: string): Promise<void> {
   execSync("npx prisma generate", { stdio: "inherit" })
 
   // Dynamic import after DATABASE_URL is set
-  const { PrismaClient } = await import("@prisma/client")
+  const { PrismaClient } = await import("../src/generated/prisma/client")
   const prisma = new PrismaClient()
 
   try {
