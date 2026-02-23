@@ -1,11 +1,15 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { DM_Sans, JetBrains_Mono } from "next/font/google"
 import { NextAuthSessionProvider } from "@/lib/session-provider"
 import { QueryProvider } from "@/lib/query-client"
 import { Toaster } from "sonner"
 import "./globals.css"
 
-const inter = Inter({ subsets: ["latin"] })
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+})
 
 export const metadata: Metadata = {
   title: "ChrisnEddys Dashboard",
@@ -19,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${dmSans.variable} ${jetbrainsMono.variable} ${dmSans.className}`}>
         <NextAuthSessionProvider session={null}>
           <QueryProvider>
             {children}

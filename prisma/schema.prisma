@@ -60,7 +60,9 @@ model Store {
   reports         DailyReport[]
   prepTasks       PrepTask[]
   otterStore      OtterStore?
-  otterSummaries  OtterDailySummary[]
+  otterSummaries      OtterDailySummary[]
+  otterMenuCategories OtterMenuCategory[]
+  otterMenuItems      OtterMenuItem[]
 
   @@index([ownerId])
   @@index([yelpBusinessId])
@@ -170,6 +172,10 @@ model OtterDailySummary {
   tpTipForRestaurant   Float?
   tpLoyaltyDiscount    Float?
 
+  // Order counts
+  fpOrderCount Int?
+  tpOrderCount Int?
+
   // Till (FP cash rows only)
   tillPaidIn  Float?
   tillPaidOut Float?
@@ -179,6 +185,51 @@ model OtterDailySummary {
   store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, platform, paymentMethod])
+  @@index([storeId])
+  @@index([date])
+}
+
+model OtterMenuCategory {
+  id        String   @id @default(cuid())
+  storeId   String
+  date      DateTime @db.Date
+  category  String
+
+  fpQuantitySold         Float @default(0)
+  fpTotalInclModifiers   Float @default(0)
+  fpTotalSales           Float @default(0)
+  tpQuantitySold         Float @default(0)
+  tpTotalInclModifiers   Float @default(0)
+  tpTotalSales           Float @default(0)
+
+  syncedAt DateTime @default(now()) @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, category])
+  @@index([storeId])
+  @@index([date])
+}
+
+model OtterMenuItem {
+  id        String   @id @default(cuid())
+  storeId   String
+  date      DateTime @db.Date
+  category  String
+  itemName  String
+
+  fpQuantitySold         Float @default(0)
+  fpTotalInclModifiers   Float @default(0)
+  fpTotalSales           Float @default(0)
+  tpQuantitySold         Float @default(0)
+  tpTotalInclModifiers   Float @default(0)
+  tpTotalSales           Float @default(0)
+
+  syncedAt DateTime @default(now()) @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, category, itemName])
   @@index([storeId])
   @@index([date])
 }
