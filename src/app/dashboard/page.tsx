@@ -1,36 +1,21 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { 
-  getStores, 
-  getStoreAnalytics, 
-  getRecentReports,
-  getPerformanceAlerts
-} from "@/app/actions/store-actions"
+import { getDashboardAnalytics, getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
 import { DashboardContent } from "./components/dashboard-content"
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect("/login")
   }
 
-  // Fetch data server-side
-  const [stores, analytics, recentReports, alerts] = await Promise.all([
-    getStores(),
-    getStoreAnalytics(),
-    getRecentReports(undefined, 5),
-    getPerformanceAlerts()
+  const [data, otterData, menuData] = await Promise.all([
+    getDashboardAnalytics({ days: 1 }),
+    getOtterAnalytics(undefined, { days: 1 }),
+    getMenuCategoryAnalytics(undefined, { days: 1 }),
   ])
 
-  return (
-    <DashboardContent 
-      initialStores={stores}
-      initialAnalytics={analytics}
-      recentReports={recentReports}
-      alerts={alerts}
-      userRole={session.user.role}
-    />
-  )
+  return <DashboardContent initialData={data} initialOtterData={otterData} initialMenuData={menuData} userRole={session.user.role} />
 }

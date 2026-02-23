@@ -25,16 +25,20 @@ import {
   Store,
   Filter,
   Calendar,
-  TrendingUp
+  TrendingUp,
 } from "lucide-react"
 import Link from "next/link"
 import { RevenueTrendChart } from "@/components/charts/revenue-trend-chart"
-import { PrepCompletionChart } from "@/components/charts/prep-completion-chart"
-import { ManagerPerformanceChart } from "@/components/charts/manager-performance-chart"
+import { PlatformBreakdownChart } from "@/components/charts/platform-breakdown-chart"
+import { PaymentSplitChart } from "@/components/charts/payment-split-chart"
 import { TodayStatusGrid } from "@/components/analytics/today-status-grid"
 import { RecentReportsTable } from "@/components/analytics/recent-reports-table"
+import { OtterSyncButton } from "@/components/otter-sync-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
+import { formatCurrency } from "@/lib/format"
+import type { StoreAnalyticsData } from "@/types/analytics"
 
 interface AnalyticsContentProps {
   initialStores: any[]
@@ -43,32 +47,36 @@ interface AnalyticsContentProps {
   todayStatus: any[]
   alerts: any[]
   userRole: string
+  otterAnalytics: StoreAnalyticsData | null
 }
 
-export function AnalyticsContent({ 
-  initialStores, 
+export function AnalyticsContent({
+  initialStores,
   initialAnalytics,
   recentReports,
   todayStatus,
   alerts,
-  userRole 
+  userRole,
+  otterAnalytics,
 }: AnalyticsContentProps) {
   const [selectedStore, setSelectedStore] = useState<string>("all")
-  
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount)
-  }
 
-  const filteredReports = selectedStore === "all" 
-    ? recentReports 
+  const filteredReports = selectedStore === "all"
+    ? recentReports
     : recentReports.filter(report => report.storeId === selectedStore)
 
-  const selectedStoreName = selectedStore === "all" 
+  const selectedStoreName = selectedStore === "all"
     ? "All Stores"
     : initialStores.find(store => store.id === selectedStore)?.name || "Unknown Store"
+
+  // Derive display values from new StoreAnalyticsData shape
+  const totalRevenue = otterAnalytics?.kpis.grossRevenue ?? initialAnalytics?.totalRevenue ?? 0
+  const revenueGrowth = otterAnalytics?.comparison.grossGrowth ?? initialAnalytics?.trends?.revenueGrowth ?? 0
+  const averageTips = otterAnalytics
+    ? otterAnalytics.kpis.totalTips / Math.max(otterAnalytics.dayCount, 1)
+    : initialAnalytics?.averageTips ?? 0
+  const currentWeekRevenue = otterAnalytics?.comparison.currentGross ?? initialAnalytics?.trends?.currentWeekRevenue ?? 0
+  const previousWeekRevenue = otterAnalytics?.comparison.previousGross ?? initialAnalytics?.trends?.previousWeekRevenue ?? 0
 
   return (
     <div>
@@ -83,7 +91,7 @@ export function AnalyticsContent({
               </BreadcrumbItem>
               <BreadcrumbSeparator className="hidden md:block" />
               <BreadcrumbItem>
-                <BreadcrumbPage>Analytics</BreadcrumbPage>
+                <BreadcrumbPage>Overview</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -92,18 +100,18 @@ export function AnalyticsContent({
 
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         {/* Header with Store Selector */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
+            <p className="text-muted-foreground text-sm">
               Comprehensive insights and metrics for {selectedStoreName.toLowerCase()}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2">
               <Store className="h-4 w-4 text-muted-foreground" />
               <Select value={selectedStore} onValueChange={setSelectedStore}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue placeholder="Select store..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -124,9 +132,10 @@ export function AnalyticsContent({
                 </SelectContent>
               </Select>
             </div>
+            <OtterSyncButton lastSyncAt={otterAnalytics?.lastSyncAt} />
             {selectedStore !== "all" && (
               <Link href={`/dashboard/store/${selectedStore}`}>
-                <Button variant="outline">
+                <Button variant="outline" size="sm">
                   <Store className="mr-2 h-4 w-4" />
                   Store Details
                 </Button>
@@ -140,21 +149,27 @@ export function AnalyticsContent({
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+                  Total Revenue
+                  {otterAnalytics && <Badge variant="secondary" className="text-[10px] px-1 py-0">POS</Badge>}
+                </CardTitle>
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(initialAnalytics.totalRevenue)}</div>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(totalRevenue)}
+                </div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <TrendingUp className="h-3 w-3" />
-                  {initialAnalytics.trends?.revenueGrowth > 0 ? "+" : ""}{initialAnalytics.trends?.revenueGrowth.toFixed(1)}% from last week
+                  {revenueGrowth > 0 ? "+" : ""}
+                  {revenueGrowth.toFixed(1)}% from prior period
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Today's Reports</CardTitle>
+                <CardTitle className="text-sm font-medium">Today&apos;s Reports</CardTitle>
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -167,13 +182,18 @@ export function AnalyticsContent({
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Average Tips</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+                  Average Tips
+                  {otterAnalytics && <Badge variant="secondary" className="text-[10px] px-1 py-0">POS</Badge>}
+                </CardTitle>
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(initialAnalytics.averageTips)}</div>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(averageTips)}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Per report average
+                  Per day average
                 </p>
               </CardContent>
             </Card>
@@ -205,7 +225,7 @@ export function AnalyticsContent({
             <CardContent>
               <div className="space-y-2">
                 {alerts.map((alert, index) => (
-                  <Alert key={index} variant={alert.severity === 'error' ? 'destructive' : 'default'}>
+                  <Alert key={index} variant={alert.severity === "error" ? "destructive" : "default"}>
                     <AlertTitle>{alert.storeName}</AlertTitle>
                     <AlertDescription>
                       {alert.message}
@@ -226,56 +246,58 @@ export function AnalyticsContent({
             <TabsTrigger value="operations">Operations</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="overview" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              {/* Today's Status Grid */}
               {userRole === "OWNER" && todayStatus && todayStatus.length > 0 && (
                 <TodayStatusGrid data={todayStatus} />
               )}
 
-              {/* Quick Revenue Overview */}
-              {initialAnalytics?.trends && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Weekly Revenue Comparison</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">This Week</span>
-                        <span className="text-lg font-bold">{formatCurrency(initialAnalytics.trends.currentWeekRevenue)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Last Week</span>
-                        <span className="text-lg font-bold">{formatCurrency(initialAnalytics.trends.previousWeekRevenue)}</span>
-                      </div>
-                      <div className="flex items-center justify-between border-t pt-2">
-                        <span className="text-sm font-medium">Growth</span>
-                        <span className={`text-lg font-bold ${initialAnalytics.trends.revenueGrowth > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {initialAnalytics.trends.revenueGrowth > 0 ? '+' : ''}{initialAnalytics.trends.revenueGrowth.toFixed(1)}%
-                        </span>
-                      </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    Period Revenue Comparison
+                    {otterAnalytics && <Badge variant="secondary" className="text-[10px] px-1 py-0">POS</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Current Period</span>
+                      <span className="text-lg font-bold">
+                        {formatCurrency(currentWeekRevenue)}
+                      </span>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Prior Period</span>
+                      <span className="text-lg font-bold">
+                        {formatCurrency(previousWeekRevenue)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-2">
+                      <span className="text-sm font-medium">Growth</span>
+                      <span className={`text-lg font-bold ${revenueGrowth > 0 ? "text-green-600" : "text-red-600"}`}>
+                        {revenueGrowth > 0 ? "+" : ""}
+                        {revenueGrowth.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="revenue" className="space-y-4">
-            <RevenueTrendChart
-              data={initialAnalytics?.trends ? [
-                { date: '7 days ago', revenue: initialAnalytics.trends.previousWeekRevenue },
-                { date: 'This week', revenue: initialAnalytics.trends.currentWeekRevenue }
-              ] : []}
-              title="Revenue Trends"
-              description="Revenue comparison over time"
-            />
+            <RevenueTrendChart />
+            {otterAnalytics && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <PlatformBreakdownChart data={otterAnalytics.platformBreakdown} />
+                <PaymentSplitChart data={otterAnalytics.paymentSplit} />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="operations" className="space-y-4">
-            {/* This would show prep completion and operational metrics */}
             <Card>
               <CardHeader>
                 <CardTitle>Operational Metrics</CardTitle>
@@ -291,7 +313,7 @@ export function AnalyticsContent({
           </TabsContent>
 
           <TabsContent value="reports" className="space-y-4">
-            <RecentReportsTable 
+            <RecentReportsTable
               data={filteredReports}
               title={selectedStore === "all" ? "All Recent Reports" : `Reports from ${selectedStoreName}`}
               description="Detailed view of recent daily reports"
