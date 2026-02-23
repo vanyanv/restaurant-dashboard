@@ -224,7 +224,9 @@ async function upsertOtterStore(detectedUUID: string): Promise<void> {
 
   // Dynamic import after DATABASE_URL is set
   const { PrismaClient } = await import("../src/generated/prisma/client")
-  const prisma = new PrismaClient()
+  const { PrismaPg } = await import("@prisma/adapter-pg")
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL!, ssl: true })
+  const prisma = new PrismaClient({ adapter })
 
   try {
     console.log(`\nUpserting OtterStore record...`)
