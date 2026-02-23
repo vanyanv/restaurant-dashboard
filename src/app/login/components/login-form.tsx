@@ -5,7 +5,7 @@ import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
-import logo from "/public/logo.png"
+import logo from "../../../../public/logo.png"
 import { Button } from "@/components/ui/button"
 import {
   Card,
