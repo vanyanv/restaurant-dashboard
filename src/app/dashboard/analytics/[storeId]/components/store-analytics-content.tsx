@@ -107,19 +107,18 @@ export function StoreAnalyticsContent({
   }
 
   const handleRangeChange = (startDate: string, endDate: string) => {
-    const diffDays = Math.ceil(
+    const diffDays = Math.round(
       (new Date(endDate).getTime() - new Date(startDate).getTime()) /
         (1000 * 60 * 60 * 24)
     )
+    const presetDays = diffDays === 0 ? 1 : diffDays
+    const presets = [1, 3, 7, 14, 30, 90]
+    const matchedPreset = presets.find((p) => p === presetDays)
 
-    // Check if this matches a preset
-    const today = new Date().toISOString().split("T")[0]
-    const isPreset = endDate === today
-    if (isPreset) {
-      setDays(diffDays)
+    if (matchedPreset) {
+      setDays(matchedPreset)
       setCustomRange(null)
     } else {
-      setDays(diffDays)
       setCustomRange({ startDate, endDate })
     }
 

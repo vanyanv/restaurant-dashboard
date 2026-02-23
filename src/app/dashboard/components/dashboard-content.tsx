@@ -59,13 +59,12 @@ export function DashboardContent({
 
   const handleRangeChange = useCallback(
     (startDate: string, endDate: string) => {
-      const end = new Date(endDate + "T23:59:59")
-      const start = new Date(startDate + "T00:00:00")
       const diffDays = Math.round(
-        (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+        (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
       )
+      const presetDays = diffDays === 0 ? 1 : diffDays
       const presets = [1, 3, 7, 14, 30, 90]
-      const matchedPreset = presets.find((p) => p === diffDays)
+      const matchedPreset = presets.find((p) => p === presetDays)
 
       if (matchedPreset) {
         setDays(matchedPreset)
