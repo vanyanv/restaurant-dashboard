@@ -2,54 +2,70 @@
 
 import { useTransition, useState, useCallback, useEffect } from "react"
 import dynamic from "next/dynamic"
-import Link from "next/link"
-import { BarChart3, ArrowRight } from "lucide-react"
-import { getDashboardAnalytics, getOtterAnalytics } from "@/app/actions/store-actions"
+import { BarChart3 } from "lucide-react"
+import { getDashboardAnalytics, getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
 
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
   Breadcrumb,
   BreadcrumbItem,
+  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
+  BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { OtterSyncButton } from "@/components/otter-sync-button"
-import {
-  FinancialSummaryTable,
-  FinancialSummaryTableSkeleton,
-} from "./financial-summary-table"
-import { KpiCards } from "@/components/analytics/kpi-cards"
-import { DayHighlights } from "@/components/analytics/day-highlights"
-import { PlatformInsights } from "@/components/analytics/platform-insights"
-import { MenuCategorySalesCard } from "@/components/analytics/menu-category-sales-card"
-import {
-  KpiCardsSkeleton,
-  ChartSkeleton,
-  MenuCategoryTableSkeleton,
-} from "@/components/skeletons"
+import { AdditionalMetrics } from "@/components/analytics/additional-metrics"
+import { DashboardSection } from "@/components/analytics/dashboard-section"
 import { formatDateRange, getLastSyncText } from "@/lib/dashboard-utils"
+import {
+  ChartSkeleton,
+  PieChartSkeleton,
+  HeatmapSkeleton,
+  AdditionalMetricsSkeleton,
+} from "@/components/skeletons"
 import type { DashboardData, StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
 
-const RevenueTrendChart = dynamic(
-  () => import("@/components/charts/revenue-trend-chart").then(m => ({ default: m.RevenueTrendChart })),
-  { loading: () => <ChartSkeleton height="h-[250px] md:h-[280px] lg:h-[300px]" showToggle />, ssr: false }
+const RevenueHeatmap = dynamic(
+  () => import("@/components/charts/revenue-heatmap").then(m => ({ default: m.RevenueHeatmap })),
+  { loading: () => <HeatmapSkeleton />, ssr: false }
+)
+const PlatformTrendChart = dynamic(
+  () => import("@/components/charts/platform-trend-chart").then(m => ({ default: m.PlatformTrendChart })),
+  { loading: () => <ChartSkeleton height="h-[240px] md:h-[280px] lg:h-[300px]" />, ssr: false }
+)
+const PlatformBreakdownChart = dynamic(
+  () => import("@/components/charts/platform-breakdown-chart").then(m => ({ default: m.PlatformBreakdownChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const PaymentSplitChart = dynamic(
+  () => import("@/components/charts/payment-split-chart").then(m => ({ default: m.PaymentSplitChart })),
+  { loading: () => <PieChartSkeleton />, ssr: false }
+)
+const TopItemsChart = dynamic(
+  () => import("@/components/charts/top-items-chart").then(m => ({ default: m.TopItemsChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const StoreComparisonChart = dynamic(
+  () => import("@/components/charts/store-comparison-chart").then(m => ({ default: m.StoreComparisonChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
 )
 
-interface DashboardContentProps {
+interface MoreAnalyticsContentProps {
   initialData: DashboardData | null
   initialOtterData: StoreAnalyticsData | null
   initialMenuData: MenuCategoryData | null
   userRole: string
 }
 
-export function DashboardContent({
+export function MoreAnalyticsContent({
   initialData,
   initialOtterData,
   initialMenuData,
   userRole,
-}: DashboardContentProps) {
+}: MoreAnalyticsContentProps) {
   const [data, setData] = useState(initialData)
   const [otterData, setOtterData] = useState(initialOtterData)
   const [menuData, setMenuData] = useState(initialMenuData)
@@ -58,6 +74,7 @@ export function DashboardContent({
   useEffect(() => { setData(initialData) }, [initialData])
   useEffect(() => { setOtterData(initialOtterData) }, [initialOtterData])
   useEffect(() => { setMenuData(initialMenuData) }, [initialMenuData])
+
   const [days, setDays] = useState(1)
   const [customRange, setCustomRange] = useState<{
     startDate: string
@@ -82,12 +99,14 @@ export function DashboardContent({
       }
 
       startTransition(async () => {
-        const [dashResult, otterResult] = await Promise.all([
+        const [dashResult, otterResult, menuResult] = await Promise.all([
           getDashboardAnalytics({ startDate, endDate }),
           getOtterAnalytics(undefined, { startDate, endDate }),
+          getMenuCategoryAnalytics(undefined, { startDate, endDate }),
         ])
         if (dashResult) setData(dashResult)
         setOtterData(otterResult)
+        if (menuResult) setMenuData(menuResult)
       })
     },
     []
@@ -106,7 +125,11 @@ export function DashboardContent({
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage>Sales Summary</BreadcrumbPage>
+                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Analytics</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -120,7 +143,7 @@ export function DashboardContent({
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-primary" />
               <h1 className="text-lg font-semibold tracking-tight">
-                Sales Summary
+                Detailed Analytics
               </h1>
             </div>
             <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
@@ -170,71 +193,85 @@ export function DashboardContent({
         </div>
       </div>
 
-      {/* Dashboard Content */}
-      <div className="flex-1 p-4 sm:p-6 space-y-6">
-        {/* 1. KPI Cards */}
-        {isPending && !otterData ? (
-          <KpiCardsSkeleton />
-        ) : hasOtterData ? (
-          <KpiCards kpis={otterData.kpis} comparison={otterData.comparison} />
+      {/* Analytics Content */}
+      <div className="flex-1 p-4 sm:p-6 space-y-8">
+        {/* Revenue Trends */}
+        <DashboardSection title="Revenue Trends">
+          <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
+            {isPending ? (
+              <HeatmapSkeleton className="lg:col-span-5" />
+            ) : hasOtterData ? (
+              <RevenueHeatmap
+                data={otterData.dailyTrends}
+                className="lg:col-span-5"
+              />
+            ) : null}
+          </div>
+        </DashboardSection>
+
+        {/* Platform Analysis */}
+        <DashboardSection title="Platform Analysis">
+          {isPending ? (
+            <ChartSkeleton height="h-[240px] md:h-[280px] lg:h-[300px]" />
+          ) : hasOtterData ? (
+            <PlatformTrendChart data={otterData.platformTrends} />
+          ) : null}
+          <div className="grid gap-4 md:gap-6 md:grid-cols-3">
+            {isPending ? (
+              <>
+                <ChartSkeleton className="md:col-span-2" />
+                <PieChartSkeleton />
+              </>
+            ) : hasOtterData ? (
+              <>
+                <PlatformBreakdownChart
+                  data={otterData.platformBreakdown}
+                  className="md:col-span-2"
+                />
+                <PaymentSplitChart data={otterData.paymentSplit} />
+              </>
+            ) : null}
+          </div>
+        </DashboardSection>
+
+        {/* Top Menu Items */}
+        {isPending ? (
+          <DashboardSection title="Top Menu Items">
+            <ChartSkeleton />
+          </DashboardSection>
+        ) : menuData ? (
+          <DashboardSection title="Top Menu Items">
+            <TopItemsChart data={menuData} />
+          </DashboardSection>
         ) : null}
 
-        {/* 2. Day Highlights (best/worst day) */}
-        {hasOtterData && otterData.dailyTrends.length > 1 && (
-          <DayHighlights dailyTrends={otterData.dailyTrends} />
-        )}
-
-        {/* 3. Revenue Trend + Menu Category (side-by-side on desktop) */}
-        <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
-          <RevenueTrendChart compact className="lg:col-span-3" />
-          {isPending ? (
-            <MenuCategoryTableSkeleton className="lg:col-span-2" />
-          ) : menuData ? (
-            <MenuCategorySalesCard
-              data={menuData}
-              stores={
-                data?.rows
-                  .filter((r) => r.storeId !== "total")
-                  .map((r) => ({ id: r.storeId, name: r.storeName })) ?? []
-              }
-              className="lg:col-span-2"
-            />
-          ) : null}
-        </div>
-
-        {/* 4. Sales Breakdown Table */}
+        {/* Store Comparison */}
         {isPending ? (
-          <FinancialSummaryTableSkeleton />
-        ) : hasData ? (
-          <FinancialSummaryTable rows={data.rows} totals={data.totals} channelRows={data.channelRows} />
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-1">
-              No financial data yet
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-md">
-              Sync your Otter data to see financial summaries across all
-              locations. Click the sync button above to get started.
-            </p>
-          </div>
-        )}
+          <DashboardSection title="Store Comparison">
+            <ChartSkeleton />
+          </DashboardSection>
+        ) : hasData && data.rows.length > 1 ? (
+          <DashboardSection title="Store Comparison">
+            <StoreComparisonChart
+              data={data.rows
+                .filter((r) => r.storeId !== "total")
+                .map((r) => ({
+                  storeName: r.storeName,
+                  grossSales: r.grossSales,
+                  netSales: r.netSales,
+                }))}
+            />
+          </DashboardSection>
+        ) : null}
 
-        {/* 5. Platform Insights (AOV + Fee % per platform) */}
-        {hasOtterData && (
-          <PlatformInsights data={otterData.platformBreakdown} />
-        )}
-
-        {/* Link to detailed analytics */}
-        <div className="flex justify-center pt-2 pb-4">
-          <Link
-            href="/dashboard/analytics"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View detailed analytics
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+        {/* Additional Metrics */}
+        <DashboardSection title="Additional Metrics">
+          {isPending ? (
+            <AdditionalMetricsSkeleton />
+          ) : hasOtterData ? (
+            <AdditionalMetrics kpis={otterData.kpis} />
+          ) : null}
+        </DashboardSection>
       </div>
     </div>
   )

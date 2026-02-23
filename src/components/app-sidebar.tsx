@@ -47,6 +47,10 @@ const data = {
           title: "Overview",
           url: "/dashboard",
         },
+        {
+          title: "Analytics",
+          url: "/dashboard/analytics",
+        },
       ],
     },
     {

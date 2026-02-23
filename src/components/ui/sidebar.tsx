@@ -40,6 +40,10 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  pinned: boolean
+  setPinned: (pinned: boolean) => void
+  hoverExpanded: boolean
+  setHoverExpanded: (expanded: boolean) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -69,29 +73,39 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
-  // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
-  const open = openProp ?? _open
-  const setOpen = React.useCallback(
-    (value: boolean | ((value: boolean) => boolean)) => {
-      const openState = typeof value === "function" ? value(open) : value
-      if (setOpenProp) {
-        setOpenProp(openState)
-      } else {
-        _setOpen(openState)
-      }
+  // Pinned state: when true, sidebar is locked open and pushes content.
+  // When false (default), sidebar is collapsed and only expands on hover as overlay.
+  const [pinned, _setPinned] = React.useState(defaultOpen)
+  const [hoverExpanded, setHoverExpanded] = React.useState(false)
 
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+  // open is derived: sidebar is open when pinned OR when hover-expanded
+  const open = openProp ?? (pinned || hoverExpanded)
+
+  const setPinned = React.useCallback(
+    (value: boolean) => {
+      if (setOpenProp) {
+        setOpenProp(value)
+      } else {
+        _setPinned(value)
+      }
+      document.cookie = `${SIDEBAR_COOKIE_NAME}=${value}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
-    [setOpenProp, open]
+    [setOpenProp]
   )
 
-  // Helper to toggle the sidebar.
+  // setOpen for backward compatibility — controls pinned state
+  const setOpen = React.useCallback(
+    (value: boolean | ((value: boolean) => boolean)) => {
+      const openState = typeof value === "function" ? value(pinned) : value
+      setPinned(openState)
+    },
+    [setPinned, pinned]
+  )
+
+  // Toggle sidebar pins/unpins on desktop, toggles sheet on mobile
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
-  }, [isMobile, setOpen, setOpenMobile])
+    return isMobile ? setOpenMobile((open) => !open) : setPinned(!pinned)
+  }, [isMobile, setPinned, pinned, setOpenMobile])
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
@@ -122,8 +136,12 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      pinned,
+      setPinned,
+      hoverExpanded,
+      setHoverExpanded,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, pinned, setPinned, hoverExpanded]
   )
 
   return (
@@ -163,7 +181,28 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile, setOpenMobile, pinned, setHoverExpanded } = useSidebar()
+  const hoverTimerRef = React.useRef<ReturnType<typeof setTimeout>>(null)
+
+  const handleMouseEnter = React.useCallback(() => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+    if (!pinned) setHoverExpanded(true)
+  }, [pinned, setHoverExpanded])
+
+  const handleMouseLeave = React.useCallback(() => {
+    hoverTimerRef.current = setTimeout(() => {
+      if (!pinned) setHoverExpanded(false)
+    }, 150)
+  }, [pinned, setHoverExpanded])
+
+  React.useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    }
+  }, [])
 
   if (collapsible === "none") {
     return (
@@ -213,17 +252,20 @@ function Sidebar({
       data-variant={variant}
       data-side={side}
       data-slot="sidebar"
+      data-pinned={pinned ? "true" : "false"}
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* Sidebar gap: always icon-width when not pinned (overlay mode), full width when pinned */}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          "relative bg-transparent transition-[width] duration-200 ease-linear",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
-          variant === "floating" || variant === "inset"
-            ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
-            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
+          pinned
+            ? "w-(--sidebar-width)"
+            : variant === "floating" || variant === "inset"
+              ? "w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
+              : "w-(--sidebar-width-icon)"
         )}
       />
       <div
@@ -233,12 +275,15 @@ function Sidebar({
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-          // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+          // Overlay shadow when hover-expanded (not pinned)
+          !pinned && state === "expanded" && "shadow-xl z-40",
           className
         )}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         {...props}
       >
         <div
