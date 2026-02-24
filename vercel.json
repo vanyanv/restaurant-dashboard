@@ -5,6 +5,9 @@
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 10
+    },
+    "src/app/api/otter/sync/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
