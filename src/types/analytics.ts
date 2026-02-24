@@ -220,3 +220,114 @@ export interface MenuPerformanceData {
   dateRange: { startDate: string; endDate: string }
   dayCount: number
 }
+
+// ========== Product Mix Report types ==========
+
+export interface TreemapItemNode {
+  name: string
+  value: number
+  category: string
+  quantity: number
+  avgPrice: number
+}
+
+export interface TreemapCategoryNode {
+  name: string
+  children: TreemapItemNode[]
+  value?: number
+}
+
+export interface TreemapData {
+  name: string
+  children: TreemapCategoryNode[]
+}
+
+export interface QuickInsight {
+  id: string
+  text: string
+  type: "info" | "positive" | "negative" | "warning"
+}
+
+export interface ParetoItem {
+  itemName: string
+  category: string
+  revenue: number
+  cumulativeRevenue: number
+  cumulativePercent: number
+  abcClass: "A" | "B" | "C"
+}
+
+export interface MatrixItem {
+  itemName: string
+  category: string
+  quantitySold: number
+  avgPrice: number
+  revenue: number
+  quadrant: "star" | "workhorse" | "puzzle" | "dog"
+}
+
+export interface MatrixThresholds {
+  medianQuantity: number
+  medianAvgPrice: number
+}
+
+export interface ProductMixTableItem {
+  itemName: string
+  category: string
+  quantitySold: number
+  revenue: number
+  modifierRevenue: number
+  avgPrice: number
+  percentOfCategoryRevenue: number
+  percentOfTotalRevenue: number
+  fpQuantitySold: number
+  tpQuantitySold: number
+  fpSales: number
+  tpSales: number
+  periodChange: number | null
+}
+
+export interface ProductMixTableCategory {
+  category: string
+  items: ProductMixTableItem[]
+  quantitySold: number
+  revenue: number
+  modifierRevenue: number
+  percentOfTotalRevenue: number
+  fpQuantitySold: number
+  tpQuantitySold: number
+  fpSales: number
+  tpSales: number
+  periodChange: number | null
+}
+
+export interface MoverItem {
+  itemName: string
+  category: string
+  currentQuantity: number
+  previousQuantity: number
+  currentRevenue: number
+  previousRevenue: number
+  quantityChange: number
+  quantityChangePercent: number
+  revenueChange: number
+  revenueChangePercent: number
+}
+
+export interface ProductMixData {
+  treemap: TreemapData
+  insights: QuickInsight[]
+  paretoItems: ParetoItem[]
+  matrixItems: MatrixItem[]
+  matrixThresholds: MatrixThresholds
+  tableCategories: ProductMixTableCategory[]
+  tableTotals: {
+    quantitySold: number
+    revenue: number
+    modifierRevenue: number
+  }
+  risers: MoverItem[]
+  decliners: MoverItem[]
+  dateRange: { startDate: string; endDate: string }
+  dayCount: number
+}

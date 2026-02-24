@@ -25,6 +25,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
+import { localDateStr } from "@/lib/dashboard-utils"
 import type { StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
 
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
@@ -114,13 +115,13 @@ export function StoreAnalyticsContent({
 
     let presetDays: number
     if (diffDays === 0) {
-      const today = new Date().toISOString().split("T")[0]
+      const today = localDateStr(new Date())
       if (startDate === today) {
         presetDays = 1
       } else {
         const yday = new Date()
         yday.setDate(yday.getDate() - 1)
-        presetDays = startDate === yday.toISOString().split("T")[0] ? -1 : diffDays
+        presetDays = startDate === localDateStr(yday) ? -1 : diffDays
       }
     } else {
       presetDays = diffDays

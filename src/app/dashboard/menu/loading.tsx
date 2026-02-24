@@ -1,0 +1,49 @@
+import {
+  KpiCardsSkeleton,
+  ChartSkeleton,
+  PieChartSkeleton,
+  DataTableSkeleton,
+} from "@/components/skeletons"
+import { Skeleton } from "@/components/ui/skeleton"
+
+export default function MenuPerformanceLoading() {
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header skeleton */}
+      <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+        <Skeleton className="h-6 w-6 rounded" />
+        <div className="mx-2 h-4 w-px bg-border" />
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-3 w-3" />
+        <Skeleton className="h-3 w-28" />
+      </header>
+
+      {/* Sticky header skeleton */}
+      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-5 w-5 rounded" />
+            <Skeleton className="h-5 w-36" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-48 rounded-md" />
+            <Skeleton className="h-8 w-28 rounded-md" />
+            <Skeleton className="h-8 w-20 rounded-md" />
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 p-4 sm:p-6 space-y-8">
+        <KpiCardsSkeleton />
+        <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
+          <ChartSkeleton className="lg:col-span-3" />
+          <PieChartSkeleton className="lg:col-span-2" />
+        </div>
+        <ChartSkeleton />
+        <ChartSkeleton />
+        <DataTableSkeleton columns={10} rows={8} />
+      </div>
+    </div>
+  )
+}

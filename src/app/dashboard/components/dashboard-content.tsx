@@ -29,7 +29,7 @@ import {
   ChartSkeleton,
   MenuCategoryTableSkeleton,
 } from "@/components/skeletons"
-import { formatDateRange, getLastSyncText } from "@/lib/dashboard-utils"
+import { formatDateRange, getLastSyncText, localDateStr } from "@/lib/dashboard-utils"
 import type { DashboardData, StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
 
 const RevenueTrendChart = dynamic(
@@ -73,13 +73,13 @@ export function DashboardContent({
 
       let presetDays: number
       if (diffDays === 0) {
-        const today = new Date().toISOString().split("T")[0]
+        const today = localDateStr(new Date())
         if (startDate === today) {
           presetDays = 1
         } else {
           const yday = new Date()
           yday.setDate(yday.getDate() - 1)
-          presetDays = startDate === yday.toISOString().split("T")[0] ? -1 : diffDays
+          presetDays = startDate === localDateStr(yday) ? -1 : diffDays
         }
       } else {
         presetDays = diffDays

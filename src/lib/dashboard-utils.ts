@@ -1,5 +1,13 @@
 import { format } from "date-fns"
 
+/** Format a Date as yyyy-MM-dd using local calendar date (avoids UTC day rollover). */
+export function localDateStr(d: Date): string {
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate + "T00:00:00")
   const end = new Date(endDate + "T00:00:00")
