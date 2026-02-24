@@ -339,6 +339,12 @@ async function main() {
     }
   }
 
+  // Update lastSyncAt for all processed stores
+  await prisma.otterStore.updateMany({
+    where: { otterStoreId: { in: otterStoreIds } },
+    data: { lastSyncAt: new Date() },
+  })
+
   // Summary
   console.log(`\n--- Backfill Complete [${elapsed()}] ---`)
   console.log(`Daily summaries: ${totalDaily} synced, ${totalDailyFailed} failed`)
