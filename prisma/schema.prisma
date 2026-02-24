@@ -18,6 +18,14 @@ enum Shift {
   BOTH
 }
 
+enum InvoiceStatus {
+  PENDING
+  MATCHED
+  REVIEW
+  APPROVED
+  REJECTED
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -31,7 +39,8 @@ model User {
   ownedStores   Store[]   @relation("StoreOwner")
   managedStores StoreManager[]
   reports       DailyReport[]
-  
+  invoices      Invoice[]
+
   @@index([email])
 }
 
@@ -63,6 +72,7 @@ model Store {
   otterSummaries      OtterDailySummary[]
   otterMenuCategories OtterMenuCategory[]
   otterMenuItems      OtterMenuItem[]
+  invoices        Invoice[]
 
   @@index([ownerId])
   @@index([yelpBusinessId])
@@ -259,12 +269,91 @@ model PrepTaskStatus {
   isCompleted   Boolean       @default(false)
   completedAt   DateTime?
   notes         String?
-  
+
   // Relations
   report        DailyReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
   task          PrepTask      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  
+
   @@unique([reportId, taskId])
   @@index([reportId])
   @@index([taskId])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  ownerId         String
+  storeId         String?
+
+  // Source tracking
+  emailMessageId  String        @unique
+  emailSubject    String?
+  emailReceivedAt DateTime?
+  attachmentName  String?
+
+  // Extracted header
+  vendorName      String
+  invoiceNumber   String
+  invoiceDate     DateTime?     @db.Date
+  dueDate         DateTime?     @db.Date
+  deliveryAddress String?
+
+  // Totals
+  subtotal        Float?
+  taxAmount       Float?
+  totalAmount     Float
+
+  // Matching
+  status          InvoiceStatus @default(PENDING)
+  matchConfidence Float?
+  matchedAt       DateTime?
+
+  // Gemini extraction metadata
+  rawExtractionJson String?
+  extractionModel   String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  owner           User          @relation(fields: [ownerId], references: [id])
+  store           Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  lineItems       InvoiceLineItem[]
+
+  @@index([ownerId])
+  @@index([storeId])
+  @@index([vendorName])
+  @@index([invoiceDate])
+  @@index([status])
+}
+
+model InvoiceLineItem {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  lineNumber    Int
+  sku           String?
+  productName   String
+  description   String?
+  category      String?
+  quantity      Float
+  unit          String?
+  unitPrice     Float
+  extendedPrice Float
+
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([category])
+  @@index([sku])
+}
+
+model InvoiceSyncLog {
+  id              String    @id @default(cuid())
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  emailsScanned   Int       @default(0)
+  invoicesCreated Int       @default(0)
+  invoicesSkipped Int       @default(0)
+  errors          Int       @default(0)
+  errorDetails    String?
+  triggeredBy     String
 }

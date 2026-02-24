@@ -8,6 +8,7 @@ import {
   Settings2,
   Plus,
   Building2,
+  FileText,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -58,6 +59,21 @@ const data = {
         {
           title: "Product Mix",
           url: "/dashboard/product-mix",
+        },
+      ],
+    },
+    {
+      title: "Invoices",
+      url: "/dashboard/invoices",
+      icon: FileText,
+      items: [
+        {
+          title: "All Invoices",
+          url: "/dashboard/invoices",
+        },
+        {
+          title: "Needs Review",
+          url: "/dashboard/invoices?status=REVIEW",
         },
       ],
     },
