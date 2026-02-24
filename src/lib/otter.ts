@@ -141,11 +141,62 @@ export interface OtterRow {
   [key: string]: string | number | null
 }
 
-export async function queryMetrics(body: object): Promise<OtterRow[]> {
-  const jwt = process.env.OTTER_JWT ?? process.env.Bearer
-  if (!jwt) {
-    throw new Error("OTTER_JWT environment variable is required")
+// --- Auto-login JWT cache ---
+const SIGN_IN_URL = "https://api.tryotter.com/users/sign_in"
+let cachedJwt: string | null = null
+let cachedJwtExp = 0 // unix seconds
+
+function decodeJwtExp(jwt: string): number {
+  try {
+    const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString())
+    return payload.exp ?? 0
+  } catch {
+    return 0
   }
+}
+
+async function getOtterJwt(): Promise<string> {
+  // 1. Static env var takes priority (backward-compatible for scripts / CI)
+  const envJwt = process.env.OTTER_JWT ?? process.env.Bearer
+  if (envJwt) return envJwt
+
+  // 2. Return cached JWT if still valid (1-hour buffer)
+  const now = Math.floor(Date.now() / 1000)
+  if (cachedJwt && cachedJwtExp - now > 3600) return cachedJwt
+
+  // 3. Login with email/password
+  const email = process.env.OTTER_EMAIL
+  const password = process.env.OTTER_PASSWORD
+  if (!email || !password) {
+    throw new Error(
+      "Otter auth requires either OTTER_JWT or both OTTER_EMAIL + OTTER_PASSWORD env vars"
+    )
+  }
+
+  const res = await fetch(SIGN_IN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Otter sign-in failed (${res.status}): ${text}`)
+  }
+
+  const data = await res.json()
+  const jwt = data.accessToken as string | undefined
+  if (!jwt) {
+    throw new Error("Otter sign-in response missing accessToken")
+  }
+
+  cachedJwt = jwt
+  cachedJwtExp = decodeJwtExp(jwt)
+  return jwt
+}
+
+export async function queryMetrics(body: object): Promise<OtterRow[]> {
+  const jwt = await getOtterJwt()
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30_000)

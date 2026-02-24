@@ -1,21 +1,16 @@
 // scripts/refresh-otter-jwt.ts
-// Automates Otter JWT capture via browser automation.
+// Refreshes the Otter JWT by calling the login API directly (no browser needed).
 // Run with: npx tsx scripts/refresh-otter-jwt.ts
 //
-// Optional env vars in .env.local:
-//   OTTER_EMAIL    — auto-fills email on login page
-//   OTTER_PASSWORD — auto-fills password on login page
-// If not set, the browser opens and you log in manually.
+// Reads OTTER_EMAIL and OTTER_PASSWORD from .env.local, calls the sign-in endpoint,
+// saves the new OTTER_JWT back to .env.local, and verifies it with a test query.
 
 import fs from "fs"
 import path from "path"
-import puppeteer from "puppeteer-core"
 
 const ENV_PATH = path.resolve(process.cwd(), ".env.local")
 
-const OTTER_API_HOST = "api.tryotter.com"
-const OTTER_APP_URL = "https://manager.tryotter.com"
-
+const SIGN_IN_URL = "https://api.tryotter.com/users/sign_in"
 const METRICS_URL = "https://api.tryotter.com/analytics/table/metrics_explorer"
 const OTTER_HEADERS = {
   "Content-Type": "application/json",
@@ -23,7 +18,6 @@ const OTTER_HEADERS = {
   "application-version": "fddebf256f27323d4bb2dfe5e021eba83cdb8a41",
 }
 
-// Store IDs for verification query
 const STORE_IDS = [
   "10b8d83b-db0e-4637-8ce6-ef3b60081f11",
   "2fb629b7-2a22-429c-80cf-de2ae6d4a662",
@@ -51,7 +45,6 @@ function updateEnvLocal(jwt: string): void {
     content = fs.readFileSync(ENV_PATH, "utf-8")
   }
 
-  // Remove existing OTTER_JWT or Bearer lines
   const lines = content.split("\n")
   const filtered = lines.filter((line) => {
     const trimmed = line.trim()
@@ -60,10 +53,8 @@ function updateEnvLocal(jwt: string): void {
     return true
   })
 
-  // Add the new OTTER_JWT line
   filtered.push(`OTTER_JWT=${jwt}`)
 
-  // Remove trailing empty lines, then add one final newline
   while (filtered.length > 0 && filtered[filtered.length - 1].trim() === "") {
     filtered.pop()
   }
@@ -96,10 +87,7 @@ async function verifyToken(jwt: string): Promise<boolean> {
   try {
     const res = await fetch(METRICS_URL, {
       method: "POST",
-      headers: {
-        ...OTTER_HEADERS,
-        Authorization: `Bearer ${jwt}`,
-      },
+      headers: { ...OTTER_HEADERS, Authorization: `Bearer ${jwt}` },
       body: JSON.stringify(body),
     })
 
@@ -126,110 +114,46 @@ async function main() {
   const email = process.env.OTTER_EMAIL ?? env["OTTER_EMAIL"]
   const password = process.env.OTTER_PASSWORD ?? env["OTTER_PASSWORD"]
 
-  console.log("Launching browser...")
-  const browser = await puppeteer.launch({
-    executablePath: "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
-    headless: false,
-    defaultViewport: { width: 1280, height: 800 },
-    args: ["--no-first-run", "--no-default-browser-check"],
+  if (!email || !password) {
+    console.error("OTTER_EMAIL and OTTER_PASSWORD must be set in .env.local")
+    process.exit(1)
+  }
+
+  console.log(`Signing in as ${email}...`)
+
+  const res = await fetch(SIGN_IN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
   })
 
-  const page = await browser.newPage()
-
-  let capturedJwt: string | null = null
-
-  // Intercept requests to capture the JWT from Authorization header
-  await page.setRequestInterception(true)
-  page.on("request", (request) => {
-    const url = request.url()
-    const headers = request.headers()
-
-    if (!capturedJwt && url.includes(OTTER_API_HOST)) {
-      const auth = headers["authorization"] || headers["Authorization"]
-      if (auth && auth.startsWith("Bearer ")) {
-        capturedJwt = auth.replace("Bearer ", "")
-        console.log("\nJWT captured from request to:", url)
-      }
-    }
-
-    request.continue()
-  })
-
-  console.log(`Navigating to ${OTTER_APP_URL}...`)
-  await page.goto(OTTER_APP_URL, { waitUntil: "networkidle2" })
-
-  // Attempt auto-login if credentials are available
-  if (email && password) {
-    console.log("Credentials found, attempting auto-login...")
-    try {
-      // Wait for the email input to appear
-      await page.waitForSelector('input[type="email"], input[name="email"], input[autocomplete="email"]', {
-        timeout: 10000,
-      })
-
-      // Type email
-      const emailInput = await page.$('input[type="email"], input[name="email"], input[autocomplete="email"]')
-      if (emailInput) {
-        await emailInput.click({ clickCount: 3 })
-        await emailInput.type(email, { delay: 50 })
-      }
-
-      // Type password
-      const passwordInput = await page.$('input[type="password"], input[name="password"]')
-      if (passwordInput) {
-        await passwordInput.click({ clickCount: 3 })
-        await passwordInput.type(password, { delay: 50 })
-      }
-
-      // Click submit button
-      const submitBtn = await page.$('button[type="submit"]')
-      if (submitBtn) {
-        await submitBtn.click()
-        console.log("Login form submitted. Waiting for dashboard to load...")
-      }
-    } catch {
-      console.log("Could not auto-fill login form. Please log in manually.")
-    }
-  } else {
-    console.log("\nNo OTTER_EMAIL/OTTER_PASSWORD found in .env.local.")
-    console.log("Please log in manually in the browser window.")
+  if (!res.ok) {
+    const text = await res.text()
+    console.error(`Sign-in failed (${res.status}): ${text}`)
+    process.exit(1)
   }
 
-  // Wait for JWT to be captured (poll every second, timeout after 5 minutes)
-  console.log("\nWaiting for JWT to be captured from network traffic...")
-  const maxWait = 5 * 60 * 1000
-  const start = Date.now()
+  const data = await res.json()
+  const jwt = data.accessToken as string | undefined
 
-  while (!capturedJwt && Date.now() - start < maxWait) {
-    await new Promise((r) => setTimeout(r, 1000))
+  if (!jwt) {
+    console.error("Sign-in response missing accessToken")
+    process.exit(1)
   }
 
-  if (!capturedJwt) {
-    console.error("\nTimeout: no JWT captured after 5 minutes.")
-    await browser.close()
-    throw new Error("No JWT captured")
-  }
+  console.log(`Got JWT (${jwt.length} chars)`)
 
-  const jwt: string = capturedJwt
-
-  console.log(`\nJWT length: ${jwt.length} characters`)
-
-  // Verify the token works
-  console.log("\nVerifying token...")
+  console.log("Verifying token...")
   const valid = await verifyToken(jwt)
 
   if (!valid) {
     console.error("Token verification failed. Not saving.")
-    await browser.close()
     process.exit(1)
   }
 
-  // Save to .env.local
   updateEnvLocal(jwt)
-  console.log(`\nSaved OTTER_JWT to ${ENV_PATH}`)
-  console.log("Done! You can close the browser.")
-
-  await browser.close()
+  console.log(`Saved OTTER_JWT to ${ENV_PATH}`)
+  console.log("Done!")
 }
 
 main().catch((err) => {
