@@ -175,7 +175,13 @@ async function getOtterJwt(): Promise<string> {
 
   const res = await fetch(SIGN_IN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Origin": "https://manager.tryotter.com",
+      "Referer": "https://manager.tryotter.com/",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+    },
     body: JSON.stringify({ email, password }),
   })
 
