@@ -10,12 +10,6 @@
       "maxDuration": 120
     }
   },
-  "crons": [
-    {
-      "path": "/api/otter/sync",
-      "schedule": "0 8 * * *"
-    }
-  ],
   "env": {
     "NEXTAUTH_RUNTIME": "nodejs"
   },
