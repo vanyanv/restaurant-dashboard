@@ -1004,6 +1004,58 @@ export async function getMenuPerformanceAnalytics(
     }
     allItems.sort((a, b) => b.totalQuantitySold - a.totalQuantitySold)
 
+    // Build item daily matrix (top 20 items x all dates) for heatmap + race
+    const top20Items = allItems.slice(0, 20)
+    const top20Set = new Set(top20Items.map(i => itemKey(i.category, i.itemName)))
+    const matrixItemNames = top20Items.map(i => i.itemName)
+
+    const itemDailyMatrix: import("@/types/analytics").ItemDailyCell[] = []
+    for (const i of items) {
+      const key = itemKey(i.category, i.itemName)
+      if (!top20Set.has(key)) continue
+      itemDailyMatrix.push({
+        date: i.date.toISOString().split("T")[0],
+        itemName: i.itemName,
+        category: i.category,
+        quantity: i.fpQuantitySold + i.tpQuantitySold,
+        revenue: i.fpTotalSales + i.tpTotalSales,
+      })
+    }
+
+    // Build race day frames (top 10 items, cumulative rankings per day)
+    const top10Items = allItems.slice(0, 10)
+    const top10Set = new Set(top10Items.map(i => itemKey(i.category, i.itemName)))
+    const uniqueDates = [...new Set(items.map(i => i.date.toISOString().split("T")[0]))].sort()
+
+    const cumulatives = new Map<string, { qty: number; rev: number; category: string }>()
+    for (const item of top10Items) {
+      cumulatives.set(item.itemName, { qty: 0, rev: 0, category: item.category })
+    }
+
+    const raceDayFrames: import("@/types/analytics").RaceDayFrame[] = []
+    for (const date of uniqueDates) {
+      for (const i of items) {
+        if (i.date.toISOString().split("T")[0] !== date) continue
+        const key = itemKey(i.category, i.itemName)
+        if (!top10Set.has(key)) continue
+        const cum = cumulatives.get(i.itemName)
+        if (!cum) continue
+        cum.qty += i.fpQuantitySold + i.tpQuantitySold
+        cum.rev += i.fpTotalSales + i.tpTotalSales
+      }
+      const entries = Array.from(cumulatives.entries())
+        .map(([name, data]) => ({ itemName: name, ...data }))
+        .sort((a, b) => b.qty - a.qty)
+        .map((e, idx) => ({
+          itemName: e.itemName,
+          category: e.category,
+          cumulativeQuantity: e.qty,
+          cumulativeRevenue: e.rev,
+          rank: idx + 1,
+        }))
+      raceDayFrames.push({ date, rankings: entries })
+    }
+
     // KPIs
     const totalItemsSold = allItems.reduce((s, i) => s + i.totalQuantitySold, 0)
     const totalMenuRevenue = allItems.reduce((s, i) => s + i.totalSales, 0)
@@ -1130,9 +1182,161 @@ export async function getMenuPerformanceAnalytics(
         endDate: rangeEnd.toISOString().split("T")[0],
       },
       dayCount,
+      itemDailyMatrix,
+      raceDayFrames,
+      matrixItemNames,
     }
   } catch (error) {
     console.error("Get menu performance analytics error:", error)
+    return null
+  }
+}
+
+export async function getMenuItemDetail(
+  itemName: string,
+  category: string,
+  storeId?: string,
+  options?: { days?: number; startDate?: string; endDate?: string }
+): Promise<import("@/types/analytics").ItemExplorerData | null> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return null
+
+    const stores = await getStores()
+    if (stores.length === 0) return null
+
+    const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
+
+    const days = options?.days ?? 7
+    let rangeStart: Date
+    let rangeEnd: Date
+
+    if (options?.startDate && options?.endDate) {
+      rangeStart = new Date(options.startDate + "T00:00:00Z")
+      rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
+    } else {
+      rangeEnd = new Date()
+      rangeEnd.setHours(23, 59, 59, 999)
+      rangeStart = new Date()
+      if (days === 1) {
+        rangeStart.setHours(0, 0, 0, 0)
+      } else {
+        rangeStart.setDate(rangeEnd.getDate() - days)
+        rangeStart.setHours(0, 0, 0, 0)
+      }
+    }
+
+    const dayCount = Math.max(1, Math.ceil(
+      (rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)
+    ))
+
+    // Fetch current period items for this specific item
+    const currentItems = await prisma.otterMenuItem.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: rangeStart, lte: rangeEnd },
+        itemName,
+        category,
+      },
+      orderBy: { date: "asc" },
+    })
+
+    if (currentItems.length === 0) return null
+
+    // Fetch all items in range for rank computation
+    const allItemsRaw = await prisma.otterMenuItem.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { itemName: true, category: true, fpQuantitySold: true, tpQuantitySold: true },
+    })
+
+    // Compute rank
+    const qtyMap = new Map<string, number>()
+    for (const i of allItemsRaw) {
+      const key = `${i.category}|||${i.itemName}`
+      qtyMap.set(key, (qtyMap.get(key) ?? 0) + i.fpQuantitySold + i.tpQuantitySold)
+    }
+    const sorted = [...qtyMap.entries()].sort((a, b) => b[1] - a[1])
+    const rank = sorted.findIndex(([k]) => k === `${category}|||${itemName}`) + 1
+
+    // Fetch previous period for growth
+    const prevEnd = new Date(rangeStart)
+    prevEnd.setDate(prevEnd.getDate() - 1)
+    const prevStart = new Date(prevEnd)
+    prevStart.setDate(prevStart.getDate() - dayCount)
+    prevStart.setHours(0, 0, 0, 0)
+
+    const prevItems = await prisma.otterMenuItem.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: prevStart, lte: prevEnd },
+        itemName,
+        category,
+      },
+    })
+
+    // Aggregate current
+    let fpQty = 0, tpQty = 0, fpSales = 0, tpSales = 0
+    for (const i of currentItems) {
+      fpQty += i.fpQuantitySold
+      tpQty += i.tpQuantitySold
+      fpSales += i.fpTotalSales
+      tpSales += i.tpTotalSales
+    }
+    const totalQty = fpQty + tpQty
+    const totalRevenue = fpSales + tpSales
+
+    // Aggregate previous
+    let prevTotalQty = 0
+    for (const i of prevItems) {
+      prevTotalQty += i.fpQuantitySold + i.tpQuantitySold
+    }
+
+    // Build daily trend (aggregate by date across stores)
+    const dailyMap = new Map<string, import("@/types/analytics").ItemDailyDetail>()
+    for (const i of currentItems) {
+      const dateStr = i.date.toISOString().split("T")[0]
+      const existing = dailyMap.get(dateStr)
+      if (existing) {
+        existing.fpQuantitySold += i.fpQuantitySold
+        existing.tpQuantitySold += i.tpQuantitySold
+        existing.fpSales += i.fpTotalSales
+        existing.tpSales += i.tpTotalSales
+        existing.totalQuantitySold += i.fpQuantitySold + i.tpQuantitySold
+        existing.totalSales += i.fpTotalSales + i.tpTotalSales
+      } else {
+        dailyMap.set(dateStr, {
+          date: dateStr,
+          fpQuantitySold: i.fpQuantitySold,
+          tpQuantitySold: i.tpQuantitySold,
+          fpSales: i.fpTotalSales,
+          tpSales: i.tpTotalSales,
+          totalQuantitySold: i.fpQuantitySold + i.tpQuantitySold,
+          totalSales: i.fpTotalSales + i.tpTotalSales,
+        })
+      }
+    }
+
+    return {
+      itemName,
+      category,
+      rank,
+      totalQuantitySold: totalQty,
+      totalRevenue,
+      avgPricePerUnit: totalQty > 0 ? totalRevenue / totalQty : 0,
+      fpQuantitySold: fpQty,
+      tpQuantitySold: tpQty,
+      fpSales,
+      tpSales,
+      growthPercent: prevTotalQty > 0
+        ? ((totalQty - prevTotalQty) / prevTotalQty) * 100
+        : null,
+      dailyTrend: Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
+    }
+  } catch (error) {
+    console.error("Get menu item detail error:", error)
     return null
   }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition, useState, useCallback, useEffect } from "react"
+import { useTransition, useState, useCallback, useEffect, useMemo } from "react"
 import dynamic from "next/dynamic"
 import { UtensilsCrossed } from "lucide-react"
 import { getMenuPerformanceAnalytics } from "@/app/actions/store-actions"
@@ -25,7 +25,9 @@ import {
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { OtterSyncButton } from "@/components/otter-sync-button"
 import { DashboardSection } from "@/components/analytics/dashboard-section"
+import { CollapsibleSection } from "@/components/analytics/collapsible-section"
 import { MenuKpiCards } from "@/components/charts/menu-kpi-cards"
+import { ItemExplorerSheet } from "./item-explorer-sheet"
 import { formatDateRange, localDateStr } from "@/lib/dashboard-utils"
 import {
   KpiCardsSkeleton,
@@ -43,10 +45,6 @@ const CategoryBreakdownChart = dynamic(
   () => import("@/components/charts/category-breakdown-chart").then(m => ({ default: m.CategoryBreakdownChart })),
   { loading: () => <PieChartSkeleton />, ssr: false }
 )
-const MenuTopItemsChart = dynamic(
-  () => import("@/components/charts/menu-top-items-chart").then(m => ({ default: m.MenuTopItemsChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
 const ChannelComparisonChart = dynamic(
   () => import("@/components/charts/channel-comparison-chart").then(m => ({ default: m.ChannelComparisonChart })),
   { loading: () => <ChartSkeleton />, ssr: false }
@@ -54,6 +52,14 @@ const ChannelComparisonChart = dynamic(
 const MenuItemsTable = dynamic(
   () => import("@/components/analytics/menu-items-table").then(m => ({ default: m.MenuItemsTable })),
   { loading: () => <DataTableSkeleton columns={10} rows={8} />, ssr: false }
+)
+const ItemHeatmap = dynamic(
+  () => import("@/components/charts/item-heatmap").then(m => ({ default: m.ItemHeatmap })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const RankingRaceChart = dynamic(
+  () => import("@/components/charts/ranking-race-chart").then(m => ({ default: m.RankingRaceChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
 )
 
 interface MenuPerformanceContentProps {
@@ -78,6 +84,10 @@ export function MenuPerformanceContent({
     endDate: string
   } | null>(null)
   const [selectedStore, setSelectedStore] = useState("all")
+  const [selectedItem, setSelectedItem] = useState<{
+    itemName: string
+    category: string
+  } | null>(null)
 
   const fetchData = useCallback(
     (storeId: string, options: { startDate: string; endDate: string } | { days: number }) => {
@@ -137,6 +147,20 @@ export function MenuPerformanceContent({
     },
     [fetchData, getDateOptions]
   )
+
+  const handleItemClick = useCallback((itemName: string, category: string) => {
+    setSelectedItem({ itemName, category })
+  }, [])
+
+  const handleCloseExplorer = useCallback(() => {
+    setSelectedItem(null)
+  }, [])
+
+  // Build dateOptions for the explorer sheet
+  const explorerDateOptions = useMemo(() => {
+    if (customRange) return customRange
+    return { days }
+  }, [customRange, days])
 
   const hasData = !isPending && data
 
@@ -229,7 +253,7 @@ export function MenuPerformanceContent({
 
       {/* Content */}
       <div className="flex-1 p-4 sm:p-6 space-y-8">
-        {/* KPI Cards */}
+        {/* KPI Cards (not collapsible) */}
         <DashboardSection title="Overview">
           {isPending ? (
             <KpiCardsSkeleton />
@@ -244,7 +268,7 @@ export function MenuPerformanceContent({
 
         {/* Daily Trend + Category Breakdown */}
         {(isPending || hasData) && (
-          <DashboardSection title="Trends & Categories">
+          <CollapsibleSection title="Trends & Categories" defaultOpen>
             <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
               {isPending ? (
                 <>
@@ -264,42 +288,73 @@ export function MenuPerformanceContent({
                 </>
               ) : null}
             </div>
-          </DashboardSection>
+          </CollapsibleSection>
         )}
 
-        {/* Top Items */}
+        {/* Item Heatmap */}
         {(isPending || hasData) && (
-          <DashboardSection title="Top Sellers">
+          <CollapsibleSection title="Item Heatmap" defaultOpen>
             {isPending ? (
               <ChartSkeleton />
-            ) : hasData ? (
-              <MenuTopItemsChart data={data.topItems} />
+            ) : hasData && data.itemDailyMatrix.length > 0 ? (
+              <ItemHeatmap
+                matrix={data.itemDailyMatrix}
+                itemNames={data.matrixItemNames}
+                dateRange={data.dateRange}
+                onItemClick={handleItemClick}
+              />
             ) : null}
-          </DashboardSection>
+          </CollapsibleSection>
+        )}
+
+        {/* Ranking Race (replaces Top Items) */}
+        {(isPending || hasData) && (
+          <CollapsibleSection title="Top Sellers" defaultOpen={false}>
+            {isPending ? (
+              <ChartSkeleton />
+            ) : hasData && data.raceDayFrames.length > 0 ? (
+              <RankingRaceChart
+                frames={data.raceDayFrames}
+                onItemClick={handleItemClick}
+              />
+            ) : null}
+          </CollapsibleSection>
         )}
 
         {/* Channel Comparison */}
         {(isPending || hasData) && (
-          <DashboardSection title="Channel Analysis">
+          <CollapsibleSection title="Channel Analysis" defaultOpen={false}>
             {isPending ? (
               <ChartSkeleton />
             ) : hasData ? (
               <ChannelComparisonChart data={data.channelComparison} />
             ) : null}
-          </DashboardSection>
+          </CollapsibleSection>
         )}
 
         {/* Detailed Items Table */}
         {(isPending || hasData) && (
-          <DashboardSection title="Detailed Breakdown">
+          <CollapsibleSection title="Detailed Breakdown" defaultOpen>
             {isPending ? (
               <DataTableSkeleton columns={10} rows={8} />
             ) : hasData ? (
-              <MenuItemsTable data={data.allItems} />
+              <MenuItemsTable
+                data={data.allItems}
+                onItemClick={handleItemClick}
+              />
             ) : null}
-          </DashboardSection>
+          </CollapsibleSection>
         )}
       </div>
+
+      {/* Item Explorer Sheet */}
+      <ItemExplorerSheet
+        itemName={selectedItem?.itemName ?? null}
+        category={selectedItem?.category ?? null}
+        storeId={selectedStore === "all" ? undefined : selectedStore}
+        dateOptions={explorerDateOptions}
+        onClose={handleCloseExplorer}
+      />
     </div>
   )
 }

@@ -32,12 +32,13 @@ import type { MenuItemRanked } from "@/types/analytics"
 interface MenuItemsTableProps {
   data: MenuItemRanked[]
   className?: string
+  onItemClick?: (itemName: string, category: string) => void
 }
 
 type SortKey = "itemName" | "category" | "fpQuantitySold" | "tpQuantitySold" | "totalQuantitySold" | "fpSales" | "tpSales" | "totalSales" | "avgPricePerUnit" | "fpShare"
 type SortDir = "asc" | "desc"
 
-export function MenuItemsTable({ data, className }: MenuItemsTableProps) {
+export function MenuItemsTable({ data, className, onItemClick }: MenuItemsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("totalQuantitySold")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -180,7 +181,19 @@ export function MenuItemsTable({ data, className }: MenuItemsTableProps) {
             <TableBody>
               {sorted.map((item, idx) => (
                 <TableRow key={`${item.category}-${item.itemName}-${idx}`}>
-                  <TableCell className="pl-6 font-medium">{item.itemName}</TableCell>
+                  <TableCell className="pl-6 font-medium">
+                    {onItemClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onItemClick(item.itemName, item.category)}
+                        className="text-left hover:underline hover:text-primary cursor-pointer transition-colors"
+                      >
+                        {item.itemName}
+                      </button>
+                    ) : (
+                      item.itemName
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{item.category}</TableCell>
                   <TableCell className="text-right font-mono-numbers">{formatNumber(item.fpQuantitySold)}</TableCell>
                   <TableCell className="text-right font-mono-numbers">{formatNumber(item.tpQuantitySold)}</TableCell>

@@ -219,6 +219,58 @@ export interface MenuPerformanceData {
   channelComparison: MenuChannelComparison[]
   dateRange: { startDate: string; endDate: string }
   dayCount: number
+  itemDailyMatrix: ItemDailyCell[]
+  raceDayFrames: RaceDayFrame[]
+  matrixItemNames: string[]
+}
+
+// Heatmap & Race source data
+export interface ItemDailyCell {
+  date: string
+  itemName: string
+  category: string
+  quantity: number
+  revenue: number
+}
+
+// Race animation frames
+export interface RaceRankingEntry {
+  itemName: string
+  category: string
+  cumulativeQuantity: number
+  cumulativeRevenue: number
+  rank: number
+}
+
+export interface RaceDayFrame {
+  date: string
+  rankings: RaceRankingEntry[]
+}
+
+// Item explorer detail (fetched on demand)
+export interface ItemDailyDetail {
+  date: string
+  fpQuantitySold: number
+  tpQuantitySold: number
+  fpSales: number
+  tpSales: number
+  totalQuantitySold: number
+  totalSales: number
+}
+
+export interface ItemExplorerData {
+  itemName: string
+  category: string
+  rank: number
+  totalQuantitySold: number
+  totalRevenue: number
+  avgPricePerUnit: number
+  fpQuantitySold: number
+  tpQuantitySold: number
+  fpSales: number
+  tpSales: number
+  growthPercent: number | null
+  dailyTrend: ItemDailyDetail[]
 }
 
 // ========== Product Mix Report types ==========
