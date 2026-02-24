@@ -1,12 +1,17 @@
 // scripts/refresh-otter-jwt.ts
-// Refreshes the Otter JWT by calling the login API directly (no browser needed).
+// Refreshes the Otter JWT and pushes it to .env.local, Vercel, and GitHub.
 // Run with: npx tsx scripts/refresh-otter-jwt.ts
 //
 // Reads OTTER_EMAIL and OTTER_PASSWORD from .env.local, calls the sign-in endpoint,
-// saves the new OTTER_JWT back to .env.local, and verifies it with a test query.
+// saves the new OTTER_JWT to .env.local, then updates Vercel and GitHub secrets.
+//
+// Requirements for auto-push:
+//   - Vercel: VERCEL_TOKEN and VERCEL_PROJECT_ID in .env.local
+//   - GitHub: `gh` CLI installed and authenticated (gh auth login)
 
 import fs from "fs"
 import path from "path"
+import { execSync } from "child_process"
 
 const ENV_PATH = path.resolve(process.cwd(), ".env.local")
 
@@ -98,14 +103,77 @@ async function verifyToken(jwt: string): Promise<boolean> {
 
     const data = await res.json()
     if (data.rows && Array.isArray(data.rows)) {
-      console.log(`Verification passed: got ${data.rows.length} row(s)`)
+      console.log(`  Verification passed: got ${data.rows.length} row(s)`)
       return true
     }
-    console.error("Verification failed: unexpected response shape")
+    console.error("  Verification failed: unexpected response shape")
     return false
   } catch (err) {
-    console.error("Verification failed:", err)
+    console.error("  Verification failed:", err)
     return false
+  }
+}
+
+async function updateVercel(jwt: string, env: Record<string, string>): Promise<void> {
+  const token = process.env.VERCEL_TOKEN ?? env["VERCEL_TOKEN"]
+  const projectId = process.env.VERCEL_PROJECT_ID ?? env["VERCEL_PROJECT_ID"]
+
+  if (!token || !projectId) {
+    console.log("  Skipped (VERCEL_TOKEN or VERCEL_PROJECT_ID not set)")
+    return
+  }
+
+  // Find existing OTTER_JWT env var ID
+  const listRes = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!listRes.ok) {
+    console.error(`  Failed to list env vars: ${listRes.status}`)
+    return
+  }
+
+  const listData = await listRes.json()
+  const existing = listData.envs?.find((e: { key: string }) => e.key === "OTTER_JWT")
+
+  if (existing) {
+    // Update existing
+    const res = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env/${existing.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ value: jwt }),
+    })
+    if (res.ok) {
+      console.log("  Updated OTTER_JWT in Vercel")
+    } else {
+      console.error(`  Failed to update: ${res.status} ${await res.text()}`)
+    }
+  } else {
+    // Create new
+    const res = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: "OTTER_JWT",
+        value: jwt,
+        type: "encrypted",
+        target: ["production", "preview"],
+      }),
+    })
+    if (res.ok) {
+      console.log("  Created OTTER_JWT in Vercel")
+    } else {
+      console.error(`  Failed to create: ${res.status} ${await res.text()}`)
+    }
+  }
+}
+
+function updateGitHub(jwt: string): void {
+  try {
+    execSync(`gh secret set OTTER_JWT --body "${jwt}"`, { stdio: "pipe" })
+    console.log("  Updated OTTER_JWT in GitHub Actions")
+  } catch {
+    console.log("  Skipped (gh CLI not available or not authenticated)")
   }
 }
 
@@ -119,8 +187,8 @@ async function main() {
     process.exit(1)
   }
 
+  // 1. Sign in
   console.log(`Signing in as ${email}...`)
-
   const res = await fetch(SIGN_IN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -143,17 +211,27 @@ async function main() {
 
   console.log(`Got JWT (${jwt.length} chars)`)
 
+  // 2. Verify
   console.log("Verifying token...")
   const valid = await verifyToken(jwt)
-
   if (!valid) {
     console.error("Token verification failed. Not saving.")
     process.exit(1)
   }
 
+  // 3. Save locally
   updateEnvLocal(jwt)
-  console.log(`Saved OTTER_JWT to ${ENV_PATH}`)
-  console.log("Done!")
+  console.log(`Saved to ${ENV_PATH}`)
+
+  // 4. Push to Vercel
+  console.log("Updating Vercel...")
+  await updateVercel(jwt, env)
+
+  // 5. Push to GitHub Actions
+  console.log("Updating GitHub...")
+  updateGitHub(jwt)
+
+  console.log("\nDone!")
 }
 
 main().catch((err) => {

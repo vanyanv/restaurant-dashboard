@@ -14,25 +14,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Get fresh Otter JWT
-        id: auth
-        run: |
-          RESPONSE=$(curl -s -X POST https://api.tryotter.com/users/sign_in \
-            -H "Content-Type: application/json" \
-            -H "Accept: */*" \
-            -H "Origin: https://manager.tryotter.com" \
-            -H "Referer: https://manager.tryotter.com/" \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" \
-            -d '{"email":"${{ secrets.OTTER_EMAIL }}","password":"${{ secrets.OTTER_PASSWORD }}"}')
-          JWT=$(echo "$RESPONSE" | jq -r '.accessToken')
-          if [ -z "$JWT" ] || [ "$JWT" = "null" ]; then
-            echo "Failed to get Otter JWT"
-            echo "$RESPONSE" | jq -r '.message // empty'
-            exit 1
-          fi
-          echo "::add-mask::$JWT"
-          echo "jwt=$JWT" >> $GITHUB_OUTPUT
       - run: npx tsx scripts/backfill-otter.ts 3
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          OTTER_JWT: ${{ steps.auth.outputs.jwt }}
+          OTTER_JWT: ${{ secrets.OTTER_JWT }}
