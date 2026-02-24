@@ -96,7 +96,6 @@ export function buildMenuCategorySyncBody(
     columns: MENU_ITEM_COLUMNS,
     groupBy: [
       { key: "menu_parent_entity_name" },
-      { key: "store" },
     ],
     sortBy: [{ type: "metric", key: "fp_order_items_quantity_sold", sortOrder: "DESC" }],
     filterSet: [
@@ -113,7 +112,7 @@ export function buildMenuCategorySyncBody(
 }
 
 export function buildMenuItemSyncBody(
-  otterStoreId: string,
+  otterStoreIds: string[],
   date: Date
 ): object {
   const { minDate, maxDate } = utcDayRange(date)
@@ -129,7 +128,7 @@ export function buildMenuItemSyncBody(
       { filterType: "dateRangeFilter", minDate, maxDate },
       { filterType: "categoryFilter", dimensionName: "is_parent", op: "IN", values: ["true"] },
     ],
-    scopeSet: [{ key: "store", values: [otterStoreId] }],
+    scopeSet: [{ key: "store", values: otterStoreIds }],
     includeMetricsFilters: true,
     localTime: true,
     includeTotalRowCount: false,

@@ -133,8 +133,16 @@ async function main() {
     activeStores.map((os) => [os.otterStoreId, os.storeId])
   )
 
+  // Group Otter UUIDs by internal storeId (multiple UUIDs may map to one store)
+  const storeGroups = new Map<string, string[]>()
+  for (const os of activeStores) {
+    const uuids = storeGroups.get(os.storeId) ?? []
+    uuids.push(os.otterStoreId)
+    storeGroups.set(os.storeId, uuids)
+  }
+
   console.log(
-    `Stores: ${activeStores.map((s) => s.store.name).join(", ")} (${activeStores.length} active)\n`
+    `Stores: ${activeStores.map((s) => s.store.name).join(", ")} (${activeStores.length} active, ${storeGroups.size} internal)\n`
   )
 
   // --- Upsert helpers (mirror sync route logic exactly) ---
@@ -279,39 +287,36 @@ async function main() {
         const date = new Date(day)
         date.setHours(0, 0, 0, 0)
 
-        // --- Menu Categories (per-day, all stores) ---
-        await sleep(INTER_API_DELAY_MS)
-        try {
-          const body = buildMenuCategorySyncBody(otterStoreIds, day)
-          const rows = await queryWithRetry(body, `Categories ${dayLabel}`)
-
-          const ops: Array<() => any> = []
-          for (const row of rows) {
-            const otterStoreId = row["store"] as string | null
-            if (!otterStoreId) continue
-            const sid = otterToInternal.get(otterStoreId)
-            if (!sid) continue
-            ops.push(makeCategoryUpsert(row, sid, date)!)
-          }
-
-          const { synced, failed } = await batchUpsert(ops, `Categories ${dayLabel}`)
-          totalCategories += synced
-          totalCategoriesFailed += failed
-
-          console.log(`  [${dayLabel}] (${dayIdx + 1}/${chunkDays.length}) Categories: ${rows.length} rows`)
-        } catch (err) {
-          console.error(`  [${dayLabel}] Category sync error:`, err instanceof Error ? err.message : err)
-        }
-
-        // --- Menu Items (per-day, per-store) ---
-        for (let storeIdx = 0; storeIdx < otterStoreIds.length; storeIdx++) {
-          const otterStoreId = otterStoreIds[storeIdx]
-          const sid = otterToInternal.get(otterStoreId)
-          if (!sid) continue
-
+        // --- Menu Categories (per-day, per internal store) ---
+        const storeEntries = [...storeGroups.entries()]
+        for (let si = 0; si < storeEntries.length; si++) {
+          const [sid, uuids] = storeEntries[si]
           await sleep(INTER_API_DELAY_MS)
           try {
-            const body = buildMenuItemSyncBody(otterStoreId, day)
+            const body = buildMenuCategorySyncBody(uuids, day)
+            const rows = await queryWithRetry(body, `Categories ${dayLabel}`)
+
+            const ops: Array<() => any> = []
+            for (const row of rows) {
+              ops.push(makeCategoryUpsert(row, sid, date)!)
+            }
+
+            const { synced, failed } = await batchUpsert(ops, `Categories ${dayLabel}`)
+            totalCategories += synced
+            totalCategoriesFailed += failed
+
+            console.log(`  [${dayLabel}] (${dayIdx + 1}/${chunkDays.length}) Categories store ${si + 1}/${storeEntries.length}: ${rows.length} rows`)
+          } catch (err) {
+            console.error(`  [${dayLabel}] Category sync error:`, err instanceof Error ? err.message : err)
+          }
+        }
+
+        // --- Menu Items (per-day, per internal store) ---
+        for (let si = 0; si < storeEntries.length; si++) {
+          const [sid, uuids] = storeEntries[si]
+          await sleep(INTER_API_DELAY_MS)
+          try {
+            const body = buildMenuItemSyncBody(uuids, day)
             const rows = await queryWithRetry(body, `Items ${dayLabel}`)
 
             const ops = rows.map((row) => makeItemUpsert(row, sid, date)).filter(Boolean) as Array<() => any>
@@ -319,9 +324,9 @@ async function main() {
             totalItems += synced
             totalItemsFailed += failed
 
-            console.log(`  [${dayLabel}] Items store ${storeIdx + 1}/${otterStoreIds.length}: ${rows.length} rows`)
+            console.log(`  [${dayLabel}] Items store ${si + 1}/${storeEntries.length}: ${rows.length} rows`)
           } catch (err) {
-            console.error(`  [${dayLabel}] Item sync error store ${storeIdx + 1}:`, err instanceof Error ? err.message : err)
+            console.error(`  [${dayLabel}] Item sync error store ${si + 1}:`, err instanceof Error ? err.message : err)
           }
         }
       }

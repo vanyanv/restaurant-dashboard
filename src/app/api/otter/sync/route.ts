@@ -103,6 +103,14 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     activeOtterStores.map((os) => [os.otterStoreId, os.storeId])
   )
 
+  // Group Otter UUIDs by internal storeId (multiple UUIDs may map to one store)
+  const storeGroups = new Map<string, string[]>()
+  for (const os of activeOtterStores) {
+    const uuids = storeGroups.get(os.storeId) ?? []
+    uuids.push(os.otterStoreId)
+    storeGroups.set(os.storeId, uuids)
+  }
+
   const days = getDateRange(startDate, endDate)
   const counts = { daily: 0, categories: 0, items: 0 }
 
@@ -205,13 +213,16 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     detail: "Fetching menu categories...", counts,
   })
 
-  const categoryTasks = days.map((day) => () =>
-    queryMetrics(buildMenuCategorySyncBody(otterStoreIds, day))
-      .then((categoryRows: OtterRow[]) => ({ day, rows: categoryRows }))
-      .catch((err: unknown) => {
-        console.error(`Menu category sync error for ${day.toISOString().slice(0, 10)}:`, err)
-        return { day, rows: [] as OtterRow[] }
-      })
+  // One API call per internal store per day (Otter deduplicates across UUIDs)
+  const categoryTasks = days.flatMap((day) =>
+    [...storeGroups.entries()].map(([storeId, uuids]) => () =>
+      queryMetrics(buildMenuCategorySyncBody(uuids, day))
+        .then((categoryRows: OtterRow[]) => ({ day, storeId, rows: categoryRows }))
+        .catch((err: unknown) => {
+          console.error(`Menu category sync error for ${day.toISOString().slice(0, 10)}:`, err)
+          return { day, storeId, rows: [] as OtterRow[] }
+        })
+    )
   )
 
   const categoryResults = await withConcurrency(categoryTasks, 5, (completed, total) => {
@@ -219,39 +230,33 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     emit({
       phase: "categories", status: "fetching",
       totalProgress: computeTotalProgress(100, fetchPct, 0),
-      detail: `Fetching categories (${completed}/${total} days)...`, counts,
+      detail: `Fetching categories (${completed}/${total} store-days)...`, counts,
     })
   })
 
   let categorySynced = 0
   let categoryFailed = 0
 
-  const categoryUpserts = categoryResults.flatMap(({ day, rows: categoryRows }) => {
+  const categoryUpserts = categoryResults.flatMap(({ day, storeId, rows: categoryRows }) => {
     const date = new Date(day)
     date.setHours(0, 0, 0, 0)
 
-    return categoryRows
-      .filter((row: OtterRow) => {
-        const otterStoreId = row["store"] as string | null
-        return otterStoreId && otterToInternal.has(otterStoreId)
+    return categoryRows.map((row: OtterRow) => {
+      const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
+      const data = {
+        fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
+        fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
+        fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
+        tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
+        tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
+        tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
+      }
+      return prisma.otterMenuCategory.upsert({
+        where: { storeId_date_category: { storeId, date, category } },
+        create: { storeId, date, category, ...data },
+        update: data,
       })
-      .map((row: OtterRow) => {
-        const sid = otterToInternal.get(row["store"] as string)!
-        const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-        const data = {
-          fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-          fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-          fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-          tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-          tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-          tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-        }
-        return prisma.otterMenuCategory.upsert({
-          where: { storeId_date_category: { storeId: sid, date, category } },
-          create: { storeId: sid, date, category, ...data },
-          update: data,
-        })
-      })
+    })
   })
 
   for (let i = 0; i < categoryUpserts.length; i += 50) {
@@ -288,13 +293,14 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     detail: "Fetching menu items...", counts,
   })
 
+  // One API call per internal store per day (Otter deduplicates across UUIDs)
   const itemTasks = days.flatMap((day) =>
-    otterStoreIds.map((otterStoreId) => () =>
-      queryMetrics(buildMenuItemSyncBody(otterStoreId, day))
-        .then((itemRows: OtterRow[]) => ({ day, otterStoreId, rows: itemRows }))
+    [...storeGroups.entries()].map(([storeId, uuids]) => () =>
+      queryMetrics(buildMenuItemSyncBody(uuids, day))
+        .then((itemRows: OtterRow[]) => ({ day, storeId, rows: itemRows }))
         .catch((err: unknown) => {
-          console.error(`Menu item sync error for ${day.toISOString().slice(0, 10)} store ${otterStoreId}:`, err)
-          return { day, otterStoreId, rows: [] as OtterRow[] }
+          console.error(`Menu item sync error for ${day.toISOString().slice(0, 10)} store ${storeId}:`, err)
+          return { day, storeId, rows: [] as OtterRow[] }
         })
     )
   )
@@ -311,11 +317,9 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   let itemSynced = 0
   let itemFailed = 0
 
-  const itemUpserts = itemResults.flatMap(({ day, otterStoreId, rows: itemRows }) => {
+  const itemUpserts = itemResults.flatMap(({ day, storeId, rows: itemRows }) => {
     const date = new Date(day)
     date.setHours(0, 0, 0, 0)
-    const sid = otterToInternal.get(otterStoreId)
-    if (!sid) return []
 
     return itemRows.map((row: OtterRow) => {
       const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
@@ -329,8 +333,8 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
         tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
       }
       return prisma.otterMenuItem.upsert({
-        where: { storeId_date_category_itemName: { storeId: sid, date, category, itemName } },
-        create: { storeId: sid, date, category, itemName, ...data },
+        where: { storeId_date_category_itemName: { storeId, date, category, itemName } },
+        create: { storeId, date, category, itemName, ...data },
         update: data,
       })
     })

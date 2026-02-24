@@ -145,3 +145,78 @@ export interface MenuCategoryData {
   }
   dateRange: { startDate: string; endDate: string }
 }
+
+// Menu Performance page types
+export interface MenuPerformanceKpis {
+  totalItemsSold: number
+  totalMenuRevenue: number
+  uniqueItemsCount: number
+  avgRevenuePerItem: number
+  topSellingItem: {
+    name: string
+    quantity: number
+    category: string
+  } | null
+}
+
+export interface MenuPerformanceComparison {
+  currentItemsSold: number
+  previousItemsSold: number
+  itemsSoldGrowth: number
+  currentRevenue: number
+  previousRevenue: number
+  revenueGrowth: number
+}
+
+export interface MenuDailyTrend {
+  date: string
+  totalQuantitySold: number
+  totalSales: number
+  fpQuantitySold: number
+  tpQuantitySold: number
+  fpSales: number
+  tpSales: number
+}
+
+export interface MenuCategorySalesBreakdown {
+  category: string
+  totalSales: number
+  totalQuantitySold: number
+  fpSales: number
+  tpSales: number
+  percentOfTotal: number
+}
+
+export interface MenuItemRanked {
+  itemName: string
+  category: string
+  totalQuantitySold: number
+  totalSales: number
+  fpQuantitySold: number
+  tpQuantitySold: number
+  fpSales: number
+  tpSales: number
+  avgPricePerUnit: number
+  fpShare: number
+  tpShare: number
+}
+
+export interface MenuChannelComparison {
+  category: string
+  fpQuantitySold: number
+  fpSales: number
+  tpQuantitySold: number
+  tpSales: number
+}
+
+export interface MenuPerformanceData {
+  kpis: MenuPerformanceKpis
+  comparison: MenuPerformanceComparison
+  dailyTrends: MenuDailyTrend[]
+  categoryBreakdown: MenuCategorySalesBreakdown[]
+  topItems: MenuItemRanked[]
+  allItems: MenuItemRanked[]
+  channelComparison: MenuChannelComparison[]
+  dateRange: { startDate: string; endDate: string }
+  dayCount: number
+}
