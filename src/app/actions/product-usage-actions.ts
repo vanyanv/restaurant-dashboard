@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import OpenAI from "openai"
 import type {
   ProductUsageData,
   RecipeWithIngredients,
@@ -15,7 +16,15 @@ import type {
   OrderAnomaly,
   ProductUsageKpis,
   MenuItemForRecipeBuilder,
+  DemandForecast,
+  AnomalyExplanation,
 } from "@/types/product-usage"
+
+function getOpenAIClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error("OPENAI_API_KEY env var is required")
+  return new OpenAI({ apiKey, timeout: 60_000 })
+}
 
 // ─── 1. Main read action ───
 
@@ -988,4 +997,284 @@ export async function getVendorPriceTrends(options?: {
   })
 
   return computeVendorPriceTrends(lineItems)
+}
+
+// ─── 8. Generate AI Insights + Anomaly Explanations ───
+
+export async function generateAiInsights(context: {
+  kpis: ProductUsageKpis
+  topVarianceItems: { name: string; variancePct: number; wasteEstimatedCost: number }[]
+  priceAlerts: PriceAlert[]
+  orderAnomalies: OrderAnomaly[]
+  dateRange: { startDate: string; endDate: string }
+}): Promise<{
+  insights: string[]
+  anomalyExplanations: AnomalyExplanation[]
+}> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { insights: [], anomalyExplanations: [] }
+
+  const client = getOpenAIClient()
+
+  const prompt = `You are a restaurant operations analyst for a slider restaurant (ChrisNEddys). Analyze the following purchasing and usage data and provide actionable insights.
+
+## Key Metrics (${context.dateRange.startDate} to ${context.dateRange.endDate})
+- Total Purchased: $${context.kpis.totalPurchasedCost.toFixed(2)}
+- Theoretical Usage: $${context.kpis.theoreticalIngredientCost.toFixed(2)}
+- Estimated Waste: $${context.kpis.wasteEstimatedCost.toFixed(2)} (${context.kpis.wastePercent.toFixed(1)}%)
+- Recipes Configured: ${context.kpis.recipesConfigured}
+- Menu Items Covered: ${context.kpis.menuItemsCovered}
+
+## Top Variance Items (over-ordered)
+${context.topVarianceItems.map(i => `- ${i.name}: ${i.variancePct > 0 ? "+" : ""}${i.variancePct.toFixed(1)}% variance, ~$${i.wasteEstimatedCost.toFixed(2)} waste`).join("\n")}
+
+## Price Alerts
+${context.priceAlerts.length > 0 ? context.priceAlerts.map(a => `- ${a.message}`).join("\n") : "No significant price changes."}
+
+## Order Anomalies
+${context.orderAnomalies.length > 0 ? context.orderAnomalies.map(a => `- [${a.type}] ${a.productName}: ${a.details} (${a.vendorName}, ${a.invoiceDate})`).join("\n") : "No unusual orders detected."}
+
+Return JSON with this exact structure:
+{
+  "insights": ["insight1", "insight2", ...],
+  "anomalyExplanations": [
+    {
+      "alertId": "product_name:::alert_type",
+      "explanation": "Why this happened",
+      "suggestedAction": "What to do about it",
+      "confidence": "high" | "medium" | "low"
+    }
+  ]
+}
+
+Guidelines:
+- Provide 3-5 specific, actionable insights about cost savings, ordering optimization, or waste reduction
+- Reference specific dollar amounts and percentages
+- For anomaly explanations, provide one per price alert and order anomaly
+- Be practical — this is a small slider restaurant, not a Fortune 500 company
+- alertId format: "productName:::increase" for price alerts, "productName:::new_product" or "productName:::quantity_spike" for anomalies`
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 2000,
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) return { insights: [], anomalyExplanations: [] }
+
+    const parsed = JSON.parse(content)
+    return {
+      insights: Array.isArray(parsed.insights) ? parsed.insights : [],
+      anomalyExplanations: Array.isArray(parsed.anomalyExplanations)
+        ? parsed.anomalyExplanations
+        : [],
+    }
+  } catch (err) {
+    console.error("AI insights generation failed:", err)
+    return { insights: [], anomalyExplanations: [] }
+  }
+}
+
+// ─── 9. Generate Demand Forecast ───
+
+export async function generateDemandForecast(
+  storeId?: string
+): Promise<DemandForecast[]> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return []
+
+  const stores = await prisma.store.findMany({
+    where: { ownerId: session.user.id },
+    select: { id: true },
+  })
+  const storeIds = stores.map((s) => s.id)
+  if (storeIds.length === 0) return []
+
+  const targetStoreIds = storeId ? [storeId] : storeIds
+
+  // Get last 4 weeks of daily sales data
+  const fourWeeksAgo = new Date()
+  fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28)
+
+  const [menuItems, recipes, aliases, recentInvoiceItems] = await Promise.all([
+    prisma.otterMenuItem.findMany({
+      where: {
+        storeId: { in: targetStoreIds },
+        date: { gte: fourWeeksAgo },
+      },
+      select: {
+        itemName: true,
+        category: true,
+        date: true,
+        fpQuantitySold: true,
+        tpQuantitySold: true,
+      },
+      orderBy: { date: "asc" },
+    }),
+    prisma.recipe.findMany({
+      where: { storeId: { in: targetStoreIds } },
+      include: { ingredients: true },
+    }),
+    prisma.ingredientAlias.findMany({
+      where: { storeId: { in: targetStoreIds } },
+    }),
+    // Recent invoice items to estimate current stock (last 7 days)
+    prisma.invoiceLineItem.findMany({
+      where: {
+        invoice: {
+          ownerId: session.user.id,
+          ...(storeId ? { storeId } : {}),
+          invoiceDate: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          },
+        },
+      },
+      select: {
+        productName: true,
+        quantity: true,
+        unit: true,
+      },
+    }),
+  ])
+
+  if (menuItems.length === 0 || recipes.length === 0) return []
+
+  // Build alias lookup
+  const aliasMap = new Map<string, { canonicalName: string; conversionFactor: number; toUnit: string }>()
+  for (const alias of aliases) {
+    aliasMap.set(alias.rawName.toLowerCase(), {
+      canonicalName: alias.canonicalName,
+      conversionFactor: alias.conversionFactor,
+      toUnit: alias.toUnit,
+    })
+  }
+
+  // Aggregate daily sales by menu item
+  const dailySales: Record<string, { date: string; totalSold: number }[]> = {}
+  for (const mi of menuItems) {
+    const key = `${mi.itemName}:::${mi.category}`
+    const dateStr = mi.date.toISOString().slice(0, 10)
+    const qtySold = mi.fpQuantitySold + mi.tpQuantitySold
+    if (!dailySales[key]) dailySales[key] = []
+    dailySales[key].push({ date: dateStr, totalSold: qtySold })
+  }
+
+  // Build recipe map
+  const recipeMap = new Map<string, (typeof recipes)[number]>()
+  for (const recipe of recipes) {
+    recipeMap.set(`${recipe.itemName}:::${recipe.category}`, recipe)
+  }
+
+  // Estimate current stock from recent invoices
+  const stockEstimate = new Map<string, { qty: number; unit: string }>()
+  for (const li of recentInvoiceItems) {
+    const rawName = li.productName.toLowerCase()
+    const alias = aliasMap.get(rawName)
+    const canonicalName = alias ? alias.canonicalName : li.productName
+    const convertedQty = alias ? li.quantity * alias.conversionFactor : li.quantity
+    const unit = alias ? alias.toUnit : li.unit ?? "unit"
+
+    const existing = stockEstimate.get(canonicalName)
+    if (existing) {
+      existing.qty += convertedQty
+    } else {
+      stockEstimate.set(canonicalName, { qty: convertedQty, unit })
+    }
+  }
+
+  // Prepare data for AI
+  const salesSummary = Object.entries(dailySales)
+    .filter(([key]) => recipeMap.has(key))
+    .map(([key, data]) => {
+      const [itemName, category] = key.split(":::")
+      const recipe = recipeMap.get(key)!
+      return {
+        itemName,
+        category,
+        dailySales: data,
+        ingredients: recipe.ingredients.map((i) => ({
+          name: i.ingredientName,
+          qtyPerServing: i.quantity,
+          unit: i.unit,
+        })),
+      }
+    })
+    .slice(0, 15) // Limit to top 15 items for token efficiency
+
+  if (salesSummary.length === 0) return []
+
+  // Collect unique ingredients from recipes
+  const ingredientUnits = new Map<string, string>()
+  for (const item of salesSummary) {
+    for (const ing of item.ingredients) {
+      if (!ingredientUnits.has(ing.name)) {
+        ingredientUnits.set(ing.name, ing.unit)
+      }
+    }
+  }
+
+  const stockInfo = Array.from(ingredientUnits.entries()).map(([name, unit]) => {
+    const stock = stockEstimate.get(name)
+    return {
+      ingredientName: name,
+      unit,
+      estimatedStock: stock?.qty ?? 0,
+    }
+  })
+
+  const client = getOpenAIClient()
+
+  const prompt = `You are a restaurant demand forecasting analyst for ChrisNEddys (a slider restaurant). Based on the past 4 weeks of daily sales data and recipe configurations, predict next week's ingredient needs.
+
+## Menu Items with Daily Sales (last 4 weeks)
+${JSON.stringify(salesSummary, null, 2)}
+
+## Current Estimated Stock (from last 7 days of invoices)
+${JSON.stringify(stockInfo, null, 2)}
+
+For EACH unique ingredient across all recipes, predict next week's usage and suggest order quantities. Return JSON:
+{
+  "forecasts": [
+    {
+      "ingredientName": "exact ingredient name from recipes",
+      "predictedUsageNextWeek": number,
+      "unit": "unit string",
+      "suggestedOrderQty": number,
+      "currentEstimatedStock": number,
+      "confidence": "high" | "medium" | "low",
+      "reasoning": "Brief explanation of the prediction",
+      "needsReorder": boolean
+    }
+  ]
+}
+
+Guidelines:
+- Account for day-of-week patterns (weekends are typically busier)
+- Account for trends (increasing/decreasing sales)
+- suggestedOrderQty should cover predicted usage minus existing stock, with a 10% safety margin
+- Set needsReorder=true when predicted usage exceeds estimated stock
+- confidence: "high" if consistent daily pattern, "medium" if some variance, "low" if erratic`
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      max_tokens: 3000,
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) return []
+
+    const parsed = JSON.parse(content)
+    return Array.isArray(parsed.forecasts) ? parsed.forecasts : []
+  } catch (err) {
+    console.error("Demand forecast generation failed:", err)
+    return []
+  }
 }

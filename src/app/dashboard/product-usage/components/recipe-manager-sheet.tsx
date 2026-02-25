@@ -29,6 +29,8 @@ import {
   ArrowLeft,
   ChefHat,
   CheckCircle2,
+  Sparkles,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -40,6 +42,7 @@ import type {
   RecipeWithIngredients,
   RecipeIngredientInput,
   MenuItemForRecipeBuilder,
+  AiRecipeSuggestion,
 } from "@/types/product-usage"
 
 const UNITS = ["EA", "LB", "OZ", "CS", "GAL", "SLICE", "PUMP", "PORTION"] as const
@@ -81,6 +84,11 @@ export function RecipeManagerSheet({
   const [error, setError] = useState("")
   const [isSaving, startSaveTransition] = useTransition()
   const [isDeleting, startDeleteTransition] = useTransition()
+
+  // ── AI suggestion state ──
+  const [aiSuggestions, setAiSuggestions] = useState<AiRecipeSuggestion[]>([])
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false)
+  const [aiError, setAiError] = useState("")
 
   // ── Load menu items on open ──
   useEffect(() => {
@@ -245,6 +253,55 @@ export function RecipeManagerSheet({
     })
   }
 
+  // ── Generate AI suggestions for unconfigured items ──
+  async function handleGenerateAiSuggestions() {
+    if (!storeId) return
+    setIsGeneratingAi(true)
+    setAiError("")
+    setAiSuggestions([])
+
+    try {
+      const items = unconfiguredItems.slice(0, 10).map((i) => ({
+        itemName: i.itemName,
+        category: i.category,
+      }))
+      const res = await fetch("/api/product-usage/suggest-recipes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId, items }),
+      })
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || "Failed to generate suggestions")
+      }
+
+      const data = await res.json()
+      setAiSuggestions(data.suggestions ?? [])
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "AI generation failed")
+    } finally {
+      setIsGeneratingAi(false)
+    }
+  }
+
+  // ── Apply an AI suggestion to edit mode ──
+  function handleApplySuggestion(suggestion: AiRecipeSuggestion) {
+    setEditingRecipe(null)
+    setEditItemName(suggestion.itemName)
+    setEditCategory(suggestion.category)
+    setServingSize("1")
+    setIngredients(
+      suggestion.ingredients.map((ing) => ({
+        ingredientName: ing.ingredientName,
+        quantity: String(ing.quantity),
+        unit: ing.unit,
+      }))
+    )
+    setError("")
+    setMode("edit")
+  }
+
   // ── Derived data ──
   const configuredRecipes = recipes
   const unconfiguredItems = menuItems.filter((item) => !item.hasRecipe)
@@ -347,34 +404,113 @@ export function RecipeManagerSheet({
                       All menu items have recipes configured.
                     </div>
                   ) : (
-                    unconfiguredItems.map((item) => (
-                      <div
-                        key={`${item.itemName}:::${item.category}`}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium truncate">
-                              {item.itemName}
+                    <>
+                      {/* AI Suggestion Button */}
+                      {storeId && unconfiguredItems.length > 0 && (
+                        <div className="pb-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2"
+                            onClick={handleGenerateAiSuggestions}
+                            disabled={isGeneratingAi}
+                          >
+                            {isGeneratingAi ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-4 w-4" />
+                            )}
+                            {isGeneratingAi
+                              ? "Generating AI Suggestions..."
+                              : "Generate AI Suggestions"}
+                          </Button>
+                          {aiError && (
+                            <p className="text-xs text-destructive mt-1 text-center">
+                              {aiError}
                             </p>
-                            <Badge variant="secondary" className="text-xs">
-                              {item.category}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {item.totalQuantitySold} sold (last 30d)
-                          </p>
+                          )}
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleConfigureItem(item)}
-                          disabled={!storeId}
+                      )}
+
+                      {/* AI Suggestions */}
+                      {aiSuggestions.length > 0 && (
+                        <div className="space-y-2 pb-2">
+                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            AI Suggestions
+                          </p>
+                          {aiSuggestions.map((suggestion) => (
+                            <div
+                              key={`${suggestion.itemName}:::${suggestion.category}`}
+                              className="p-3 rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-sm font-medium truncate">
+                                    {suggestion.itemName}
+                                  </p>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {suggestion.category}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs text-amber-600">
+                                    {Math.round(suggestion.confidence * 100)}% confidence
+                                  </Badge>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="shrink-0"
+                                  onClick={() => handleApplySuggestion(suggestion)}
+                                >
+                                  Use
+                                </Button>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {suggestion.ingredients.map(
+                                  (i) => `${i.quantity} ${i.unit} ${i.ingredientName}`
+                                ).join(", ")}
+                              </p>
+                              {suggestion.reasoning && (
+                                <p className="text-[10px] text-muted-foreground/80 mt-1 italic">
+                                  {suggestion.reasoning}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                          <Separator />
+                        </div>
+                      )}
+
+                      {/* Unconfigured items list */}
+                      {unconfiguredItems.map((item) => (
+                        <div
+                          key={`${item.itemName}:::${item.category}`}
+                          className="flex items-center justify-between p-3 rounded-lg border bg-card"
                         >
-                          Configure
-                        </Button>
-                      </div>
-                    ))
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium truncate">
+                                {item.itemName}
+                              </p>
+                              <Badge variant="secondary" className="text-xs">
+                                {item.category}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {item.totalQuantitySold} sold (last 30d)
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleConfigureItem(item)}
+                            disabled={!storeId}
+                          >
+                            Configure
+                          </Button>
+                        </div>
+                      ))}
+                    </>
                   )}
                   {!storeId && unconfiguredItems.length > 0 && (
                     <p className="text-xs text-muted-foreground text-center pt-2">

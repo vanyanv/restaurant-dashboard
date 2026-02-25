@@ -41,6 +41,8 @@ import { IngredientVarianceTable } from "./ingredient-variance-table"
 import { RecipeManagerSheet } from "./recipe-manager-sheet"
 import { MenuItemCostTable } from "./menu-item-cost-table"
 import { PriceChangesTable } from "./price-changes-table"
+import { AiInsightsPanel } from "./ai-insights-panel"
+import { DemandForecastPanel } from "./demand-forecast-panel"
 import type { ProductUsageData, RecipeWithIngredients } from "@/types/product-usage"
 
 const IngredientEfficiencyChart = dynamic(
@@ -273,15 +275,19 @@ export function ProductUsageContent({
                   {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
                 </div>
                 <div className="lg:col-span-2">
-                  {/* AI Insights - coming in Phase 5 */}
-                  <ChartSkeleton />
+                  {hasData ? (
+                    <div className="rounded-lg border bg-card p-4 h-full">
+                      <AiInsightsPanel data={data} />
+                    </div>
+                  ) : (
+                    <ChartSkeleton />
+                  )}
                 </div>
               </div>
             </CollapsibleSection>
 
             <CollapsibleSection title="Demand Forecast" defaultOpen={false}>
-              {/* Coming in Phase 5 */}
-              <ChartSkeleton />
+              <DemandForecastPanel storeId={selectedStore !== "all" ? selectedStore : undefined} />
             </CollapsibleSection>
 
             <CollapsibleSection title="Ingredient Variance" defaultOpen>
