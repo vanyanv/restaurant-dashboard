@@ -39,6 +39,8 @@ import { ProductUsageKpiCards } from "./product-usage-kpi-cards"
 import { AlertsBanner } from "./alerts-banner"
 import { IngredientVarianceTable } from "./ingredient-variance-table"
 import { RecipeManagerSheet } from "./recipe-manager-sheet"
+import { MenuItemCostTable } from "./menu-item-cost-table"
+import { PriceChangesTable } from "./price-changes-table"
 import type { ProductUsageData, RecipeWithIngredients } from "@/types/product-usage"
 
 const IngredientEfficiencyChart = dynamic(
@@ -47,6 +49,10 @@ const IngredientEfficiencyChart = dynamic(
 )
 const CategorySpendChart = dynamic(
   () => import("./category-spend-chart").then(m => ({ default: m.CategorySpendChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const VendorPriceChart = dynamic(
+  () => import("./vendor-price-chart").then(m => ({ default: m.VendorPriceChart })),
   { loading: () => <ChartSkeleton />, ssr: false }
 )
 
@@ -285,22 +291,31 @@ export function ProductUsageContent({
 
           {/* Costs Tab */}
           <TabsContent value="costs" className="space-y-8">
-            {/* Menu Item Cost Table placeholder */}
             <DashboardSection title="Menu Item Costs">
-              <DataTableSkeleton columns={8} rows={10} />
+              {hasData ? (
+                <MenuItemCostTable data={data.menuItemCosts} />
+              ) : (
+                <DataTableSkeleton columns={8} rows={10} />
+              )}
             </DashboardSection>
           </TabsContent>
 
           {/* Vendors Tab */}
           <TabsContent value="vendors" className="space-y-8">
-            {/* Price Changes Table placeholder */}
             <CollapsibleSection title="Price Changes" defaultOpen>
-              <DataTableSkeleton columns={6} rows={8} />
+              {hasData ? (
+                <PriceChangesTable data={data.priceAlerts} />
+              ) : (
+                <DataTableSkeleton columns={6} rows={8} />
+              )}
             </CollapsibleSection>
 
-            {/* Vendor Price Chart placeholder */}
             <CollapsibleSection title="Vendor Price Trends" defaultOpen>
-              <ChartSkeleton />
+              {hasData ? (
+                <VendorPriceChart data={data.vendorPriceTrends} />
+              ) : (
+                <ChartSkeleton />
+              )}
             </CollapsibleSection>
           </TabsContent>
 
