@@ -73,6 +73,8 @@ model Store {
   otterMenuCategories OtterMenuCategory[]
   otterMenuItems      OtterMenuItem[]
   invoices        Invoice[]
+  recipes          Recipe[]
+  ingredientAliases IngredientAlias[]
 
   @@index([ownerId])
   @@index([yelpBusinessId])
@@ -356,4 +358,54 @@ model InvoiceSyncLog {
   errors          Int       @default(0)
   errorDetails    String?
   triggeredBy     String
+}
+
+model Recipe {
+  id            String   @id @default(cuid())
+  storeId       String
+  itemName      String
+  category      String
+  servingSize   Float    @default(1)
+  notes         String?
+  isAiGenerated Boolean  @default(false)
+  isConfirmed   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  ingredients   RecipeIngredient[]
+
+  @@unique([storeId, itemName, category])
+  @@index([storeId])
+}
+
+model RecipeIngredient {
+  id              String   @id @default(cuid())
+  recipeId        String
+  ingredientName  String
+  quantity        Float
+  unit            String
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  recipe          Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+}
+
+model IngredientAlias {
+  id                String   @id @default(cuid())
+  storeId           String
+  canonicalName     String
+  rawName           String
+  conversionFactor  Float    @default(1)
+  fromUnit          String
+  toUnit            String
+  createdAt         DateTime @default(now())
+
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, rawName])
+  @@index([storeId, canonicalName])
 }
