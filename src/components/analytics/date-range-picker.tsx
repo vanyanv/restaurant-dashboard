@@ -98,7 +98,7 @@ export function DateRangePicker({
         onValueChange={(v) => v !== "custom" && handlePresetChange(v)}
         disabled={isPending}
       >
-        <SelectTrigger className="sm:hidden h-8 w-[85px] text-xs">
+        <SelectTrigger className="lg:hidden h-8 w-[85px] text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -116,7 +116,7 @@ export function DateRangePicker({
         value={activePreset}
         onValueChange={handlePresetChange}
         disabled={isPending}
-        className="hidden sm:flex overflow-x-auto"
+        className="hidden lg:flex overflow-x-auto"
       >
         {PRESETS.map((p) => (
           <ToggleGroupItem
@@ -143,12 +143,12 @@ export function DateRangePicker({
           >
             <CalendarIcon className="h-3.5 w-3.5" />
             {customRange ? (
-              <span className="hidden sm:inline">
+              <span className="hidden lg:inline">
                 {format(new Date(customRange.startDate + "T00:00:00"), "MMM d")} -{" "}
                 {format(new Date(customRange.endDate + "T00:00:00"), "MMM d")}
               </span>
             ) : (
-              <span className="sm:hidden">
+              <span className="lg:hidden">
                 {PRESETS.find((p) => p.value === String(days))?.label ?? `${days}D`}
               </span>
             )}

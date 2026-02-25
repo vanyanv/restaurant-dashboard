@@ -131,7 +131,7 @@ export function DashboardContent({
                 Sales Summary
               </h1>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="hidden lg:flex items-center gap-2 text-xs text-muted-foreground">
               <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
               {data?.dateRange && (
                 <span>
@@ -164,24 +164,26 @@ export function DashboardContent({
                 </SelectContent>
               </Select>
             )}
+            {userRole === "OWNER" && (
+              <div className="shrink-0">
+                <OtterSyncButton
+                  lastSyncAt={data?.lastSyncAt}
+                  variant="outline"
+                  size="sm"
+                />
+              </div>
+            )}
             <DateRangePicker
               days={days}
               customRange={customRange}
               onRangeChange={handleRangeChange}
               isPending={isPending}
             />
-            {userRole === "OWNER" && (
-              <OtterSyncButton
-                lastSyncAt={data?.lastSyncAt}
-                variant="outline"
-                size="sm"
-              />
-            )}
           </div>
         </div>
 
         {/* Mobile date info */}
-        <div className="sm:hidden px-3 pb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="lg:hidden px-3 pb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
           {data?.dateRange && (
             <span>
               {formatDateRange(
