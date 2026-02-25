@@ -60,6 +60,10 @@ const data = {
           title: "Product Mix",
           url: "/dashboard/product-mix",
         },
+        {
+          title: "Product Usage",
+          url: "/dashboard/product-usage",
+        },
       ],
     },
     {
