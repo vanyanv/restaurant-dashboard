@@ -18,6 +18,7 @@ import type {
   MenuItemForRecipeBuilder,
   DemandForecast,
   AnomalyExplanation,
+  WeeklyComparison,
 } from "@/types/product-usage"
 
 function getOpenAIClient(): OpenAI {
@@ -1276,5 +1277,249 @@ Guidelines:
   } catch (err) {
     console.error("Demand forecast generation failed:", err)
     return []
+  }
+}
+
+// ─── 10. Generate Weekly Comparison ───
+
+export async function generateWeeklyComparison(
+  storeId?: string
+): Promise<WeeklyComparison | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+
+  const stores = await prisma.store.findMany({
+    where: { ownerId: session.user.id },
+    select: { id: true },
+  })
+  const storeIds = stores.map((s) => s.id)
+  if (storeIds.length === 0) return null
+
+  const targetStoreIds = storeId ? [storeId] : storeIds
+
+  // Calculate current week (Mon-Sun) and previous week
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=Sun, 1=Mon, ...
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const thisMonday = new Date(now)
+  thisMonday.setDate(now.getDate() - diffToMonday)
+  thisMonday.setHours(0, 0, 0, 0)
+
+  const lastMonday = new Date(thisMonday)
+  lastMonday.setDate(thisMonday.getDate() - 7)
+
+  const lastSunday = new Date(thisMonday)
+  lastSunday.setDate(thisMonday.getDate() - 1)
+  lastSunday.setHours(23, 59, 59, 999)
+
+  const thisSunday = new Date(thisMonday)
+  thisSunday.setDate(thisMonday.getDate() + 6)
+  thisSunday.setHours(23, 59, 59, 999)
+
+  const invoiceWhere = {
+    ownerId: session.user.id,
+    ...(storeId ? { storeId } : {}),
+  }
+
+  // Fetch invoices for both weeks
+  const [thisWeekInvoiceItems, lastWeekInvoiceItems, thisWeekSales, lastWeekSales] =
+    await Promise.all([
+      prisma.invoiceLineItem.findMany({
+        where: {
+          invoice: {
+            ...invoiceWhere,
+            invoiceDate: { gte: thisMonday, lte: thisSunday },
+          },
+        },
+        select: {
+          productName: true,
+          category: true,
+          quantity: true,
+          unit: true,
+          unitPrice: true,
+          extendedPrice: true,
+        },
+      }),
+      prisma.invoiceLineItem.findMany({
+        where: {
+          invoice: {
+            ...invoiceWhere,
+            invoiceDate: { gte: lastMonday, lte: lastSunday },
+          },
+        },
+        select: {
+          productName: true,
+          category: true,
+          quantity: true,
+          unit: true,
+          unitPrice: true,
+          extendedPrice: true,
+        },
+      }),
+      // Otter sales this week
+      prisma.otterDailySummary.findMany({
+        where: {
+          storeId: { in: targetStoreIds },
+          date: { gte: thisMonday, lte: thisSunday },
+        },
+        select: {
+          fpGrossSales: true,
+          tpGrossSales: true,
+        },
+      }),
+      // Otter sales last week
+      prisma.otterDailySummary.findMany({
+        where: {
+          storeId: { in: targetStoreIds },
+          date: { gte: lastMonday, lte: lastSunday },
+        },
+        select: {
+          fpGrossSales: true,
+          tpGrossSales: true,
+        },
+      }),
+    ])
+
+  // Aggregate spending per product for each week
+  const aggregateByProduct = (
+    items: typeof thisWeekInvoiceItems
+  ): Record<string, { total: number; qty: number; avgPrice: number }> => {
+    const map: Record<string, { total: number; qty: number }> = {}
+    for (const item of items) {
+      const name = item.productName
+      if (!map[name]) map[name] = { total: 0, qty: 0 }
+      map[name].total += item.extendedPrice ?? 0
+      map[name].qty += item.quantity ?? 0
+    }
+    const result: Record<string, { total: number; qty: number; avgPrice: number }> = {}
+    for (const [name, data] of Object.entries(map)) {
+      result[name] = {
+        ...data,
+        avgPrice: data.qty > 0 ? data.total / data.qty : 0,
+      }
+    }
+    return result
+  }
+
+  const thisWeekProducts = aggregateByProduct(thisWeekInvoiceItems)
+  const lastWeekProducts = aggregateByProduct(lastWeekInvoiceItems)
+
+  const thisWeekTotalSpend = Object.values(thisWeekProducts).reduce(
+    (s, p) => s + p.total,
+    0
+  )
+  const lastWeekTotalSpend = Object.values(lastWeekProducts).reduce(
+    (s, p) => s + p.total,
+    0
+  )
+
+  const thisWeekTotalSales = thisWeekSales.reduce(
+    (s: number, d: { fpGrossSales: number | null; tpGrossSales: number | null }) =>
+      s + (d.fpGrossSales ?? 0) + (d.tpGrossSales ?? 0),
+    0
+  )
+  const lastWeekTotalSales = lastWeekSales.reduce(
+    (s: number, d: { fpGrossSales: number | null; tpGrossSales: number | null }) =>
+      s + (d.fpGrossSales ?? 0) + (d.tpGrossSales ?? 0),
+    0
+  )
+
+  // If no data for either week, return basic comparison without AI
+  if (thisWeekInvoiceItems.length === 0 && lastWeekInvoiceItems.length === 0) {
+    return null
+  }
+
+  // Prepare data for AI
+  const productComparisons = new Set([
+    ...Object.keys(thisWeekProducts),
+    ...Object.keys(lastWeekProducts),
+  ])
+  const productData = Array.from(productComparisons)
+    .map((name) => ({
+      product: name,
+      thisWeek: thisWeekProducts[name] ?? { total: 0, qty: 0, avgPrice: 0 },
+      lastWeek: lastWeekProducts[name] ?? { total: 0, qty: 0, avgPrice: 0 },
+    }))
+    .sort(
+      (a, b) =>
+        Math.abs(b.thisWeek.total - b.lastWeek.total) -
+        Math.abs(a.thisWeek.total - a.lastWeek.total)
+    )
+    .slice(0, 20) // Top 20 by spend change
+
+  const client = getOpenAIClient()
+
+  const prompt = `You are a restaurant operations analyst for ChrisNEddys (a slider restaurant). Compare this week vs last week and explain what changed.
+
+## Spending
+- This week total: $${thisWeekTotalSpend.toFixed(2)}
+- Last week total: $${lastWeekTotalSpend.toFixed(2)}
+
+## Sales Revenue
+- This week total: $${thisWeekTotalSales.toFixed(2)}
+- Last week total: $${lastWeekTotalSales.toFixed(2)}
+
+## Product-Level Spending Comparison
+${JSON.stringify(productData, null, 2)}
+
+Return JSON:
+{
+  "observations": ["3-5 plain-English bullet points explaining what changed and why, with dollar amounts. Focus on what the restaurant owner needs to know. Be specific about product names."],
+  "topSpendChanges": [
+    {
+      "productName": "product name",
+      "thisWeek": dollar_amount,
+      "lastWeek": dollar_amount,
+      "changePct": percent_change,
+      "reason": "price" | "volume" | "both" | "new"
+    }
+  ]
+}
+
+Guidelines:
+- For each product, determine if change is driven by price (unit price changed), volume (ordered more/less), both, or new (not ordered last week)
+- Keep observations conversational and actionable — this is for a small business owner, not a data scientist
+- Include dollar amounts in observations so the owner knows the impact
+- If spending rose faster than sales, call that out
+- topSpendChanges should include the top 5-8 products by absolute dollar change`
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.5,
+      max_tokens: 2000,
+    })
+
+    const content = response.choices[0]?.message?.content
+    if (!content) return null
+
+    const parsed = JSON.parse(content)
+
+    const spendChangePct =
+      lastWeekTotalSpend > 0
+        ? ((thisWeekTotalSpend - lastWeekTotalSpend) / lastWeekTotalSpend) * 100
+        : 0
+    const salesChangePct =
+      lastWeekTotalSales > 0
+        ? ((thisWeekTotalSales - lastWeekTotalSales) / lastWeekTotalSales) * 100
+        : 0
+
+    return {
+      currentWeekSpend: thisWeekTotalSpend,
+      previousWeekSpend: lastWeekTotalSpend,
+      spendChangePct,
+      currentWeekSales: thisWeekTotalSales,
+      previousWeekSales: lastWeekTotalSales,
+      salesChangePct,
+      observations: Array.isArray(parsed.observations) ? parsed.observations : [],
+      topSpendChanges: Array.isArray(parsed.topSpendChanges)
+        ? parsed.topSpendChanges
+        : [],
+    }
+  } catch (err) {
+    console.error("Weekly comparison generation failed:", err)
+    return null
   }
 }

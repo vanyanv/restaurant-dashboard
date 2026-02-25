@@ -135,6 +135,23 @@ export interface AnomalyExplanation {
   confidence: "high" | "medium" | "low"
 }
 
+export interface WeeklyComparison {
+  currentWeekSpend: number
+  previousWeekSpend: number
+  spendChangePct: number
+  currentWeekSales: number
+  previousWeekSales: number
+  salesChangePct: number
+  observations: string[]
+  topSpendChanges: {
+    productName: string
+    thisWeek: number
+    lastWeek: number
+    changePct: number
+    reason: "price" | "volume" | "both" | "new"
+  }[]
+}
+
 // ─── Page-level response ───
 
 export interface ProductUsageData {

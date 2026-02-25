@@ -41,8 +41,6 @@ import { IngredientVarianceTable } from "./ingredient-variance-table"
 import { RecipeManagerSheet } from "./recipe-manager-sheet"
 import { MenuItemCostTable } from "./menu-item-cost-table"
 import { PriceChangesTable } from "./price-changes-table"
-import { AiInsightsPanel } from "./ai-insights-panel"
-import { DemandForecastPanel } from "./demand-forecast-panel"
 import { IngredientDrilldownSheet } from "./ingredient-drilldown-sheet"
 import type { ProductUsageData, RecipeWithIngredients, IngredientUsageRow } from "@/types/product-usage"
 
@@ -272,24 +270,7 @@ export function ProductUsageContent({
             </CollapsibleSection>
 
             <CollapsibleSection title="Category Breakdown" defaultOpen>
-              <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
-                <div className="lg:col-span-3">
-                  {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
-                </div>
-                <div className="lg:col-span-2">
-                  {hasData ? (
-                    <div className="rounded-lg border bg-card p-4 h-full">
-                      <AiInsightsPanel data={data} />
-                    </div>
-                  ) : (
-                    <ChartSkeleton />
-                  )}
-                </div>
-              </div>
-            </CollapsibleSection>
-
-            <CollapsibleSection title="Demand Forecast" defaultOpen={false}>
-              <DemandForecastPanel storeId={selectedStore !== "all" ? selectedStore : undefined} />
+              {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
             </CollapsibleSection>
 
             <CollapsibleSection title="Ingredient Variance" defaultOpen>

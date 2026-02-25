@@ -64,6 +64,10 @@ const data = {
           title: "Product Usage",
           url: "/dashboard/product-usage",
         },
+        {
+          title: "AI Analytics",
+          url: "/dashboard/ai-analytics",
+        },
       ],
     },
     {
