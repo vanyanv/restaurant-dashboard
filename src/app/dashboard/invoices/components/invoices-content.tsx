@@ -7,7 +7,6 @@ import {
   FileText,
   AlertCircle,
   Building2,
-  SidebarIcon,
   Package,
   TrendingUp,
   ChevronDown,
@@ -46,18 +45,11 @@ import {
 } from "@/components/ui/select"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { InvoiceSyncButton } from "@/components/invoice-sync-button"
 import { getInvoiceSummary, getInvoiceList, getProductAnalytics } from "@/app/actions/invoice-actions"
 import type { InvoiceKpis, InvoiceListItem, ProductAnalytics } from "@/types/invoice"
 import { formatCurrency } from "@/lib/format"
+import { getLastSyncText } from "@/lib/dashboard-utils"
 
 interface InvoicesContentProps {
   initialSummary: InvoiceKpis
@@ -90,16 +82,6 @@ const CATEGORY_COLORS = [
   "hsl(var(--primary) / 0.4)",
   "hsl(var(--primary) / 0.25)",
 ]
-
-function getLastSyncText(lastSyncAt: string | null): string {
-  if (!lastSyncAt) return "Never synced"
-  const date = new Date(lastSyncAt)
-  const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60))
-  if (diffHours < 1) return "Synced recently"
-  if (diffHours < 24) return `Synced ${diffHours}h ago`
-  if (diffHours < 168) return `Synced ${Math.floor(diffHours / 24)}d ago`
-  return "Synced over a week ago"
-}
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ value: number; name: string; payload: { name: string } }> }) {
   if (!active || !payload?.length) return null
@@ -159,25 +141,29 @@ export function InvoicesContent({
       title: "Total Spend",
       value: formatCurrency(summary.totalSpend),
       icon: DollarSign,
-      color: "border-l-blue-500",
+      borderColor: "hsl(221, 83%, 53%)",
+      bgTint: "hsla(221, 83%, 53%, 0.04)",
     },
     {
       title: "Invoices",
       value: summary.invoiceCount.toString(),
       icon: FileText,
-      color: "border-l-emerald-500",
+      borderColor: "hsl(142, 71%, 45%)",
+      bgTint: "hsla(142, 71%, 45%, 0.04)",
     },
     {
       title: "Avg Invoice",
       value: formatCurrency(summary.avgInvoiceTotal),
       icon: TrendingUp,
-      color: "border-l-violet-500",
+      borderColor: "hsl(262, 83%, 58%)",
+      bgTint: "hsla(262, 83%, 58%, 0.04)",
     },
     {
       title: "Needs Review",
       value: summary.pendingReviewCount.toString(),
       icon: AlertCircle,
-      color: "border-l-amber-500",
+      borderColor: "hsl(35, 85%, 45%)",
+      bgTint: "hsla(35, 85%, 45%, 0.04)",
     },
   ]
 
@@ -198,71 +184,67 @@ export function InvoicesContent({
   const maxProductSpend = products.topProducts[0]?.totalSpend ?? 1
 
   return (
-    <>
-      {/* Header */}
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1">
-          <SidebarIcon className="h-4 w-4" />
-        </SidebarTrigger>
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Invoices</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
-        <div className="ml-auto flex items-center gap-3">
-          {/* Store Filter */}
-          {stores.length > 0 && (
-            <Select value={storeFilter} onValueChange={handleStoreFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Building2 className="h-4 w-4 mr-2 shrink-0 text-muted-foreground" />
-                <SelectValue placeholder="All Stores" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stores</SelectItem>
-                {stores.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {/* Last Sync + Sync Button */}
+    <div className="flex flex-col h-full">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="h-4" />
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              <h1 className="text-lg font-semibold tracking-tight">Invoices</h1>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <span suppressHydrationWarning>{getLastSyncText(lastSyncAt)}</span>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {getLastSyncText(lastSyncAt)}
-            </span>
-            <InvoiceSyncButton lastSyncAt={lastSyncAt} size="default" />
+            {stores.length > 0 && (
+              <Select value={storeFilter} onValueChange={handleStoreFilter}>
+                <SelectTrigger className="w-[160px] h-8 text-xs">
+                  <Building2 className="h-3.5 w-3.5 mr-1.5 shrink-0 text-muted-foreground" />
+                  <SelectValue placeholder="All Stores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stores</SelectItem>
+                  {stores.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <InvoiceSyncButton lastSyncAt={lastSyncAt} size="sm" variant="outline" />
           </div>
         </div>
-      </header>
+        {/* Mobile sync info */}
+        <div className="sm:hidden px-3 pb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+          <span suppressHydrationWarning>{getLastSyncText(lastSyncAt)}</span>
+        </div>
+      </div>
 
-      <div className={`flex-1 overflow-auto p-4 space-y-6 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
+      <div className={`flex-1 overflow-auto p-3 sm:p-4 space-y-3 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
         {/* KPI Cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {kpiCards.map((kpi, i) => (
             <motion.div
               key={kpi.title}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
+              transition={{ delay: i * 0.08, duration: 0.35, ease: "easeOut" }}
             >
-              <Card className={`border-l-4 ${kpi.color}`}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
+              <Card
+                className="relative overflow-hidden border-t-[3px] py-3"
+                style={{ borderTopColor: kpi.borderColor, backgroundColor: kpi.bgTint }}
+              >
+                <CardContent className="p-3">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                     {kpi.title}
-                  </CardTitle>
-                  <kpi.icon className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{kpi.value}</div>
+                  </span>
+                  <div className="mt-1 font-mono-numbers text-xl font-bold tracking-tight sm:text-2xl">
+                    {kpi.value}
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -586,6 +568,6 @@ export function InvoicesContent({
           </CardContent>
         </Card>
       </div>
-    </>
+    </div>
   )
 }
