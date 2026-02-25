@@ -1,6 +1,7 @@
 "use client"
 
 import { useTransition, useState, useCallback, useEffect, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { PackageSearch } from "lucide-react"
 import { getProductUsageData, getRecipes } from "@/app/actions/product-usage-actions"
 
@@ -32,7 +33,19 @@ import {
   DataTableSkeleton,
 } from "@/components/skeletons"
 import { formatDateRange, localDateStr } from "@/lib/dashboard-utils"
+import { ProductUsageKpiCards } from "./product-usage-kpi-cards"
+import { AlertsBanner } from "./alerts-banner"
+import { IngredientVarianceTable } from "./ingredient-variance-table"
 import type { ProductUsageData, RecipeWithIngredients } from "@/types/product-usage"
+
+const IngredientEfficiencyChart = dynamic(
+  () => import("./ingredient-efficiency-chart").then(m => ({ default: m.IngredientEfficiencyChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const CategorySpendChart = dynamic(
+  () => import("./category-spend-chart").then(m => ({ default: m.CategorySpendChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
 
 interface ProductUsageContentProps {
   initialData: ProductUsageData | null
@@ -232,49 +245,37 @@ export function ProductUsageContent({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-8">
-            {/* Alerts Banner placeholder */}
-            <DashboardSection title="Alerts">
-              {isPending ? (
-                <KpiCardsSkeleton />
-              ) : (
-                <KpiCardsSkeleton />
-              )}
-            </DashboardSection>
+            {hasData && (data.priceAlerts.length > 0 || data.orderAnomalies.length > 0) && (
+              <AlertsBanner priceAlerts={data.priceAlerts} orderAnomalies={data.orderAnomalies} />
+            )}
 
-            {/* KPI Cards placeholder */}
             <DashboardSection title="Key Metrics">
-              {isPending ? (
-                <KpiCardsSkeleton />
-              ) : (
-                <KpiCardsSkeleton />
-              )}
+              {hasData ? <ProductUsageKpiCards kpis={data.kpis} /> : <KpiCardsSkeleton />}
             </DashboardSection>
 
-            {/* Ingredient Efficiency Chart placeholder */}
             <CollapsibleSection title="Ingredient Efficiency" defaultOpen>
-              {isPending ? (
-                <ChartSkeleton />
-              ) : (
-                <ChartSkeleton />
-              )}
+              {hasData ? <IngredientEfficiencyChart data={data.ingredientUsage} /> : <ChartSkeleton />}
             </CollapsibleSection>
 
-            {/* Category Breakdown + AI Insights */}
-            <CollapsibleSection title="Category Breakdown & Insights" defaultOpen>
-              <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
-                <ChartSkeleton />
-                <ChartSkeleton />
+            <CollapsibleSection title="Category Breakdown" defaultOpen>
+              <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
+                <div className="lg:col-span-3">
+                  {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
+                </div>
+                <div className="lg:col-span-2">
+                  {/* AI Insights - coming in Phase 5 */}
+                  <ChartSkeleton />
+                </div>
               </div>
             </CollapsibleSection>
 
-            {/* Demand Forecast placeholder */}
             <CollapsibleSection title="Demand Forecast" defaultOpen={false}>
+              {/* Coming in Phase 5 */}
               <ChartSkeleton />
             </CollapsibleSection>
 
-            {/* Ingredient Variance Table placeholder */}
             <CollapsibleSection title="Ingredient Variance" defaultOpen>
-              <DataTableSkeleton columns={7} rows={8} />
+              {hasData ? <IngredientVarianceTable data={data.ingredientUsage} /> : <DataTableSkeleton columns={7} rows={8} />}
             </CollapsibleSection>
           </TabsContent>
 
