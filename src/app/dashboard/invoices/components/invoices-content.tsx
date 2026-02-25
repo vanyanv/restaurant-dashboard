@@ -239,7 +239,7 @@ export function InvoicesContent({
             <span className="text-xs text-muted-foreground hidden sm:inline">
               {getLastSyncText(lastSyncAt)}
             </span>
-            <InvoiceSyncButton lastSyncAt={lastSyncAt} size="default" onSyncComplete={refreshData} />
+            <InvoiceSyncButton lastSyncAt={lastSyncAt} size="default" />
           </div>
         </div>
       </header>
