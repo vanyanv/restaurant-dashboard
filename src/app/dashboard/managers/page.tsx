@@ -5,14 +5,6 @@ import { authOptions } from "@/lib/auth"
 import { getManagers } from "@/app/actions/manager-actions"
 import { Users, Mail, Store, Plus, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
@@ -28,7 +20,7 @@ import { Badge } from "@/components/ui/badge"
 
 export default async function ManagersPage() {
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect("/login")
   }
@@ -40,41 +32,34 @@ export default async function ManagersPage() {
   const managers = await getManagers()
 
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Managers</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Manager Management</h1>
-            <p className="text-muted-foreground">
-              Manage your restaurant managers and their store assignments
-            </p>
+    <div className="flex flex-col h-full">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="h-4" />
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              <h1 className="text-lg font-semibold tracking-tight">Manager Management</h1>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <span>{managers.length} manager{managers.length !== 1 ? "s" : ""}</span>
+            </div>
           </div>
-          <Link href="/dashboard/managers/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add New Manager
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/managers/new">
+              <Button size="sm">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Manager
+              </Button>
+            </Link>
+          </div>
         </div>
+      </div>
 
+      <div className="flex-1 p-3 sm:p-4 space-y-3">
         {managers.length === 0 ? (
           <div className="rounded-xl border bg-card text-card-foreground shadow p-12">
             <div className="text-center">

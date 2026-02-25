@@ -20,6 +20,7 @@ import { OtterSyncButton } from "@/components/otter-sync-button"
 import { AdditionalMetrics } from "@/components/analytics/additional-metrics"
 import { DashboardSection } from "@/components/analytics/dashboard-section"
 import { formatDateRange, getLastSyncText, localDateStr } from "@/lib/dashboard-utils"
+import { PlatformInsights } from "@/components/analytics/platform-insights"
 import {
   ChartSkeleton,
   PieChartSkeleton,
@@ -224,6 +225,9 @@ export function MoreAnalyticsContent({
 
         {/* Platform Analysis */}
         <DashboardSection title="Platform Analysis">
+          {hasOtterData && (
+            <PlatformInsights data={otterData.platformBreakdown} />
+          )}
           {isPending ? (
             <ChartSkeleton height="h-[240px] md:h-[280px] lg:h-[300px]" />
           ) : hasOtterData ? (

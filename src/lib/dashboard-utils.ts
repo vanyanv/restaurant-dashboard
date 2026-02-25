@@ -1,5 +1,24 @@
 import { format } from "date-fns"
 
+const LA_TZ = "America/Los_Angeles"
+
+/** Get "today" as a YYYY-MM-DD string in LA timezone (works correctly on Vercel/UTC servers). */
+export function todayInLA(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: LA_TZ })
+}
+
+/** Get a Date for start-of-day of a given LA-local date (defaults to today in LA). */
+export function startOfDayLA(dateStr?: string): Date {
+  const d = dateStr ?? todayInLA()
+  return new Date(d + "T00:00:00.000Z")
+}
+
+/** Get a Date for end-of-day of a given LA-local date (defaults to today in LA). */
+export function endOfDayLA(dateStr?: string): Date {
+  const d = dateStr ?? todayInLA()
+  return new Date(d + "T23:59:59.999Z")
+}
+
 /** Format a Date as yyyy-MM-dd using local calendar date (avoids UTC day rollover). */
 export function localDateStr(d: Date): string {
   const yyyy = d.getFullYear()

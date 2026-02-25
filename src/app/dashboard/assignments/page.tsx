@@ -3,22 +3,14 @@ import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
 import { getManagers } from "@/app/actions/manager-actions"
-import { 
-  Users, 
-  Store, 
-  UserPlus, 
+import {
+  Users,
+  Store,
+  UserPlus,
   Building2,
   CheckCircle,
-  UserX
+  UserX,
 } from "lucide-react"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
@@ -32,7 +24,7 @@ import {
 
 export default async function AssignmentsPage() {
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect("/login")
   }
@@ -43,108 +35,103 @@ export default async function AssignmentsPage() {
 
   const [stores, managers] = await Promise.all([
     getStores(),
-    getManagers()
+    getManagers(),
   ])
 
   // Create assignment matrix data
-  const assignmentMatrix = stores.map(store => {
-    const assignedManagers = managers.filter(manager => 
-      manager.managedStores.some(assignment => assignment.store.id === store.id)
+  const assignmentMatrix = stores.map((store) => {
+    const assignedManagers = managers.filter((manager) =>
+      manager.managedStores.some((assignment) => assignment.store.id === store.id)
     )
     return {
       store,
       assignedManagers,
-      availableSlots: Math.max(0, 3 - assignedManagers.length) // Assume max 3 managers per store
+      availableSlots: Math.max(0, 3 - assignedManagers.length),
     }
   })
 
-  const unassignedManagers = managers.filter(manager => 
-    manager.managedStores.length === 0
+  const unassignedManagers = managers.filter(
+    (manager) => manager.managedStores.length === 0
   )
 
+  const totalAssignments = managers.reduce(
+    (total, manager) => total + manager.managedStores.length,
+    0
+  )
+
+  const kpiCards = [
+    {
+      label: "Total Stores",
+      value: stores.length,
+      icon: Store,
+      borderColor: "hsl(221, 83%, 53%)",
+      bgTint: "hsla(221, 83%, 53%, 0.04)",
+      sub: "Active store locations",
+    },
+    {
+      label: "Total Managers",
+      value: managers.length,
+      icon: Users,
+      borderColor: "hsl(142, 71%, 45%)",
+      bgTint: "hsla(142, 71%, 45%, 0.04)",
+      sub: "Available managers",
+    },
+    {
+      label: "Unassigned",
+      value: unassignedManagers.length,
+      icon: UserX,
+      borderColor: "hsl(35, 85%, 45%)",
+      bgTint: "hsla(35, 85%, 45%, 0.04)",
+      sub: "Without assignments",
+    },
+    {
+      label: "Active Assignments",
+      value: totalAssignments,
+      icon: CheckCircle,
+      borderColor: "hsl(280, 70%, 50%)",
+      bgTint: "hsla(280, 70%, 50%, 0.04)",
+      sub: "Manager-store pairs",
+    },
+  ]
+
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
+    <div className="flex flex-col h-full">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="px-3 sm:px-4 py-2 flex items-center gap-3">
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Manager Assignments</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
+          <Separator orientation="vertical" className="h-4" />
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            <h1 className="text-lg font-semibold tracking-tight">Manager Assignments</h1>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
+            <span>{stores.length} stores · {managers.length} managers</span>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Manager Assignment Center</h1>
-          <p className="text-muted-foreground">
-            Manage which managers are assigned to which store locations
-          </p>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Stores</CardTitle>
-              <Store className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stores.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Active store locations
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Managers</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{managers.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Available managers
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unassigned</CardTitle>
-              <UserX className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{unassignedManagers.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Managers without assignments
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Assignments</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {managers.reduce((total, manager) => total + manager.managedStores.length, 0)}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Total manager-store pairs
-              </p>
-            </CardContent>
-          </Card>
+      <div className="flex-1 p-3 sm:p-4 space-y-3">
+        {/* KPI Summary Cards */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {kpiCards.map((kpi) => (
+            <Card
+              key={kpi.label}
+              className="relative overflow-hidden border-t-[3px] py-3"
+              style={{ borderTopColor: kpi.borderColor, backgroundColor: kpi.bgTint }}
+            >
+              <CardContent className="p-3">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {kpi.label}
+                </span>
+                <div className="mt-1 font-mono-numbers text-xl font-bold tracking-tight sm:text-2xl">
+                  {kpi.value}
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">{kpi.sub}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         {/* Assignment Matrix */}
@@ -177,10 +164,10 @@ export default async function AssignmentsPage() {
                         </Badge>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {assignedManagers.length} assigned • {availableSlots} available
+                        {assignedManagers.length} assigned · {availableSlots} available
                       </div>
                     </div>
-                    
+
                     <div className="grid gap-2 md:grid-cols-3">
                       {assignedManagers.map((manager) => (
                         <div key={manager.id} className="flex items-center gap-2 p-2 bg-primary/5 rounded border">
@@ -194,7 +181,7 @@ export default async function AssignmentsPage() {
                           </Badge>
                         </div>
                       ))}
-                      
+
                       {/* Show available slots */}
                       {Array.from({ length: availableSlots }).map((_, index) => (
                         <div key={`empty-${index}`} className="flex items-center gap-2 p-2 border-2 border-dashed border-muted-foreground/25 rounded">
@@ -247,10 +234,10 @@ export default async function AssignmentsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p>• Go to <strong>Store Management</strong> to view individual stores</p>
-              <p>• Click <strong>"View Details"</strong> on any store to see current assignments</p>
-              <p>• Use the <strong>"Manage Staff"</strong> button to assign or remove managers</p>
-              <p>• Create new managers from the <strong>Manager Management</strong> section</p>
+              <p>· Go to <strong>Store Management</strong> to view individual stores</p>
+              <p>· Click <strong>&quot;View Details&quot;</strong> on any store to see current assignments</p>
+              <p>· Use the <strong>&quot;Manage Staff&quot;</strong> button to assign or remove managers</p>
+              <p>· Create new managers from the <strong>Manager Management</strong> section</p>
             </div>
           </CardContent>
         </Card>

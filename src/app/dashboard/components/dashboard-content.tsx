@@ -22,7 +22,7 @@ import {
 } from "./financial-summary-table"
 import { KpiCards } from "@/components/analytics/kpi-cards"
 import { DayHighlights } from "@/components/analytics/day-highlights"
-import { PlatformInsights } from "@/components/analytics/platform-insights"
+import { InvoiceSnapshot } from "@/components/analytics/invoice-snapshot"
 import { MenuCategorySalesCard } from "@/components/analytics/menu-category-sales-card"
 import {
   KpiCardsSkeleton,
@@ -31,6 +31,7 @@ import {
 } from "@/components/skeletons"
 import { formatDateRange, getLastSyncText, localDateStr } from "@/lib/dashboard-utils"
 import type { DashboardData, StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
+import type { InvoiceKpis, InvoiceListItem } from "@/types/invoice"
 
 const RevenueTrendChart = dynamic(
   () => import("@/components/charts/revenue-trend-chart").then(m => ({ default: m.RevenueTrendChart })),
@@ -41,6 +42,8 @@ interface DashboardContentProps {
   initialData: DashboardData | null
   initialOtterData: StoreAnalyticsData | null
   initialMenuData: MenuCategoryData | null
+  initialInvoiceSummary: InvoiceKpis | null
+  initialRecentInvoices: InvoiceListItem[]
   userRole: string
 }
 
@@ -48,6 +51,8 @@ export function DashboardContent({
   initialData,
   initialOtterData,
   initialMenuData,
+  initialInvoiceSummary,
+  initialRecentInvoices,
   userRole,
 }: DashboardContentProps) {
   const router = useRouter()
@@ -242,9 +247,9 @@ export function DashboardContent({
           </div>
         )}
 
-        {/* 5. Platform Insights (AOV + Fee % per platform) */}
-        {hasOtterData && (
-          <PlatformInsights data={otterData.platformBreakdown} />
+        {/* 5. Invoice Snapshot (last 30 days) */}
+        {initialInvoiceSummary && (
+          <InvoiceSnapshot summary={initialInvoiceSummary} recentInvoices={initialRecentInvoices} />
         )}
 
       </div>

@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -232,14 +233,14 @@ export async function getOtterAnalytics(
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
-      rangeEnd = new Date()
-      rangeEnd.setHours(23, 59, 59, 999)
-      rangeStart = new Date()
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
       if (days === 1) {
-        rangeStart.setHours(0, 0, 0, 0)
+        rangeStart = startOfDayLA(today)
       } else {
-        rangeStart.setDate(rangeEnd.getDate() - days)
-        rangeStart.setHours(0, 0, 0, 0)
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
       }
     }
 
@@ -492,11 +493,10 @@ export async function getRevenueTrendData(
     const storeIds = stores.map((s) => s.id)
     const days = options?.days ?? 7
 
-    const rangeEnd = new Date()
-    rangeEnd.setHours(23, 59, 59, 999)
-    const rangeStart = new Date()
-    rangeStart.setDate(rangeEnd.getDate() - days)
-    rangeStart.setHours(0, 0, 0, 0)
+    const today = todayInLA()
+    const rangeEnd = endOfDayLA(today)
+    const rangeStart = startOfDayLA(today)
+    rangeStart.setDate(rangeStart.getDate() - days)
 
     const summaries = await prisma.otterDailySummary.findMany({
       where: {
@@ -572,14 +572,14 @@ export async function getDashboardAnalytics(
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
-      rangeEnd = new Date()
-      rangeEnd.setHours(23, 59, 59, 999)
-      rangeStart = new Date()
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
       if (days === 1) {
-        rangeStart.setHours(0, 0, 0, 0)
+        rangeStart = startOfDayLA(today)
       } else {
-        rangeStart.setDate(rangeEnd.getDate() - days)
-        rangeStart.setHours(0, 0, 0, 0)
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
       }
     }
 
@@ -766,14 +766,14 @@ export async function getMenuCategoryAnalytics(
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
-      rangeEnd = new Date()
-      rangeEnd.setHours(23, 59, 59, 999)
-      rangeStart = new Date()
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
       if (days === 1) {
-        rangeStart.setHours(0, 0, 0, 0)
+        rangeStart = startOfDayLA(today)
       } else {
-        rangeStart.setDate(rangeEnd.getDate() - days)
-        rangeStart.setHours(0, 0, 0, 0)
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
       }
     }
 
@@ -911,14 +911,14 @@ export async function getMenuPerformanceAnalytics(
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
-      rangeEnd = new Date()
-      rangeEnd.setHours(23, 59, 59, 999)
-      rangeStart = new Date()
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
       if (days === 1) {
-        rangeStart.setHours(0, 0, 0, 0)
+        rangeStart = startOfDayLA(today)
       } else {
-        rangeStart.setDate(rangeEnd.getDate() - days)
-        rangeStart.setHours(0, 0, 0, 0)
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
       }
     }
 
@@ -1215,14 +1215,14 @@ export async function getMenuItemDetail(
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
-      rangeEnd = new Date()
-      rangeEnd.setHours(23, 59, 59, 999)
-      rangeStart = new Date()
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
       if (days === 1) {
-        rangeStart.setHours(0, 0, 0, 0)
+        rangeStart = startOfDayLA(today)
       } else {
-        rangeStart.setDate(rangeEnd.getDate() - days)
-        rangeStart.setHours(0, 0, 0, 0)
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
       }
     }
 
@@ -1372,14 +1372,14 @@ export async function getProductMixData(
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
-      rangeEnd = new Date()
-      rangeEnd.setHours(23, 59, 59, 999)
-      rangeStart = new Date()
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
       if (days === 1) {
-        rangeStart.setHours(0, 0, 0, 0)
+        rangeStart = startOfDayLA(today)
       } else {
-        rangeStart.setDate(rangeEnd.getDate() - days)
-        rangeStart.setHours(0, 0, 0, 0)
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
       }
     }
 

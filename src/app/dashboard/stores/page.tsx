@@ -3,20 +3,12 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
-import { Store, MapPin, Phone, Plus, Users, BarChart3, Edit, Trash2, Eye } from "lucide-react"
+import { Store, MapPin, Phone, Plus, Users, BarChart3, Edit, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
 import { DeleteStoreButton } from "./delete-store-button"
 import { StarRatingCompact } from "@/components/ui/star-rating"
-import { YelpSyncButton, YelpSyncAllButton } from "@/components/yelp-sync-button"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { YelpSyncAllButton } from "@/components/yelp-sync-button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
@@ -32,7 +24,7 @@ import { Badge } from "@/components/ui/badge"
 
 export default async function StoresPage() {
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect("/login")
   }
@@ -40,32 +32,21 @@ export default async function StoresPage() {
   const stores = await getStores()
 
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Stores</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Store Management</h1>
-            <p className="text-muted-foreground">
-              Manage your restaurant locations and their details
-            </p>
+    <div className="flex flex-col h-full">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+        <div className="px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="h-4" />
+            <div className="flex items-center gap-2">
+              <Store className="h-4 w-4 text-primary" />
+              <h1 className="text-lg font-semibold tracking-tight">Store Management</h1>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <span>{stores.length} location{stores.length !== 1 ? "s" : ""}</span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {session.user.role === "OWNER" && stores.length > 0 && (
@@ -73,20 +54,22 @@ export default async function StoresPage() {
             )}
             {session.user.role === "OWNER" && (
               <Link href="/dashboard/stores/new">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add New Store
+                <Button size="sm">
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Store
                 </Button>
               </Link>
             )}
           </div>
         </div>
+      </div>
 
+      <div className="flex-1 p-3 sm:p-4 space-y-3">
         {/* Store Selector */}
         {stores.length > 0 && (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <StoreSelector stores={stores} currentStoreId="all" />
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground hidden sm:block">
               Select a store to view details, or browse all stores below
             </div>
           </div>
@@ -98,7 +81,7 @@ export default async function StoresPage() {
               <Store className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No stores found</h3>
               <p className="text-muted-foreground mb-4">
-                {session.user.role === "OWNER" 
+                {session.user.role === "OWNER"
                   ? "Get started by adding your first store location."
                   : "You are not assigned to manage any stores yet."
                 }
@@ -192,8 +175,8 @@ export default async function StoresPage() {
                                 Edit
                               </Button>
                             </Link>
-                            <DeleteStoreButton 
-                              storeId={store.id} 
+                            <DeleteStoreButton
+                              storeId={store.id}
                               storeName={store.name}
                               hasReports={store._count.reports > 0}
                               hasManagers={store._count.managers > 0}
