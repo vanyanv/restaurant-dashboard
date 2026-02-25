@@ -43,7 +43,8 @@ import { MenuItemCostTable } from "./menu-item-cost-table"
 import { PriceChangesTable } from "./price-changes-table"
 import { AiInsightsPanel } from "./ai-insights-panel"
 import { DemandForecastPanel } from "./demand-forecast-panel"
-import type { ProductUsageData, RecipeWithIngredients } from "@/types/product-usage"
+import { IngredientDrilldownSheet } from "./ingredient-drilldown-sheet"
+import type { ProductUsageData, RecipeWithIngredients, IngredientUsageRow } from "@/types/product-usage"
 
 const IngredientEfficiencyChart = dynamic(
   () => import("./ingredient-efficiency-chart").then(m => ({ default: m.IngredientEfficiencyChart })),
@@ -90,6 +91,7 @@ export function ProductUsageContent({
   } | null>(null)
   const [selectedStore, setSelectedStore] = useState("all")
   const [recipeSheetOpen, setRecipeSheetOpen] = useState(false)
+  const [selectedIngredient, setSelectedIngredient] = useState<IngredientUsageRow | null>(null)
 
   const fetchData = useCallback(
     (storeId: string, options: { startDate: string; endDate: string } | { days: number }) => {
@@ -291,7 +293,17 @@ export function ProductUsageContent({
             </CollapsibleSection>
 
             <CollapsibleSection title="Ingredient Variance" defaultOpen>
-              {hasData ? <IngredientVarianceTable data={data.ingredientUsage} /> : <DataTableSkeleton columns={7} rows={8} />}
+              {hasData ? (
+                <IngredientVarianceTable
+                  data={data.ingredientUsage}
+                  onRowClick={(name) => {
+                    const row = data.ingredientUsage.find((i) => i.canonicalName === name)
+                    if (row) setSelectedIngredient(row)
+                  }}
+                />
+              ) : (
+                <DataTableSkeleton columns={7} rows={8} />
+              )}
             </CollapsibleSection>
           </TabsContent>
 
@@ -385,6 +397,12 @@ export function ProductUsageContent({
         onRecipeChange={() => {
           fetchData(selectedStore, getDateOptions())
         }}
+      />
+
+      <IngredientDrilldownSheet
+        ingredient={selectedIngredient}
+        recipes={recipes}
+        onClose={() => setSelectedIngredient(null)}
       />
     </div>
   )
