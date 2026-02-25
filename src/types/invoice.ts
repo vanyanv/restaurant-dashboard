@@ -124,3 +124,31 @@ export interface InvoiceListResponse {
   page: number
   totalPages: number
 }
+
+// ─── Store/Vendor breakdown (dashboard snapshot) ───
+
+export interface InvoiceStoreRow {
+  storeId: string | null
+  storeName: string
+  totalSpend: number
+  invoiceCount: number
+  avgInvoice: number
+  vendorCount: number
+  needsReview: number
+}
+
+export interface InvoiceVendorRow {
+  vendorName: string
+  totalSpend: number
+  invoiceCount: number
+  avgInvoice: number
+  storeCount: number
+  needsReview: number
+}
+
+export interface InvoiceBreakdownData {
+  storeRows: InvoiceStoreRow[]
+  vendorRows: InvoiceVendorRow[]
+  storeTotals: Omit<InvoiceStoreRow, "storeId" | "storeName">
+  vendorTotals: Omit<InvoiceVendorRow, "vendorName">
+}

@@ -31,7 +31,7 @@ import {
 } from "@/components/skeletons"
 import { formatDateRange, getLastSyncText, localDateStr } from "@/lib/dashboard-utils"
 import type { DashboardData, StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
-import type { InvoiceKpis, InvoiceListItem } from "@/types/invoice"
+import type { InvoiceKpis, InvoiceBreakdownData } from "@/types/invoice"
 
 const RevenueTrendChart = dynamic(
   () => import("@/components/charts/revenue-trend-chart").then(m => ({ default: m.RevenueTrendChart })),
@@ -43,7 +43,7 @@ interface DashboardContentProps {
   initialOtterData: StoreAnalyticsData | null
   initialMenuData: MenuCategoryData | null
   initialInvoiceSummary: InvoiceKpis | null
-  initialRecentInvoices: InvoiceListItem[]
+  initialInvoiceBreakdown: InvoiceBreakdownData | null
   userRole: string
 }
 
@@ -52,7 +52,7 @@ export function DashboardContent({
   initialOtterData,
   initialMenuData,
   initialInvoiceSummary,
-  initialRecentInvoices,
+  initialInvoiceBreakdown,
   userRole,
 }: DashboardContentProps) {
   const router = useRouter()
@@ -248,8 +248,8 @@ export function DashboardContent({
         )}
 
         {/* 5. Invoice Snapshot (last 30 days) */}
-        {initialInvoiceSummary && (
-          <InvoiceSnapshot summary={initialInvoiceSummary} recentInvoices={initialRecentInvoices} />
+        {initialInvoiceSummary && initialInvoiceBreakdown && (
+          <InvoiceSnapshot summary={initialInvoiceSummary} breakdown={initialInvoiceBreakdown} />
         )}
 
       </div>

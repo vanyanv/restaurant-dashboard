@@ -3,7 +3,13 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import type { InvoiceKpis, ProductAnalytics } from "@/types/invoice"
+import type {
+  InvoiceKpis,
+  ProductAnalytics,
+  InvoiceBreakdownData,
+  InvoiceStoreRow,
+  InvoiceVendorRow,
+} from "@/types/invoice"
 
 export async function getInvoiceSummary(options?: {
   storeId?: string
@@ -208,6 +214,139 @@ export async function getProductAnalytics(options?: {
     .slice(0, 20)
 
   return { topProducts }
+}
+
+export async function getInvoiceStoreBreakdown(options?: {
+  days?: number
+}): Promise<InvoiceBreakdownData> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    return {
+      storeRows: [],
+      vendorRows: [],
+      storeTotals: { totalSpend: 0, invoiceCount: 0, avgInvoice: 0, vendorCount: 0, needsReview: 0 },
+      vendorTotals: { totalSpend: 0, invoiceCount: 0, avgInvoice: 0, storeCount: 0, needsReview: 0 },
+    }
+  }
+
+  const { days = 30 } = options ?? {}
+  const sinceDate = new Date()
+  sinceDate.setDate(sinceDate.getDate() - days)
+
+  const baseWhere = {
+    ownerId: session.user.id,
+    invoiceDate: { gte: sinceDate },
+  }
+
+  const [byStore, byVendor, reviewByStore, reviewByVendor, pivot, stores] =
+    await Promise.all([
+      prisma.invoice.groupBy({
+        by: ["storeId"],
+        where: baseWhere,
+        _sum: { totalAmount: true },
+        _count: { id: true },
+      }),
+      prisma.invoice.groupBy({
+        by: ["vendorName"],
+        where: baseWhere,
+        _sum: { totalAmount: true },
+        _count: { id: true },
+      }),
+      prisma.invoice.groupBy({
+        by: ["storeId"],
+        where: { ...baseWhere, status: "REVIEW" },
+        _count: { id: true },
+      }),
+      prisma.invoice.groupBy({
+        by: ["vendorName"],
+        where: { ...baseWhere, status: "REVIEW" },
+        _count: { id: true },
+      }),
+      prisma.invoice.groupBy({
+        by: ["storeId", "vendorName"],
+        where: baseWhere,
+        _sum: { totalAmount: true },
+      }),
+      prisma.store.findMany({
+        where: { ownerId: session.user.id, isActive: true },
+        select: { id: true, name: true },
+      }),
+    ])
+
+  // Lookups
+  const storeNameMap = new Map(stores.map((s) => [s.id, s.name]))
+  const reviewByStoreMap = new Map(
+    reviewByStore.map((r) => [r.storeId, r._count.id])
+  )
+  const reviewByVendorMap = new Map(
+    reviewByVendor.map((r) => [r.vendorName, r._count.id])
+  )
+
+  // Store rows
+  const storeRows: InvoiceStoreRow[] = byStore
+    .map((row) => {
+      const total = row._sum.totalAmount ?? 0
+      const count = row._count.id
+      const vendorsForStore = new Set(
+        pivot.filter((p) => p.storeId === row.storeId).map((p) => p.vendorName)
+      )
+      return {
+        storeId: row.storeId,
+        storeName: row.storeId ? (storeNameMap.get(row.storeId) ?? "Unknown") : "Unassigned",
+        totalSpend: total,
+        invoiceCount: count,
+        avgInvoice: count > 0 ? total / count : 0,
+        vendorCount: vendorsForStore.size,
+        needsReview: reviewByStoreMap.get(row.storeId) ?? 0,
+      }
+    })
+    .sort((a, b) => b.totalSpend - a.totalSpend)
+
+  // Vendor rows
+  const vendorRows: InvoiceVendorRow[] = byVendor
+    .map((row) => {
+      const total = row._sum.totalAmount ?? 0
+      const count = row._count.id
+      const storesForVendor = new Set(
+        pivot.filter((p) => p.vendorName === row.vendorName).map((p) => p.storeId)
+      )
+      return {
+        vendorName: row.vendorName,
+        totalSpend: total,
+        invoiceCount: count,
+        avgInvoice: count > 0 ? total / count : 0,
+        storeCount: storesForVendor.size,
+        needsReview: reviewByVendorMap.get(row.vendorName) ?? 0,
+      }
+    })
+    .sort((a, b) => b.totalSpend - a.totalSpend)
+
+  // Totals
+  const storeTotals = {
+    totalSpend: storeRows.reduce((s, r) => s + r.totalSpend, 0),
+    invoiceCount: storeRows.reduce((s, r) => s + r.invoiceCount, 0),
+    avgInvoice: 0,
+    vendorCount: new Set(pivot.map((p) => p.vendorName)).size,
+    needsReview: storeRows.reduce((s, r) => s + r.needsReview, 0),
+  }
+  storeTotals.avgInvoice =
+    storeTotals.invoiceCount > 0
+      ? storeTotals.totalSpend / storeTotals.invoiceCount
+      : 0
+
+  const vendorTotals = {
+    totalSpend: vendorRows.reduce((s, r) => s + r.totalSpend, 0),
+    invoiceCount: vendorRows.reduce((s, r) => s + r.invoiceCount, 0),
+    avgInvoice: 0,
+    storeCount: stores.length,
+    needsReview: vendorRows.reduce((s, r) => s + r.needsReview, 0),
+  }
+  vendorTotals.avgInvoice =
+    vendorTotals.invoiceCount > 0
+      ? vendorTotals.totalSpend / vendorTotals.invoiceCount
+      : 0
+
+  return { storeRows, vendorRows, storeTotals, vendorTotals }
 }
 
 export async function getLastInvoiceSyncAt(): Promise<string | null> {
