@@ -2,9 +2,11 @@
 
 import { useTransition, useState, useCallback, useEffect, useMemo } from "react"
 import dynamic from "next/dynamic"
-import { PackageSearch } from "lucide-react"
+import { PackageSearch, ChefHat } from "lucide-react"
 import { getProductUsageData, getRecipes } from "@/app/actions/product-usage-actions"
 
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -36,6 +38,7 @@ import { formatDateRange, localDateStr } from "@/lib/dashboard-utils"
 import { ProductUsageKpiCards } from "./product-usage-kpi-cards"
 import { AlertsBanner } from "./alerts-banner"
 import { IngredientVarianceTable } from "./ingredient-variance-table"
+import { RecipeManagerSheet } from "./recipe-manager-sheet"
 import type { ProductUsageData, RecipeWithIngredients } from "@/types/product-usage"
 
 const IngredientEfficiencyChart = dynamic(
@@ -78,6 +81,7 @@ export function ProductUsageContent({
     endDate: string
   } | null>(null)
   const [selectedStore, setSelectedStore] = useState("all")
+  const [recipeSheetOpen, setRecipeSheetOpen] = useState(false)
 
   const fetchData = useCallback(
     (storeId: string, options: { startDate: string; endDate: string } | { days: number }) => {
@@ -302,18 +306,65 @@ export function ProductUsageContent({
 
           {/* Recipes Tab */}
           <TabsContent value="recipes" className="space-y-8">
-            {/* Recipe coverage placeholder */}
             <DashboardSection title="Recipe Coverage">
-              <KpiCardsSkeleton />
-            </DashboardSection>
+              <div className="space-y-4">
+                {/* Coverage stats */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      {recipes.length} recipes configured
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Configure recipes to track ingredient usage vs purchases
+                    </p>
+                  </div>
+                  <Button onClick={() => setRecipeSheetOpen(true)} size="sm">
+                    <ChefHat className="h-4 w-4 mr-2" />
+                    Manage Recipes
+                  </Button>
+                </div>
 
-            {/* Recipe list placeholder */}
-            <CollapsibleSection title="All Recipes" defaultOpen>
-              <DataTableSkeleton columns={5} rows={10} />
-            </CollapsibleSection>
+                {/* Recipe list */}
+                {recipes.length > 0 ? (
+                  <div className="space-y-2">
+                    {recipes.map((recipe) => (
+                      <div key={recipe.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{recipe.itemName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {recipe.ingredients.length} ingredient{recipe.ingredients.length !== 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">{recipe.category}</Badge>
+                          {recipe.isConfirmed && <Badge variant="outline" className="text-emerald-600">Confirmed</Badge>}
+                          {recipe.isAiGenerated && !recipe.isConfirmed && <Badge variant="outline" className="text-amber-600">AI Generated</Badge>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-sm text-muted-foreground">
+                    No recipes configured yet. Click &quot;Manage Recipes&quot; to get started.
+                  </div>
+                )}
+              </div>
+            </DashboardSection>
           </TabsContent>
         </Tabs>
       </div>
+
+      <RecipeManagerSheet
+        open={recipeSheetOpen}
+        onOpenChange={setRecipeSheetOpen}
+        recipes={recipes}
+        storeId={selectedStore !== "all" ? selectedStore : undefined}
+        onRecipeChange={() => {
+          fetchData(selectedStore, getDateOptions())
+        }}
+      />
     </div>
   )
 }
