@@ -1,8 +1,8 @@
 /** Build UTC midnight ISO strings for a local calendar date (matches Otter's format). */
 export function utcDayRange(date: Date): { minDate: string; maxDate: string } {
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, "0")
-  const dd = String(date.getDate()).padStart(2, "0")
+  const yyyy = date.getUTCFullYear()
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(date.getUTCDate()).padStart(2, "0")
   return {
     minDate: `${yyyy}-${mm}-${dd}T00:00:00.000Z`,
     maxDate: `${yyyy}-${mm}-${dd}T23:59:59.999Z`,
@@ -260,6 +260,40 @@ export function getDateRange(startDate: Date, endDate: Date): Date[] {
     current.setDate(current.getDate() + 1)
   }
   return dates
+}
+
+export const CUSTOMER_ORDER_COLUMNS = [
+  { type: "field", key: "reference_time_local_without_tz" },
+  { type: "field", key: "consolidated_channel_slug" },
+  { type: "field", key: "net_sales" },
+  { type: "field", key: "facility_name" },
+]
+
+export function buildCustomerOrdersBody(
+  otterStoreIds: string[],
+  startDate: Date,
+  endDate: Date
+): object {
+  const { minDate, maxDate } = utcMultiDayRange(startDate, endDate)
+
+  return {
+    columns: CUSTOMER_ORDER_COLUMNS,
+    sortBy: [{ type: "field", key: "reference_time_local_without_tz", sortOrder: "DESC" }],
+    filterSet: [
+      { filterType: "dateRangeFilter", minDate, maxDate },
+      { filterType: "namedFilter", name: "all_valid_orders" },
+      { filterType: "namedFilter", name: "paid_order_filter" },
+    ],
+    scopeSet: [{ key: "store", values: otterStoreIds }],
+    dataset: "customer_orders",
+    includeMetricsFilters: true,
+    localTime: true,
+    includeTotalRowCount: true,
+    paginate: true,
+    timeCol: ORDERS_TIME_COL,
+    includeRawQueries: false,
+    limit: 10000,
+  }
 }
 
 export function buildDailySyncBody(

@@ -2275,3 +2275,176 @@ export async function getPerformanceAlerts() {
     return []
   }
 }
+
+// ========== Order Patterns ==========
+
+export async function getOrderPatterns(
+  storeId?: string,
+  options?: { days?: number; startDate?: string; endDate?: string }
+): Promise<import("@/types/analytics").OrderPatternsData | null> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return null
+
+    const stores = await getStores()
+    if (stores.length === 0) return null
+
+    const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
+
+    // Determine date range
+    const days = options?.days ?? 30
+    let rangeStart: Date
+    let rangeEnd: Date
+
+    if (options?.startDate && options?.endDate) {
+      rangeStart = new Date(options.startDate + "T00:00:00Z")
+      rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
+    } else {
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
+      if (days === 1) {
+        rangeStart = startOfDayLA(today)
+      } else {
+        const start = startOfDayLA(today)
+        start.setDate(start.getDate() - days)
+        rangeStart = start
+      }
+    }
+
+    // Fetch hourly data from Otter API + daily data from DB in parallel
+    const [hourly, summaries] = await Promise.all([
+      getHourlyOrderDistribution(storeIds, rangeStart, rangeEnd),
+      prisma.otterDailySummary.findMany({
+        where: {
+          storeId: { in: storeIds },
+          date: { gte: rangeStart, lte: rangeEnd },
+        },
+        select: {
+          date: true,
+          platform: true,
+          fpOrderCount: true,
+          tpOrderCount: true,
+          fpGrossSales: true,
+          tpGrossSales: true,
+        },
+        orderBy: { date: "asc" },
+      }),
+    ])
+
+    // --- Day of week aggregation ---
+    const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    const dayBuckets = Array.from({ length: 7 }, () => ({
+      orderCount: 0,
+      totalSales: 0,
+      dayOccurrences: new Set<string>(),
+    }))
+
+    for (const row of summaries) {
+      const d = new Date(row.date)
+      const dow = d.getUTCDay()
+      const dateKey = d.toISOString().slice(0, 10)
+      dayBuckets[dow].orderCount += (row.fpOrderCount ?? 0) + (row.tpOrderCount ?? 0)
+      dayBuckets[dow].totalSales += (row.fpGrossSales ?? 0) + (row.tpGrossSales ?? 0)
+      dayBuckets[dow].dayOccurrences.add(dateKey)
+    }
+
+    const byDayOfWeek = dayBuckets.map((b, i) => ({
+      day: i,
+      label: DAY_LABELS[i],
+      orderCount: b.orderCount,
+      totalSales: Math.round(b.totalSales * 100) / 100,
+      avgOrders: b.dayOccurrences.size > 0
+        ? Math.round(b.orderCount / b.dayOccurrences.size)
+        : 0,
+    }))
+
+    // --- Monthly aggregation ---
+    const monthMap = new Map<string, { orderCount: number; totalSales: number }>()
+
+    for (const row of summaries) {
+      const d = new Date(row.date)
+      const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+      const entry = monthMap.get(monthKey) ?? { orderCount: 0, totalSales: 0 }
+      entry.orderCount += (row.fpOrderCount ?? 0) + (row.tpOrderCount ?? 0)
+      entry.totalSales += (row.fpGrossSales ?? 0) + (row.tpGrossSales ?? 0)
+      monthMap.set(monthKey, entry)
+    }
+
+    const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const byMonth = Array.from(monthMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, val]) => {
+        const [year, month] = key.split("-")
+        return {
+          month: key,
+          label: `${MONTH_NAMES[parseInt(month) - 1]} ${year}`,
+          orderCount: val.orderCount,
+          totalSales: Math.round(val.totalSales * 100) / 100,
+        }
+      })
+
+    return { hourly, byDayOfWeek, byMonth }
+  } catch (error) {
+    console.error("Get order patterns error:", error)
+    return null
+  }
+}
+
+async function getHourlyOrderDistribution(
+  storeIds: string[],
+  rangeStart: Date,
+  rangeEnd: Date
+): Promise<import("@/types/analytics").HourlyOrderPoint[]> {
+  const { queryMetrics, buildCustomerOrdersBody } = await import("@/lib/otter")
+
+  // Look up Otter UUIDs for the given stores
+  const otterStores = await prisma.otterStore.findMany({
+    where: { storeId: { in: storeIds } },
+    select: { otterStoreId: true },
+  })
+
+  const HOUR_LABELS = [
+    "12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM",
+    "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM",
+    "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM",
+    "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM",
+  ]
+
+  const emptyHourly = Array.from({ length: 24 }, (_, i) => ({
+    hour: i,
+    label: HOUR_LABELS[i],
+    orderCount: 0,
+    totalSales: 0,
+  }))
+
+  if (otterStores.length === 0) return emptyHourly
+
+  const otterIds = otterStores.map((s) => s.otterStoreId)
+  const body = buildCustomerOrdersBody(otterIds, rangeStart, rangeEnd)
+
+  try {
+    const rows = await queryMetrics(body)
+
+    const hourly = [...emptyHourly]
+    for (const row of rows) {
+      const epochMs = row.reference_time_local_without_tz as number | null
+      if (epochMs == null) continue
+
+      const hour = new Date(epochMs).getUTCHours()
+      if (hour >= 0 && hour < 24) {
+        hourly[hour].orderCount += 1
+        hourly[hour].totalSales += (row.net_sales as number) ?? 0
+      }
+    }
+
+    // Round sales
+    for (const h of hourly) {
+      h.totalSales = Math.round(h.totalSales * 100) / 100
+    }
+
+    return hourly
+  } catch (error) {
+    console.error("Failed to fetch hourly order data from Otter:", error)
+    return emptyHourly
+  }
+}

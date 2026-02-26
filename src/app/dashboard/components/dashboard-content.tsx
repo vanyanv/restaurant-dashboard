@@ -4,7 +4,7 @@ import { useTransition, useState, useCallback, useEffect } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { BarChart3, Store } from "lucide-react"
-import { getDashboardAnalytics, getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
+import { getDashboardAnalytics, getOtterAnalytics } from "@/app/actions/store-actions"
 
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -23,14 +23,13 @@ import {
 import { KpiCards } from "@/components/analytics/kpi-cards"
 import { DayHighlights } from "@/components/analytics/day-highlights"
 import { InvoiceSnapshot } from "@/components/analytics/invoice-snapshot"
-import { MenuCategorySalesCard } from "@/components/analytics/menu-category-sales-card"
+import { HourlyOrdersDashboardCard } from "@/components/analytics/hourly-orders-dashboard-card"
 import {
   KpiCardsSkeleton,
   ChartSkeleton,
-  MenuCategoryTableSkeleton,
 } from "@/components/skeletons"
 import { formatDateRange, getLastSyncText, localDateStr } from "@/lib/dashboard-utils"
-import type { DashboardData, StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
+import type { DashboardData, StoreAnalyticsData } from "@/types/analytics"
 import type { InvoiceKpis, InvoiceBreakdownData } from "@/types/invoice"
 
 const RevenueTrendChart = dynamic(
@@ -41,7 +40,6 @@ const RevenueTrendChart = dynamic(
 interface DashboardContentProps {
   initialData: DashboardData | null
   initialOtterData: StoreAnalyticsData | null
-  initialMenuData: MenuCategoryData | null
   initialInvoiceSummary: InvoiceKpis | null
   initialInvoiceBreakdown: InvoiceBreakdownData | null
   userRole: string
@@ -50,7 +48,6 @@ interface DashboardContentProps {
 export function DashboardContent({
   initialData,
   initialOtterData,
-  initialMenuData,
   initialInvoiceSummary,
   initialInvoiceBreakdown,
   userRole,
@@ -58,12 +55,10 @@ export function DashboardContent({
   const router = useRouter()
   const [data, setData] = useState(initialData)
   const [otterData, setOtterData] = useState(initialOtterData)
-  const [menuData, setMenuData] = useState(initialMenuData)
   const [isPending, startTransition] = useTransition()
 
   useEffect(() => { setData(initialData) }, [initialData])
   useEffect(() => { setOtterData(initialOtterData) }, [initialOtterData])
-  useEffect(() => { setMenuData(initialMenuData) }, [initialMenuData])
   const [days, setDays] = useState(1)
   const [customRange, setCustomRange] = useState<{
     startDate: string
@@ -101,14 +96,12 @@ export function DashboardContent({
       }
 
       startTransition(async () => {
-        const [dashResult, otterResult, menuResult] = await Promise.all([
+        const [dashResult, otterResult] = await Promise.all([
           getDashboardAnalytics({ startDate, endDate }),
           getOtterAnalytics(undefined, { startDate, endDate }),
-          getMenuCategoryAnalytics(undefined, { startDate, endDate }),
         ])
         if (dashResult) setData(dashResult)
         setOtterData(otterResult)
-        if (menuResult) setMenuData(menuResult)
       })
     },
     []
@@ -213,22 +206,17 @@ export function DashboardContent({
           )}
         </div>
 
-        {/* 3. Revenue Trend + Menu Category (side-by-side on desktop) */}
+        {/* 3. Revenue Trend + Busiest Hours (side-by-side on desktop) */}
         <div className="grid gap-3 md:gap-4 lg:grid-cols-5">
           <RevenueTrendChart compact className="lg:col-span-3" />
-          {isPending ? (
-            <MenuCategoryTableSkeleton className="lg:col-span-2" />
-          ) : menuData ? (
-            <MenuCategorySalesCard
-              data={menuData}
-              stores={
-                data?.rows
-                  .filter((r) => r.storeId !== "total")
-                  .map((r) => ({ id: r.storeId, name: r.storeName })) ?? []
-              }
-              className="lg:col-span-2"
-            />
-          ) : null}
+          <HourlyOrdersDashboardCard
+            stores={
+              data?.rows
+                .filter((r) => r.storeId !== "total")
+                .map((r) => ({ id: r.storeId, name: r.storeName })) ?? []
+            }
+            className="lg:col-span-2"
+          />
         </div>
 
         {/* 4. Sales Breakdown Table */}

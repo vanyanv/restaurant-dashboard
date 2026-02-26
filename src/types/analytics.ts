@@ -383,3 +383,33 @@ export interface ProductMixData {
   dateRange: { startDate: string; endDate: string }
   dayCount: number
 }
+
+// ========== Order Patterns types ==========
+
+export interface HourlyOrderPoint {
+  hour: number
+  label: string
+  orderCount: number
+  totalSales: number
+}
+
+export interface DayOfWeekOrderPoint {
+  day: number
+  label: string
+  orderCount: number
+  totalSales: number
+  avgOrders: number
+}
+
+export interface MonthlyOrderPoint {
+  month: string
+  label: string
+  orderCount: number
+  totalSales: number
+}
+
+export interface OrderPatternsData {
+  hourly: HourlyOrderPoint[]
+  byDayOfWeek: DayOfWeekOrderPoint[]
+  byMonth: MonthlyOrderPoint[]
+}

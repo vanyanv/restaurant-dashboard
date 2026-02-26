@@ -24,9 +24,9 @@ import { Store, ArrowLeft, BarChart3 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-import { getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
+import { getOtterAnalytics, getMenuCategoryAnalytics, getOrderPatterns } from "@/app/actions/store-actions"
 import { localDateStr } from "@/lib/dashboard-utils"
-import type { StoreAnalyticsData, MenuCategoryData } from "@/types/analytics"
+import type { StoreAnalyticsData, MenuCategoryData, OrderPatternsData } from "@/types/analytics"
 
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { KpiCards } from "@/components/analytics/kpi-cards"
@@ -72,6 +72,18 @@ const MenuCategoryTable = dynamic(
   () => import("@/components/analytics/menu-category-table").then(m => ({ default: m.MenuCategoryTable })),
   { loading: () => <MenuCategoryTableSkeleton />, ssr: false }
 )
+const HourlyOrdersChart = dynamic(
+  () => import("@/components/charts/hourly-orders-chart").then(m => ({ default: m.HourlyOrdersChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const DayOfWeekChart = dynamic(
+  () => import("@/components/charts/day-of-week-chart").then(m => ({ default: m.DayOfWeekChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
+const MonthlyOrdersChart = dynamic(
+  () => import("@/components/charts/monthly-orders-chart").then(m => ({ default: m.MonthlyOrdersChart })),
+  { loading: () => <ChartSkeleton />, ssr: false }
+)
 
 interface StoreAnalyticsContentProps {
   store: { id: string; name: string; address?: string | null; phone?: string | null }
@@ -92,8 +104,20 @@ export function StoreAnalyticsContent({
   const [menuCategoryData, setMenuCategoryData] = useState(initialMenuData)
   const [days, setDays] = useState(30)
 
+  const [orderPatterns, setOrderPatterns] = useState<OrderPatternsData | null>(null)
+  const [patternsLoading, setPatternsLoading] = useState(true)
+
   useEffect(() => { setAnalytics(initialAnalytics) }, [initialAnalytics])
   useEffect(() => { setMenuCategoryData(initialMenuData) }, [initialMenuData])
+
+  // Lazy-load order patterns on mount (external API call, don't block SSR)
+  useEffect(() => {
+    setPatternsLoading(true)
+    getOrderPatterns(store.id)
+      .then(setOrderPatterns)
+      .finally(() => setPatternsLoading(false))
+  }, [store.id])
+
   const [customRange, setCustomRange] = useState<{
     startDate: string
     endDate: string
@@ -138,14 +162,16 @@ export function StoreAnalyticsContent({
     }
 
     startTransition(async () => {
-      const [result, menuResult] = await Promise.all([
+      const [result, menuResult, patternsResult] = await Promise.all([
         getOtterAnalytics(store.id, { startDate, endDate }),
         getMenuCategoryAnalytics(store.id, { startDate, endDate }),
+        getOrderPatterns(store.id, { startDate, endDate }),
       ])
       if (result) {
         setAnalytics(result)
       }
       setMenuCategoryData(menuResult)
+      setOrderPatterns(patternsResult)
     })
   }
 
@@ -244,6 +270,23 @@ export function StoreAnalyticsContent({
         ) : (
           <PlatformTrendChart data={analytics.platformTrends} />
         )}
+
+        {/* Order patterns: busiest hours, days, months */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {(isPending || patternsLoading) ? (
+            <>
+              <ChartSkeleton />
+              <ChartSkeleton />
+              <ChartSkeleton />
+            </>
+          ) : orderPatterns ? (
+            <>
+              <HourlyOrdersChart data={orderPatterns.hourly} />
+              <DayOfWeekChart data={orderPatterns.byDayOfWeek} />
+              <MonthlyOrdersChart data={orderPatterns.byMonth} />
+            </>
+          ) : null}
+        </div>
 
         {/* Platform breakdown + Payment split */}
         <div className="grid gap-4 md:grid-cols-2">
