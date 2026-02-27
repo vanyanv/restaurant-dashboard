@@ -12,6 +12,7 @@ export interface RecipeInput {
   category: string
   servingSize?: number
   notes?: string
+  foodCostOverride?: number | null
   ingredients: RecipeIngredientInput[]
 }
 
@@ -21,6 +22,7 @@ export interface RecipeWithIngredients {
   category: string
   servingSize: number
   notes: string | null
+  foodCostOverride: number | null
   isAiGenerated: boolean
   isConfirmed: boolean
   ingredients: {

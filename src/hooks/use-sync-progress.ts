@@ -80,7 +80,7 @@ export function useSyncProgress(onComplete?: () => void): UseSyncProgressReturn 
         status: "error",
         totalProgress: 0,
         detail: err instanceof Error ? err.message : "Connection lost",
-        counts: { daily: 0, categories: 0, items: 0 },
+        counts: { daily: 0, categories: 0, items: 0, modifiers: 0 },
         error: err instanceof Error ? err.message : "Connection lost",
       })
     }

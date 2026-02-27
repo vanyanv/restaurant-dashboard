@@ -230,6 +230,8 @@ model OtterMenuItem {
   category  String
   itemName  String
 
+  isModifier Boolean @default(false)
+
   fpQuantitySold         Float @default(0)
   fpTotalInclModifiers   Float @default(0)
   fpTotalSales           Float @default(0)
@@ -241,7 +243,7 @@ model OtterMenuItem {
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  @@unique([storeId, date, category, itemName])
+  @@unique([storeId, date, category, itemName, isModifier])
   @@index([storeId])
   @@index([date])
 }
@@ -365,9 +367,10 @@ model Recipe {
   storeId       String
   itemName      String
   category      String
-  servingSize   Float    @default(1)
-  notes         String?
-  isAiGenerated Boolean  @default(false)
+  servingSize        Float    @default(1)
+  notes              String?
+  foodCostOverride   Float?
+  isAiGenerated      Boolean  @default(false)
   isConfirmed   Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -80,6 +80,7 @@ export function RecipeManagerSheet({
   const [editItemName, setEditItemName] = useState("")
   const [editCategory, setEditCategory] = useState("")
   const [servingSize, setServingSize] = useState("1")
+  const [foodCost, setFoodCost] = useState("")
   const [ingredients, setIngredients] = useState<IngredientRow[]>([])
   const [error, setError] = useState("")
   const [isSaving, startSaveTransition] = useTransition()
@@ -115,6 +116,7 @@ export function RecipeManagerSheet({
     setEditItemName(recipe.itemName)
     setEditCategory(recipe.category)
     setServingSize(String(recipe.servingSize))
+    setFoodCost(recipe.foodCostOverride != null ? String(recipe.foodCostOverride) : "")
     setIngredients(
       recipe.ingredients.map((ing) => ({
         ingredientName: ing.ingredientName,
@@ -141,6 +143,7 @@ export function RecipeManagerSheet({
     setEditItemName(item.itemName)
     setEditCategory(item.category)
     setServingSize("1")
+    setFoodCost("")
     setIngredients([{ ingredientName: "", quantity: "", unit: "EA" }])
     setError("")
     setMode("edit")
@@ -210,10 +213,12 @@ export function RecipeManagerSheet({
     }
 
     startSaveTransition(async () => {
+      const parsedCost = parseFloat(foodCost)
       const result = await upsertRecipe(storeId, {
         itemName: editItemName,
         category: editCategory,
         servingSize: parseFloat(servingSize) || 1,
+        foodCostOverride: !isNaN(parsedCost) && parsedCost > 0 ? parsedCost : null,
         ingredients: parsed,
       })
 
@@ -377,6 +382,11 @@ export function RecipeManagerSheet({
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {recipe.ingredients.length} ingredient
                             {recipe.ingredients.length !== 1 ? "s" : ""}
+                            {recipe.foodCostOverride != null && (
+                              <span className="ml-2 text-emerald-600 font-medium">
+                                ${recipe.foodCostOverride.toFixed(2)}/serving
+                              </span>
+                            )}
                           </p>
                         </div>
                         <Button
@@ -570,18 +580,33 @@ export function RecipeManagerSheet({
 
               <Separator />
 
-              {/* Serving size */}
-              <div className="space-y-2">
-                <Label htmlFor="serving-size">Serving Size</Label>
-                <Input
-                  id="serving-size"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={servingSize}
-                  onChange={(e) => setServingSize(e.target.value)}
-                  className="w-24"
-                />
+              {/* Serving size & food cost */}
+              <div className="flex gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="serving-size">Serving Size</Label>
+                  <Input
+                    id="serving-size"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={servingSize}
+                    onChange={(e) => setServingSize(e.target.value)}
+                    className="w-24"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="food-cost">Food Cost / Serving ($)</Label>
+                  <Input
+                    id="food-cost"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={foodCost}
+                    onChange={(e) => setFoodCost(e.target.value)}
+                    className="w-32"
+                  />
+                </div>
               </div>
 
               <Separator />

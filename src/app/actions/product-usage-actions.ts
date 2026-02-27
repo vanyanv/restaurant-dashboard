@@ -294,12 +294,27 @@ export async function getProductUsageData(options?: {
 
     let theoreticalCOGS = 0
     if (recipe) {
+      // Check if any ingredient has invoice cost data
+      let hasInvoiceCost = false
       for (const ing of recipe.ingredients) {
         const purchased = purchasedMap.get(ing.ingredientName)
-        const avgCost = purchased
-          ? purchased.totalCost / purchased.purchasedQty
-          : 0
-        theoreticalCOGS += sales.totalQtySold * ing.quantity * avgCost
+        if (purchased && purchased.totalCost > 0) {
+          hasInvoiceCost = true
+          break
+        }
+      }
+
+      if (!hasInvoiceCost && recipe.foodCostOverride != null) {
+        // Use R365 pre-calculated cost when no invoice data matches
+        theoreticalCOGS = sales.totalQtySold * recipe.foodCostOverride
+      } else {
+        for (const ing of recipe.ingredients) {
+          const purchased = purchasedMap.get(ing.ingredientName)
+          const avgCost = purchased
+            ? purchased.totalCost / purchased.purchasedQty
+            : 0
+          theoreticalCOGS += sales.totalQtySold * ing.quantity * avgCost
+        }
       }
     }
 
@@ -538,6 +553,7 @@ export async function getProductUsageData(options?: {
     category: r.category,
     servingSize: r.servingSize,
     notes: r.notes,
+    foodCostOverride: r.foodCostOverride,
     isAiGenerated: r.isAiGenerated,
     isConfirmed: r.isConfirmed,
     ingredients: r.ingredients.map((ing) => ({
@@ -701,6 +717,7 @@ export async function getRecipes(
     category: r.category,
     servingSize: r.servingSize,
     notes: r.notes,
+    foodCostOverride: r.foodCostOverride,
     isAiGenerated: r.isAiGenerated,
     isConfirmed: r.isConfirmed,
     ingredients: r.ingredients.map((ing) => ({
@@ -744,12 +761,14 @@ export async function upsertRecipe(
         category: data.category,
         servingSize: data.servingSize ?? 1,
         notes: data.notes ?? null,
+        foodCostOverride: data.foodCostOverride ?? null,
         isAiGenerated: false,
         isConfirmed: true,
       },
       update: {
         servingSize: data.servingSize ?? 1,
         notes: data.notes ?? null,
+        foodCostOverride: data.foodCostOverride ?? null,
         isConfirmed: true,
         updatedAt: new Date(),
       },
@@ -797,6 +816,7 @@ export async function upsertRecipe(
     category: result.category,
     servingSize: result.servingSize,
     notes: result.notes,
+    foodCostOverride: result.foodCostOverride,
     isAiGenerated: result.isAiGenerated,
     isConfirmed: result.isConfirmed,
     ingredients: result.ingredients.map((ing) => ({

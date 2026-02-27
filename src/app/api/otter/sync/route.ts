@@ -7,6 +7,7 @@ import {
   buildDailySyncBody,
   buildMenuCategorySyncBody,
   buildMenuItemSyncBody,
+  buildModifierSyncBody,
   getDateRange,
 } from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
@@ -18,13 +19,14 @@ type OtterRow = Record<string, any>
 
 type ProgressEmitter = (event: SyncProgressEvent) => void
 
-const PHASE_WEIGHTS = { daily: 0.3, categories: 0.2, items: 0.5 } as const
+const PHASE_WEIGHTS = { daily: 0.25, categories: 0.15, items: 0.35, modifiers: 0.25 } as const
 
-function computeTotalProgress(dailyPct: number, categoryPct: number, itemPct: number): number {
+function computeTotalProgress(dailyPct: number, categoryPct: number, itemPct: number, modifierPct: number = 0): number {
   return Math.round(
     dailyPct * PHASE_WEIGHTS.daily +
     categoryPct * PHASE_WEIGHTS.categories +
-    itemPct * PHASE_WEIGHTS.items
+    itemPct * PHASE_WEIGHTS.items +
+    modifierPct * PHASE_WEIGHTS.modifiers
   )
 }
 
@@ -70,6 +72,8 @@ interface SyncResult {
   categoryFailed: number
   itemSynced: number
   itemFailed: number
+  modifierSynced: number
+  modifierFailed: number
   storesProcessed: number
 }
 
@@ -85,6 +89,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
       synced: 0, failed: 0,
       categorySynced: 0, categoryFailed: 0,
       itemSynced: 0, itemFailed: 0,
+      modifierSynced: 0, modifierFailed: 0,
       storesProcessed: 0,
     }
   }
@@ -112,7 +117,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   }
 
   const days = getDateRange(startDate, endDate)
-  const counts = { daily: 0, categories: 0, items: 0 }
+  const counts = { daily: 0, categories: 0, items: 0, modifiers: 0 }
 
   // ─── Phase 1: Daily summary sync (1 API call) ───
   emit({
@@ -126,7 +131,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   let synced = 0
   let failed = 0
 
-  const dailyUpserts = rows
+  const dailyRecords = rows
     .filter((row: OtterRow) => {
       const otterStoreId = row["store"] as string | null
       return otterStoreId && otterToInternal.has(otterStoreId) && row["eod_date_with_timezone"]
@@ -166,37 +171,41 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
         tpOrderCount: isFP ? null : orderCount,
       }
 
-      return prisma.otterDailySummary.upsert({
-        where: {
-          storeId_date_platform_paymentMethod: { storeId, date, platform, paymentMethod },
-        },
-        create: { storeId, date, platform, paymentMethod, ...fields },
-        update: fields,
-      })
+      return { storeId, date, platform, paymentMethod, fields }
     })
 
   emit({
     phase: "daily", status: "writing", totalProgress: computeTotalProgress(10, 0, 0),
-    detail: `Writing ${dailyUpserts.length} daily records...`, counts,
+    detail: `Writing ${dailyRecords.length} daily records...`, counts,
   })
 
-  for (let i = 0; i < dailyUpserts.length; i += 50) {
-    const batch = dailyUpserts.slice(i, i + 50)
+  for (let i = 0; i < dailyRecords.length; i += 50) {
+    const batch = dailyRecords.slice(i, i + 50)
     try {
-      await prisma.$transaction(batch)
+      await prisma.$transaction(
+        batch.map(({ storeId, date, platform, paymentMethod, fields }) =>
+          prisma.otterDailySummary.upsert({
+            where: {
+              storeId_date_platform_paymentMethod: { storeId, date, platform, paymentMethod },
+            },
+            create: { storeId, date, platform, paymentMethod, ...fields },
+            update: fields,
+          })
+        )
+      )
       synced += batch.length
       counts.daily = synced
     } catch (err) {
       console.error(`Failed batch of ${batch.length} daily upserts at offset ${i}:`, err)
       failed += batch.length
     }
-    const phasePct = dailyUpserts.length > 0
-      ? 10 + ((i + batch.length) / dailyUpserts.length) * 90
+    const phasePct = dailyRecords.length > 0
+      ? 10 + ((i + batch.length) / dailyRecords.length) * 90
       : 100
     emit({
       phase: "daily", status: "writing",
       totalProgress: computeTotalProgress(phasePct, 0, 0),
-      detail: `Writing daily records (${Math.min(i + 50, dailyUpserts.length)}/${dailyUpserts.length})...`,
+      detail: `Writing daily records (${Math.min(i + 50, dailyRecords.length)}/${dailyRecords.length})...`,
       counts,
     })
   }
@@ -237,7 +246,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   let categorySynced = 0
   let categoryFailed = 0
 
-  const categoryUpserts = categoryResults.flatMap(({ day, storeId, rows: categoryRows }) => {
+  const categoryRecords = categoryResults.flatMap(({ day, storeId, rows: categoryRows }) => {
     const date = new Date(day)
     date.setHours(0, 0, 0, 0)
 
@@ -251,31 +260,35 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
         tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
         tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
       }
-      return prisma.otterMenuCategory.upsert({
-        where: { storeId_date_category: { storeId, date, category } },
-        create: { storeId, date, category, ...data },
-        update: data,
-      })
+      return { storeId, date, category, data }
     })
   })
 
-  for (let i = 0; i < categoryUpserts.length; i += 50) {
-    const batch = categoryUpserts.slice(i, i + 50)
+  for (let i = 0; i < categoryRecords.length; i += 50) {
+    const batch = categoryRecords.slice(i, i + 50)
     try {
-      await prisma.$transaction(batch)
+      await prisma.$transaction(
+        batch.map(({ storeId, date, category, data }) =>
+          prisma.otterMenuCategory.upsert({
+            where: { storeId_date_category: { storeId, date, category } },
+            create: { storeId, date, category, ...data },
+            update: data,
+          })
+        )
+      )
       categorySynced += batch.length
       counts.categories = categorySynced
     } catch (err) {
       console.error(`Failed batch of ${batch.length} category upserts:`, err)
       categoryFailed += batch.length
     }
-    const phasePct = categoryUpserts.length > 0
-      ? 40 + ((i + batch.length) / categoryUpserts.length) * 60
+    const phasePct = categoryRecords.length > 0
+      ? 40 + ((i + batch.length) / categoryRecords.length) * 60
       : 100
     emit({
       phase: "categories", status: "writing",
       totalProgress: computeTotalProgress(100, phasePct, 0),
-      detail: `Writing categories (${Math.min(i + 50, categoryUpserts.length)}/${categoryUpserts.length})...`,
+      detail: `Writing categories (${Math.min(i + 50, categoryRecords.length)}/${categoryRecords.length})...`,
       counts,
     })
   }
@@ -317,7 +330,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   let itemSynced = 0
   let itemFailed = 0
 
-  const itemUpserts = itemResults.flatMap(({ day, storeId, rows: itemRows }) => {
+  const itemRecords = itemResults.flatMap(({ day, storeId, rows: itemRows }) => {
     const date = new Date(day)
     date.setHours(0, 0, 0, 0)
 
@@ -332,31 +345,113 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
         tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
         tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
       }
-      return prisma.otterMenuItem.upsert({
-        where: { storeId_date_category_itemName: { storeId, date, category, itemName } },
-        create: { storeId, date, category, itemName, ...data },
-        update: data,
-      })
+      return { storeId, date, category, itemName, data }
     })
   })
 
-  for (let i = 0; i < itemUpserts.length; i += 50) {
-    const batch = itemUpserts.slice(i, i + 50)
+  for (let i = 0; i < itemRecords.length; i += 50) {
+    const batch = itemRecords.slice(i, i + 50)
     try {
-      await prisma.$transaction(batch)
+      await prisma.$transaction(
+        batch.map(({ storeId, date, category, itemName, data }) =>
+          prisma.otterMenuItem.upsert({
+            where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier: false } },
+            create: { storeId, date, category, itemName, isModifier: false, ...data },
+            update: data,
+          })
+        )
+      )
       itemSynced += batch.length
       counts.items = itemSynced
     } catch (err) {
       console.error(`Failed batch of ${batch.length} item upserts:`, err)
       itemFailed += batch.length
     }
-    const phasePct = itemUpserts.length > 0
-      ? 40 + ((i + batch.length) / itemUpserts.length) * 60
+    const phasePct = itemRecords.length > 0
+      ? 40 + ((i + batch.length) / itemRecords.length) * 60
       : 100
     emit({
       phase: "items", status: "writing",
       totalProgress: computeTotalProgress(100, 100, phasePct),
-      detail: `Writing items (${Math.min(i + 50, itemUpserts.length)}/${itemUpserts.length})...`,
+      detail: `Writing items (${Math.min(i + 50, itemRecords.length)}/${itemRecords.length})...`,
+      counts,
+    })
+  }
+
+  // ─── Phase 4: Modifiers (is_parent: false) ───
+  emit({
+    phase: "modifiers", status: "fetching",
+    totalProgress: computeTotalProgress(100, 100, 100, 0),
+    detail: "Fetching modifiers...", counts,
+  })
+
+  const modifierTasks = days.flatMap((day) =>
+    [...storeGroups.entries()].map(([storeId, uuids]) => () =>
+      queryMetrics(buildModifierSyncBody(uuids, day))
+        .then((modRows: OtterRow[]) => ({ day, storeId, rows: modRows }))
+        .catch((err: unknown) => {
+          console.error(`Modifier sync error for ${day.toISOString().slice(0, 10)} store ${storeId}:`, err)
+          return { day, storeId, rows: [] as OtterRow[] }
+        })
+    )
+  )
+
+  const modifierResults = await withConcurrency(modifierTasks, 5, (completed, total) => {
+    const fetchPct = (completed / total) * 40
+    emit({
+      phase: "modifiers", status: "fetching",
+      totalProgress: computeTotalProgress(100, 100, 100, fetchPct),
+      detail: `Fetching modifiers (${completed}/${total} store-days)...`, counts,
+    })
+  })
+
+  let modifierSynced = 0
+  let modifierFailed = 0
+
+  const modifierRecords = modifierResults.flatMap(({ day, storeId, rows: modRows }) => {
+    const date = new Date(day)
+    date.setHours(0, 0, 0, 0)
+
+    return modRows.map((row: OtterRow) => {
+      const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
+      const itemName = (row["item"] as string | null) ?? "Unknown"
+      const data = {
+        fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
+        fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
+        fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
+        tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
+        tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
+        tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
+      }
+      return { storeId, date, category, itemName, data }
+    })
+  })
+
+  for (let i = 0; i < modifierRecords.length; i += 50) {
+    const batch = modifierRecords.slice(i, i + 50)
+    try {
+      await prisma.$transaction(
+        batch.map(({ storeId, date, category, itemName, data }) =>
+          prisma.otterMenuItem.upsert({
+            where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier: true } },
+            create: { storeId, date, category, itemName, isModifier: true, ...data },
+            update: data,
+          })
+        )
+      )
+      modifierSynced += batch.length
+      counts.modifiers = modifierSynced
+    } catch (err) {
+      console.error(`Failed batch of ${batch.length} modifier upserts:`, err)
+      modifierFailed += batch.length
+    }
+    const phasePct = modifierRecords.length > 0
+      ? 40 + ((i + batch.length) / modifierRecords.length) * 60
+      : 100
+    emit({
+      phase: "modifiers", status: "writing",
+      totalProgress: computeTotalProgress(100, 100, 100, phasePct),
+      detail: `Writing modifiers (${Math.min(i + 50, modifierRecords.length)}/${modifierRecords.length})...`,
       counts,
     })
   }
@@ -367,10 +462,11 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     data: { lastSyncAt: new Date() },
   })
 
-  const message = `Otter sync completed: ${synced} daily rows, ${categorySynced} categories, ${itemSynced} items`
+  const message = `Otter sync completed: ${synced} daily rows, ${categorySynced} categories, ${itemSynced} items, ${modifierSynced} modifiers`
   counts.daily = synced
   counts.categories = categorySynced
   counts.items = itemSynced
+  counts.modifiers = modifierSynced
 
   emit({
     phase: "complete", status: "done", totalProgress: 100,
@@ -382,6 +478,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     synced, failed,
     categorySynced, categoryFailed,
     itemSynced, itemFailed,
+    modifierSynced, modifierFailed,
     storesProcessed: activeOtterStores.length,
   }
 }
@@ -419,7 +516,7 @@ export async function POST(request: NextRequest) {
           emit({
             phase: "error", status: "error", totalProgress: 0,
             detail: error instanceof Error ? error.message : "Internal server error",
-            counts: { daily: 0, categories: 0, items: 0 },
+            counts: { daily: 0, categories: 0, items: 0, modifiers: 0 },
             error: error instanceof Error ? error.message : "Internal server error",
           })
         } finally {

@@ -9,6 +9,7 @@ import {
   Plus,
   Building2,
   FileText,
+  Activity,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -61,10 +62,6 @@ const data = {
           url: "/dashboard/product-mix",
         },
         {
-          title: "Product Usage",
-          url: "/dashboard/product-usage",
-        },
-        {
           title: "AI Analytics",
           url: "/dashboard/ai-analytics",
         },
@@ -82,6 +79,33 @@ const data = {
         {
           title: "Needs Review",
           url: "/dashboard/invoices?status=REVIEW",
+        },
+      ],
+    },
+    {
+      title: "Operations",
+      url: "/dashboard/operations",
+      icon: Activity,
+      items: [
+        {
+          title: "Overview",
+          url: "/dashboard/operations",
+        },
+        {
+          title: "Product Usage",
+          url: "/dashboard/operations/product-usage",
+        },
+        {
+          title: "Costs",
+          url: "/dashboard/operations/costs",
+        },
+        {
+          title: "Vendors",
+          url: "/dashboard/operations/vendors",
+        },
+        {
+          title: "Recipes",
+          url: "/dashboard/operations/recipes",
         },
       ],
     },

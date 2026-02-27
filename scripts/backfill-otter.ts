@@ -233,8 +233,8 @@ async function main() {
 
     return () =>
       prisma.otterMenuItem.upsert({
-        where: { storeId_date_category_itemName: { storeId, date, category, itemName } },
-        create: { storeId, date, category, itemName, ...data },
+        where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier: false } },
+        create: { storeId, date, category, itemName, isModifier: false, ...data },
         update: data,
       })
   }

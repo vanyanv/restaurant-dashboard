@@ -137,6 +137,32 @@ export function buildMenuItemSyncBody(
   }
 }
 
+export function buildModifierSyncBody(
+  otterStoreIds: string[],
+  date: Date
+): object {
+  const { minDate, maxDate } = utcDayRange(date)
+
+  return {
+    columns: MENU_ITEM_COLUMNS,
+    groupBy: [
+      { key: "item" },
+      { key: "menu_parent_entity_name" },
+    ],
+    sortBy: [{ type: "metric", key: "fp_order_items_quantity_sold", sortOrder: "DESC" }],
+    filterSet: [
+      { filterType: "dateRangeFilter", minDate, maxDate },
+      { filterType: "categoryFilter", dimensionName: "is_parent", op: "IN", values: ["false"] },
+    ],
+    scopeSet: [{ key: "store", values: otterStoreIds }],
+    includeMetricsFilters: true,
+    localTime: true,
+    includeTotalRowCount: false,
+    limit: 15000,
+    includeRawQueries: false,
+  }
+}
+
 export interface OtterRow {
   [key: string]: string | number | null
 }
