@@ -24,9 +24,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ArrowUpDown } from "lucide-react"
+import { ArrowUpDown, TriangleAlert } from "lucide-react"
+import Link from "next/link"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { MenuItemCostRow } from "@/types/product-usage"
@@ -51,6 +53,9 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "totalSalesRevenue", desc: true },
   ])
+
+  const withRecipe = data.filter((d) => d.hasRecipe).length
+  const coveragePct = data.length > 0 ? Math.round((withRecipe / data.length) * 100) : 100
 
   const columns = useMemo<ColumnDef<MenuItemCostRow>[]>(
     () => [
@@ -270,8 +275,25 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
           </div>
         </div>
       </CardHeader>
+      {coveragePct < 100 && (
+        <div className="px-4 pb-3">
+          <Alert className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
+            <TriangleAlert className="h-4 w-4 text-amber-600! dark:text-amber-400!" />
+            <AlertDescription className="text-amber-800 dark:text-amber-300">
+              {withRecipe} of {data.length} items have recipes configured ({coveragePct}% coverage).
+              Items without recipes show $0 COGS and 100% margin.{" "}
+              <Link
+                href="/dashboard/operations/recipes"
+                className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
+              >
+                Configure recipes
+              </Link>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       <CardContent className="px-0 pb-0">
-        <div className="max-h-[500px] overflow-auto">
+        <div className="max-h-125 overflow-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               {table.getHeaderGroups().map((headerGroup) => (

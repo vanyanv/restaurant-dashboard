@@ -147,7 +147,7 @@ export async function getProductUsageData(options?: {
   }
 
   // ── Build purchased map ──
-  // canonicalName → { purchasedQty (in recipe units), totalCost, unitCosts, invoiceIds, category, unit }
+  // lowercased canonicalName → { purchasedQty (in recipe units), totalCost, unitCosts, invoiceIds, category, unit }
   const purchasedMap = new Map<
     string,
     {
@@ -158,23 +158,28 @@ export async function getProductUsageData(options?: {
       unit: string
     }
   >()
+  // Track best display name per lowercased key
+  const displayNameMap = new Map<string, string>()
 
   for (const li of lineItems) {
     const rawName = li.productName.toLowerCase()
     const alias = aliasMap.get(rawName)
     const canonicalName = alias ? alias.canonicalName : li.productName
+    const key = canonicalName.toLowerCase()
     const convertedQty = alias
       ? li.quantity * alias.conversionFactor
       : li.quantity
     const unit = alias ? alias.toUnit : li.unit ?? "unit"
 
-    const existing = purchasedMap.get(canonicalName)
+    if (!displayNameMap.has(key)) displayNameMap.set(key, canonicalName)
+
+    const existing = purchasedMap.get(key)
     if (existing) {
       existing.purchasedQty += convertedQty
       existing.totalCost += li.extendedPrice
       existing.invoiceIds.add(li.invoiceId)
     } else {
-      purchasedMap.set(canonicalName, {
+      purchasedMap.set(key, {
         purchasedQty: convertedQty,
         totalCost: li.extendedPrice,
         invoiceIds: new Set([li.invoiceId]),
@@ -225,10 +230,12 @@ export async function getProductUsageData(options?: {
     if (!recipe) continue
 
     for (const ing of recipe.ingredients) {
-      const theoreticalQty = sales.totalQtySold * ing.quantity
+      const theoreticalQty = sales.totalQtySold * (ing.quantity / recipe.servingSize)
+      const ingKey = ing.ingredientName.toLowerCase()
+      if (!displayNameMap.has(ingKey)) displayNameMap.set(ingKey, ing.ingredientName)
       theoreticalMap.set(
-        ing.ingredientName,
-        (theoreticalMap.get(ing.ingredientName) ?? 0) + theoreticalQty
+        ingKey,
+        (theoreticalMap.get(ingKey) ?? 0) + theoreticalQty
       )
     }
   }
@@ -269,8 +276,8 @@ export async function getProductUsageData(options?: {
     }
 
     ingredientUsage.push({
-      ingredientName: name,
-      canonicalName: name,
+      ingredientName: displayNameMap.get(name) ?? name,
+      canonicalName: displayNameMap.get(name) ?? name,
       category,
       purchasedQuantity: purchasedQty,
       purchasedUnit: unit,
@@ -297,7 +304,7 @@ export async function getProductUsageData(options?: {
       // Check if any ingredient has invoice cost data
       let hasInvoiceCost = false
       for (const ing of recipe.ingredients) {
-        const purchased = purchasedMap.get(ing.ingredientName)
+        const purchased = purchasedMap.get(ing.ingredientName.toLowerCase())
         if (purchased && purchased.totalCost > 0) {
           hasInvoiceCost = true
           break
@@ -309,11 +316,11 @@ export async function getProductUsageData(options?: {
         theoreticalCOGS = sales.totalQtySold * recipe.foodCostOverride
       } else {
         for (const ing of recipe.ingredients) {
-          const purchased = purchasedMap.get(ing.ingredientName)
+          const purchased = purchasedMap.get(ing.ingredientName.toLowerCase())
           const avgCost = purchased
             ? purchased.totalCost / purchased.purchasedQty
             : 0
-          theoreticalCOGS += sales.totalQtySold * ing.quantity * avgCost
+          theoreticalCOGS += sales.totalQtySold * (ing.quantity / recipe.servingSize) * avgCost
         }
       }
     }
