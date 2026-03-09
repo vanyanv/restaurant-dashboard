@@ -20,6 +20,7 @@ export function utcMultiDayRange(
 }
 
 const OTTER_BASE_URL = "https://api.tryotter.com/analytics/table/metrics_explorer"
+const OTTER_RATINGS_URL = "https://api.tryotter.com/analytics/table/order_performance_cullinan"
 
 const OTTER_HEADERS = {
   "Content-Type": "application/json",
@@ -85,6 +86,44 @@ export const MENU_ITEM_COLUMNS = [
   { type: "metric", key: "third_party_item_total_include_modifiers" },
   { type: "metric", key: "third_party_item_total_sales" },
 ]
+
+export const RATING_COLUMNS = [
+  { type: "field", key: "external_review_id" },
+  { type: "field", key: "brand_name" },
+  { type: "field", key: "facility_name" },
+  { type: "field", key: "store_name" },
+  { type: "field", key: "order_reviewed_at" },
+  { type: "field", key: "ofo_slug" },
+  { type: "field", key: "order_review_full_text" },
+  { type: "field", key: "order_rating" },
+  { type: "field", key: "external_order_id" },
+  { type: "field", key: "order_items_names" },
+]
+
+export function buildRatingsBody(
+  otterStoreIds: string[],
+  startDate: Date,
+  endDate: Date
+): object {
+  const { minDate, maxDate } = utcMultiDayRange(startDate, endDate)
+
+  return {
+    scopeSet: [{ key: "store", values: otterStoreIds }],
+    columns: RATING_COLUMNS,
+    dataset: "ratings_with_customer_orders",
+    filterSet: [
+      { filterType: "dateRangeFilter", maxDate, minDate },
+      { filterType: "namedFilter", name: "excludeFacilitiesWithDataIssues" },
+      { filterType: "namedFilter", name: "invalidCurrency" },
+    ],
+    sortBy: [
+      { type: "field", key: "order_reviewed_at", sortOrder: "DESC" },
+      { type: "field", key: "external_order_id", sortOrder: "DESC" },
+    ],
+    limit: 5000,
+    paginate: true,
+  }
+}
 
 export function buildMenuCategorySyncBody(
   otterStoreIds: string[],
@@ -168,7 +207,7 @@ export interface OtterRow {
 }
 
 // --- Auto-login JWT cache ---
-const SIGN_IN_URL = "https://api.tryotter.com/users/sign_in"
+const SIGN_IN_URL = "https://manager.tryotter.com/api/users/sign_in"
 let cachedJwt: string | null = null
 let cachedJwtExp = 0 // unix seconds
 
@@ -227,51 +266,73 @@ async function getOtterJwt(): Promise<string> {
   return jwt
 }
 
-export async function queryMetrics(body: object): Promise<OtterRow[]> {
+const MAX_RETRIES = 3
+const RETRY_BASE_MS = 2000
+
+async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]> {
   const jwt = await getOtterJwt()
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 30_000)
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
 
-  let response: Response
-  try {
-    response = await fetch(OTTER_BASE_URL, {
-      method: "POST",
-      headers: {
-        ...OTTER_HEADERS,
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-  } catch (err) {
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          ...OTTER_HEADERS,
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      clearTimeout(timeout)
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error("Otter API request timed out after 30s")
+      }
+      throw err
+    }
     clearTimeout(timeout)
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("Otter API request timed out after 30s")
+
+    if (response.status === 403 && attempt < MAX_RETRIES) {
+      const backoff = RETRY_BASE_MS * attempt
+      console.log(`Otter API 403 — retrying in ${backoff / 1000}s (attempt ${attempt}/${MAX_RETRIES})`)
+      await new Promise((r) => setTimeout(r, backoff))
+      continue
     }
-    throw err
-  }
-  clearTimeout(timeout)
 
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Otter API error ${response.status}: ${text}`)
-  }
-
-  const data = await response.json()
-
-  if (!data.rows || !Array.isArray(data.rows)) {
-    throw new Error(`Unexpected Otter API response shape: ${JSON.stringify(data).slice(0, 200)}`)
-  }
-
-  // Flatten cell array into key-value object
-  return data.rows.map((row: Array<{ key: string; value: string | number | null }>) => {
-    const flat: OtterRow = {}
-    for (const cell of row) {
-      flat[cell.key] = cell.value
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(`Otter API error ${response.status}: ${text}`)
     }
-    return flat
-  })
+
+    const data = await response.json()
+
+    if (!data.rows || !Array.isArray(data.rows)) {
+      throw new Error(`Unexpected Otter API response shape: ${JSON.stringify(data).slice(0, 200)}`)
+    }
+
+    // Flatten cell array into key-value object
+    return data.rows.map((row: Array<{ key: string; value: string | number | null }>) => {
+      const flat: OtterRow = {}
+      for (const cell of row) {
+        flat[cell.key] = cell.value
+      }
+      return flat
+    })
+  }
+
+  throw new Error("Otter API: max retries exceeded")
+}
+
+export async function queryMetrics(body: object): Promise<OtterRow[]> {
+  return queryOtterEndpoint(OTTER_BASE_URL, body)
+}
+
+export async function queryRatings(body: object): Promise<OtterRow[]> {
+  return queryOtterEndpoint(OTTER_RATINGS_URL, body)
 }
 
 export function getDateRange(startDate: Date, endDate: Date): Date[] {
@@ -346,4 +407,92 @@ export function buildDailySyncBody(
     limit: 15000,
     includeRawQueries: false,
   }
+}
+
+// ─── Batched category builder (all stores in one call via store groupBy) ───
+// Note: eod_date_with_timezone is NOT available in the order_items dataset,
+// so categories still need per-day date filters. Items/modifiers also can't
+// use store groupBy (500 error), so they stay per-store-per-day.
+
+export function buildMenuCategoryBatchBody(
+  otterStoreIds: string[],
+  date: Date
+): object {
+  const { minDate, maxDate } = utcDayRange(date)
+
+  return {
+    columns: MENU_ITEM_COLUMNS,
+    groupBy: [
+      { key: "menu_parent_entity_name" },
+      { key: "store" },
+    ],
+    sortBy: [{ type: "metric", key: "fp_order_items_quantity_sold", sortOrder: "DESC" }],
+    filterSet: [
+      { filterType: "dateRangeFilter", minDate, maxDate },
+      { filterType: "categoryFilter", dimensionName: "is_parent", op: "IN", values: ["true"] },
+    ],
+    scopeSet: [{ key: "store", values: otterStoreIds }],
+    includeMetricsFilters: true,
+    localTime: true,
+    includeTotalRowCount: false,
+    limit: 10000,
+    includeRawQueries: false,
+  }
+}
+
+// ─── Shared utilities ───
+
+/** Run async tasks with a concurrency limit (worker-pool pattern). */
+export async function withConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  limit: number,
+  onProgress?: (completed: number, total: number) => void
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length)
+  let nextIndex = 0
+  let completed = 0
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const index = nextIndex++
+      results[index] = await tasks[index]()
+      completed++
+      onProgress?.(completed, tasks.length)
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(limit, tasks.length) },
+    () => worker()
+  )
+  await Promise.all(workers)
+  return results
+}
+
+/** Split a date range into sub-ranges of at most maxDays each. */
+export function splitDateRange(
+  start: Date,
+  end: Date,
+  maxDays: number
+): Array<{ start: Date; end: Date }> {
+  const ranges: Array<{ start: Date; end: Date }> = []
+  const current = new Date(start)
+  current.setHours(0, 0, 0, 0)
+  const endNorm = new Date(end)
+  endNorm.setHours(23, 59, 59, 999)
+
+  while (current <= endNorm) {
+    const chunkEnd = new Date(current)
+    chunkEnd.setDate(chunkEnd.getDate() + maxDays - 1)
+    chunkEnd.setHours(23, 59, 59, 999)
+
+    ranges.push({
+      start: new Date(current),
+      end: chunkEnd > endNorm ? new Date(endNorm) : chunkEnd,
+    })
+
+    current.setDate(current.getDate() + maxDays)
+  }
+
+  return ranges
 }
