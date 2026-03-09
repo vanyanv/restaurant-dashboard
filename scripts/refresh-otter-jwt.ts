@@ -12,10 +12,11 @@
 import fs from "fs"
 import path from "path"
 import { execSync } from "child_process"
+import { chromium } from "playwright"
 
 const ENV_PATH = path.resolve(process.cwd(), ".env.local")
 
-const SIGN_IN_URL = "https://api.tryotter.com/users/sign_in"
+const SIGN_IN_URL = "https://manager.tryotter.com/api/users/sign_in"
 const METRICS_URL = "https://api.tryotter.com/analytics/table/metrics_explorer"
 const OTTER_HEADERS = {
   "Content-Type": "application/json",
@@ -182,30 +183,60 @@ async function main() {
   const email = process.env.OTTER_EMAIL ?? env["OTTER_EMAIL"]
   const password = process.env.OTTER_PASSWORD ?? env["OTTER_PASSWORD"]
 
+  const isCI = !!process.env.CI
+
   if (!email || !password) {
-    console.error("OTTER_EMAIL and OTTER_PASSWORD must be set in .env.local")
+    console.error("OTTER_EMAIL and OTTER_PASSWORD must be set in .env.local (or as env vars in CI)")
     process.exit(1)
   }
 
-  // 1. Sign in
-  console.log(`Signing in as ${email}...`)
-  const res = await fetch(SIGN_IN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+  // 1. Sign in via Playwright (bypasses Cloudflare bot detection)
+  console.log(`Signing in as ${email} (via headless browser)...`)
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      "--disable-blink-features=AutomationControlled",
+    ],
+  })
+  const context = await browser.newContext({
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+  })
+  const page = await context.newPage()
+
+  // Hide headless browser signals
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => false })
   })
 
-  if (!res.ok) {
-    const text = await res.text()
-    console.error(`Sign-in failed (${res.status}): ${text}`)
-    process.exit(1)
-  }
+  // Intercept the sign-in API response to capture the JWT
+  let jwt: string | undefined
+  page.on("response", async (response) => {
+    if (response.url() === SIGN_IN_URL && response.status() === 200) {
+      const authHeader = response.headers()["authorization"]
+      if (authHeader) {
+        jwt = authHeader.replace("Bearer ", "")
+      }
+    }
+  })
 
-  const data = await res.json()
-  const jwt = data.accessToken as string | undefined
+  // Navigate to the Otter login page and fill in the form
+  await page.goto("https://manager.tryotter.com", { waitUntil: "networkidle" })
+
+  // Fill email and password, click sign in
+  await page.fill('[data-testid="op-auth_email-field"]', email)
+  await page.fill('[data-testid="op-auth_password-field"]', password)
+  await page.click('[data-testid="op-auth_login-button"]')
+
+  // Wait for the sign-in API call to complete
+  await page.waitForResponse(
+    (response) => response.url() === SIGN_IN_URL && response.status() === 200,
+    { timeout: 15000 },
+  )
+
+  await browser.close()
 
   if (!jwt) {
-    console.error("Sign-in response missing accessToken")
+    console.error("Sign-in response missing JWT in Authorization header")
     process.exit(1)
   }
 
@@ -219,9 +250,11 @@ async function main() {
     process.exit(1)
   }
 
-  // 3. Save locally
-  updateEnvLocal(jwt)
-  console.log(`Saved to ${ENV_PATH}`)
+  // 3. Save locally (skip in CI — no .env.local)
+  if (!isCI) {
+    updateEnvLocal(jwt)
+    console.log(`Saved to ${ENV_PATH}`)
+  }
 
   // 4. Push to Vercel
   console.log("Updating Vercel...")
