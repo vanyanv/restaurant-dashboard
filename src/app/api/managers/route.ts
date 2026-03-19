@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 const createManagerSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -20,6 +21,9 @@ const updateManagerSchema = z.object({
 // Get all managers (OWNER only)
 export async function GET(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
     
     if (!session?.user) {
@@ -74,8 +78,11 @@ export async function GET(req: Request) {
 // Create new manager (OWNER only)
 export async function POST(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -139,6 +146,9 @@ export async function POST(req: Request) {
 // Update manager (OWNER only)
 export async function PUT(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
     
     if (!session?.user) {

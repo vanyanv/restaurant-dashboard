@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 const createReportSchema = z.object({
   storeId: z.string().min(1),
@@ -30,8 +31,11 @@ const createReportSchema = z.object({
 
 export async function GET(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -99,8 +103,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }

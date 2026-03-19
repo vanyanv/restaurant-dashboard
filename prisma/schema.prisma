@@ -72,6 +72,7 @@ model Store {
   otterSummaries      OtterDailySummary[]
   otterMenuCategories OtterMenuCategory[]
   otterMenuItems      OtterMenuItem[]
+  otterRatings        OtterRating[]
   invoices        Invoice[]
   recipes          Recipe[]
   ingredientAliases IngredientAlias[]
@@ -246,6 +247,29 @@ model OtterMenuItem {
   @@unique([storeId, date, category, itemName, isModifier])
   @@index([storeId])
   @@index([date])
+}
+
+model OtterRating {
+  id               String   @id @default(cuid())
+  storeId          String
+  externalReviewId String
+  brandName        String
+  facilityName     String
+  storeName        String
+  reviewedAt       DateTime
+  platform         String
+  reviewText       String?
+  rating           Int
+  externalOrderId  String?
+  orderItemNames   String?
+  syncedAt         DateTime @default(now()) @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, externalReviewId])
+  @@index([storeId])
+  @@index([reviewedAt])
+  @@index([platform])
 }
 
 model PrepTask {

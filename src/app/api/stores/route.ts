@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { rateLimit, RATE_LIMIT_TIERS } from '@/lib/rate-limit';
 
 const createStoreSchema = z.object({
   name: z.string().min(1),
@@ -12,6 +13,9 @@ const createStoreSchema = z.object({
 
 export async function GET(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate);
+    if (limited) return limited;
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user) {
@@ -61,6 +65,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate);
+    if (limited) return limited;
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user) {

@@ -3,10 +3,14 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getYelpService } from "@/lib/yelp"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 // Sync all stores owned by the user
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
     
     if (!session?.user) {

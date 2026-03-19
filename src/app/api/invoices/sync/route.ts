@@ -6,6 +6,7 @@ import { fetchInvoiceEmails, getEmailAttachments } from "@/lib/microsoft-graph"
 import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
+import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 export const maxDuration = 120
 
@@ -76,13 +77,6 @@ async function withConcurrency<T>(
   )
   await Promise.all(workers)
   return results
-}
-
-function isCronRequest(request: NextRequest): boolean {
-  const authHeader = request.headers.get("authorization")
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) return false
-  return authHeader === `Bearer ${cronSecret}`
 }
 
 interface SyncResult {
@@ -354,6 +348,9 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
 }
 
 export async function POST(request: NextRequest) {
+  const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
+  if (limited) return limited
+
   const fromCron = isCronRequest(request)
   let userId: string
 

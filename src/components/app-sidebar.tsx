@@ -10,6 +10,7 @@ import {
   Building2,
   FileText,
   Activity,
+  Star,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -64,6 +65,10 @@ const data = {
         {
           title: "AI Analytics",
           url: "/dashboard/ai-analytics",
+        },
+        {
+          title: "Ratings",
+          url: "/dashboard/ratings",
         },
       ],
     },

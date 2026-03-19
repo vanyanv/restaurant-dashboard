@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import OpenAI from "openai"
 import type { AiRecipeSuggestion } from "@/types/product-usage"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 function getClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY
@@ -12,6 +13,9 @@ function getClient(): OpenAI {
 }
 
 export async function POST(request: Request) {
+  const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
+  if (limited) return limited
+
   const session = await getServerSession(authOptions)
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

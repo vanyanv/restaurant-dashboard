@@ -3,9 +3,13 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { startOfWeek, endOfWeek } from "date-fns"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const limited = await rateLimit(request, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
     
     if (!session?.user) {

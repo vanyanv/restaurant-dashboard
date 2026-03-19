@@ -30,9 +30,9 @@ loadEnvLocal()
 
 const CHUNK_DAYS = 30
 const INTER_CHUNK_DELAY_MS = 2000
-const INTER_API_DELAY_MS = 200
 const MAX_RETRIES = 3
 const BATCH_SIZE = 25
+const CONCURRENCY = 5
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -52,9 +52,11 @@ async function main() {
   const {
     queryMetrics,
     buildDailySyncBody,
-    buildMenuCategorySyncBody,
+    buildMenuCategoryBatchBody,
     buildMenuItemSyncBody,
+    buildModifierSyncBody,
     getDateRange,
+    withConcurrency,
   } = await import("../src/lib/otter")
   type OtterRow = import("../src/lib/otter").OtterRow
 
@@ -145,7 +147,7 @@ async function main() {
     `Stores: ${activeStores.map((s) => s.store.name).join(", ")} (${activeStores.length} active, ${storeGroups.size} internal)\n`
   )
 
-  // --- Upsert helpers (mirror sync route logic exactly) ---
+  // --- Upsert helpers ---
 
   function makeDailyUpsert(row: OtterRow) {
     const otterStoreId = row["store"] as string | null
@@ -218,7 +220,7 @@ async function main() {
       })
   }
 
-  function makeItemUpsert(row: OtterRow, storeId: string, date: Date) {
+  function makeItemUpsert(row: OtterRow, storeId: string, date: Date, isModifier: boolean) {
     const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
     const itemName = (row["item"] as string | null) ?? "Unknown"
 
@@ -233,8 +235,8 @@ async function main() {
 
     return () =>
       prisma.otterMenuItem.upsert({
-        where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier: false } },
-        create: { storeId, date, category, itemName, isModifier: false, ...data },
+        where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier } },
+        create: { storeId, date, category, itemName, isModifier, ...data },
         update: data,
       })
   }
@@ -247,6 +249,8 @@ async function main() {
   let totalCategoriesFailed = 0
   let totalItems = 0
   let totalItemsFailed = 0
+  let totalModifiers = 0
+  let totalModifiersFailed = 0
 
   for (let chunk = 0; chunk < totalChunks; chunk++) {
     const daysBack = days - chunk * CHUNK_DAYS
@@ -263,7 +267,7 @@ async function main() {
     const label = `[${elapsed()}] Chunk ${chunk + 1}/${totalChunks}: days ${daysBack}-${daysBackEnd}`
     console.log(`\n${label}`)
 
-    // --- Daily Summaries ---
+    // --- Daily Summaries (1 API call per chunk, all stores) ---
     try {
       const body = buildDailySyncBody(otterStoreIds, startDate, endDate)
       const rows = await queryWithRetry(body, "Daily")
@@ -281,55 +285,77 @@ async function main() {
     if (!dailyOnly) {
       const chunkDays = getDateRange(startDate, endDate)
 
-      for (let dayIdx = 0; dayIdx < chunkDays.length; dayIdx++) {
-        const day = chunkDays[dayIdx]
-        const dayLabel = day.toISOString().slice(0, 10)
+      // --- Menu Categories (1 API call per day, all stores via store groupBy) ---
+      const categoryTasks = chunkDays.map((day) => () =>
+        queryWithRetry(buildMenuCategoryBatchBody(otterStoreIds, day), `Categories ${day.toISOString().slice(0, 10)}`)
+          .then((rows) => ({ day, rows }))
+      )
+
+      console.log(`  [Categories] Fetching ${categoryTasks.length} days with concurrency ${CONCURRENCY}...`)
+      const categoryResults = await withConcurrency(categoryTasks, CONCURRENCY)
+
+      for (const { day, rows } of categoryResults) {
         const date = new Date(day)
         date.setHours(0, 0, 0, 0)
 
-        // --- Menu Categories (per-day, per internal store) ---
-        const storeEntries = [...storeGroups.entries()]
-        for (let si = 0; si < storeEntries.length; si++) {
-          const [sid, uuids] = storeEntries[si]
-          await sleep(INTER_API_DELAY_MS)
-          try {
-            const body = buildMenuCategorySyncBody(uuids, day)
-            const rows = await queryWithRetry(body, `Categories ${dayLabel}`)
+        const ops = rows
+          .filter((row) => {
+            const otterStoreId = row["store"] as string | null
+            return otterStoreId && otterToInternal.has(otterStoreId)
+          })
+          .map((row) => {
+            const storeId = otterToInternal.get(row["store"] as string)!
+            return makeCategoryUpsert(row, storeId, date)
+          })
 
-            const ops: Array<() => any> = []
-            for (const row of rows) {
-              ops.push(makeCategoryUpsert(row, sid, date)!)
-            }
-
-            const { synced, failed } = await batchUpsert(ops, `Categories ${dayLabel}`)
-            totalCategories += synced
-            totalCategoriesFailed += failed
-
-            console.log(`  [${dayLabel}] (${dayIdx + 1}/${chunkDays.length}) Categories store ${si + 1}/${storeEntries.length}: ${rows.length} rows`)
-          } catch (err) {
-            console.error(`  [${dayLabel}] Category sync error:`, err instanceof Error ? err.message : err)
-          }
-        }
-
-        // --- Menu Items (per-day, per internal store) ---
-        for (let si = 0; si < storeEntries.length; si++) {
-          const [sid, uuids] = storeEntries[si]
-          await sleep(INTER_API_DELAY_MS)
-          try {
-            const body = buildMenuItemSyncBody(uuids, day)
-            const rows = await queryWithRetry(body, `Items ${dayLabel}`)
-
-            const ops = rows.map((row) => makeItemUpsert(row, sid, date)).filter(Boolean) as Array<() => any>
-            const { synced, failed } = await batchUpsert(ops, `Items ${dayLabel}`)
-            totalItems += synced
-            totalItemsFailed += failed
-
-            console.log(`  [${dayLabel}] Items store ${si + 1}/${storeEntries.length}: ${rows.length} rows`)
-          } catch (err) {
-            console.error(`  [${dayLabel}] Item sync error store ${si + 1}:`, err instanceof Error ? err.message : err)
-          }
-        }
+        const { synced, failed } = await batchUpsert(ops, `Categories ${day.toISOString().slice(0, 10)}`)
+        totalCategories += synced
+        totalCategoriesFailed += failed
       }
+      console.log(`  [Categories] Done: ${totalCategories} synced total`)
+
+      // --- Menu Items (per-store per-day, store groupBy not supported) ---
+      const storeEntries = [...storeGroups.entries()]
+      const itemTasks = chunkDays.flatMap((day) =>
+        storeEntries.map(([sid, uuids]) => () =>
+          queryWithRetry(buildMenuItemSyncBody(uuids, day), `Items ${day.toISOString().slice(0, 10)}`)
+            .then((rows) => ({ day, sid, rows }))
+        )
+      )
+
+      console.log(`  [Items] Fetching ${itemTasks.length} store-days with concurrency ${CONCURRENCY}...`)
+      const itemResults = await withConcurrency(itemTasks, CONCURRENCY)
+
+      for (const { day, sid, rows } of itemResults) {
+        const date = new Date(day)
+        date.setHours(0, 0, 0, 0)
+        const ops = rows.map((row) => makeItemUpsert(row, sid, date, false)).filter(Boolean) as Array<() => any>
+        const { synced, failed } = await batchUpsert(ops, `Items`)
+        totalItems += synced
+        totalItemsFailed += failed
+      }
+      console.log(`  [Items] Done: ${totalItems} synced total`)
+
+      // --- Modifiers (per-store per-day) ---
+      const modTasks = chunkDays.flatMap((day) =>
+        storeEntries.map(([sid, uuids]) => () =>
+          queryWithRetry(buildModifierSyncBody(uuids, day), `Modifiers ${day.toISOString().slice(0, 10)}`)
+            .then((rows) => ({ day, sid, rows }))
+        )
+      )
+
+      console.log(`  [Modifiers] Fetching ${modTasks.length} store-days with concurrency ${CONCURRENCY}...`)
+      const modResults = await withConcurrency(modTasks, CONCURRENCY)
+
+      for (const { day, sid, rows } of modResults) {
+        const date = new Date(day)
+        date.setHours(0, 0, 0, 0)
+        const ops = rows.map((row) => makeItemUpsert(row, sid, date, true)).filter(Boolean) as Array<() => any>
+        const { synced, failed } = await batchUpsert(ops, `Modifiers`)
+        totalModifiers += synced
+        totalModifiersFailed += failed
+      }
+      console.log(`  [Modifiers] Done: ${totalModifiers} synced total`)
     }
 
     // Pause between chunks to avoid rate limiting
@@ -350,9 +376,10 @@ async function main() {
   console.log(`Daily summaries: ${totalDaily} synced, ${totalDailyFailed} failed`)
   console.log(`Menu categories: ${totalCategories} synced, ${totalCategoriesFailed} failed`)
   console.log(`Menu items:      ${totalItems} synced, ${totalItemsFailed} failed`)
-  console.log(
-    `Total:           ${totalDaily + totalCategories + totalItems} synced, ${totalDailyFailed + totalCategoriesFailed + totalItemsFailed} failed\n`
-  )
+  console.log(`Modifiers:       ${totalModifiers} synced, ${totalModifiersFailed} failed`)
+  const totalSynced = totalDaily + totalCategories + totalItems + totalModifiers
+  const totalFailed = totalDailyFailed + totalCategoriesFailed + totalItemsFailed + totalModifiersFailed
+  console.log(`Total:           ${totalSynced} synced, ${totalFailed} failed\n`)
 
   await prisma.$disconnect()
 }

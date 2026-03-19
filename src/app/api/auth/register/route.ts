@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -12,6 +15,18 @@ const registerSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.auth)
+    if (limited) return limited
+
+    // Only authenticated OWNERs can create new users
+    const session = await getServerSession(authOptions)
+    if (!session || session.user.role !== "OWNER") {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      )
+    }
+
     const body = await req.json()
     const validatedData = registerSchema.parse(body)
 

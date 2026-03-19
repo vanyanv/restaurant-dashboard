@@ -1,0 +1,25 @@
+name: Refresh Otter JWT
+on:
+  schedule:
+    - cron: '0 0 */2 * *' # every 2 days at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx tsx scripts/refresh-otter-jwt.ts
+        env:
+          CI: 'true'
+          OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
+          OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

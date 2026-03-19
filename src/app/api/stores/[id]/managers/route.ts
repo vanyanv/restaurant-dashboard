@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 const assignManagerSchema = z.object({
   managerId: z.string().min(1, "Manager ID is required"),
@@ -18,8 +19,11 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -93,8 +97,11 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -220,8 +227,11 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }

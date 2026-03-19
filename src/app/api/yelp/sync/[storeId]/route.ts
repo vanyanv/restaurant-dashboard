@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getYelpService } from "@/lib/yelp"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 // Sync specific store
 export async function POST(
@@ -10,6 +11,9 @@ export async function POST(
   props: { params: Promise<{ storeId: string }> }
 ) {
   try {
+    const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
+    if (limited) return limited
+
     const params = await props.params
     const session = await getServerSession(authOptions)
     

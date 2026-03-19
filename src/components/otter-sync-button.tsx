@@ -28,6 +28,8 @@ const PHASE_LABELS: Record<string, string> = {
   daily: "Daily",
   categories: "Categories",
   items: "Items",
+  modifiers: "Modifiers",
+  ratings: "Ratings",
 }
 
 export function OtterSyncButton({
@@ -50,6 +52,7 @@ export function OtterSyncButton({
       if (counts.categories > 0) parts.push(`${counts.categories} categories`)
       if (counts.items > 0) parts.push(`${counts.items} items`)
       if (counts.modifiers > 0) parts.push(`${counts.modifiers} modifiers`)
+      if (counts.ratings > 0) parts.push(`${counts.ratings} ratings`)
       if (parts.length > 0) {
         toast.success(`Sync complete: ${parts.join(", ")}`)
       } else {

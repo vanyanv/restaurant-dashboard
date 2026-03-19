@@ -3,11 +3,15 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { InvoiceStatus } from "@/generated/prisma/client"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await rateLimit(request, RATE_LIMIT_TIERS.moderate)
+  if (limited) return limited
+
   const session = await getServerSession(authOptions)
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -65,6 +69,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limited = await rateLimit(request, RATE_LIMIT_TIERS.moderate)
+  if (limited) return limited
+
   const session = await getServerSession(authOptions)
   if (!session?.user || session.user.role !== "OWNER") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
