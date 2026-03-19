@@ -114,13 +114,6 @@ After seeding, you can use these accounts:
    npm run db:seed
    ```
 
-### Health Check
-
-Your deployment includes a health check endpoint at `/api/health` that monitors:
-- Database connectivity
-- Authentication configuration
-- System status
-
 ## Scripts
 
 - `npm run dev` - Start development server

@@ -121,7 +121,7 @@ export const runtime = 'nodejs'  // This prevents Edge Runtime issues
 
 ### After Deploying:
 - [ ] Test authentication flow on deployed URL
-- [ ] Check `/api/health` endpoint returns healthy status
+- [ ] Verify authentication flow works on deployed URL
 - [ ] Verify database connectivity from Vercel
 - [ ] Test with both production and preview deployments
 
@@ -141,9 +141,6 @@ vercel logs your-project-name --follow
 
 ### Debug Endpoints on Vercel
 ```bash
-# Check health status
-curl https://your-app.vercel.app/api/health
-
 # Check auth debug (only works if NEXTAUTH_DEBUG=true)
 curl https://your-app.vercel.app/api/debug/auth
 ```
@@ -197,7 +194,6 @@ If you're still having issues:
 
 Your deployment is working when:
 - ✅ Login page loads without errors
-- ✅ `/api/health` returns status 200
 - ✅ Authentication redirects work properly
 - ✅ Dashboard loads after successful login
 - ✅ No authentication errors in Vercel function logs
