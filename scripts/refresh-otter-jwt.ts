@@ -270,10 +270,20 @@ async function main() {
   await page.click('[data-testid="op-auth_login-button"]')
 
   // Wait for the sign-in API call to complete
-  await page.waitForResponse(
-    (response) => response.url() === SIGN_IN_URL && response.status() === 200,
-    { timeout: 15000 },
-  )
+  try {
+    await page.waitForResponse(
+      (response) => response.url() === SIGN_IN_URL && response.status() === 200,
+      { timeout: 30000 },
+    )
+  } catch {
+    // Capture screenshot for debugging
+    const screenshotPath = path.resolve(process.cwd(), "debug-login.png")
+    await page.screenshot({ path: screenshotPath, fullPage: true })
+    console.error(`  Login timed out. Screenshot saved to ${screenshotPath}`)
+    console.error(`  Current URL: ${page.url()}`)
+    await browser.close()
+    process.exit(1)
+  }
 
   await browser.close()
 
