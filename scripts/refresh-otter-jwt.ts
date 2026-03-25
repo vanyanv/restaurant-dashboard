@@ -7,12 +7,12 @@
 //
 // Requirements for auto-push:
 //   - Vercel: VERCEL_TOKEN and VERCEL_PROJECT_ID in .env.local
-//   - GitHub: `gh` CLI installed and authenticated (gh auth login)
+//   - GitHub: GH_TOKEN in .env.local (personal access token with repo scope)
 
 import fs from "fs"
 import path from "path"
-import { execSync } from "child_process"
 import { chromium } from "playwright"
+import sodium from "libsodium-wrappers"
 
 const ENV_PATH = path.resolve(process.cwd(), ".env.local")
 
@@ -169,12 +169,54 @@ async function updateVercel(jwt: string, env: Record<string, string>): Promise<v
   }
 }
 
-function updateGitHub(jwt: string): void {
-  try {
-    execSync(`gh secret set OTTER_JWT --body "${jwt}"`, { stdio: "pipe" })
+const GH_REPO = "vanyanv/restaurant-dashboard"
+
+async function updateGitHub(jwt: string, env: Record<string, string>): Promise<void> {
+  const token = process.env.GH_TOKEN ?? env["GH_TOKEN"]
+
+  if (!token) {
+    console.log("  Skipped (GH_TOKEN not set)")
+    return
+  }
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  }
+
+  // 1. Get repo public key
+  const keyRes = await fetch(
+    `https://api.github.com/repos/${GH_REPO}/actions/secrets/public-key`,
+    { headers },
+  )
+  if (!keyRes.ok) {
+    console.error(`  Failed to get public key: ${keyRes.status} ${await keyRes.text()}`)
+    return
+  }
+  const { key, key_id } = await keyRes.json()
+
+  // 2. Encrypt the secret with libsodium sealed box
+  await sodium.ready
+  const binKey = sodium.from_base64(key, sodium.base64_variants.ORIGINAL)
+  const binSecret = sodium.from_string(jwt)
+  const encrypted = sodium.crypto_box_seal(binSecret, binKey)
+  const encryptedB64 = sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL)
+
+  // 3. Create or update the secret
+  const putRes = await fetch(
+    `https://api.github.com/repos/${GH_REPO}/actions/secrets/OTTER_JWT`,
+    {
+      method: "PUT",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ encrypted_value: encryptedB64, key_id }),
+    },
+  )
+
+  if (putRes.ok || putRes.status === 204) {
     console.log("  Updated OTTER_JWT in GitHub Actions")
-  } catch {
-    console.log("  Skipped (gh CLI not available or not authenticated)")
+  } else {
+    console.error(`  Failed to update: ${putRes.status} ${await putRes.text()}`)
   }
 }
 
@@ -262,7 +304,7 @@ async function main() {
 
   // 5. Push to GitHub Actions
   console.log("Updating GitHub...")
-  updateGitHub(jwt)
+  await updateGitHub(jwt, env)
 
   console.log("\nDone!")
 }
