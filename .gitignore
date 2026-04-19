@@ -47,3 +47,10 @@ scripts/test-output/
 
 # worktrees
 .worktrees/
+.env*.local
+
+# Claude Code local project config
+.claude/
+
+# Local outputs from invoice backfill / diagnostic scripts
+backfill-failures.json
