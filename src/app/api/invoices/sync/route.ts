@@ -7,6 +7,8 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { sanitizeInvoiceDate } from "@/lib/invoice-sanity"
+import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 
 export const maxDuration = 120
 
@@ -175,13 +177,16 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
     select: { id: true, address: true },
   })
 
+  type ExtractionPayload = Awaited<ReturnType<typeof extractInvoiceData>>["extraction"]
   interface ExtractedInvoice {
     messageId: string
     subject: string | null
     receivedAt: string
     attachmentName: string
-    extraction: Awaited<ReturnType<typeof extractInvoiceData>>
+    extraction: ExtractionPayload
+    extractionModel: string
     rawJson: string
+    pdfUpload: InvoicePdfUpload | null
   }
 
   const extractionTasks = newMessages.map((msg) => async () => {
@@ -192,7 +197,16 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
 
       // Process the first PDF
       const pdf = attachments[0]
-      const extraction = await extractInvoiceData(pdf.contentBytes, pdf.name)
+      const { extraction, model } = await extractInvoiceData(pdf.contentBytes, pdf.name)
+
+      let pdfUpload: InvoicePdfUpload | null = null
+      try {
+        const buffer = Buffer.from(pdf.contentBytes, "base64")
+        pdfUpload = await putInvoicePdf(msg.id, buffer)
+      } catch (uploadErr) {
+        console.error(`Failed to upload PDF to blob for "${msg.subject}":`, uploadErr)
+        // Continue without PDF — backfill script can retry later.
+      }
 
       return {
         messageId: msg.id,
@@ -200,7 +214,9 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
         receivedAt: msg.receivedDateTime,
         attachmentName: pdf.name,
         extraction,
+        extractionModel: model,
         rawJson: JSON.stringify(extraction),
+        pdfUpload,
       } satisfies ExtractedInvoice
     } catch (err) {
       console.error(`Failed to extract invoice from email "${msg.subject}":`, err)
@@ -232,30 +248,49 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
       ? matchInvoiceToStore(inv.extraction.deliveryAddress, stores)
       : null
 
-    const status = match
-      ? match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
-      : "PENDING"
+    const emailReceivedAt = inv.receivedAt ? new Date(inv.receivedAt) : null
+    const contextLabel = `${inv.extraction.vendorName} #${inv.extraction.invoiceNumber}`
+    const invoiceDate = sanitizeInvoiceDate(
+      inv.extraction.invoiceDate,
+      emailReceivedAt,
+      contextLabel
+    )
+    const dateSuspect =
+      Boolean(inv.extraction.invoiceDate) && invoiceDate === null
+
+    let status: "MATCHED" | "REVIEW" | "PENDING"
+    if (dateSuspect) {
+      status = "REVIEW"
+    } else if (match) {
+      status = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
+    } else {
+      status = "PENDING"
+    }
 
     return {
       ownerId: userId,
       storeId: match?.storeId ?? null,
       emailMessageId: inv.messageId,
       emailSubject: inv.subject,
-      emailReceivedAt: inv.receivedAt ? new Date(inv.receivedAt) : null,
+      emailReceivedAt,
       attachmentName: inv.attachmentName,
       vendorName: normalizeVendorName(inv.extraction.vendorName),
       invoiceNumber: inv.extraction.invoiceNumber,
-      invoiceDate: inv.extraction.invoiceDate ? new Date(inv.extraction.invoiceDate) : null,
+      invoiceDate,
       dueDate: inv.extraction.dueDate ? new Date(inv.extraction.dueDate) : null,
       deliveryAddress: inv.extraction.deliveryAddress,
       subtotal: inv.extraction.subtotal,
       taxAmount: inv.extraction.taxAmount,
       totalAmount: inv.extraction.totalAmount,
-      status: status as "MATCHED" | "REVIEW" | "PENDING",
+      status,
       matchConfidence: match?.confidence ?? null,
       matchedAt: match ? new Date() : null,
       rawExtractionJson: inv.rawJson,
-      extractionModel: "gpt-4o",
+      extractionModel: inv.extractionModel,
+      pdfBlobPathname: inv.pdfUpload?.pathname ?? null,
+      pdfBlobUrl: inv.pdfUpload?.url ?? null,
+      pdfSize: inv.pdfUpload?.size ?? null,
+      pdfUploadedAt: inv.pdfUpload?.uploadedAt ?? null,
       lineItems: inv.extraction.lineItems,
     }
   })
@@ -291,18 +326,33 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
           matchedAt: inv.matchedAt,
           rawExtractionJson: inv.rawExtractionJson,
           extractionModel: inv.extractionModel,
+          pdfBlobPathname: inv.pdfBlobPathname,
+          pdfBlobUrl: inv.pdfBlobUrl,
+          pdfSize: inv.pdfSize,
+          pdfUploadedAt: inv.pdfUploadedAt,
           lineItems: {
-            create: inv.lineItems.map((li) => ({
-              lineNumber: li.lineNumber,
-              sku: li.sku,
-              productName: li.productName,
-              description: li.description,
-              category: li.category,
-              quantity: li.quantity,
-              unit: li.unit,
-              unitPrice: li.unitPrice,
-              extendedPrice: li.extendedPrice,
-            })),
+            create: inv.lineItems.map((li) => {
+              if (li.unit === "CS" && li.packSize == null) {
+                console.warn(
+                  `Line ${li.lineNumber} on ${inv.vendorName} #${inv.invoiceNumber} is unit=CS ` +
+                  `but packSize is null — extraction may have missed the Pack column`
+                )
+              }
+              return {
+                lineNumber: li.lineNumber,
+                sku: li.sku,
+                productName: li.productName,
+                description: li.description,
+                category: li.category,
+                quantity: li.quantity,
+                unit: li.unit,
+                packSize: li.packSize,
+                unitSize: li.unitSize,
+                unitSizeUom: li.unitSizeUom,
+                unitPrice: li.unitPrice,
+                extendedPrice: li.extendedPrice,
+              }
+            }),
           },
         },
       })

@@ -121,6 +121,7 @@ export interface InvoiceDetail extends InvoiceListItem {
   emailSubject: string | null
   emailReceivedAt: string | null
   attachmentName: string | null
+  hasPdf: boolean
   lineItems: InvoiceDetailLineItem[]
 }
 

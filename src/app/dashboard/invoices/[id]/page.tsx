@@ -48,6 +48,7 @@ export default async function InvoiceDetailPage({
         emailSubject: invoice.emailSubject,
         emailReceivedAt: invoice.emailReceivedAt?.toISOString() ?? null,
         attachmentName: invoice.attachmentName,
+        hasPdf: Boolean(invoice.pdfBlobPathname),
         lineItemCount: invoice.lineItems.length,
         createdAt: invoice.createdAt.toISOString(),
         lineItems: invoice.lineItems.map((li) => ({
@@ -59,6 +60,9 @@ export default async function InvoiceDetailPage({
           category: li.category,
           quantity: li.quantity,
           unit: li.unit,
+          packSize: li.packSize,
+          unitSize: li.unitSize,
+          unitSizeUom: li.unitSizeUom,
           unitPrice: li.unitPrice,
           extendedPrice: li.extendedPrice,
         })),

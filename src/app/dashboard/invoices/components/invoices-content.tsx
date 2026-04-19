@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useCallback } from "react"
+import { useState, useTransition, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   DollarSign,
@@ -107,6 +107,28 @@ export function InvoicesContent({
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [storeFilter, setStoreFilter] = useState<string>("all")
   const [isPending, startTransition] = useTransition()
+
+  const prefetchedRef = useRef<Set<string>>(new Set())
+  const prefetchInvoice = useCallback(
+    (id: string) => {
+      if (prefetchedRef.current.has(id)) return
+      if (typeof navigator !== "undefined") {
+        const conn = (navigator as Navigator & {
+          connection?: { saveData?: boolean; effectiveType?: string }
+        }).connection
+        if (conn?.saveData) return
+        if (conn?.effectiveType === "slow-2g" || conn?.effectiveType === "2g") return
+      }
+      prefetchedRef.current.add(id)
+      router.prefetch(`/dashboard/invoices/${id}`)
+      fetch(`/api/invoices/${id}/pdf`, { credentials: "same-origin" }).catch(
+        () => {
+          prefetchedRef.current.delete(id)
+        },
+      )
+    },
+    [router],
+  )
 
   const refreshData = useCallback(
     (opts?: { status?: string; storeId?: string }) => {
@@ -490,6 +512,9 @@ export function InvoicesContent({
                             key={inv.id}
                             className="cursor-pointer hover:bg-muted/50"
                             onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}
+                            onMouseEnter={() => prefetchInvoice(inv.id)}
+                            onFocus={() => prefetchInvoice(inv.id)}
+                            onTouchStart={() => prefetchInvoice(inv.id)}
                           >
                             <TableCell className="font-medium max-w-[200px] truncate">
                               {inv.vendorName}

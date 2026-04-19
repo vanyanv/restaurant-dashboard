@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { toast } from "sonner"
 import type { InvoiceDetail } from "@/types/invoice"
+import { PdfViewer } from "./pdf-viewer"
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -141,16 +142,31 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
         </Breadcrumb>
       </header>
 
-      <div className="flex-1 overflow-auto p-4 space-y-6">
+      <div className="flex-1 overflow-hidden flex flex-col p-2 sm:p-4 gap-3 sm:gap-4">
         {/* Back button */}
-        <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard/invoices")}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          onClick={() => router.push("/dashboard/invoices")}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Invoices
         </Button>
 
+        {/* Split view: PDF | extracted data */}
+        <div className="grid flex-1 min-h-0 gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-2">
+          {/* Left: original PDF */}
+          <div className="min-h-[60vh] max-h-[75vh] lg:min-h-0 lg:max-h-none">
+            <PdfViewer invoiceId={invoice.id} hasPdf={invoice.hasPdf} />
+          </div>
+
+          {/* Right: extracted fields + line items */}
+          <div className="min-h-0 overflow-auto space-y-4 sm:space-y-6 pr-1">
+
         {/* Invoice Header */}
-        <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
+        <div className="grid gap-4 grid-cols-1">
+          <Card>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div>
@@ -284,6 +300,7 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
                     <TableHead>Unit</TableHead>
+                    <TableHead>Pack × Size</TableHead>
                     <TableHead className="text-right">Unit Price</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                   </TableRow>
@@ -310,6 +327,13 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{li.quantity}</TableCell>
                       <TableCell className="text-muted-foreground">{li.unit ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground tabular-nums text-xs">
+                        {li.packSize != null && li.unitSize != null
+                          ? `${li.packSize} × ${li.unitSize} ${li.unitSizeUom ?? ""}`.trim()
+                          : li.packSize != null
+                          ? `${li.packSize} × ${li.unitSizeUom ?? ""}`.trim()
+                          : "—"}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(li.unitPrice)}
                       </TableCell>
@@ -324,7 +348,7 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
 
             {/* Category Summary */}
             {Object.keys(categoryTotals).length > 0 && (
-              <div className="mt-4 grid gap-2 grid-cols-2 sm:grid-cols-4">
+              <div className="mt-4 grid gap-2 grid-cols-2">
                 {Object.entries(categoryTotals)
                   .sort((a, b) => b[1] - a[1])
                   .map(([cat, total]) => (
@@ -337,6 +361,8 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
             )}
           </CardContent>
         </Card>
+          </div>
+        </div>
       </div>
     </>
   )

@@ -347,6 +347,12 @@ model Invoice {
   rawExtractionJson String?
   extractionModel   String?
 
+  // PDF storage (Vercel Blob, access: 'private')
+  pdfBlobPathname String?
+  pdfBlobUrl      String?
+  pdfSize         Int?
+  pdfUploadedAt   DateTime?
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
