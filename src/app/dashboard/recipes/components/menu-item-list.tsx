@@ -2,14 +2,6 @@
 
 import { useMemo } from "react"
 import { Plus, CircleCheck, CircleDashed } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { MenuItemForCatalog, RecipeSummary } from "@/types/recipe"
@@ -56,40 +48,55 @@ export function MenuItemList({
     [sellableRecipes]
   )
 
+  const chips: Array<{ id: Filter; label: string; count: number }> = [
+    { id: "unbuilt", label: "Unbuilt", count: unbuilt.length },
+    { id: "all", label: "All", count: menuItems.length },
+    { id: "prep", label: "Prep", count: prepRecipes.length },
+    { id: "confirmed", label: "Done", count: confirmed.length },
+  ]
+
   return (
-    <div className="flex h-full flex-col border-r bg-background">
-      <div className="border-b p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Menu & Recipes</h2>
-          <Button
-            size="sm"
-            variant="outline"
+    <div className="flex h-full flex-col overflow-hidden border-r border-[var(--hairline)] bg-[var(--paper)]">
+      <div className="border-b border-[var(--hairline)] px-4 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="editorial-section-label">§ menu</div>
+          <button
+            type="button"
             onClick={onAddPrepRecipe}
-            className="h-7"
+            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)] hover:text-[var(--accent)]"
           >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Prep recipe
-          </Button>
+            <Plus className="h-3 w-3" />
+            Prep
+          </button>
         </div>
-        <Tabs
-          value={filter}
-          onValueChange={(v) => onFilterChange(v as Filter)}
-        >
-          <TabsList className="grid h-8 w-full grid-cols-4">
-            <TabsTrigger value="unbuilt" className="text-xs">
-              Unbuilt ({unbuilt.length})
-            </TabsTrigger>
-            <TabsTrigger value="all" className="text-xs">
-              Menu ({menuItems.length})
-            </TabsTrigger>
-            <TabsTrigger value="prep" className="text-xs">
-              Prep ({prepRecipes.length})
-            </TabsTrigger>
-            <TabsTrigger value="confirmed" className="text-xs">
-              Done ({confirmed.length})
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap gap-1">
+          {chips.map((c) => {
+            const active = filter === c.id
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onFilterChange(c.id)}
+                className={cn(
+                  "border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition",
+                  active
+                    ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]"
+                    : "border-[var(--hairline-bold)] text-[var(--ink-muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                )}
+              >
+                {c.label}
+                <span
+                  className={cn(
+                    "ml-1.5 tabular-nums",
+                    active ? "text-[var(--paper)]/70" : "text-[var(--ink-faint)]"
+                  )}
+                >
+                  {c.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
@@ -137,13 +144,13 @@ function MenuItemRows({
 }) {
   if (items.length === 0) {
     return (
-      <div className="p-6 text-center text-sm text-muted-foreground">
+      <div className="px-4 py-10 text-center font-mono text-[11px] italic text-[var(--ink-faint)]">
         {emptyLabel}
       </div>
     )
   }
   return (
-    <ul className="divide-y">
+    <ul>
       {items.map((m) => {
         const isSelected = selectedItemName === m.otterItemName
         const hasRecipe = !!m.mappedRecipeId
@@ -153,23 +160,35 @@ function MenuItemRows({
               type="button"
               onClick={() => onSelect(m)}
               className={cn(
-                "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/40",
-                isSelected && "bg-muted"
+                "group relative flex w-full items-start gap-2.5 border-b border-[var(--hairline)] px-4 py-2.5 text-left transition",
+                isSelected
+                  ? "bg-[var(--paper-deep)]"
+                  : "hover:bg-[var(--paper-deep)]/60"
               )}
             >
-              {hasRecipe ? (
-                <CircleCheck className="h-4 w-4 shrink-0 text-green-600" />
-              ) : (
-                <CircleDashed className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {isSelected && (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-[2px] bg-[var(--accent)]"
+                />
               )}
+              <div className="mt-1 shrink-0">
+                {hasRecipe ? (
+                  <CircleCheck className="h-3.5 w-3.5 text-[var(--accent)]" />
+                ) : (
+                  <CircleDashed className="h-3.5 w-3.5 text-[var(--ink-faint)]" />
+                )}
+              </div>
               <div className="flex-1 overflow-hidden">
-                <div className="truncate text-sm font-medium">
+                <div className="truncate font-display text-[14px] leading-snug text-[var(--ink)]">
                   {m.otterItemName}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
                   <span>{m.category}</span>
                   <span>·</span>
-                  <span>{Math.round(m.totalQtySoldAllTime).toLocaleString()} sold</span>
+                  <span className="tabular-nums">
+                    {Math.round(m.totalQtySoldAllTime).toLocaleString()} sold
+                  </span>
                 </div>
               </div>
             </button>
@@ -193,13 +212,13 @@ function RecipeList({
 }) {
   if (recipes.length === 0) {
     return (
-      <div className="p-6 text-center text-sm text-muted-foreground">
+      <div className="px-4 py-10 text-center font-mono text-[11px] italic text-[var(--ink-faint)]">
         {emptyLabel}
       </div>
     )
   }
   return (
-    <ul className="divide-y">
+    <ul>
       {recipes.map((r) => {
         const isSelected = selectedId === r.id
         return (
@@ -208,28 +227,42 @@ function RecipeList({
               type="button"
               onClick={() => onSelect(r)}
               className={cn(
-                "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/40",
-                isSelected && "bg-muted"
+                "group relative flex w-full items-start gap-2.5 border-b border-[var(--hairline)] px-4 py-2.5 text-left transition",
+                isSelected
+                  ? "bg-[var(--paper-deep)]"
+                  : "hover:bg-[var(--paper-deep)]/60"
               )}
             >
-              <CircleCheck className="h-4 w-4 shrink-0 text-green-600" />
+              {isSelected && (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-[2px] bg-[var(--accent)]"
+                />
+              )}
+              <div className="mt-1 shrink-0">
+                <CircleCheck className="h-3.5 w-3.5 text-[var(--accent)]" />
+              </div>
               <div className="flex-1 overflow-hidden">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{r.itemName}</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="truncate font-display text-[14px] italic leading-snug text-[var(--ink)]">
+                    {r.itemName}
+                  </span>
                   {!r.isSellable && (
-                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
                       prep
-                    </Badge>
+                    </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
                   <span>{r.category}</span>
                   <span>·</span>
-                  <span>{r.ingredientCount} ingredients</span>
+                  <span className="tabular-nums">
+                    {r.ingredientCount} ing
+                  </span>
                   {r.computedCost != null && (
                     <>
                       <span>·</span>
-                      <span>
+                      <span className="tabular-nums">
                         ${r.computedCost.toFixed(2)}
                         {r.partialCost ? "*" : ""}
                       </span>

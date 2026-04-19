@@ -39,12 +39,23 @@ model User {
   role          Role
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  
+
+  // Profile
+  phone         String?
+  avatarUrl     String?
+  timezone      String    @default("America/New_York")
+
+  // Notification standing orders
+  notifyInvoices     Boolean @default(true)
+  notifyWeeklyReport Boolean @default(true)
+  notifyAnomaly      Boolean @default(true)
+
   // Relations
   ownedStores          Store[]   @relation("StoreOwner")
   invoices             Invoice[]
   recipes              Recipe[]
   canonicalIngredients CanonicalIngredient[]
+  ingredientSkuMatches IngredientSkuMatch[]
 
   @@index([email])
 }
@@ -310,11 +321,19 @@ model InvoiceLineItem {
   unitPrice     Float
   extendedPrice Float
 
-  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // Ingredient unification. Populated at sync time via (vendor, sku) match,
+  // or at review-queue time by a manual confirm. Null = unmatched.
+  canonicalIngredientId String?
+  matchSource           String?   // "sku" | "manual" | "alias"
+  matchedAt             DateTime?
+
+  invoice             Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([category])
   @@index([sku])
+  @@index([canonicalIngredientId])
 }
 
 model InvoiceSyncLog {
@@ -386,11 +405,36 @@ model CanonicalIngredient {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner              User               @relation(fields: [ownerId], references: [id])
+  owner              User                 @relation(fields: [ownerId], references: [id])
   aliases            IngredientAlias[]
   recipeIngredients  RecipeIngredient[]
+  invoiceLineItems   InvoiceLineItem[]
+  skuMatches         IngredientSkuMatch[]
 
   @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+/// Learned (vendor, sku) → canonical ingredient matches. Future invoice line
+/// items with the same (vendor, sku) auto-link to the canonical at sync time.
+/// Manual matches from the review queue upsert here and backfill history.
+model IngredientSkuMatch {
+  id                    String   @id @default(cuid())
+  ownerId               String
+  vendorName            String
+  sku                   String
+  canonicalIngredientId String
+  conversionFactor      Float    @default(1)
+  fromUnit              String
+  toUnit                String
+  confirmedBy           String
+  confirmedAt           DateTime @default(now())
+
+  owner               User                @relation(fields: [ownerId], references: [id])
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, vendorName, sku])
+  @@index([canonicalIngredientId])
   @@index([ownerId])
 }
 

@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Sparkles } from "lucide-react"
+import { Sparkles, ListChecks } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,14 +17,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { MenuItemList } from "./menu-item-list"
-import {
-  RecipeEditor,
-  type EditorInitialValue,
-  type EditorIngredientRow,
-} from "./recipe-editor"
+import { RecipeCanvas, type CanvasInitialValue } from "./recipe-canvas"
+import type { IngredientRowData } from "./sortable-ingredient-row"
 import { getRecipeDetail } from "@/app/actions/recipe-actions"
 import {
   createCanonicalIngredient,
+  listCanonicalIngredients,
   runCanonicalIngredientSeed,
 } from "@/app/actions/canonical-ingredient-actions"
 import type {
@@ -36,6 +35,7 @@ type Props = {
   initialMenuItems: MenuItemForCatalog[]
   initialRecipes: RecipeSummary[]
   initialCanonicalIngredients: CanonicalIngredientSummary[]
+  unmatchedLineItemCount: number
 }
 
 type Filter = "unbuilt" | "all" | "prep" | "confirmed"
@@ -44,15 +44,16 @@ export function RecipesContent({
   initialMenuItems,
   initialRecipes,
   initialCanonicalIngredients,
+  unmatchedLineItemCount,
 }: Props) {
   const router = useRouter()
   const [filter, setFilter] = useState<Filter>("unbuilt")
-  const [editor, setEditor] = useState<EditorInitialValue | null>(null)
+  const [editor, setEditor] = useState<CanvasInitialValue | null>(null)
   const [selectedMenuItemName, setSelectedMenuItemName] = useState<string | null>(
     null
   )
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
-  const [loadingDetail, setLoadingDetail] = useTransition()
+  const [, setLoadingDetail] = useTransition()
   const [seedPending, startSeedTransition] = useTransition()
   const [seedMessage, setSeedMessage] = useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -63,6 +64,11 @@ export function RecipesContent({
   const [canonicalIngredients, setCanonicalIngredients] = useState(
     initialCanonicalIngredients
   )
+
+  async function refreshCanonicals() {
+    const next = await listCanonicalIngredients()
+    setCanonicalIngredients(next)
+  }
 
   const openForMenuItem = useCallback(
     (m: MenuItemForCatalog) => {
@@ -103,7 +109,7 @@ export function RecipesContent({
       const detail = await getRecipeDetail(recipeId)
       if (!detail) return
       const { recipe } = detail
-      const rows: EditorIngredientRow[] = recipe.ingredients.map((ing) => ({
+      const rows: IngredientRowData[] = recipe.ingredients.map((ing) => ({
         id: ing.id,
         picker: ing.componentRecipeId
           ? {
@@ -215,14 +221,13 @@ export function RecipesContent({
   }
 
   useEffect(() => {
-    // Reset seed message after 6s
     if (!seedMessage) return
     const t = setTimeout(() => setSeedMessage(null), 6000)
     return () => clearTimeout(t)
   }, [seedMessage])
 
   return (
-    <>
+    <div className="editorial-surface relative flex min-h-[calc(100vh-3.5rem)] flex-col">
       <EditorialTopbar
         section="§ 10"
         title="Recipes"
@@ -233,21 +238,35 @@ export function RecipesContent({
         }
       >
         {seedMessage && (
-          <span className="text-xs text-muted-foreground">{seedMessage}</span>
+          <span className="hidden font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)] lg:inline">
+            {seedMessage}
+          </span>
         )}
+        <Link
+          href="/dashboard/ingredients?tab=review"
+          className="inline-flex h-8 items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+        >
+          <ListChecks className="h-3 w-3" />
+          Needs review
+          {unmatchedLineItemCount > 0 && (
+            <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center bg-[var(--accent)] px-1 text-[9px] text-white">
+              {unmatchedLineItemCount}
+            </span>
+          )}
+        </Link>
         <Button
           size="sm"
           variant="outline"
           onClick={handleSeed}
           disabled={seedPending}
-          className="h-8"
+          className="h-8 border-[var(--hairline-bold)] bg-[var(--paper)]"
         >
           <Sparkles className="mr-1 h-3.5 w-3.5" />
           {seedPending ? "Seeding…" : "Seed from invoices"}
         </Button>
       </EditorialTopbar>
 
-      <div className="grid h-[calc(100vh-3.5rem)] grid-cols-[340px_1fr] overflow-hidden">
+      <div className="grid h-[calc(100vh-3.5rem)] grid-cols-[280px_1fr] overflow-hidden">
         <MenuItemList
           menuItems={initialMenuItems}
           recipes={initialRecipes}
@@ -259,32 +278,32 @@ export function RecipesContent({
           onSelectRecipe={openForRecipe}
           onAddPrepRecipe={startNewPrepRecipe}
         />
+
         {editor ? (
-          <RecipeEditor
-            key={editor.recipeId ?? editor.itemName + editor.mapOtterItemName}
+          <RecipeCanvas
+            key={editor.recipeId ?? editor.itemName + (editor.mapOtterItemName ?? "")}
             initial={editor}
             canonicalIngredients={canonicalIngredients}
             recipes={initialRecipes}
             onSaved={handleSaved}
             onCancel={handleCancel}
             onRequestCreateIngredient={() => setCreateDialogOpen(true)}
+            onCanonicalCreated={refreshCanonicals}
           />
         ) : (
-          <div className="flex h-full items-center justify-center bg-muted/20 text-sm text-muted-foreground">
-            {loadingDetail
-              ? "Loading…"
-              : "Pick a menu item on the left to start a recipe."}
-          </div>
+          <EmptyState />
         )}
       </div>
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="border-[var(--hairline-bold)] bg-[var(--paper)]">
           <DialogHeader>
-            <DialogTitle>Add an ingredient</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="font-display text-[22px] italic">
+              Add an ingredient
+            </DialogTitle>
+            <DialogDescription className="text-[var(--ink-muted)]">
               Creates a canonical ingredient that isn&apos;t on any invoice yet
-              (e.g. salt, house spice mix). You can attach it to invoice line
+              (e.g. salt, house spice mix). You can link it to invoice line
               items later.
             </DialogDescription>
           </DialogHeader>
@@ -330,12 +349,33 @@ export function RecipesContent({
               disabled={
                 createPending || !newIngName.trim() || !newIngUnit.trim()
               }
+              className="bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--accent-dark)]"
             >
               {createPending ? "Adding…" : "Add ingredient"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="flex h-full items-center justify-center bg-[var(--paper)]">
+      <div className="mx-10 max-w-md text-center">
+        <div className="editorial-section-label">§ canvas</div>
+        <h2 className="mt-2 font-display text-[34px] italic leading-tight text-[var(--ink)]">
+          Pick a dish
+          <br />
+          to begin.
+        </h2>
+        <p className="mt-4 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-[var(--ink-muted)]">
+          Select a menu item or recipe on the left.
+          <br />
+          Or start a new prep component.
+        </p>
+      </div>
+    </div>
   )
 }

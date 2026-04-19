@@ -12,29 +12,13 @@ import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { matchNewLineItems } from "@/lib/ingredient-matching"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
 const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
 
 export const maxDuration = 120
-
-// ─── Vendor name normalization ───
-const VENDOR_ALIASES: Record<string, string> = {
-  "sysco": "Sysco",
-  "us foods": "US Foods",
-  "individual foodservice": "Individual FoodService",
-  "restaurant depot": "Restaurant Depot",
-  "performance food group": "Performance Food Group",
-  "ben e. keith": "Ben E. Keith",
-}
-
-function normalizeVendorName(raw: string): string {
-  const lower = raw.toLowerCase().trim()
-  for (const [pattern, canonical] of Object.entries(VENDOR_ALIASES)) {
-    if (lower.startsWith(pattern)) return canonical
-  }
-  return raw.trim()
-}
 
 type ProgressEmitter = (event: InvoiceSyncProgressEvent) => void
 
@@ -497,7 +481,20 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
     })
   }
 
-  // ─── Phase 5: detect price hikes vs prior orders and email the owner ───
+  // ─── Phase 5: auto-match line items to canonical ingredients ───
+  if (createdInvoiceIds.length > 0) {
+    try {
+      const matchResult = await matchNewLineItems(userId, createdInvoiceIds)
+      console.log(
+        `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
+        `${matchResult.matchedByAlias} by alias, ${matchResult.unmatched} unmatched`
+      )
+    } catch (err) {
+      console.error("Ingredient matching failed:", err)
+    }
+  }
+
+  // ─── Phase 6: detect price hikes vs prior orders and email the owner ───
   if (createdInvoiceIds.length > 0) {
     try {
       await detectAndAlertPriceHikes(createdInvoiceIds, userId)

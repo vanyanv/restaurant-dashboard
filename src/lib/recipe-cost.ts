@@ -10,6 +10,12 @@ export type RecipeCostLine = {
   unitCost: number | null
   lineCost: number
   missingCost: boolean
+  /** Invoice provenance (ingredient kind only; null for sub-recipes). */
+  sourceInvoiceId?: string | null
+  sourceLineItemId?: string | null
+  sourceVendor?: string | null
+  sourceSku?: string | null
+  sourceInvoiceDate?: Date | null
 }
 
 export type RecipeCostResult = {
@@ -144,6 +150,11 @@ async function walk(
         unitCost: cost.unitCost,
         lineCost,
         missingCost: false,
+        sourceInvoiceId: cost.sourceInvoiceId,
+        sourceLineItemId: cost.sourceLineItemId,
+        sourceVendor: cost.sourceVendor,
+        sourceSku: cost.sourceSku,
+        sourceInvoiceDate: cost.asOfDate,
       })
       continue
     }

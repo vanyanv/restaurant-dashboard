@@ -108,12 +108,23 @@ export type CanonicalIngredientCost = {
   asOfDate: Date
   sourceInvoiceId: string
   sourceLineItemId: string
+  sourceVendor: string
+  sourceSku: string | null
+  sourceProductName: string
 }
 
 /**
  * Resolve the unit cost of a canonical ingredient.
  *
- * - If `asOf` is undefined, returns the *latest* invoice price (builder mode).
+ * Primary path: direct FK (InvoiceLineItem.canonicalIngredientId). Picks the
+ * most recent invoice line *across any vendor* — whoever we last bought from
+ * wins. This is what gives the recipe builder "most recent purchase" pricing.
+ *
+ * Fallback: legacy alias-based string match, used only for canonicals that
+ * have no FK'd line items yet (pre-migration data). Drop this fallback once
+ * the review queue is empty.
+ *
+ * - If `asOf` is undefined, returns the latest price (builder mode).
  * - If `asOf` is set, returns the most recent price on or before that date
  *   (P&L / period-matched mode).
  *
@@ -123,6 +134,40 @@ export async function getCanonicalIngredientCost(
   canonicalIngredientId: string,
   asOf?: Date
 ): Promise<CanonicalIngredientCost | null> {
+  // Primary: direct FK match.
+  const direct = await prisma.invoiceLineItem.findFirst({
+    where: {
+      canonicalIngredientId,
+      invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
+      quantity: { gt: 0 },
+    },
+    orderBy: { invoice: { invoiceDate: "desc" } },
+    select: {
+      id: true,
+      invoiceId: true,
+      sku: true,
+      productName: true,
+      quantity: true,
+      unit: true,
+      extendedPrice: true,
+      invoice: { select: { invoiceDate: true, vendorName: true } },
+    },
+  })
+
+  if (direct && direct.invoice.invoiceDate) {
+    return {
+      unitCost: direct.extendedPrice / direct.quantity,
+      unit: direct.unit ?? "unit",
+      asOfDate: direct.invoice.invoiceDate,
+      sourceInvoiceId: direct.invoiceId,
+      sourceLineItemId: direct.id,
+      sourceVendor: direct.invoice.vendorName,
+      sourceSku: direct.sku,
+      sourceProductName: direct.productName,
+    }
+  }
+
+  // Fallback: alias-based lookup for canonicals not yet FK-matched.
   const aliases = await prisma.ingredientAlias.findMany({
     where: { canonicalIngredientId },
     select: {
@@ -136,6 +181,7 @@ export async function getCanonicalIngredientCost(
 
   const candidates = await prisma.invoiceLineItem.findMany({
     where: {
+      canonicalIngredientId: null,
       invoice: {
         invoiceDate: asOf ? { lte: asOf } : undefined,
         storeId: { in: aliases.map((a) => a.storeId) },
@@ -147,11 +193,11 @@ export async function getCanonicalIngredientCost(
     select: {
       id: true,
       invoiceId: true,
+      sku: true,
       productName: true,
       quantity: true,
-      unitPrice: true,
       extendedPrice: true,
-      invoice: { select: { invoiceDate: true, storeId: true } },
+      invoice: { select: { invoiceDate: true, storeId: true, vendorName: true } },
     },
   })
 
@@ -177,6 +223,9 @@ export async function getCanonicalIngredientCost(
       asOfDate: li.invoice.invoiceDate,
       sourceInvoiceId: li.invoiceId,
       sourceLineItemId: li.id,
+      sourceVendor: li.invoice.vendorName,
+      sourceSku: li.sku,
+      sourceProductName: li.productName,
     }
   }
 

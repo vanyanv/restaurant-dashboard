@@ -275,6 +275,11 @@ export async function previewRecipeCost(input: {
         unitCost: cost.unitCost,
         lineCost,
         missingCost: false,
+        sourceInvoiceId: cost.sourceInvoiceId,
+        sourceLineItemId: cost.sourceLineItemId,
+        sourceVendor: cost.sourceVendor,
+        sourceSku: cost.sourceSku,
+        sourceInvoiceDate: cost.asOfDate,
       })
     }
   }
