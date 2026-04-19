@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Store, ArrowLeft, BarChart3 } from "lucide-react"
+import { Store, ArrowLeft, BarChart3, Receipt } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -236,6 +236,12 @@ export function StoreAnalyticsContent({
             onRangeChange={handleRangeChange}
             isPending={isPending}
           />
+          <Link href={`/dashboard/pnl/${store.id}`}>
+            <Button variant="outline" size="sm" className="h-8 text-xs">
+              <Receipt className="mr-1 h-3.5 w-3.5" />
+              P&amp;L
+            </Button>
+          </Link>
           <OtterSyncButton lastSyncAt={analytics.lastSyncAt} />
         </div>
       </div>

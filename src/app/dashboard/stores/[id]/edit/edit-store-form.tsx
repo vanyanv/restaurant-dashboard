@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { MapPin, Phone, Store, Loader2, ToggleLeft, ToggleRight } from "lucide-react"
+import { MapPin, Phone, Store, Loader2, ToggleLeft, ToggleRight, DollarSign, Home } from "lucide-react"
 import { updateStore } from "@/app/actions/store-actions"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,6 +26,10 @@ const updateStoreSchema = z.object({
   address: z.string().max(200, "Address too long").optional(),
   phone: z.string().max(20, "Phone number too long").optional(),
   isActive: z.boolean(),
+  fixedMonthlyLabor: z.string().optional(),
+  fixedMonthlyRent: z.string().optional(),
+  uberCommissionPct: z.string().optional(),
+  doordashCommissionPct: z.string().optional(),
 })
 
 type UpdateStoreFormValues = z.infer<typeof updateStoreSchema>
@@ -36,6 +40,10 @@ interface StoreData {
   address: string | null
   phone: string | null
   isActive: boolean
+  fixedMonthlyLabor: number | null
+  fixedMonthlyRent: number | null
+  uberCommissionRate: number
+  doordashCommissionRate: number
 }
 
 interface EditStoreFormProps {
@@ -53,6 +61,10 @@ export function EditStoreForm({ store }: EditStoreFormProps) {
       address: store.address || "",
       phone: store.phone || "",
       isActive: store.isActive,
+      fixedMonthlyLabor: store.fixedMonthlyLabor != null ? String(store.fixedMonthlyLabor) : "",
+      fixedMonthlyRent: store.fixedMonthlyRent != null ? String(store.fixedMonthlyRent) : "",
+      uberCommissionPct: String(Math.round(store.uberCommissionRate * 1000) / 10),
+      doordashCommissionPct: String(Math.round(store.doordashCommissionRate * 1000) / 10),
     },
   })
 
@@ -65,6 +77,10 @@ export function EditStoreForm({ store }: EditStoreFormProps) {
       if (values.address) formData.append("address", values.address)
       if (values.phone) formData.append("phone", values.phone)
       formData.append("isActive", values.isActive.toString())
+      formData.append("fixedMonthlyLabor", values.fixedMonthlyLabor ?? "")
+      formData.append("fixedMonthlyRent", values.fixedMonthlyRent ?? "")
+      formData.append("uberCommissionRate", values.uberCommissionPct ?? "")
+      formData.append("doordashCommissionRate", values.doordashCommissionPct ?? "")
 
       const result = await updateStore(store.id, formData)
 
@@ -197,6 +213,119 @@ export function EditStoreForm({ store }: EditStoreFormProps) {
           )}
         />
         
+        <div className="space-y-4 rounded-lg border p-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold">Fixed costs (for P&L)</h3>
+            <p className="text-xs text-muted-foreground">
+              Monthly figures. Used on the P&amp;L view; converted to weekly/daily automatically.
+              Leave blank to show the row as &ldquo;—&rdquo; until configured.
+            </p>
+          </div>
+
+          <FormField
+            control={form.control}
+            name="fixedMonthlyLabor"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Fixed Monthly Labor
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    placeholder="29600"
+                    {...field}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Total monthly labor cost treated as fixed for now.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="fixedMonthlyRent"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Home className="h-4 w-4" />
+                  Fixed Monthly Rent
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    placeholder="8500"
+                    {...field}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Base rent for this location.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              control={form.control}
+              name="uberCommissionPct"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">Uber Commission %</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      placeholder="21"
+                      {...field}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="doordashCommissionPct"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs">DoorDash Commission %</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      placeholder="25"
+                      {...field}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+
         <div className="flex gap-3 pt-4">
           <Button
             type="button"

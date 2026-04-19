@@ -6,6 +6,15 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
+import {
+  buildPeriods,
+  bucketSummariesByPeriod,
+  computeStorePnL,
+  channelMix,
+  type Granularity,
+  type Period,
+  type PnLRow,
+} from "@/lib/pnl"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -18,6 +27,10 @@ const updateStoreSchema = z.object({
   address: z.string().max(200).optional(),
   phone: z.string().max(20).optional(),
   isActive: z.boolean().optional(),
+  fixedMonthlyLabor: z.number().min(0).max(1_000_000).nullable().optional(),
+  fixedMonthlyRent: z.number().min(0).max(1_000_000).nullable().optional(),
+  uberCommissionRate: z.number().min(0).max(1).optional(),
+  doordashCommissionRate: z.number().min(0).max(1).optional(),
 })
 
 export async function createStore(formData: FormData) {
@@ -1848,11 +1861,35 @@ export async function updateStore(storeId: string, formData: FormData) {
       return { error: "Only owners can update stores" }
     }
 
+    const rawLabor = formData.get("fixedMonthlyLabor")
+    const rawRent = formData.get("fixedMonthlyRent")
+    const parseOptionalNumber = (v: FormDataEntryValue | null): number | null | undefined => {
+      if (v == null) return undefined
+      const s = String(v).trim()
+      if (s === "") return null
+      const n = Number(s)
+      return Number.isFinite(n) ? n : undefined
+    }
+
+    const parseRate = (v: FormDataEntryValue | null): number | undefined => {
+      if (v == null) return undefined
+      const s = String(v).trim()
+      if (s === "") return undefined
+      // Accept either decimals (0.21) or percents (21). Treat values > 1 as percents.
+      const n = Number(s)
+      if (!Number.isFinite(n) || n < 0) return undefined
+      return n > 1 ? n / 100 : n
+    }
+
     const validatedData = updateStoreSchema.parse({
       name: formData.get("name"),
       address: formData.get("address") || undefined,
       phone: formData.get("phone") || undefined,
       isActive: formData.get("isActive") === "true",
+      fixedMonthlyLabor: parseOptionalNumber(rawLabor),
+      fixedMonthlyRent: parseOptionalNumber(rawRent),
+      uberCommissionRate: parseRate(formData.get("uberCommissionRate")),
+      doordashCommissionRate: parseRate(formData.get("doordashCommissionRate")),
     })
 
     // Verify store exists and user owns it
@@ -2446,5 +2483,304 @@ async function getHourlyOrderDistribution(
   } catch (error) {
     console.error("Failed to fetch hourly order data from Otter:", error)
     return emptyHourly
+  }
+}
+
+// ═══ P&L ═══
+
+export type StorePnLResult =
+  | {
+      storeName: string
+      periods: Period[]
+      rows: PnLRow[]
+      fixedLaborConfigured: boolean
+      fixedRentConfigured: boolean
+      kpis: {
+        grossSales: number
+        netAfterCommissions: number
+        laborPlusRent: number
+        bottomLine: number
+        marginPct: number
+      }
+      channelMix: Array<{ channel: string; amount: number }>
+      trend: {
+        totalSales: number[]
+        bottomLine: number[]
+      }
+    }
+  | { error: string }
+
+export async function getStorePnL(input: {
+  storeId: string
+  startDate: Date
+  endDate: Date
+  granularity: Granularity
+}): Promise<StorePnLResult> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return { error: "Unauthorized" }
+    if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
+
+    const store = await prisma.store.findFirst({
+      where: { id: input.storeId, ownerId: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        fixedMonthlyLabor: true,
+        fixedMonthlyRent: true,
+        uberCommissionRate: true,
+        doordashCommissionRate: true,
+      },
+    })
+    if (!store) return { error: "Store not found" }
+
+    const periods = buildPeriods(input.startDate, input.endDate, input.granularity)
+    if (periods.length === 0) {
+      return {
+        storeName: store.name,
+        periods: [],
+        rows: [],
+        fixedLaborConfigured: store.fixedMonthlyLabor != null,
+        fixedRentConfigured: store.fixedMonthlyRent != null,
+        kpis: {
+          grossSales: 0,
+          netAfterCommissions: 0,
+          laborPlusRent: 0,
+          bottomLine: 0,
+          marginPct: 0,
+        },
+        channelMix: [],
+        trend: { totalSales: [], bottomLine: [] },
+      }
+    }
+
+    const overallStart = periods[0].startDate
+    const overallEnd = periods[periods.length - 1].endDate
+
+    const summaries = await prisma.otterDailySummary.findMany({
+      where: {
+        storeId: store.id,
+        date: { gte: overallStart, lte: overallEnd },
+      },
+      select: {
+        date: true,
+        platform: true,
+        paymentMethod: true,
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpTaxCollected: true,
+        tpTaxCollected: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+      },
+    })
+
+    const bucketed = bucketSummariesByPeriod(summaries, periods)
+    const computed = computeStorePnL({ bucketed, periods, store })
+
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+    const grossSales = sum(computed.totalSales)
+    const netAfterCommissions = sum(computed.netAfterCommissions)
+    const laborPlusRent = sum(computed.laborValues) + sum(computed.rentValues)
+    const bottomLine = sum(computed.bottomLine)
+    const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
+
+    const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
+      (acc, periodVals) => {
+        for (let i = 0; i < periodVals.length; i++) {
+          acc[i] = (acc[i] ?? 0) + periodVals[i]
+        }
+        return acc
+      },
+      []
+    )
+
+    return {
+      storeName: store.name,
+      periods,
+      rows: computed.rows,
+      fixedLaborConfigured: store.fixedMonthlyLabor != null,
+      fixedRentConfigured: store.fixedMonthlyRent != null,
+      kpis: {
+        grossSales,
+        netAfterCommissions,
+        laborPlusRent,
+        bottomLine,
+        marginPct,
+      },
+      channelMix: channelMix(totalChannelVals),
+      trend: {
+        totalSales: computed.totalSales,
+        bottomLine: computed.bottomLine,
+      },
+    }
+  } catch (error) {
+    console.error("getStorePnL error:", error)
+    const msg = error instanceof Error ? error.message : String(error)
+    return { error: `Failed to load P&L: ${msg.slice(0, 300)}` }
+  }
+}
+
+// ─── All-stores P&L for the /dashboard/pnl overview ───
+
+export type AllStoresPnLResult =
+  | {
+      storeCount: number
+      combined: {
+        grossSales: number
+        netAfterCommissions: number
+        laborPlusRent: number
+        bottomLine: number
+        marginPct: number
+      }
+      perStore: Array<{
+        storeId: string
+        storeName: string
+        grossSales: number
+        netAfterCommissions: number
+        laborPlusRent: number
+        bottomLine: number
+        marginPct: number
+        channelMix: Array<{ channel: string; amount: number }>
+        fixedCostsConfigured: boolean
+      }>
+      periods: Period[]
+    }
+  | { error: string }
+
+export async function getAllStoresPnL(input: {
+  startDate: Date
+  endDate: Date
+  granularity: Granularity
+}): Promise<AllStoresPnLResult> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return { error: "Unauthorized" }
+    if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
+
+    const stores = await prisma.store.findMany({
+      where: { ownerId: session.user.id, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        fixedMonthlyLabor: true,
+        fixedMonthlyRent: true,
+        uberCommissionRate: true,
+        doordashCommissionRate: true,
+      },
+      orderBy: { name: "asc" },
+    })
+
+    const periods = buildPeriods(input.startDate, input.endDate, input.granularity)
+    if (stores.length === 0 || periods.length === 0) {
+      return {
+        storeCount: 0,
+        combined: {
+          grossSales: 0,
+          netAfterCommissions: 0,
+          laborPlusRent: 0,
+          bottomLine: 0,
+          marginPct: 0,
+        },
+        perStore: [],
+        periods,
+      }
+    }
+
+    const storeIds = stores.map((s) => s.id)
+    const overallStart = periods[0].startDate
+    const overallEnd = periods[periods.length - 1].endDate
+
+    const allSummaries = await prisma.otterDailySummary.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: overallStart, lte: overallEnd },
+      },
+      select: {
+        storeId: true,
+        date: true,
+        platform: true,
+        paymentMethod: true,
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpTaxCollected: true,
+        tpTaxCollected: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+      },
+    })
+
+    const byStore = new Map<string, typeof allSummaries>()
+    for (const s of allSummaries) {
+      const arr = byStore.get(s.storeId) ?? []
+      arr.push(s)
+      byStore.set(s.storeId, arr)
+    }
+
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+
+    const perStore = stores.map((store) => {
+      const storeSummaries = byStore.get(store.id) ?? []
+      const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
+      const computed = computeStorePnL({ bucketed, periods, store })
+
+      // Aggregate per-period arrays to range totals.
+      const grossSales = sum(computed.totalSales)
+      const netAfterCommissions = sum(computed.netAfterCommissions)
+      const laborTotal = sum(computed.laborValues)
+      const rentTotal = sum(computed.rentValues)
+      const laborPlusRent = laborTotal + rentTotal
+      const bottomLine = sum(computed.bottomLine)
+      const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
+
+      // Sum per-channel across periods for the mini mix bar.
+      const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
+        (acc, periodVals) => {
+          for (let i = 0; i < periodVals.length; i++) {
+            acc[i] = (acc[i] ?? 0) + periodVals[i]
+          }
+          return acc
+        },
+        []
+      )
+
+      return {
+        storeId: store.id,
+        storeName: store.name,
+        grossSales,
+        netAfterCommissions,
+        laborPlusRent,
+        bottomLine,
+        marginPct,
+        channelMix: channelMix(totalChannelVals),
+        fixedCostsConfigured:
+          store.fixedMonthlyLabor != null && store.fixedMonthlyRent != null,
+      }
+    })
+
+    const combined = {
+      grossSales: sum(perStore.map((p) => p.grossSales)),
+      netAfterCommissions: sum(perStore.map((p) => p.netAfterCommissions)),
+      laborPlusRent: sum(perStore.map((p) => p.laborPlusRent)),
+      bottomLine: sum(perStore.map((p) => p.bottomLine)),
+      marginPct: 0,
+    }
+    combined.marginPct =
+      combined.grossSales === 0 ? 0 : combined.bottomLine / combined.grossSales
+
+    return {
+      storeCount: stores.length,
+      combined,
+      perStore,
+      periods,
+    }
+  } catch (error) {
+    console.error("getAllStoresPnL error:", error)
+    const msg = error instanceof Error ? error.message : String(error)
+    return { error: `Failed to load P&L: ${msg.slice(0, 300)}` }
   }
 }

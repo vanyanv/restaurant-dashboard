@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
-import { Store, MapPin, Phone, Plus, Users, BarChart3, Edit, Eye } from "lucide-react"
+import { Store, MapPin, Phone, Plus, Users, BarChart3, Edit, Eye, Receipt } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
 import { DeleteStoreButton } from "./delete-store-button"
@@ -169,6 +169,12 @@ export default async function StoresPage() {
                         </Link>
                         {session.user.role === "OWNER" && (
                           <>
+                            <Link href={`/dashboard/pnl/${store.id}`}>
+                              <Button variant="outline" size="sm">
+                                <Receipt className="mr-1 h-3 w-3" />
+                                P&amp;L
+                              </Button>
+                            </Link>
                             <Link href={`/dashboard/stores/${store.id}/edit`}>
                               <Button variant="outline" size="sm">
                                 <Edit className="mr-1 h-3 w-3" />
