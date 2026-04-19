@@ -6,16 +6,7 @@ import { EditStoreForm } from "./edit-store-form"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { EditorialTopbar } from "../../../components/editorial-topbar"
 
 export default async function EditStorePage(props: {
   params: Promise<{ id: string }>
@@ -39,49 +30,22 @@ export default async function EditStorePage(props: {
   }
 
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/stores">Stores</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink href={`/dashboard/stores/${store.id}`}>
-                  {store.name}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Edit</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
+    <div className="flex flex-col h-full">
+      <EditorialTopbar
+        section="§ 05"
+        title={`Edit · ${store.name}`}
+      >
+        <Link href={`/dashboard/stores/${store.id}`}>
+          <Button variant="outline" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+      </EditorialTopbar>
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <div className="flex items-center gap-4">
-          <Link href={`/dashboard/stores/${store.id}`}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Edit Store</h1>
-            <p className="text-muted-foreground">
-              Update the details for {store.name}
-            </p>
-          </div>
-        </div>
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <p className="text-muted-foreground">
+          Update the details for {store.name}
+        </p>
 
         <EditStoreForm store={store} />
       </div>

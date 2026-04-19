@@ -9,31 +9,23 @@ import { Skeleton } from "@/components/ui/skeleton"
 export default function MenuPerformanceLoading() {
   return (
     <div className="flex flex-col h-full">
-      {/* Header skeleton */}
-      <header className="flex h-16 shrink-0 items-center gap-2 px-4">
-        <Skeleton className="h-6 w-6 rounded" />
-        <div className="mx-2 h-4 w-px bg-border" />
-        <Skeleton className="h-3 w-16" />
-        <Skeleton className="h-3 w-3" />
-        <Skeleton className="h-3 w-28" />
-      </header>
-
-      {/* Sticky header skeleton */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-5 w-5 rounded" />
-            <Skeleton className="h-5 w-36" />
-          </div>
-          <div className="flex items-center gap-2">
+      <header className="editorial-topbar">
+        <div className="editorial-topbar-rule" aria-hidden="true" />
+        <div className="editorial-topbar-inner">
+          <Skeleton className="h-6 w-6 rounded" />
+          <div className="mx-1 h-4 w-px bg-border" />
+          <span className="editorial-section-label">§ 08</span>
+          <span className="font-display text-[18px] italic leading-none tracking-[-0.02em] opacity-60">
+            Menu Performance
+          </span>
+          <div className="ml-auto flex items-center gap-2">
             <Skeleton className="h-8 w-48 rounded-md" />
             <Skeleton className="h-8 w-28 rounded-md" />
             <Skeleton className="h-8 w-20 rounded-md" />
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Content */}
       <div className="flex-1 p-4 sm:p-6 space-y-8">
         <KpiCardsSkeleton />
         <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
