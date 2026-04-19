@@ -119,7 +119,7 @@ export function RecipeManagerSheet({
     setFoodCost(recipe.foodCostOverride != null ? String(recipe.foodCostOverride) : "")
     setIngredients(
       recipe.ingredients.map((ing) => ({
-        ingredientName: ing.ingredientName,
+        ingredientName: ing.ingredientName ?? "",
         quantity: String(ing.quantity),
         unit: ing.unit,
       }))

@@ -40,7 +40,7 @@ export function IngredientDrilldownSheet({
     if (!ingredient) return []
     return recipes.filter((r) =>
       r.ingredients.some(
-        (ing) => ing.ingredientName.toLowerCase() === ingredient.ingredientName.toLowerCase()
+        (ing) => (ing.ingredientName ?? "").toLowerCase() === ingredient.ingredientName.toLowerCase()
       )
     )
   }, [ingredient, recipes])
@@ -50,7 +50,7 @@ export function IngredientDrilldownSheet({
     if (!ingredient) return []
     return linkedRecipes.map((recipe) => {
       const ing = recipe.ingredients.find(
-        (i) => i.ingredientName.toLowerCase() === ingredient.ingredientName.toLowerCase()
+        (i) => (i.ingredientName ?? "").toLowerCase() === ingredient.ingredientName.toLowerCase()
       )
       return {
         recipeName: recipe.itemName,

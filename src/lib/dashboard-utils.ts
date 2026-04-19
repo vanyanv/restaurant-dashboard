@@ -2,6 +2,47 @@ import { format } from "date-fns"
 
 const LA_TZ = "America/Los_Angeles"
 
+export type DashboardRange =
+  | { kind: "days"; days: number }
+  | { kind: "custom"; startDate: string; endDate: string }
+
+/** Parse /dashboard URL searchParams into a typed date range. Defaults to days=1. */
+export function parseDashboardRange(sp: {
+  start?: string
+  end?: string
+  days?: string
+}): DashboardRange {
+  if (sp.start && sp.end) {
+    return { kind: "custom", startDate: sp.start, endDate: sp.end }
+  }
+  const parsed = sp.days ? Number.parseInt(sp.days, 10) : 1
+  const days = Number.isFinite(parsed) && parsed !== 0 ? parsed : 1
+  return { kind: "days", days }
+}
+
+/** Convert a DashboardRange into the options shape every server action expects. */
+export function rangeToActionOptions(
+  range: DashboardRange
+): { days?: number; startDate?: string; endDate?: string } {
+  return range.kind === "days"
+    ? { days: range.days }
+    : { startDate: range.startDate, endDate: range.endDate }
+}
+
+/** Parse searchParams with a route-specific default preset (e.g. 7 or 30 days). */
+export function parseRangeWithDefault(
+  sp: { start?: string; end?: string; days?: string },
+  defaultDays: number
+): DashboardRange {
+  if (sp.start && sp.end) {
+    return { kind: "custom", startDate: sp.start, endDate: sp.end }
+  }
+  const parsed = sp.days ? Number.parseInt(sp.days, 10) : defaultDays
+  const days =
+    Number.isFinite(parsed) && parsed !== 0 ? parsed : defaultDays
+  return { kind: "days", days }
+}
+
 /** Get "today" as a YYYY-MM-DD string in LA timezone (works correctly on Vercel/UTC servers). */
 export function todayInLA(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: LA_TZ })

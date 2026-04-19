@@ -9,6 +9,7 @@ import type {
   InvoiceBreakdownData,
   InvoiceStoreRow,
   InvoiceVendorRow,
+  PriceMoverRow,
 } from "@/types/invoice"
 
 export async function getInvoiceSummary(options?: {
@@ -347,6 +348,100 @@ export async function getInvoiceStoreBreakdown(options?: {
       : 0
 
   return { storeRows, vendorRows, storeTotals, vendorTotals }
+}
+
+export async function getPriceMovers(options?: {
+  periodDays?: number
+  minPctChange?: number
+  minLatestPrice?: number
+  limit?: number
+}): Promise<PriceMoverRow[]> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return []
+
+  const periodDays = options?.periodDays ?? 90
+  const minPctChange = options?.minPctChange ?? 5
+  const minLatestPrice = options?.minLatestPrice ?? 0.5
+  const limit = options?.limit ?? 20
+
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - periodDays)
+
+  const lineItems = await prisma.invoiceLineItem.findMany({
+    where: {
+      invoice: {
+        ownerId: session.user.id,
+        invoiceDate: { gte: cutoff, not: null },
+      },
+    },
+    select: {
+      sku: true,
+      productName: true,
+      category: true,
+      unit: true,
+      unitPrice: true,
+      invoice: {
+        select: {
+          vendorName: true,
+          invoiceDate: true,
+        },
+      },
+    },
+  })
+
+  interface Row {
+    vendorName: string
+    sku: string | null
+    productName: string
+    category: string | null
+    unit: string | null
+    unitPrice: number
+    invoiceDate: Date
+  }
+
+  // Group by (vendor, sku or productName lower)
+  const groups = new Map<string, Row[]>()
+  for (const li of lineItems) {
+    if (!li.invoice.invoiceDate) continue
+    const key = `${li.invoice.vendorName}::${li.sku ?? li.productName.toLowerCase()}`
+    const arr = groups.get(key) ?? []
+    arr.push({
+      vendorName: li.invoice.vendorName,
+      sku: li.sku,
+      productName: li.productName,
+      category: li.category,
+      unit: li.unit,
+      unitPrice: li.unitPrice,
+      invoiceDate: li.invoice.invoiceDate,
+    })
+    groups.set(key, arr)
+  }
+
+  const movers: PriceMoverRow[] = []
+  for (const rows of groups.values()) {
+    if (rows.length < 2) continue
+    rows.sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime())
+    const [latest, prev] = rows
+    if (latest.unitPrice < minLatestPrice) continue
+    if (prev.unitPrice <= 0) continue
+    const pctChange = ((latest.unitPrice - prev.unitPrice) / prev.unitPrice) * 100
+    if (Math.abs(pctChange) < minPctChange) continue
+    movers.push({
+      vendorName: latest.vendorName,
+      sku: latest.sku,
+      productName: latest.productName,
+      category: latest.category,
+      unit: latest.unit,
+      prevPrice: prev.unitPrice,
+      prevDate: prev.invoiceDate.toISOString().slice(0, 10),
+      latestPrice: latest.unitPrice,
+      latestDate: latest.invoiceDate.toISOString().slice(0, 10),
+      pctChange,
+    })
+  }
+
+  movers.sort((a, b) => b.pctChange - a.pctChange)
+  return movers.slice(0, limit)
 }
 
 export async function getLastInvoiceSyncAt(): Promise<string | null> {

@@ -1,33 +1,23 @@
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getInvoiceSummary, getInvoiceList, getProductAnalytics, getLastInvoiceSyncAt } from "@/app/actions/invoice-actions"
-import { InvoicesContent } from "./components/invoices-content"
+import { InvoicesShell } from "./components/invoices-shell"
+import { parseInvoiceFilters } from "./components/sections/data"
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    storeId?: string
+    status?: string
+    page?: string
+  }>
+}) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
 
-  const [summary, invoices, products, lastSyncAt, stores] = await Promise.all([
-    getInvoiceSummary(),
-    getInvoiceList(),
-    getProductAnalytics(),
-    getLastInvoiceSyncAt(),
-    prisma.store.findMany({
-      where: { ownerId: session.user.id, isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-  ])
+  const sp = await searchParams
+  const filters = parseInvoiceFilters(sp)
 
-  return (
-    <InvoicesContent
-      initialSummary={summary}
-      initialInvoices={invoices}
-      initialProducts={products}
-      lastSyncAt={lastSyncAt}
-      stores={stores}
-    />
-  )
+  return <InvoicesShell userId={session.user.id} filters={filters} />
 }

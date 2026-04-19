@@ -4,7 +4,7 @@ const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 let cachedToken: string | null = null
 let cachedTokenExp = 0 // unix seconds
 
-async function getGraphAccessToken(): Promise<string> {
+export async function getGraphAccessToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   if (cachedToken && cachedTokenExp - now > 300) return cachedToken
 
@@ -44,7 +44,7 @@ async function getGraphAccessToken(): Promise<string> {
   return cachedToken
 }
 
-function getMailUserId(): string {
+export function getMailUserId(): string {
   const userId = process.env.MICROSOFT_MAIL_USER_ID
   if (!userId) {
     throw new Error("MICROSOFT_MAIL_USER_ID env var is required (email or user object ID)")

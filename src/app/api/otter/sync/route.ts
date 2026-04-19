@@ -15,6 +15,7 @@ import {
 } from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { refreshStaleDailyCogs } from "@/lib/cogs-materializer"
 
 export const maxDuration = 120
 
@@ -23,15 +24,16 @@ type OtterRow = Record<string, any>
 
 type ProgressEmitter = (event: SyncProgressEvent) => void
 
-const PHASE_WEIGHTS = { daily: 0.20, categories: 0.15, items: 0.30, modifiers: 0.20, ratings: 0.15 } as const
+const PHASE_WEIGHTS = { daily: 0.20, categories: 0.15, items: 0.28, modifiers: 0.18, ratings: 0.14, cogs: 0.05 } as const
 
-function computeTotalProgress(dailyPct: number, categoryPct: number, itemPct: number, modifierPct: number = 0, ratingsPct: number = 0): number {
+function computeTotalProgress(dailyPct: number, categoryPct: number, itemPct: number, modifierPct: number = 0, ratingsPct: number = 0, cogsPct: number = 0): number {
   return Math.round(
     dailyPct * PHASE_WEIGHTS.daily +
     categoryPct * PHASE_WEIGHTS.categories +
     itemPct * PHASE_WEIGHTS.items +
     modifierPct * PHASE_WEIGHTS.modifiers +
-    ratingsPct * PHASE_WEIGHTS.ratings
+    ratingsPct * PHASE_WEIGHTS.ratings +
+    cogsPct * PHASE_WEIGHTS.cogs
   )
 }
 
@@ -47,13 +49,15 @@ interface SyncResult {
   modifierFailed: number
   ratingsSynced: number
   ratingsFailed: number
+  cogsDaysProcessed: number
+  cogsRowsWritten: number
   storesProcessed: number
 }
 
 async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   // Fetch all configured Otter stores
   const otterStores = await prisma.otterStore.findMany({
-    include: { store: { select: { id: true, name: true, isActive: true } } },
+    include: { store: { select: { id: true, name: true, isActive: true, ownerId: true } } },
   })
 
   if (otterStores.length === 0) {
@@ -64,6 +68,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
       itemSynced: 0, itemFailed: 0,
       modifierSynced: 0, modifierFailed: 0,
       ratingsSynced: 0, ratingsFailed: 0,
+      cogsDaysProcessed: 0, cogsRowsWritten: 0,
       storesProcessed: 0,
     }
   }
@@ -91,7 +96,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   }
 
   const days = getDateRange(startDate, endDate)
-  const counts = { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0 }
+  const counts = { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0, cogs: 0 }
 
   // ─── Phase 1: Daily summary sync (1 API call) ───
   emit({
@@ -537,18 +542,58 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     detail: `${ratingsSynced} ratings synced`, counts,
   })
 
+  // ─── Phase 6: Materialize daily COGS for each owner ───
+  emit({
+    phase: "cogs", status: "writing",
+    totalProgress: computeTotalProgress(100, 100, 100, 100, 100, 0),
+    detail: "Refreshing daily COGS...", counts,
+  })
+
+  const uniqueOwnerIds = Array.from(
+    new Set(activeOtterStores.map((os) => os.store.ownerId))
+  )
+  let cogsDaysProcessed = 0
+  let cogsRowsWritten = 0
+
+  for (let i = 0; i < uniqueOwnerIds.length; i++) {
+    const ownerId = uniqueOwnerIds[i]
+    try {
+      const result = await refreshStaleDailyCogs({ ownerId, lookbackDays: 90 })
+      cogsDaysProcessed += result.daysProcessed
+      cogsRowsWritten += result.rowsWritten
+    } catch (err) {
+      console.error(`Failed to refresh daily COGS for owner ${ownerId}:`, err)
+    }
+    counts.cogs = cogsDaysProcessed
+    const cogsPct = ((i + 1) / uniqueOwnerIds.length) * 100
+    emit({
+      phase: "cogs", status: "writing",
+      totalProgress: computeTotalProgress(100, 100, 100, 100, 100, cogsPct),
+      detail: `COGS: ${cogsDaysProcessed} day(s) materialized across ${i + 1}/${uniqueOwnerIds.length} owners`,
+      counts,
+    })
+  }
+
+  emit({
+    phase: "cogs", status: "done",
+    totalProgress: computeTotalProgress(100, 100, 100, 100, 100, 100),
+    detail: `${cogsDaysProcessed} day(s) materialized (${cogsRowsWritten} rows)`,
+    counts,
+  })
+
   // Update lastSyncAt for all processed stores
   await prisma.otterStore.updateMany({
     where: { otterStoreId: { in: otterStoreIds } },
     data: { lastSyncAt: new Date() },
   })
 
-  const message = `Otter sync completed: ${synced} daily rows, ${categorySynced} categories, ${itemSynced} items, ${modifierSynced} modifiers, ${ratingsSynced} ratings`
+  const message = `Otter sync completed: ${synced} daily rows, ${categorySynced} categories, ${itemSynced} items, ${modifierSynced} modifiers, ${ratingsSynced} ratings, ${cogsDaysProcessed} COGS days`
   counts.daily = synced
   counts.categories = categorySynced
   counts.items = itemSynced
   counts.modifiers = modifierSynced
   counts.ratings = ratingsSynced
+  counts.cogs = cogsDaysProcessed
 
   emit({
     phase: "complete", status: "done", totalProgress: 100,
@@ -562,6 +607,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     itemSynced, itemFailed,
     modifierSynced, modifierFailed,
     ratingsSynced, ratingsFailed,
+    cogsDaysProcessed, cogsRowsWritten,
     storesProcessed: activeOtterStores.length,
   }
 }
@@ -602,7 +648,7 @@ export async function POST(request: NextRequest) {
           emit({
             phase: "error", status: "error", totalProgress: 0,
             detail: error instanceof Error ? error.message : "Internal server error",
-            counts: { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0 },
+            counts: { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0, cogs: 0 },
             error: error instanceof Error ? error.message : "Internal server error",
           })
         } finally {

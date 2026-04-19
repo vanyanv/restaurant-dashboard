@@ -3,14 +3,13 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
-import { Store, MapPin, Phone, Plus, Users, BarChart3, Edit, Eye, Receipt } from "lucide-react"
+import { MapPin, Phone, Plus, Edit, Eye, Receipt, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
 import { DeleteStoreButton } from "./delete-store-button"
 import { StarRatingCompact } from "@/components/ui/star-rating"
 import { YelpSyncAllButton } from "@/components/yelp-sync-button"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { EditorialTopbar } from "../components/editorial-topbar"
 import {
   Table,
   TableBody,
@@ -33,36 +32,27 @@ export default async function StoresPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="h-4" />
-            <div className="flex items-center gap-2">
-              <Store className="h-4 w-4 text-primary" />
-              <h1 className="text-lg font-semibold tracking-tight">Store Management</h1>
-            </div>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
-              <span>{stores.length} location{stores.length !== 1 ? "s" : ""}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {session.user.role === "OWNER" && stores.length > 0 && (
-              <YelpSyncAllButton />
-            )}
-            {session.user.role === "OWNER" && (
-              <Link href="/dashboard/stores/new">
-                <Button size="sm">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Add Store
-                </Button>
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
+      <EditorialTopbar
+        section="§ 05"
+        title="Stores"
+        stamps={
+          <span>
+            {stores.length} location{stores.length !== 1 ? "s" : ""}
+          </span>
+        }
+      >
+        {session.user.role === "OWNER" && stores.length > 0 && (
+          <YelpSyncAllButton />
+        )}
+        {session.user.role === "OWNER" && (
+          <Link href="/dashboard/stores/new">
+            <Button size="sm">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add Store
+            </Button>
+          </Link>
+        )}
+      </EditorialTopbar>
 
       <div className="flex-1 p-3 sm:p-4 space-y-3">
         {/* Store Selector */}
@@ -106,8 +96,6 @@ export default async function StoresPage() {
                   <TableHead>Rating</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>Managers</TableHead>
-                  <TableHead>Reports</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -143,18 +131,6 @@ export default async function StoresPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        {store._count.managers}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                        {store._count.reports}
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <Badge variant={store.isActive ? "default" : "secondary"}>
                         {store.isActive ? "Active" : "Inactive"}
                       </Badge>
@@ -184,8 +160,6 @@ export default async function StoresPage() {
                             <DeleteStoreButton
                               storeId={store.id}
                               storeName={store.name}
-                              hasReports={store._count.reports > 0}
-                              hasManagers={store._count.managers > 0}
                             />
                           </>
                         )}

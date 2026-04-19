@@ -53,6 +53,7 @@ export function OtterSyncButton({
       if (counts.items > 0) parts.push(`${counts.items} items`)
       if (counts.modifiers > 0) parts.push(`${counts.modifiers} modifiers`)
       if (counts.ratings > 0) parts.push(`${counts.ratings} ratings`)
+      if (counts.cogs > 0) parts.push(`${counts.cogs} cogs days`)
       if (parts.length > 0) {
         toast.success(`Sync complete: ${parts.join(", ")}`)
       } else {

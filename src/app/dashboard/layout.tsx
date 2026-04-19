@@ -1,6 +1,15 @@
 import { cookies } from "next/headers"
+import { Fraunces } from "next/font/google"
 import { AppSidebarClient } from "@/components/app-sidebar-client"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import "./editorial.css"
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+  axes: ["SOFT", "WONK", "opsz"],
+})
 
 export default async function DashboardLayout({
   children,
@@ -11,11 +20,11 @@ export default async function DashboardLayout({
   const defaultPinned = cookieStore.get("sidebar_state")?.value === "true"
 
   return (
-    <SidebarProvider defaultOpen={defaultPinned}>
-      <AppSidebarClient />
-      <SidebarInset>
-        {children}
-      </SidebarInset>
-    </SidebarProvider>
+    <div className={`${fraunces.variable} editorial-surface`}>
+      <SidebarProvider defaultOpen={defaultPinned}>
+        <AppSidebarClient />
+        <SidebarInset>{children}</SidebarInset>
+      </SidebarProvider>
+    </div>
   )
 }

@@ -1,6 +1,3 @@
-"use client"
-
-import { useMemo } from "react"
 import { TrendingUp, TrendingDown } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/format"
 import type { DailyTrend } from "@/types/analytics"
@@ -9,20 +6,20 @@ interface DayHighlightsProps {
   dailyTrends: DailyTrend[]
 }
 
-export function DayHighlights({ dailyTrends }: DayHighlightsProps) {
-  const { best, worst } = useMemo(() => {
-    if (dailyTrends.length === 0) return { best: null, worst: null }
-    let best = dailyTrends[0]
-    let worst = dailyTrends[0]
-    for (const d of dailyTrends) {
-      if (d.grossRevenue > best.grossRevenue) best = d
-      if (d.grossRevenue < worst.grossRevenue) worst = d
-    }
-    // Don't show if best === worst (single day range)
-    if (best.date === worst.date) return { best, worst: null }
-    return { best, worst }
-  }, [dailyTrends])
+function computeHighlights(dailyTrends: DailyTrend[]) {
+  if (dailyTrends.length === 0) return { best: null, worst: null }
+  let best = dailyTrends[0]
+  let worst = dailyTrends[0]
+  for (const d of dailyTrends) {
+    if (d.grossRevenue > best.grossRevenue) best = d
+    if (d.grossRevenue < worst.grossRevenue) worst = d
+  }
+  if (best.date === worst.date) return { best, worst: null }
+  return { best, worst }
+}
 
+export function DayHighlights({ dailyTrends }: DayHighlightsProps) {
+  const { best, worst } = computeHighlights(dailyTrends)
   if (!best) return null
 
   return (

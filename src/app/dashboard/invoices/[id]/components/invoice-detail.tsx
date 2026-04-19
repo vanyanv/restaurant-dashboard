@@ -29,17 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { SidebarIcon } from "lucide-react"
-import { Separator } from "@/components/ui/separator"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { EditorialTopbar } from "../../../components/editorial-topbar"
 import { toast } from "sonner"
 import type { InvoiceDetail } from "@/types/invoice"
 import { PdfViewer } from "./pdf-viewer"
@@ -120,40 +110,27 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
 
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1">
-          <SidebarIcon className="h-4 w-4" />
-        </SidebarTrigger>
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard/invoices">Invoices</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{invoice.invoiceNumber}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </header>
-
-      <div className="flex-1 overflow-hidden flex flex-col p-2 sm:p-4 gap-3 sm:gap-4">
-        {/* Back button */}
+      <EditorialTopbar
+        section="§ 02"
+        title={`Invoice · ${invoice.invoiceNumber}`}
+        stamps={
+          <span>
+            {invoice.vendorName}
+            {invoice.invoiceDate ? ` · ${invoice.invoiceDate}` : ""}
+          </span>
+        }
+      >
         <Button
           variant="ghost"
           size="sm"
-          className="self-start"
           onClick={() => router.push("/dashboard/invoices")}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Invoices
+          Back
         </Button>
+      </EditorialTopbar>
 
+      <div className="flex-1 overflow-hidden flex flex-col p-2 sm:p-4 gap-3 sm:gap-4">
         {/* Split view: PDF | extracted data */}
         <div className="grid flex-1 min-h-0 gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-2">
           {/* Left: original PDF */}
@@ -300,7 +277,8 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
                     <TableHead>Unit</TableHead>
-                    <TableHead>Pack × Size</TableHead>
+                    <TableHead className="text-right">Pack</TableHead>
+                    <TableHead>Size</TableHead>
                     <TableHead className="text-right">Unit Price</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                   </TableRow>
@@ -327,11 +305,12 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{li.quantity}</TableCell>
                       <TableCell className="text-muted-foreground">{li.unit ?? "—"}</TableCell>
+                      <TableCell className="text-right text-muted-foreground tabular-nums text-xs">
+                        {li.packSize ?? "—"}
+                      </TableCell>
                       <TableCell className="text-muted-foreground tabular-nums text-xs">
-                        {li.packSize != null && li.unitSize != null
-                          ? `${li.packSize} × ${li.unitSize} ${li.unitSizeUom ?? ""}`.trim()
-                          : li.packSize != null
-                          ? `${li.packSize} × ${li.unitSizeUom ?? ""}`.trim()
+                        {li.unitSize != null
+                          ? `${li.unitSize} ${li.unitSizeUom ?? ""}`.trim()
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">

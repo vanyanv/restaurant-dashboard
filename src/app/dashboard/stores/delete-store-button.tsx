@@ -21,15 +21,11 @@ import {
 interface DeleteStoreButtonProps {
   storeId: string
   storeName: string
-  hasReports: boolean
-  hasManagers: boolean
 }
 
 export function DeleteStoreButton({
   storeId,
   storeName,
-  hasReports,
-  hasManagers
 }: DeleteStoreButtonProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const router = useRouter()
@@ -60,16 +56,6 @@ export function DeleteStoreButton({
     }
   }
 
-  const getWarningMessage = () => {
-    const warnings = []
-    if (hasReports) warnings.push(`${hasReports ? 'existing' : 'no'} reports`)
-    if (hasManagers) warnings.push(`${hasManagers ? 'assigned' : 'no'} managers`)
-    
-    return warnings.length > 0 
-      ? `This store has ${warnings.join(' and ')}. `
-      : ''
-  }
-
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -86,17 +72,9 @@ export function DeleteStoreButton({
           </AlertDialogTitle>
           <AlertDialogDescription className="space-y-2">
             <p>
-              Are you sure you want to delete this store? This action will deactivate the store
-              and remove all manager assignments.
+              Are you sure you want to delete this store? The store will be
+              deactivated (not permanently removed) so data is preserved.
             </p>
-            {(hasReports || hasManagers) && (
-              <div className="rounded-md bg-orange-50 p-3 border border-orange-200">
-                <p className="text-sm text-orange-800">
-                  <strong>Warning:</strong> {getWarningMessage()}
-                  The store will be deactivated (not permanently deleted) so data is preserved.
-                </p>
-              </div>
-            )}
             <p className="text-sm text-muted-foreground">
               You can reactivate this store later if needed.
             </p>

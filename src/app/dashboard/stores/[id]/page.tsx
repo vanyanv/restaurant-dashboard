@@ -3,35 +3,21 @@ import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getStoreById, getStores } from "@/app/actions/store-actions"
-import { getStoreManagers } from "@/app/actions/manager-actions"
-import { 
-  Store, 
-  MapPin, 
-  Phone, 
-  Users, 
-  BarChart3, 
-  Edit, 
+import {
+  Store,
+  MapPin,
+  Phone,
+  BarChart3,
+  Edit,
   ArrowLeft,
   CheckCircle,
   XCircle,
-  Calendar,
-  Mail,
-  UserX
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
 import { StarRatingLarge } from "@/components/ui/star-rating"
 import { YelpSyncButton } from "@/components/yelp-sync-button"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { EditorialTopbar } from "../../components/editorial-topbar"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -47,15 +33,14 @@ export default async function StoreDetailPage(props: {
   const params = await props.params
   const { id } = params
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect("/login")
   }
 
-  const [store, allStores, storeManagers] = await Promise.all([
+  const [store, allStores] = await Promise.all([
     getStoreById(id),
     getStores(),
-    getStoreManagers(id)
   ])
 
   if (!store) {
@@ -63,62 +48,35 @@ export default async function StoreDetailPage(props: {
   }
 
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/stores">Stores</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{store.name}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
+    <div className="flex flex-col h-full">
+      <EditorialTopbar
+        section="§ 05"
+        title={store.name}
+        stamps={store.address ? <span>{store.address}</span> : undefined}
+      >
+        <Link href="/dashboard/stores">
+          <Button variant="outline" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <StoreSelector stores={allStores} currentStoreId={store.id} />
+        <YelpSyncButton
+          storeId={store.id}
+          storeName={store.name}
+          hasAddress={!!store.address}
+          lastSync={store.yelpLastSearch}
+          size="default"
+        />
+        <Link href={`/dashboard/stores/${store.id}/edit`}>
+          <Button>
+            <Edit className="mr-2 h-4 w-4" />
+            Edit Store
+          </Button>
+        </Link>
+      </EditorialTopbar>
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        {/* Header with Store Selector and Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard/stores">
-              <Button variant="outline" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <StoreSelector stores={allStores} currentStoreId={store.id} />
-          </div>
-          <div className="flex items-center gap-2">
-            {session.user.role === "OWNER" && (
-              <YelpSyncButton
-                storeId={store.id}
-                storeName={store.name}
-                hasAddress={!!store.address}
-                lastSync={store.yelpLastSearch}
-                size="default"
-              />
-            )}
-            {session.user.role === "OWNER" && (
-              <Link href={`/dashboard/stores/${store.id}/edit`}>
-                <Button>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Store
-                </Button>
-              </Link>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-1 flex-col gap-4 p-4">
 
-        {/* Store Information Header */}
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -169,8 +127,7 @@ export default async function StoreDetailPage(props: {
           </CardHeader>
         </Card>
 
-        {/* Key Metrics */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Yelp Rating</CardTitle>
@@ -182,32 +139,6 @@ export default async function StoreDetailPage(props: {
               </div>
               <p className="text-xs text-muted-foreground">
                 {store.yelpReviewCount ? `${store.yelpReviewCount.toLocaleString()} reviews` : "No Yelp data"}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Assigned Managers</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{store._count.managers}</div>
-              <p className="text-xs text-muted-foreground">
-                Active manager assignments
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Reports</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{store._count.reports}</div>
-              <p className="text-xs text-muted-foreground">
-                Daily reports submitted
               </p>
             </CardContent>
           </Card>
@@ -227,72 +158,6 @@ export default async function StoreDetailPage(props: {
             </CardContent>
           </Card>
         </div>
-
-        {/* Manager Assignments */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Manager Assignments</CardTitle>
-            <CardDescription>
-              Managers currently assigned to this store
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {storeManagers.length === 0 ? (
-              <div className="text-center py-8 border-2 border-dashed border-muted-foreground/25 rounded-lg">
-                <UserX className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">No managers assigned to this store</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Managers can be assigned from the Store Management page
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {storeManagers.map((manager: any) => (
-                  <div key={manager.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <Users className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <div className="font-medium">{manager.name}</div>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Mail className="h-3 w-3" />
-                          {manager.email}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant="secondary" className="mb-1">
-                        {manager._count.reports} reports
-                      </Badge>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        Assigned {new Date(manager.assignedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Activity / Reports Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>
-              Latest reports and activities from this store
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8 text-muted-foreground">
-              <BarChart3 className="h-8 w-8 mx-auto mb-2" />
-              <p>Recent reports will appear here</p>
-              <p className="text-sm">Reports functionality coming soon</p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

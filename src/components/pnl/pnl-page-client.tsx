@@ -2,20 +2,12 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useQuery } from "@tanstack/react-query"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
 import { PnLKpiStrip } from "./pnl-kpi-strip"
@@ -23,7 +15,7 @@ import { PnLChannelDonut } from "./pnl-channel-donut"
 import { PnLTrendChart } from "./pnl-trend-chart"
 import { PnLSummaryTable } from "./pnl-summary-table"
 import { PnLTable } from "./pnl-table"
-import { getStorePnL } from "@/app/actions/store-actions"
+import { getStorePnL, recomputeCogsForStore } from "@/app/actions/store-actions"
 
 export interface PnLPageClientProps {
   storeId: string
@@ -34,6 +26,7 @@ export interface PnLPageClientProps {
 export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientProps) {
   const [state, setState] = useState<PnLRangeState>(defaultPnLRangeState)
   const [detailOpen, setDetailOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   const query = useQuery({
     queryKey: [
@@ -55,34 +48,34 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
     },
   })
 
+  const recomputeMutation = useMutation({
+    mutationFn: async () => {
+      const result = await recomputeCogsForStore({ storeId, lookbackDays: 90 })
+      if ("error" in result) throw new Error(result.error)
+      return result
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `Recomputed COGS: ${result.daysProcessed} day(s), ${result.rowsWritten} row(s)`
+      )
+      queryClient.invalidateQueries({ queryKey: ["pnl", storeId] })
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to recompute COGS")
+    },
+  })
+
   const configureHref = `/dashboard/stores/${storeId}/edit`
   const data = query.data
 
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard/pnl">P&amp;L</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{storeName}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
+    <div className="flex flex-col h-full">
+      <EditorialTopbar
+        section="§ 11"
+        title={`P&L · ${storeName}`}
+      />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="flex flex-1 flex-col gap-4 p-4">
         <PnLHeader
           title={`P&L — ${storeName}`}
           state={state}
@@ -137,12 +130,12 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                       : data.kpis.netAfterCommissions / data.kpis.grossSales,
                 },
                 {
-                  label: "Labor + Rent",
-                  value: data.kpis.laborPlusRent,
+                  label: "Fixed Costs",
+                  value: data.kpis.fixedCosts,
                   percentOfSales:
                     data.kpis.grossSales === 0
                       ? 0
-                      : data.kpis.laborPlusRent / data.kpis.grossSales,
+                      : data.kpis.fixedCosts / data.kpis.grossSales,
                   costStyle: true,
                 },
                 {
@@ -161,6 +154,28 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                 bottomLine={data.trend.bottomLine}
               />
             </div>
+
+            {data.cogs.unmappedItems.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex items-baseline justify-between gap-4">
+                  <div>
+                    <strong>COGS is undercounted.</strong>{" "}
+                    {data.cogs.unmappedItems.length} sold item
+                    {data.cogs.unmappedItems.length === 1 ? "" : "s"} ($
+                    {data.cogs.unmappedItems
+                      .reduce((a, b) => a + b.salesRevenue, 0)
+                      .toFixed(0)}{" "}
+                    of sales) aren&apos;t mapped to a recipe yet.
+                  </div>
+                  <a
+                    href="/dashboard/recipes"
+                    className="shrink-0 underline hover:text-amber-700"
+                  >
+                    Build recipes →
+                  </a>
+                </div>
+              </div>
+            )}
 
             <PnLSummaryTable rows={data.rows} configureHref={configureHref} />
 
@@ -199,6 +214,18 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                   Edit fixed costs
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => recomputeMutation.mutate()}
+                disabled={recomputeMutation.isPending}
+              >
+                <RefreshCw
+                  className={`mr-1 h-3 w-3 ${recomputeMutation.isPending ? "animate-spin" : ""}`}
+                />
+                {recomputeMutation.isPending ? "Recomputing…" : "Recompute COGS"}
+              </Button>
             </div>
           </>
         ) : null}

@@ -351,9 +351,21 @@ export function getDateRange(startDate: Date, endDate: Date): Date[] {
 
 export const CUSTOMER_ORDER_COLUMNS = [
   { type: "field", key: "reference_time_local_without_tz" },
-  { type: "field", key: "consolidated_channel_slug" },
-  { type: "field", key: "net_sales" },
+  { type: "field", key: "order_id" },
+  { type: "field", key: "external_order_display_id" },
+  { type: "field", key: "store_id" },
+  { type: "field", key: "ofo_slug" },
   { type: "field", key: "facility_name" },
+  { type: "field", key: "order_status" },
+  { type: "field", key: "acceptance_status" },
+  { type: "field", key: "fulfillment_mode" },
+  { type: "field", key: "subtotal" },
+  { type: "field", key: "tax" },
+  { type: "field", key: "tip" },
+  { type: "field", key: "restaurant_funded_discount" },
+  { type: "field", key: "ofo_funded_discount" },
+  { type: "dimension", key: "total_with_tip" },
+  { type: "dimension", key: "adjusted_commission" },
 ]
 
 export function buildCustomerOrdersBody(
@@ -365,21 +377,256 @@ export function buildCustomerOrdersBody(
 
   return {
     columns: CUSTOMER_ORDER_COLUMNS,
-    sortBy: [{ type: "field", key: "reference_time_local_without_tz", sortOrder: "DESC" }],
+    sortBy: [
+      { type: "field", key: "reference_time_local_without_tz", sortOrder: "DESC" },
+      { type: "field", key: "order_id", sortOrder: "DESC" },
+    ],
     filterSet: [
       { filterType: "dateRangeFilter", minDate, maxDate },
-      { filterType: "namedFilter", name: "all_valid_orders" },
-      { filterType: "namedFilter", name: "paid_order_filter" },
+      { filterType: "namedFilter", name: "excludeD2cPreorders" },
+      { filterType: "namedFilter", name: "excludeFacilitiesWithDataIssues" },
+      { filterType: "namedFilter", name: "invalidCurrency" },
     ],
     scopeSet: [{ key: "store", values: otterStoreIds }],
     dataset: "customer_orders",
-    includeMetricsFilters: true,
     localTime: true,
     includeTotalRowCount: true,
     paginate: true,
     timeCol: ORDERS_TIME_COL,
-    includeRawQueries: false,
-    limit: 10000,
+    useRealTimeDataset: false,
+    limit: 5000,
+  }
+}
+
+// ─── GraphQL client for per-order details ───
+
+const OTTER_GRAPHQL_URL = "https://api.tryotter.com/graphql"
+
+const ORDER_DETAILS_QUERY = `query OrderDetails($input: OrderDetailsInput!) {
+  orderDetails(input: $input) {
+    ... on OrderDetailsResponse {
+      metadata {
+        internalId
+        externalId
+        displayId
+        ofo { slug }
+        store {
+          id
+          facilityV2 { id name }
+          restrictedBrand { id name }
+        }
+        isTest
+      }
+      details {
+        referenceTime
+        referenceTimeLocalWithoutTz
+        orderState
+        subtotal { units nanos }
+        tax { units nanos }
+        tip { units nanos }
+        commission { units nanos }
+        discount { units nanos }
+        ofoFundedDiscount { units nanos }
+        total { units nanos }
+        fulfillmentInfo { fulfillmentMode }
+        customerName
+      }
+      items {
+        skuId
+        name
+        quantity
+        price { units nanos }
+        subItems {
+          skuId
+          name
+          quantity
+          subHeader
+          price { units nanos }
+        }
+      }
+    }
+  }
+}`
+
+function moneyToFloat(m: { units?: number | null; nanos?: number | null } | null | undefined): number {
+  if (!m) return 0
+  const u = m.units ?? 0
+  const n = m.nanos ?? 0
+  return u + n / 1_000_000_000
+}
+
+export type OrderDetailsPayload = {
+  metadata: {
+    internalId: string
+    externalId: string | null
+    displayId: string | null
+    ofo: { slug: string } | null
+    store: {
+      id: string
+      facilityV2: { id: string; name: string } | null
+      restrictedBrand: { id: string; name: string } | null
+    }
+    isTest: boolean
+  }
+  details: {
+    referenceTime: string
+    referenceTimeLocalWithoutTz: string
+    orderState: string | null
+    subtotal: number
+    tax: number
+    tip: number
+    commission: number
+    discount: number
+    ofoFundedDiscount: number
+    total: number
+    fulfillmentMode: string | null
+    customerName: string | null
+  }
+  items: Array<{
+    skuId: string
+    name: string
+    quantity: number
+    price: number
+    subItems: Array<{
+      skuId: string
+      name: string
+      quantity: number
+      subHeader: string | null
+      price: number
+    }>
+  }>
+}
+
+/** POST a GraphQL operation to Otter. Shares the retry + timeout pattern of queryOtterEndpoint. */
+async function queryOtterGraphQL<T>(
+  operationName: string,
+  query: string,
+  variables: Record<string, unknown>
+): Promise<T> {
+  const jwt = await getOtterJwt()
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+
+    let response: Response
+    try {
+      response = await fetch(OTTER_GRAPHQL_URL, {
+        method: "POST",
+        headers: {
+          ...OTTER_HEADERS,
+          Authorization: `Bearer ${jwt}`,
+        },
+        body: JSON.stringify({ operationName, query, variables }),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      clearTimeout(timeout)
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(`Otter GraphQL ${operationName} timed out after 30s`)
+      }
+      throw err
+    }
+    clearTimeout(timeout)
+
+    if (response.status === 403 && attempt < MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, RETRY_BASE_MS * attempt))
+      continue
+    }
+
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(
+        `Otter GraphQL ${operationName} error ${response.status}: ${text.slice(0, 300)}`
+      )
+    }
+
+    const data = await response.json()
+    if (data.errors && data.errors.length > 0) {
+      throw new Error(
+        `Otter GraphQL ${operationName} returned errors: ${JSON.stringify(data.errors).slice(0, 300)}`
+      )
+    }
+    return data.data as T
+  }
+
+  throw new Error(`Otter GraphQL ${operationName}: max retries exceeded`)
+}
+
+/** Fetch enriched per-order details (items + subItems) for a single Otter orderId. */
+export async function fetchOrderDetails(
+  orderId: string
+): Promise<OrderDetailsPayload | null> {
+  type Response = {
+    orderDetails: {
+      metadata: OrderDetailsPayload["metadata"]
+      details: {
+        referenceTime: string
+        referenceTimeLocalWithoutTz: string
+        orderState: string | null
+        subtotal: { units: number; nanos: number } | null
+        tax: { units: number; nanos: number } | null
+        tip: { units: number; nanos: number } | null
+        commission: { units: number; nanos: number } | null
+        discount: { units: number; nanos: number } | null
+        ofoFundedDiscount: { units: number; nanos: number } | null
+        total: { units: number; nanos: number } | null
+        fulfillmentInfo: { fulfillmentMode: string | null } | null
+        customerName: string | null
+      }
+      items: Array<{
+        skuId: string
+        name: string
+        quantity: number
+        price: { units: number; nanos: number } | null
+        subItems: Array<{
+          skuId: string
+          name: string
+          quantity: number
+          subHeader: string | null
+          price: { units: number; nanos: number } | null
+        }> | null
+      }>
+    } | null
+  }
+
+  const data = await queryOtterGraphQL<Response>(
+    "OrderDetails",
+    ORDER_DETAILS_QUERY,
+    { input: { enrichData: true, orderId } }
+  )
+  if (!data?.orderDetails) return null
+
+  const od = data.orderDetails
+  return {
+    metadata: od.metadata,
+    details: {
+      referenceTime: od.details.referenceTime,
+      referenceTimeLocalWithoutTz: od.details.referenceTimeLocalWithoutTz,
+      orderState: od.details.orderState,
+      subtotal: moneyToFloat(od.details.subtotal),
+      tax: moneyToFloat(od.details.tax),
+      tip: moneyToFloat(od.details.tip),
+      commission: moneyToFloat(od.details.commission),
+      discount: moneyToFloat(od.details.discount),
+      ofoFundedDiscount: moneyToFloat(od.details.ofoFundedDiscount),
+      total: moneyToFloat(od.details.total),
+      fulfillmentMode: od.details.fulfillmentInfo?.fulfillmentMode ?? null,
+      customerName: od.details.customerName,
+    },
+    items: od.items.map((it) => ({
+      skuId: it.skuId,
+      name: it.name,
+      quantity: it.quantity,
+      price: moneyToFloat(it.price),
+      subItems: (it.subItems ?? []).map((si) => ({
+        skuId: si.skuId,
+        name: si.name,
+        quantity: si.quantity,
+        subHeader: si.subHeader,
+        price: moneyToFloat(si.price),
+      })),
+    })),
   }
 }
 

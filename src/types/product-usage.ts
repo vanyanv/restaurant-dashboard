@@ -27,7 +27,7 @@ export interface RecipeWithIngredients {
   isConfirmed: boolean
   ingredients: {
     id: string
-    ingredientName: string
+    ingredientName: string | null
     quantity: number
     unit: string
     notes: string | null

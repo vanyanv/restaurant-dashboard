@@ -15,6 +15,9 @@ import {
   type Period,
   type PnLRow,
 } from "@/lib/pnl"
+import type { UnmappedMenuItem } from "@/lib/pnl-cogs"
+import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
+import { CogsStatus } from "@/generated/prisma/client"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -29,6 +32,8 @@ const updateStoreSchema = z.object({
   isActive: z.boolean().optional(),
   fixedMonthlyLabor: z.number().min(0).max(1_000_000).nullable().optional(),
   fixedMonthlyRent: z.number().min(0).max(1_000_000).nullable().optional(),
+  fixedMonthlyTowels: z.number().min(0).max(1_000_000).nullable().optional(),
+  fixedMonthlyCleaning: z.number().min(0).max(1_000_000).nullable().optional(),
   uberCommissionRate: z.number().min(0).max(1).optional(),
   doordashCommissionRate: z.number().min(0).max(1).optional(),
 })
@@ -57,14 +62,6 @@ export async function createStore(formData: FormData) {
         ownerId: session.user.id,
         isActive: true,
       },
-      include: {
-        _count: {
-          select: {
-            managers: true,
-            reports: true,
-          }
-        }
-      }
     })
 
     revalidatePath("/dashboard")
@@ -87,27 +84,9 @@ export async function getStores() {
     }
 
     const stores = await prisma.store.findMany({
-      where: session.user.role === "OWNER" 
-        ? { 
-            ownerId: session.user.id,
-            isActive: true
-          }
-        : {
-            isActive: true,
-            managers: {
-              some: {
-                managerId: session.user.id,
-                isActive: true
-              }
-            }
-          },
-      include: {
-        _count: {
-          select: {
-            managers: true,
-            reports: true,
-          }
-        }
+      where: {
+        ownerId: session.user.id,
+        isActive: true
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -116,106 +95,6 @@ export async function getStores() {
   } catch (error) {
     console.error("Get stores error:", error)
     return []
-  }
-}
-
-export async function getStoreAnalytics() {
-  try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user) {
-      return null
-    }
-
-    const stores = await getStores()
-    
-    if (stores.length === 0) {
-      return {
-        todayReports: 0,
-        totalReports: 0,
-        totalRevenue: 0,
-        averageTips: 0,
-        avgPrepCompletion: 0,
-        trends: {
-          revenueGrowth: 0,
-          currentWeekRevenue: 0,
-          previousWeekRevenue: 0
-        },
-        storeCount: 0
-      }
-    }
-
-    const storeIds = stores.map(s => s.id)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    // Get today's reports
-    const todayReports = await prisma.dailyReport.count({
-      where: {
-        storeId: { in: storeIds },
-        date: {
-          gte: today,
-        }
-      }
-    })
-
-    // Get last 30 days of reports
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-    
-    const reports = await prisma.dailyReport.findMany({
-      where: {
-        storeId: { in: storeIds },
-        date: {
-          gte: thirtyDaysAgo,
-        }
-      }
-    })
-
-    const totalReports = reports.length
-    const totalRevenue = reports.reduce((sum, r) => sum + (r.totalSales || 0), 0)
-    const totalTips = reports.reduce((sum, r) => sum + r.tipCount, 0)
-    const averageTips = totalReports > 0 ? totalTips / totalReports : 0
-    
-    const prepCompletions = reports.map(r => (r.morningPrepCompleted + r.eveningPrepCompleted) / 2)
-    const avgPrepCompletion = prepCompletions.length > 0 
-      ? Math.round(prepCompletions.reduce((sum, p) => sum + p, 0) / prepCompletions.length)
-      : 0
-
-    // Calculate week-over-week growth
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-    const fourteenDaysAgo = new Date()
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
-
-    const currentWeekReports = reports.filter(r => r.date >= sevenDaysAgo)
-    const previousWeekReports = reports.filter(r => 
-      r.date >= fourteenDaysAgo && r.date < sevenDaysAgo
-    )
-
-    const currentWeekRevenue = currentWeekReports.reduce((sum, r) => sum + (r.totalSales || 0), 0)
-    const previousWeekRevenue = previousWeekReports.reduce((sum, r) => sum + (r.totalSales || 0), 0)
-    
-    const revenueGrowth = previousWeekRevenue > 0 
-      ? ((currentWeekRevenue - previousWeekRevenue) / previousWeekRevenue) * 100 
-      : 0
-
-    return {
-      todayReports,
-      totalReports,
-      totalRevenue,
-      averageTips,
-      avgPrepCompletion,
-      trends: {
-        revenueGrowth: Math.round(revenueGrowth * 100) / 100,
-        currentWeekRevenue,
-        previousWeekRevenue
-      },
-      storeCount: stores.length
-    }
-  } catch (error) {
-    console.error("Get analytics error:", error)
-    return null
   }
 }
 
@@ -1809,37 +1688,8 @@ export async function getStoreById(storeId: string) {
     const store = await prisma.store.findFirst({
       where: {
         id: storeId,
-        AND: session.user.role === "OWNER" 
-          ? { ownerId: session.user.id }
-          : {
-              managers: {
-                some: {
-                  managerId: session.user.id,
-                  isActive: true
-                }
-              }
-            }
+        ownerId: session.user.id,
       },
-      include: {
-        _count: {
-          select: {
-            managers: true,
-            reports: true,
-          }
-        },
-        managers: {
-          where: { isActive: true },
-          include: {
-            manager: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              }
-            }
-          }
-        }
-      }
     })
 
     return store
@@ -1861,8 +1711,6 @@ export async function updateStore(storeId: string, formData: FormData) {
       return { error: "Only owners can update stores" }
     }
 
-    const rawLabor = formData.get("fixedMonthlyLabor")
-    const rawRent = formData.get("fixedMonthlyRent")
     const parseOptionalNumber = (v: FormDataEntryValue | null): number | null | undefined => {
       if (v == null) return undefined
       const s = String(v).trim()
@@ -1886,8 +1734,10 @@ export async function updateStore(storeId: string, formData: FormData) {
       address: formData.get("address") || undefined,
       phone: formData.get("phone") || undefined,
       isActive: formData.get("isActive") === "true",
-      fixedMonthlyLabor: parseOptionalNumber(rawLabor),
-      fixedMonthlyRent: parseOptionalNumber(rawRent),
+      fixedMonthlyLabor: parseOptionalNumber(formData.get("fixedMonthlyLabor")),
+      fixedMonthlyRent: parseOptionalNumber(formData.get("fixedMonthlyRent")),
+      fixedMonthlyTowels: parseOptionalNumber(formData.get("fixedMonthlyTowels")),
+      fixedMonthlyCleaning: parseOptionalNumber(formData.get("fixedMonthlyCleaning")),
       uberCommissionRate: parseRate(formData.get("uberCommissionRate")),
       doordashCommissionRate: parseRate(formData.get("doordashCommissionRate")),
     })
@@ -1907,14 +1757,6 @@ export async function updateStore(storeId: string, formData: FormData) {
     const updatedStore = await prisma.store.update({
       where: { id: storeId },
       data: validatedData,
-      include: {
-        _count: {
-          select: {
-            managers: true,
-            reports: true,
-          }
-        }
-      }
     })
 
     revalidatePath("/dashboard/stores")
@@ -1943,18 +1785,10 @@ export async function deleteStore(storeId: string) {
 
     // Verify store exists and user owns it
     const existingStore = await prisma.store.findFirst({
-      where: { 
+      where: {
         id: storeId,
         ownerId: session.user.id
       },
-      include: {
-        _count: {
-          select: {
-            reports: true,
-            managers: true,
-          }
-        }
-      }
     })
 
     if (!existingStore) {
@@ -1964,12 +1798,6 @@ export async function deleteStore(storeId: string) {
     // Soft delete - set as inactive instead of hard delete
     await prisma.store.update({
       where: { id: storeId },
-      data: { isActive: false }
-    })
-
-    // Deactivate all manager assignments
-    await prisma.storeManager.updateMany({
-      where: { storeId: storeId },
       data: { isActive: false }
     })
 
@@ -2018,298 +1846,6 @@ export async function toggleStoreStatus(storeId: string) {
   } catch (error) {
     console.error("Toggle store status error:", error)
     return { error: "Failed to update store status" }
-  }
-}
-
-export async function getRecentReports(storeId?: string, limit: number = 15) {
-  try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user) {
-      return []
-    }
-
-    const whereClause = session.user.role === "OWNER"
-      ? {
-          store: { ownerId: session.user.id },
-          ...(storeId ? { storeId } : {})
-        }
-      : {
-          managerId: session.user.id,
-          ...(storeId ? { storeId } : {})
-        }
-
-    const reports = await prisma.dailyReport.findMany({
-      where: whereClause,
-      include: {
-        store: {
-          select: {
-            id: true,
-            name: true
-          }
-        },
-        manager: {
-          select: {
-            name: true,
-            email: true
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit
-    })
-
-    return reports
-  } catch (error) {
-    console.error("Get recent reports error:", error)
-    return []
-  }
-}
-
-export async function getStoreMetrics(storeId: string, days: number = 30) {
-  try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user) {
-      return null
-    }
-
-    // Verify access to store
-    const store = await getStoreById(storeId)
-    if (!store) {
-      return null
-    }
-
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    
-    const reports = await prisma.dailyReport.findMany({
-      where: {
-        storeId,
-        date: {
-          gte: startDate,
-        }
-      },
-      include: {
-        manager: {
-          select: {
-            name: true,
-            email: true
-          }
-        }
-      },
-      orderBy: { date: 'desc' }
-    })
-
-    // Calculate daily revenue trends
-    const revenueByDate = reports.reduce((acc: Record<string, number>, report) => {
-      const dateStr = report.date.toISOString().split('T')[0]
-      acc[dateStr] = (acc[dateStr] || 0) + (report.totalSales || 0)
-      return acc
-    }, {})
-
-    const revenueTrends = Object.entries(revenueByDate)
-      .map(([date, revenue]) => ({ date, revenue }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-
-    // Calculate prep task completion rates
-    const prepTasks = ['prepMeat', 'prepSauce', 'prepOnionsSliced', 'prepOnionsDiced', 'prepTomatoesSliced', 'prepLettuce'] as const
-    const prepCompletion = prepTasks.map(task => ({
-      task: task.replace('prep', '').replace(/([A-Z])/g, ' $1').trim(),
-      completed: reports.filter(r => r[task]).length,
-      total: reports.length,
-      percentage: reports.length > 0 ? Math.round((reports.filter(r => r[task]).length / reports.length) * 100) : 0
-    }))
-
-    // Manager performance
-    const managerStats = reports.reduce((acc: Record<string, any>, report) => {
-      const managerId = report.managerId
-      if (!acc[managerId]) {
-        acc[managerId] = {
-          name: report.manager.name,
-          email: report.manager.email,
-          reportsCount: 0,
-          totalRevenue: 0,
-          avgPrepCompletion: 0,
-          prepScores: []
-        }
-      }
-      acc[managerId].reportsCount++
-      acc[managerId].totalRevenue += report.totalSales || 0
-      const prepScore = (report.morningPrepCompleted + report.eveningPrepCompleted) / 2
-      acc[managerId].prepScores.push(prepScore)
-      return acc
-    }, {})
-
-    // Calculate average prep completion for each manager
-    Object.values(managerStats).forEach((manager: any) => {
-      manager.avgPrepCompletion = manager.prepScores.length > 0 
-        ? Math.round(manager.prepScores.reduce((sum: number, score: number) => sum + score, 0) / manager.prepScores.length)
-        : 0
-      delete manager.prepScores // Remove temporary array
-    })
-
-    // Shift performance comparison
-    const morningReports = reports.filter(r => r.shift === 'MORNING' || r.shift === 'BOTH')
-    const eveningReports = reports.filter(r => r.shift === 'EVENING' || r.shift === 'BOTH')
-
-    const shiftComparison = {
-      morning: {
-        count: morningReports.length,
-        avgRevenue: morningReports.length > 0 ? morningReports.reduce((sum, r) => sum + (r.totalSales || 0), 0) / morningReports.length : 0,
-        avgPrepCompletion: morningReports.length > 0 ? Math.round(morningReports.reduce((sum, r) => sum + r.morningPrepCompleted, 0) / morningReports.length) : 0
-      },
-      evening: {
-        count: eveningReports.length,
-        avgRevenue: eveningReports.length > 0 ? eveningReports.reduce((sum, r) => sum + (r.totalSales || 0), 0) / eveningReports.length : 0,
-        avgPrepCompletion: eveningReports.length > 0 ? Math.round(eveningReports.reduce((sum, r) => sum + r.eveningPrepCompleted, 0) / eveningReports.length) : 0
-      }
-    }
-
-    // Till variance analysis
-    const tillVariances = reports.map(r => ({
-      date: r.date.toISOString().split('T')[0],
-      shift: r.shift,
-      variance: r.endingAmount - r.startingAmount,
-      manager: r.manager.name
-    }))
-
-    return {
-      store,
-      totalReports: reports.length,
-      dateRange: { start: startDate, end: new Date() },
-      revenueTrends,
-      prepCompletion,
-      managerStats: Object.values(managerStats),
-      shiftComparison,
-      tillVariances,
-      summary: {
-        totalRevenue: reports.reduce((sum, r) => sum + (r.totalSales || 0), 0),
-        avgTips: reports.length > 0 ? reports.reduce((sum, r) => sum + (r.cashTips || 0), 0) / reports.length : 0,
-        avgPrepCompletion: reports.length > 0 ? Math.round(reports.reduce((sum, r) => sum + ((r.morningPrepCompleted + r.eveningPrepCompleted) / 2), 0) / reports.length) : 0
-      }
-    }
-  } catch (error) {
-    console.error("Get store metrics error:", error)
-    return null
-  }
-}
-
-export async function getTodayReportStatus() {
-  try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user || session.user.role !== "OWNER") {
-      return []
-    }
-
-    const stores = await getStores()
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const todayReports = await prisma.dailyReport.findMany({
-      where: {
-        storeId: { in: stores.map(s => s.id) },
-        date: {
-          gte: today,
-        }
-      },
-      select: {
-        storeId: true,
-        shift: true,
-        managerId: true,
-        manager: {
-          select: {
-            name: true
-          }
-        }
-      }
-    })
-
-    // Create status grid for each store
-    const statusGrid = stores.map(store => {
-      const storeReports = todayReports.filter(r => r.storeId === store.id)
-      const morningReport = storeReports.find(r => r.shift === 'MORNING' || r.shift === 'BOTH')
-      const eveningReport = storeReports.find(r => r.shift === 'EVENING' || r.shift === 'BOTH')
-
-      return {
-        storeId: store.id,
-        storeName: store.name,
-        morning: {
-          submitted: !!morningReport,
-          manager: morningReport?.manager.name || null
-        },
-        evening: {
-          submitted: !!eveningReport,
-          manager: eveningReport?.manager.name || null
-        }
-      }
-    })
-
-    return statusGrid
-  } catch (error) {
-    console.error("Get today report status error:", error)
-    return []
-  }
-}
-
-export async function getPerformanceAlerts() {
-  try {
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user) {
-      return []
-    }
-
-    const stores = await getStores()
-    const alerts: any[] = []
-
-    // Check for missing reports today
-    const statusGrid = await getTodayReportStatus()
-    statusGrid.forEach(store => {
-      if (!store.morning.submitted) {
-        alerts.push({
-          type: 'missing_report',
-          severity: 'warning',
-          storeId: store.storeId,
-          storeName: store.storeName,
-          message: 'Missing morning report',
-          shift: 'MORNING'
-        })
-      }
-      if (!store.evening.submitted) {
-        alerts.push({
-          type: 'missing_report',
-          severity: 'warning',
-          storeId: store.storeId,
-          storeName: store.storeName,
-          message: 'Missing evening report',
-          shift: 'EVENING'
-        })
-      }
-    })
-
-    // Check for low prep completion in recent reports
-    const recentReports = await getRecentReports(undefined, 50)
-    recentReports.forEach(report => {
-      const avgPrep = (report.morningPrepCompleted + report.eveningPrepCompleted) / 2
-      if (avgPrep < 70) {
-        alerts.push({
-          type: 'low_prep',
-          severity: 'error',
-          storeId: report.storeId,
-          storeName: report.store.name,
-          message: `Low prep completion: ${Math.round(avgPrep)}%`,
-          manager: report.manager.name,
-          date: report.date
-        })
-      }
-    })
-
-    return alerts.slice(0, 10) // Limit to 10 most recent alerts
-  } catch (error) {
-    console.error("Get performance alerts error:", error)
-    return []
   }
 }
 
@@ -2498,7 +2034,7 @@ export type StorePnLResult =
       kpis: {
         grossSales: number
         netAfterCommissions: number
-        laborPlusRent: number
+        fixedCosts: number
         bottomLine: number
         marginPct: number
       }
@@ -2507,8 +2043,69 @@ export type StorePnLResult =
         totalSales: number[]
         bottomLine: number[]
       }
+      cogs: {
+        totalCogs: number
+        grossProfit: number
+        grossMarginPct: number
+        unmappedItems: UnmappedMenuItem[]
+      }
     }
   | { error: string }
+
+type DailyCogsRow = {
+  date: Date
+  itemName: string
+  category: string
+  qtySold: number
+  salesRevenue: number
+  lineCost: number
+  status: CogsStatus
+  recipeId: string | null
+}
+
+/**
+ * Turn DailyCogsItem rows into (per-period cogs totals, aggregated unmapped items).
+ * Replaces the old per-request `computeCogsForPeriods` walk.
+ */
+function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
+  cogsValues: number[]
+  unmappedItems: UnmappedMenuItem[]
+} {
+  const cogsValues = periods.map(() => 0)
+  const unmappedAgg = new Map<string, UnmappedMenuItem>()
+
+  for (const row of rows) {
+    const t = row.date.getTime()
+    const idx = periods.findIndex(
+      (p) => t >= p.startDate.getTime() && t <= p.endDate.getTime()
+    )
+    if (idx === -1) continue
+
+    if (row.status === CogsStatus.UNMAPPED) {
+      const key = `${row.itemName}:::${row.category}`
+      const existing = unmappedAgg.get(key)
+      if (existing) {
+        existing.qtySold += row.qtySold
+        existing.salesRevenue += row.salesRevenue
+      } else {
+        unmappedAgg.set(key, {
+          itemName: row.itemName,
+          category: row.category,
+          qtySold: row.qtySold,
+          salesRevenue: row.salesRevenue,
+        })
+      }
+      continue
+    }
+
+    cogsValues[idx] += row.lineCost
+  }
+
+  const unmappedItems = Array.from(unmappedAgg.values()).sort(
+    (a, b) => b.salesRevenue - a.salesRevenue
+  )
+  return { cogsValues, unmappedItems }
+}
 
 export async function getStorePnL(input: {
   storeId: string
@@ -2528,6 +2125,8 @@ export async function getStorePnL(input: {
         name: true,
         fixedMonthlyLabor: true,
         fixedMonthlyRent: true,
+        fixedMonthlyTowels: true,
+        fixedMonthlyCleaning: true,
         uberCommissionRate: true,
         doordashCommissionRate: true,
       },
@@ -2545,12 +2144,18 @@ export async function getStorePnL(input: {
         kpis: {
           grossSales: 0,
           netAfterCommissions: 0,
-          laborPlusRent: 0,
+          fixedCosts: 0,
           bottomLine: 0,
           marginPct: 0,
         },
         channelMix: [],
         trend: { totalSales: [], bottomLine: [] },
+        cogs: {
+          totalCogs: 0,
+          grossProfit: 0,
+          grossMarginPct: 0,
+          unmappedItems: [],
+        },
       }
     }
 
@@ -2578,12 +2183,41 @@ export async function getStorePnL(input: {
     })
 
     const bucketed = bucketSummariesByPeriod(summaries, periods)
-    const computed = computeStorePnL({ bucketed, periods, store })
+    const cogsRows = await prisma.dailyCogsItem.findMany({
+      where: {
+        storeId: store.id,
+        date: { gte: overallStart, lte: overallEnd },
+      },
+      select: {
+        date: true,
+        itemName: true,
+        category: true,
+        qtySold: true,
+        salesRevenue: true,
+        lineCost: true,
+        status: true,
+        recipeId: true,
+      },
+    })
+    const cogs = summarizeDailyCogs(cogsRows, periods)
+    const computed = computeStorePnL({
+      bucketed,
+      periods,
+      store,
+      cogsValues: cogs.cogsValues,
+    })
 
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
     const grossSales = sum(computed.totalSales)
     const netAfterCommissions = sum(computed.netAfterCommissions)
-    const laborPlusRent = sum(computed.laborValues) + sum(computed.rentValues)
+    const totalCogs = sum(computed.cogsValues)
+    const grossProfit = sum(computed.grossProfit)
+    const grossMarginPct = grossSales === 0 ? 0 : grossProfit / grossSales
+    const fixedCosts =
+      sum(computed.laborValues) +
+      sum(computed.rentValues) +
+      sum(computed.towelsValues) +
+      sum(computed.cleaningValues)
     const bottomLine = sum(computed.bottomLine)
     const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
 
@@ -2606,7 +2240,7 @@ export async function getStorePnL(input: {
       kpis: {
         grossSales,
         netAfterCommissions,
-        laborPlusRent,
+        fixedCosts,
         bottomLine,
         marginPct,
       },
@@ -2614,6 +2248,12 @@ export async function getStorePnL(input: {
       trend: {
         totalSales: computed.totalSales,
         bottomLine: computed.bottomLine,
+      },
+      cogs: {
+        totalCogs,
+        grossProfit,
+        grossMarginPct,
+        unmappedItems: cogs.unmappedItems,
       },
     }
   } catch (error) {
@@ -2631,7 +2271,7 @@ export type AllStoresPnLResult =
       combined: {
         grossSales: number
         netAfterCommissions: number
-        laborPlusRent: number
+        fixedCosts: number
         bottomLine: number
         marginPct: number
       }
@@ -2640,7 +2280,7 @@ export type AllStoresPnLResult =
         storeName: string
         grossSales: number
         netAfterCommissions: number
-        laborPlusRent: number
+        fixedCosts: number
         bottomLine: number
         marginPct: number
         channelMix: Array<{ channel: string; amount: number }>
@@ -2667,6 +2307,8 @@ export async function getAllStoresPnL(input: {
         name: true,
         fixedMonthlyLabor: true,
         fixedMonthlyRent: true,
+        fixedMonthlyTowels: true,
+        fixedMonthlyCleaning: true,
         uberCommissionRate: true,
         doordashCommissionRate: true,
       },
@@ -2680,7 +2322,7 @@ export async function getAllStoresPnL(input: {
         combined: {
           grossSales: 0,
           netAfterCommissions: 0,
-          laborPlusRent: 0,
+          fixedCosts: 0,
           bottomLine: 0,
           marginPct: 0,
         },
@@ -2723,17 +2365,49 @@ export async function getAllStoresPnL(input: {
 
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
 
+    const allCogsRows = await prisma.dailyCogsItem.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: overallStart, lte: overallEnd },
+      },
+      select: {
+        storeId: true,
+        date: true,
+        itemName: true,
+        category: true,
+        qtySold: true,
+        salesRevenue: true,
+        lineCost: true,
+        status: true,
+        recipeId: true,
+      },
+    })
+    const cogsByStore = new Map<string, DailyCogsRow[]>()
+    for (const r of allCogsRows) {
+      const arr = cogsByStore.get(r.storeId) ?? []
+      arr.push(r)
+      cogsByStore.set(r.storeId, arr)
+    }
+
     const perStore = stores.map((store) => {
       const storeSummaries = byStore.get(store.id) ?? []
       const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
-      const computed = computeStorePnL({ bucketed, periods, store })
+      const storeCogs = summarizeDailyCogs(cogsByStore.get(store.id) ?? [], periods)
+      const computed = computeStorePnL({
+        bucketed,
+        periods,
+        store,
+        cogsValues: storeCogs.cogsValues,
+      })
 
       // Aggregate per-period arrays to range totals.
       const grossSales = sum(computed.totalSales)
       const netAfterCommissions = sum(computed.netAfterCommissions)
-      const laborTotal = sum(computed.laborValues)
-      const rentTotal = sum(computed.rentValues)
-      const laborPlusRent = laborTotal + rentTotal
+      const fixedCosts =
+        sum(computed.laborValues) +
+        sum(computed.rentValues) +
+        sum(computed.towelsValues) +
+        sum(computed.cleaningValues)
       const bottomLine = sum(computed.bottomLine)
       const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
 
@@ -2753,7 +2427,7 @@ export async function getAllStoresPnL(input: {
         storeName: store.name,
         grossSales,
         netAfterCommissions,
-        laborPlusRent,
+        fixedCosts,
         bottomLine,
         marginPct,
         channelMix: channelMix(totalChannelVals),
@@ -2765,7 +2439,7 @@ export async function getAllStoresPnL(input: {
     const combined = {
       grossSales: sum(perStore.map((p) => p.grossSales)),
       netAfterCommissions: sum(perStore.map((p) => p.netAfterCommissions)),
-      laborPlusRent: sum(perStore.map((p) => p.laborPlusRent)),
+      fixedCosts: sum(perStore.map((p) => p.fixedCosts)),
       bottomLine: sum(perStore.map((p) => p.bottomLine)),
       marginPct: 0,
     }
@@ -2782,5 +2456,52 @@ export async function getAllStoresPnL(input: {
     console.error("getAllStoresPnL error:", error)
     const msg = error instanceof Error ? error.message : String(error)
     return { error: `Failed to load P&L: ${msg.slice(0, 300)}` }
+  }
+}
+
+/**
+ * Force a full recompute of DailyCogsItem rows for one store across the last
+ * `lookbackDays` days. Useful after a retroactive correction (e.g., editing an
+ * old invoice). Safe to call repeatedly; idempotent.
+ */
+export async function recomputeCogsForStore(input: {
+  storeId: string
+  lookbackDays?: number
+}): Promise<
+  | { daysProcessed: number; rowsWritten: number }
+  | { error: string }
+> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return { error: "Unauthorized" }
+    if (session.user.role !== "OWNER")
+      return { error: "P&L is restricted to owners" }
+
+    const store = await prisma.store.findFirst({
+      where: { id: input.storeId, ownerId: session.user.id },
+      select: { id: true },
+    })
+    if (!store) return { error: "Store not found" }
+
+    const lookbackDays = input.lookbackDays ?? 90
+    const endDate = new Date()
+    endDate.setUTCHours(0, 0, 0, 0)
+    const startDate = new Date(endDate)
+    startDate.setUTCDate(startDate.getUTCDate() - lookbackDays)
+
+    const result = await recomputeDailyCogsForRange({
+      storeId: store.id,
+      startDate,
+      endDate,
+      ownerId: session.user.id,
+    })
+
+    revalidatePath(`/dashboard/pnl/${store.id}`)
+    revalidatePath(`/dashboard/pnl`)
+    return result
+  } catch (error) {
+    console.error("recomputeCogsForStore error:", error)
+    const msg = error instanceof Error ? error.message : String(error)
+    return { error: `Failed to recompute COGS: ${msg.slice(0, 300)}` }
   }
 }

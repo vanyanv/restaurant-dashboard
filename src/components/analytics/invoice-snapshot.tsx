@@ -5,7 +5,6 @@ import Link from "next/link"
 import { ArrowRight, FileText, Search } from "lucide-react"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   InvoiceKpis,
   InvoiceBreakdownData,
@@ -48,9 +47,11 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
   const [viewBy, setViewBy] = useState<"store" | "vendor">("store")
   const [search, setSearch] = useState("")
 
-  const displayedRows = viewBy === "store" ? breakdown.storeRows : breakdown.vendorRows
+  const displayedRows =
+    viewBy === "store" ? breakdown.storeRows : breakdown.vendorRows
   const columns = viewBy === "store" ? STORE_COLUMNS : VENDOR_COLUMNS
-  const totals = viewBy === "store" ? breakdown.storeTotals : breakdown.vendorTotals
+  const totals =
+    viewBy === "store" ? breakdown.storeTotals : breakdown.vendorTotals
 
   const filteredRows = search
     ? displayedRows.filter((r) =>
@@ -63,56 +64,62 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
       )
     : displayedRows
 
+  const setView = (v: "store" | "vendor") => {
+    setViewBy(v)
+    setSearch("")
+  }
+
   return (
-    <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+    <div className="relative rounded-none border border-(--hairline) bg-[rgba(255,253,248,0.68)] shadow-none overflow-hidden">
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 h-px w-5 bg-(--accent) opacity-80"
+      />
+
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 py-2 border-b border-border bg-muted/30">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 border-b border-dotted border-(--hairline-bold) bg-transparent px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold text-foreground">
-              Invoice Spending
-            </h3>
-            <span className="text-[11px] text-muted-foreground">
-              Last 30 days
-            </span>
+            <FileText className="h-3 w-3 text-(--ink-faint)" />
+            <span className="editorial-section-label">Invoices · 30 days</span>
           </div>
-          <ToggleGroup
-            type="single"
-            value={viewBy}
-            onValueChange={(v) => {
-              if (v) {
-                setViewBy(v as "store" | "vendor")
-                setSearch("")
-              }
-            }}
-            variant="outline"
-            className="h-7"
-          >
-            <ToggleGroupItem value="store" className="h-6 px-2 text-xs">
-              Store
-            </ToggleGroupItem>
-            <ToggleGroupItem value="vendor" className="h-6 px-2 text-xs">
-              Vendor
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <h3 className="font-display-tight text-[22px] leading-none text-(--ink)">
+            Invoice Spending
+          </h3>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setView("store")}
+              aria-pressed={viewBy === "store"}
+              className={cn("toolbar-btn", viewBy === "store" && "active")}
+            >
+              Store
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("vendor")}
+              aria-pressed={viewBy === "vendor"}
+              className={cn("toolbar-btn", viewBy === "vendor" && "active")}
+            >
+              Vendor
+            </button>
+          </div>
+          <label className="search-shell !min-w-0 sm:!min-w-[200px]">
+            <Search className="h-3.5 w-3.5 text-(--ink-faint)" />
             <input
               type="text"
               placeholder={
-                viewBy === "store" ? "Search stores..." : "Search vendors..."
+                viewBy === "store" ? "Search stores…" : "Search vendors…"
               }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-full sm:w-[180px] rounded-md border border-input bg-background pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
-          </div>
+          </label>
           <Link
             href="/dashboard/invoices"
-            className="flex items-center gap-1 text-xs text-primary hover:underline whitespace-nowrap"
+            className="flex items-center gap-1 border-b border-(--ink) font-[family-name:var(--font-dm-sans)] text-[11px] uppercase tracking-[0.14em] text-(--ink) transition-colors hover:border-(--accent) hover:text-(--accent)"
           >
             View All
             <ArrowRight className="h-3 w-3" />
@@ -124,14 +131,14 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
       <div className="relative overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th className="sticky left-0 z-20 bg-muted/95 backdrop-blur-sm px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground min-w-[160px]">
+            <tr className="border-b border-(--hairline-bold) bg-[rgba(0,0,0,0.02)]">
+              <th className="sticky left-0 z-20 min-w-[160px] bg-[rgba(244,236,223,0.95)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.16em] text-(--ink-muted) backdrop-blur-sm">
                 {viewBy === "store" ? "Store" : "Vendor"}
               </th>
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap min-w-[100px]"
+                  className="min-w-[100px] whitespace-nowrap px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.16em] text-(--ink-muted)"
                 >
                   {col.label}
                 </th>
@@ -140,7 +147,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
           </thead>
 
           <tbody>
-            {filteredRows.map((row, idx) => {
+            {filteredRows.map((row) => {
               const isStore = viewBy === "store"
               const name = isStore
                 ? (row as InvoiceStoreRow).storeName
@@ -152,28 +159,28 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
               return (
                 <tr
                   key={rowKey}
-                  className={cn(
-                    "group border-b border-border/40 transition-colors hover:bg-primary/[0.03]",
-                    idx % 2 === 1 && "bg-muted/15"
-                  )}
+                  className="group border-b border-(--hairline) transition-colors hover:bg-[rgba(220,38,38,0.028)]"
                 >
-                  <td className="sticky left-0 z-10 bg-card group-hover:bg-primary/[0.03] px-3 py-2 transition-colors">
-                    <div className="flex items-center gap-1">
-                      <span className="absolute left-0 top-0 h-full w-[3px] bg-transparent group-hover:bg-primary transition-colors" />
+                  <td className="sticky left-0 z-10 bg-[rgba(255,253,248,0.98)] px-3 py-2 transition-colors group-hover:bg-[rgba(250,232,232,0.98)]">
+                    <div className="relative flex items-center gap-1">
+                      <span
+                        aria-hidden
+                        className="absolute -left-3 top-[10%] bottom-[10%] w-[3px] origin-center scale-y-0 bg-(--accent) transition-transform duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] group-hover:scale-y-100"
+                      />
                       {isStore && (row as InvoiceStoreRow).storeId ? (
                         <Link
                           href={`/dashboard/invoices?storeId=${(row as InvoiceStoreRow).storeId}`}
-                          className="font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors"
+                          className="font-medium text-(--ink) underline-offset-2 transition-colors hover:text-(--accent) hover:underline"
                         >
                           {name}
                         </Link>
                       ) : (
                         <span
                           className={cn(
-                            "font-medium text-foreground",
+                            "font-medium text-(--ink)",
                             isStore &&
                               !(row as InvoiceStoreRow).storeId &&
-                              "text-muted-foreground italic"
+                              "italic text-(--ink-muted)"
                           )}
                         >
                           {name}
@@ -189,7 +196,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
                       <td key={col.key} className="px-3 py-2 text-right">
                         <span
                           className={cn(
-                            "font-mono-numbers text-sm whitespace-nowrap",
+                            "text-sm tabular-nums whitespace-nowrap",
                             col.highlight &&
                               val > 0 &&
                               "text-rose-600 dark:text-rose-400 font-medium"
@@ -207,7 +214,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
               <tr>
                 <td
                   colSpan={columns.length + 1}
-                  className="px-4 py-8 text-center text-sm text-muted-foreground"
+                  className="px-4 py-8 text-center text-sm text-(--ink-muted)"
                 >
                   No {viewBy === "store" ? "stores" : "vendors"} match
                   &ldquo;{search}&rdquo;
@@ -217,9 +224,9 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
           </tbody>
 
           <tfoot>
-            <tr className="border-t-2 border-foreground/15 bg-muted/30">
-              <td className="sticky left-0 z-10 bg-muted/90 backdrop-blur-sm px-3 py-2">
-                <span className="text-xs font-bold uppercase tracking-widest text-foreground">
+            <tr className="border-t-2 border-(--hairline-bold) bg-[rgba(0,0,0,0.03)]">
+              <td className="sticky left-0 z-10 bg-[rgba(244,236,223,0.95)] px-3 py-2 backdrop-blur-sm">
+                <span className="font-[family-name:var(--font-dm-sans)] text-[10px] font-bold uppercase tracking-[0.22em] text-(--ink)">
                   Total
                 </span>
               </td>
@@ -229,7 +236,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
                   <td key={col.key} className="px-3 py-2 text-right">
                     <span
                       className={cn(
-                        "font-mono-numbers text-sm font-semibold whitespace-nowrap",
+                        "text-sm tabular-nums font-semibold whitespace-nowrap",
                         col.highlight &&
                           val > 0 &&
                           "text-rose-600 dark:text-rose-400"
@@ -246,8 +253,8 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
       </div>
 
       {/* Row count footer */}
-      <div className="px-3 py-1.5 border-t border-border/50 bg-muted/20">
-        <span className="text-[11px] text-muted-foreground">
+      <div className="border-t border-(--hairline) bg-transparent px-4 py-2">
+        <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
           {filteredRows.length} of {displayedRows.length}{" "}
           {viewBy === "store" ? "store" : "vendor"}
           {displayedRows.length !== 1 ? "s" : ""}

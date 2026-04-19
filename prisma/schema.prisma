@@ -9,7 +9,6 @@ datasource db {
 
 enum Role {
   OWNER
-  MANAGER
 }
 
 enum Shift {
@@ -26,6 +25,12 @@ enum InvoiceStatus {
   REJECTED
 }
 
+enum CogsStatus {
+  COSTED
+  UNMAPPED
+  MISSING_COST
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -36,10 +41,10 @@ model User {
   updatedAt     DateTime  @updatedAt
   
   // Relations
-  ownedStores   Store[]   @relation("StoreOwner")
-  managedStores StoreManager[]
-  reports       DailyReport[]
-  invoices      Invoice[]
+  ownedStores          Store[]   @relation("StoreOwner")
+  invoices             Invoice[]
+  recipes              Recipe[]
+  canonicalIngredients CanonicalIngredient[]
 
   @@index([email])
 }
@@ -64,8 +69,10 @@ model Store {
   yelpLastSearch   DateTime? // Prevent excessive API calls
 
   // Fixed cost inputs for P&L (monthly figures; converted per period when displayed)
-  fixedMonthlyLabor Float?
-  fixedMonthlyRent  Float?
+  fixedMonthlyLabor    Float?
+  fixedMonthlyRent     Float?
+  fixedMonthlyTowels   Float? // Towels/linen service; entered weekly in UI, stored as monthly equivalent
+  fixedMonthlyCleaning Float? // Recurring deep-cleaning service
 
   // Platform commission rates (decimal, e.g. 0.21 = 21%). Applied to tpGrossSales on the P&L.
   uberCommissionRate     Float @default(0.21)
@@ -73,83 +80,20 @@ model Store {
   
   // Relations
   owner           User      @relation("StoreOwner", fields: [ownerId], references: [id])
-  managers        StoreManager[]
-  reports         DailyReport[]
   prepTasks       PrepTask[]
   otterStores     OtterStore[]
   otterSummaries      OtterDailySummary[]
   otterMenuCategories OtterMenuCategory[]
   otterMenuItems      OtterMenuItem[]
   otterRatings        OtterRating[]
-  invoices        Invoice[]
-  recipes          Recipe[]
+  invoices          Invoice[]
   ingredientAliases IngredientAlias[]
+  otterItemMappings OtterItemMapping[]
+  otterOrders       OtterOrder[]
+  dailyCogsItems    DailyCogsItem[]
 
   @@index([ownerId])
   @@index([yelpBusinessId])
-}
-
-model StoreManager {
-  id          String    @id @default(cuid())
-  storeId     String
-  managerId   String
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  
-  // Relations
-  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  manager     User      @relation(fields: [managerId], references: [id], onDelete: Cascade)
-  
-  @@unique([storeId, managerId])
-  @@index([storeId])
-  @@index([managerId])
-}
-
-model DailyReport {
-  id                   String    @id @default(cuid())
-  storeId              String
-  date                 DateTime  @db.Date
-  shift                Shift
-  
-  // Financial data
-  startingAmount       Float
-  endingAmount         Float
-  totalSales           Float?
-  cashSales            Float?
-  cardSales            Float?
-  tipCount             Float
-  cashTips             Float?    // New field for cash tips
-  
-  // Prep completion
-  morningPrepCompleted Int       // Percentage 0-100
-  eveningPrepCompleted Int       // Percentage 0-100
-  
-  // Specific prep completion checkboxes
-  prepMeat             Boolean   @default(false)
-  prepSauce            Boolean   @default(false)
-  prepOnionsSliced     Boolean   @default(false)
-  prepOnionsDiced      Boolean   @default(false)
-  prepTomatoesSliced   Boolean   @default(false)
-  prepLettuce          Boolean   @default(false)
-  
-  // Additional info
-  managerId            String
-  notes                String?
-  weatherCondition     String?
-  customerCount        Int?
-  
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  
-  // Relations
-  store                Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  manager              User      @relation(fields: [managerId], references: [id])
-  prepTaskStatus       PrepTaskStatus[]
-  
-  @@unique([storeId, date, shift])
-  @@index([storeId])
-  @@index([date])
-  @@index([managerId])
 }
 
 model OtterStore {
@@ -293,26 +237,8 @@ model PrepTask {
   
   // Relations
   store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  status      PrepTaskStatus[]
-  
+
   @@index([storeId])
-}
-
-model PrepTaskStatus {
-  id            String        @id @default(cuid())
-  reportId      String
-  taskId        String
-  isCompleted   Boolean       @default(false)
-  completedAt   DateTime?
-  notes         String?
-
-  // Relations
-  report        DailyReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  task          PrepTask      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@unique([reportId, taskId])
-  @@index([reportId])
-  @@index([taskId])
 }
 
 model Invoice {
@@ -404,52 +330,189 @@ model InvoiceSyncLog {
 }
 
 model Recipe {
-  id            String   @id @default(cuid())
-  storeId       String
-  itemName      String
-  category      String
+  id                 String   @id @default(cuid())
+  ownerId            String
+  itemName           String
+  category           String
   servingSize        Float    @default(1)
   notes              String?
   foodCostOverride   Float?
+  isSellable         Boolean  @default(true)
   isAiGenerated      Boolean  @default(false)
-  isConfirmed   Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isConfirmed        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  ingredients   RecipeIngredient[]
+  owner              User               @relation(fields: [ownerId], references: [id])
+  ingredients        RecipeIngredient[]
+  usedInIngredients  RecipeIngredient[] @relation("ComponentRecipe")
+  otterItemMappings  OtterItemMapping[]
+  dailyCogsItems     DailyCogsItem[]
 
-  @@unique([storeId, itemName, category])
-  @@index([storeId])
+  @@unique([ownerId, itemName, category])
+  @@index([ownerId])
 }
 
+/// A line in a recipe. Exactly one of `canonicalIngredientId` or `componentRecipeId`
+/// must be set; this is enforced by a DB CHECK constraint in the migration.
 model RecipeIngredient {
-  id              String   @id @default(cuid())
-  recipeId        String
-  ingredientName  String
-  quantity        Float
-  unit            String
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  recipeId              String
+  canonicalIngredientId String?
+  componentRecipeId     String?
+  ingredientName        String?
+  quantity              Float
+  unit                  String
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  recipe          Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipe               Recipe               @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  canonicalIngredient  CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: Restrict)
+  componentRecipe      Recipe?              @relation("ComponentRecipe", fields: [componentRecipeId], references: [id], onDelete: Restrict)
 
   @@index([recipeId])
+  @@index([canonicalIngredientId])
+  @@index([componentRecipeId])
+}
+
+model CanonicalIngredient {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String
+  defaultUnit String
+  category    String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner              User               @relation(fields: [ownerId], references: [id])
+  aliases            IngredientAlias[]
+  recipeIngredients  RecipeIngredient[]
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
 }
 
 model IngredientAlias {
-  id                String   @id @default(cuid())
-  storeId           String
-  canonicalName     String
-  rawName           String
-  conversionFactor  Float    @default(1)
-  fromUnit          String
-  toUnit            String
-  createdAt         DateTime @default(now())
+  id                    String   @id @default(cuid())
+  storeId               String
+  canonicalIngredientId String?
+  canonicalName         String
+  rawName               String
+  conversionFactor      Float    @default(1)
+  fromUnit              String
+  toUnit                String
+  createdAt             DateTime @default(now())
 
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store                Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  canonicalIngredient  CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: SetNull)
 
   @@unique([storeId, rawName])
   @@index([storeId, canonicalName])
+  @@index([canonicalIngredientId])
+}
+
+model OtterItemMapping {
+  id            String   @id @default(cuid())
+  storeId       String
+  otterItemName String
+  /// Stable Otter sku (preferred for modern mappings). Legacy rows may leave this null.
+  skuId         String?
+  recipeId      String
+  confirmedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recipe        Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, otterItemName])
+  @@index([storeId])
+  @@index([recipeId])
+  @@index([skuId])
+}
+
+/// Per-(store, date, itemName) COGS row, materialized at write time so P&L reads
+/// don't have to walk recipes/invoices at request time. Maintained by
+/// `src/lib/cogs-materializer.ts` (fill) and `src/lib/cogs-invalidate.ts` (delete
+/// on upstream mutation). Refill happens in the Otter sync route's COGS phase.
+model DailyCogsItem {
+  id           String     @id @default(cuid())
+  storeId      String
+  date         DateTime   @db.Date
+  itemName     String
+  category     String
+  recipeId     String?
+  qtySold      Float
+  salesRevenue Float
+  unitCost     Float?
+  lineCost     Float      @default(0)
+  status       CogsStatus
+  computedAt   DateTime   @default(now())
+
+  store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recipe Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, date, itemName, category])
+  @@index([storeId, date])
+  @@index([recipeId, date])
+}
+
+model OtterOrder {
+  id                 String   @id @default(cuid())
+  otterOrderId       String   @unique
+  externalDisplayId  String?
+  storeId            String
+  otterStoreId       String
+  platform           String
+  referenceTimeLocal DateTime
+  fulfillmentMode    String?
+  orderStatus        String?
+  acceptanceStatus   String?
+  subtotal           Float    @default(0)
+  tax                Float    @default(0)
+  tip                Float    @default(0)
+  commission         Float    @default(0)
+  discount           Float    @default(0)
+  total              Float    @default(0)
+  customerName       String?
+  detailsFetchedAt   DateTime?
+  syncedAt           DateTime @default(now()) @updatedAt
+
+  store Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items OtterOrderItem[]
+
+  @@index([storeId, referenceTimeLocal])
+  @@index([detailsFetchedAt])
+  @@index([platform])
+}
+
+model OtterOrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  skuId     String
+  name      String
+  quantity  Float
+  price     Float  @default(0)
+
+  order    OtterOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  subItems OtterOrderSubItem[]
+
+  @@index([orderId])
+  @@index([skuId])
+}
+
+model OtterOrderSubItem {
+  id          String  @id @default(cuid())
+  orderItemId String
+  skuId       String
+  name        String
+  quantity    Float
+  price       Float   @default(0)
+  subHeader   String?
+
+  orderItem OtterOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+  @@index([skuId])
 }

@@ -26,10 +26,6 @@ interface StoreData {
   address: string | null
   phone: string | null
   isActive: boolean
-  _count: {
-    managers: number
-    reports: number
-  }
 }
 
 interface StoreSelectorProps {

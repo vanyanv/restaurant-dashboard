@@ -57,9 +57,13 @@ export const TOTAL_SALES_CODE = "TOTAL_SALES"
 export const UBER_COMMISSION_CODE = "COM_UBER"
 export const DOORDASH_COMMISSION_CODE = "COM_DD"
 export const NET_AFTER_COMMISSIONS_CODE = "NET_COM"
+export const COGS_CODE = "6100"
+export const GROSS_PROFIT_CODE = "GROSS_PROFIT"
 export const LABOR_CODE = "6200"
 export const RENT_CODE = "7200"
-export const AFTER_LABOR_RENT_CODE = "AFTER_LR"
+export const CLEANING_CODE = "7210"
+export const TOWELS_CODE = "7220"
+export const AFTER_LABOR_RENT_CODE = "AFTER_FIXED"
 
 // ─── Period bucket generation ───
 
@@ -158,6 +162,19 @@ export function monthlyCostForDays(
 ): number | null {
   if (monthlyAmount == null) return null
   return (monthlyAmount * days) / DAYS_PER_MONTH
+}
+
+const WEEKS_PER_YEAR = 52
+const MONTHS_PER_YEAR = 12
+
+/** Convert a weekly recurring cost to its monthly equivalent (weekly × 52 / 12). */
+export function monthlyFromWeekly(weekly: number): number {
+  return (weekly * WEEKS_PER_YEAR) / MONTHS_PER_YEAR
+}
+
+/** Inverse of monthlyFromWeekly — useful for seeding a "weekly" form field from a stored monthly value. */
+export function weeklyFromMonthly(monthly: number): number {
+  return (monthly * MONTHS_PER_YEAR) / WEEKS_PER_YEAR
 }
 
 // ─── Sum helpers for Otter rows ───
@@ -268,6 +285,8 @@ export function channelMix(salesValues: number[]): Array<{ channel: string; amou
 export interface StoreFixedInputs {
   fixedMonthlyLabor: number | null
   fixedMonthlyRent: number | null
+  fixedMonthlyTowels: number | null
+  fixedMonthlyCleaning: number | null
   uberCommissionRate: number
   doordashCommissionRate: number
 }
@@ -279,8 +298,12 @@ export interface ComputedPnL {
   uberCommission: number[] // already negative
   doordashCommission: number[] // already negative
   netAfterCommissions: number[]
+  cogsValues: number[] // positive magnitude (may be 0s if no recipes)
+  grossProfit: number[]
   laborValues: number[] // positive magnitude
   rentValues: number[] // positive magnitude
+  towelsValues: number[] // positive magnitude
+  cleaningValues: number[] // positive magnitude
   bottomLine: number[]
 }
 
@@ -292,8 +315,12 @@ export function computeStorePnL(input: {
   bucketed: OtterSummaryRow[][]
   periods: Period[]
   store: StoreFixedInputs
+  /** Optional per-period COGS (positive magnitude). When provided, a COGS row and
+   *  Gross Profit subtotal are inserted between Net Sales After Commissions and Labor,
+   *  and the bottom line subtracts COGS too. */
+  cogsValues?: number[]
 }): ComputedPnL {
-  const { bucketed, periods, store } = input
+  const { bucketed, periods, store, cogsValues } = input
 
   const perPeriodSalesValues = bucketed.map((rows) => salesRowValues(rows))
   const totalSales = perPeriodSalesValues.map((vals) => vals.reduce((a, b) => a + b, 0))
@@ -347,14 +374,41 @@ export function computeStorePnL(input: {
     isSubtotal: true,
   })
 
+  const cogs = cogsValues ?? periods.map(() => 0)
+  const grossProfit = netAfterCommissions.map((n, i) => n - cogs[i])
+
+  if (cogsValues) {
+    rows.push({
+      code: COGS_CODE,
+      label: "Cost of Goods Sold",
+      values: cogs.map((v) => -v),
+      percents: cogs.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    })
+    rows.push({
+      code: GROSS_PROFIT_CODE,
+      label: "Gross Profit",
+      values: grossProfit,
+      percents: grossProfit.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
+      isSubtotal: true,
+    })
+  }
+
   const laborValues = periods.map(
     (p) => monthlyCostForDays(store.fixedMonthlyLabor, p.days) ?? 0
   )
   const rentValues = periods.map(
     (p) => monthlyCostForDays(store.fixedMonthlyRent, p.days) ?? 0
   )
+  const cleaningValues = periods.map(
+    (p) => monthlyCostForDays(store.fixedMonthlyCleaning, p.days) ?? 0
+  )
+  const towelsValues = periods.map(
+    (p) => monthlyCostForDays(store.fixedMonthlyTowels, p.days) ?? 0
+  )
   const laborUnknown = periods.map(() => store.fixedMonthlyLabor == null)
   const rentUnknown = periods.map(() => store.fixedMonthlyRent == null)
+  const cleaningUnknown = periods.map(() => store.fixedMonthlyCleaning == null)
+  const towelsUnknown = periods.map(() => store.fixedMonthlyTowels == null)
 
   rows.push({
     code: LABOR_CODE,
@@ -372,11 +426,30 @@ export function computeStorePnL(input: {
     isFixed: true,
     isUnknown: rentUnknown,
   })
+  rows.push({
+    code: CLEANING_CODE,
+    label: "Store Cleaning (fixed)",
+    values: cleaningValues.map((v) => -v),
+    percents: cleaningValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    isFixed: true,
+    isUnknown: cleaningUnknown,
+  })
+  rows.push({
+    code: TOWELS_CODE,
+    label: "Towels (fixed)",
+    values: towelsValues.map((v) => -v),
+    percents: towelsValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+    isFixed: true,
+    isUnknown: towelsUnknown,
+  })
 
-  const bottomLine = netAfterCommissions.map((n, i) => n - laborValues[i] - rentValues[i])
+  const bottomLine = netAfterCommissions.map(
+    (n, i) =>
+      n - cogs[i] - laborValues[i] - rentValues[i] - cleaningValues[i] - towelsValues[i]
+  )
   rows.push({
     code: AFTER_LABOR_RENT_CODE,
-    label: "Net After Commissions, Labor & Rent",
+    label: "Net After Commissions & Fixed Costs",
     values: bottomLine,
     percents: bottomLine.map((v, i) => (totalSales[i] === 0 ? 0 : v / totalSales[i])),
     isSubtotal: true,
@@ -389,8 +462,12 @@ export function computeStorePnL(input: {
     uberCommission,
     doordashCommission,
     netAfterCommissions,
+    cogsValues: cogs,
+    grossProfit,
     laborValues,
     rentValues,
+    towelsValues,
+    cleaningValues,
     bottomLine,
   }
 }

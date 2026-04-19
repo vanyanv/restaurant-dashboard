@@ -1,0 +1,57 @@
+export type CanonicalIngredientSummary = {
+  id: string
+  name: string
+  defaultUnit: string
+  category: string | null
+  aliasCount: number
+  latestUnitCost: number | null
+  latestUnit: string | null
+  latestPriceAt: Date | null
+}
+
+export type RecipeIngredientInput = {
+  /** Optional — only for updates. */
+  id?: string
+  /** Exactly one of these two must be set. */
+  canonicalIngredientId?: string | null
+  componentRecipeId?: string | null
+  /** Optional display override. */
+  ingredientName?: string | null
+  quantity: number
+  unit: string
+  notes?: string | null
+}
+
+export type RecipeInput = {
+  id?: string
+  itemName: string
+  category: string
+  servingSize: number
+  isSellable: boolean
+  notes?: string | null
+  foodCostOverride?: number | null
+  ingredients: RecipeIngredientInput[]
+}
+
+export type RecipeSummary = {
+  id: string
+  itemName: string
+  category: string
+  isSellable: boolean
+  isConfirmed: boolean
+  ingredientCount: number
+  computedCost: number | null
+  partialCost: boolean
+  updatedAt: Date
+}
+
+export type MenuItemForCatalog = {
+  otterItemName: string
+  category: string
+  totalQtySoldAllTime: number
+  firstSeen: Date
+  lastSeen: Date
+  mappedRecipeId: string | null
+  mappedRecipeName: string | null
+  storeIds: string[]
+}

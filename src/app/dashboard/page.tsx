@@ -1,31 +1,19 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { getDashboardAnalytics, getOtterAnalytics } from "@/app/actions/store-actions"
-import { getInvoiceSummary, getInvoiceStoreBreakdown } from "@/app/actions/invoice-actions"
-import { DashboardContent } from "./components/dashboard-content"
+import { parseDashboardRange } from "@/lib/dashboard-utils"
+import { DashboardShell } from "./components/dashboard-shell"
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ start?: string; end?: string; days?: string }>
+}) {
   const session = await getServerSession(authOptions)
+  if (!session) redirect("/login")
 
-  if (!session) {
-    redirect("/login")
-  }
+  const sp = await searchParams
+  const range = parseDashboardRange(sp)
 
-  const [data, otterData, invoiceSummary, invoiceBreakdown] = await Promise.all([
-    getDashboardAnalytics({ days: 1 }),
-    getOtterAnalytics(undefined, { days: 1 }),
-    getInvoiceSummary({ days: 30 }),
-    getInvoiceStoreBreakdown({ days: 30 }),
-  ])
-
-  return (
-    <DashboardContent
-      initialData={data}
-      initialOtterData={otterData}
-      initialInvoiceSummary={invoiceSummary}
-      initialInvoiceBreakdown={invoiceBreakdown}
-      userRole={session.user.role}
-    />
-  )
+  return <DashboardShell range={range} userRole={session.user.role} />
 }

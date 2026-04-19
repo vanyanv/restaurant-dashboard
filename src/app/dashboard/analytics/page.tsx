@@ -1,28 +1,19 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { getDashboardAnalytics, getOtterAnalytics, getMenuCategoryAnalytics } from "@/app/actions/store-actions"
-import { MoreAnalyticsContent } from "./components/more-analytics-content"
+import { parseDashboardRange } from "@/lib/dashboard-utils"
+import { AnalyticsShell } from "./components/analytics-shell"
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ start?: string; end?: string; days?: string }>
+}) {
   const session = await getServerSession(authOptions)
+  if (!session) redirect("/login")
 
-  if (!session) {
-    redirect("/login")
-  }
+  const sp = await searchParams
+  const range = parseDashboardRange(sp)
 
-  const [data, otterData, menuData] = await Promise.all([
-    getDashboardAnalytics({ days: 1 }),
-    getOtterAnalytics(undefined, { days: 1 }),
-    getMenuCategoryAnalytics(undefined, { days: 1 }),
-  ])
-
-  return (
-    <MoreAnalyticsContent
-      initialData={data}
-      initialOtterData={otterData}
-      initialMenuData={menuData}
-      userRole={session.user.role}
-    />
-  )
+  return <AnalyticsShell range={range} userRole={session.user.role} />
 }

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { InvoiceStatus } from "@/generated/prisma/client"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 
 export async function GET(request: NextRequest) {
   const limited = await rateLimit(request, RATE_LIMIT_TIERS.moderate)
@@ -89,6 +90,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "invoiceIds and status are required" }, { status: 400 })
   }
 
+  const before = await prisma.invoice.findMany({
+    where: { id: { in: invoiceIds }, ownerId: session.user.id },
+    select: { id: true, storeId: true, invoiceDate: true },
+  })
+
   const updated = await prisma.invoice.updateMany({
     where: {
       id: { in: invoiceIds },
@@ -100,6 +106,24 @@ export async function PATCH(request: NextRequest) {
       ...(status === "MATCHED" || status === "APPROVED" ? { matchedAt: new Date() } : {}),
     },
   })
+
+  for (const inv of before) {
+    if (!inv.invoiceDate) continue
+    const oldStoreId = inv.storeId
+    const newStoreId = storeId ?? oldStoreId
+    const affected = new Set<string>()
+    if (oldStoreId) affected.add(oldStoreId)
+    if (newStoreId) affected.add(newStoreId)
+    for (const sid of affected) {
+      await invalidateDailyCogs({
+        kind: "store-from-date",
+        storeId: sid,
+        fromDate: inv.invoiceDate,
+      }).catch((e) =>
+        console.error("invalidateDailyCogs failed after invoice PATCH:", e)
+      )
+    }
+  }
 
   return NextResponse.json({ updated: updated.count })
 }

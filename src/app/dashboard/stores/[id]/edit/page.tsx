@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { getStoreById } from "@/app/actions/store-actions"
 import { EditStoreForm } from "./edit-store-form"
-import { Store, ArrowLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
@@ -83,25 +83,7 @@ export default async function EditStorePage(props: {
           </div>
         </div>
 
-        <div className="max-w-2xl">
-          <div className="rounded-xl border bg-card text-card-foreground shadow">
-            <div className="flex items-center gap-2 p-6 pb-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Store className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">Store Information</h2>
-                <p className="text-sm text-muted-foreground">
-                  Update the store details and settings
-                </p>
-              </div>
-            </div>
-            <Separator />
-            <div className="p-6">
-              <EditStoreForm store={store} />
-            </div>
-          </div>
-        </div>
+        <EditStoreForm store={store} />
       </div>
     </div>
   )

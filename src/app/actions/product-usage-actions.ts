@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import OpenAI from "openai"
 import type {
   ProductUsageData,
@@ -96,9 +97,9 @@ export async function getProductUsageData(options?: {
           date: { gte: startDate, lte: endDate },
         },
       }),
-      // All recipes with ingredients for the stores
+      // All recipes with ingredients for the owner
       prisma.recipe.findMany({
-        where: { storeId: { in: targetStoreIds } },
+        where: { ownerId: session.user.id },
         include: {
           ingredients: {
             select: {
@@ -231,8 +232,9 @@ export async function getProductUsageData(options?: {
 
     for (const ing of recipe.ingredients) {
       const theoreticalQty = sales.totalQtySold * (ing.quantity / recipe.servingSize)
-      const ingKey = ing.ingredientName.toLowerCase()
-      if (!displayNameMap.has(ingKey)) displayNameMap.set(ingKey, ing.ingredientName)
+      const ingName = ing.ingredientName ?? ""
+      const ingKey = ingName.toLowerCase()
+      if (!displayNameMap.has(ingKey)) displayNameMap.set(ingKey, ingName)
       theoreticalMap.set(
         ingKey,
         (theoreticalMap.get(ingKey) ?? 0) + theoreticalQty
@@ -304,7 +306,7 @@ export async function getProductUsageData(options?: {
       // Check if any ingredient has invoice cost data
       let hasInvoiceCost = false
       for (const ing of recipe.ingredients) {
-        const purchased = purchasedMap.get(ing.ingredientName.toLowerCase())
+        const purchased = purchasedMap.get((ing.ingredientName ?? "").toLowerCase())
         if (purchased && purchased.totalCost > 0) {
           hasInvoiceCost = true
           break
@@ -316,7 +318,7 @@ export async function getProductUsageData(options?: {
         theoreticalCOGS = sales.totalQtySold * recipe.foodCostOverride
       } else {
         for (const ing of recipe.ingredients) {
-          const purchased = purchasedMap.get(ing.ingredientName.toLowerCase())
+          const purchased = purchasedMap.get((ing.ingredientName ?? "").toLowerCase())
           const avgCost = purchased
             ? purchased.totalCost / purchased.purchasedQty
             : 0
@@ -702,8 +704,9 @@ export async function getRecipes(
 
   const targetStoreIds = storeId ? [storeId] : storeIds
 
+  const _unusedTargetStoreIds = targetStoreIds // eslint-disable-line @typescript-eslint/no-unused-vars
   const recipes = await prisma.recipe.findMany({
-    where: { storeId: { in: targetStoreIds } },
+    where: { ownerId: session.user.id },
     include: {
       ingredients: {
         select: {
@@ -753,17 +756,17 @@ export async function upsertRecipe(
   if (!store) return null
 
   const result = await prisma.$transaction(async (tx) => {
-    // Upsert the recipe
+    // Upsert the recipe (owner-level)
     const recipe = await tx.recipe.upsert({
       where: {
-        storeId_itemName_category: {
-          storeId,
+        ownerId_itemName_category: {
+          ownerId: session.user.id,
           itemName: data.itemName,
           category: data.category,
         },
       },
       create: {
-        storeId,
+        ownerId: session.user.id,
         itemName: data.itemName,
         category: data.category,
         servingSize: data.servingSize ?? 1,
@@ -842,13 +845,12 @@ export async function deleteRecipe(recipeId: string): Promise<boolean> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return false
 
-  // Verify ownership through store
-  const recipe = await prisma.recipe.findUnique({
-    where: { id: recipeId },
-    include: { store: { select: { ownerId: true } } },
+  // Owner-level check
+  const recipe = await prisma.recipe.findFirst({
+    where: { id: recipeId, ownerId: session.user.id },
+    select: { id: true },
   })
-
-  if (!recipe || recipe.store.ownerId !== session.user.id) return false
+  if (!recipe) return false
 
   await prisma.recipe.delete({ where: { id: recipeId } })
   return true
@@ -898,6 +900,7 @@ export async function upsertIngredientAlias(
     },
   })
 
+  await invalidateDailyCogs({ kind: "store-full", storeId })
   return true
 }
 
@@ -936,7 +939,7 @@ export async function getMenuItemsForRecipeBuilder(
       },
     }),
     prisma.recipe.findMany({
-      where: { storeId: { in: targetStoreIds } },
+      where: { ownerId: session.user.id },
       select: { itemName: true, category: true },
     }),
   ])
@@ -1144,7 +1147,7 @@ export async function generateDemandForecast(
       orderBy: { date: "asc" },
     }),
     prisma.recipe.findMany({
-      where: { storeId: { in: targetStoreIds } },
+      where: { ownerId: session.user.id },
       include: { ingredients: true },
     }),
     prisma.ingredientAlias.findMany({
@@ -1239,8 +1242,9 @@ export async function generateDemandForecast(
   const ingredientUnits = new Map<string, string>()
   for (const item of salesSummary) {
     for (const ing of item.ingredients) {
-      if (!ingredientUnits.has(ing.name)) {
-        ingredientUnits.set(ing.name, ing.unit)
+      const name = ing.name ?? ""
+      if (name && !ingredientUnits.has(name)) {
+        ingredientUnits.set(name, ing.unit)
       }
     }
   }

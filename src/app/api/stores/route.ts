@@ -22,36 +22,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const stores =
-      session.user.role === 'OWNER'
-        ? await prisma.store.findMany({
-            where: { ownerId: session.user.id },
-            include: {
-              _count: {
-                select: {
-                  managers: true,
-                  reports: true,
-                },
-              },
-            },
-          })
-        : await prisma.store.findMany({
-            where: {
-              managers: {
-                some: {
-                  managerId: session.user.id,
-                  isActive: true,
-                },
-              },
-            },
-            include: {
-              _count: {
-                select: {
-                  reports: true,
-                },
-              },
-            },
-          });
+    const stores = await prisma.store.findMany({
+      where: { ownerId: session.user.id },
+    });
 
     return NextResponse.json(stores);
   } catch (error) {

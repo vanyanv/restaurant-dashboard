@@ -6,16 +6,6 @@ import { getRecipes } from "@/app/actions/product-usage-actions"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import {
   Select,
   SelectContent,
@@ -23,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { EditorialTopbar } from "../../../components/editorial-topbar"
 import { DashboardSection } from "@/components/analytics/dashboard-section"
 import { RecipeManagerSheet } from "./recipe-manager-sheet"
 import type { RecipeWithIngredients } from "@/types/product-usage"
@@ -61,51 +52,31 @@ export function RecipesContent({ initialRecipes, stores }: RecipesContentProps) 
 
   return (
     <div className="flex flex-col h-full">
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Recipes</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <ChefHat className="h-5 w-5 text-primary" />
-              <h1 className="text-lg font-semibold tracking-tight">Recipes</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {stores.length > 1 && (
-              <Select value={selectedStore} onValueChange={handleStoreChange}>
-                <SelectTrigger className="h-8 w-[140px] text-sm">
-                  <SelectValue placeholder="All Stores" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Stores</SelectItem>
-                  {stores.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        </div>
-      </div>
+      <EditorialTopbar
+        section="§ 04"
+        title="Recipes"
+        stamps={
+          <span>
+            {recipes.length} recipe{recipes.length !== 1 ? "s" : ""}
+          </span>
+        }
+      >
+        {stores.length > 1 && (
+          <Select value={selectedStore} onValueChange={handleStoreChange}>
+            <SelectTrigger className="h-8 w-[140px] text-sm">
+              <SelectValue placeholder="All Stores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stores</SelectItem>
+              {stores.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </EditorialTopbar>
 
       <div className="flex-1 p-4 sm:p-6">
         <DashboardSection title="Recipe Coverage">

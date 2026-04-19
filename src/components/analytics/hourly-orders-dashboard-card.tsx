@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
+import dynamic from "next/dynamic"
 import { Store } from "lucide-react"
-import { Bar, BarChart, XAxis, YAxis } from "recharts"
 import {
   Card,
   CardContent,
@@ -16,16 +16,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { getOrderPatterns } from "@/app/actions/store-actions"
 import { todayInLA } from "@/lib/dashboard-utils"
 import type { HourlyOrderPoint } from "@/types/analytics"
 import { cn } from "@/lib/utils"
+
+const HourlyOrdersChart = dynamic(
+  () =>
+    import("./hourly-orders-chart-inner").then((m) => ({
+      default: m.HourlyOrdersChart,
+    })),
+  {
+    loading: () => (
+      <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
+        Loading chart…
+      </div>
+    ),
+    ssr: false,
+  }
+)
 
 interface StoreOption {
   id: string
@@ -37,19 +47,9 @@ interface HourlyOrdersDashboardCardProps {
   className?: string
 }
 
-const chartConfig = {
-  orderCount: {
-    label: "Orders",
-    color: "hsl(var(--primary))",
-  },
-}
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
-
 function getDateStr(period: "today" | "yesterday"): string {
   if (period === "today") return todayInLA()
-  const d = new Date(todayInLA() + "T12:00:00Z") // noon to avoid DST edge
+  const d = new Date(todayInLA() + "T12:00:00Z")
   d.setUTCDate(d.getUTCDate() - 1)
   return d.toISOString().slice(0, 10)
 }
@@ -71,7 +71,7 @@ export function HourlyOrdersDashboardCard({
   const [hourlyData, setHourlyData] = useState<HourlyOrderPoint[] | null>(null)
   const [selectedStore, setSelectedStore] = useState("all")
   const [period, setPeriod] = useState<"today" | "yesterday">("today")
-  const [isPending, startTransition] = useTransition()
+  const [isPending] = useTransition()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -90,7 +90,6 @@ export function HourlyOrdersDashboardCard({
 
   const isLoading = loading || isPending
 
-  // Today: trim to current hour so chart grows live; Yesterday: full 24h
   const chartData =
     hourlyData && period === "today"
       ? hourlyData.slice(0, getCurrentLAHour() + 1)
@@ -106,7 +105,9 @@ export function HourlyOrdersDashboardCard({
             <ToggleGroup
               type="single"
               value={period}
-              onValueChange={(v) => v && setPeriod(v as "today" | "yesterday")}
+              onValueChange={(v) =>
+                v && setPeriod(v as "today" | "yesterday")
+              }
               disabled={isLoading}
             >
               <ToggleGroupItem value="today" className="h-6 px-2 text-xs">
@@ -135,56 +136,20 @@ export function HourlyOrdersDashboardCard({
           )}
         </div>
       </CardHeader>
-      <CardContent className={cn("flex-1 pb-0", isLoading && "opacity-50 pointer-events-none")}>
+      <CardContent
+        className={cn(
+          "flex-1 pb-0",
+          isLoading && "opacity-50 pointer-events-none"
+        )}
+      >
         {isLoading && !hourlyData ? (
-          <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">
+          <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
             Loading...
           </div>
         ) : chartData && chartData.some((h) => h.orderCount > 0) ? (
-          <ChartContainer config={chartConfig} className="h-[200px] w-full">
-            <BarChart accessibilityLayer data={chartData} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
-              <XAxis
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={6}
-                fontSize={10}
-                interval={xInterval}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tickMargin={4}
-                width={28}
-                fontSize={10}
-              />
-              <ChartTooltip
-                cursor={false}
-                content={
-                  <ChartTooltipContent
-                    formatter={(value, name, item) => {
-                      const point = item.payload as HourlyOrderPoint
-                      return (
-                        <div className="flex flex-col gap-0.5">
-                          <span>{Number(value)} orders</span>
-                          <span className="text-muted-foreground text-xs">
-                            {formatCurrency(point.totalSales)} in sales
-                          </span>
-                        </div>
-                      )
-                    }}
-                  />
-                }
-              />
-              <Bar
-                dataKey="orderCount"
-                fill="var(--color-orderCount)"
-                radius={[2, 2, 0, 0]}
-              />
-            </BarChart>
-          </ChartContainer>
+          <HourlyOrdersChart chartData={chartData} xInterval={xInterval} />
         ) : (
-          <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">
+          <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
             No order data available
           </div>
         )}

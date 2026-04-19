@@ -3,16 +3,7 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { StoreComparisonChart } from "@/components/charts/store-comparison-chart"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
@@ -49,26 +40,18 @@ export function PnLAllStoresClient({ stores }: PnLAllStoresClientProps) {
   const perStore = query.data?.perStore ?? []
 
   return (
-    <div>
-      <header className="flex h-16 shrink-0 items-center gap-2">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>P&amp;L — All Stores</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
+    <div className="flex flex-col h-full">
+      <EditorialTopbar
+        section="§ 11"
+        title="P&L · All Stores"
+        stamps={
+          <span>
+            {stores.length} store{stores.length !== 1 ? "s" : ""}
+          </span>
+        }
+      />
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <div className="flex flex-1 flex-col gap-4 p-4">
         <PnLHeader
           title="P&L — All Stores"
           state={state}
@@ -114,12 +97,12 @@ export function PnLAllStoresClient({ stores }: PnLAllStoresClientProps) {
                       : combined.netAfterCommissions / combined.grossSales,
                 },
                 {
-                  label: "Labor + Rent",
-                  value: combined.laborPlusRent,
+                  label: "Fixed Costs",
+                  value: combined.fixedCosts,
                   percentOfSales:
                     combined.grossSales === 0
                       ? 0
-                      : combined.laborPlusRent / combined.grossSales,
+                      : combined.fixedCosts / combined.grossSales,
                   costStyle: true,
                 },
                 {

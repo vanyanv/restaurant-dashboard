@@ -10,7 +10,6 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   name: z.string().min(1),
-  role: z.enum(["OWNER", "MANAGER"])
 })
 
 export async function POST(req: Request) {
@@ -51,7 +50,7 @@ export async function POST(req: Request) {
         email: validatedData.email,
         password: hashedPassword,
         name: validatedData.name,
-        role: validatedData.role
+        role: "OWNER"
       },
       select: {
         id: true,

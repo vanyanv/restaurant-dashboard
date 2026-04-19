@@ -32,16 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { EditorialTopbar } from "../../components/editorial-topbar"
 import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { DashboardSection } from "@/components/analytics/dashboard-section"
 import { getOperationalAnalytics } from "@/app/actions/operational-actions"
@@ -137,79 +128,39 @@ export function OperationsContent({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Navigation Header */}
-      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-        <div className="flex items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Operations</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      </header>
-
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              <h1 className="text-lg font-semibold tracking-tight">
-                Operations Overview
-              </h1>
-            </div>
-            {data?.dateRange && (
-              <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
-                <span>
-                  {formatDateRange(data.dateRange.startDate, data.dateRange.endDate)}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {stores.length > 1 && (
-              <Select value={storeFilter} onValueChange={handleStoreChange}>
-                <SelectTrigger className="w-[160px] h-8 text-xs">
-                  <SelectValue placeholder="All Stores" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Stores</SelectItem>
-                  {stores.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <DateRangePicker
-              days={days}
-              customRange={customRange}
-              onRangeChange={handleRangeChange}
-              isPending={isPending}
-            />
-          </div>
-        </div>
-
-        {/* Mobile date info */}
-        {data?.dateRange && (
-          <div className="sm:hidden px-4 pb-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <EditorialTopbar
+        section="§ 04"
+        title="Operations"
+        stamps={
+          data?.dateRange ? (
             <span>
               {formatDateRange(data.dateRange.startDate, data.dateRange.endDate)}
             </span>
-          </div>
+          ) : undefined
+        }
+      >
+        {stores.length > 1 && (
+          <Select value={storeFilter} onValueChange={handleStoreChange}>
+            <SelectTrigger className="w-[160px] h-8 text-xs">
+              <SelectValue placeholder="All Stores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stores</SelectItem>
+              {stores.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
-      </div>
+        <DateRangePicker
+          days={days}
+          customRange={customRange}
+          onRangeChange={handleRangeChange}
+          isPending={isPending}
+        />
+      </EditorialTopbar>
 
       {/* Content */}
       <div className={`flex-1 overflow-auto p-3 sm:p-4 space-y-6 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>

@@ -59,9 +59,9 @@ export async function POST(request: Request) {
     distinct: ["productName"],
   })
 
-  // Get existing recipes for context
+  // Get existing recipes for context (owner-level)
   const existingRecipes = await prisma.recipe.findMany({
-    where: { storeId },
+    where: { ownerId: session.user.id },
     include: { ingredients: true },
     take: 10,
   })

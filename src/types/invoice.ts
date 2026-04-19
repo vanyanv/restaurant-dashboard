@@ -113,6 +113,19 @@ export interface ProductAnalytics {
   topProducts: ProductAnalyticsItem[]
 }
 
+export interface PriceMoverRow {
+  vendorName: string
+  sku: string | null
+  productName: string
+  category: string | null
+  unit: string | null
+  prevPrice: number
+  prevDate: string
+  latestPrice: number
+  latestDate: string
+  pctChange: number
+}
+
 export interface InvoiceDetail extends InvoiceListItem {
   dueDate: string | null
   deliveryAddress: string | null

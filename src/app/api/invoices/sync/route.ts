@@ -9,6 +9,12 @@ import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { sanitizeInvoiceDate } from "@/lib/invoice-sanity"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
+import { sendGraphMail } from "@/lib/graph-mail"
+import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
+import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
+
+const PRICE_ALERT_PCT_THRESHOLD = 5
+const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
 
 export const maxDuration = 120
 
@@ -87,6 +93,109 @@ interface SyncResult {
   created: number
   skipped: number
   errors: number
+}
+
+/**
+ * After a sync run, compare each newly-created line item's unit price against the
+ * most-recent prior order for the same (vendor, sku or productName). If any line
+ * jumped ≥5% AND the latest unit price is ≥$0.50, log them and send a single
+ * consolidated email to PRICE_ALERT_EMAIL (falling back to OTTER_EMAIL).
+ *
+ * Failures here are logged but never propagated — a flaky email path must not
+ * break an otherwise-successful invoice sync.
+ */
+async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string): Promise<void> {
+  const recipient = process.env.PRICE_ALERT_EMAIL || process.env.OTTER_EMAIL
+  if (!recipient) {
+    console.warn("PRICE_ALERT_EMAIL / OTTER_EMAIL not set — skipping price-hike email")
+  }
+
+  const newLines = await prisma.invoiceLineItem.findMany({
+    where: { invoiceId: { in: invoiceIds } },
+    select: {
+      sku: true,
+      productName: true,
+      category: true,
+      unit: true,
+      unitPrice: true,
+      invoice: {
+        select: {
+          vendorName: true,
+          invoiceDate: true,
+          invoiceNumber: true,
+        },
+      },
+    },
+  })
+
+  const hikes: PriceHike[] = []
+  for (const li of newLines) {
+    if (!li.invoice.invoiceDate) continue
+    if (li.unitPrice < PRICE_ALERT_MIN_UNIT_PRICE) continue
+
+    // Find the single most recent prior order of the same (vendor, sku or productName)
+    const priorWhere = {
+      invoice: {
+        ownerId: userId,
+        vendorName: li.invoice.vendorName,
+        invoiceDate: { lt: li.invoice.invoiceDate, not: null },
+      },
+      ...(li.sku
+        ? { sku: li.sku }
+        : { sku: null, productName: { equals: li.productName, mode: "insensitive" as const } }),
+    }
+    const prior = await prisma.invoiceLineItem.findFirst({
+      where: priorWhere,
+      orderBy: { invoice: { invoiceDate: "desc" } },
+      select: {
+        unitPrice: true,
+        invoice: { select: { invoiceDate: true } },
+      },
+    })
+
+    if (!prior || !prior.invoice.invoiceDate || prior.unitPrice <= 0) continue
+
+    const pctChange = ((li.unitPrice - prior.unitPrice) / prior.unitPrice) * 100
+    if (pctChange < PRICE_ALERT_PCT_THRESHOLD) continue
+
+    hikes.push({
+      vendorName: li.invoice.vendorName,
+      productName: li.productName,
+      sku: li.sku,
+      category: li.category,
+      unit: li.unit,
+      prevPrice: prior.unitPrice,
+      prevDate: prior.invoice.invoiceDate,
+      latestPrice: li.unitPrice,
+      latestDate: li.invoice.invoiceDate,
+      pctChange,
+      invoiceNumber: li.invoice.invoiceNumber,
+    })
+  }
+
+  if (hikes.length === 0) {
+    console.log(`Price-alert: no hikes ≥${PRICE_ALERT_PCT_THRESHOLD}% detected across ${newLines.length} new lines`)
+    return
+  }
+
+  // Sort biggest jump first
+  hikes.sort((a, b) => b.pctChange - a.pctChange)
+
+  for (const h of hikes) {
+    console.log(
+      `Price hike: ${h.vendorName} ${h.productName} (sku ${h.sku ?? "—"}): ` +
+      `$${h.prevPrice.toFixed(2)} → $${h.latestPrice.toFixed(2)} (+${h.pctChange.toFixed(1)}%)`
+    )
+  }
+
+  if (!recipient) return
+  const { subject, html } = buildPriceAlertEmail(hikes)
+  const result = await sendGraphMail({ toEmail: recipient, subject, html })
+  if (result.sent) {
+    console.log(`Price-alert email sent to ${recipient}: ${hikes.length} hike(s)`)
+  } else {
+    console.error(`Price-alert email NOT sent: ${result.error}`)
+  }
 }
 
 async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResult> {
@@ -302,10 +411,11 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
   })
 
   // ─── Phase 4: Write to database ───
+  const createdInvoiceIds: string[] = []
   for (let i = 0; i < invoicesToCreate.length; i++) {
     const inv = invoicesToCreate[i]
     try {
-      await prisma.invoice.create({
+      const created = await prisma.invoice.create({
         data: {
           ownerId: inv.ownerId,
           storeId: inv.storeId,
@@ -356,7 +466,18 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
           },
         },
       })
+      createdInvoiceIds.push(created.id)
       counts.created++
+
+      if (created.storeId && created.invoiceDate) {
+        await invalidateDailyCogs({
+          kind: "store-from-date",
+          storeId: created.storeId,
+          fromDate: created.invoiceDate,
+        }).catch((e) =>
+          console.error("invalidateDailyCogs failed after invoice create:", e)
+        )
+      }
     } catch (err) {
       // Unique constraint violation = already processed (race condition safety)
       const msg = err instanceof Error ? err.message : String(err)
@@ -374,6 +495,15 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
       totalProgress: computeProgress(100, 100, 100, pct),
       detail: `Saving invoices (${i + 1}/${invoicesToCreate.length})...`, counts,
     })
+  }
+
+  // ─── Phase 5: detect price hikes vs prior orders and email the owner ───
+  if (createdInvoiceIds.length > 0) {
+    try {
+      await detectAndAlertPriceHikes(createdInvoiceIds, userId)
+    } catch (err) {
+      console.error("Price-alert detection failed:", err)
+    }
   }
 
   // Create sync log
