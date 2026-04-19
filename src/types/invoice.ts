@@ -27,6 +27,9 @@ export interface InvoiceExtractionLineItem {
   category: string | null
   quantity: number
   unit: string | null
+  packSize: number | null
+  unitSize: number | null
+  unitSizeUom: string | null
   unitPrice: number
   extendedPrice: number
 }
@@ -88,6 +91,9 @@ export interface InvoiceDetailLineItem {
   category: string | null
   quantity: number
   unit: string | null
+  packSize: number | null
+  unitSize: number | null
+  unitSizeUom: string | null
   unitPrice: number
   extendedPrice: number
 }

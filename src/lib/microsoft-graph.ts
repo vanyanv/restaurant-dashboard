@@ -77,11 +77,13 @@ export async function fetchInvoiceEmails(sinceDate: Date): Promise<GraphMessage[
   const userId = getMailUserId()
   const since = sinceDate.toISOString()
 
+  // Graph rejects $filter combining hasAttachments + $orderby with InefficientFilter.
+  // Use a server-side date filter with orderby desc; filter hasAttachments client-side.
   const messages: GraphMessage[] = []
-  // Simple filter - combining $filter with $orderby can fail on some mailbox types
   let url: string | null =
     `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/messages` +
-    `?$filter=hasAttachments eq true` +
+    `?$filter=${encodeURIComponent(`receivedDateTime ge ${since}`)}` +
+    `&$orderby=receivedDateTime desc` +
     `&$select=id,subject,receivedDateTime,from,hasAttachments` +
     `&$top=50`
 
@@ -99,18 +101,10 @@ export async function fetchInvoiceEmails(sinceDate: Date): Promise<GraphMessage[
     const batch = (data.value ?? []) as GraphMessage[]
     messages.push(...batch)
 
-    // Follow pagination
     url = data["@odata.nextLink"] ?? null
-
-    // Stop if we've gone past our sinceDate (messages come newest-first by default)
-    const oldest = batch[batch.length - 1]
-    if (oldest && new Date(oldest.receivedDateTime) < sinceDate) {
-      break
-    }
   }
 
-  // Client-side date filter since we couldn't combine it with $filter on server
-  return messages.filter((m) => new Date(m.receivedDateTime) >= sinceDate)
+  return messages.filter((m) => m.hasAttachments)
 }
 
 // --- Attachment fetching ---

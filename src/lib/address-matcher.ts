@@ -66,6 +66,15 @@ function extractStreetNumber(normalized: string): string | null {
   return match ? match[1] : null
 }
 
+/** Extract the 5-digit ZIP code from a normalized address, ignoring any +4 extension. */
+function extractZip(normalized: string): string | null {
+  const match = normalized.match(/\b(\d{5})(?:-\d{4})?\b/g)
+  if (!match) return null
+  // Last 5-digit block is almost always the ZIP (street numbers appear earlier).
+  const last = match[match.length - 1]
+  return last.slice(0, 5)
+}
+
 /** Levenshtein distance between two strings. */
 function levenshtein(a: string, b: string): number {
   const m = a.length
@@ -99,6 +108,13 @@ export function addressSimilarity(a: string, b: string): number {
   const numB = extractStreetNumber(normB)
   if (numA && numB && numA !== numB) return 0
 
+  // US addresses are uniquely identified by street number + 5-digit ZIP.
+  // If both match, cosmetic differences (city spelling, directional abbrev,
+  // ZIP+4 suffix) don't change the physical location.
+  const zipA = extractZip(normA)
+  const zipB = extractZip(normB)
+  if (numA && numA === numB && zipA && zipA === zipB) return 1.0
+
   // Compare the rest after removing the street number
   const restA = normA.replace(/^\d+[\w-]*\s*/, "")
   const restB = normB.replace(/^\d+[\w-]*\s*/, "")
@@ -109,10 +125,11 @@ export function addressSimilarity(a: string, b: string): number {
   const dist = levenshtein(restA, restB)
   const stringSimilarity = 1 - dist / maxLen
 
-  // Bonus if both have a matching number
+  // Bonus if both have a matching number, extra bonus if ZIPs match
   const numberBonus = numA && numA === numB ? 0.1 : 0
+  const zipBonus = zipA && zipA === zipB ? 0.1 : 0
 
-  return Math.min(1, stringSimilarity + numberBonus)
+  return Math.min(1, stringSimilarity + numberBonus + zipBonus)
 }
 
 export interface StoreMatch {

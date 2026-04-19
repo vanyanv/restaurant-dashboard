@@ -372,6 +372,9 @@ model InvoiceLineItem {
   category      String?
   quantity      Float
   unit          String?
+  packSize      Int?
+  unitSize      Float?
+  unitSizeUom   String?
   unitPrice     Float
   extendedPrice Float
 
