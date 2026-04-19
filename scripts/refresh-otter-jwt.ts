@@ -171,6 +171,52 @@ async function updateVercel(jwt: string, env: Record<string, string>): Promise<v
 
 const GH_REPO = "vanyanv/restaurant-dashboard"
 
+async function redeployVercel(env: Record<string, string>): Promise<void> {
+  const token = process.env.VERCEL_TOKEN ?? env["VERCEL_TOKEN"]
+  const projectId = process.env.VERCEL_PROJECT_ID ?? env["VERCEL_PROJECT_ID"]
+
+  if (!token || !projectId) {
+    console.log("  Skipped (VERCEL_TOKEN or VERCEL_PROJECT_ID not set)")
+    return
+  }
+
+  // Get the latest production deployment to find the target
+  const listRes = await fetch(
+    `https://api.vercel.com/v6/deployments?projectId=${projectId}&target=production&limit=1`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+
+  if (!listRes.ok) {
+    console.error(`  Failed to list deployments: ${listRes.status}`)
+    return
+  }
+
+  const listData = await listRes.json()
+  const latest = listData.deployments?.[0]
+
+  if (!latest) {
+    console.error("  No production deployment found to redeploy")
+    return
+  }
+
+  const res = await fetch("https://api.vercel.com/v13/deployments", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: latest.name,
+      target: "production",
+      deploymentId: latest.uid,
+    }),
+  })
+
+  if (res.ok) {
+    const data = await res.json()
+    console.log(`  Triggered production redeploy: ${data.url}`)
+  } else {
+    console.error(`  Failed to redeploy: ${res.status} ${await res.text()}`)
+  }
+}
+
 async function updateGitHub(jwt: string, env: Record<string, string>): Promise<void> {
   const token = process.env.GH_TOKEN ?? env["GH_TOKEN"]
 
@@ -315,6 +361,10 @@ async function main() {
   // 5. Push to GitHub Actions
   console.log("Updating GitHub...")
   await updateGitHub(jwt, env)
+
+  // 6. Redeploy Vercel so the new JWT takes effect
+  console.log("Redeploying Vercel...")
+  await redeployVercel(env)
 
   console.log("\nDone!")
 }

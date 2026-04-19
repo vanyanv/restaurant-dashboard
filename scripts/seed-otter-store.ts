@@ -69,13 +69,13 @@ const HEADERS = {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Build date range: last 7 days
+// 3. Build date range: last 30 days
 // ---------------------------------------------------------------------------
 
 const now = new Date()
-const sevenDaysAgo = new Date(now)
-sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-const minDate = sevenDaysAgo.toISOString()
+const thirtyDaysAgo = new Date(now)
+thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+const minDate = thirtyDaysAgo.toISOString()
 const maxDate = now.toISOString()
 
 // ---------------------------------------------------------------------------
@@ -176,7 +176,7 @@ function findActiveUUID(data: OtterResponse): string | null {
   }
 
   // Print summary table
-  console.log("\nPer-UUID sales summary (last 7 days):")
+  console.log("\nPer-UUID sales summary (last 30 days):")
   console.log("  UUID                                     | FP Gross Sales | 3P Gross Sales | Total")
   console.log("  " + "-".repeat(90))
   for (const r of results) {
@@ -263,7 +263,7 @@ async function main() {
 
   if (!detectedUUID) {
     console.error(
-      "\nError: Could not detect a UUID with sales activity in the last 7 days.\n" +
+      "\nError: Could not detect a UUID with sales activity in the last 30 days.\n" +
         "Possible causes:\n" +
         "  - The date range has no data (try a different range)\n" +
         "  - The JWT is expired or scoped to different stores\n" +
