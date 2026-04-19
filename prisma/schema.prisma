@@ -62,6 +62,14 @@ model Store {
   yelpUpdatedAt    DateTime? // Last time Yelp data was fetched
   yelpSearchTerm   String?   // Store name + address used for search
   yelpLastSearch   DateTime? // Prevent excessive API calls
+
+  // Fixed cost inputs for P&L (monthly figures; converted per period when displayed)
+  fixedMonthlyLabor Float?
+  fixedMonthlyRent  Float?
+
+  // Platform commission rates (decimal, e.g. 0.21 = 21%). Applied to tpGrossSales on the P&L.
+  uberCommissionRate     Float @default(0.21)
+  doordashCommissionRate Float @default(0.25)
   
   // Relations
   owner           User      @relation("StoreOwner", fields: [ownerId], references: [id])

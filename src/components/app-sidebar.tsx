@@ -55,6 +55,10 @@ const data = {
           url: "/dashboard/analytics",
         },
         {
+          title: "P&L",
+          url: "/dashboard/pnl",
+        },
+        {
           title: "Menu Performance",
           url: "/dashboard/menu",
         },
