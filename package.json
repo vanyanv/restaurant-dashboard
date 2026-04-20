@@ -45,6 +45,7 @@
     "@tanstack/react-query": "^5.85.5",
     "@tanstack/react-query-devtools": "^5.85.5",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.24",
     "@vercel/blob": "^2.3.3",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",

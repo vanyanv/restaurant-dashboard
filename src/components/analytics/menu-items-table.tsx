@@ -1,6 +1,7 @@
 "use client"
 
-import { memo, useMemo, useState } from "react"
+import { memo, useMemo, useRef, useState } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   Card,
   CardContent,
@@ -8,14 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   Select,
   SelectContent,
@@ -37,6 +30,22 @@ interface MenuItemsTableProps {
 
 type SortKey = "itemName" | "category" | "fpQuantitySold" | "tpQuantitySold" | "totalQuantitySold" | "fpSales" | "tpSales" | "totalSales" | "avgPricePerUnit" | "fpShare"
 type SortDir = "asc" | "desc"
+
+const ROW_HEIGHT = 56
+
+// Grid template for 10 columns: Item(2fr) Category(1fr) + 8 numeric cols(1fr each)
+const GRID_TEMPLATE = "2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr"
+
+const NUMERIC_HEADERS: [SortKey, string][] = [
+  ["fpQuantitySold", "FP Qty"],
+  ["tpQuantitySold", "3P Qty"],
+  ["totalQuantitySold", "Total Qty"],
+  ["fpSales", "FP Sales"],
+  ["tpSales", "3P Sales"],
+  ["totalSales", "Total Sales"],
+  ["avgPricePerUnit", "Avg Price"],
+  ["fpShare", "FP %"],
+]
 
 function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("totalQuantitySold")
@@ -106,6 +115,14 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
       : <ArrowDown className="h-3 w-3" />
   }
 
+  const parentRef = useRef<HTMLDivElement>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  })
+
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
@@ -136,98 +153,126 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
         </div>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <div className="max-h-[500px] overflow-auto">
-          <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead
-                  className="pl-6 cursor-pointer select-none"
-                  onClick={() => handleSort("itemName")}
-                >
-                  <div className="flex items-center gap-1">
-                    Item <SortIcon column="itemName" />
-                  </div>
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none"
-                  onClick={() => handleSort("category")}
-                >
-                  <div className="flex items-center gap-1">
-                    Category <SortIcon column="category" />
-                  </div>
-                </TableHead>
-                {([
-                  ["fpQuantitySold", "FP Qty"],
-                  ["tpQuantitySold", "3P Qty"],
-                  ["totalQuantitySold", "Total Qty"],
-                  ["fpSales", "FP Sales"],
-                  ["tpSales", "3P Sales"],
-                  ["totalSales", "Total Sales"],
-                  ["avgPricePerUnit", "Avg Price"],
-                  ["fpShare", "FP %"],
-                ] as [SortKey, string][]).map(([key, label]) => (
-                  <TableHead
-                    key={key}
-                    className="text-right cursor-pointer select-none"
-                    onClick={() => handleSort(key)}
+        <div className="rounded-md border-0">
+          {/* Sticky header */}
+          <div
+            className="grid items-center border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sticky top-0 z-10"
+            style={{ gridTemplateColumns: GRID_TEMPLATE }}
+          >
+            <button
+              type="button"
+              className="flex items-center gap-1 cursor-pointer select-none pl-2 text-left"
+              onClick={() => handleSort("itemName")}
+            >
+              Item <SortIcon column="itemName" />
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1 cursor-pointer select-none text-left"
+              onClick={() => handleSort("category")}
+            >
+              Category <SortIcon column="category" />
+            </button>
+            {NUMERIC_HEADERS.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="flex items-center justify-end gap-1 cursor-pointer select-none text-right"
+                onClick={() => handleSort(key)}
+              >
+                {label} <SortIcon column={key} />
+              </button>
+            ))}
+          </div>
+
+          {/* Virtualized rows */}
+          <div
+            ref={parentRef}
+            className="max-h-125 overflow-auto"
+            style={{ contain: "strict" }}
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((vi) => {
+                const item = sorted[vi.index]
+                return (
+                  <div
+                    key={`${item.category}-${item.itemName}-${vi.index}`}
+                    className="grid items-center border-b px-4 text-sm hover:bg-muted/30 cursor-pointer"
+                    onClick={() => onItemClick?.(item.itemName, item.category)}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${vi.size}px`,
+                      transform: `translateY(${vi.start}px)`,
+                      gridTemplateColumns: GRID_TEMPLATE,
+                    }}
                   >
-                    <div className="flex items-center justify-end gap-1">
-                      {label} <SortIcon column={key} />
-                    </div>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((item, idx) => (
-                <TableRow key={`${item.category}-${item.itemName}-${idx}`}>
-                  <TableCell className="pl-6 font-medium">
-                    {onItemClick ? (
-                      <button
-                        type="button"
-                        onClick={() => onItemClick(item.itemName, item.category)}
-                        className="text-left hover:underline hover:text-primary cursor-pointer transition-colors"
-                      >
-                        {item.itemName}
-                      </button>
-                    ) : (
-                      item.itemName
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{item.category}</TableCell>
-                  <TableCell className="text-right font-mono-numbers">{formatNumber(item.fpQuantitySold)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers">{formatNumber(item.tpQuantitySold)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers font-medium">{formatNumber(item.totalQuantitySold)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers">{formatCurrency(item.fpSales)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers">{formatCurrency(item.tpSales)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers font-medium">{formatCurrency(item.totalSales)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers">{formatCurrency(item.avgPricePerUnit)}</TableCell>
-                  <TableCell className="text-right font-mono-numbers">
-                    <span className={cn(
-                      item.fpShare >= 70 ? "text-chart-1" :
-                      item.tpShare >= 70 ? "text-chart-5" :
-                      "text-muted-foreground"
-                    )}>
-                      {item.fpShare.toFixed(0)}%
+                    <span className="pl-2 font-medium truncate">
+                      {onItemClick ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onItemClick(item.itemName, item.category)
+                          }}
+                          className="text-left hover:underline hover:text-primary cursor-pointer transition-colors"
+                        >
+                          {item.itemName}
+                        </button>
+                      ) : (
+                        item.itemName
+                      )}
                     </span>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {/* Totals row */}
-              <TableRow className="bg-muted/30 font-medium border-t-2">
-                <TableCell className="pl-6">Total</TableCell>
-                <TableCell />
-                <TableCell className="text-right font-mono-numbers">{formatNumber(totals.fpQuantitySold)}</TableCell>
-                <TableCell className="text-right font-mono-numbers">{formatNumber(totals.tpQuantitySold)}</TableCell>
-                <TableCell className="text-right font-mono-numbers">{formatNumber(totals.totalQuantitySold)}</TableCell>
-                <TableCell className="text-right font-mono-numbers">{formatCurrency(totals.fpSales)}</TableCell>
-                <TableCell className="text-right font-mono-numbers">{formatCurrency(totals.tpSales)}</TableCell>
-                <TableCell className="text-right font-mono-numbers">{formatCurrency(totals.totalSales)}</TableCell>
-                <TableCell />
-                <TableCell />
-              </TableRow>
-            </TableBody>
-          </Table>
+                    <span className="text-muted-foreground truncate">{item.category}</span>
+                    <span className="text-right font-mono-numbers">{formatNumber(item.fpQuantitySold)}</span>
+                    <span className="text-right font-mono-numbers">{formatNumber(item.tpQuantitySold)}</span>
+                    <span className="text-right font-mono-numbers font-medium">{formatNumber(item.totalQuantitySold)}</span>
+                    <span className="text-right font-mono-numbers">{formatCurrency(item.fpSales)}</span>
+                    <span className="text-right font-mono-numbers">{formatCurrency(item.tpSales)}</span>
+                    <span className="text-right font-mono-numbers font-medium">{formatCurrency(item.totalSales)}</span>
+                    <span className="text-right font-mono-numbers">{formatCurrency(item.avgPricePerUnit)}</span>
+                    <span className="text-right font-mono-numbers">
+                      <span className={cn(
+                        item.fpShare >= 70 ? "text-chart-1" :
+                        item.tpShare >= 70 ? "text-chart-5" :
+                        "text-muted-foreground"
+                      )}>
+                        {item.fpShare.toFixed(0)}%
+                      </span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Totals row — always rendered outside the virtualizer */}
+          <div
+            className="grid items-center bg-muted/30 font-medium border-t-2 px-4 text-sm"
+            style={{
+              gridTemplateColumns: GRID_TEMPLATE,
+              height: `${ROW_HEIGHT}px`,
+            }}
+          >
+            <span className="pl-2">Total</span>
+            <span />
+            <span className="text-right font-mono-numbers">{formatNumber(totals.fpQuantitySold)}</span>
+            <span className="text-right font-mono-numbers">{formatNumber(totals.tpQuantitySold)}</span>
+            <span className="text-right font-mono-numbers">{formatNumber(totals.totalQuantitySold)}</span>
+            <span className="text-right font-mono-numbers">{formatCurrency(totals.fpSales)}</span>
+            <span className="text-right font-mono-numbers">{formatCurrency(totals.tpSales)}</span>
+            <span className="text-right font-mono-numbers">{formatCurrency(totals.totalSales)}</span>
+            <span />
+            <span />
+          </div>
         </div>
       </CardContent>
     </Card>
