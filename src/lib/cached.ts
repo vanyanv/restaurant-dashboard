@@ -53,3 +53,38 @@ export function cachedMenuPerformance(
   )
   return cached()
 }
+
+import { listRecipes } from "@/app/actions/recipe-actions"
+import {
+  getMenuItemSellPrices,
+  getMenuItemsForCatalog,
+} from "@/app/actions/menu-item-actions"
+
+type CatalogBundle = {
+  recipes: Awaited<ReturnType<typeof listRecipes>>
+  sellPrices: Awaited<ReturnType<typeof getMenuItemSellPrices>>
+  otterMappings: Awaited<ReturnType<typeof getMenuItemsForCatalog>>
+}
+
+/**
+ * Bundle the three catalog-page queries into one cached fetch. Keyed per owner;
+ * tagged for invalidation from recipe edits (Task 7c).
+ */
+export function cachedCatalogBundle(ownerId: string): Promise<CatalogBundle> {
+  const cached = unstable_cache(
+    async () => {
+      const [recipes, sellPrices, otterMappings] = await Promise.all([
+        listRecipes(),
+        getMenuItemSellPrices(30),
+        getMenuItemsForCatalog(),
+      ])
+      return { recipes, sellPrices, otterMappings }
+    },
+    ["menu-catalog-bundle-v1", ownerId],
+    {
+      tags: [MENU_TAGS.catalog(ownerId), MENU_TAGS.recipes(ownerId)],
+      revalidate: 300,
+    }
+  )
+  return cached()
+}
