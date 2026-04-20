@@ -184,8 +184,7 @@ model OtterMenuCategory {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, category])
-  @@index([storeId])
-  @@index([date])
+  @@index([storeId, date])
 }
 
 model OtterMenuItem {
@@ -209,8 +208,7 @@ model OtterMenuItem {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, category, itemName, isModifier])
-  @@index([storeId])
-  @@index([date])
+  @@index([storeId, date])
 }
 
 model OtterRating {
