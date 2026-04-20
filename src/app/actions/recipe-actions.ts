@@ -10,7 +10,7 @@ import {
   type RecipeCostLine,
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
-import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
+import { costRecipeCached, costIngredientCached } from "@/lib/cached"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import type { RecipeInput, RecipeSummary } from "@/types/recipe"
 
@@ -57,7 +57,7 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
 
   const costs = await Promise.all(
     recipes.map((r) =>
-      computeRecipeCost(r.id).catch(() => null)
+      costRecipeCached(r.id).catch(() => null)
     )
   )
 
@@ -93,7 +93,7 @@ export async function getRecipeDetail(recipeId: string) {
   })
   if (!recipe) return null
 
-  const cost = await computeRecipeCost(recipeId).catch(() => null)
+  const cost = await costRecipeCached(recipeId).catch(() => null)
   return { recipe, cost }
 }
 
@@ -249,7 +249,7 @@ export async function previewRecipeCost(input: {
       continue
     }
     if (ing.canonicalIngredientId) {
-      const cost = await getCanonicalIngredientCost(ing.canonicalIngredientId)
+      const cost = await costIngredientCached(ing.canonicalIngredientId)
       if (!cost) {
         partial = true
         lines.push({
