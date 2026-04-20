@@ -129,6 +129,11 @@ export async function getOtterAnalytics(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)
@@ -468,6 +473,11 @@ export async function getDashboardAnalytics(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)
@@ -662,6 +672,11 @@ export async function getMenuCategoryAnalytics(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)
@@ -781,7 +796,7 @@ export async function getMenuCategoryAnalytics(
   }
 }
 
-export async function getMenuPerformanceAnalytics(
+async function getMenuPerformanceAnalyticsRaw(
   storeId?: string,
   options?: { days?: number; startDate?: string; endDate?: string }
 ): Promise<import("@/types/analytics").MenuPerformanceData | null> {
@@ -807,6 +822,11 @@ export async function getMenuPerformanceAnalytics(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)
@@ -1112,6 +1132,14 @@ export async function getMenuPerformanceAnalytics(
   }
 }
 
+export async function getMenuPerformanceAnalytics(
+  storeId?: string,
+  options?: { days?: number; startDate?: string; endDate?: string }
+): Promise<import("@/types/analytics").MenuPerformanceData | null> {
+  const { cachedMenuPerformance } = await import("@/lib/cached")
+  return cachedMenuPerformance(getMenuPerformanceAnalyticsRaw, storeId, options)
+}
+
 export async function getMenuItemDetail(
   itemName: string,
   category: string,
@@ -1139,6 +1167,11 @@ export async function getMenuItemDetail(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)
@@ -1296,6 +1329,11 @@ export async function getProductMixData(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)
@@ -1905,6 +1943,11 @@ export async function getOrderPatterns(
       rangeEnd = endOfDayLA(today)
       if (days === 1) {
         rangeStart = startOfDayLA(today)
+      } else if (days === -1) {
+        const yday = startOfDayLA(today)
+        yday.setDate(yday.getDate() - 1)
+        rangeStart = yday
+        rangeEnd = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
       } else {
         const start = startOfDayLA(today)
         start.setDate(start.getDate() - days)

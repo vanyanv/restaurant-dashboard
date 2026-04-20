@@ -13,3 +13,43 @@ export const costIngredientCached = cache(getCanonicalIngredientCost)
  * sub-recipe (e.g., "Burger Bun") walk it once per request.
  */
 export const costRecipeCached = cache(computeRecipeCost)
+
+import { unstable_cache } from "next/cache"
+import type { MenuPerformanceData } from "@/types/analytics"
+
+export const MENU_TAGS = {
+  performance: (storeIdOrAll: string) => `menu:perf:${storeIdOrAll}`,
+  catalog: (ownerId: string) => `menu:catalog:${ownerId}`,
+  recipes: (ownerId: string) => `recipes:${ownerId}`,
+} as const
+
+type PerfOptions = { days?: number; startDate?: string; endDate?: string }
+
+/**
+ * Cache key includes storeId + date range so every distinct call gets its own
+ * entry. Tag-based invalidation is scoped to the store (Task 7c wires this
+ * into mutation paths).
+ */
+export function cachedMenuPerformance(
+  loader: (
+    storeId: string | undefined,
+    options?: PerfOptions
+  ) => Promise<MenuPerformanceData | null>,
+  storeId: string | undefined,
+  options?: PerfOptions
+): Promise<MenuPerformanceData | null> {
+  const storeKey = storeId ?? "all"
+  const rangeKey =
+    options?.startDate && options?.endDate
+      ? `${options.startDate}:${options.endDate}`
+      : `days:${options?.days ?? 7}`
+  const cached = unstable_cache(
+    () => loader(storeId, options),
+    ["menu-perf-v1", storeKey, rangeKey],
+    {
+      tags: [MENU_TAGS.performance(storeKey), MENU_TAGS.performance("all")],
+      revalidate: 300,
+    }
+  )
+  return cached()
+}
