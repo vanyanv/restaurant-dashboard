@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatCurrency } from "@/lib/format"
+import { formatCurrency, formatDateUS } from "@/lib/format"
 import type { PriceMoverRow } from "@/types/invoice"
 
 interface PriceMoversCardProps {
@@ -85,11 +85,11 @@ export function PriceMoversCard({ rows }: PriceMoversCardProps) {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(r.prevPrice)}
-                        <div className="text-xs text-muted-foreground">{r.prevDate}</div>
+                        <div className="text-xs text-muted-foreground">{formatDateUS(r.prevDate)}</div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-medium">
                         {formatCurrency(r.latestPrice)}
-                        <div className="text-xs text-muted-foreground">{r.latestDate}</div>
+                        <div className="text-xs text-muted-foreground">{formatDateUS(r.latestDate)}</div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         <span

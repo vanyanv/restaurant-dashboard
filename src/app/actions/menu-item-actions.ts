@@ -31,7 +31,11 @@ export async function getMenuItemsForCatalog(): Promise<MenuItemForCatalog[]> {
   if (storeIds.length === 0) return []
 
   const menuRows = await prisma.otterMenuItem.findMany({
-    where: { storeId: { in: storeIds }, isModifier: false },
+    where: {
+      storeId: { in: storeIds },
+      isModifier: false,
+      category: { not: "Uncategorized" },
+    },
     select: {
       storeId: true,
       itemName: true,

@@ -7,6 +7,8 @@ export type CanonicalIngredientSummary = {
   latestUnitCost: number | null
   latestUnit: string | null
   latestPriceAt: Date | null
+  latestVendor: string | null
+  latestSku: string | null
 }
 
 export type RecipeIngredientInput = {

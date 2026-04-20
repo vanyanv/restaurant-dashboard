@@ -10,7 +10,7 @@ import {
   ReferenceLine,
   Cell,
   CartesianGrid,
-} from "recharts"
+} from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

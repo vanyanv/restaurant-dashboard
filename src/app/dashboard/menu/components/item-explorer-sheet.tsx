@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
-import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "@/components/charts/recharts"
 import { motion } from "framer-motion"
 import { TrendingUp, TrendingDown, Trophy } from "lucide-react"
 import {

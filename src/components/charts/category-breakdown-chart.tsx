@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Pie, PieChart, Cell } from "recharts"
+import { Pie, PieChart, Cell } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

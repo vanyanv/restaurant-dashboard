@@ -112,32 +112,65 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string): P
     },
   })
 
+  // Batch-fetch prior line items for every vendor touched in this sync — one query
+  // replaces the old per-line findFirst (previously O(N) queries per sync).
+  const vendorNames = Array.from(new Set(newLines.map((l) => l.invoice.vendorName)))
+  const priorLines = vendorNames.length > 0
+    ? await prisma.invoiceLineItem.findMany({
+        where: {
+          invoice: {
+            ownerId: userId,
+            vendorName: { in: vendorNames },
+            invoiceDate: { not: null },
+          },
+        },
+        select: {
+          sku: true,
+          productName: true,
+          unitPrice: true,
+          invoice: { select: { vendorName: true, invoiceDate: true } },
+        },
+      })
+    : []
+
+  type PriorCandidate = { unitPrice: number; date: Date }
+  const priorsBySku = new Map<string, PriorCandidate[]>()
+  const priorsByName = new Map<string, PriorCandidate[]>()
+  for (const p of priorLines) {
+    const date = p.invoice.invoiceDate
+    if (!date) continue
+    const candidate: PriorCandidate = { unitPrice: p.unitPrice, date }
+    if (p.sku) {
+      const key = `${p.invoice.vendorName}|${p.sku}`
+      const arr = priorsBySku.get(key)
+      if (arr) arr.push(candidate)
+      else priorsBySku.set(key, [candidate])
+    } else if (p.productName) {
+      const key = `${p.invoice.vendorName}|${p.productName.toLowerCase()}`
+      const arr = priorsByName.get(key)
+      if (arr) arr.push(candidate)
+      else priorsByName.set(key, [candidate])
+    }
+  }
+
   const hikes: PriceHike[] = []
   for (const li of newLines) {
     if (!li.invoice.invoiceDate) continue
     if (li.unitPrice < PRICE_ALERT_MIN_UNIT_PRICE) continue
 
-    // Find the single most recent prior order of the same (vendor, sku or productName)
-    const priorWhere = {
-      invoice: {
-        ownerId: userId,
-        vendorName: li.invoice.vendorName,
-        invoiceDate: { lt: li.invoice.invoiceDate, not: null },
-      },
-      ...(li.sku
-        ? { sku: li.sku }
-        : { sku: null, productName: { equals: li.productName, mode: "insensitive" as const } }),
-    }
-    const prior = await prisma.invoiceLineItem.findFirst({
-      where: priorWhere,
-      orderBy: { invoice: { invoiceDate: "desc" } },
-      select: {
-        unitPrice: true,
-        invoice: { select: { invoiceDate: true } },
-      },
-    })
+    const currentDate = li.invoice.invoiceDate
+    const candidates = li.sku
+      ? priorsBySku.get(`${li.invoice.vendorName}|${li.sku}`) ?? []
+      : li.productName
+        ? priorsByName.get(`${li.invoice.vendorName}|${li.productName.toLowerCase()}`) ?? []
+        : []
 
-    if (!prior || !prior.invoice.invoiceDate || prior.unitPrice <= 0) continue
+    let prior: PriorCandidate | null = null
+    for (const c of candidates) {
+      if (c.date >= currentDate) continue
+      if (!prior || c.date > prior.date) prior = c
+    }
+    if (!prior || prior.unitPrice <= 0) continue
 
     const pctChange = ((li.unitPrice - prior.unitPrice) / prior.unitPrice) * 100
     if (pctChange < PRICE_ALERT_PCT_THRESHOLD) continue
@@ -149,7 +182,7 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string): P
       category: li.category,
       unit: li.unit,
       prevPrice: prior.unitPrice,
-      prevDate: prior.invoice.invoiceDate,
+      prevDate: prior.date,
       latestPrice: li.unitPrice,
       latestDate: li.invoice.invoiceDate,
       pctChange,

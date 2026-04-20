@@ -121,6 +121,8 @@ function GroupRow({
           latestUnitCost: null,
           latestUnit: null,
           latestPriceAt: null,
+          latestVendor: null,
+          latestSku: null,
         })
         onMatched(group.key, result.canonicalIngredientId)
       } catch (err) {

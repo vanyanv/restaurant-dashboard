@@ -11,7 +11,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
-} from "recharts"
+} from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

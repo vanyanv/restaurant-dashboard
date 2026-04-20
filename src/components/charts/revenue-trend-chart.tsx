@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "recharts"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

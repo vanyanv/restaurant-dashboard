@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import logo from "../../public/logo.png"
 import {
   ChevronRight,
   Store,
@@ -200,13 +202,13 @@ function EditorialBrand() {
         className="brand-logo-link"
         aria-label="Chris N Eddy's — Home"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo.png"
+        <Image
+          src={logo}
           alt="Chris N Eddy's"
-          width={1280}
-          height={720}
+          priority
+          sizes="(max-width: 768px) 200px, 280px"
           className="brand-logo-img"
+          style={{ width: "100%", height: "auto" }}
         />
       </Link>
       <div className="brand-details">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "recharts"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

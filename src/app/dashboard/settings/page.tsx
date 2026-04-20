@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
@@ -68,9 +69,11 @@ export default async function SettingsMastheadPage() {
       <section className="settings-masthead-grid dock-in dock-in-1">
         <div className="flex items-start gap-6">
           {user.avatarUrl ? (
-            <img
+            <Image
               src={user.avatarUrl}
               alt={user.name}
+              width={96}
+              height={96}
               className="settings-masthead-monogram object-cover"
             />
           ) : (

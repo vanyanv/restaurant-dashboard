@@ -1,6 +1,6 @@
 "use client"
 
-import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "recharts"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

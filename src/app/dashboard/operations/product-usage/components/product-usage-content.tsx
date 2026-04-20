@@ -1,7 +1,6 @@
 "use client"
 
 import { useTransition, useState, useCallback, useEffect } from "react"
-import dynamic from "next/dynamic"
 import { getProductUsageData } from "@/app/actions/product-usage-actions"
 
 import {
@@ -27,15 +26,8 @@ import { AlertsBanner } from "./alerts-banner"
 import { IngredientVarianceTable } from "./ingredient-variance-table"
 import { IngredientDrilldownSheet } from "./ingredient-drilldown-sheet"
 import type { ProductUsageData, IngredientUsageRow } from "@/types/product-usage"
-
-const IngredientEfficiencyChart = dynamic(
-  () => import("./ingredient-efficiency-chart").then(m => ({ default: m.IngredientEfficiencyChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
-const CategorySpendChart = dynamic(
-  () => import("./category-spend-chart").then(m => ({ default: m.CategorySpendChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
+import { IngredientEfficiencyChart } from "./ingredient-efficiency-chart"
+import { CategorySpendChart } from "./category-spend-chart"
 
 interface ProductUsageContentProps {
   initialData: ProductUsageData | null

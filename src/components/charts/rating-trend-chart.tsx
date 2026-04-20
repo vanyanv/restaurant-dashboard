@@ -1,6 +1,6 @@
 "use client"
 
-import { Line, LineChart, XAxis, YAxis, ReferenceLine } from "recharts"
+import { Line, LineChart, XAxis, YAxis, ReferenceLine } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

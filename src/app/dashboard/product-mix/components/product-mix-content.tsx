@@ -1,11 +1,9 @@
 "use client"
 
 import { useTransition, useState, useCallback, useEffect } from "react"
-import dynamic from "next/dynamic"
 import { ChevronDown } from "lucide-react"
 import { getProductMixData } from "@/app/actions/store-actions"
 
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -18,47 +16,15 @@ import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { OtterSyncButton } from "@/components/otter-sync-button"
 import { DashboardSection } from "@/components/analytics/dashboard-section"
 import { formatDateRange, localDateStr } from "@/lib/dashboard-utils"
-import {
-  ChartSkeleton,
-  DataTableSkeleton,
-} from "@/components/skeletons"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ChartSkeleton, DataTableSkeleton } from "@/components/skeletons"
 import type { ProductMixData } from "@/types/analytics"
-
-const ProductMixTreemap = dynamic(
-  () => import("@/components/charts/product-mix-treemap").then(m => ({ default: m.ProductMixTreemap })),
-  { loading: () => <ChartSkeleton height="h-[350px] md:h-[400px]" />, ssr: false }
-)
-const QuickInsights = dynamic(
-  () => import("@/components/analytics/quick-insights").then(m => ({ default: m.QuickInsights })),
-  { loading: () => (
-    <div className="flex gap-2">
-      <Skeleton className="h-8 w-48 rounded-full" />
-      <Skeleton className="h-8 w-56 rounded-full" />
-      <Skeleton className="h-8 w-44 rounded-full" />
-    </div>
-  ), ssr: false }
-)
-const ParetoChart = dynamic(
-  () => import("@/components/charts/pareto-chart").then(m => ({ default: m.ParetoChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
-const MenuEngineeringMatrix = dynamic(
-  () => import("@/components/charts/menu-engineering-matrix").then(m => ({ default: m.MenuEngineeringMatrix })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
-const ProductMixTable = dynamic(
-  () => import("@/components/analytics/product-mix-table").then(m => ({ default: m.ProductMixTable })),
-  { loading: () => <DataTableSkeleton columns={10} rows={8} />, ssr: false }
-)
-const TopMovers = dynamic(
-  () => import("@/components/analytics/top-movers").then(m => ({ default: m.TopMovers })),
-  { loading: () => (
-    <div className="grid gap-4 md:grid-cols-2">
-      <ChartSkeleton height="h-[200px]" />
-      <ChartSkeleton height="h-[200px]" />
-    </div>
-  ), ssr: false }
-)
+import { ProductMixTreemap } from "@/components/charts/product-mix-treemap"
+import { QuickInsights } from "@/components/analytics/quick-insights"
+import { ParetoChart } from "@/components/charts/pareto-chart"
+import { MenuEngineeringMatrix } from "@/components/charts/menu-engineering-matrix"
+import { ProductMixTable } from "@/components/analytics/product-mix-table"
+import { TopMovers } from "@/components/analytics/top-movers"
 
 interface ProductMixContentProps {
   initialData: ProductMixData | null

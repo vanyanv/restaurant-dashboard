@@ -303,6 +303,8 @@ model Invoice {
   @@index([vendorName])
   @@index([invoiceDate])
   @@index([status])
+  @@index([ownerId, createdAt])
+  @@index([ownerId, vendorName, invoiceDate])
 }
 
 model InvoiceLineItem {

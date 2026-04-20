@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { InvoiceListItem } from "@/types/invoice"
-import { formatCurrency } from "@/lib/format"
+import { formatCurrency, formatDateUS } from "@/lib/format"
 
 const STATUS_STYLES: Record<
   string,
@@ -177,7 +177,7 @@ export function InvoicesListClient({
                         <TableCell className="font-mono text-sm">
                           {inv.invoiceNumber}
                         </TableCell>
-                        <TableCell>{inv.invoiceDate ?? "—"}</TableCell>
+                        <TableCell>{inv.invoiceDate ? formatDateUS(inv.invoiceDate) : "—"}</TableCell>
                         <TableCell>{inv.storeName ?? "Unmatched"}</TableCell>
                         <TableCell className="text-right font-medium">
                           {formatCurrency(inv.totalAmount)}

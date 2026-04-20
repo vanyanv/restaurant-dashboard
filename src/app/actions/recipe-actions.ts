@@ -42,7 +42,7 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
   if (!ownerId) return []
 
   const recipes = await prisma.recipe.findMany({
-    where: { ownerId },
+    where: { ownerId, category: { not: "Uncategorized" } },
     orderBy: [{ isSellable: "desc" }, { itemName: "asc" }],
     select: {
       id: true,

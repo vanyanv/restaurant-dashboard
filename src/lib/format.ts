@@ -30,6 +30,15 @@ export function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
+export function formatDateUS(dateStr: string): string {
+  const date = new Date(dateStr + "T00:00:00")
+  return date.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  })
+}
+
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value)
 }

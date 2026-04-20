@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Treemap, ResponsiveContainer, Tooltip } from "recharts"
+import { Treemap, ResponsiveContainer, Tooltip } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

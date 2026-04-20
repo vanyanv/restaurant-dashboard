@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Bar, BarChart, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

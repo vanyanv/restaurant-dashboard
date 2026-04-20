@@ -1,7 +1,6 @@
 "use client"
 
 import { useTransition, useState, useCallback, useEffect, useMemo } from "react"
-import dynamic from "next/dynamic"
 import { getMenuPerformanceAnalytics } from "@/app/actions/store-actions"
 
 import {
@@ -26,31 +25,12 @@ import {
   DataTableSkeleton,
 } from "@/components/skeletons"
 import type { MenuPerformanceData } from "@/types/analytics"
-
-const MenuDailyTrendChart = dynamic(
-  () => import("@/components/charts/menu-daily-trend-chart").then(m => ({ default: m.MenuDailyTrendChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
-const CategoryBreakdownChart = dynamic(
-  () => import("@/components/charts/category-breakdown-chart").then(m => ({ default: m.CategoryBreakdownChart })),
-  { loading: () => <PieChartSkeleton />, ssr: false }
-)
-const ChannelComparisonChart = dynamic(
-  () => import("@/components/charts/channel-comparison-chart").then(m => ({ default: m.ChannelComparisonChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
-const MenuItemsTable = dynamic(
-  () => import("@/components/analytics/menu-items-table").then(m => ({ default: m.MenuItemsTable })),
-  { loading: () => <DataTableSkeleton columns={10} rows={8} />, ssr: false }
-)
-const ItemHeatmap = dynamic(
-  () => import("@/components/charts/item-heatmap").then(m => ({ default: m.ItemHeatmap })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
-const RankingRaceChart = dynamic(
-  () => import("@/components/charts/ranking-race-chart").then(m => ({ default: m.RankingRaceChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
+import { MenuDailyTrendChart } from "@/components/charts/menu-daily-trend-chart"
+import { CategoryBreakdownChart } from "@/components/charts/category-breakdown-chart"
+import { ChannelComparisonChart } from "@/components/charts/channel-comparison-chart"
+import { MenuItemsTable } from "@/components/analytics/menu-items-table"
+import { ItemHeatmap } from "@/components/charts/item-heatmap"
+import { RankingRaceChart } from "@/components/charts/ranking-race-chart"
 
 interface MenuPerformanceContentProps {
   initialData: MenuPerformanceData | null

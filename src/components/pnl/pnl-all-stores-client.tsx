@@ -13,10 +13,13 @@ import { getAllStoresPnL } from "@/app/actions/store-actions"
 
 export interface PnLAllStoresClientProps {
   stores: Array<{ id: string; name: string }>
+  initialState?: PnLRangeState
 }
 
-export function PnLAllStoresClient({ stores }: PnLAllStoresClientProps) {
-  const [state, setState] = useState<PnLRangeState>(defaultPnLRangeState)
+export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientProps) {
+  const [state, setState] = useState<PnLRangeState>(
+    () => initialState ?? defaultPnLRangeState(),
+  )
 
   const query = useQuery({
     queryKey: [

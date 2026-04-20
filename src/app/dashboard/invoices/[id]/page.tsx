@@ -16,9 +16,43 @@ export default async function InvoiceDetailPage({
 
   const invoice = await prisma.invoice.findFirst({
     where: { id, ownerId: session.user.id },
-    include: {
+    select: {
+      id: true,
+      vendorName: true,
+      invoiceNumber: true,
+      invoiceDate: true,
+      dueDate: true,
+      deliveryAddress: true,
+      totalAmount: true,
+      subtotal: true,
+      taxAmount: true,
+      status: true,
+      storeId: true,
+      matchConfidence: true,
+      emailSubject: true,
+      emailReceivedAt: true,
+      attachmentName: true,
+      pdfBlobPathname: true,
+      createdAt: true,
       store: { select: { id: true, name: true } },
-      lineItems: { orderBy: { lineNumber: "asc" } },
+      lineItems: {
+        orderBy: { lineNumber: "asc" },
+        select: {
+          id: true,
+          lineNumber: true,
+          sku: true,
+          productName: true,
+          description: true,
+          category: true,
+          quantity: true,
+          unit: true,
+          packSize: true,
+          unitSize: true,
+          unitSizeUom: true,
+          unitPrice: true,
+          extendedPrice: true,
+        },
+      },
     },
   })
 

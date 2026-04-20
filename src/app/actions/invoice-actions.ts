@@ -103,11 +103,23 @@ export async function getInvoiceList(filters?: {
   const [invoices, total] = await Promise.all([
     prisma.invoice.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        vendorName: true,
+        invoiceNumber: true,
+        invoiceDate: true,
+        totalAmount: true,
+        status: true,
+        storeId: true,
+        matchConfidence: true,
+        createdAt: true,
         store: { select: { name: true } },
         _count: { select: { lineItems: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [
+        { invoiceDate: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
       skip: (page - 1) * limit,
       take: limit,
     }),

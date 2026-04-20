@@ -33,6 +33,7 @@ import { EditorialTopbar } from "../../../components/editorial-topbar"
 import { toast } from "sonner"
 import type { InvoiceDetail } from "@/types/invoice"
 import { PdfViewer } from "./pdf-viewer"
+import { formatDateUS } from "@/lib/format"
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -116,7 +117,7 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
         stamps={
           <span>
             {invoice.vendorName}
-            {invoice.invoiceDate ? ` · ${invoice.invoiceDate}` : ""}
+            {invoice.invoiceDate ? ` · ${formatDateUS(invoice.invoiceDate)}` : ""}
           </span>
         }
       >
@@ -162,12 +163,12 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                 <p className="text-xs text-muted-foreground">Invoice Date</p>
                 <p className="font-medium flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
-                  {invoice.invoiceDate ?? "N/A"}
+                  {invoice.invoiceDate ? formatDateUS(invoice.invoiceDate) : "N/A"}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Due Date</p>
-                <p className="font-medium">{invoice.dueDate ?? "N/A"}</p>
+                <p className="font-medium">{invoice.dueDate ? formatDateUS(invoice.dueDate) : "N/A"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Subtotal</p>

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { Bar, BarChart, XAxis, YAxis, Cell, ReferenceLine } from "recharts"
+import { Bar, BarChart, XAxis, YAxis, Cell, ReferenceLine } from "@/components/charts/recharts"
 import {
   Card,
   CardContent,

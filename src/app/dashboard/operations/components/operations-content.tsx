@@ -23,7 +23,7 @@ import {
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   Legend,
-} from "recharts"
+} from "@/components/charts/recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Select,

@@ -1,7 +1,6 @@
 "use client"
 
 import { useTransition, useState, useCallback, useEffect } from "react"
-import dynamic from "next/dynamic"
 import { getProductUsageData } from "@/app/actions/product-usage-actions"
 
 import {
@@ -18,11 +17,7 @@ import { ChartSkeleton, DataTableSkeleton } from "@/components/skeletons"
 import { formatDateRange, localDateStr } from "@/lib/dashboard-utils"
 import { PriceChangesTable } from "./price-changes-table"
 import type { ProductUsageData } from "@/types/product-usage"
-
-const VendorPriceChart = dynamic(
-  () => import("./vendor-price-chart").then(m => ({ default: m.VendorPriceChart })),
-  { loading: () => <ChartSkeleton />, ssr: false }
-)
+import { VendorPriceChart } from "./vendor-price-chart"
 
 interface VendorsContentProps {
   initialData: ProductUsageData | null

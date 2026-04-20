@@ -177,7 +177,7 @@ export function RecipesContent({
       try {
         const result = await runCanonicalIngredientSeed()
         setSeedMessage(
-          `Created ${result.canonicalsCreated} ingredients, ${result.aliasesCreated} aliases (${result.skipped} already mapped).`
+          `Created ${result.canonicalsCreated} ingredients, ${result.skuMatchesCreated} SKU matches, ${result.aliasesCreated} aliases (${result.skipped} skipped).`
         )
         router.refresh()
       } catch (err) {
@@ -207,6 +207,8 @@ export function RecipesContent({
               latestUnitCost: null,
               latestUnit: null,
               latestPriceAt: null,
+              latestVendor: null,
+              latestSku: null,
             },
           ].sort((a, b) => a.name.localeCompare(b.name))
         )
