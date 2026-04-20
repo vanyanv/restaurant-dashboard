@@ -2832,6 +2832,21 @@
   font-size: 13px;
 }
 
+/* Deduction cells — cost rows (COGS, labor, rent, commissions, discounts)
+   always read red, plus any cell whose stored value is negative (a losing
+   subtotal). The label gets a tonal nudge so the row is scannable as a cost. */
+.statement-cell--deduction .font-mono {
+  color: var(--accent-dark);
+}
+
+.statement-cell--cost .statement-label {
+  color: var(--accent-dark);
+}
+
+.statement-cell--cost.statement-cell--subtotal .statement-label {
+  color: var(--accent-dark);
+}
+
 /* ─── DeltaStamp ───────────────────────────────────────────────── */
 
 .delta-stamp {

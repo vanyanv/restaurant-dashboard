@@ -35,6 +35,34 @@ function formatDollar(v: number, { parens = true } = {}): string {
   return v < 0 ? (parens ? `(${str})` : `-$${str}`) : `$${str}`
 }
 
+/** Deduction-style format: always shows magnitude in parens, regardless of
+ *  storage sign. Used for cost rows where the accounting meaning is always
+ *  "subtract". */
+function formatDeduction(v: number): string {
+  if (!Number.isFinite(v) || v === 0) return "—"
+  const abs = Math.abs(v)
+  const str = abs.toLocaleString("en-US", { maximumFractionDigits: 0 })
+  return `(${str})`
+}
+
+/** Row codes where the semantic meaning is a DEDUCTION regardless of how
+ *  the value is stored (some are stored as negatives, some as positive
+ *  magnitudes). Used to render those cells in red with parens formatting. */
+const DEDUCTION_CODES = new Set<string>([
+  "COM_UBER", // 3P commissions
+  "COM_DD",
+  "6100",     // COGS
+  "6200",     // Labor
+  "7200",     // Rent
+  "7210",     // Cleaning
+  "7220",     // Towels
+  "4110",     // Discounts (guest)
+])
+
+function isDeductionRow(row: PnLRow): boolean {
+  return DEDUCTION_CODES.has(row.code)
+}
+
 function formatPercent(p: number): string {
   if (!Number.isFinite(p) || p === 0) return "—"
   return `${(p * 100).toFixed(1)}%`
@@ -137,14 +165,15 @@ export function PnLStatement({
 
           {rows.flatMap((row) => {
             const cells: React.ReactNode[] = []
-            const isCostRow = row.code.startsWith("COM_") || row.isFixed || row.code === "6100"
+            const isCostRow = isDeductionRow(row)
 
             cells.push(
               <div
                 key={`${row.code}-label`}
                 className={cn(
                   "statement-cell statement-cell--label",
-                  row.isSubtotal && "statement-cell--subtotal"
+                  row.isSubtotal && "statement-cell--subtotal",
+                  isCostRow && "statement-cell--cost"
                 )}
                 role="rowheader"
               >
@@ -157,20 +186,27 @@ export function PnLStatement({
             for (let i = 0; i < periods.length; i++) {
               const v = row.values[i] ?? 0
               const unknown = row.isUnknown?.[i] === true
+              // A cell should read red when the ROW is a deduction (always),
+              // OR when the stored value is negative (e.g., a losing
+              // Bottom Line subtotal or a negative discount aggregate).
+              const isNegativeValue = Number.isFinite(v) && v < 0
+              const showRed = !unknown && v !== 0 && (isCostRow || isNegativeValue)
+              const display = isCostRow ? formatDeduction(v) : formatDollar(v)
               cells.push(
                 <div
                   key={`${row.code}-${i}`}
                   className={cn(
                     "statement-cell statement-cell--num",
                     row.isSubtotal && "statement-cell--subtotal",
-                    i === latestIdx && "statement-cell--latest"
+                    i === latestIdx && "statement-cell--latest",
+                    showRed && "statement-cell--deduction"
                   )}
                   role="cell"
                 >
                   {unknown ? (
                     <span className="statement-unknown" title="Not configured">—</span>
                   ) : (
-                    <span className="font-mono">{formatDollar(v)}</span>
+                    <span className="font-mono">{display}</span>
                   )}
                 </div>
               )
