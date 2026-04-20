@@ -411,3 +411,102 @@ export async function unmapOtterSubItem(skuId: string): Promise<void> {
     stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
   )
 }
+
+export type MenuItemSellPrice = {
+  /** Blended average sell price across platforms over the lookback window. */
+  avgPrice: number
+  /** Total units sold over the lookback window — how much trust to put in the avg. */
+  qtySold: number
+}
+
+/**
+ * Per-Otter-item average selling price, aggregated from OtterMenuItem daily
+ * rollups over the last N days (default 30). Lookup key is case-insensitive
+ * item name.
+ *
+ * Falls back to the most recent OtterOrderItem.price for items that exist in
+ * the order stream but don't have OtterMenuItem rollups (rare, but possible
+ * for freshly added menu items).
+ */
+export async function getMenuItemSellPrices(
+  lookbackDays: number = 30
+): Promise<Map<string, MenuItemSellPrice>> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) return new Map()
+
+  const stores = await prisma.store.findMany({
+    where: { ownerId },
+    select: { id: true },
+  })
+  const storeIds = stores.map((s) => s.id)
+  if (storeIds.length === 0) return new Map()
+
+  const cutoff = new Date()
+  cutoff.setUTCDate(cutoff.getUTCDate() - lookbackDays)
+
+  // Primary: OtterMenuItem daily rollups — averaged total_sales / total_qty per item.
+  const rollups = await prisma.otterMenuItem.findMany({
+    where: {
+      storeId: { in: storeIds },
+      isModifier: false,
+      date: { gte: cutoff },
+    },
+    select: {
+      itemName: true,
+      fpQuantitySold: true,
+      tpQuantitySold: true,
+      fpTotalSales: true,
+      tpTotalSales: true,
+    },
+  })
+
+  const agg = new Map<string, { qty: number; sales: number }>()
+  for (const r of rollups) {
+    const qty = (r.fpQuantitySold ?? 0) + (r.tpQuantitySold ?? 0)
+    const sales = (r.fpTotalSales ?? 0) + (r.tpTotalSales ?? 0)
+    if (qty <= 0) continue
+    const key = r.itemName.toLowerCase()
+    const existing = agg.get(key)
+    if (existing) {
+      existing.qty += qty
+      existing.sales += sales
+    } else {
+      agg.set(key, { qty, sales })
+    }
+  }
+
+  const prices = new Map<string, MenuItemSellPrice>()
+  for (const [key, { qty, sales }] of agg) {
+    if (qty <= 0 || sales <= 0) continue
+    prices.set(key, { avgPrice: sales / qty, qtySold: qty })
+  }
+
+  // Fallback: items present in recent OtterOrderItem but missing rollups.
+  // Group by lowercase name, take the most-recent-order price per name.
+  const recentOrderItems = await prisma.otterOrderItem.findMany({
+    where: {
+      order: {
+        storeId: { in: storeIds },
+        referenceTimeLocal: { gte: cutoff },
+      },
+      price: { gt: 0 },
+    },
+    select: {
+      name: true,
+      price: true,
+      quantity: true,
+      order: { select: { referenceTimeLocal: true } },
+    },
+    orderBy: { order: { referenceTimeLocal: "desc" } },
+    take: 5000,
+  })
+
+  for (const oi of recentOrderItems) {
+    const key = oi.name.toLowerCase()
+    if (prices.has(key)) continue
+    const unit = oi.quantity > 0 ? oi.price / oi.quantity : oi.price
+    prices.set(key, { avgPrice: unit, qtySold: Math.round(oi.quantity) })
+  }
+
+  return prices
+}

@@ -15,6 +15,7 @@ import {
   Receipt,
   ChefHat,
   Package,
+  UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
@@ -73,6 +74,11 @@ const NAV: NavSection[] = [
         title: "Orders",
         url: "/dashboard/orders",
         icon: Receipt,
+      },
+      {
+        title: "Menu",
+        url: "/dashboard/menu/catalog",
+        icon: UtensilsCrossed,
       },
       {
         title: "Recipes",
