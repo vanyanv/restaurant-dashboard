@@ -19,13 +19,6 @@ export async function HeroKpisSection({ range }: { range: DashboardRange }) {
 
   const invoiceSpend = invoiceSummary?.totalSpend ?? 0
 
-  // Food cost % = invoice spend ÷ net revenue. Only meaningful when both sides
-  // have data; otherwise show em-dash.
-  const foodCostPct =
-    kpis && kpis.net > 0 && invoiceSpend > 0
-      ? (invoiceSpend / kpis.net) * 100
-      : null
-
   return (
     <dl className="editorial-kpi-strip editorial-kpi-strip-wide dock-in dock-in-2">
       <HeroKpi
@@ -56,12 +49,6 @@ export async function HeroKpisSection({ range }: { range: DashboardRange }) {
         label="Invoice spend"
         value={invoiceSummary ? formatMoneyLarge(invoiceSpend) : "—"}
         unit="last 30d"
-        delta={null}
-      />
-      <HeroKpi
-        label="Food cost"
-        value={foodCostPct != null ? `${foodCostPct.toFixed(1)}%` : "—"}
-        unit="of net sales"
         delta={null}
       />
     </dl>
