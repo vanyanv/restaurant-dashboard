@@ -8,6 +8,7 @@ import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
 import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
 import { PnLLeagueTable } from "./pnl-league-table"
+import { PnLStoreComparison } from "./pnl-store-comparison"
 import { getAllStoresPnL } from "@/app/actions/store-actions"
 import {
   TOTAL_SALES_CODE,
@@ -139,6 +140,39 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
                 .
               </div>
             )}
+
+            {/* Stores side by side — full P&L with stores as columns */}
+            {data.perStore.length > 0 ? (
+              <PnLStoreComparison
+                stores={data.perStore.map((s) => ({
+                  storeId: s.storeId,
+                  storeName: s.storeName,
+                  grossSales: s.grossSales,
+                  cogsValue: s.cogsValue,
+                  laborValue: s.laborValue,
+                  rentValue:
+                    s.rentValue + (s.fixedCosts - s.laborValue - s.rentValue),
+                  bottomLine: s.bottomLine,
+                  marginPct: s.marginPct,
+                  fixedCostsConfigured: s.fixedCostsConfigured,
+                }))}
+                total={{
+                  storeId: null,
+                  storeName: "Total",
+                  grossSales: data.combined.grossSales,
+                  cogsValue: data.combined.cogsValue,
+                  laborValue: data.combined.laborValue,
+                  rentValue:
+                    data.combined.rentValue +
+                    (data.combined.fixedCosts -
+                      data.combined.laborValue -
+                      data.combined.rentValue),
+                  bottomLine: data.combined.bottomLine,
+                  marginPct: data.combined.marginPct,
+                  fixedCostsConfigured: true,
+                }}
+              />
+            ) : null}
 
           </>
         ) : null}

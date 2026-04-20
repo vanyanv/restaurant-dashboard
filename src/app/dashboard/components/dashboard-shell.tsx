@@ -13,7 +13,6 @@ import { DayHighlightsSection } from "./sections/day-highlights-section"
 import { HourlyOrdersSection } from "./sections/hourly-orders-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
 import { InvoiceSnapshotSection } from "./sections/invoice-snapshot-section"
-import { PnLStoreComparisonSection } from "./sections/pnl-store-comparison-section"
 
 interface DashboardShellProps {
   range: DashboardRange
@@ -39,10 +38,6 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
       <div className="px-6 py-8 space-y-8">
         <Suspense fallback={<DayHighlightsSkeleton />}>
           <DayHighlightsSection range={range} />
-        </Suspense>
-
-        <Suspense fallback={<ChartSkeleton height="h-64" />}>
-          <PnLStoreComparisonSection range={range} />
         </Suspense>
 
         <div className="grid gap-6 lg:grid-cols-5 dock-in dock-in-4">
