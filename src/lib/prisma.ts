@@ -5,9 +5,22 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+// Strip sslmode from the connection string. SSL is configured explicitly via
+// `ssl: true` below, and leaving `sslmode=` in the URL makes pg-connection-string
+// emit a deprecation warning on every boot.
+const stripSslMode = (raw: string): string => {
+  try {
+    const url = new URL(raw)
+    url.searchParams.delete('sslmode')
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
 const createPrismaClient = () => {
   const adapter = new PrismaPg({
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: stripSslMode(process.env.DATABASE_URL!),
     ssl: true,
   })
 
