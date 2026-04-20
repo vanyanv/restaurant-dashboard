@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Search } from "lucide-react"
 import { EditorialTopbar } from "../../../components/editorial-topbar"
 import { Input } from "@/components/ui/input"
@@ -502,11 +503,16 @@ function MenuRow({
   showCategory: boolean
 }) {
   const { computedCost: cost, sellPrice: sell, marginPct, profit30d, contribution } = row
+  const router = useRouter()
+  const href = `/dashboard/menu/catalog/${row.id}`
 
   return (
     <li>
       <Link
-        href={`/dashboard/menu/catalog/${row.id}`}
+        href={href}
+        prefetch={false}
+        onMouseEnter={() => router.prefetch(href)}
+        onFocus={() => router.prefetch(href)}
         className={cn(
           "group grid w-full items-start gap-4 border-b border-[var(--hairline)] py-3 text-left transition hover:bg-[var(--paper-deep)]",
           GRID_COLS
