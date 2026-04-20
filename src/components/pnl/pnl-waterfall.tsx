@@ -40,10 +40,22 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
     running.push(cursor)
   }
 
-  // Scale: 0 → peak (first total). Use max of running + step values so a
-  // negative bottom line (rare) still fits.
-  const peak = Math.max(...steps.map((s, i) => (s.kind === "total" ? s.value : running[i - 1] ?? 0)))
-  const safePeak = peak > 0 ? peak : 1
+  // Scale spans from `floor` (min — may be below zero when fixed costs exceed
+  // revenue in a small window, e.g. a single day vs monthly rent) to `peak`
+  // (max — the tallest total or pre-subtract running value). Including 0 in
+  // both bounds guarantees the zero baseline is always visible.
+  const rawPeak = Math.max(
+    0,
+    ...steps.map((s, i) => (s.kind === "total" ? s.value : running[i - 1] ?? 0))
+  )
+  const rawFloor = Math.min(
+    0,
+    ...steps.map((s, i) => (s.kind === "total" ? s.value : running[i] ?? 0))
+  )
+  const range = rawPeak - rawFloor || 1
+  // Convert a dollar value to a "distance from top" percentage.
+  const toTopPct = (v: number) => ((rawPeak - v) / range) * 100
+  const zeroTopPct = toTopPct(0)
 
   const grossValue = steps[0].kind === "total" ? steps[0].value : 0
   const bottomValue = steps[steps.length - 1].kind === "total" ? steps[steps.length - 1].value : running[running.length - 1]
@@ -66,25 +78,30 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
           let barTopPct: number
           let barBottomPct: number
           if (s.kind === "total") {
-            barTopPct = 100 - (s.value / safePeak) * 100
-            barBottomPct = 100
+            // Bar from zero baseline to the total value (either direction).
+            const valTop = toTopPct(s.value)
+            barTopPct = Math.min(valTop, zeroTopPct)
+            barBottomPct = Math.max(valTop, zeroTopPct)
           } else {
-            // Subtract: bar spans from previous running total down to new running total
-            barTopPct = 100 - (runBefore / safePeak) * 100
-            barBottomPct = 100 - (runAfter / safePeak) * 100
+            // Subtract: bar spans from previous running total to new running total.
+            const before = toTopPct(runBefore)
+            const after = toTopPct(runAfter)
+            barTopPct = Math.min(before, after)
+            barBottomPct = Math.max(before, after)
           }
 
           const barStyle = {
-            top: `${Math.max(0, barTopPct)}%`,
+            top: `${barTopPct}%`,
             height: `${Math.max(1, barBottomPct - barTopPct)}%`,
           }
 
           const tone = s.kind === "total" ? "total" : "subtract"
           const isLast = i === steps.length - 1
+          const isNegativeTotal = s.kind === "total" && s.value < 0
 
           // Connector tick between columns, at the running total line
           const connectorStyle = i < steps.length - 1 ? {
-            top: `${100 - (runAfter / safePeak) * 100}%`,
+            top: `${toTopPct(runAfter)}%`,
           } : undefined
 
           return (
@@ -94,6 +111,7 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
                 "pnl-waterfall__col",
                 `pnl-waterfall__col--${tone}`,
                 isLast && "pnl-waterfall__col--finish",
+                isNegativeTotal && "pnl-waterfall__col--negative",
                 `dock-in dock-in-${Math.min(i + 1, 12)}`
               )}
             >
@@ -102,6 +120,12 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
                 {formatDollar(Math.abs(s.value)).replace(/^−/, "")}
               </div>
               <div className="pnl-waterfall__plot" aria-hidden>
+                {rawFloor < 0 ? (
+                  <div
+                    className="pnl-waterfall__zero"
+                    style={{ top: `${zeroTopPct}%` }}
+                  />
+                ) : null}
                 <div className="pnl-waterfall__bar" style={barStyle} />
                 {connectorStyle ? (
                   <div className="pnl-waterfall__connector" style={connectorStyle} />

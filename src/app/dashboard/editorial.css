@@ -3108,6 +3108,24 @@
   background: var(--accent-dark);
 }
 
+.pnl-waterfall__col--negative .pnl-waterfall__bar {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--accent) 0 3px,
+    rgba(220, 38, 38, 0.55) 3px 6px
+  );
+}
+
+.pnl-waterfall__zero {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed var(--ink-muted);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .pnl-waterfall__connector {
   position: absolute;
   right: -1px;
