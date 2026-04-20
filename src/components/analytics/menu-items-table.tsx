@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   Card,
@@ -123,6 +123,10 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
     overscan: 8,
   })
 
+  useEffect(() => {
+    parentRef.current?.scrollTo({ top: 0 })
+  }, [sortKey, sortDir])
+
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
@@ -154,43 +158,43 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
       </CardHeader>
       <CardContent className="px-0 pb-0">
         <div className="rounded-md border-0">
-          {/* Sticky header */}
-          <div
-            className="grid items-center border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sticky top-0 z-10"
-            style={{ gridTemplateColumns: GRID_TEMPLATE }}
-          >
-            <button
-              type="button"
-              className="flex items-center gap-1 cursor-pointer select-none pl-2 text-left"
-              onClick={() => handleSort("itemName")}
-            >
-              Item <SortIcon column="itemName" />
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-1 cursor-pointer select-none text-left"
-              onClick={() => handleSort("category")}
-            >
-              Category <SortIcon column="category" />
-            </button>
-            {NUMERIC_HEADERS.map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                className="flex items-center justify-end gap-1 cursor-pointer select-none text-right"
-                onClick={() => handleSort(key)}
-              >
-                {label} <SortIcon column={key} />
-              </button>
-            ))}
-          </div>
-
-          {/* Virtualized rows */}
+          {/* Virtualized scroll container — sticky header lives inside so it sticks to this scroll ancestor */}
           <div
             ref={parentRef}
             className="max-h-125 overflow-auto"
             style={{ contain: "strict" }}
           >
+            {/* Sticky header — inside the scroll container so sticky is scoped correctly */}
+            <div
+              className="sticky top-0 z-10 grid items-center border-b bg-muted/90 backdrop-blur px-4 py-2 text-xs font-medium text-muted-foreground"
+              style={{ gridTemplateColumns: GRID_TEMPLATE }}
+            >
+              <button
+                type="button"
+                className="flex items-center gap-1 cursor-pointer select-none pl-2 text-left"
+                onClick={() => handleSort("itemName")}
+              >
+                Item <SortIcon column="itemName" />
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1 cursor-pointer select-none text-left"
+                onClick={() => handleSort("category")}
+              >
+                Category <SortIcon column="category" />
+              </button>
+              {NUMERIC_HEADERS.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="flex items-center justify-end gap-1 cursor-pointer select-none text-right"
+                  onClick={() => handleSort(key)}
+                >
+                  {label} <SortIcon column={key} />
+                </button>
+              ))}
+            </div>
+
             <div
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
@@ -203,8 +207,7 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
                 return (
                   <div
                     key={`${item.category}-${item.itemName}-${vi.index}`}
-                    className="grid items-center border-b px-4 text-sm hover:bg-muted/30 cursor-pointer"
-                    onClick={() => onItemClick?.(item.itemName, item.category)}
+                    className="grid items-center border-b px-4 text-sm hover:bg-muted/30"
                     style={{
                       position: "absolute",
                       top: 0,
@@ -219,10 +222,7 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
                       {onItemClick ? (
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onItemClick(item.itemName, item.category)
-                          }}
+                          onClick={() => onItemClick(item.itemName, item.category)}
                           className="text-left hover:underline hover:text-primary cursor-pointer transition-colors"
                         >
                           {item.itemName}
@@ -252,7 +252,7 @@ function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProp
                 )
               })}
             </div>
-          </div>
+          </div>{/* end virtualized scroll container */}
 
           {/* Totals row — always rendered outside the virtualizer */}
           <div
