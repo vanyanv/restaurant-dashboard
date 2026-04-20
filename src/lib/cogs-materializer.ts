@@ -247,8 +247,11 @@ export async function recomputeDailyCogsForRange(input: {
 export async function refreshStaleDailyCogs(input: {
   ownerId: string
   lookbackDays?: number
+  onProgress?: (done: number, total: number) => void
+  concurrency?: number
 }): Promise<{ daysProcessed: number; rowsWritten: number }> {
   const lookbackDays = input.lookbackDays ?? 90
+  const concurrency = Math.max(1, input.concurrency ?? 4)
   const cutoff = startOfDayUTC(new Date())
   cutoff.setUTCDate(cutoff.getUTCDate() - lookbackDays)
 
@@ -284,18 +287,30 @@ export async function refreshStaleDailyCogs(input: {
     (r) => !have.has(`${r.storeId}::${dateKey(r.date)}`)
   )
 
+  const total = missing.length
   let daysProcessed = 0
   let rowsWritten = 0
+  input.onProgress?.(0, total)
 
-  for (const { storeId, date } of missing) {
-    const { rowsWritten: n } = await recomputeDailyCogsForDay({
-      storeId,
-      date,
-      ownerId: input.ownerId,
-    })
-    daysProcessed++
-    rowsWritten += n
+  // Process N days concurrently. Each recomputeDailyCogsForDay scope is
+  // independent (no shared mutable state), so parallelism is safe.
+  let cursor = 0
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = cursor++
+      if (i >= missing.length) return
+      const { storeId, date } = missing[i]
+      const { rowsWritten: n } = await recomputeDailyCogsForDay({
+        storeId,
+        date,
+        ownerId: input.ownerId,
+      })
+      daysProcessed++
+      rowsWritten += n
+      input.onProgress?.(daysProcessed, total)
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(concurrency, total || 1) }, () => worker()))
 
   return { daysProcessed, rowsWritten }
 }

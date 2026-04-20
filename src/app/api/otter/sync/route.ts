@@ -17,7 +17,7 @@ import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { refreshStaleDailyCogs } from "@/lib/cogs-materializer"
 
-export const maxDuration = 120
+export const maxDuration = 60
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OtterRow = Record<string, any>
@@ -557,21 +557,33 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
 
   for (let i = 0; i < uniqueOwnerIds.length; i++) {
     const ownerId = uniqueOwnerIds[i]
+    const ownerStart = cogsDaysProcessed
     try {
-      const result = await refreshStaleDailyCogs({ ownerId, lookbackDays: 90 })
+      // Narrow window on the live sync path — Vercel Hobby caps at 60s.
+      // Bulk/historical refills run via `scripts/backfill-daily-cogs.ts`, which
+      // has no timeout and iterates the full 90-day window.
+      const result = await refreshStaleDailyCogs({
+        ownerId,
+        lookbackDays: 7,
+        concurrency: 4,
+        onProgress: (done, total) => {
+          const withinOwner = total > 0 ? done / total : 1
+          const cogsPct = ((i + withinOwner) / uniqueOwnerIds.length) * 100
+          counts.cogs = ownerStart + done
+          emit({
+            phase: "cogs", status: "writing",
+            totalProgress: computeTotalProgress(100, 100, 100, 100, 100, cogsPct),
+            detail: `COGS: ${ownerStart + done}/${ownerStart + total} day(s) — owner ${i + 1}/${uniqueOwnerIds.length}`,
+            counts,
+          })
+        },
+      })
       cogsDaysProcessed += result.daysProcessed
       cogsRowsWritten += result.rowsWritten
     } catch (err) {
       console.error(`Failed to refresh daily COGS for owner ${ownerId}:`, err)
     }
     counts.cogs = cogsDaysProcessed
-    const cogsPct = ((i + 1) / uniqueOwnerIds.length) * 100
-    emit({
-      phase: "cogs", status: "writing",
-      totalProgress: computeTotalProgress(100, 100, 100, 100, 100, cogsPct),
-      detail: `COGS: ${cogsDaysProcessed} day(s) materialized across ${i + 1}/${uniqueOwnerIds.length} owners`,
-      counts,
-    })
   }
 
   emit({

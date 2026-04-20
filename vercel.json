@@ -7,7 +7,7 @@
       "maxDuration": 10
     },
     "src/app/api/otter/sync/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 60
     }
   },
   "env": {

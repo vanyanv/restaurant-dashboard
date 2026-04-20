@@ -48,9 +48,19 @@ async function main() {
   for (const owner of owners) {
     const start = Date.now()
     try {
+      let lastLogged = 0
       const { daysProcessed, rowsWritten } = await refreshStaleDailyCogs({
         ownerId: owner.id,
         lookbackDays,
+        concurrency: 4,
+        onProgress: (done, total) => {
+          // Log every ~5 days to keep output readable.
+          if (done === total || done - lastLogged >= 5) {
+            const elapsed = ((Date.now() - start) / 1000).toFixed(1)
+            console.log(`  ${owner.email}: ${done}/${total} days — ${elapsed}s`)
+            lastLogged = done
+          }
+        },
       })
       totalDays += daysProcessed
       totalRows += rowsWritten
