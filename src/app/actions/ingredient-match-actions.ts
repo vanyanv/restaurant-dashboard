@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
+import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 
 async function requireOwnerId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
@@ -22,6 +23,8 @@ export type UnmatchedLineItemGroup = {
   occurrences: number
   totalSpend: number
   lastSeen: Date | null
+  /** Normalized preview cost derived from the sample line: "$3.30/lb" or null. */
+  derivedCostPreview: { costPerBase: number; baseUnit: string } | null
 }
 
 /**
@@ -42,6 +45,10 @@ export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]
       sku: true,
       productName: true,
       unit: true,
+      packSize: true,
+      unitSize: true,
+      unitSizeUom: true,
+      quantity: true,
       extendedPrice: true,
       invoice: { select: { vendorName: true, invoiceDate: true } },
     },
@@ -61,6 +68,19 @@ export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]
       const d = li.invoice.invoiceDate
       if (d && (!existing.lastSeen || d > existing.lastSeen)) existing.lastSeen = d
     } else {
+      // Compute a per-base-unit preview cost from the sample line item.
+      const packSize = li.packSize ?? 1
+      const unitSize = li.unitSize ?? 1
+      const totalBaseQty = li.quantity * packSize * unitSize
+      const baseUom = li.unitSizeUom ?? li.unit
+      const derivedCostPreview =
+        totalBaseQty > 0 && baseUom && li.extendedPrice > 0
+          ? {
+              costPerBase: li.extendedPrice / totalBaseQty,
+              baseUnit: baseUom.toLowerCase(),
+            }
+          : null
+
       groups.set(key, {
         key,
         vendorName: vendor,
@@ -71,6 +91,7 @@ export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]
         occurrences: 1,
         totalSpend: li.extendedPrice,
         lastSeen: li.invoice.invoiceDate,
+        derivedCostPreview,
       })
     }
   }
@@ -232,6 +253,12 @@ export async function confirmSkuMatch(input: {
       },
     })
 
+    // Auto-derive canonical.costPerRecipeUnit from the newly-linked invoice.
+    // No-ops when the canonical is locked, has no recipeUnit, or units don't convert.
+    await recomputeCanonicalCost(targetCanonicalId).catch((e) => {
+      console.warn("[confirmSkuMatch] recomputeCanonicalCost failed:", e)
+    })
+
     await invalidateDailyCogs({ kind: "owner-full", ownerId })
     return { backfilled: backfill.count, canonicalIngredientId: targetCanonicalId }
   }
@@ -270,6 +297,10 @@ export async function confirmSkuMatch(input: {
       matchSource: "alias",
       matchedAt: new Date(),
     },
+  })
+
+  await recomputeCanonicalCost(targetCanonicalId).catch((e) => {
+    console.warn("[confirmSkuMatch/alias] recomputeCanonicalCost failed:", e)
   })
 
   await invalidateDailyCogs({ kind: "owner-full", ownerId })

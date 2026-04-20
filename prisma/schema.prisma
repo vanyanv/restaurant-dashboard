@@ -407,6 +407,17 @@ model CanonicalIngredient {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  /// How this ingredient is measured in recipes (lb, oz, each, tbsp, cup, gal, fl oz, g, ml, l).
+  /// Null until set manually or hydrated from an invoice match.
+  recipeUnit        String?
+  /// Dollars per recipeUnit. Null when unknown.
+  costPerRecipeUnit Float?
+  /// "manual" — user-entered; "invoice" — auto-derived from latest matched line item.
+  costSource        String?
+  /// When true, invoice-match recomputes won't overwrite a manually set cost.
+  costLocked        Boolean   @default(false)
+  costUpdatedAt     DateTime?
+
   owner              User                 @relation(fields: [ownerId], references: [id])
   aliases            IngredientAlias[]
   recipeIngredients  RecipeIngredient[]

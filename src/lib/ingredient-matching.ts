@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 
 export type MatchResult = {
   matchedBySku: number
   matchedByAlias: number
   unmatched: number
+  costsUpdated: number
 }
 
 /**
@@ -23,7 +25,7 @@ export async function matchNewLineItems(
   invoiceIds: string[]
 ): Promise<MatchResult> {
   if (invoiceIds.length === 0) {
-    return { matchedBySku: 0, matchedByAlias: 0, unmatched: 0 }
+    return { matchedBySku: 0, matchedByAlias: 0, unmatched: 0, costsUpdated: 0 }
   }
 
   const invoices = await prisma.invoice.findMany({
@@ -68,6 +70,7 @@ export async function matchNewLineItems(
   let matchedByAlias = 0
   let unmatched = 0
   const now = new Date()
+  const touchedCanonicals = new Set<string>()
 
   for (const inv of invoices) {
     const vendor = normalizeVendorName(inv.vendorName)
@@ -93,6 +96,7 @@ export async function matchNewLineItems(
             matchedAt: now,
           },
         })
+        touchedCanonicals.add(canonicalId)
         if (source === "sku") matchedBySku++
         else matchedByAlias++
       } else {
@@ -101,5 +105,17 @@ export async function matchNewLineItems(
     }
   }
 
-  return { matchedBySku, matchedByAlias, unmatched }
+  // Now that new line items are linked, refresh each touched canonical's
+  // cost-per-recipe-unit from its most recent matched line (respects costLocked).
+  let costsUpdated = 0
+  for (const canonicalId of touchedCanonicals) {
+    try {
+      const res = await recomputeCanonicalCost(canonicalId)
+      if (res.status === "updated") costsUpdated++
+    } catch (e) {
+      console.warn("[matchNewLineItems] recomputeCanonicalCost failed:", e)
+    }
+  }
+
+  return { matchedBySku, matchedByAlias, unmatched, costsUpdated }
 }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
+import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
 
 export type RecipeCostLine = {
   kind: "ingredient" | "component"
@@ -7,10 +8,15 @@ export type RecipeCostLine = {
   name: string
   quantity: number
   unit: string
+  /** Cost in `costUnit` (may differ from `unit` — we converted before multiplying). */
   unitCost: number | null
+  /** The unit the `unitCost` is priced in (the canonical's recipeUnit). */
+  costUnit?: string | null
   lineCost: number
   missingCost: boolean
-  /** Invoice provenance (ingredient kind only; null for sub-recipes). */
+  /** How the unit cost was established (ingredient kind only; undefined for sub-recipes). */
+  costSource?: "manual" | "invoice" | null
+  /** Invoice provenance (ingredient kind only; null for sub-recipes or manual costs). */
   sourceInvoiceId?: string | null
   sourceLineItemId?: string | null
   sourceVendor?: string | null
@@ -139,7 +145,46 @@ async function walk(
         })
         continue
       }
-      const lineCost = cost.unitCost * ing.quantity
+
+      // Reconcile the recipe line's unit against the canonical's cost unit.
+      // Example: cost is $3.30/lb, recipe asks for 0.48 oz — convert 0.48 oz
+      // into lb before multiplying. If units are cross-category or unknown,
+      // the line is flagged as missing.
+      const recipeUnit = canonicalizeUnit(ing.unit)
+      const costUnit = canonicalizeUnit(cost.unit)
+      let qtyInCostUnit: number | null = ing.quantity
+      if (recipeUnit && costUnit && recipeUnit !== costUnit) {
+        qtyInCostUnit = convert(ing.quantity, ing.unit, cost.unit)
+      } else if (!recipeUnit || !costUnit) {
+        // At least one side is unrecognized. If the raw strings match (after trim/lc)
+        // we assume 1:1; otherwise we can't trust a naive multiply — mark missing.
+        const same = ing.unit.trim().toLowerCase() === cost.unit.trim().toLowerCase()
+        if (!same) qtyInCostUnit = null
+      }
+
+      if (qtyInCostUnit == null) {
+        partial = true
+        lines.push({
+          kind: "ingredient",
+          refId: ing.canonicalIngredientId,
+          name: ing.canonicalIngredient?.name ?? ing.ingredientName ?? "ingredient",
+          quantity: ing.quantity,
+          unit: ing.unit,
+          unitCost: cost.unitCost,
+          costUnit: cost.unit,
+          lineCost: 0,
+          missingCost: true,
+          costSource: cost.source,
+          sourceInvoiceId: cost.sourceInvoiceId,
+          sourceLineItemId: cost.sourceLineItemId,
+          sourceVendor: cost.sourceVendor,
+          sourceSku: cost.sourceSku,
+          sourceInvoiceDate: cost.asOfDate,
+        })
+        continue
+      }
+
+      const lineCost = cost.unitCost * qtyInCostUnit
       total += lineCost
       lines.push({
         kind: "ingredient",
@@ -148,8 +193,10 @@ async function walk(
         quantity: ing.quantity,
         unit: ing.unit,
         unitCost: cost.unitCost,
+        costUnit: cost.unit,
         lineCost,
         missingCost: false,
+        costSource: cost.source,
         sourceInvoiceId: cost.sourceInvoiceId,
         sourceLineItemId: cost.sourceLineItemId,
         sourceVendor: cost.sourceVendor,

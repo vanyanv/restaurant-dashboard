@@ -179,12 +179,15 @@ export async function seedCanonicalIngredientsFromInvoices(
 export type CanonicalIngredientCost = {
   unitCost: number
   unit: string
+  /** "manual" if from canonical.costPerRecipeUnit; "invoice" otherwise. */
+  source: "manual" | "invoice"
   asOfDate: Date
-  sourceInvoiceId: string
-  sourceLineItemId: string
-  sourceVendor: string
+  /** Invoice provenance — populated only when source === "invoice". */
+  sourceInvoiceId: string | null
+  sourceLineItemId: string | null
+  sourceVendor: string | null
   sourceSku: string | null
-  sourceProductName: string
+  sourceProductName: string | null
 }
 
 /**
@@ -208,7 +211,35 @@ export async function getCanonicalIngredientCost(
   canonicalIngredientId: string,
   asOf?: Date
 ): Promise<CanonicalIngredientCost | null> {
-  // Primary: direct FK match.
+  // Preferred: the canonical's own `costPerRecipeUnit` + `recipeUnit` (manual or
+  // invoice-derived). Only used in builder mode — when `asOf` is supplied we want
+  // period-matched historical prices, so we skip straight to the invoice lookup.
+  if (asOf === undefined) {
+    const canonical = await prisma.canonicalIngredient.findUnique({
+      where: { id: canonicalIngredientId },
+      select: {
+        recipeUnit: true,
+        costPerRecipeUnit: true,
+        costSource: true,
+        costUpdatedAt: true,
+      },
+    })
+    if (canonical?.costPerRecipeUnit != null && canonical.recipeUnit) {
+      return {
+        unitCost: canonical.costPerRecipeUnit,
+        unit: canonical.recipeUnit,
+        source: canonical.costSource === "invoice" ? "invoice" : "manual",
+        asOfDate: canonical.costUpdatedAt ?? new Date(),
+        sourceInvoiceId: null,
+        sourceLineItemId: null,
+        sourceVendor: null,
+        sourceSku: null,
+        sourceProductName: null,
+      }
+    }
+  }
+
+  // Fallback: direct FK match (legacy path — cost per invoice-unit).
   const direct = await prisma.invoiceLineItem.findFirst({
     where: {
       canonicalIngredientId,
@@ -232,6 +263,7 @@ export async function getCanonicalIngredientCost(
     return {
       unitCost: direct.extendedPrice / direct.quantity,
       unit: direct.unit ?? "unit",
+      source: "invoice",
       asOfDate: direct.invoice.invoiceDate,
       sourceInvoiceId: direct.invoiceId,
       sourceLineItemId: direct.id,
@@ -294,6 +326,7 @@ export async function getCanonicalIngredientCost(
     return {
       unitCost: li.extendedPrice / normalizedQty,
       unit: alias.toUnit,
+      source: "invoice",
       asOfDate: li.invoice.invoiceDate,
       sourceInvoiceId: li.invoiceId,
       sourceLineItemId: li.id,

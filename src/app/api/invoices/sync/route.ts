@@ -520,7 +520,8 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
       const matchResult = await matchNewLineItems(userId, createdInvoiceIds)
       console.log(
         `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
-        `${matchResult.matchedByAlias} by alias, ${matchResult.unmatched} unmatched`
+        `${matchResult.matchedByAlias} by alias, ${matchResult.unmatched} unmatched, ` +
+        `${matchResult.costsUpdated} canonical costs refreshed`
       )
     } catch (err) {
       console.error("Ingredient matching failed:", err)

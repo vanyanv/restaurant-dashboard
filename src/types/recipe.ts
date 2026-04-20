@@ -4,6 +4,16 @@ export type CanonicalIngredientSummary = {
   defaultUnit: string
   category: string | null
   aliasCount: number
+  /** User-configured "recipe unit" (lb/oz/each/tbsp/...) — what recipes multiply against. */
+  recipeUnit: string | null
+  /** Dollars per recipeUnit. Null when unknown. */
+  costPerRecipeUnit: number | null
+  /** "manual" (user-entered) or "invoice" (derived from latest matched line item). */
+  costSource: "manual" | "invoice" | null
+  /** When true, invoice recomputes won't overwrite manual cost. */
+  costLocked: boolean
+  costUpdatedAt: Date | null
+  /** Latest matched invoice line item (for reference / provenance). */
   latestUnitCost: number | null
   latestUnit: string | null
   latestPriceAt: Date | null

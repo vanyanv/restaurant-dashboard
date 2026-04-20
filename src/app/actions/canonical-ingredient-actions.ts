@@ -44,10 +44,15 @@ export async function listCanonicalIngredients(): Promise<
       defaultUnit: c.defaultUnit,
       category: c.category,
       aliasCount: c.aliases.length,
+      recipeUnit: c.recipeUnit,
+      costPerRecipeUnit: c.costPerRecipeUnit,
+      costSource: (c.costSource as "manual" | "invoice" | null) ?? null,
+      costLocked: c.costLocked,
+      costUpdatedAt: c.costUpdatedAt,
       latestUnitCost: cost?.unitCost ?? null,
       latestUnit: cost?.unit ?? null,
       latestPriceAt: cost?.asOfDate ?? null,
-      latestVendor: cost ? normalizeVendorName(cost.sourceVendor) : null,
+      latestVendor: cost?.sourceVendor ? normalizeVendorName(cost.sourceVendor) : null,
       latestSku: cost?.sourceSku ?? null,
     }
   })
@@ -73,6 +78,61 @@ export async function createCanonicalIngredient(input: {
   })
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
   return created
+}
+
+/**
+ * Update the "recipe unit + cost per unit" fields on a canonical. Setting any
+ * of these flags the canonical as manually edited (`costSource = "manual"`,
+ * `costUpdatedAt = now`). Also lets the user toggle `costLocked` to block
+ * future invoice-derived overrides.
+ *
+ * Pass `null` to clear a field.
+ */
+export async function updateCanonicalCost(input: {
+  canonicalIngredientId: string
+  recipeUnit?: string | null
+  costPerRecipeUnit?: number | null
+  costLocked?: boolean
+}): Promise<void> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) throw new Error("Not authenticated")
+
+  const existing = await prisma.canonicalIngredient.findFirst({
+    where: { id: input.canonicalIngredientId, ownerId },
+    select: { id: true },
+  })
+  if (!existing) throw new Error("Canonical ingredient not found")
+
+  const data: {
+    recipeUnit?: string | null
+    costPerRecipeUnit?: number | null
+    costSource?: "manual"
+    costLocked?: boolean
+    costUpdatedAt?: Date
+  } = {}
+
+  const touchedCost =
+    input.recipeUnit !== undefined || input.costPerRecipeUnit !== undefined
+  if (input.recipeUnit !== undefined) data.recipeUnit = input.recipeUnit
+  if (input.costPerRecipeUnit !== undefined) {
+    data.costPerRecipeUnit = input.costPerRecipeUnit
+  }
+  if (touchedCost) {
+    data.costSource = "manual"
+    data.costUpdatedAt = new Date()
+  }
+  if (input.costLocked !== undefined) data.costLocked = input.costLocked
+
+  if (Object.keys(data).length === 0) return
+
+  await prisma.canonicalIngredient.update({
+    where: { id: input.canonicalIngredientId },
+    data,
+  })
+
+  await invalidateDailyCogs({ kind: "owner-full", ownerId })
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {

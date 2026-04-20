@@ -118,6 +118,11 @@ function GroupRow({
           defaultUnit: unit,
           category: null,
           aliasCount: 0,
+          recipeUnit: null,
+          costPerRecipeUnit: null,
+          costSource: null,
+          costLocked: false,
+          costUpdatedAt: null,
           latestUnitCost: null,
           latestUnit: null,
           latestPriceAt: null,
@@ -155,6 +160,14 @@ function GroupRow({
             <>
               <span>·</span>
               <span>{group.unit}</span>
+            </>
+          )}
+          {group.derivedCostPreview && (
+            <>
+              <span>·</span>
+              <span className="text-[var(--ink-muted)]">
+                📄 ${group.derivedCostPreview.costPerBase.toFixed(4)}/{group.derivedCostPreview.baseUnit}
+              </span>
             </>
           )}
         </div>

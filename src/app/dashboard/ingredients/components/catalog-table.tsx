@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Check, ChevronsUpDown, Package, Search } from "lucide-react"
+import { Check, ChevronsUpDown, Lock, LockOpen, Package, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,8 +15,17 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { mergeCanonicalIngredients } from "@/app/actions/canonical-ingredient-actions"
+import {
+  mergeCanonicalIngredients,
+  updateCanonicalCost,
+} from "@/app/actions/canonical-ingredient-actions"
 import type { CanonicalIngredientSummary } from "@/types/recipe"
+
+const RECIPE_UNIT_OPTIONS = [
+  "lb", "oz", "g", "kg",
+  "gal", "qt", "pt", "cup", "fl oz", "ml", "l",
+  "each", "dz",
+]
 
 type Props = {
   canonicals: CanonicalIngredientSummary[]
@@ -125,8 +134,8 @@ function Row({
     : null
 
   return (
-    <li className="group grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 border-b border-[var(--hairline)] py-4">
-      <div className="flex h-9 w-9 items-center justify-center border border-[var(--hairline-bold)] text-[var(--ink-faint)]">
+    <li className="group grid grid-cols-[auto_1fr_auto_auto] items-start gap-4 border-b border-[var(--hairline)] py-4">
+      <div className="mt-0.5 flex h-9 w-9 items-center justify-center border border-[var(--hairline-bold)] text-[var(--ink-faint)]">
         <Package className="h-4 w-4" />
       </div>
 
@@ -151,10 +160,13 @@ function Row({
                   <span>SKU {row.latestSku}</span>
                 </>
               )}
-              {row.latestUnit && (
+              {row.latestUnitCost != null && (
                 <>
                   <span>·</span>
-                  <span>{row.latestUnit}</span>
+                  <span>
+                    📄 ${row.latestUnitCost.toFixed(2)}/{row.latestUnit}
+                    {asOf ? ` ${asOf}` : ""}
+                  </span>
                 </>
               )}
             </>
@@ -172,23 +184,7 @@ function Row({
         </div>
       </div>
 
-      <div className="text-right">
-        <div className="font-mono text-[15px] tabular-nums text-[var(--ink)]">
-          {row.latestUnitCost != null ? (
-            <>
-              ${row.latestUnitCost.toFixed(2)}
-              <span className="ml-0.5 text-[11px] text-[var(--ink-muted)]">
-                /{row.latestUnit}
-              </span>
-            </>
-          ) : (
-            <span className="text-[var(--ink-faint)]">—</span>
-          )}
-        </div>
-        <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-          {asOf ? `as of ${asOf}` : "no prices yet"}
-        </div>
-      </div>
+      <CostEditor row={row} />
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -245,5 +241,134 @@ function Row({
         </PopoverContent>
       </Popover>
     </li>
+  )
+}
+
+/**
+ * Editable "recipe unit + cost per unit" block. Saves on blur / unit change.
+ * Cost source is surfaced with 📄 (invoice) / ✏️ (manual) badges. Lock toggle
+ * blocks future invoice-derived overrides.
+ */
+function CostEditor({ row }: { row: CanonicalIngredientSummary }) {
+  const router = useRouter()
+  const [unit, setUnit] = useState(row.recipeUnit ?? "")
+  const [cost, setCost] = useState<string>(
+    row.costPerRecipeUnit != null ? row.costPerRecipeUnit.toString() : ""
+  )
+  const [locked, setLocked] = useState(row.costLocked)
+  const [pending, startTransition] = useTransition()
+
+  const hasChanges =
+    unit !== (row.recipeUnit ?? "") ||
+    cost !== (row.costPerRecipeUnit != null ? row.costPerRecipeUnit.toString() : "")
+
+  function save(next: {
+    recipeUnit?: string | null
+    costPerRecipeUnit?: number | null
+    costLocked?: boolean
+  }) {
+    startTransition(async () => {
+      try {
+        await updateCanonicalCost({
+          canonicalIngredientId: row.id,
+          ...next,
+        })
+        router.refresh()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Save failed")
+      }
+    })
+  }
+
+  function commit() {
+    if (!hasChanges) return
+    const trimmedUnit = unit.trim()
+    const parsedCost = cost.trim() === "" ? null : Number(cost)
+    if (parsedCost != null && (!Number.isFinite(parsedCost) || parsedCost < 0)) {
+      toast.error("Cost must be a non-negative number")
+      return
+    }
+    save({
+      recipeUnit: trimmedUnit === "" ? null : trimmedUnit,
+      costPerRecipeUnit: parsedCost,
+    })
+  }
+
+  function toggleLock() {
+    const next = !locked
+    setLocked(next)
+    save({ costLocked: next })
+  }
+
+  const sourceBadge =
+    row.costPerRecipeUnit != null
+      ? row.costSource === "invoice"
+        ? "📄 invoice"
+        : "✏️ manual"
+      : "—"
+
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+          $
+        </span>
+        <Input
+          type="number"
+          step="0.0001"
+          min="0"
+          inputMode="decimal"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur()
+            }
+          }}
+          disabled={pending}
+          placeholder="cost"
+          className="h-7 w-24 border-[var(--hairline-bold)] bg-transparent px-2 text-right font-mono text-[13px] tabular-nums focus-visible:ring-0"
+        />
+        <span className="font-mono text-[10px] text-[var(--ink-muted)]">/</span>
+        <select
+          value={unit}
+          onChange={(e) => {
+            setUnit(e.target.value)
+            // Commit immediately on unit change (use the new value, not stale state).
+            const parsedCost = cost.trim() === "" ? null : Number(cost)
+            const next = e.target.value.trim()
+            save({
+              recipeUnit: next === "" ? null : next,
+              costPerRecipeUnit:
+                parsedCost != null && Number.isFinite(parsedCost) && parsedCost >= 0
+                  ? parsedCost
+                  : row.costPerRecipeUnit,
+            })
+          }}
+          disabled={pending}
+          className="h-7 border border-[var(--hairline-bold)] bg-transparent px-2 font-mono text-[11px] uppercase tracking-[0.05em] text-[var(--ink)] focus:outline-none"
+        >
+          <option value="">unit</option>
+          {RECIPE_UNIT_OPTIONS.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={toggleLock}
+          disabled={pending}
+          title={locked ? "Locked — invoice matches won't overwrite" : "Unlocked — invoice matches can overwrite"}
+          className="flex h-7 w-7 items-center justify-center border border-[var(--hairline-bold)] text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-50"
+        >
+          {locked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
+        </button>
+      </div>
+      <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+        {pending ? "saving…" : sourceBadge}
+      </div>
+    </div>
   )
 }

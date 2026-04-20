@@ -179,13 +179,23 @@ function ProvenanceChip({ line }: { line: RecipeCostLine }) {
   }
 
   const cost = `$${line.lineCost.toFixed(2)}`
-  const chipSuffix = [
-    line.sourceSku ? `SKU ${line.sourceSku}` : null,
-    line.sourceVendor ?? null,
-    line.sourceInvoiceDate ? relativeTime(line.sourceInvoiceDate) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ")
+  const isManual = line.costSource === "manual"
+  const chipSuffix = isManual
+    ? "manual"
+    : [
+        line.sourceSku ? `SKU ${line.sourceSku}` : null,
+        line.sourceVendor ?? null,
+        line.sourceInvoiceDate ? relativeTime(line.sourceInvoiceDate) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "priced"
+
+  // Live math display: "0.003 lb × $3.30/lb = $0.0099"
+  const costUnit = line.costUnit ?? line.unit
+  const mathLine =
+    line.unitCost != null
+      ? `${line.quantity} ${line.unit} × $${line.unitCost.toFixed(4)}/${costUnit} = $${line.lineCost.toFixed(4)}`
+      : null
 
   return (
     <Popover>
@@ -198,8 +208,8 @@ function ProvenanceChip({ line }: { line: RecipeCostLine }) {
             {cost}
           </span>
           <span className="hidden items-center gap-1 border border-dashed border-[var(--hairline-bold)] px-1 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-[var(--ink-muted)] hover:border-[var(--ink)] hover:text-[var(--ink)] lg:inline-flex">
-            <Receipt className="h-2.5 w-2.5" />
-            {chipSuffix || "priced"}
+            {isManual ? <span>✏️</span> : <Receipt className="h-2.5 w-2.5" />}
+            {chipSuffix}
           </span>
         </button>
       </PopoverTrigger>
@@ -208,21 +218,27 @@ function ProvenanceChip({ line }: { line: RecipeCostLine }) {
         align="end"
       >
         <div className="mb-2 flex items-center gap-1.5 text-[var(--ink-faint)]">
-          <Receipt className="h-3 w-3" />
-          <span className="uppercase tracking-[0.12em]">Invoice provenance</span>
+          {isManual ? <span className="text-sm leading-none">✏️</span> : <Receipt className="h-3 w-3" />}
+          <span className="uppercase tracking-[0.12em]">
+            {isManual ? "Manual cost" : "Invoice provenance"}
+          </span>
         </div>
         <dl className="space-y-1.5">
-          <Row k="Vendor" v={line.sourceVendor ?? "—"} />
-          <Row k="SKU" v={line.sourceSku ?? "—"} />
-          <Row
-            k="Priced"
-            v={line.sourceInvoiceDate ? formatDate(line.sourceInvoiceDate) : "—"}
-          />
+          {!isManual && (
+            <>
+              <Row k="Vendor" v={line.sourceVendor ?? "—"} />
+              <Row k="SKU" v={line.sourceSku ?? "—"} />
+              <Row
+                k="Priced"
+                v={line.sourceInvoiceDate ? formatDate(line.sourceInvoiceDate) : "—"}
+              />
+            </>
+          )}
           <Row
             k="Unit cost"
-            v={line.unitCost != null ? `$${line.unitCost.toFixed(4)}/${line.unit}` : "—"}
+            v={line.unitCost != null ? `$${line.unitCost.toFixed(4)}/${costUnit}` : "—"}
           />
-          <Row k="Line" v={`${line.quantity} ${line.unit} · $${line.lineCost.toFixed(2)}`} />
+          <Row k="Line" v={mathLine ?? `${line.quantity} ${line.unit} · ${cost}`} />
         </dl>
         {line.sourceInvoiceId && (
           <Link
@@ -230,6 +246,14 @@ function ProvenanceChip({ line }: { line: RecipeCostLine }) {
             className="mt-3 inline-block border-b border-[var(--ink)] text-[var(--ink)] hover:text-[var(--accent)] hover:border-[var(--accent)]"
           >
             Open source invoice →
+          </Link>
+        )}
+        {isManual && (
+          <Link
+            href="/dashboard/ingredients"
+            className="mt-3 inline-block border-b border-[var(--ink)] text-[var(--ink)] hover:text-[var(--accent)] hover:border-[var(--accent)]"
+          >
+            Edit in catalog →
           </Link>
         )}
       </PopoverContent>
