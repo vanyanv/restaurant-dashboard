@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import { revalidateTag } from "next/cache"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
@@ -16,6 +17,7 @@ import {
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { refreshStaleDailyCogs } from "@/lib/cogs-materializer"
+import { MENU_TAGS } from "@/lib/cached"
 
 export const maxDuration = 60
 
@@ -598,6 +600,12 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     where: { otterStoreId: { in: otterStoreIds } },
     data: { lastSyncAt: new Date() },
   })
+
+  // Bust menu-performance caches for every store that was touched in this sync
+  for (const storeId of storeGroups.keys()) {
+    revalidateTag(MENU_TAGS.performance(storeId), "max")
+  }
+  revalidateTag(MENU_TAGS.performance("all"), "max")
 
   const message = `Otter sync completed: ${synced} daily rows, ${categorySynced} categories, ${itemSynced} items, ${modifierSynced} modifiers, ${ratingsSynced} ratings, ${cogsDaysProcessed} COGS days`
   counts.daily = synced

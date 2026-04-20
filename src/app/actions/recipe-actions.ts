@@ -10,7 +10,8 @@ import {
   type RecipeCostLine,
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
-import { costRecipeCached, costIngredientCached } from "@/lib/cached"
+import { costRecipeCached, costIngredientCached, MENU_TAGS } from "@/lib/cached"
+import { revalidateTag } from "next/cache"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import type { RecipeInput, RecipeSummary } from "@/types/recipe"
 import {
@@ -169,6 +170,9 @@ export async function upsertRecipe(
     itemName: input.itemName.trim(),
   })
 
+  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
+  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
+
   return { id }
 }
 
@@ -199,6 +203,9 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
     recipeId,
     itemName: recipe.itemName,
   })
+
+  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
+  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
 }
 
 /**
@@ -321,6 +328,9 @@ export async function confirmRecipe(
       itemName: recipe.itemName,
     })
   }
+
+  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
+  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
 }
 
 export type RecipeCatalogSummary = {

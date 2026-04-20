@@ -1,8 +1,9 @@
 "use server"
 
 import { getServerSession } from "next-auth"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import { authOptions } from "@/lib/auth"
+import { MENU_TAGS } from "@/lib/cached"
 import { prisma } from "@/lib/prisma"
 import {
   seedCanonicalIngredientsFromInvoices,
@@ -133,6 +134,8 @@ export async function updateCanonicalCost(input: {
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
+  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
+  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
@@ -249,5 +252,7 @@ export async function mergeCanonicalIngredients(input: {
 
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
+  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
+  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
   return result
 }
