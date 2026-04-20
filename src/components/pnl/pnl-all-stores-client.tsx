@@ -9,7 +9,6 @@ import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
 import { PnLLede } from "./pnl-lede"
 import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
 import { PnLLeagueTable } from "./pnl-league-table"
-import { PnLStatement } from "./pnl-statement"
 import { getAllStoresPnL } from "@/app/actions/store-actions"
 import {
   TOTAL_SALES_CODE,
@@ -154,30 +153,6 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
               </div>
             )}
 
-            {/* Per-store matrices — same format, one per store */}
-            {data.perStore.length > 1 ? (
-              <div className="flex flex-col gap-6">
-                {data.perStore.map((s) => (
-                  <PnLStatement
-                    key={s.storeId}
-                    rows={s.rows}
-                    periods={data.periods}
-                    title={s.storeName}
-                    showTrend
-                    showDelta
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {/* Consolidated statement */}
-            {data.consolidatedRows.length > 0 && data.perStore.length > 1 ? (
-              <PnLStatement
-                rows={data.consolidatedRows}
-                periods={data.periods}
-                title="Consolidated · All Stores"
-              />
-            ) : null}
           </>
         ) : null}
       </div>

@@ -3554,6 +3554,23 @@
   }
 }
 
+/* ─── P&L Header (store picker + date controls) ────────────────── */
+
+.pnl-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pnl-header__stores {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
 /* ─── P&L Date Controls (editorial re-skin) ─────────────────────── */
 
 .pnl-controls {
