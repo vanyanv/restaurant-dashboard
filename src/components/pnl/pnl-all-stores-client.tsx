@@ -4,12 +4,24 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
-import { StoreComparisonChart } from "@/components/charts/store-comparison-chart"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
-import { PnLKpiStrip } from "./pnl-kpi-strip"
-import { PnLStoreCard } from "./pnl-store-card"
+import { PnLLede } from "./pnl-lede"
+import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
+import { PnLLeagueTable } from "./pnl-league-table"
+import { PnLStatement } from "./pnl-statement"
 import { getAllStoresPnL } from "@/app/actions/store-actions"
+import {
+  TOTAL_SALES_CODE,
+  UBER_COMMISSION_CODE,
+  DOORDASH_COMMISSION_CODE,
+  COGS_CODE,
+  LABOR_CODE,
+  RENT_CODE,
+  CLEANING_CODE,
+  TOWELS_CODE,
+  AFTER_LABOR_RENT_CODE,
+} from "@/lib/pnl"
 
 export interface PnLAllStoresClientProps {
   stores: Array<{ id: string; name: string }>
@@ -39,8 +51,7 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
     },
   })
 
-  const combined = query.data?.combined
-  const perStore = query.data?.perStore ?? []
+  const data = query.data
 
   return (
     <div className="flex flex-col h-full">
@@ -66,69 +77,74 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
 
         {query.isLoading ? (
           <>
-            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-              <Skeleton className="h-24" />
-            </div>
-            <Skeleton className="h-[320px]" />
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-40" />
-              <Skeleton className="h-40" />
-              <Skeleton className="h-40" />
-            </div>
+            <Skeleton className="h-48" />
+            <Skeleton className="h-70" />
+            <Skeleton className="h-65" />
+            <Skeleton className="h-105" />
           </>
         ) : query.error ? (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
             {(query.error as Error).message}
           </div>
-        ) : combined ? (
+        ) : data ? (
           <>
-            <PnLKpiStrip
-              kpis={[
-                {
-                  label: "Gross Sales",
-                  value: combined.grossSales,
-                },
-                {
-                  label: "Net After Commissions",
-                  value: combined.netAfterCommissions,
-                  percentOfSales:
-                    combined.grossSales === 0
-                      ? 0
-                      : combined.netAfterCommissions / combined.grossSales,
-                },
-                {
-                  label: "Fixed Costs",
-                  value: combined.fixedCosts,
-                  percentOfSales:
-                    combined.grossSales === 0
-                      ? 0
-                      : combined.fixedCosts / combined.grossSales,
-                  costStyle: true,
-                },
-                {
-                  label: "Bottom Line",
-                  value: combined.bottomLine,
-                  percentOfSales: combined.marginPct,
-                },
-              ]}
+            {/* Lede — use the consolidated bottom-line series */}
+            <PnLLede
+              storeName={stores.length === 1 ? stores[0].name : "The business"}
+              bottomLineByPeriod={
+                data.consolidatedRows.find((r) => r.code === AFTER_LABOR_RENT_CODE)?.values ?? []
+              }
+              grossByPeriod={
+                data.consolidatedRows.find((r) => r.code === TOTAL_SALES_CODE)?.values ?? []
+              }
+              periods={data.periods}
             />
 
-            {perStore.length > 1 && (
-              <StoreComparisonChart
-                data={perStore.map((s) => ({
-                  storeName: s.storeName,
-                  grossSales: Math.round(s.grossSales),
-                  netSales: Math.round(s.bottomLine),
-                }))}
-                title="Store Comparison"
-                description="Gross Sales vs Bottom Line by location"
-              />
-            )}
+            {/* Combined waterfall for the latest period */}
+            {data.periods.length > 0 && data.consolidatedRows.length > 0 ? (
+              (() => {
+                const latestIdx = data.periods.length - 1
+                const latest = (code: string) =>
+                  data.consolidatedRows.find((r) => r.code === code)?.values[latestIdx] ?? 0
+                const gross = latest(TOTAL_SALES_CODE)
+                const commissions = Math.abs(
+                  latest(UBER_COMMISSION_CODE) + latest(DOORDASH_COMMISSION_CODE)
+                )
+                const cogs = latest(COGS_CODE)
+                const labor = latest(LABOR_CODE)
+                const rent = latest(RENT_CODE)
+                const cleaning = latest(CLEANING_CODE)
+                const towels = latest(TOWELS_CODE)
+                const bottom = latest(AFTER_LABOR_RENT_CODE)
 
-            {perStore.length === 0 ? (
+                const steps: WaterfallStep[] = [
+                  { kind: "total", label: "Gross Sales", value: gross },
+                  { kind: "subtract", label: "3P Commissions", value: commissions },
+                  { kind: "subtract", label: "COGS", value: cogs },
+                  { kind: "subtract", label: "Labor", value: labor },
+                  { kind: "subtract", label: "Rent + Fixed", value: rent + cleaning + towels },
+                  { kind: "total", label: "Bottom Line", value: bottom },
+                ]
+                return <PnLWaterfall steps={steps} />
+              })()
+            ) : null}
+
+            {/* League table — compare across stores for the latest period */}
+            {data.perStore.length > 0 ? (
+              <PnLLeagueTable
+                rows={data.perStore.map((s) => ({
+                  storeId: s.storeId,
+                  storeName: s.storeName,
+                  grossSales: s.grossSales,
+                  cogsPct: s.cogsPct,
+                  laborPct: s.laborPct,
+                  rentPct: s.rentPct,
+                  bottomLine: s.bottomLine,
+                  marginPct: s.marginPct,
+                  fixedCostsConfigured: s.fixedCostsConfigured,
+                }))}
+              />
+            ) : (
               <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
                 No stores yet. Create one from{" "}
                 <a href="/dashboard/stores" className="underline">
@@ -136,22 +152,32 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
                 </a>
                 .
               </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {perStore.map((s) => (
-                  <PnLStoreCard
+            )}
+
+            {/* Per-store matrices — same format, one per store */}
+            {data.perStore.length > 1 ? (
+              <div className="flex flex-col gap-6">
+                {data.perStore.map((s) => (
+                  <PnLStatement
                     key={s.storeId}
-                    storeId={s.storeId}
-                    storeName={s.storeName}
-                    grossSales={s.grossSales}
-                    bottomLine={s.bottomLine}
-                    marginPct={s.marginPct}
-                    channelMix={s.channelMix}
-                    fixedCostsConfigured={s.fixedCostsConfigured}
+                    rows={s.rows}
+                    periods={data.periods}
+                    title={s.storeName}
+                    showTrend
+                    showDelta
                   />
                 ))}
               </div>
-            )}
+            ) : null}
+
+            {/* Consolidated statement */}
+            {data.consolidatedRows.length > 0 && data.perStore.length > 1 ? (
+              <PnLStatement
+                rows={data.consolidatedRows}
+                periods={data.periods}
+                title="Consolidated · All Stores"
+              />
+            ) : null}
           </>
         ) : null}
       </div>

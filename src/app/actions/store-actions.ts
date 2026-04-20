@@ -11,6 +11,7 @@ import {
   bucketSummariesByPeriod,
   computeStorePnL,
   channelMix,
+  TOTAL_SALES_CODE,
   type Granularity,
   type Period,
   type PnLRow,
@@ -2087,6 +2088,18 @@ async function getHourlyOrderDistribution(
 
 // ═══ P&L ═══
 
+export type PnLMover = {
+  itemName: string
+  category: string
+  current: number
+  prior: number
+  delta: number
+  pctDelta: number
+  qtyCurrent: number
+  qtyPrior: number
+  qtyDelta: number
+}
+
 export type StorePnLResult =
   | {
       storeName: string
@@ -2112,6 +2125,9 @@ export type StorePnLResult =
         grossMarginPct: number
         unmappedItems: UnmappedMenuItem[]
       }
+      /** Top per-item $ swings between the latest period and the one before it.
+       *  Empty when there's only one period. */
+      movers: PnLMover[]
     }
   | { error: string }
 
@@ -2170,6 +2186,81 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   return { cogsValues, unmappedItems }
 }
 
+/**
+ * Compute the top-N item-level $ swings between two period buckets. Returns
+ * the biggest absolute-dollar deltas first — positive (item grew) or negative
+ * (item shrank), so owners see the movement regardless of direction.
+ */
+function computeMovers(
+  rows: DailyCogsRow[],
+  periods: Period[],
+  currentIdx: number,
+  priorIdx: number,
+  limit = 5
+): PnLMover[] {
+  if (periods.length < 2 || currentIdx === priorIdx) return []
+
+  const byItem = new Map<
+    string,
+    {
+      itemName: string
+      category: string
+      currentRev: number
+      priorRev: number
+      currentQty: number
+      priorQty: number
+    }
+  >()
+
+  for (const row of rows) {
+    const t = row.date.getTime()
+    const idx = periods.findIndex(
+      (p) => t >= p.startDate.getTime() && t <= p.endDate.getTime()
+    )
+    if (idx !== currentIdx && idx !== priorIdx) continue
+
+    const key = `${row.itemName}:::${row.category}`
+    let bucket = byItem.get(key)
+    if (!bucket) {
+      bucket = {
+        itemName: row.itemName,
+        category: row.category,
+        currentRev: 0,
+        priorRev: 0,
+        currentQty: 0,
+        priorQty: 0,
+      }
+      byItem.set(key, bucket)
+    }
+    if (idx === currentIdx) {
+      bucket.currentRev += row.salesRevenue
+      bucket.currentQty += row.qtySold
+    } else {
+      bucket.priorRev += row.salesRevenue
+      bucket.priorQty += row.qtySold
+    }
+  }
+
+  const movers: PnLMover[] = []
+  for (const b of byItem.values()) {
+    const delta = b.currentRev - b.priorRev
+    if (Math.abs(delta) < 1) continue
+    movers.push({
+      itemName: b.itemName,
+      category: b.category,
+      current: b.currentRev,
+      prior: b.priorRev,
+      delta,
+      pctDelta: b.priorRev === 0 ? (delta > 0 ? 1 : -1) : delta / Math.abs(b.priorRev),
+      qtyCurrent: b.currentQty,
+      qtyPrior: b.priorQty,
+      qtyDelta: b.currentQty - b.priorQty,
+    })
+  }
+  movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+  return movers.slice(0, limit)
+}
+
 export async function getStorePnL(input: {
   storeId: string
   startDate: Date
@@ -2219,6 +2310,7 @@ export async function getStorePnL(input: {
           grossMarginPct: 0,
           unmappedItems: [],
         },
+        movers: [],
       }
     }
 
@@ -2269,6 +2361,9 @@ export async function getStorePnL(input: {
       store,
       cogsValues: cogs.cogsValues,
     })
+    const movers = periods.length >= 2
+      ? computeMovers(cogsRows, periods, periods.length - 1, periods.length - 2, 5)
+      : []
 
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
     const grossSales = sum(computed.totalSales)
@@ -2318,6 +2413,7 @@ export async function getStorePnL(input: {
         grossMarginPct,
         unmappedItems: cogs.unmappedItems,
       },
+      movers,
     }
   } catch (error) {
     console.error("getStorePnL error:", error)
@@ -2337,6 +2433,12 @@ export type AllStoresPnLResult =
         fixedCosts: number
         bottomLine: number
         marginPct: number
+        cogsValue: number
+        cogsPct: number
+        laborValue: number
+        laborPct: number
+        rentValue: number
+        rentPct: number
       }
       perStore: Array<{
         storeId: string
@@ -2346,9 +2448,21 @@ export type AllStoresPnLResult =
         fixedCosts: number
         bottomLine: number
         marginPct: number
+        cogsValue: number
+        cogsPct: number
+        laborValue: number
+        laborPct: number
+        rentValue: number
+        rentPct: number
         channelMix: Array<{ channel: string; amount: number }>
         fixedCostsConfigured: boolean
+        /** Per-period GL rows for this store — used to render the per-store
+         *  mini-statement across the selected N periods. */
+        rows: PnLRow[]
       }>
+      /** All-store roll-up of `rows` — row.values[i] is the sum across stores
+       *  for period i. Used for the consolidated statement at the bottom. */
+      consolidatedRows: PnLRow[]
       periods: Period[]
     }
   | { error: string }
@@ -2388,8 +2502,15 @@ export async function getAllStoresPnL(input: {
           fixedCosts: 0,
           bottomLine: 0,
           marginPct: 0,
+          cogsValue: 0,
+          cogsPct: 0,
+          laborValue: 0,
+          laborPct: 0,
+          rentValue: 0,
+          rentPct: 0,
         },
         perStore: [],
+        consolidatedRows: [],
         periods,
       }
     }
@@ -2466,13 +2587,17 @@ export async function getAllStoresPnL(input: {
       // Aggregate per-period arrays to range totals.
       const grossSales = sum(computed.totalSales)
       const netAfterCommissions = sum(computed.netAfterCommissions)
+      const cogsValue = sum(computed.cogsValues)
+      const laborValue = sum(computed.laborValues)
+      const rentValue = sum(computed.rentValues)
       const fixedCosts =
-        sum(computed.laborValues) +
-        sum(computed.rentValues) +
+        laborValue +
+        rentValue +
         sum(computed.towelsValues) +
         sum(computed.cleaningValues)
       const bottomLine = sum(computed.bottomLine)
       const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
+      const ratio = (v: number) => (grossSales === 0 ? 0 : v / grossSales)
 
       // Sum per-channel across periods for the mini mix bar.
       const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
@@ -2493,26 +2618,81 @@ export async function getAllStoresPnL(input: {
         fixedCosts,
         bottomLine,
         marginPct,
+        cogsValue,
+        cogsPct: ratio(cogsValue),
+        laborValue,
+        laborPct: ratio(laborValue),
+        rentValue,
+        rentPct: ratio(rentValue),
         channelMix: channelMix(totalChannelVals),
         fixedCostsConfigured:
           store.fixedMonthlyLabor != null && store.fixedMonthlyRent != null,
+        rows: computed.rows,
       }
     })
 
+    const combinedGross = sum(perStore.map((p) => p.grossSales))
+    const combinedCogs = sum(perStore.map((p) => p.cogsValue))
+    const combinedLabor = sum(perStore.map((p) => p.laborValue))
+    const combinedRent = sum(perStore.map((p) => p.rentValue))
     const combined = {
-      grossSales: sum(perStore.map((p) => p.grossSales)),
+      grossSales: combinedGross,
       netAfterCommissions: sum(perStore.map((p) => p.netAfterCommissions)),
       fixedCosts: sum(perStore.map((p) => p.fixedCosts)),
       bottomLine: sum(perStore.map((p) => p.bottomLine)),
       marginPct: 0,
+      cogsValue: combinedCogs,
+      cogsPct: combinedGross === 0 ? 0 : combinedCogs / combinedGross,
+      laborValue: combinedLabor,
+      laborPct: combinedGross === 0 ? 0 : combinedLabor / combinedGross,
+      rentValue: combinedRent,
+      rentPct: combinedGross === 0 ? 0 : combinedRent / combinedGross,
     }
     combined.marginPct =
       combined.grossSales === 0 ? 0 : combined.bottomLine / combined.grossSales
+
+    // Roll up each store's rows into one consolidated matrix. Every store has
+    // the same GL row order (driven by computeStorePnL / GL_ROWS), so we just
+    // sum values[i] per row. Percents and isUnknown are recomputed off the
+    // combined gross.
+    const consolidatedRows: PnLRow[] = []
+    const firstStoreRows = perStore[0]?.rows ?? []
+    for (let rowIdx = 0; rowIdx < firstStoreRows.length; rowIdx++) {
+      const template = firstStoreRows[rowIdx]
+      const combinedValues = periods.map((_, pi) =>
+        perStore.reduce((acc, s) => acc + (s.rows[rowIdx]?.values[pi] ?? 0), 0)
+      )
+      const combinedGrossPerPeriod = periods.map((_, pi) =>
+        perStore.reduce(
+          (acc, s) =>
+            acc + (s.rows.find((r) => r.code === TOTAL_SALES_CODE)?.values[pi] ?? 0),
+          0
+        )
+      )
+      // A combined cell is "unknown" only if every contributing store's cell
+      // is unknown (e.g., every store missing a rent config).
+      const combinedUnknown = periods.map((_, pi) =>
+        perStore.every((s) => s.rows[rowIdx]?.isUnknown?.[pi] === true)
+      )
+      const anyUnknown = combinedUnknown.some(Boolean)
+      consolidatedRows.push({
+        code: template.code,
+        label: template.label,
+        values: combinedValues,
+        percents: combinedValues.map((v, i) =>
+          combinedGrossPerPeriod[i] === 0 ? 0 : v / combinedGrossPerPeriod[i]
+        ),
+        isSubtotal: template.isSubtotal,
+        isFixed: template.isFixed,
+        isUnknown: anyUnknown ? combinedUnknown : undefined,
+      })
+    }
 
     return {
       storeCount: stores.length,
       combined,
       perStore,
+      consolidatedRows,
       periods,
     }
   } catch (error) {

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -11,10 +11,23 @@ import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
 import { PnLKpiStrip } from "./pnl-kpi-strip"
-import { PnLChannelDonut } from "./pnl-channel-donut"
+import { PnLChannelLedger } from "./pnl-channel-ledger"
 import { PnLTrendChart } from "./pnl-trend-chart"
-import { PnLSummaryTable } from "./pnl-summary-table"
-import { PnLTable } from "./pnl-table"
+import { PnLStatement } from "./pnl-statement"
+import { PnLLede } from "./pnl-lede"
+import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
+import { PnLWhatMoved } from "./pnl-what-moved"
+import {
+  TOTAL_SALES_CODE,
+  UBER_COMMISSION_CODE,
+  DOORDASH_COMMISSION_CODE,
+  COGS_CODE,
+  LABOR_CODE,
+  RENT_CODE,
+  CLEANING_CODE,
+  TOWELS_CODE,
+  AFTER_LABOR_RENT_CODE,
+} from "@/lib/pnl"
 import { getStorePnL, recomputeCogsForStore } from "@/app/actions/store-actions"
 
 export interface PnLPageClientProps {
@@ -25,7 +38,6 @@ export interface PnLPageClientProps {
 
 export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientProps) {
   const [state, setState] = useState<PnLRangeState>(defaultPnLRangeState)
-  const [detailOpen, setDetailOpen] = useState(false)
   const queryClient = useQueryClient()
 
   const query = useQuery({
@@ -118,6 +130,44 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
           </div>
         ) : data ? (
           <>
+            <PnLLede
+              storeName={storeName}
+              bottomLineByPeriod={
+                data.rows.find((r) => r.code === AFTER_LABOR_RENT_CODE)?.values ?? data.trend.bottomLine
+              }
+              grossByPeriod={data.trend.totalSales}
+              periods={data.periods}
+            />
+
+            {(() => {
+              const latestIdx = data.periods.length - 1
+              if (latestIdx < 0) return null
+              const latest = (code: string) =>
+                data.rows.find((r) => r.code === code)?.values[latestIdx] ?? 0
+              const gross = latest(TOTAL_SALES_CODE)
+              // Commissions stored as negatives — convert to positive amounts here.
+              const commissions = Math.abs(
+                latest(UBER_COMMISSION_CODE) + latest(DOORDASH_COMMISSION_CODE)
+              )
+              const cogs = latest(COGS_CODE)
+              const labor = latest(LABOR_CODE)
+              const rent = latest(RENT_CODE)
+              const cleaning = latest(CLEANING_CODE)
+              const towels = latest(TOWELS_CODE)
+              const fixed = labor + rent + cleaning + towels
+              const bottom = latest(AFTER_LABOR_RENT_CODE)
+
+              const steps: WaterfallStep[] = [
+                { kind: "total", label: "Gross Sales", value: gross },
+                { kind: "subtract", label: "3P Commissions", value: commissions },
+                { kind: "subtract", label: "COGS", value: cogs },
+                { kind: "subtract", label: "Labor", value: labor },
+                { kind: "subtract", label: "Rent + Fixed", value: rent + cleaning + towels },
+                { kind: "total", label: "Bottom Line", value: bottom },
+              ]
+              return <PnLWaterfall steps={steps} />
+            })()}
+
             <PnLKpiStrip
               kpis={[
                 { label: "Gross Sales", value: data.kpis.grossSales },
@@ -147,7 +197,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
             />
 
             <div className="grid gap-4 md:grid-cols-2">
-              <PnLChannelDonut data={data.channelMix} />
+              <PnLChannelLedger data={data.channelMix} />
               <PnLTrendChart
                 periods={data.periods}
                 totalSales={data.trend.totalSales}
@@ -177,31 +227,15 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
               </div>
             )}
 
-            <PnLSummaryTable rows={data.rows} configureHref={configureHref} />
+            {data.movers.length > 0 ? (
+              <PnLWhatMoved movers={data.movers} periods={data.periods} />
+            ) : null}
 
-            <div className="rounded-lg border bg-card">
-              <button
-                type="button"
-                onClick={() => setDetailOpen((o) => !o)}
-                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
-              >
-                <span>Show full line-item detail (GL accounts)</span>
-                {detailOpen ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </button>
-              {detailOpen && (
-                <div className="border-t p-3">
-                  <PnLTable
-                    periods={data.periods}
-                    rows={data.rows}
-                    configureHref={configureHref}
-                  />
-                </div>
-              )}
-            </div>
+            <PnLStatement
+              rows={data.rows}
+              periods={data.periods}
+              title="The Statement"
+            />
 
             <div className="flex items-center gap-2">
               <Link href={`/dashboard/analytics/${storeId}`}>

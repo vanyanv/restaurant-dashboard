@@ -4,16 +4,13 @@ import { useState } from "react"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { type DateRange } from "react-day-picker"
-import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
-import type { Granularity } from "@/lib/pnl"
 import {
   PNL_PRESETS,
   defaultPnLRangeState,
@@ -35,54 +32,66 @@ export function PnLDateControls({ state, onChange, isPending }: PnLDateControlsP
   const activePreset = state.preset
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium text-muted-foreground mr-1">Granularity</span>
-      <ToggleGroup
-        type="single"
-        value={state.granularity}
-        onValueChange={(v) => {
-          if (!v) return
-          onChange({ ...state, granularity: v as Granularity, preset: undefined })
-        }}
-        disabled={isPending}
-      >
-        <ToggleGroupItem value="daily" size="sm" className="text-xs h-8">Daily</ToggleGroupItem>
-        <ToggleGroupItem value="weekly" size="sm" className="text-xs h-8">Weekly</ToggleGroupItem>
-        <ToggleGroupItem value="monthly" size="sm" className="text-xs h-8">Monthly</ToggleGroupItem>
-      </ToggleGroup>
+    <div className="pnl-controls">
+      <div className="pnl-controls__group">
+        <span className="pnl-controls__label">Granularity</span>
+        <div className="pnl-controls__seg" role="radiogroup" aria-label="Granularity">
+          {(["daily", "weekly", "monthly"] as const).map((g) => (
+            <button
+              key={g}
+              type="button"
+              role="radio"
+              aria-checked={state.granularity === g}
+              className={cn(
+                "pnl-controls__segItem",
+                state.granularity === g && "pnl-controls__segItem--active"
+              )}
+              onClick={() => onChange({ ...state, granularity: g, preset: undefined })}
+              disabled={isPending}
+            >
+              {g === "daily" ? "Day" : g === "weekly" ? "Week" : "Month"}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <div className="mx-2 h-6 w-px bg-border hidden md:block" />
+      <div className="pnl-controls__divider" aria-hidden />
 
-      <div className="flex flex-wrap gap-1.5">
-        {PNL_PRESETS.map((p) => (
-          <Button
-            key={p.key}
-            type="button"
-            size="sm"
-            variant={activePreset === p.key ? "default" : "outline"}
-            className="h-8 text-xs"
-            onClick={() => onChange(p.compute())}
-            disabled={isPending}
-          >
-            {p.label}
-          </Button>
-        ))}
+      <div className="pnl-controls__group">
+        <span className="pnl-controls__label">Range</span>
+        <div className="pnl-controls__pills">
+          {PNL_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={cn(
+                "pnl-controls__pill",
+                activePreset === p.key && "pnl-controls__pill--active"
+              )}
+              onClick={() => onChange(p.compute())}
+              disabled={isPending}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
         <PopoverTrigger asChild>
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant="outline"
             disabled={isPending}
-            className={cn("h-8 gap-1.5 text-xs", !activePreset && "border-primary")}
+            className={cn(
+              "pnl-controls__pill pnl-controls__pill--custom",
+              !activePreset && "pnl-controls__pill--active"
+            )}
           >
-            <CalendarIcon className="h-3.5 w-3.5" />
+            <CalendarIcon className="h-3 w-3" />
             {activePreset
-              ? "Custom"
+              ? "Custom…"
               : `${format(state.startDate, "MMM d")} – ${format(state.endDate, "MMM d")}`}
-          </Button>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
           <Calendar
