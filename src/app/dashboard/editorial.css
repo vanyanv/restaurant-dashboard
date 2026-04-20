@@ -3572,6 +3572,153 @@
   }
 }
 
+/* ─── P&L Store Comparison (home page) ─────────────────────────── */
+
+.pnl-comparison {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.pnl-comparison__grid {
+  display: grid;
+  column-gap: 0;
+  min-width: 100%;
+  border-top: 1px solid var(--hairline-bold);
+}
+
+.pnl-comparison__cell {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.pnl-comparison__cell--label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--paper);
+  border-right: 1px solid var(--hairline);
+}
+
+.pnl-comparison__cell--num {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.pnl-comparison__cell--head {
+  padding-top: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline-bold);
+  background: var(--paper);
+  min-height: 56px;
+}
+
+.pnl-comparison__cell--total {
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.04) 0%, rgba(220, 38, 38, 0.015) 100%);
+  border-left: 1px solid var(--hairline-bold);
+}
+
+.pnl-comparison__cell--subtotal {
+  background: var(--paper-deep);
+  border-top: 1px solid var(--ink);
+}
+
+.pnl-comparison__cell--subtotal.pnl-comparison__cell--total {
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.06) 0%, rgba(220, 38, 38, 0.03) 100%);
+}
+
+.pnl-comparison__storeLink {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  text-decoration: none;
+  color: inherit;
+  gap: 2px;
+  transition: color 140ms ease-out;
+}
+
+.pnl-comparison__storeLink:hover {
+  color: var(--accent-dark);
+}
+
+.pnl-comparison__storeLink--static:hover {
+  color: inherit;
+}
+
+.pnl-comparison__storeName {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-variation-settings: "opsz" 48;
+  font-style: italic;
+  font-weight: 450;
+  font-size: 18px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.pnl-comparison__storeName--total {
+  font-weight: 500;
+  color: var(--accent-dark);
+}
+
+.pnl-comparison__warn {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+  border: 1px dashed rgba(124, 21, 21, 0.4);
+  padding: 1px 5px;
+  border-radius: 1px;
+}
+
+.pnl-comparison__rowLabel {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12.5px;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+.pnl-comparison__cell--subtotal .pnl-comparison__rowLabel {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-variation-settings: "opsz" 48;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.pnl-comparison__cell .font-mono {
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.pnl-comparison__subtotalNum {
+  font-size: 15px !important;
+  font-weight: 500;
+}
+
+.pnl-comparison__pct {
+  font-size: 10.5px !important;
+  color: var(--ink-muted) !important;
+  margin-top: 2px;
+}
+
+.pnl-comparison__cell--negative .font-mono {
+  color: var(--accent-dark);
+}
+
 /* ─── P&L Header (store picker + date controls) ────────────────── */
 
 .pnl-header {

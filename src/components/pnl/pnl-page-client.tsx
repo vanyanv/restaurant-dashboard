@@ -14,7 +14,6 @@ import { PnLKpiStrip } from "./pnl-kpi-strip"
 import { PnLChannelLedger } from "./pnl-channel-ledger"
 import { PnLTrendChart } from "./pnl-trend-chart"
 import { PnLStatement } from "./pnl-statement"
-import { PnLLede } from "./pnl-lede"
 import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
 import { PnLWhatMoved } from "./pnl-what-moved"
 import {
@@ -115,10 +114,10 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
               <Skeleton className="h-24" />
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Skeleton className="h-[320px]" />
-              <Skeleton className="h-[320px]" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
             </div>
-            <Skeleton className="h-[380px]" />
+            <Skeleton className="h-95" />
           </>
         ) : query.error ? (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
@@ -130,15 +129,6 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
           </div>
         ) : data ? (
           <>
-            <PnLLede
-              storeName={storeName}
-              bottomLineByPeriod={
-                data.rows.find((r) => r.code === AFTER_LABOR_RENT_CODE)?.values ?? data.trend.bottomLine
-              }
-              grossByPeriod={data.trend.totalSales}
-              periods={data.periods}
-            />
-
             {(() => {
               const latestIdx = data.periods.length - 1
               if (latestIdx < 0) return null

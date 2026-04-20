@@ -6,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
-import { PnLLede } from "./pnl-lede"
 import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
 import { PnLLeagueTable } from "./pnl-league-table"
 import { getAllStoresPnL } from "@/app/actions/store-actions"
@@ -87,18 +86,6 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
           </div>
         ) : data ? (
           <>
-            {/* Lede — use the consolidated bottom-line series */}
-            <PnLLede
-              storeName={stores.length === 1 ? stores[0].name : "The business"}
-              bottomLineByPeriod={
-                data.consolidatedRows.find((r) => r.code === AFTER_LABOR_RENT_CODE)?.values ?? []
-              }
-              grossByPeriod={
-                data.consolidatedRows.find((r) => r.code === TOTAL_SALES_CODE)?.values ?? []
-              }
-              periods={data.periods}
-            />
-
             {/* Combined waterfall for the latest period */}
             {data.periods.length > 0 && data.consolidatedRows.length > 0 ? (
               (() => {
