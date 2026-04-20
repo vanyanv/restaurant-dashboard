@@ -31,10 +31,21 @@ import {
 import type { MenuPerformanceData } from "@/types/analytics"
 import { MenuDailyTrendChart } from "@/components/charts/menu-daily-trend-chart"
 import { CategoryBreakdownChart } from "@/components/charts/category-breakdown-chart"
-import { ChannelComparisonChart } from "@/components/charts/channel-comparison-chart"
+import dynamic from "next/dynamic"
 import { MenuItemsTable } from "@/components/analytics/menu-items-table"
-import { ItemHeatmap } from "@/components/charts/item-heatmap"
-import { RankingRaceChart } from "@/components/charts/ranking-race-chart"
+
+const ChannelComparisonChart = dynamic(
+  () => import("@/components/charts/channel-comparison-chart").then((m) => m.ChannelComparisonChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+)
+const ItemHeatmap = dynamic(
+  () => import("@/components/charts/item-heatmap").then((m) => m.ItemHeatmap),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+)
+const RankingRaceChart = dynamic(
+  () => import("@/components/charts/ranking-race-chart").then((m) => m.RankingRaceChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+)
 
 interface MenuPerformanceContentProps {
   initialData: MenuPerformanceData | null
