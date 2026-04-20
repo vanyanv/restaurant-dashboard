@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useCallback, useRef } from "react"
+import { memo, useMemo, useState, useCallback, useRef } from "react"
 import {
   Card,
   CardContent,
@@ -50,7 +50,7 @@ function generateDateRange(start: string, end: string): string[] {
   return dates
 }
 
-export function ItemHeatmap({
+function ItemHeatmapImpl({
   matrix,
   itemNames,
   dateRange,
@@ -230,3 +230,5 @@ export function ItemHeatmap({
     </Card>
   )
 }
+
+export const ItemHeatmap = memo(ItemHeatmapImpl)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import {
   Card,
   CardContent,
@@ -38,7 +38,7 @@ interface MenuItemsTableProps {
 type SortKey = "itemName" | "category" | "fpQuantitySold" | "tpQuantitySold" | "totalQuantitySold" | "fpSales" | "tpSales" | "totalSales" | "avgPricePerUnit" | "fpShare"
 type SortDir = "asc" | "desc"
 
-export function MenuItemsTable({ data, className, onItemClick }: MenuItemsTableProps) {
+function MenuItemsTableImpl({ data, className, onItemClick }: MenuItemsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("totalQuantitySold")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -233,3 +233,5 @@ export function MenuItemsTable({ data, className, onItemClick }: MenuItemsTableP
     </Card>
   )
 }
+
+export const MenuItemsTable = memo(MenuItemsTableImpl)

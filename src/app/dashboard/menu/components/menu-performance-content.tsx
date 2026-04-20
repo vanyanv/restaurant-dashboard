@@ -160,6 +160,15 @@ export function MenuPerformanceContent({
     [hasData, data]
   )
 
+  const trendData = useMemo(() => data?.dailyTrends ?? [], [data])
+  const categoryData = useMemo(() => data?.categoryBreakdown ?? [], [data])
+  const channelData = useMemo(() => data?.channelComparison ?? [], [data])
+  const heatmapMatrix = useMemo(() => data?.itemDailyMatrix ?? [], [data])
+  const heatmapItemNames = useMemo(() => data?.matrixItemNames ?? [], [data])
+  const heatmapDateRange = useMemo(() => data?.dateRange, [data])
+  const raceFrames = useMemo(() => data?.raceDayFrames ?? [], [data])
+  const itemsTableData = useMemo(() => data?.allItems ?? [], [data])
+
   return (
     <div className="flex flex-col h-full">
       <EditorialTopbar
@@ -229,11 +238,11 @@ export function MenuPerformanceContent({
               ) : hasData ? (
                 <>
                   <MenuDailyTrendChart
-                    data={data.dailyTrends}
+                    data={trendData}
                     className="lg:col-span-3"
                   />
                   <CategoryBreakdownChart
-                    data={data.categoryBreakdown}
+                    data={categoryData}
                     className="lg:col-span-2"
                   />
                 </>
@@ -258,7 +267,7 @@ export function MenuPerformanceContent({
                   <DataTableSkeleton columns={10} rows={8} />
                 ) : hasData ? (
                   <MenuItemsTable
-                    data={data.allItems}
+                    data={itemsTableData}
                     onItemClick={handleItemClick}
                   />
                 ) : null}
@@ -267,11 +276,11 @@ export function MenuPerformanceContent({
               <TabsContent value="heatmap" className="mt-4">
                 {isPending ? (
                   <ChartSkeleton />
-                ) : hasData && data.itemDailyMatrix.length > 0 ? (
+                ) : hasData && heatmapMatrix.length > 0 ? (
                   <ItemHeatmap
-                    matrix={data.itemDailyMatrix}
-                    itemNames={data.matrixItemNames}
-                    dateRange={data.dateRange}
+                    matrix={heatmapMatrix}
+                    itemNames={heatmapItemNames}
+                    dateRange={heatmapDateRange!}
                     onItemClick={handleItemClick}
                   />
                 ) : (
@@ -284,9 +293,9 @@ export function MenuPerformanceContent({
               <TabsContent value="race" className="mt-4">
                 {isPending ? (
                   <ChartSkeleton />
-                ) : hasData && data.raceDayFrames.length > 0 ? (
+                ) : hasData && raceFrames.length > 0 ? (
                   <RankingRaceChart
-                    frames={data.raceDayFrames}
+                    frames={raceFrames}
                     onItemClick={handleItemClick}
                   />
                 ) : (
@@ -300,7 +309,7 @@ export function MenuPerformanceContent({
                 {isPending ? (
                   <ChartSkeleton />
                 ) : hasData ? (
-                  <ChannelComparisonChart data={data.channelComparison} />
+                  <ChannelComparisonChart data={channelData} />
                 ) : null}
               </TabsContent>
             </Tabs>

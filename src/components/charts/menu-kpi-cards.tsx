@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { memo, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency, formatPct, formatNumber } from "@/lib/format"
 import type { MenuPerformanceKpis, MenuPerformanceComparison } from "@/types/analytics"
@@ -40,7 +40,7 @@ const CARDS = [
   },
 ]
 
-export function MenuKpiCards({ kpis, comparison }: MenuKpiCardsProps) {
+function MenuKpiCardsImpl({ kpis, comparison }: MenuKpiCardsProps) {
   const hasAnimated = useRef(false)
 
   const getValue = (key: string): string => {
@@ -146,3 +146,5 @@ export function MenuKpiCards({ kpis, comparison }: MenuKpiCardsProps) {
     </div>
   )
 }
+
+export const MenuKpiCards = memo(MenuKpiCardsImpl)

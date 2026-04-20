@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { Pie, PieChart, Cell } from "@/components/charts/recharts"
 import {
   Card,
@@ -31,7 +31,7 @@ const COLORS = [
   "hsl(var(--primary) / 0.6)",
 ]
 
-export function CategoryBreakdownChart({
+function CategoryBreakdownChartImpl({
   data,
   className,
 }: CategoryBreakdownChartProps) {
@@ -128,3 +128,5 @@ export function CategoryBreakdownChart({
     </Card>
   )
 }
+
+export const CategoryBreakdownChart = memo(CategoryBreakdownChartImpl)

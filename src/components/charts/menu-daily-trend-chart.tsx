@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "@/components/charts/recharts"
 import {
@@ -40,7 +41,7 @@ const chartConfig: ChartConfig = {
   },
 }
 
-export function MenuDailyTrendChart({
+function MenuDailyTrendChartImpl({
   data,
   className,
 }: MenuDailyTrendChartProps) {
@@ -126,3 +127,5 @@ export function MenuDailyTrendChart({
     </Card>
   )
 }
+
+export const MenuDailyTrendChart = memo(MenuDailyTrendChartImpl)

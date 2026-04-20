@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { memo, useState } from "react"
 import { Bar, BarChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
   Card,
@@ -23,7 +23,7 @@ interface ChannelComparisonChartProps {
   className?: string
 }
 
-export function ChannelComparisonChart({
+function ChannelComparisonChartImpl({
   data,
   className,
 }: ChannelComparisonChartProps) {
@@ -130,3 +130,5 @@ export function ChannelComparisonChart({
     </Card>
   )
 }
+
+export const ChannelComparisonChart = memo(ChannelComparisonChartImpl)

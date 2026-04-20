@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Play, Pause, RotateCcw } from "lucide-react"
 import { motion } from "framer-motion"
 import {
@@ -39,7 +39,7 @@ interface RankingRaceChartProps {
 const BAR_HEIGHT = 36
 const GAP = 4
 
-export function RankingRaceChart({
+function RankingRaceChartImpl({
   frames,
   onItemClick,
   className,
@@ -245,3 +245,5 @@ export function RankingRaceChart({
     </Card>
   )
 }
+
+export const RankingRaceChart = memo(RankingRaceChartImpl)
