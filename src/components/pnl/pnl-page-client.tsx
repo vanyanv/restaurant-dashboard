@@ -11,11 +11,8 @@ import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
 import { PnLKpiStrip } from "./pnl-kpi-strip"
-import { PnLChannelLedger } from "./pnl-channel-ledger"
-import { PnLTrendChart } from "./pnl-trend-chart"
 import { PnLStatement } from "./pnl-statement"
 import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
-import { PnLWhatMoved } from "./pnl-what-moved"
 import {
   TOTAL_SALES_CODE,
   UBER_COMMISSION_CODE,
@@ -190,15 +187,6 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
               ]}
             />
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <PnLChannelLedger data={data.channelMix} />
-              <PnLTrendChart
-                periods={data.periods}
-                totalSales={data.trend.totalSales}
-                bottomLine={data.trend.bottomLine}
-              />
-            </div>
-
             {data.cogs.unmappedItems.length > 0 && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <div className="flex items-baseline justify-between gap-4">
@@ -220,10 +208,6 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                 </div>
               </div>
             )}
-
-            {data.movers.length > 0 ? (
-              <PnLWhatMoved movers={data.movers} periods={data.periods} />
-            ) : null}
 
             <PnLStatement
               rows={data.rows}
