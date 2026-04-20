@@ -13,6 +13,11 @@ import {
 import { costRecipeCached, costIngredientCached } from "@/lib/cached"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import type { RecipeInput, RecipeSummary } from "@/types/recipe"
+import {
+  getMenuItemSellPrices,
+  getMenuItemsForCatalog,
+} from "@/app/actions/menu-item-actions"
+import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
 
 async function requireOwnerId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
@@ -315,5 +320,66 @@ export async function confirmRecipe(
       recipeId,
       itemName: recipe.itemName,
     })
+  }
+}
+
+export type RecipeCatalogSummary = {
+  id: string
+  itemName: string
+  category: string
+  isConfirmed: boolean
+  ingredientCount: number
+  computedCost: number | null
+  partialCost: boolean
+  updatedAt: Date
+  sellPrice: number | null
+  qtySold: number
+  sellSourceName: string | null
+}
+
+export async function getRecipeCatalogSummary(
+  recipeId: string
+): Promise<RecipeCatalogSummary | null> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) return null
+
+  const recipe = await prisma.recipe.findFirst({
+    where: { id: recipeId, ownerId },
+    select: {
+      id: true,
+      itemName: true,
+      category: true,
+      isConfirmed: true,
+      updatedAt: true,
+      ingredients: { select: { id: true } },
+    },
+  })
+  if (!recipe) return null
+
+  const [cost, sellPrices, otterMappings] = await Promise.all([
+    costRecipeCached(recipe.id).catch(() => null),
+    getMenuItemSellPrices(30),
+    getMenuItemsForCatalog(),
+  ])
+
+  const resolved = resolveSellPriceForRecipe(
+    recipe.id,
+    recipe.itemName,
+    sellPrices,
+    otterMappings
+  )
+
+  return {
+    id: recipe.id,
+    itemName: recipe.itemName,
+    category: recipe.category,
+    isConfirmed: recipe.isConfirmed,
+    ingredientCount: recipe.ingredients.length,
+    computedCost: cost?.totalCost ?? null,
+    partialCost: cost?.partial ?? true,
+    updatedAt: recipe.updatedAt,
+    sellPrice: resolved?.avgPrice ?? null,
+    qtySold: resolved?.qtySold ?? 0,
+    sellSourceName: resolved?.sourceOtterName ?? null,
   }
 }
