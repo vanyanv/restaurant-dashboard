@@ -11,7 +11,7 @@ import {
 } from "@/lib/nav-frequency"
 import { flatNavItems } from "@/components/app-sidebar"
 
-const TOP_N = 5
+const TOP_N = 3
 
 export function NavFrequent() {
   const [entries, setEntries] = React.useState<RankedEntry[]>([])

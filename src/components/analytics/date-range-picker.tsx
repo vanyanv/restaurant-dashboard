@@ -1,10 +1,18 @@
 "use client"
 
-import { useState } from "react"
-import { Calendar as CalendarIcon } from "lucide-react"
-import { format } from "date-fns"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  addDays,
+  differenceInCalendarDays,
+  format,
+  startOfMonth,
+  startOfQuarter,
+  startOfWeek,
+  startOfYear,
+  subDays,
+} from "date-fns"
 import { type DateRange } from "react-day-picker"
-import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
@@ -21,7 +29,6 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 
-/** Format a Date as yyyy-MM-dd using local calendar date (avoids UTC day rollover). */
 function localDateStr(d: Date): string {
   const yyyy = d.getFullYear()
   const mm = String(d.getMonth() + 1).padStart(2, "0")
@@ -29,15 +36,67 @@ function localDateStr(d: Date): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
+function parseLocal(s: string): Date {
+  return new Date(s + "T00:00:00")
+}
+
 const PRESETS = [
   { label: "Today", value: "1" },
   { label: "Yday", value: "-1" },
-  { label: "3D", value: "3" },
   { label: "7D", value: "7" },
-  { label: "14D", value: "14" },
   { label: "30D", value: "30" },
   { label: "90D", value: "90" },
 ] as const
+
+const DRAWER_PRESETS: Array<{
+  group: string
+  label: string
+  compute: (today: Date) => [Date, Date]
+}> = [
+  { group: "Quick views", label: "Today", compute: (t) => [t, t] },
+  {
+    group: "Quick views",
+    label: "Yesterday",
+    compute: (t) => {
+      const y = subDays(t, 1)
+      return [y, y]
+    },
+  },
+  {
+    group: "Quick views",
+    label: "This week",
+    compute: (t) => [startOfWeek(t, { weekStartsOn: 1 }), t],
+  },
+  {
+    group: "Quick views",
+    label: "Last week",
+    compute: (t) => {
+      const thisMon = startOfWeek(t, { weekStartsOn: 1 })
+      const lastMon = subDays(thisMon, 7)
+      return [lastMon, addDays(lastMon, 6)]
+    },
+  },
+  { group: "Periods", label: "Last 3", compute: (t) => [subDays(t, 3), t] },
+  { group: "Periods", label: "Last 7", compute: (t) => [subDays(t, 7), t] },
+  { group: "Periods", label: "Last 14", compute: (t) => [subDays(t, 14), t] },
+  { group: "Periods", label: "Last 30", compute: (t) => [subDays(t, 30), t] },
+  { group: "Periods", label: "Last 90", compute: (t) => [subDays(t, 90), t] },
+  {
+    group: "To date",
+    label: "Month-to-date",
+    compute: (t) => [startOfMonth(t), t],
+  },
+  {
+    group: "To date",
+    label: "Quarter-to-date",
+    compute: (t) => [startOfQuarter(t), t],
+  },
+  {
+    group: "To date",
+    label: "Year-to-date",
+    compute: (t) => [startOfYear(t), t],
+  },
+]
 
 interface DateRangePickerProps {
   days: number
@@ -52,53 +111,152 @@ export function DateRangePicker({
   onRangeChange,
   isPending,
 }: DateRangePickerProps) {
-  const [calendarOpen, setCalendarOpen] = useState(false)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
+  const [open, setOpen] = useState(false)
+  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
 
   const activePreset = customRange ? undefined : String(days)
+
+  // Current effective start/end (as Date objects in local time)
+  const { startDate, endDate } = useMemo(() => {
+    if (customRange) {
+      return {
+        startDate: parseLocal(customRange.startDate),
+        endDate: parseLocal(customRange.endDate),
+      }
+    }
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (days === 1) return { startDate: today, endDate: today }
+    if (days === -1) {
+      const y = subDays(today, 1)
+      return { startDate: y, endDate: y }
+    }
+    return { startDate: subDays(today, days), endDate: today }
+  }, [customRange, days])
+
+  const spanDays = differenceInCalendarDays(endDate, startDate) + 1
+
+  // Previous period (same span, immediately prior)
+  const prior = useMemo(() => {
+    const prevEnd = subDays(startDate, 1)
+    const prevStart = subDays(prevEnd, spanDays - 1)
+    return { start: prevStart, end: prevEnd }
+  }, [startDate, spanDays])
+
+  const applyRange = useCallback(
+    (start: Date, end: Date) => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      // Clamp to not-in-future
+      const clampedEnd = end > today ? today : end
+      const clampedStart = start > clampedEnd ? clampedEnd : start
+      onRangeChange(localDateStr(clampedStart), localDateStr(clampedEnd))
+    },
+    [onRangeChange]
+  )
 
   const handlePresetChange = (value: string) => {
     if (!value) return
     if (value === "-1") {
-      // "Yesterday" — single day
-      const yesterday = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      const dateStr = localDateStr(yesterday)
-      onRangeChange(dateStr, dateStr)
+      const y = subDays(new Date(), 1)
+      const s = localDateStr(y)
+      onRangeChange(s, s)
       return
     }
     const d = Number(value)
     const end = new Date()
-    const start = new Date()
-    if (d === 1) {
-      // "Today" — just today
-      start.setHours(0, 0, 0, 0)
-    } else {
-      start.setDate(end.getDate() - d)
-    }
-    onRangeChange(localDateStr(start), localDateStr(end))
+    end.setHours(0, 0, 0, 0)
+    const start = d === 1 ? end : subDays(end, d)
+    applyRange(start, end)
   }
+
+  const stepBy = useCallback(
+    (direction: -1 | 1) => {
+      const delta = spanDays * direction
+      applyRange(addDays(startDate, delta), addDays(endDate, delta))
+    },
+    [applyRange, endDate, spanDays, startDate]
+  )
+
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
+
+  const canStepForward = endDate < today
+
+  // Keyboard shortcuts ([ and ] to nudge)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tgt = e.target as HTMLElement | null
+      if (
+        tgt &&
+        (tgt.tagName === "INPUT" ||
+          tgt.tagName === "TEXTAREA" ||
+          tgt.isContentEditable)
+      )
+        return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === "[") {
+        e.preventDefault()
+        stepBy(-1)
+      } else if (e.key === "]" && canStepForward) {
+        e.preventDefault()
+        stepBy(1)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [stepBy, canStepForward])
 
   const handleCalendarSelect = (range: DateRange | undefined) => {
-    setDateRange(range)
+    setDraftRange(range)
     if (range?.from && range?.to) {
-      onRangeChange(
-        format(range.from, "yyyy-MM-dd"),
-        format(range.to, "yyyy-MM-dd")
-      )
-      setCalendarOpen(false)
+      applyRange(range.from, range.to)
+      setOpen(false)
+      setDraftRange(undefined)
     }
   }
 
+  // Dateline readout
+  const sameDay = spanDays === 1
+  const sameYear = startDate.getFullYear() === endDate.getFullYear()
+  const currentYear = new Date().getFullYear()
+  const showYear = !sameYear || endDate.getFullYear() !== currentYear
+  const dateline = sameDay
+    ? format(startDate, showYear ? "MMM d, yyyy" : "EEE · MMM d")
+    : sameYear
+      ? `${format(startDate, "MMM d")} – ${format(endDate, showYear ? "MMM d, yyyy" : "MMM d")}`
+      : `${format(startDate, "MMM d, yyyy")} – ${format(endDate, "MMM d, yyyy")}`
+
+  const priorReadout = sameDay
+    ? format(prior.start, "MMM d, yyyy")
+    : prior.start.getFullYear() === prior.end.getFullYear()
+      ? `${format(prior.start, "MMM d")} – ${format(prior.end, "MMM d, yyyy")}`
+      : `${format(prior.start, "MMM d, yyyy")} – ${format(prior.end, "MMM d, yyyy")}`
+
+  const groupedDrawer = useMemo(() => {
+    const order = ["Quick views", "Periods", "To date"] as const
+    return order.map((g) => ({
+      group: g,
+      items: DRAWER_PRESETS.filter((p) => p.group === g),
+    }))
+  }, [])
+
+  const isDrawerActive = (start: Date, end: Date) =>
+    localDateStr(start) === localDateStr(startDate) &&
+    localDateStr(end) === localDateStr(endDate)
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="drp-shell flex items-stretch gap-2">
       {/* Mobile: compact dropdown */}
       <Select
         value={activePreset ?? "custom"}
         onValueChange={(v) => v !== "custom" && handlePresetChange(v)}
         disabled={isPending}
       >
-        <SelectTrigger className="lg:hidden h-8 w-[85px] text-xs">
+        <SelectTrigger className="lg:hidden h-8 w-[90px] text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -110,7 +268,7 @@ export function DateRangePicker({
         </SelectContent>
       </Select>
 
-      {/* Desktop: toggle group */}
+      {/* Desktop: preset strip */}
       <ToggleGroup
         type="single"
         value={activePreset}
@@ -130,40 +288,122 @@ export function DateRangePicker({
         ))}
       </ToggleGroup>
 
-      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isPending}
-            className={cn(
-              "h-8 gap-1.5 text-xs",
-              customRange && "border-primary"
-            )}
+      {/* Dateline pill with step arrows */}
+      <div className="drp-dateline-group" aria-label="Date range">
+        <button
+          type="button"
+          onClick={() => stepBy(-1)}
+          disabled={isPending}
+          aria-label="Previous period"
+          title="Previous period ( [ )"
+          className="drp-step"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+        </button>
+
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={isPending}
+              data-active={customRange ? "true" : "false"}
+              className={cn("drp-dateline", customRange && "drp-dateline-custom")}
+              aria-label={`Open date picker. Current range: ${dateline}`}
+            >
+              <span className="drp-dateline-text">{dateline}</span>
+              <span className="drp-dateline-span font-mono">
+                {spanDays === 1 ? "1 day" : `${spanDays} days`}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="drp-popover w-auto p-0"
+            align="end"
+            sideOffset={6}
           >
-            <CalendarIcon className="h-3.5 w-3.5" />
-            {customRange ? (
-              <span className="hidden lg:inline">
-                {format(new Date(customRange.startDate + "T00:00:00"), "MMM d")} -{" "}
-                {format(new Date(customRange.endDate + "T00:00:00"), "MMM d")}
-              </span>
-            ) : (
-              <span className="lg:hidden">
-                {PRESETS.find((p) => p.value === String(days))?.label ?? `${days}D`}
-              </span>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
-          <Calendar
-            mode="range"
-            selected={dateRange}
-            onSelect={handleCalendarSelect}
-            numberOfMonths={2}
-            disabled={{ after: new Date() }}
-          />
-        </PopoverContent>
-      </Popover>
+            <div className="drp-popover-grid">
+              <aside className="drp-presets">
+                {groupedDrawer.map(({ group, items }) => (
+                  <div key={group} className="drp-preset-group">
+                    <div className="drp-preset-group-label">
+                      <span>{group}</span>
+                    </div>
+                    {items.map(({ label, compute }) => {
+                      const [ps, pe] = compute(today)
+                      const active = isDrawerActive(ps, pe)
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          className="drp-preset-btn"
+                          data-active={active ? "true" : "false"}
+                          onClick={() => {
+                            applyRange(ps, pe)
+                            setOpen(false)
+                            setDraftRange(undefined)
+                          }}
+                        >
+                          <span className="drp-preset-label">{label}</span>
+                          <span className="drp-preset-dates font-mono">
+                            {format(ps, "M/d")}
+                            {localDateStr(ps) === localDateStr(pe)
+                              ? ""
+                              : `–${format(pe, "M/d")}`}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
+              </aside>
+
+              <div className="drp-calendar">
+                <Calendar
+                  mode="range"
+                  selected={draftRange ?? { from: startDate, to: endDate }}
+                  onSelect={handleCalendarSelect}
+                  numberOfMonths={2}
+                  defaultMonth={subDays(endDate, 30)}
+                  disabled={{ after: today }}
+                  className="drp-cal-root"
+                  formatters={{
+                    formatWeekdayName: (d) =>
+                      d.toLocaleDateString("en-US", { weekday: "narrow" }),
+                  }}
+                />
+              </div>
+            </div>
+
+            <footer className="drp-popover-footer">
+              <div className="drp-footer-col">
+                <span className="drp-footer-eyebrow">Current</span>
+                <span className="drp-footer-value font-mono">{dateline}</span>
+              </div>
+              <div className="drp-footer-divider" aria-hidden />
+              <div className="drp-footer-col">
+                <span className="drp-footer-eyebrow">vs. Prior</span>
+                <span className="drp-footer-value drp-footer-value-muted font-mono">
+                  {priorReadout}
+                </span>
+              </div>
+              <div className="drp-footer-hint font-mono" aria-hidden>
+                [ ] to step
+              </div>
+            </footer>
+          </PopoverContent>
+        </Popover>
+
+        <button
+          type="button"
+          onClick={() => stepBy(1)}
+          disabled={isPending || !canStepForward}
+          aria-label="Next period"
+          title="Next period ( ] )"
+          className="drp-step"
+        >
+          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+        </button>
+      </div>
     </div>
   )
 }

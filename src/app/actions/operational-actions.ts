@@ -47,8 +47,14 @@ export async function getOperationalAnalytics(
     const today = todayInLA()
     rangeEnd = endOfDayLA(today)
     const start = startOfDayLA(today)
-    start.setDate(start.getDate() - (days === 1 ? 0 : days))
-    rangeStart = start
+    if (days === -1) {
+      start.setDate(start.getDate() - 1)
+      rangeStart = start
+      rangeEnd = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1)
+    } else {
+      start.setDate(start.getDate() - (days === 1 ? 0 : days))
+      rangeStart = start
+    }
   }
 
   const dayCount = Math.max(1, Math.ceil(
