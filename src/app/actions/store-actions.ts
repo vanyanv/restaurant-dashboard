@@ -876,13 +876,32 @@ export async function getMenuPerformanceAnalytics(
           avgPricePerUnit: 0,
           fpShare: 0,
           tpShare: 0,
+          previousQuantity: 0,
+          previousSales: 0,
+          quantityGrowth: null,
+          salesGrowth: null,
         })
+      }
+    }
+
+    // Aggregate previous-period qty/sales per item for WoW deltas.
+    const prevItemMap = new Map<string, { qty: number; sales: number }>()
+    for (const i of prevItems) {
+      const key = itemKey(i.category, i.itemName)
+      const qty = i.fpQuantitySold + i.tpQuantitySold
+      const sales = i.fpTotalSales + i.tpTotalSales
+      const existing = prevItemMap.get(key)
+      if (existing) {
+        existing.qty += qty
+        existing.sales += sales
+      } else {
+        prevItemMap.set(key, { qty, sales })
       }
     }
 
     // Compute derived fields
     const allItems: import("@/types/analytics").MenuItemRanked[] = []
-    for (const item of itemMap.values()) {
+    for (const [key, item] of itemMap.entries()) {
       item.avgPricePerUnit = item.totalQuantitySold > 0
         ? item.totalSales / item.totalQuantitySold
         : 0
@@ -892,6 +911,15 @@ export async function getMenuPerformanceAnalytics(
       item.tpShare = item.totalQuantitySold > 0
         ? (item.tpQuantitySold / item.totalQuantitySold) * 100
         : 0
+      const prev = prevItemMap.get(key)
+      item.previousQuantity = prev?.qty ?? 0
+      item.previousSales = prev?.sales ?? 0
+      item.quantityGrowth = item.previousQuantity > 0
+        ? ((item.totalQuantitySold - item.previousQuantity) / item.previousQuantity) * 100
+        : null
+      item.salesGrowth = item.previousSales > 0
+        ? ((item.totalSales - item.previousSales) / item.previousSales) * 100
+        : null
       allItems.push(item)
     }
     allItems.sort((a, b) => b.totalQuantitySold - a.totalQuantitySold)

@@ -199,6 +199,13 @@ export interface MenuItemRanked {
   avgPricePerUnit: number
   fpShare: number
   tpShare: number
+  // Prior-period comparison (same window length immediately before `dateRange`).
+  // growth is null when previous was zero and current > 0 (item is "new"),
+  // or when both are zero.
+  previousQuantity: number
+  previousSales: number
+  quantityGrowth: number | null
+  salesGrowth: number | null
 }
 
 export interface MenuChannelComparison {
