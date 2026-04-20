@@ -796,7 +796,7 @@ export async function getMenuCategoryAnalytics(
   }
 }
 
-async function getMenuPerformanceAnalyticsRaw(
+export async function getMenuPerformanceAnalytics(
   storeId?: string,
   options?: { days?: number; startDate?: string; endDate?: string }
 ): Promise<import("@/types/analytics").MenuPerformanceData | null> {
@@ -1130,14 +1130,6 @@ async function getMenuPerformanceAnalyticsRaw(
     console.error("Get menu performance analytics error:", error)
     return null
   }
-}
-
-export async function getMenuPerformanceAnalytics(
-  storeId?: string,
-  options?: { days?: number; startDate?: string; endDate?: string }
-): Promise<import("@/types/analytics").MenuPerformanceData | null> {
-  const { cachedMenuPerformance } = await import("@/lib/cached")
-  return cachedMenuPerformance(getMenuPerformanceAnalyticsRaw, storeId, options)
 }
 
 export async function getMenuItemDetail(

@@ -1,16 +1,23 @@
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { listRecipes } from "@/app/actions/recipe-actions"
+import {
+  getMenuItemSellPrices,
+  getMenuItemsForCatalog,
+} from "@/app/actions/menu-item-actions"
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
 import { MenuCatalogContent } from "./components/menu-catalog-content"
-import { cachedCatalogBundle } from "@/lib/cached"
 
 export default async function MenuCatalogPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
 
-  const ownerId = session.user.id
-  const { recipes, sellPrices, otterMappings } = await cachedCatalogBundle(ownerId)
+  const [recipes, sellPrices, otterMappings] = await Promise.all([
+    listRecipes(),
+    getMenuItemSellPrices(30),
+    getMenuItemsForCatalog(),
+  ])
 
   // Surface recipes the owner can actually sell; modifiers are plumbing.
   const menuRecipes = recipes.filter(
