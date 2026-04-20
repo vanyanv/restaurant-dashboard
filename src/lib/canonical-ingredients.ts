@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 
 /** Rough lowercase + collapse-whitespace + strip-trailing-parens normalizer. */
 function normalizeProductName(raw: string): string {
@@ -211,35 +212,46 @@ export async function getCanonicalIngredientCost(
   canonicalIngredientId: string,
   asOf?: Date
 ): Promise<CanonicalIngredientCost | null> {
-  // Preferred: the canonical's own `costPerRecipeUnit` + `recipeUnit` (manual or
-  // invoice-derived). Only used in builder mode — when `asOf` is supplied we want
-  // period-matched historical prices, so we skip straight to the invoice lookup.
-  if (asOf === undefined) {
-    const canonical = await prisma.canonicalIngredient.findUnique({
-      where: { id: canonicalIngredientId },
-      select: {
-        recipeUnit: true,
-        costPerRecipeUnit: true,
-        costSource: true,
-        costUpdatedAt: true,
-      },
-    })
-    if (canonical?.costPerRecipeUnit != null && canonical.recipeUnit) {
-      return {
-        unitCost: canonical.costPerRecipeUnit,
-        unit: canonical.recipeUnit,
-        source: canonical.costSource === "invoice" ? "invoice" : "manual",
-        asOfDate: canonical.costUpdatedAt ?? new Date(),
-        sourceInvoiceId: null,
-        sourceLineItemId: null,
-        sourceVendor: null,
-        sourceSku: null,
-        sourceProductName: null,
-      }
+  // Load canonical metadata once — we need `recipeUnit` for both branches
+  // to normalize invoice costs into cost-per-recipe-unit.
+  const canonical = await prisma.canonicalIngredient.findUnique({
+    where: { id: canonicalIngredientId },
+    select: {
+      recipeUnit: true,
+      costPerRecipeUnit: true,
+      costSource: true,
+      costUpdatedAt: true,
+    },
+  })
+
+  // Builder mode (no asOf) — trust the canonical's precomputed value.
+  //
+  // Also use the canonical value for `asOf` queries when the cost was set
+  // manually. Manual prices are authoritative per-unit ($/each, $/oz, …) and
+  // we don't store their history; falling back to raw invoice data in the
+  // dated path would silently apply the wrong unit (e.g. $36/EA-case for
+  // pickle jars where the user meant $0.036/each-pickle). If a user later
+  // overrides a manual price, old P&Ls will reflect the new value — a
+  // deliberate trade-off vs. surfacing garbage invoice units.
+  const useCanonical =
+    canonical?.costPerRecipeUnit != null &&
+    canonical.recipeUnit &&
+    (asOf === undefined || canonical.costSource === "manual")
+  if (useCanonical) {
+    return {
+      unitCost: canonical!.costPerRecipeUnit!,
+      unit: canonical!.recipeUnit!,
+      source: canonical!.costSource === "invoice" ? "invoice" : "manual",
+      asOfDate: canonical!.costUpdatedAt ?? new Date(),
+      sourceInvoiceId: null,
+      sourceLineItemId: null,
+      sourceVendor: null,
+      sourceSku: null,
+      sourceProductName: null,
     }
   }
 
-  // Fallback: direct FK match (legacy path — cost per invoice-unit).
+  // Period-matched mode: find the most recent invoice line on-or-before asOf.
   const direct = await prisma.invoiceLineItem.findFirst({
     where: {
       canonicalIngredientId,
@@ -254,12 +266,45 @@ export async function getCanonicalIngredientCost(
       productName: true,
       quantity: true,
       unit: true,
+      packSize: true,
+      unitSize: true,
+      unitSizeUom: true,
+      unitPrice: true,
       extendedPrice: true,
       invoice: { select: { invoiceDate: true, vendorName: true } },
     },
   })
 
   if (direct && direct.invoice.invoiceDate) {
+    // Prefer the hydration path: derive $/recipeUnit using packSize/unitSize,
+    // matching how `recomputeCanonicalCost` computes the non-asOf value.
+    if (canonical?.recipeUnit) {
+      const vendorMatch = await prisma.ingredientSkuMatch.findFirst({
+        where: { canonicalIngredientId },
+        select: { conversionFactor: true, fromUnit: true, toUnit: true },
+      })
+      const derived = deriveCostFromLineItem(
+        direct,
+        canonical.recipeUnit,
+        vendorMatch
+          ? { conversionFactor: vendorMatch.conversionFactor, fromUnit: vendorMatch.fromUnit, toUnit: vendorMatch.toUnit }
+          : undefined
+      )
+      if (derived != null) {
+        return {
+          unitCost: derived,
+          unit: canonical.recipeUnit,
+          source: "invoice",
+          asOfDate: direct.invoice.invoiceDate,
+          sourceInvoiceId: direct.invoiceId,
+          sourceLineItemId: direct.id,
+          sourceVendor: direct.invoice.vendorName,
+          sourceSku: direct.sku,
+          sourceProductName: direct.productName,
+        }
+      }
+    }
+    // Fallback: legacy raw-invoice-unit path (no recipeUnit or derivation failed).
     return {
       unitCost: direct.extendedPrice / direct.quantity,
       unit: direct.unit ?? "unit",
