@@ -130,22 +130,26 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
         ) : data ? (
           <>
             {(() => {
-              const latestIdx = data.periods.length - 1
-              if (latestIdx < 0) return null
-              const latest = (code: string) =>
-                data.rows.find((r) => r.code === code)?.values[latestIdx] ?? 0
-              const gross = latest(TOTAL_SALES_CODE)
+              if (data.periods.length === 0) return null
+              // Show the full selected range — sum across all periods, not just
+              // the latest one. Matches the KPI strip below and the Statement
+              // totals on the right-most column.
+              const sumRow = (code: string) => {
+                const row = data.rows.find((r) => r.code === code)
+                if (!row) return 0
+                return row.values.reduce((a, b) => a + (b ?? 0), 0)
+              }
+              const gross = sumRow(TOTAL_SALES_CODE)
               // Commissions stored as negatives — convert to positive amounts here.
               const commissions = Math.abs(
-                latest(UBER_COMMISSION_CODE) + latest(DOORDASH_COMMISSION_CODE)
+                sumRow(UBER_COMMISSION_CODE) + sumRow(DOORDASH_COMMISSION_CODE)
               )
-              const cogs = latest(COGS_CODE)
-              const labor = latest(LABOR_CODE)
-              const rent = latest(RENT_CODE)
-              const cleaning = latest(CLEANING_CODE)
-              const towels = latest(TOWELS_CODE)
-              const fixed = labor + rent + cleaning + towels
-              const bottom = latest(AFTER_LABOR_RENT_CODE)
+              const cogs = sumRow(COGS_CODE)
+              const labor = sumRow(LABOR_CODE)
+              const rent = sumRow(RENT_CODE)
+              const cleaning = sumRow(CLEANING_CODE)
+              const towels = sumRow(TOWELS_CODE)
+              const bottom = sumRow(AFTER_LABOR_RENT_CODE)
 
               const steps: WaterfallStep[] = [
                 { kind: "total", label: "Gross Sales", value: gross },

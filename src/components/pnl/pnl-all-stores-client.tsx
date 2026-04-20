@@ -87,22 +87,24 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
           </div>
         ) : data ? (
           <>
-            {/* Combined waterfall for the latest period */}
+            {/* Combined waterfall for the full selected range */}
             {data.periods.length > 0 && data.consolidatedRows.length > 0 ? (
               (() => {
-                const latestIdx = data.periods.length - 1
-                const latest = (code: string) =>
-                  data.consolidatedRows.find((r) => r.code === code)?.values[latestIdx] ?? 0
-                const gross = latest(TOTAL_SALES_CODE)
+                const sumRow = (code: string) => {
+                  const row = data.consolidatedRows.find((r) => r.code === code)
+                  if (!row) return 0
+                  return row.values.reduce((a, b) => a + (b ?? 0), 0)
+                }
+                const gross = sumRow(TOTAL_SALES_CODE)
                 const commissions = Math.abs(
-                  latest(UBER_COMMISSION_CODE) + latest(DOORDASH_COMMISSION_CODE)
+                  sumRow(UBER_COMMISSION_CODE) + sumRow(DOORDASH_COMMISSION_CODE)
                 )
-                const cogs = latest(COGS_CODE)
-                const labor = latest(LABOR_CODE)
-                const rent = latest(RENT_CODE)
-                const cleaning = latest(CLEANING_CODE)
-                const towels = latest(TOWELS_CODE)
-                const bottom = latest(AFTER_LABOR_RENT_CODE)
+                const cogs = sumRow(COGS_CODE)
+                const labor = sumRow(LABOR_CODE)
+                const rent = sumRow(RENT_CODE)
+                const cleaning = sumRow(CLEANING_CODE)
+                const towels = sumRow(TOWELS_CODE)
+                const bottom = sumRow(AFTER_LABOR_RENT_CODE)
 
                 const steps: WaterfallStep[] = [
                   { kind: "total", label: "Gross Sales", value: gross },
