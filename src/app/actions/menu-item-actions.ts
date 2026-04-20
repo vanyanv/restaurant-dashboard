@@ -195,3 +195,219 @@ export async function unmapOtterItem(otterItemName: string): Promise<void> {
     )
   )
 }
+
+/* ─────────────────────────────── sub-items (modifiers) ─────────────────────────────── */
+
+export type OtterSubItemForCatalog = {
+  skuId: string
+  /** Most common display name for this SKU. */
+  name: string
+  /** Parent sub-header (e.g. "Add Toppings (Meat & Cheese Base)") — most common seen. */
+  subHeader: string | null
+  occurrences: number
+  firstSeen: Date | null
+  lastSeen: Date | null
+  storeIds: string[]
+  mappedRecipeId: string | null
+  mappedRecipeName: string | null
+}
+
+/**
+ * Aggregate every Otter order sub-item the owner has seen, grouped by skuId,
+ * with occurrence counts and mapping status. Sorted by occurrences DESC so
+ * high-impact modifiers surface first.
+ *
+ * Every OtterOrderSubItem carries a stable skuId (verified: 0 nulls in DB),
+ * and names are 1:1 with skuIds, so skuId is the sole identity. Multiple
+ * skuIds that happen to mean the same thing (e.g. "Add Pickle" vs
+ * "Add Pickles" on different menu platforms) can each map to the same
+ * modifier recipe.
+ */
+export async function getOtterSubItemsForCatalog(): Promise<OtterSubItemForCatalog[]> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) return []
+
+  const stores = await prisma.store.findMany({
+    where: { ownerId },
+    select: { id: true },
+  })
+  const storeIds = stores.map((s) => s.id)
+  if (storeIds.length === 0) return []
+
+  const subs = await prisma.otterOrderSubItem.findMany({
+    where: {
+      orderItem: { order: { storeId: { in: storeIds } } },
+    },
+    select: {
+      skuId: true,
+      name: true,
+      subHeader: true,
+      quantity: true,
+      orderItem: {
+        select: {
+          quantity: true,
+          order: {
+            select: { storeId: true, referenceTimeLocal: true },
+          },
+        },
+      },
+    },
+  })
+
+  type Agg = {
+    skuId: string
+    nameCounts: Map<string, number>
+    subHeaderCounts: Map<string, number>
+    occurrences: number
+    firstSeen: Date | null
+    lastSeen: Date | null
+    storeIds: Set<string>
+  }
+  const bag = new Map<string, Agg>()
+  for (const s of subs) {
+    if (!s.skuId) continue
+    let a = bag.get(s.skuId)
+    if (!a) {
+      a = {
+        skuId: s.skuId,
+        nameCounts: new Map(),
+        subHeaderCounts: new Map(),
+        occurrences: 0,
+        firstSeen: null,
+        lastSeen: null,
+        storeIds: new Set(),
+      }
+      bag.set(s.skuId, a)
+    }
+    // Each row counts its own (subQty × parentItemQty) so we bias toward
+    // how many physical modifier-uses actually happened.
+    const uses = (s.quantity ?? 1) * (s.orderItem.quantity ?? 1)
+    a.occurrences += uses
+    a.nameCounts.set(s.name, (a.nameCounts.get(s.name) ?? 0) + uses)
+    const sh = s.subHeader ?? "__none__"
+    a.subHeaderCounts.set(sh, (a.subHeaderCounts.get(sh) ?? 0) + uses)
+    a.storeIds.add(s.orderItem.order.storeId)
+    const ts = s.orderItem.order.referenceTimeLocal
+    if (ts) {
+      if (!a.firstSeen || ts < a.firstSeen) a.firstSeen = ts
+      if (!a.lastSeen || ts > a.lastSeen) a.lastSeen = ts
+    }
+  }
+
+  const mappings = await prisma.otterSubItemMapping.findMany({
+    where: { storeId: { in: storeIds } },
+    include: { recipe: { select: { id: true, itemName: true } } },
+  })
+  const mappingBySku = new Map<
+    string,
+    { recipeId: string; recipeName: string }
+  >()
+  for (const m of mappings) {
+    if (!mappingBySku.has(m.skuId)) {
+      mappingBySku.set(m.skuId, {
+        recipeId: m.recipeId,
+        recipeName: m.recipe.itemName,
+      })
+    }
+  }
+
+  const rows: OtterSubItemForCatalog[] = []
+  for (const a of bag.values()) {
+    const mostCommonName = pickTopKey(a.nameCounts) ?? ""
+    const mostCommonHeader = pickTopKey(a.subHeaderCounts)
+    const m = mappingBySku.get(a.skuId)
+    rows.push({
+      skuId: a.skuId,
+      name: mostCommonName,
+      subHeader: mostCommonHeader === "__none__" ? null : mostCommonHeader,
+      occurrences: a.occurrences,
+      firstSeen: a.firstSeen,
+      lastSeen: a.lastSeen,
+      storeIds: Array.from(a.storeIds),
+      mappedRecipeId: m?.recipeId ?? null,
+      mappedRecipeName: m?.recipeName ?? null,
+    })
+  }
+
+  rows.sort((a, b) => b.occurrences - a.occurrences)
+  return rows
+}
+
+function pickTopKey(counts: Map<string, number>): string | null {
+  let best: string | null = null
+  let bestN = -1
+  for (const [k, n] of counts) {
+    if (n > bestN) {
+      best = k
+      bestN = n
+    }
+  }
+  return best
+}
+
+export async function mapOtterSubItemToRecipe(input: {
+  skuId: string
+  otterSubItemName: string
+  recipeId: string
+}): Promise<void> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) throw new Error("Not authenticated")
+
+  const stores = await prisma.store.findMany({
+    where: { ownerId },
+    select: { id: true },
+  })
+  const recipe = await prisma.recipe.findFirst({
+    where: { id: input.recipeId, ownerId },
+    select: { id: true },
+  })
+  if (!recipe) throw new Error("Recipe not found")
+
+  await prisma.$transaction(
+    stores.map((s) =>
+      prisma.otterSubItemMapping.upsert({
+        where: {
+          storeId_skuId: { storeId: s.id, skuId: input.skuId },
+        },
+        create: {
+          storeId: s.id,
+          skuId: input.skuId,
+          otterSubItemName: input.otterSubItemName,
+          recipeId: input.recipeId,
+        },
+        update: {
+          otterSubItemName: input.otterSubItemName,
+          recipeId: input.recipeId,
+          confirmedAt: new Date(),
+        },
+      })
+    )
+  )
+
+  // Modifier recipe change ripples through every DailyCogsItem for the store —
+  // safest to invalidate all days. The per-item scope doesn't fit here because
+  // one modifier can affect many menu items.
+  await Promise.all(
+    stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
+  )
+}
+
+export async function unmapOtterSubItem(skuId: string): Promise<void> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) throw new Error("Not authenticated")
+
+  const stores = await prisma.store.findMany({
+    where: { ownerId },
+    select: { id: true },
+  })
+  await prisma.otterSubItemMapping.deleteMany({
+    where: {
+      skuId,
+      storeId: { in: stores.map((s) => s.id) },
+    },
+  })
+
+  await Promise.all(
+    stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
+  )
+}

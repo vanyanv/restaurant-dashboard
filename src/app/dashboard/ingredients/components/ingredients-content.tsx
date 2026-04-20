@@ -5,29 +5,40 @@ import { useRouter } from "next/navigation"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { CatalogTable } from "./catalog-table"
 import { ReviewQueue } from "./review-queue"
-import type { CanonicalIngredientSummary } from "@/types/recipe"
+import { ModifierMappingTable } from "./modifier-mapping-table"
+import type { CanonicalIngredientSummary, RecipeSummary } from "@/types/recipe"
 import type { UnmatchedLineItemGroup } from "@/app/actions/ingredient-match-actions"
+import type { OtterSubItemForCatalog } from "@/app/actions/menu-item-actions"
 import { cn } from "@/lib/utils"
+
+type TabId = "catalog" | "review" | "modifiers"
 
 type Props = {
   initialCanonicals: CanonicalIngredientSummary[]
   initialUnmatched: UnmatchedLineItemGroup[]
-  initialTab: "catalog" | "review"
+  initialSubItems: OtterSubItemForCatalog[]
+  initialRecipes: RecipeSummary[]
+  initialTab: TabId
 }
 
 export function IngredientsContent({
   initialCanonicals,
   initialUnmatched,
+  initialSubItems,
+  initialRecipes,
   initialTab,
 }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<"catalog" | "review">(initialTab)
+  const [tab, setTab] = useState<TabId>(initialTab)
   const [canonicals, setCanonicals] = useState(initialCanonicals)
   const [unmatched, setUnmatched] = useState(initialUnmatched)
 
-  const tabs: Array<{ id: "catalog" | "review"; label: string; count: number }> = [
+  const unmappedMods = initialSubItems.filter((s) => !s.mappedRecipeId).length
+
+  const tabs: Array<{ id: TabId; label: string; count: number }> = [
     { id: "catalog", label: "Canonical catalog", count: canonicals.length },
     { id: "review", label: "Needs review", count: unmatched.length },
+    { id: "modifiers", label: "Otter modifiers", count: unmappedMods },
   ]
 
   return (
@@ -74,9 +85,8 @@ export function IngredientsContent({
       </div>
 
       <div className="flex-1 overflow-y-auto bg-[var(--paper)] px-8 py-8">
-        {tab === "catalog" ? (
-          <CatalogTable canonicals={canonicals} />
-        ) : (
+        {tab === "catalog" && <CatalogTable canonicals={canonicals} />}
+        {tab === "review" && (
           <ReviewQueue
             groups={unmatched}
             canonicals={canonicals}
@@ -92,6 +102,9 @@ export function IngredientsContent({
               )
             }}
           />
+        )}
+        {tab === "modifiers" && (
+          <ModifierMappingTable subItems={initialSubItems} recipes={initialRecipes} />
         )}
       </div>
     </div>

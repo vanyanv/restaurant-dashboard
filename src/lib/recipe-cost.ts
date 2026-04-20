@@ -220,7 +220,11 @@ async function walk(
     })
   }
 
-  if (total === 0 && partial && recipe.foodCostOverride != null) {
+  // Apply the recipe-level override as a fallback whenever we couldn't produce
+  // a real total. Covers two cases: (a) partial — some ingredients missing
+  // cost, and (b) empty — no ingredient lines at all (common for modifier
+  // recipes that just carry an override dollar amount).
+  if (total === 0 && recipe.foodCostOverride != null) {
     total = recipe.foodCostOverride
   }
 

@@ -2,6 +2,16 @@ import { prisma } from "@/lib/prisma"
 import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
 import { CogsStatus } from "@/generated/prisma/client"
 
+/** One day's modifier usage, aggregated by parent item name. */
+type ModifierUsage = {
+  /** Extra dollars of COGS on this day attributable to modifiers on this item. */
+  extraLineCost: number
+  /** Did every modifier SKU have a mapped + costed recipe? If not, mark MISSING_COST. */
+  missingMappings: boolean
+  /** Running partial list of `(modifierName, uses)` for debugging / UI. */
+  breakdown: Array<{ skuId: string; name: string; uses: number; unitCost: number | null }>
+}
+
 /**
  * Compute and upsert DailyCogsItem rows for one (storeId, date).
  *
@@ -64,6 +74,72 @@ export async function recomputeDailyCogsForDay(input: {
     return p
   }
 
+  // ── Modifier usage aggregation ─────────────────────────────────────────
+  // For the day, walk every OtterOrderSubItem and bucket by parent item name.
+  // uses = subItem.quantity × orderItem.quantity (e.g. "2× burger + 1× add cheese"
+  // = 2 cheese uses). Then look up each skuId in OtterSubItemMapping and add
+  // modifierRecipeCost × uses to that item's extra cost.
+  const modifierUsageByItem = new Map<string, ModifierUsage>()
+  const [subItems, subMappings] = await Promise.all([
+    prisma.otterOrderSubItem.findMany({
+      where: {
+        orderItem: {
+          order: {
+            storeId,
+            referenceTimeLocal: { gte: date, lte: dayEnd },
+          },
+        },
+      },
+      select: {
+        skuId: true,
+        name: true,
+        quantity: true,
+        orderItem: {
+          select: { name: true, quantity: true },
+        },
+      },
+    }),
+    prisma.otterSubItemMapping.findMany({
+      where: { storeId },
+      select: { skuId: true, recipeId: true },
+    }),
+  ])
+  const subRecipeBySku = new Map(subMappings.map((m) => [m.skuId, m.recipeId]))
+
+  for (const s of subItems) {
+    if (!s.orderItem?.name) continue
+    const itemName = s.orderItem.name
+    const uses = (s.quantity ?? 1) * (s.orderItem.quantity ?? 1)
+    if (!isFinite(uses) || uses <= 0) continue
+
+    let bucket = modifierUsageByItem.get(itemName)
+    if (!bucket) {
+      bucket = { extraLineCost: 0, missingMappings: false, breakdown: [] }
+      modifierUsageByItem.set(itemName, bucket)
+    }
+
+    const modRecipeId = s.skuId ? subRecipeBySku.get(s.skuId) : undefined
+    if (!modRecipeId) {
+      bucket.missingMappings = true
+      bucket.breakdown.push({
+        skuId: s.skuId ?? "(no sku)",
+        name: s.name,
+        uses,
+        unitCost: null,
+      })
+      continue
+    }
+    const result = await costFor(modRecipeId)
+    const modCost = result?.totalCost ?? 0
+    if (modCost > 0) bucket.extraLineCost += modCost * uses
+    bucket.breakdown.push({
+      skuId: s.skuId ?? "(no sku)",
+      name: s.name,
+      uses,
+      unitCost: modCost,
+    })
+  }
+
   const rows = await Promise.all(
     menuRows.map(async (row) => {
       const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
@@ -74,7 +150,15 @@ export async function recomputeDailyCogsForDay(input: {
         recipeByName.get(row.itemName.toLowerCase()) ??
         null
 
+      // Modifier cost is additive — compute it whether or not the base item
+      // has a recipe. A partially costed row (no base, has mods) is still
+      // better data than a silent zero.
+      const mod = modifierUsageByItem.get(row.itemName)
+      const modLineCost = mod?.extraLineCost ?? 0
+
       if (!recipeId) {
+        // No base recipe. If modifiers were used we still record their cost;
+        // status stays UNMAPPED so you can see the item still needs a base.
         return {
           storeId,
           date,
@@ -83,15 +167,20 @@ export async function recomputeDailyCogsForDay(input: {
           recipeId: null,
           qtySold: qty,
           salesRevenue: revenue,
-          unitCost: null,
-          lineCost: 0,
+          unitCost: modLineCost > 0 && qty > 0 ? modLineCost / qty : null,
+          lineCost: modLineCost,
           status: CogsStatus.UNMAPPED,
         }
       }
 
       const result = await costFor(recipeId)
-      const totalCost = result?.totalCost ?? null
-      const hasCost = totalCost != null && totalCost > 0
+      const baseUnitCost = result?.totalCost ?? null
+      const hasBase = baseUnitCost != null && baseUnitCost > 0
+      const baseLineCost = hasBase ? baseUnitCost * qty : 0
+      const totalLineCost = baseLineCost + modLineCost
+      const blendedUnitCost = qty > 0 ? totalLineCost / qty : baseUnitCost
+      const status = hasBase ? CogsStatus.COSTED : CogsStatus.MISSING_COST
+
       return {
         storeId,
         date,
@@ -100,9 +189,9 @@ export async function recomputeDailyCogsForDay(input: {
         recipeId,
         qtySold: qty,
         salesRevenue: revenue,
-        unitCost: hasCost ? totalCost : null,
-        lineCost: hasCost ? totalCost * qty : 0,
-        status: hasCost ? CogsStatus.COSTED : CogsStatus.MISSING_COST,
+        unitCost: hasBase ? blendedUnitCost : null,
+        lineCost: totalLineCost,
+        status,
       }
     })
   )

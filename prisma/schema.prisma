@@ -97,11 +97,12 @@ model Store {
   otterMenuCategories OtterMenuCategory[]
   otterMenuItems      OtterMenuItem[]
   otterRatings        OtterRating[]
-  invoices          Invoice[]
-  ingredientAliases IngredientAlias[]
-  otterItemMappings OtterItemMapping[]
-  otterOrders       OtterOrder[]
-  dailyCogsItems    DailyCogsItem[]
+  invoices             Invoice[]
+  ingredientAliases    IngredientAlias[]
+  otterItemMappings    OtterItemMapping[]
+  otterSubItemMappings OtterSubItemMapping[]
+  otterOrders          OtterOrder[]
+  dailyCogsItems       DailyCogsItem[]
 
   @@index([ownerId])
   @@index([yelpBusinessId])
@@ -365,10 +366,11 @@ model Recipe {
   updatedAt          DateTime @updatedAt
 
   owner              User               @relation(fields: [ownerId], references: [id])
-  ingredients        RecipeIngredient[]
-  usedInIngredients  RecipeIngredient[] @relation("ComponentRecipe")
-  otterItemMappings  OtterItemMapping[]
-  dailyCogsItems     DailyCogsItem[]
+  ingredients          RecipeIngredient[]
+  usedInIngredients    RecipeIngredient[] @relation("ComponentRecipe")
+  otterItemMappings    OtterItemMapping[]
+  otterSubItemMappings OtterSubItemMapping[]
+  dailyCogsItems       DailyCogsItem[]
 
   @@unique([ownerId, itemName, category])
   @@index([ownerId])
@@ -487,6 +489,30 @@ model OtterItemMapping {
   @@index([storeId])
   @@index([recipeId])
   @@index([skuId])
+}
+
+/// Per-(store, sub-item SKU) mapping of an Otter order modifier → a Recipe
+/// that represents the modifier's ingredient usage (e.g. "Mod: Add Lettuce" →
+/// 1 leaf). Multiple Otter sub-item SKUs with the same meaning (e.g.
+/// "Add Pickle" vs "Add Pickles" with distinct Otter SKUs) can share one
+/// recipe. Drives modifier cost in the daily COGS walker.
+model OtterSubItemMapping {
+  id                String   @id @default(cuid())
+  storeId           String
+  /// Stable Otter sub-item SKU — our primary key. Every OtterOrderSubItem has one.
+  skuId             String
+  /// Last seen display name for this SKU (for UI). Not used as identity.
+  otterSubItemName  String
+  recipeId          String
+  confirmedAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, skuId])
+  @@index([storeId])
+  @@index([recipeId])
 }
 
 /// Per-(store, date, itemName) COGS row, materialized at write time so P&L reads
