@@ -50,15 +50,7 @@ export async function CogsKpiStripSection({
         </div>
         <div className="flex items-baseline justify-between py-2 dock-in dock-in-3">
           <dt className="font-label">Δ vs prior period</dt>
-          <dd
-            className={`font-mono ${
-              priorPp.dir === "up"
-                ? "text-(--accent-dark)"
-                : "text-(--ink-muted)"
-            }`}
-          >
-            {priorPp.text}
-          </dd>
+          <dd className="font-mono text-(--ink-muted)">{priorPp.text}</dd>
         </div>
         <div className="flex items-baseline justify-between py-2 dock-in dock-in-4">
           <dt className="font-label">vs target</dt>

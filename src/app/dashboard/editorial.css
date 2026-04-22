@@ -4021,7 +4021,7 @@
   display: inline-block;
   margin-right: 0.4ch;
 }
-.cogs-bar-row__arrow--up { color: var(--accent-dark); }
+.cogs-bar-row__arrow--up { color: var(--ink); }
 .cogs-bar-row__arrow--down { color: var(--ink-muted); }
 
 /* Worst-margin table row hover. */

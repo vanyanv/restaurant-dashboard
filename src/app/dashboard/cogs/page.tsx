@@ -20,7 +20,7 @@ export default async function CogsLandingPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <EditorialTopbar section="§ 12" title="COGS" />
+      <EditorialTopbar section="§ 13" title="COGS" />
       <div className="flex-1 overflow-auto px-4 pb-8 pt-4 sm:px-6 sm:pt-5">
         <div className="cogs-page">
           <div className="font-label mb-3">Pick a store</div>

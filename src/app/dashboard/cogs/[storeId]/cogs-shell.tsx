@@ -32,7 +32,7 @@ export function CogsShell({
   return (
     <div className="flex flex-col h-full">
       <EditorialTopbar
-        section="§ 12"
+        section="§ 13"
         title={`COGS · ${storeName}`}
         stamps={
           <TargetChip storeId={storeId} initialValue={targetCogsPct} />

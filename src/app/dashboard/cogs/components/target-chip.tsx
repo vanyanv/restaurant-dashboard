@@ -66,7 +66,10 @@ export function TargetChip({
         onBlur={submit}
         onKeyDown={(e) => {
           if (e.key === "Enter") submit()
-          if (e.key === "Escape") setEditing(false)
+          if (e.key === "Escape") {
+            setValue(initialValue != null ? String(initialValue) : "")
+            setEditing(false)
+          }
         }}
         className="w-12 bg-transparent border-b border-(--hairline-bold) font-mono text-[11px] text-(--ink) focus:outline-none"
       />

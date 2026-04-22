@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma"
-import { computeRecipeCost } from "@/lib/recipe-cost"
 import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
 import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
 
@@ -310,17 +309,10 @@ export async function getTopCostDriverIngredients(
   for (const g of grouped) {
     if (!g.recipeId || !g._sum.qtySold) continue
     const qtySold = g._sum.qtySold
-    const cost = await computeRecipeCost(g.recipeId, asOf)
 
-    // Walk only ingredient lines (sub-recipes are already flattened into the
-    // tree by computeRecipeCost — but its `lines` array preserves the top
-    // level. We need a deep walk: re-read the recipe tree's leaf canonicals).
-    // Simplest correct approach: pull all RecipeIngredient rows for this
-    // recipe transitively (sub-recipes too) and multiply their canonical
-    // contribution by qtySold.
     const leaves = await flattenRecipeToCanonicals(g.recipeId, asOf)
     for (const leaf of leaves) {
-      const lineUnitCost = leaf.unitCost ?? 0 // missing → 0 contribution
+      const lineUnitCost = leaf.unitCost ?? 0
       const dollars = qtySold * leaf.qtyPerServing * lineUnitCost
       if (dollars <= 0) continue
       const prev = byIng.get(leaf.canonicalIngredientId) ?? {
@@ -331,11 +323,6 @@ export async function getTopCostDriverIngredients(
       prev.theoreticalDollars += dollars
       byIng.set(leaf.canonicalIngredientId, prev)
     }
-
-    // computeRecipeCost throws RecipeCycleError on a cycle — call it for
-    // that side effect. Its returned cost is unused (we recompute via the
-    // flatten walk so we get per-leaf rather than per-recipe figures).
-    void cost
   }
 
   // 3. Resolve latest+prior unit cost per canonical (for the ▲▼ glyph).
