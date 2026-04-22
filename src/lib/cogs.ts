@@ -280,8 +280,17 @@ export async function getTopCostDriverIngredients(
     _sum: { qtySold: true, lineCost: true },
   })
 
-  const totalCogs = grouped.reduce((acc, r) => acc + (r._sum.lineCost ?? 0), 0)
-  if (grouped.length === 0 || totalCogs <= 0) return []
+  if (grouped.length === 0) return []
+
+  // Denominator = total COGS dollars in the period (across all statuses).
+  // Using only COSTED-with-recipe rows would inflate ingredient %s when some
+  // dishes are unmapped or override-costed.
+  const totalAgg = await prisma.dailyCogsItem.aggregate({
+    where: dateWindow(storeId, startDate, endDate),
+    _sum: { lineCost: true },
+  })
+  const totalCogs = totalAgg._sum.lineCost ?? 0
+  if (totalCogs <= 0) return []
 
   // asOf for ingredient costs = the last second of the period so we use
   // prices in effect across the period (matches recipe-cost.ts P&L convention).
@@ -309,7 +318,7 @@ export async function getTopCostDriverIngredients(
     // Simplest correct approach: pull all RecipeIngredient rows for this
     // recipe transitively (sub-recipes too) and multiply their canonical
     // contribution by qtySold.
-    const leaves = await flattenRecipeToCanonicals(g.recipeId)
+    const leaves = await flattenRecipeToCanonicals(g.recipeId, asOf)
     for (const leaf of leaves) {
       const lineUnitCost = leaf.unitCost ?? 0 // missing → 0 contribution
       const dollars = qtySold * leaf.qtyPerServing * lineUnitCost
@@ -323,8 +332,9 @@ export async function getTopCostDriverIngredients(
       byIng.set(leaf.canonicalIngredientId, prev)
     }
 
-    // (We use computeRecipeCost above just to seed the memo cache and
-    // surface RecipeCycleError early.)
+    // computeRecipeCost throws RecipeCycleError on a cycle — call it for
+    // that side effect. Its returned cost is unused (we recompute via the
+    // flatten walk so we get per-leaf rather than per-recipe figures).
     void cost
   }
 
@@ -367,6 +377,7 @@ interface CanonicalLeaf {
 
 async function flattenRecipeToCanonicals(
   recipeId: string,
+  asOf: Date | undefined,
   multiplier = 1,
   visited: Set<string> = new Set()
 ): Promise<CanonicalLeaf[]> {
@@ -380,7 +391,6 @@ async function flattenRecipeToCanonicals(
         select: {
           quantity: true,
           unit: true,
-          ingredientName: true,
           canonicalIngredientId: true,
           componentRecipeId: true,
           canonicalIngredient: { select: { id: true, name: true } },
@@ -395,6 +405,7 @@ async function flattenRecipeToCanonicals(
     if (ing.componentRecipeId) {
       const sub = await flattenRecipeToCanonicals(
         ing.componentRecipeId,
+        asOf,
         multiplier * ing.quantity,
         new Set(visited)
       )
@@ -405,7 +416,7 @@ async function flattenRecipeToCanonicals(
 
     // Convert this line's quantity to the canonical's costUnit, mirroring
     // the math in recipe-cost.ts.
-    const cost = await getCanonicalIngredientCost(ing.canonicalIngredientId)
+    const cost = await getCanonicalIngredientCost(ing.canonicalIngredientId, asOf)
     let qtyInCostUnit: number | null = ing.quantity
     if (cost) {
       const recipeUnit = canonicalizeUnit(ing.unit)
