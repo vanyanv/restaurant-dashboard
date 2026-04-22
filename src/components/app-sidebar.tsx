@@ -65,6 +65,7 @@ const NAV: NavSection[] = [
           { title: "Sales Summary", url: "/dashboard" },
           { title: "Analytics", url: "/dashboard/analytics" },
           { title: "P&L", url: "/dashboard/pnl" },
+          { title: "COGS", url: "/dashboard/cogs" },
           { title: "Menu Performance", url: "/dashboard/menu" },
           { title: "Product Mix", url: "/dashboard/product-mix" },
           { title: "AI Analytics", url: "/dashboard/ai-analytics" },
