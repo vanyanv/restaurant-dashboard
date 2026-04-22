@@ -19,7 +19,6 @@ import {
 } from "@dnd-kit/sortable"
 import { Plus, Save, X, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import {
   upsertRecipe,
@@ -28,7 +27,7 @@ import {
 } from "@/app/actions/recipe-actions"
 import { mapOtterItemToRecipe } from "@/app/actions/menu-item-actions"
 import { SortableIngredientRow, type IngredientRowData } from "./sortable-ingredient-row"
-import type { IngredientPickerValue } from "./ingredient-command"
+import type { IngredientPickerValue } from "./ingredient-picker-utils"
 import { CostPanel } from "./cost-panel"
 import type {
   CanonicalIngredientSummary,
@@ -246,7 +245,7 @@ export function RecipeCanvas({
       {/* Canvas column */}
       <div className="relative flex h-full flex-col overflow-hidden bg-[var(--paper)]">
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex max-w-[720px] flex-col gap-6 px-10 py-10">
+          <div className="mx-auto flex max-w-[820px] flex-col gap-6 px-10 py-10">
             {/* Title block */}
             <div>
               <div className="editorial-section-label">
@@ -316,14 +315,19 @@ export function RecipeCanvas({
 
             {/* Ingredients */}
             <div>
-              <div className="mb-2 flex items-baseline justify-between">
-                <h2 className="editorial-section-label">Ingredients</h2>
-                <span className="font-mono text-[10px] tabular-nums text-[var(--ink-faint)]">
+              <div className="mb-3 flex items-end justify-between border-b border-[var(--hairline-bold)] pb-2">
+                <div>
+                  <h2 className="editorial-section-label">Ingredients</h2>
+                  <div className="mt-1 font-display text-[26px] italic leading-none text-[var(--ink)]">
+                    What goes in.
+                  </div>
+                </div>
+                <span className="pb-1 font-mono text-[10px] uppercase tracking-[0.14em] tabular-nums text-[var(--ink-muted)]">
                   {rows.filter((r) => r.picker !== null).length} line{rows.filter((r) => r.picker !== null).length === 1 ? "" : "s"}
                 </span>
               </div>
 
-              <div className="border-t border-[var(--hairline)]">
+              <div>
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
@@ -334,10 +338,11 @@ export function RecipeCanvas({
                     items={rows.map((r) => r.id)}
                     strategy={verticalListSortingStrategy}
                   >
-                    {rows.map((row) => (
+                    {rows.map((row, i) => (
                       <SortableIngredientRow
                         key={row.id}
                         row={row}
+                        index={i}
                         canonicalIngredients={canonicalIngredients}
                         recipes={recipes}
                         excludeRecipeIds={excludeRecipeIds}
@@ -356,10 +361,10 @@ export function RecipeCanvas({
               <button
                 type="button"
                 onClick={addRow}
-                className="mt-3 inline-flex items-center gap-2 border border-dashed border-[var(--hairline-bold)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                className="mt-2 flex w-full items-center justify-center gap-2 border-2 border-dashed border-[var(--hairline-bold)] bg-[var(--paper)] px-4 py-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:bg-[var(--paper-deep)] hover:text-[var(--ink)]"
               >
-                <Plus className="h-3 w-3" />
-                Add ingredient
+                <Plus className="h-4 w-4" />
+                Add another ingredient
               </button>
             </div>
 
