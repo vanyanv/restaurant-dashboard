@@ -73,7 +73,7 @@ export function ProvenanceChip({ line }: { line: RecipeCostLine }) {
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-72 border-[var(--hairline-bold)] bg-[var(--paper)] p-3 font-mono text-[11px]"
+        className="w-72 border border-(--ink)/80 bg-white p-3 font-mono text-[11px] shadow-[0_8px_24px_-8px_rgba(26,22,19,0.25)]"
         align="end"
       >
         <div className="mb-2 flex items-center gap-1.5 text-[var(--ink-faint)]">

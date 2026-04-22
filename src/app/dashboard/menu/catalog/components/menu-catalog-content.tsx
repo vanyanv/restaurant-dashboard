@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Search } from "lucide-react"
-import { EditorialTopbar } from "../../../components/editorial-topbar"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { marginBandClass } from "@/lib/menu-margin"
@@ -158,21 +157,29 @@ export function MenuCatalogContent({ rows }: Props) {
   }
 
   return (
-    <div className="editorial-surface flex min-h-[calc(100vh-3.5rem)] flex-col">
-      <EditorialTopbar
-        section="§ 12"
-        title="Menu"
-        stamps={
-          <span>
-            {enriched.length} items
-            {totals.blendedMargin != null &&
-              ` · ${totals.blendedMargin.toFixed(1)}% blended margin`}
-            {totals.profit > 0 && ` · $${Math.round(totals.profit).toLocaleString()} profit 30d`}
-          </span>
-        }
-      />
-
+    <div className="flex flex-1 flex-col">
       <div className="border-b border-[var(--hairline)] bg-[var(--paper)] px-8 py-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
+          <span className="tabular-nums text-[var(--ink-muted)]">
+            {enriched.length} items
+          </span>
+          {totals.blendedMargin != null && (
+            <>
+              <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
+              <span className="tabular-nums">
+                {totals.blendedMargin.toFixed(1)}% blended margin
+              </span>
+            </>
+          )}
+          {totals.profit > 0 && (
+            <>
+              <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
+              <span className="tabular-nums">
+                ${Math.round(totals.profit).toLocaleString()} profit 30d
+              </span>
+            </>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <CategoryPill
             label="All"
@@ -437,7 +444,7 @@ function AttentionPill({
 }
 
 const GRID_COLS =
-  "grid-cols-[minmax(0,1fr)_72px_72px_96px_70px_72px_20px]"
+  "grid-cols-[minmax(0,1fr)_88px_88px_112px_80px_88px_20px]"
 
 function HeaderRow({
   sort,
