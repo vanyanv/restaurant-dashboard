@@ -42,16 +42,15 @@ export async function getCogsKpis(
   startDate: Date,
   endDate: Date
 ): Promise<CogsKpis> {
-  const [current, store] = await Promise.all([
+  const { priorStart, priorEnd } = priorWindow(startDate, endDate)
+  const [current, store, prior] = await Promise.all([
     rollup(dateWindow(storeId, startDate, endDate)),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
     }),
+    rollup(dateWindow(storeId, priorStart, priorEnd)),
   ])
-
-  const { priorStart, priorEnd } = priorWindow(startDate, endDate)
-  const prior = await rollup(dateWindow(storeId, priorStart, priorEnd))
 
   const deltaVsPriorPp =
     prior.revenueDollars > 0 ? current.cogsPct - prior.cogsPct : null
@@ -121,7 +120,7 @@ export async function getCogsTrend(
     map.set(bucketKeyOf(cursor), { cogs: 0, rev: 0 })
     if (granularity === "daily") cursor.setDate(cursor.getDate() + 1)
     else if (granularity === "weekly") cursor.setDate(cursor.getDate() + 7)
-    else cursor.setMonth(cursor.getMonth() + 1)
+    else cursor.setFullYear(cursor.getFullYear(), cursor.getMonth() + 1, 1)
   }
 
   for (const r of rows) {
