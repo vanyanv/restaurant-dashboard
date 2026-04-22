@@ -11,7 +11,6 @@ import { SpendTrendSection } from "./sections/spend-trend-section"
 import { InvoiceSummaryKpisSection } from "./sections/summary-kpis-section"
 import { InvoiceSummaryChartsSection } from "./sections/summary-charts-section"
 import { TopProductsSection } from "./sections/top-products-section"
-import { PriceMoversSection } from "./sections/price-movers-section"
 import { InvoicesListSection } from "./sections/invoices-list-section"
 import {
   InvoicesLastSyncText,
@@ -102,14 +101,6 @@ export function InvoicesShell({ userId, filters }: InvoicesShellProps) {
               fallback={<Skeleton className="h-28 w-full rounded-sm" />}
             >
               <TopProductsSection filters={filters} />
-            </Suspense>
-          </SectionErrorBoundary>
-
-          <SectionErrorBoundary label="Price movers unavailable">
-            <Suspense
-              fallback={<DataTableSkeleton columns={5} rows={3} />}
-            >
-              <PriceMoversSection />
             </Suspense>
           </SectionErrorBoundary>
         </div>

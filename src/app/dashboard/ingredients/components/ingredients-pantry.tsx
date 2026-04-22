@@ -35,9 +35,9 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
   const [bucket, setBucket] = useState<CategoryBucket | "All">("All")
   const [showSupplies, setShowSupplies] = useState(false)
   const [filter, setFilter] = useState<Filter>("all")
-  // If we arrived from a deep link (e.g. Price Movers row), the canonical may
-  // be hidden by the supplies filter — so toggle that off to guarantee the
-  // sheet has an ingredient to render.
+  // If we arrived from a deep link, the canonical may be hidden by the supplies
+  // filter — so toggle that off to guarantee the sheet has an ingredient to
+  // render.
   const initialMatches =
     initialOpenId != null && canonicals.some((c) => c.id === initialOpenId)
   const [openId, setOpenId] = useState<string | null>(

@@ -4,7 +4,6 @@ import {
   getInvoiceSummary,
   getInvoiceList,
   getProductAnalytics,
-  getPriceMovers,
   getLastInvoiceSyncAt,
   getInvoiceSpendTimeline,
 } from "@/app/actions/invoice-actions"
@@ -145,8 +144,6 @@ export const fetchProducts = cache(
   (storeId: string | undefined, startDate: string, endDate: string) =>
     getProductAnalytics({ storeId, startDate, endDate })
 )
-
-export const fetchPriceMovers = cache(() => getPriceMovers())
 
 export const fetchLastSync = cache(() => getLastInvoiceSyncAt())
 
