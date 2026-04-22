@@ -12,9 +12,19 @@ import type {
   PriceMoverRow,
 } from "@/types/invoice"
 
+function isoToStartOfDay(iso: string): Date {
+  return new Date(`${iso}T00:00:00`)
+}
+
+function isoToEndOfDay(iso: string): Date {
+  return new Date(`${iso}T23:59:59.999`)
+}
+
 export async function getInvoiceSummary(options?: {
   storeId?: string
   days?: number
+  startDate?: string
+  endDate?: string
 }): Promise<InvoiceKpis> {
   const session = await getServerSession(authOptions)
   if (!session?.user) {
@@ -25,14 +35,21 @@ export async function getInvoiceSummary(options?: {
     }
   }
 
-  const { storeId, days = 30 } = options ?? {}
-  const sinceDate = new Date()
-  sinceDate.setDate(sinceDate.getDate() - days)
+  const { storeId, days, startDate, endDate } = options ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { ownerId: session.user.id }
   if (storeId) where.storeId = storeId
-  if (days) where.invoiceDate = { gte: sinceDate }
+  if (startDate && endDate) {
+    where.invoiceDate = {
+      gte: isoToStartOfDay(startDate),
+      lte: isoToEndOfDay(endDate),
+    }
+  } else if (days) {
+    const sinceDate = new Date()
+    sinceDate.setDate(sinceDate.getDate() - days)
+    where.invoiceDate = { gte: sinceDate }
+  }
 
   const [invoices, pendingReview, lineItems] = await Promise.all([
     prisma.invoice.findMany({
@@ -87,18 +104,38 @@ export async function getInvoiceSummary(options?: {
 export async function getInvoiceList(filters?: {
   storeId?: string
   status?: string
+  vendor?: string
+  startDate?: string
+  endDate?: string
   page?: number
   limit?: number
 }) {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { invoices: [], total: 0, page: 1, totalPages: 0 }
 
-  const { storeId, status, page = 1, limit = 25 } = filters ?? {}
+  const {
+    storeId,
+    status,
+    vendor,
+    startDate,
+    endDate,
+    page = 1,
+    limit = 25,
+  } = filters ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { ownerId: session.user.id }
   if (storeId) where.storeId = storeId
   if (status) where.status = status
+  if (vendor) {
+    where.vendorName = { contains: vendor, mode: "insensitive" }
+  }
+  if (startDate && endDate) {
+    where.invoiceDate = {
+      gte: isoToStartOfDay(startDate),
+      lte: isoToEndOfDay(endDate),
+    }
+  }
 
   const [invoices, total] = await Promise.all([
     prisma.invoice.findMany({
@@ -149,18 +186,28 @@ export async function getInvoiceList(filters?: {
 export async function getProductAnalytics(options?: {
   storeId?: string
   days?: number
+  startDate?: string
+  endDate?: string
 }): Promise<ProductAnalytics> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { topProducts: [] }
 
-  const { storeId, days = 90 } = options ?? {}
-  const sinceDate = new Date()
-  sinceDate.setDate(sinceDate.getDate() - days)
+  const { storeId, days, startDate, endDate } = options ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invoiceWhere: any = { ownerId: session.user.id }
   if (storeId) invoiceWhere.storeId = storeId
-  if (days) invoiceWhere.invoiceDate = { gte: sinceDate }
+  if (startDate && endDate) {
+    invoiceWhere.invoiceDate = {
+      gte: isoToStartOfDay(startDate),
+      lte: isoToEndOfDay(endDate),
+    }
+  } else {
+    const fallbackDays = days ?? 90
+    const sinceDate = new Date()
+    sinceDate.setDate(sinceDate.getDate() - fallbackDays)
+    invoiceWhere.invoiceDate = { gte: sinceDate }
+  }
 
   const lineItems = await prisma.invoiceLineItem.findMany({
     where: { invoice: invoiceWhere },
@@ -385,6 +432,7 @@ export async function getPriceMovers(options?: {
         ownerId: session.user.id,
         invoiceDate: { gte: cutoff, not: null },
       },
+      unitPrice: { gt: 0 },
     },
     select: {
       sku: true,
@@ -392,6 +440,8 @@ export async function getPriceMovers(options?: {
       category: true,
       unit: true,
       unitPrice: true,
+      canonicalIngredientId: true,
+      canonicalIngredient: { select: { name: true } },
       invoice: {
         select: {
           vendorName: true,
@@ -409,22 +459,33 @@ export async function getPriceMovers(options?: {
     unit: string | null
     unitPrice: number
     invoiceDate: Date
+    canonicalIngredientId: string | null
+    canonicalName: string | null
   }
 
-  // Group by (vendor, sku or productName lower)
+  // Group by (vendor, canonical ingredient + unit) when matched; otherwise
+  // (vendor, sku-or-productName) so unmatched items still surface. Unit is
+  // part of the key — switching pack size is a re-quote, not a price change.
   const groups = new Map<string, Row[]>()
   for (const li of lineItems) {
     if (!li.invoice.invoiceDate) continue
-    const key = `${li.invoice.vendorName}::${li.sku ?? li.productName.toLowerCase()}`
+    const vendor = li.invoice.vendorName
+    const unitKey = li.unit?.trim().toUpperCase() || "∅"
+    const idKey = li.canonicalIngredientId
+      ? `canon:${li.canonicalIngredientId}`
+      : `sku:${li.sku ?? li.productName.toLowerCase()}`
+    const key = `${vendor}::${idKey}::${unitKey}`
     const arr = groups.get(key) ?? []
     arr.push({
-      vendorName: li.invoice.vendorName,
+      vendorName: vendor,
       sku: li.sku,
       productName: li.productName,
       category: li.category,
       unit: li.unit,
       unitPrice: li.unitPrice,
       invoiceDate: li.invoice.invoiceDate,
+      canonicalIngredientId: li.canonicalIngredientId,
+      canonicalName: li.canonicalIngredient?.name ?? null,
     })
     groups.set(key, arr)
   }
@@ -449,11 +510,175 @@ export async function getPriceMovers(options?: {
       latestPrice: latest.unitPrice,
       latestDate: latest.invoiceDate.toISOString().slice(0, 10),
       pctChange,
+      canonicalIngredientId: latest.canonicalIngredientId,
+      canonicalName: latest.canonicalName,
+      sampleCount: rows.length,
     })
   }
 
-  movers.sort((a, b) => b.pctChange - a.pctChange)
+  // Sort by magnitude of movement (up or down), largest first.
+  movers.sort((a, b) => Math.abs(b.pctChange) - Math.abs(a.pctChange))
   return movers.slice(0, limit)
+}
+
+export interface SpendTimelineBucket {
+  bucketStart: string // YYYY-MM-DD (inclusive)
+  bucketEnd: string // YYYY-MM-DD (inclusive)
+  label: string
+  total: number
+  invoiceCount: number
+}
+
+export interface SpendTimelineResult {
+  buckets: SpendTimelineBucket[]
+  granularity: "day" | "week" | "month"
+  total: number
+  invoiceCount: number
+  avgPerBucket: number
+  peakBucket: SpendTimelineBucket | null
+}
+
+function startOfWeekMonday(d: Date): Date {
+  const copy = new Date(d)
+  copy.setHours(0, 0, 0, 0)
+  const day = copy.getDay() // 0 = Sun
+  const diff = (day + 6) % 7
+  copy.setDate(copy.getDate() - diff)
+  return copy
+}
+
+function isoDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+export async function getInvoiceSpendTimeline(options: {
+  storeId?: string
+  startDate: string
+  endDate: string
+  granularity: "day" | "week" | "month"
+}): Promise<SpendTimelineResult> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    return {
+      buckets: [],
+      granularity: options.granularity,
+      total: 0,
+      invoiceCount: 0,
+      avgPerBucket: 0,
+      peakBucket: null,
+    }
+  }
+
+  const { storeId, startDate, endDate, granularity } = options
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: any = {
+    ownerId: session.user.id,
+    invoiceDate: {
+      gte: isoToStartOfDay(startDate),
+      lte: isoToEndOfDay(endDate),
+    },
+  }
+  if (storeId) where.storeId = storeId
+
+  const invoices = await prisma.invoice.findMany({
+    where,
+    select: { invoiceDate: true, totalAmount: true },
+  })
+
+  // Build empty buckets across the range
+  const start = isoToStartOfDay(startDate)
+  const end = isoToStartOfDay(endDate)
+  const buckets: SpendTimelineBucket[] = []
+
+  if (granularity === "day") {
+    const cursor = new Date(start)
+    while (cursor <= end) {
+      const s = isoDate(cursor)
+      buckets.push({
+        bucketStart: s,
+        bucketEnd: s,
+        label: cursor.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
+        total: 0,
+        invoiceCount: 0,
+      })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+  } else if (granularity === "week") {
+    const cursor = startOfWeekMonday(start)
+    while (cursor <= end) {
+      const bucketEnd = new Date(cursor)
+      bucketEnd.setDate(bucketEnd.getDate() + 6)
+      buckets.push({
+        bucketStart: isoDate(cursor),
+        bucketEnd: isoDate(bucketEnd),
+        label: `${cursor.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })}`,
+        total: 0,
+        invoiceCount: 0,
+      })
+      cursor.setDate(cursor.getDate() + 7)
+    }
+  } else {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+    while (cursor <= end) {
+      const monthEnd = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth() + 1,
+        0
+      )
+      buckets.push({
+        bucketStart: isoDate(cursor),
+        bucketEnd: isoDate(monthEnd),
+        label: cursor.toLocaleDateString("en-US", {
+          month: "short",
+          year: "2-digit",
+        }),
+        total: 0,
+        invoiceCount: 0,
+      })
+      cursor.setMonth(cursor.getMonth() + 1)
+    }
+  }
+
+  // Fill buckets
+  for (const inv of invoices) {
+    if (!inv.invoiceDate) continue
+    const d = inv.invoiceDate
+    const idx = buckets.findIndex((b) => {
+      const bs = isoToStartOfDay(b.bucketStart)
+      const be = isoToEndOfDay(b.bucketEnd)
+      return d >= bs && d <= be
+    })
+    if (idx === -1) continue
+    buckets[idx].total += inv.totalAmount
+    buckets[idx].invoiceCount += 1
+  }
+
+  const total = buckets.reduce((s, b) => s + b.total, 0)
+  const invoiceCount = buckets.reduce((s, b) => s + b.invoiceCount, 0)
+  const nonEmpty = buckets.filter((b) => b.total > 0)
+  const peakBucket = nonEmpty.length
+    ? nonEmpty.reduce((a, b) => (b.total > a.total ? b : a))
+    : null
+  const avgPerBucket = buckets.length > 0 ? total / buckets.length : 0
+
+  return {
+    buckets,
+    granularity,
+    total,
+    invoiceCount,
+    avgPerBucket,
+    peakBucket,
+  }
 }
 
 export async function getLastInvoiceSyncAt(): Promise<string | null> {

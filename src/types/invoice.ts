@@ -124,6 +124,32 @@ export interface PriceMoverRow {
   latestPrice: number
   latestDate: string
   pctChange: number
+  /** Set when rows have been rolled up to a canonical ingredient (cross-SKU within one vendor). */
+  canonicalIngredientId: string | null
+  /** Canonical ingredient display name when rolled up; otherwise null. */
+  canonicalName: string | null
+  /** How many distinct line items fed this row (≥2). Useful for "how confident is this trend?" context. */
+  sampleCount: number
+}
+
+export interface IngredientPricePoint {
+  /** ISO date (YYYY-MM-DD) of the invoice. */
+  date: string
+  /** $/unit as captured on the invoice line. */
+  unitPrice: number
+  /** Quantity on the line. */
+  quantity: number
+  /** Unit string on the line (e.g. "CASE", "LB"). */
+  unit: string | null
+  vendor: string
+  sku: string | null
+  invoiceId: string
+  invoiceNumber: string
+}
+
+export interface IngredientPriceHistory {
+  /** Oldest → newest. */
+  points: IngredientPricePoint[]
 }
 
 export interface InvoiceDetail extends InvoiceListItem {

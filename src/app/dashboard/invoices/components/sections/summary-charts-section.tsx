@@ -1,5 +1,5 @@
 import { InvoicesChartsSlot } from "../invoices-charts-slot"
-import { fetchSummary } from "./data"
+import { fetchSummary, type InvoiceFilters } from "./data"
 
 const CATEGORY_COLORS = [
   "hsl(var(--chart-1))",
@@ -13,11 +13,15 @@ const CATEGORY_COLORS = [
 ]
 
 export async function InvoiceSummaryChartsSection({
-  storeId,
+  filters,
 }: {
-  storeId?: string
+  filters: InvoiceFilters
 }) {
-  const summary = await fetchSummary(storeId)
+  const summary = await fetchSummary(
+    filters.storeId,
+    filters.startDate,
+    filters.endDate
+  )
 
   const categoryData = summary.spendByCategory.slice(0, 8).map((c, i) => ({
     name: c.category,

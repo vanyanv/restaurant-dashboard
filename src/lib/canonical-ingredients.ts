@@ -238,16 +238,37 @@ export async function getCanonicalIngredientCost(
     canonical.recipeUnit &&
     (asOf === undefined || canonical.costSource === "manual")
   if (useCanonical) {
+    // The canonical's costPerRecipeUnit is authoritative for the price, but its
+    // `costUpdatedAt` lags behind invoice arrivals (locked canonicals, same-value
+    // recomputes, and derivation failures all skip the write). Always pull
+    // vendor / SKU / invoice date from the actual most-recent matched line so
+    // the UI reflects the latest invoice even when the stored cost didn't move.
+    const latest = await prisma.invoiceLineItem.findFirst({
+      where: {
+        canonicalIngredientId,
+        quantity: { gt: 0 },
+        invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
+      },
+      orderBy: { invoice: { invoiceDate: "desc" } },
+      select: {
+        id: true,
+        invoiceId: true,
+        sku: true,
+        productName: true,
+        invoice: { select: { invoiceDate: true, vendorName: true } },
+      },
+    })
     return {
       unitCost: canonical!.costPerRecipeUnit!,
       unit: canonical!.recipeUnit!,
       source: canonical!.costSource === "invoice" ? "invoice" : "manual",
-      asOfDate: canonical!.costUpdatedAt ?? new Date(),
-      sourceInvoiceId: null,
-      sourceLineItemId: null,
-      sourceVendor: null,
-      sourceSku: null,
-      sourceProductName: null,
+      asOfDate:
+        latest?.invoice.invoiceDate ?? canonical!.costUpdatedAt ?? new Date(),
+      sourceInvoiceId: latest?.invoiceId ?? null,
+      sourceLineItemId: latest?.id ?? null,
+      sourceVendor: latest?.invoice.vendorName ?? null,
+      sourceSku: latest?.sku ?? null,
+      sourceProductName: latest?.productName ?? null,
     }
   }
 

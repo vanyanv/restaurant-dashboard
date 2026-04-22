@@ -1,16 +1,8 @@
 "use client"
 
-import { ArrowDownRight, ArrowUpRight, TrendingUp } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import Link from "next/link"
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { formatCurrency, formatDateUS } from "@/lib/format"
 import type { PriceMoverRow } from "@/types/invoice"
 
@@ -23,97 +15,124 @@ export function PriceMoversCard({ rows }: PriceMoversCardProps) {
   const decreases = rows.filter((r) => r.pctChange < 0).length
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Price Movers
-            </CardTitle>
-            <CardDescription>
-              Products whose latest unit price differs 5% or more from the prior order (last 90 days).
-            </CardDescription>
-          </div>
-          <div className="flex gap-2 text-xs">
-            {increases > 0 && (
-              <Badge variant="outline" className="border-red-500/50 text-red-600">
-                ↑ {increases} up
-              </Badge>
-            )}
-            {decreases > 0 && (
-              <Badge variant="outline" className="border-emerald-500/50 text-emerald-600">
-                ↓ {decreases} down
-              </Badge>
-            )}
-          </div>
+    <section className="inv-panel mv-panel">
+      <div className="inv-panel__head">
+        <div className="flex items-baseline gap-3">
+          <div className="inv-panel__dept">§ price movers</div>
+          <h3 className="inv-panel__title">What shifted</h3>
         </div>
-      </CardHeader>
-      <CardContent>
-        {rows.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            No significant price changes in the past 90 days.
-          </div>
-        ) : (
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Prev</TableHead>
-                  <TableHead className="text-right">Latest</TableHead>
-                  <TableHead className="text-right">Change</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r, i) => {
-                  const up = r.pctChange > 0
-                  return (
-                    <TableRow key={`${r.vendorName}-${r.sku ?? r.productName}-${i}`}>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {r.vendorName}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[280px]">
-                        <div className="truncate font-medium">{r.productName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {r.sku ? `SKU ${r.sku}` : "—"}
-                          {r.unit ? ` · ${r.unit}` : ""}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(r.prevPrice)}
-                        <div className="text-xs text-muted-foreground">{formatDateUS(r.prevDate)}</div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">
-                        {formatCurrency(r.latestPrice)}
-                        <div className="text-xs text-muted-foreground">{formatDateUS(r.latestDate)}</div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        <span
-                          className={`inline-flex items-center gap-1 font-semibold ${
-                            up ? "text-red-600" : "text-emerald-600"
-                          }`}
-                        >
-                          {up ? (
-                            <ArrowUpRight className="h-3.5 w-3.5" />
-                          ) : (
-                            <ArrowDownRight className="h-3.5 w-3.5" />
-                          )}
-                          {up ? "+" : ""}
-                          {r.pctChange.toFixed(1)}%
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        <div className="flex items-center gap-2">
+          {increases > 0 && (
+            <span className="inv-stamp" data-status="REVIEW">
+              <ArrowUpRight className="h-3 w-3" />
+              {increases} up
+            </span>
+          )}
+          {decreases > 0 && (
+            <span
+              className="inv-stamp"
+              data-status="MATCHED"
+              style={{ color: "#3f5e1a" }}
+            >
+              <ArrowDownRight className="h-3 w-3" />
+              {decreases} down
+            </span>
+          )}
+        </div>
+      </div>
+
+      <p className="-mt-2 mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-muted)]">
+        unit price changed ≥5% from the prior order · last 90 days
+      </p>
+
+      {rows.length === 0 ? (
+        <div className="inv-empty">
+          <div className="inv-empty__mark">·</div>
+          <div className="inv-empty__title">Prices have been quiet.</div>
+          <p className="inv-empty__body">
+            No unit-price changes above 5% in the last 90 days. Check back after
+            the next invoice run.
+          </p>
+        </div>
+      ) : (
+        <div className="-mx-5 -mb-4 overflow-x-auto">
+          {rows.map((r, i) => (
+            <MoverRow key={`${r.vendorName}-${r.canonicalIngredientId ?? r.sku ?? r.productName}-${i}`} row={r} />
+          ))}
+        </div>
+      )}
+    </section>
   )
+}
+
+function MoverRow({ row }: { row: PriceMoverRow }) {
+  const up = row.pctChange > 0
+  const displayName = row.canonicalName ?? row.productName
+  const meta: string[] = []
+  if (row.canonicalName) meta.push("ingredient rollup")
+  if (row.sku) meta.push(`SKU ${row.sku}`)
+  if (row.unit) meta.push(row.unit)
+  if (row.sampleCount > 2) meta.push(`${row.sampleCount} invoices`)
+
+  const changeLabel = `${up ? "+" : ""}${row.pctChange.toFixed(row.pctChange >= 10 || row.pctChange <= -10 ? 0 : 1)}%`
+
+  const content = (
+    <>
+      <span className="mv-row__product">
+        <span className="mv-row__name" title={displayName}>
+          {displayName}
+        </span>
+        {meta.length > 0 && (
+          <span className="mv-row__meta">
+            {meta.map((m, i) => (
+              <span key={i}>
+                {i > 0 && <span aria-hidden>·</span>}
+                {m.startsWith("ingredient") ? <em>{m}</em> : m}
+              </span>
+            ))}
+          </span>
+        )}
+        <span className="mv-row__vendor" title={row.vendorName}>
+          <span className="mv-row__vendor-label" aria-hidden>
+            from
+          </span>
+          {row.vendorName}
+        </span>
+      </span>
+      <span className="mv-row__price">
+        {formatCurrency(row.prevPrice)}
+        <span className="mv-row__price-date">{formatDateUS(row.prevDate)}</span>
+      </span>
+      <span className="mv-row__arrow" aria-hidden>
+        <ArrowRight className="h-3.5 w-3.5" />
+      </span>
+      <span className="mv-row__price mv-row__price--latest">
+        {formatCurrency(row.latestPrice)}
+        <span className="mv-row__price-date">{formatDateUS(row.latestDate)}</span>
+      </span>
+      <span
+        className={cn(
+          "mv-row__change",
+          up ? "mv-row__change--up" : "mv-row__change--down"
+        )}
+      >
+        {up ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+        {changeLabel}
+      </span>
+      <ChevronRight className="mv-row__chev h-4 w-4" />
+    </>
+  )
+
+  if (row.canonicalIngredientId) {
+    return (
+      <Link
+        href={`/dashboard/ingredients?open=${row.canonicalIngredientId}`}
+        className="mv-row mv-row--button"
+      >
+        {content}
+      </Link>
+    )
+  }
+
+  return <div className="mv-row">{content}</div>
 }

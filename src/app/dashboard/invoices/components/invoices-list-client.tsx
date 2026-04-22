@@ -1,46 +1,17 @@
 "use client"
 
 import { useCallback, useRef, useTransition } from "react"
-import { useRouter } from "next/navigation"
-import { FileText } from "lucide-react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { useRouter, useSearchParams } from "next/navigation"
+import { ChevronRight, MapPin } from "lucide-react"
 import type { InvoiceListItem } from "@/types/invoice"
 import { formatCurrency, formatDateUS } from "@/lib/format"
 
-const STATUS_STYLES: Record<
-  string,
-  {
-    label: string
-    variant: "default" | "secondary" | "destructive" | "outline"
-  }
-> = {
-  MATCHED: { label: "Matched", variant: "default" },
-  APPROVED: { label: "Approved", variant: "default" },
-  REVIEW: { label: "Review", variant: "secondary" },
-  PENDING: { label: "Pending", variant: "outline" },
-  REJECTED: { label: "Rejected", variant: "destructive" },
+const STATUS_LABELS: Record<string, string> = {
+  MATCHED: "Matched",
+  APPROVED: "Approved",
+  REVIEW: "Review",
+  PENDING: "Pending",
+  REJECTED: "Rejected",
 }
 
 interface InvoicesListClientProps {
@@ -48,17 +19,6 @@ interface InvoicesListClientProps {
   total: number
   page: number
   totalPages: number
-  status: string
-  storeId: string
-}
-
-function buildHref(params: Record<string, string | undefined>) {
-  const q = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) {
-    if (v && v !== "all") q.set(k, v)
-  }
-  const qs = q.toString()
-  return qs ? `/dashboard/invoices?${qs}` : "/dashboard/invoices"
 }
 
 export function InvoicesListClient({
@@ -66,10 +26,9 @@ export function InvoicesListClient({
   total,
   page,
   totalPages,
-  status,
-  storeId,
 }: InvoicesListClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
   const prefetchedRef = useRef<Set<string>>(new Set())
@@ -95,133 +54,135 @@ export function InvoicesListClient({
     [router]
   )
 
-  const handleStatus = (value: string) => {
+  const handlePage = (nextPage: number) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "")
+    if (nextPage <= 1) params.delete("page")
+    else params.set("page", String(nextPage))
+    const qs = params.toString()
     startTransition(() => {
       router.replace(
-        buildHref({ storeId, status: value, page: undefined }),
+        qs ? `/dashboard/invoices?${qs}` : "/dashboard/invoices",
         { scroll: false }
       )
     })
   }
 
-  const handlePage = (nextPage: number) => {
-    startTransition(() => {
-      router.replace(
-        buildHref({ storeId, status, page: String(nextPage) }),
-        { scroll: false }
-      )
-    })
+  if (invoices.length === 0) {
+    return (
+      <div className="inv-empty">
+        <div className="inv-empty__mark">§</div>
+        <p className="inv-empty__title">The ledger is empty</p>
+        <p className="inv-empty__body">
+          No invoices match your filters. Try a wider date range above, clear
+          the filters, or sync fresh invoices from email.
+        </p>
+      </div>
+    )
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Invoices</CardTitle>
-        <Select value={status} onValueChange={handleStatus}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Filter status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="MATCHED">Matched</SelectItem>
-            <SelectItem value="REVIEW">Needs Review</SelectItem>
-            <SelectItem value="PENDING">Pending</SelectItem>
-            <SelectItem value="APPROVED">Approved</SelectItem>
-            <SelectItem value="REJECTED">Rejected</SelectItem>
-          </SelectContent>
-        </Select>
-      </CardHeader>
-      <CardContent
-        className={isPending ? "opacity-60 pointer-events-none" : ""}
-      >
-        {invoices.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="text-lg font-medium">No invoices yet</p>
-            <p className="text-sm mt-1">
-              Click &quot;Sync Invoices&quot; to fetch from email
-            </p>
+    <section
+      className="inv-list"
+      style={{ opacity: isPending ? 0.7 : 1, pointerEvents: isPending ? "none" : undefined }}
+    >
+      <div className="inv-list__masthead" aria-hidden="true">
+        <span />
+        <span>Vendor</span>
+        <span>Invoice date</span>
+        <span>Store</span>
+        <span>Total</span>
+        <span>Status</span>
+        <span />
+      </div>
+
+      <div role="list">
+        {invoices.map((inv, i) => {
+          const statusLabel = STATUS_LABELS[inv.status] ?? "Pending"
+          return (
+            <button
+              key={inv.id}
+              type="button"
+              role="listitem"
+              className={`inv-row dock-in dock-in-${Math.min(i + 1, 12)}`}
+              onClick={() => router.push(`/dashboard/invoices/${inv.id}`)}
+              onMouseEnter={() => prefetchInvoice(inv.id)}
+              onFocus={() => prefetchInvoice(inv.id)}
+              onTouchStart={() => prefetchInvoice(inv.id)}
+              aria-label={`Open invoice ${inv.invoiceNumber} from ${inv.vendorName} for ${formatCurrency(inv.totalAmount)}`}
+            >
+              <span className="inv-row__folio">
+                {String(i + 1 + (page - 1) * 25).padStart(3, "0")}
+              </span>
+
+              <span className="inv-row__vendor">
+                <span className="inv-row__vendor-name">{inv.vendorName}</span>
+                <span className="inv-row__vendor-meta">
+                  <em>№ {inv.invoiceNumber}</em>
+                  <span aria-hidden>·</span>
+                  <span>
+                    {inv.lineItemCount}{" "}
+                    {inv.lineItemCount === 1 ? "item" : "items"}
+                  </span>
+                </span>
+              </span>
+
+              <span className="inv-row__date">
+                {inv.invoiceDate ? formatDateUS(inv.invoiceDate) : "—"}
+              </span>
+
+              <span className="inv-row__store">
+                <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+                {inv.storeName ? (
+                  <span>{inv.storeName}</span>
+                ) : (
+                  <em>Unassigned</em>
+                )}
+              </span>
+
+              <span className="inv-row__total total-num">
+                {formatCurrency(inv.totalAmount)}
+              </span>
+
+              <span className="inv-row__status-cell">
+                <span className="inv-stamp" data-status={inv.status}>
+                  {statusLabel}
+                </span>
+              </span>
+
+              <ChevronRight
+                className="inv-row__chev h-4 w-4"
+                aria-hidden="true"
+              />
+            </button>
+          )
+        })}
+      </div>
+
+      {totalPages > 1 ? (
+        <div className="inv-pagination">
+          <span>
+            Folio {page} / {totalPages} · {total.toLocaleString()} total
+          </span>
+          <div className="inv-pagination__nav">
+            <button
+              type="button"
+              className="inv-pagination__btn"
+              disabled={page <= 1 || isPending}
+              onClick={() => handlePage(page - 1)}
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              className="inv-pagination__btn"
+              disabled={page >= totalPages || isPending}
+              onClick={() => handlePage(page + 1)}
+            >
+              Next →
+            </button>
           </div>
-        ) : (
-          <>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Vendor</TableHead>
-                    <TableHead>Invoice #</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Store</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Items</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((inv) => {
-                    const s = STATUS_STYLES[inv.status] ?? STATUS_STYLES.PENDING
-                    return (
-                      <TableRow
-                        key={inv.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() =>
-                          router.push(`/dashboard/invoices/${inv.id}`)
-                        }
-                        onMouseEnter={() => prefetchInvoice(inv.id)}
-                        onFocus={() => prefetchInvoice(inv.id)}
-                        onTouchStart={() => prefetchInvoice(inv.id)}
-                      >
-                        <TableCell className="font-medium max-w-[200px] truncate">
-                          {inv.vendorName}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {inv.invoiceNumber}
-                        </TableCell>
-                        <TableCell>{inv.invoiceDate ? formatDateUS(inv.invoiceDate) : "—"}</TableCell>
-                        <TableCell>{inv.storeName ?? "Unmatched"}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(inv.totalAmount)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={s.variant}>{s.label}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {inv.lineItemCount}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <p className="text-sm text-muted-foreground">
-                  Showing {invoices.length} of {total} invoices
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1 || isPending}
-                    onClick={() => handlePage(page - 1)}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages || isPending}
-                    onClick={() => handlePage(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      ) : null}
+    </section>
   )
 }

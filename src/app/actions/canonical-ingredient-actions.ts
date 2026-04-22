@@ -12,7 +12,14 @@ import {
 } from "@/lib/canonical-ingredients"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import type { CanonicalIngredientSummary } from "@/types/recipe"
+import type {
+  CanonicalIngredientSummary,
+  IngredientTrend,
+} from "@/types/recipe"
+import type {
+  IngredientPriceHistory,
+  IngredientPricePoint,
+} from "@/types/invoice"
 
 async function requireOwnerId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
@@ -33,9 +40,10 @@ export async function listCanonicalIngredients(): Promise<
     },
   })
 
-  const costs = await Promise.all(
-    canonicals.map((c) => getCanonicalIngredientCost(c.id))
-  )
+  const [costs, trendsByCanonical] = await Promise.all([
+    Promise.all(canonicals.map((c) => getCanonicalIngredientCost(c.id))),
+    computeTrendsByCanonical(ownerId),
+  ])
 
   return canonicals.map((c, i) => {
     const cost = costs[i]
@@ -55,8 +63,167 @@ export async function listCanonicalIngredients(): Promise<
       latestPriceAt: cost?.asOfDate ?? null,
       latestVendor: cost?.sourceVendor ? normalizeVendorName(cost.sourceVendor) : null,
       latestSku: cost?.sourceSku ?? null,
+      trend30d: trendsByCanonical.get(c.id) ?? null,
     }
   })
+}
+
+/**
+ * One batched pass over the last 90 days of matched invoice line items to
+ * compute a ~30-day price trend per canonical ingredient. Safe unit comparison:
+ * we only compare within the same (vendor, unit) — switching units or vendors
+ * is not treated as a price change. If multiple (vendor, unit) pairs have
+ * trends, the one with the largest |pctChange| wins.
+ */
+async function computeTrendsByCanonical(
+  ownerId: string
+): Promise<Map<string, IngredientTrend>> {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 90)
+
+  const lines = await prisma.invoiceLineItem.findMany({
+    where: {
+      canonicalIngredientId: { not: null },
+      invoice: {
+        ownerId,
+        invoiceDate: { gte: cutoff, not: null },
+      },
+      unitPrice: { gt: 0 },
+    },
+    select: {
+      canonicalIngredientId: true,
+      unitPrice: true,
+      unit: true,
+      invoice: {
+        select: {
+          vendorName: true,
+          invoiceDate: true,
+        },
+      },
+    },
+  })
+
+  type Pt = { date: Date; price: number; vendor: string; unit: string | null }
+  const buckets = new Map<string, Pt[]>() // key = canonicalId|vendor|unit
+  const canonicalMap = new Map<string, string>() // bucketKey → canonicalId
+  for (const li of lines) {
+    if (!li.canonicalIngredientId || !li.invoice.invoiceDate) continue
+    const vendor = normalizeVendorName(li.invoice.vendorName)
+    const unit = li.unit?.trim().toUpperCase() || null
+    const key = `${li.canonicalIngredientId}|${vendor}|${unit ?? "∅"}`
+    canonicalMap.set(key, li.canonicalIngredientId)
+    const arr = buckets.get(key) ?? []
+    arr.push({
+      date: li.invoice.invoiceDate,
+      price: li.unitPrice,
+      vendor,
+      unit,
+    })
+    buckets.set(key, arr)
+  }
+
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+  const cutoffMs = Date.now() - THIRTY_DAYS_MS
+
+  const best = new Map<string, IngredientTrend>() // canonicalId → best trend
+  for (const [key, pts] of buckets) {
+    if (pts.length < 2) continue
+    pts.sort((a, b) => b.date.getTime() - a.date.getTime()) // newest first
+    const latest = pts[0]
+    // Baseline: most recent point dated on or before (now - 30d). If none,
+    // skip — we don't want to call a two-day swing a "30-day trend".
+    const baseline = pts.find((p) => p.date.getTime() <= cutoffMs)
+    if (!baseline) continue
+    if (baseline.price <= 0) continue
+    const pctChange = ((latest.price - baseline.price) / baseline.price) * 100
+    if (!Number.isFinite(pctChange)) continue
+
+    const canonicalId = canonicalMap.get(key)
+    if (!canonicalId) continue
+    const trend: IngredientTrend = {
+      pctChange,
+      latestPrice: latest.price,
+      baselinePrice: baseline.price,
+      vendor: latest.vendor,
+      unit: latest.unit,
+      latestDate: latest.date.toISOString().slice(0, 10),
+      baselineDate: baseline.date.toISOString().slice(0, 10),
+    }
+    const prior = best.get(canonicalId)
+    if (!prior || Math.abs(trend.pctChange) > Math.abs(prior.pctChange)) {
+      best.set(canonicalId, trend)
+    }
+  }
+
+  return best
+}
+
+/**
+ * Full price history for one canonical ingredient, sourced from its matched
+ * invoice line items. Oldest → newest. Scoped to the last `periodDays` days
+ * (default 180). Consumers (charts, tables) are responsible for any grouping.
+ */
+export async function getIngredientPriceHistory(
+  canonicalIngredientId: string,
+  options?: { periodDays?: number }
+): Promise<IngredientPriceHistory> {
+  const ownerId = await requireOwnerId()
+  if (!ownerId) return { points: [] }
+
+  const canonical = await prisma.canonicalIngredient.findFirst({
+    where: { id: canonicalIngredientId, ownerId },
+    select: { id: true },
+  })
+  if (!canonical) return { points: [] }
+
+  const periodDays = options?.periodDays ?? 180
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - periodDays)
+
+  const lines = await prisma.invoiceLineItem.findMany({
+    where: {
+      canonicalIngredientId,
+      unitPrice: { gt: 0 },
+      quantity: { gt: 0 },
+      invoice: {
+        ownerId,
+        invoiceDate: { gte: cutoff, not: null },
+      },
+    },
+    select: {
+      id: true,
+      sku: true,
+      unit: true,
+      unitPrice: true,
+      quantity: true,
+      invoice: {
+        select: {
+          id: true,
+          invoiceNumber: true,
+          invoiceDate: true,
+          vendorName: true,
+        },
+      },
+    },
+    orderBy: { invoice: { invoiceDate: "asc" } },
+  })
+
+  const points: IngredientPricePoint[] = []
+  for (const li of lines) {
+    if (!li.invoice.invoiceDate) continue
+    points.push({
+      date: li.invoice.invoiceDate.toISOString().slice(0, 10),
+      unitPrice: li.unitPrice,
+      quantity: li.quantity,
+      unit: li.unit,
+      vendor: normalizeVendorName(li.invoice.vendorName),
+      sku: li.sku,
+      invoiceId: li.invoice.id,
+      invoiceNumber: li.invoice.invoiceNumber,
+    })
+  }
+
+  return { points }
 }
 
 export async function createCanonicalIngredient(input: {

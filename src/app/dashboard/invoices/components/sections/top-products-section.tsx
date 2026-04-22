@@ -21,14 +21,18 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatCurrency } from "@/lib/format"
-import { fetchProducts } from "./data"
+import { fetchProducts, type InvoiceFilters } from "./data"
 
 export async function TopProductsSection({
-  storeId,
+  filters,
 }: {
-  storeId?: string
+  filters: InvoiceFilters
 }) {
-  const products = await fetchProducts(storeId)
+  const products = await fetchProducts(
+    filters.storeId,
+    filters.startDate,
+    filters.endDate
+  )
   if (products.topProducts.length === 0) return null
 
   const maxSpend = products.topProducts[0]?.totalSpend ?? 1
@@ -44,7 +48,7 @@ export async function TopProductsSection({
                 <div>
                   <CardTitle className="text-base">Top Products</CardTitle>
                   <CardDescription>
-                    Most ordered items by total spend (last 90 days)
+                    Most ordered items by total spend in this period
                   </CardDescription>
                 </div>
               </div>

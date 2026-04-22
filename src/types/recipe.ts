@@ -1,3 +1,20 @@
+export type IngredientTrend = {
+  /** Percent change, signed. +8.2 means price rose 8.2%. */
+  pctChange: number
+  /** $/unit as of most recent invoice. */
+  latestPrice: number
+  /** $/unit baseline from ~30d ago (closest earlier point within window). */
+  baselinePrice: number
+  /** Vendor the compared prices came from. */
+  vendor: string
+  /** Unit the comparison was done in (e.g. "CASE", "LB"). */
+  unit: string | null
+  /** ISO date of latest price. */
+  latestDate: string
+  /** ISO date of baseline price. */
+  baselineDate: string
+}
+
 export type CanonicalIngredientSummary = {
   id: string
   name: string
@@ -19,6 +36,8 @@ export type CanonicalIngredientSummary = {
   latestPriceAt: Date | null
   latestVendor: string | null
   latestSku: string | null
+  /** ~30d price trend, sourced from matched invoice line items. Null when no comparable baseline exists. */
+  trend30d: IngredientTrend | null
 }
 
 export type RecipeIngredientInput = {

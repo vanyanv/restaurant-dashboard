@@ -214,6 +214,7 @@ export function RecipesContent({
               latestPriceAt: null,
               latestVendor: null,
               latestSku: null,
+              trend30d: null,
             },
           ].sort((a, b) => a.name.localeCompare(b.name))
         )

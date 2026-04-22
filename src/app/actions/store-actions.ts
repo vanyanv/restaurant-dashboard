@@ -2355,6 +2355,7 @@ export async function getStorePnL(input: {
       },
     })
     const cogs = summarizeDailyCogs(cogsRows, periods)
+
     const computed = computeStorePnL({
       bucketed,
       periods,

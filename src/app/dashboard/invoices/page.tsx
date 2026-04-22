@@ -10,6 +10,10 @@ export default async function InvoicesPage({
   searchParams: Promise<{
     storeId?: string
     status?: string
+    vendor?: string
+    period?: string
+    startDate?: string
+    endDate?: string
     page?: string
   }>
 }) {

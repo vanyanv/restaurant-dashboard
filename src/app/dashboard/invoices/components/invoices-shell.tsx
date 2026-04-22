@@ -6,6 +6,8 @@ import {
 } from "@/components/skeletons"
 import { SectionErrorBoundary } from "@/components/analytics/section-error"
 import { EditorialTopbar } from "../../components/editorial-topbar"
+import { InvoicesPeriodSelector } from "./invoices-period-selector"
+import { SpendTrendSection } from "./sections/spend-trend-section"
 import { InvoiceSummaryKpisSection } from "./sections/summary-kpis-section"
 import { InvoiceSummaryChartsSection } from "./sections/summary-charts-section"
 import { TopProductsSection } from "./sections/top-products-section"
@@ -16,7 +18,7 @@ import {
   InvoicesTopbarStoreFilter,
   InvoicesTopbarSyncButton,
 } from "./sections/invoices-topbar-bits"
-import type { InvoiceFilters } from "./sections/data"
+import { resolvePeriod, type InvoiceFilters } from "./sections/data"
 
 interface InvoicesShellProps {
   userId: string
@@ -25,6 +27,7 @@ interface InvoicesShellProps {
 
 export function InvoicesShell({ userId, filters }: InvoicesShellProps) {
   const currentStore = filters.storeId ?? "all"
+  const resolved = resolvePeriod(filters.period, filters.startDate, filters.endDate)
 
   return (
     <div className="flex flex-col h-full">
@@ -45,49 +48,71 @@ export function InvoicesShell({ userId, filters }: InvoicesShellProps) {
         </Suspense>
       </EditorialTopbar>
 
-      <div className="flex-1 overflow-auto p-3 sm:p-4 space-y-3">
-        <SectionErrorBoundary label="Summary unavailable">
-          <Suspense fallback={<KpiCardsSkeleton />}>
-            <InvoiceSummaryKpisSection storeId={filters.storeId} />
-          </Suspense>
-        </SectionErrorBoundary>
+      <div className="flex-1 overflow-auto px-4 pb-8 pt-4 sm:px-6 sm:pt-5">
+        <div className="mx-auto flex max-w-350 flex-col gap-5 sm:gap-6">
+          <InvoicesPeriodSelector
+            period={filters.period}
+            startDate={filters.startDate}
+            endDate={filters.endDate}
+            label={resolved.label}
+          />
 
-        <SectionErrorBoundary label="Charts unavailable">
-          <Suspense
-            fallback={
-              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-                <Skeleton className="h-[320px] w-full rounded-md" />
-                <Skeleton className="h-[320px] w-full rounded-md" />
-              </div>
-            }
-          >
-            <InvoiceSummaryChartsSection storeId={filters.storeId} />
-          </Suspense>
-        </SectionErrorBoundary>
+          <SectionErrorBoundary label="Spend trend unavailable">
+            <Suspense
+              fallback={<Skeleton className="h-80 w-full rounded-sm" />}
+            >
+              <SpendTrendSection filters={filters} />
+            </Suspense>
+          </SectionErrorBoundary>
 
-        <SectionErrorBoundary label="Top products unavailable">
-          <Suspense
-            fallback={<Skeleton className="h-28 w-full rounded-md" />}
-          >
-            <TopProductsSection storeId={filters.storeId} />
-          </Suspense>
-        </SectionErrorBoundary>
+          <SectionErrorBoundary label="Summary unavailable">
+            <Suspense fallback={<KpiCardsSkeleton />}>
+              <InvoiceSummaryKpisSection filters={filters} />
+            </Suspense>
+          </SectionErrorBoundary>
 
-        <SectionErrorBoundary label="Price movers unavailable">
-          <Suspense
-            fallback={<DataTableSkeleton columns={5} rows={3} />}
-          >
-            <PriceMoversSection />
-          </Suspense>
-        </SectionErrorBoundary>
+          <SectionErrorBoundary label="Invoice list unavailable">
+            <Suspense
+              fallback={
+                <div className="space-y-3">
+                  <Skeleton className="h-24 w-full rounded-sm" />
+                  <DataTableSkeleton columns={5} rows={8} />
+                </div>
+              }
+            >
+              <InvoicesListSection filters={filters} />
+            </Suspense>
+          </SectionErrorBoundary>
 
-        <SectionErrorBoundary label="Invoice list unavailable">
-          <Suspense
-            fallback={<DataTableSkeleton columns={7} rows={6} />}
-          >
-            <InvoicesListSection filters={filters} />
-          </Suspense>
-        </SectionErrorBoundary>
+          <SectionErrorBoundary label="Charts unavailable">
+            <Suspense
+              fallback={
+                <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                  <Skeleton className="h-80 w-full rounded-sm" />
+                  <Skeleton className="h-80 w-full rounded-sm" />
+                </div>
+              }
+            >
+              <InvoiceSummaryChartsSection filters={filters} />
+            </Suspense>
+          </SectionErrorBoundary>
+
+          <SectionErrorBoundary label="Top products unavailable">
+            <Suspense
+              fallback={<Skeleton className="h-28 w-full rounded-sm" />}
+            >
+              <TopProductsSection filters={filters} />
+            </Suspense>
+          </SectionErrorBoundary>
+
+          <SectionErrorBoundary label="Price movers unavailable">
+            <Suspense
+              fallback={<DataTableSkeleton columns={5} rows={3} />}
+            >
+              <PriceMoversSection />
+            </Suspense>
+          </SectionErrorBoundary>
+        </div>
       </div>
     </div>
   )

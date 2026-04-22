@@ -1,7 +1,7 @@
 "use client"
 
 import { useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Building2 } from "lucide-react"
 import {
   Select,
@@ -21,12 +21,15 @@ export function InvoicesStoreFilter({
   current,
 }: InvoicesStoreFilterProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
   const handleChange = (value: string) => {
     startTransition(() => {
-      const params = new URLSearchParams()
-      if (value !== "all") params.set("storeId", value)
+      const params = new URLSearchParams(searchParams?.toString() ?? "")
+      params.delete("page")
+      if (value === "all") params.delete("storeId")
+      else params.set("storeId", value)
       const qs = params.toString()
       router.replace(
         qs ? `/dashboard/invoices?${qs}` : "/dashboard/invoices",

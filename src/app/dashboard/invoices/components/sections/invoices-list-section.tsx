@@ -1,25 +1,38 @@
 import { InvoicesListClient } from "../invoices-list-client"
-import { fetchInvoiceList, type InvoiceFilters } from "./data"
+import { InvoicesFilterBar } from "../invoices-filter-bar"
+import { fetchInvoiceList, fetchSummary, type InvoiceFilters } from "./data"
 
 export async function InvoicesListSection({
   filters,
 }: {
   filters: InvoiceFilters
 }) {
-  const list = await fetchInvoiceList(
-    filters.storeId,
-    filters.status,
-    filters.page
-  )
+  const [list, summary] = await Promise.all([
+    fetchInvoiceList(
+      filters.storeId,
+      filters.status,
+      filters.vendor,
+      filters.startDate,
+      filters.endDate,
+      filters.page
+    ),
+    fetchSummary(filters.storeId, filters.startDate, filters.endDate),
+  ])
 
   return (
-    <InvoicesListClient
-      invoices={list.invoices}
-      total={list.total}
-      page={list.page}
-      totalPages={list.totalPages}
-      status={filters.status ?? "all"}
-      storeId={filters.storeId ?? "all"}
-    />
+    <div className="space-y-3">
+      <InvoicesFilterBar
+        vendor={filters.vendor ?? ""}
+        status={filters.status ?? "all"}
+        total={list.total}
+        needsReview={summary.pendingReviewCount}
+      />
+      <InvoicesListClient
+        invoices={list.invoices}
+        total={list.total}
+        page={list.page}
+        totalPages={list.totalPages}
+      />
+    </div>
   )
 }
