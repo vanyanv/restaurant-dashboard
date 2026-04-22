@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { computeRecipeCost } from "@/lib/recipe-cost"
+import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
+import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
 
 /** Internal: end-exclusive Prisma where for a date window. */
 function dateWindow(storeId: string, startDate: Date, endDate: Date) {
@@ -229,4 +231,201 @@ export async function getDataQualityCounts(
     unmapped: by("UNMAPPED"),
     missingCost: by("MISSING_COST"),
   }
+}
+
+export interface IngredientCostDriver {
+  canonicalIngredientId: string
+  name: string
+  /** Total theoretical $ across the period for this ingredient. */
+  theoreticalDollars: number
+  /** % of total period COGS represented by this ingredient. */
+  pctOfCogs: number
+  /** Latest known unit cost (asOf endDate). */
+  latestUnitCost: number | null
+  /** Unit cost as-of (startDate - 1ms) for the ▲▼ trend glyph. */
+  priorUnitCost: number | null
+  costUnit: string | null
+}
+
+/**
+ * Decompose period sales into ingredient-level theoretical usage and dollars.
+ *
+ * Approach (on-the-fly, no new materialization):
+ *   1. Group DailyCogsItem rows by recipeId (only COSTED + recipeId set).
+ *   2. For each recipe, walk RecipeIngredient → CanonicalIngredient (via the
+ *      same recipe-cost.ts machinery) and produce ingredient-level qty.
+ *   3. Multiply qty × ingredient.unitCost (asOf endDate) → theoretical $.
+ *   4. Aggregate by canonicalIngredientId.
+ *
+ * Sub-recipes are flattened: when a recipe has a componentRecipe, we recurse
+ * via the same cost helpers so the canonical ingredients deep inside roll up.
+ *
+ * NOTE: returns `[]` if the period has no costed sales.
+ */
+export async function getTopCostDriverIngredients(
+  storeId: string,
+  startDate: Date,
+  endDate: Date,
+  limit: number
+): Promise<IngredientCostDriver[]> {
+  // 1. Pull COSTED rows with a recipe in the period; group by recipeId
+  //    summing units sold (across all dates in the period).
+  const grouped = await prisma.dailyCogsItem.groupBy({
+    by: ["recipeId"],
+    where: {
+      ...dateWindow(storeId, startDate, endDate),
+      status: "COSTED",
+      recipeId: { not: null },
+    },
+    _sum: { qtySold: true, lineCost: true },
+  })
+
+  const totalCogs = grouped.reduce((acc, r) => acc + (r._sum.lineCost ?? 0), 0)
+  if (grouped.length === 0 || totalCogs <= 0) return []
+
+  // asOf for ingredient costs = the last second of the period so we use
+  // prices in effect across the period (matches recipe-cost.ts P&L convention).
+  const asOf = new Date(endDate.getTime() - 1)
+  const priorAsOf = new Date(startDate.getTime() - 1)
+
+  // 2. For each recipe, compute its cost breakdown once (memoized inside
+  //    computeRecipeCost). We rebuild the per-ingredient theoretical qty
+  //    by scaling the cost-line's quantity by the period's qtySold.
+  type Acc = {
+    name: string
+    theoreticalDollars: number
+    costUnit: string | null
+  }
+  const byIng = new Map<string, Acc>()
+
+  for (const g of grouped) {
+    if (!g.recipeId || !g._sum.qtySold) continue
+    const qtySold = g._sum.qtySold
+    const cost = await computeRecipeCost(g.recipeId, asOf)
+
+    // Walk only ingredient lines (sub-recipes are already flattened into the
+    // tree by computeRecipeCost — but its `lines` array preserves the top
+    // level. We need a deep walk: re-read the recipe tree's leaf canonicals).
+    // Simplest correct approach: pull all RecipeIngredient rows for this
+    // recipe transitively (sub-recipes too) and multiply their canonical
+    // contribution by qtySold.
+    const leaves = await flattenRecipeToCanonicals(g.recipeId)
+    for (const leaf of leaves) {
+      const lineUnitCost = leaf.unitCost ?? 0 // missing → 0 contribution
+      const dollars = qtySold * leaf.qtyPerServing * lineUnitCost
+      if (dollars <= 0) continue
+      const prev = byIng.get(leaf.canonicalIngredientId) ?? {
+        name: leaf.name,
+        theoreticalDollars: 0,
+        costUnit: leaf.costUnit,
+      }
+      prev.theoreticalDollars += dollars
+      byIng.set(leaf.canonicalIngredientId, prev)
+    }
+
+    // (We use computeRecipeCost above just to seed the memo cache and
+    // surface RecipeCycleError early.)
+    void cost
+  }
+
+  // 3. Resolve latest+prior unit cost per canonical (for the ▲▼ glyph).
+  const ids = Array.from(byIng.keys())
+  const [latestCosts, priorCosts] = await Promise.all([
+    Promise.all(ids.map((id) => getCanonicalIngredientCost(id, asOf))),
+    Promise.all(ids.map((id) => getCanonicalIngredientCost(id, priorAsOf))),
+  ])
+
+  const out: IngredientCostDriver[] = ids.map((id, i) => {
+    const acc = byIng.get(id)!
+    return {
+      canonicalIngredientId: id,
+      name: acc.name,
+      theoreticalDollars: acc.theoreticalDollars,
+      pctOfCogs:
+        totalCogs > 0 ? (acc.theoreticalDollars / totalCogs) * 100 : 0,
+      latestUnitCost: latestCosts[i]?.unitCost ?? null,
+      priorUnitCost: priorCosts[i]?.unitCost ?? null,
+      costUnit: acc.costUnit,
+    }
+  })
+
+  return out
+    .sort((a, b) => b.theoreticalDollars - a.theoreticalDollars)
+    .slice(0, limit)
+}
+
+/** Internal: flatten a recipe (with sub-recipes) into leaf canonical contributions. */
+interface CanonicalLeaf {
+  canonicalIngredientId: string
+  name: string
+  /** Quantity contributed *per serving* of the top-level recipe, expressed
+   *  in the canonical ingredient's costUnit (already converted). */
+  qtyPerServing: number
+  unitCost: number | null
+  costUnit: string | null
+}
+
+async function flattenRecipeToCanonicals(
+  recipeId: string,
+  multiplier = 1,
+  visited: Set<string> = new Set()
+): Promise<CanonicalLeaf[]> {
+  if (visited.has(recipeId)) return [] // cycle guard (should be impossible in DB)
+  visited.add(recipeId)
+
+  const recipe = await prisma.recipe.findUnique({
+    where: { id: recipeId },
+    select: {
+      ingredients: {
+        select: {
+          quantity: true,
+          unit: true,
+          ingredientName: true,
+          canonicalIngredientId: true,
+          componentRecipeId: true,
+          canonicalIngredient: { select: { id: true, name: true } },
+        },
+      },
+    },
+  })
+  if (!recipe) return []
+
+  const leaves: CanonicalLeaf[] = []
+  for (const ing of recipe.ingredients) {
+    if (ing.componentRecipeId) {
+      const sub = await flattenRecipeToCanonicals(
+        ing.componentRecipeId,
+        multiplier * ing.quantity,
+        new Set(visited)
+      )
+      leaves.push(...sub)
+      continue
+    }
+    if (!ing.canonicalIngredientId || !ing.canonicalIngredient) continue
+
+    // Convert this line's quantity to the canonical's costUnit, mirroring
+    // the math in recipe-cost.ts.
+    const cost = await getCanonicalIngredientCost(ing.canonicalIngredientId)
+    let qtyInCostUnit: number | null = ing.quantity
+    if (cost) {
+      const recipeUnit = canonicalizeUnit(ing.unit)
+      const costUnit = canonicalizeUnit(cost.unit)
+      if (recipeUnit && costUnit && recipeUnit !== costUnit) {
+        qtyInCostUnit = convert(ing.quantity, ing.unit, cost.unit)
+      } else if (!recipeUnit || !costUnit) {
+        const same =
+          ing.unit.trim().toLowerCase() === cost.unit.trim().toLowerCase()
+        if (!same) qtyInCostUnit = null
+      }
+    }
+
+    leaves.push({
+      canonicalIngredientId: ing.canonicalIngredientId,
+      name: ing.canonicalIngredient.name,
+      qtyPerServing: (qtyInCostUnit ?? 0) * multiplier,
+      unitCost: cost?.unitCost ?? null,
+      costUnit: cost?.unit ?? null,
+    })
+  }
+  return leaves
 }
