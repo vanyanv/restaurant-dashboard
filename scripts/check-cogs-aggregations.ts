@@ -25,6 +25,10 @@ async function main() {
     console.error("usage: pnpm tsx scripts/check-cogs-aggregations.ts <storeName> [days=30]")
     process.exit(1)
   }
+  if (!Number.isFinite(days) || days <= 0) {
+    console.error(`days must be a positive number, got "${process.argv[3]}"`)
+    process.exit(1)
+  }
 
   const store = await prisma.store.findFirst({
     where: { name: { contains: storeName, mode: "insensitive" } },

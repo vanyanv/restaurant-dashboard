@@ -43,5 +43,6 @@ export async function setStoreTargetCogsPct(
   })
 
   revalidatePath(`/dashboard/cogs/${store.id}`)
+  revalidatePath(`/dashboard/cogs`)
   return { ok: true, targetCogsPct: value }
 }
