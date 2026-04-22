@@ -88,7 +88,12 @@ model Store {
   // Platform commission rates (decimal, e.g. 0.21 = 21%). Applied to tpGrossSales on the P&L.
   uberCommissionRate     Float @default(0.21)
   doordashCommissionRate Float @default(0.25)
-  
+
+  // Per-store COGS target as a percent (e.g. 28.5 for 28.5%). Drives the
+  // /dashboard/cogs target band and the "vs target" KPI. Nullable so existing
+  // stores remain valid until set via the topbar chip.
+  targetCogsPct          Float?
+
   // Relations
   owner           User      @relation("StoreOwner", fields: [ownerId], references: [id])
   prepTasks       PrepTask[]
