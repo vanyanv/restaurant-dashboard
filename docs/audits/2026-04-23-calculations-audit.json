@@ -1,0 +1,1393 @@
+[
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945729735 — header $2,677.45 vs Σlines+tax $2,668.50 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80urx0000004jxzgkxiook",
+      "label": "Sysco Los Angeles, Inc. 945729735"
+    },
+    "details": {
+      "invoiceDate": "2026-03-19",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2677.45,
+      "lineSum": 2615.7900000000004,
+      "tax": 52.71,
+      "delta": 8.949999999999363,
+      "lineCount": 13
+    },
+    "deltaDollars": 8.949999999999363,
+    "deltaPct": 0.0033427328241421366
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945741472 — header $2,116.40 vs Σlines+tax $2,107.45 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us37001404jxs7pvbfqy",
+      "label": "Sysco Los Angeles, Inc. 945741472"
+    },
+    "details": {
+      "invoiceDate": "2026-03-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2116.4,
+      "lineSum": 2103.73,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.004228879228879358
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G44506-00 — header $749.70 vs Σlines+tax $743.75 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm18zy3n00102du94pb2r2bd",
+      "label": "Individual FoodService G44506-00"
+    },
+    "details": {
+      "invoiceDate": "2026-02-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 749.7,
+      "lineSum": 709.58,
+      "tax": 34.17,
+      "delta": 5.9500000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.007936507936507997
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G49714-00 — header $1,869.24 vs Σlines+tax $1,863.29 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm6tj9t100zo6iu9b0gift9l",
+      "label": "Individual FoodService G49714-00"
+    },
+    "details": {
+      "invoiceDate": "2026-02-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1869.24,
+      "lineSum": 1794.4,
+      "tax": 68.89,
+      "delta": 5.949999999999818,
+      "lineCount": 18
+    },
+    "deltaDollars": 5.949999999999818,
+    "deltaPct": 0.003183111852945485
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945828794 — header $1,985.26 vs Σlines+tax $1,975.26 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo7ju8x7000d04l22whv9d8t",
+      "label": "Sysco 945828794"
+    },
+    "details": {
+      "invoiceDate": "2026-04-18",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1985.26,
+      "lineSum": 1971.5399999999997,
+      "tax": 3.72,
+      "delta": 10.000000000000227,
+      "lineCount": 9
+    },
+    "deltaDollars": 10.000000000000227,
+    "deltaPct": 0.005037123600939035
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Bear State Kitchen 1076 — header $3,398.20 vs Σlines+tax $3,373.20 (Δ $25.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnxuj00iwx5u9e5oixx1f",
+      "label": "Bear State Kitchen 1076"
+    },
+    "details": {
+      "invoiceDate": "2026-01-15",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3398.2,
+      "lineSum": 3373.2,
+      "tax": 0,
+      "delta": 25,
+      "lineCount": 1
+    },
+    "deltaDollars": 25,
+    "deltaPct": 0.007356835971985169
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945798750 — header $3,154.42 vs Σlines+tax $3,144.42 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ufvfk0000keu9xx539jk6",
+      "label": "Sysco 945798750"
+    },
+    "details": {
+      "invoiceDate": "2026-04-09",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3154.42,
+      "lineSum": 3131.2599999999998,
+      "tax": 13.16,
+      "delta": 10.000000000000455,
+      "lineCount": 11
+    },
+    "deltaDollars": 10.000000000000455,
+    "deltaPct": 0.0031701548937682535
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G62143-00 — header $856.84 vs Σlines+tax $850.89 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjo0s700kcx5u9fmgqlivu",
+      "label": "Individual FoodService G62143-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-09",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 856.84,
+      "lineSum": 808.93,
+      "tax": 41.96,
+      "delta": 5.9500000000000455,
+      "lineCount": 12
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.006944120255823777
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945819855 — header $3,075.46 vs Σlines+tax $3,065.46 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo50946m0009lfu9uwispe1v",
+      "label": "Sysco Los Angeles, Inc. 945819855"
+    },
+    "details": {
+      "invoiceDate": "2026-04-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3075.46,
+      "lineSum": 3003.6299999999997,
+      "tax": 61.83,
+      "delta": 10.000000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 10.000000000000455,
+    "deltaPct": 0.0032515461101755364
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945788718 — header $3,060.11 vs Σlines+tax $3,050.11 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ugsb0000jkeu9zll49j8p",
+      "label": "Sysco 945788718"
+    },
+    "details": {
+      "invoiceDate": "2026-04-06",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3060.11,
+      "lineSum": 3029.959999999999,
+      "tax": 20.15,
+      "delta": 10.00000000000091,
+      "lineCount": 12
+    },
+    "deltaDollars": 10.00000000000091,
+    "deltaPct": 0.003267856384247922
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G79241-00 — header $1,094.06 vs Σlines+tax $1,088.11 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us0h000g04jx59bxu356",
+      "label": "Individual FoodService G79241-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1094.06,
+      "lineSum": 1051.32,
+      "tax": 36.79,
+      "delta": 5.9500000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.005438458585452393
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945736383 — header $2,244.39 vs Σlines+tax $2,235.44 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us2m000u04jxdnij8en4",
+      "label": "Sysco Los Angeles, Inc. 945736383"
+    },
+    "details": {
+      "invoiceDate": "2026-03-21",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2244.39,
+      "lineSum": 2231.72,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.00398772049421013
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G84442-00 — header $2,031.02 vs Σlines+tax $2,025.07 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us4e001f04jx1xi974hb",
+      "label": "Individual FoodService G84442-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2031.02,
+      "lineSum": 1934.6100000000001,
+      "tax": 90.46,
+      "delta": 5.949999999999818,
+      "lineCount": 24
+    },
+    "deltaDollars": 5.949999999999818,
+    "deltaPct": 0.0029295624858444616
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G95788-00 — header $1,543.56 vs Σlines+tax $1,535.81 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uhq05000ykeu9hus14h53",
+      "label": "Individual FoodService G95788-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-06",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1543.56,
+      "lineSum": 1474.06,
+      "tax": 61.75,
+      "delta": 7.75,
+      "lineCount": 21
+    },
+    "deltaDollars": 7.75,
+    "deltaPct": 0.005020860867086476
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945786246 — header $1,713.83 vs Σlines+tax $1,703.83 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ui2r3001kkeu92s1rgiga",
+      "label": "Sysco 945786246"
+    },
+    "details": {
+      "invoiceDate": "2026-04-04",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1713.83,
+      "lineSum": 1700.1000000000001,
+      "tax": 3.73,
+      "delta": 9.999999999999773,
+      "lineCount": 8
+    },
+    "deltaDollars": 9.999999999999773,
+    "deltaPct": 0.005834884440113531
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945752339 — header $3,045.88 vs Σlines+tax $3,036.93 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmnc5tbop000004johq0sdjyj",
+      "label": "Sysco Los Angeles, Inc. 945752339"
+    },
+    "details": {
+      "invoiceDate": "2026-03-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3045.88,
+      "lineSum": 2962.4,
+      "tax": 74.53,
+      "delta": 8.949999999999818,
+      "lineCount": 12
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.0029383954719161024
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService H09376-00 — header $1,157.25 vs Σlines+tax $1,149.50 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5094hc000nlfu9laa6gw8b",
+      "label": "Individual FoodService H09376-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1157.25,
+      "lineSum": 1096.89,
+      "tax": 52.61,
+      "delta": 7.75,
+      "lineCount": 20
+    },
+    "deltaDollars": 7.75,
+    "deltaPct": 0.006696910779866062
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945674659 — header $1,939.55 vs Σlines+tax $1,930.60 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnz0300j8x5u9747hpl78",
+      "label": "Sysco Los Angeles, Inc. 945674659"
+    },
+    "details": {
+      "invoiceDate": "2026-03-02",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1939.55,
+      "lineSum": 1926.88,
+      "tax": 3.72,
+      "delta": 8.949999999999818,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.0046144724291716215
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G67225-00 — header $1,056.02 vs Σlines+tax $1,050.07 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uoqwk0055keu9ccdallr1",
+      "label": "Individual FoodService G67225-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-12",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1056.02,
+      "lineSum": 1007.71,
+      "tax": 42.36,
+      "delta": 5.9500000000000455,
+      "lineCount": 12
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.005634362985549559
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945649371 — header $2,613.96 vs Σlines+tax $2,605.01 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm40uiw5000004juh1rz22ai",
+      "label": "Sysco Los Angeles, Inc. 945649371"
+    },
+    "details": {
+      "invoiceDate": "2026-02-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2613.96,
+      "lineSum": 2546.8799999999997,
+      "tax": 58.13,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.0034239238549940596
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945660521 — header $2,635.20 vs Σlines+tax $2,626.25 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm6tja5c01076iu928vqwd7o",
+      "label": "Sysco Los Angeles, Inc. 945660521"
+    },
+    "details": {
+      "invoiceDate": "2026-02-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2635.2,
+      "lineSum": 2622.5299999999997,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 10
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.0033963266545234795
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945807489 — header $1,654.83 vs Σlines+tax $1,644.83 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo509640001jlfu9eo42k4ux",
+      "label": "Sysco Los Angeles, Inc. 945807489"
+    },
+    "details": {
+      "invoiceDate": "2026-04-11",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1654.83,
+      "lineSum": 1636.3999999999999,
+      "tax": 8.43,
+      "delta": 10,
+      "lineCount": 9
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.0060429167950786485
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945809694 — header $1,897.47 vs Σlines+tax $1,887.47 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5094sf0018lfu98fmygnux",
+      "label": "Sysco Los Angeles, Inc. 945809694"
+    },
+    "details": {
+      "invoiceDate": "2026-04-13",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1897.47,
+      "lineSum": 1887.47,
+      "tax": 0,
+      "delta": 10,
+      "lineCount": 7
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.005270175549547555
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945668952 — header $1,892.35 vs Σlines+tax $1,883.40 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnxjm00inx5u9pwfavcw4",
+      "label": "Sysco Los Angeles, Inc. 945668952"
+    },
+    "details": {
+      "invoiceDate": "2026-02-28",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1892.35,
+      "lineSum": 1879.6799999999998,
+      "tax": 3.72,
+      "delta": 8.950000000000045,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.950000000000045,
+    "deltaPct": 0.004729569054350435
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945777245 — header $1,444.14 vs Σlines+tax $1,434.14 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uizpb0022keu9uhoyk0gs",
+      "label": "Sysco 945777245"
+    },
+    "details": {
+      "invoiceDate": "2026-04-02",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1444.14,
+      "lineSum": 1430.41,
+      "tax": 3.73,
+      "delta": 10,
+      "lineCount": 8
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.0069245364022878664
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945763808 — header $2,095.38 vs Σlines+tax $2,085.38 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ujtlg002bkeu9kgoudeyw",
+      "label": "Sysco 945763808"
+    },
+    "details": {
+      "invoiceDate": "2026-03-30",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2095.38,
+      "lineSum": 2060.1,
+      "tax": 25.28,
+      "delta": 10,
+      "lineCount": 10
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.0047724040508165585
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945685538 — header $2,643.91 vs Σlines+tax $2,634.96 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnzw900jpx5u98616a0q8",
+      "label": "Sysco 945685538"
+    },
+    "details": {
+      "invoiceDate": "2026-03-05",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2643.91,
+      "lineSum": 2631.24,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.003385137920731142
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G88326-00 — header $1,363.35 vs Σlines+tax $1,357.40 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ukhtf002mkeu9bocbkrrx",
+      "label": "Individual FoodService G88326-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-30",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1363.35,
+      "lineSum": 1311.4900000000002,
+      "tax": 45.91,
+      "delta": 5.949999999999591,
+      "lineCount": 15
+    },
+    "deltaDollars": 5.949999999999591,
+    "deltaPct": 0.004364249825796451
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945761642 — header $2,979.74 vs Σlines+tax $2,970.79 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ukzlg0032keu9jw10z5te",
+      "label": "Sysco 945761642"
+    },
+    "details": {
+      "invoiceDate": "2026-03-28",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2979.74,
+      "lineSum": 2967.0699999999993,
+      "tax": 3.72,
+      "delta": 8.950000000000728,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000728,
+    "deltaPct": 0.003003617765308627
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G76238-00 — header $922.78 vs Σlines+tax $916.83 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ulpo6003ekeu9vhilco0n",
+      "label": "Individual FoodService G76238-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-19",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 922.78,
+      "lineSum": 869.93,
+      "tax": 46.9,
+      "delta": 5.9500000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.006447907410217003
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945719143 — header $1,904.86 vs Σlines+tax $1,895.91 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6um3y5003skeu9jd0d8jd0",
+      "label": "Sysco 945719143"
+    },
+    "details": {
+      "invoiceDate": "2026-03-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1904.86,
+      "lineSum": 1895.91,
+      "tax": 0,
+      "delta": 8.949999999999818,
+      "lineCount": 7
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.004698508026836522
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945717028 — header $2,036.18 vs Σlines+tax $2,027.23 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6umhzp0040keu9granej7o",
+      "label": "Sysco 945717028"
+    },
+    "details": {
+      "invoiceDate": "2026-03-14",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2036.18,
+      "lineSum": 2023.5099999999998,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.004395485664332364
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G70746-00 — header $715.94 vs Σlines+tax $709.99 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6un4jp004ckeu9yr2e3mob",
+      "label": "Individual FoodService G70746-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 715.94,
+      "lineSum": 692.24,
+      "tax": 17.75,
+      "delta": 5.9500000000000455,
+      "lineCount": 10
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.00831075229767864
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945707660 — header $2,182.37 vs Σlines+tax $2,173.42 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6unpkl004pkeu94frmizbp",
+      "label": "Sysco 945707660"
+    },
+    "details": {
+      "invoiceDate": "2026-03-12",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2182.37,
+      "lineSum": 2163.97,
+      "tax": 9.45,
+      "delta": 8.950000000000273,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.0041010461104213644
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945696984 — header $2,659.36 vs Σlines+tax $2,650.41 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6updms005kkeu9jgzgboe3",
+      "label": "Sysco 945696984"
+    },
+    "details": {
+      "invoiceDate": "2026-03-09",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2659.36,
+      "lineSum": 2604.9100000000003,
+      "tax": 45.5,
+      "delta": 8.949999999999818,
+      "lineCount": 10
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.003365471391612951
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945828794 — header $1,985.26 vs Σlines+tax $1,975.26 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo77450h000004kvmhf45sen",
+      "label": "Sysco 945828794"
+    },
+    "details": {
+      "invoiceDate": "2026-04-18",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1985.26,
+      "lineSum": 1971.54,
+      "tax": 3.72,
+      "delta": 10,
+      "lineCount": 9
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.00503712360093892
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945831303 — header $6,422.52 vs Σlines+tax $6,412.52 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmoa1wl6t000004l29buyl779",
+      "label": "Sysco Los Angeles, Inc. 945831303"
+    },
+    "details": {
+      "invoiceDate": "2026-04-20",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "REVIEW",
+      "header": 6422.52,
+      "lineSum": 6408.8099999999995,
+      "tax": 3.71,
+      "delta": 10.00000000000091,
+      "lineCount": 10
+    },
+    "deltaDollars": 10.00000000000091,
+    "deltaPct": 0.0015570212315416548
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService H04728-00 — header $1,038.89 vs Σlines+tax $1,031.14 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5096qc001wlfu9t9r2us61",
+      "label": "Individual FoodService H04728-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-13",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "REVIEW",
+      "header": 1038.89,
+      "lineSum": 993.7500000000002,
+      "tax": 37.39,
+      "delta": 7.749999999999773,
+      "lineCount": 15
+    },
+    "deltaDollars": 7.749999999999773,
+    "deltaPct": 0.007459885069641417
+  },
+  {
+    "domain": "invoices",
+    "check": "line_arithmetic",
+    "severity": "CRITICAL",
+    "message": "Sysco Los Angeles, Inc. 945831303 line 2 \"Beef Ground Bulk 75/25 CHUB\" — 15 × $4.51 = $67.60, got $4,098.22",
+    "entity": {
+      "kind": "lineItem",
+      "id": "cmoarc83600205su9ogg1uwzz",
+      "label": "Sysco Los Angeles, Inc. 945831303 / Beef Ground Bulk 75/25 CHUB"
+    },
+    "details": {
+      "invoiceId": "cmoa1wl6t000004l29buyl779",
+      "lineNumber": 2,
+      "productName": "Beef Ground Bulk 75/25 CHUB",
+      "sku": "1029562",
+      "quantity": 15,
+      "unitPrice": 4.507,
+      "extendedPrice": 4098.22,
+      "computed": 67.60499999999999,
+      "delta": 4030.6150000000002
+    },
+    "deltaDollars": 4030.6150000000002,
+    "deltaPct": 0.9835038138508914
+  },
+  {
+    "domain": "invoices",
+    "check": "line_arithmetic",
+    "severity": "CRITICAL",
+    "message": "Premier Meats & Crystal Bay 2232461 line 1 \"GROUND BEEF FINE GRND 73/27 CREEKSTONE\" — 8 × $4.60 = $36.80, got $2,242.59",
+    "entity": {
+      "kind": "lineItem",
+      "id": "cmoar8xwc000l5su9bohb05vd",
+      "label": "Premier Meats & Crystal Bay 2232461 / GROUND BEEF FINE GRND 73/27 CREEKSTONE"
+    },
+    "details": {
+      "invoiceId": "cmn80us56002404jxhelpbyg0",
+      "lineNumber": 1,
+      "productName": "GROUND BEEF FINE GRND 73/27 CREEKSTONE",
+      "sku": "0014046-01",
+      "quantity": 8,
+      "unitPrice": 4.6,
+      "extendedPrice": 2242.59,
+      "computed": 36.8,
+      "delta": 2205.79
+    },
+    "deltaDollars": 2205.79,
+    "deltaPct": 0.9835904021689207
+  },
+  {
+    "domain": "invoices",
+    "check": "line_arithmetic",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService H04728-00 line 7 \"Syrup Hi-C Fruit Punch Flashin\" — 1 × $124.68 = $124.68, got $0.00",
+    "entity": {
+      "kind": "lineItem",
+      "id": "cmoar9z8b000w5su9rlw05qvy",
+      "label": "Individual FoodService H04728-00 / Syrup Hi-C Fruit Punch Flashin"
+    },
+    "details": {
+      "invoiceId": "cmo5096qc001wlfu9t9r2us61",
+      "lineNumber": 7,
+      "productName": "Syrup Hi-C Fruit Punch Flashin",
+      "sku": "NFBGFP",
+      "quantity": 1,
+      "unitPrice": 124.68,
+      "extendedPrice": 0,
+      "computed": 124.68,
+      "delta": -124.68
+    },
+    "deltaDollars": 124.68,
+    "deltaPct": null
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "fuel surcharge — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uav8000s3nu9cnnsen3o",
+      "label": "fuel surcharge"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ketchup vol-pack heinz — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uc5k001e3nu9no4mc4np",
+      "label": "ketchup vol-pack heinz"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "sys cls mayonnaise banquet xhv duty — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wdw001jiku91l5vnsuk",
+      "label": "sys cls mayonnaise banquet xhv duty"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "sugar packet — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wk9001liku92r0b9ozh",
+      "label": "sugar packet"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "bleach 6% epa registered — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1vl9001biku9vaoh4w25",
+      "label": "bleach 6% epa registered"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "hellmann mayonnaise extra heavy — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1vsa001diku9vo9c3xpf",
+      "label": "hellmann mayonnaise extra heavy"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "syrup pibb xtra — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wqm001niku9057zgfaa",
+      "label": "syrup pibb xtra"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "cup plastic 10 oz clear pp — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wwt001piku91stqwcpf",
+      "label": "cup plastic 10 oz clear pp"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ground beef fine grnd 73/27 creekstone — latest invoice line can't be converted to lb (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58ufid002y3nu9f9sbsnoz",
+      "label": "ground beef fine grnd 73/27 creekstone"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "lb",
+      "lineUnit": "CS",
+      "unitSizeUom": null,
+      "vendorName": "Sysco Los Angeles, Inc.",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "bag t-shirt white 12x7x22 17mic with warning — canonical has no costPerRecipeUnit but latest invoice derives $0.04/each",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1x5v001riku97k5jz2po",
+      "label": "bag t-shirt white 12x7x22 17mic with warning"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "derived": 0.03657407407407407,
+      "recipeUnit": "each",
+      "vendorName": "Individual FoodService",
+      "invoiceDate": "2026-03-19"
+    },
+    "deltaDollars": 0.03657407407407407
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "imported fresh tomato bulk 5x6 fresh — latest invoice line can't be converted to lb (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uhax003s3nu992dz4iob",
+      "label": "imported fresh tomato bulk 5x6 fresh"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "lb",
+      "lineUnit": "CS",
+      "unitSizeUom": null,
+      "vendorName": "Sysco Los Angeles, Inc.",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ctecocrft paper wax deli — latest invoice line can't be converted to oz (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58ugcj003c3nu98lwa4t2j",
+      "label": "ctecocrft paper wax deli"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "oz",
+      "lineUnit": "CS",
+      "unitSizeUom": "IN",
+      "vendorName": "Sysco Los Angeles, Inc.",
+      "invoiceDate": "2026-03-03",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "can liner 40 x 46 1.5 mil black roll — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uhwe00423nu9mp6q2rxn",
+      "label": "can liner 40 x 46 1.5 mil black roll"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "paper roll thermal 3-1/8 x 220 ft bpa/bps free — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58upyt00783nu9xdsh382i",
+      "label": "paper roll thermal 3-1/8 x 220 ft bpa/bps free"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "embossed bath tissue 2-ply recycled individually wrapped — latest invoice line can't be converted to cs (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uq2y007a3nu9e7ljw3u5",
+      "label": "embossed bath tissue 2-ply recycled individually wrapped"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "cs",
+      "lineUnit": "CS",
+      "unitSizeUom": "CT",
+      "vendorName": "Individual FoodService",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "tray pulp 4-cup carrier 8-32 oz — latest invoice line can't be converted to cs (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uq74007c3nu99nk8f9sc",
+      "label": "tray pulp 4-cup carrier 8-32 oz"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "cs",
+      "lineUnit": "CS",
+      "unitSizeUom": "OZ",
+      "vendorName": "Individual FoodService",
+      "invoiceDate": "2026-04-06",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "cogs-materialization",
+    "check": "unmapped_weighted",
+    "severity": "WARNING",
+    "message": "Hollywood — MISSING_COST covers 3.0% of revenue ($38,177.26 over 925 rows)",
+    "entity": {
+      "kind": "store",
+      "id": "cmexd4zia0001jr04ljkdt9na",
+      "label": "Hollywood"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "status": "MISSING_COST",
+      "revenue": 38177.25999999996,
+      "rows": 925,
+      "totalRevenue": 1272929.9599999909,
+      "share": 0.02999164227386103
+    },
+    "deltaDollars": 38177.25999999996,
+    "deltaPct": 0.02999164227386103
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"CVT Ice Cream - Vanilla\" has $516.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::CVT Ice Cream - Vanilla",
+      "label": "CVT Ice Cream - Vanilla"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "CVT Ice Cream - Vanilla",
+      "revenue": 516,
+      "qtySold": 76
+    },
+    "deltaDollars": 516
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Viral Dubai Chocolate\" has $84.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Viral Dubai Chocolate",
+      "label": "Viral Dubai Chocolate"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Viral Dubai Chocolate",
+      "revenue": 84,
+      "qtySold": 3
+    },
+    "deltaDollars": 84
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"SUPER BOWL BOX [LIMITED TIME ONLY]\" has $120.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::SUPER BOWL BOX [LIMITED TIME ONLY]",
+      "label": "SUPER BOWL BOX [LIMITED TIME ONLY]"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "SUPER BOWL BOX [LIMITED TIME ONLY]",
+      "revenue": 120,
+      "qtySold": 3
+    },
+    "deltaDollars": 120
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Signature Slider Fries and Drink Combo\" has $271.92 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Signature Slider Fries and Drink Combo",
+      "label": "Signature Slider Fries and Drink Combo"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Signature Slider Fries and Drink Combo",
+      "revenue": 271.91999999999996,
+      "qtySold": 15
+    },
+    "deltaDollars": 271.91999999999996
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Dr. Pepper (20 oz cup)\" has $713.98 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Dr. Pepper (20 oz cup)",
+      "label": "Dr. Pepper (20 oz cup)"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Dr. Pepper (20 oz cup)",
+      "revenue": 713.98,
+      "qtySold": 208
+    },
+    "deltaDollars": 713.98
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Hi-C Fruit Punch\" has $56.41 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Hi-C Fruit Punch",
+      "label": "Hi-C Fruit Punch"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Hi-C Fruit Punch",
+      "revenue": 56.410000000000025,
+      "qtySold": 19
+    },
+    "deltaDollars": 56.410000000000025
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"SUPER BOWL BOX\" has $288.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::SUPER BOWL BOX",
+      "label": "SUPER BOWL BOX"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "SUPER BOWL BOX",
+      "revenue": 288,
+      "qtySold": 6
+    },
+    "deltaDollars": 288
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"CVT Ice Cream - Chocolate\" has $486.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::CVT Ice Cream - Chocolate",
+      "label": "CVT Ice Cream - Chocolate"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "CVT Ice Cream - Chocolate",
+      "revenue": 486,
+      "qtySold": 68
+    },
+    "deltaDollars": 486
+  },
+  {
+    "domain": "pnl-aggregation",
+    "check": "cogs_pct_sanity",
+    "severity": "WARNING",
+    "message": "Hollywood — 90d COGS% = 14.3% (revenue $719,919.21, cogs $102,938.58) — outside typical 15–65% band",
+    "entity": {
+      "kind": "store",
+      "id": "cmexd4zia0001jr04ljkdt9na",
+      "label": "Hollywood"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "cogsPct": 14.298629176944033,
+      "cogsDollars": 102938.57821148497,
+      "revenueDollars": 719919.21,
+      "targetCogsPct": 30
+    },
+    "deltaDollars": 113037.184788515,
+    "deltaPct": 0.14298629176944033
+  }
+]

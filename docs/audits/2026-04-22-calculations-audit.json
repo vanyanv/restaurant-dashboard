@@ -1,0 +1,5276 @@
+[
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945729735 — header $2,677.45 vs Σlines+tax $2,668.50 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80urx0000004jxzgkxiook",
+      "label": "Sysco Los Angeles, Inc. 945729735"
+    },
+    "details": {
+      "invoiceDate": "2026-03-19",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2677.45,
+      "lineSum": 2615.7900000000004,
+      "tax": 52.71,
+      "delta": 8.949999999999363,
+      "lineCount": 13
+    },
+    "deltaDollars": 8.949999999999363,
+    "deltaPct": 0.0033427328241421366
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945741472 — header $2,116.40 vs Σlines+tax $2,107.45 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us37001404jxs7pvbfqy",
+      "label": "Sysco Los Angeles, Inc. 945741472"
+    },
+    "details": {
+      "invoiceDate": "2026-03-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2116.4,
+      "lineSum": 2103.73,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.004228879228879358
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G44506-00 — header $749.70 vs Σlines+tax $743.75 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm18zy3n00102du94pb2r2bd",
+      "label": "Individual FoodService G44506-00"
+    },
+    "details": {
+      "invoiceDate": "2026-02-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 749.7,
+      "lineSum": 709.58,
+      "tax": 34.17,
+      "delta": 5.9500000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.007936507936507997
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G49714-00 — header $1,869.24 vs Σlines+tax $1,863.29 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm6tj9t100zo6iu9b0gift9l",
+      "label": "Individual FoodService G49714-00"
+    },
+    "details": {
+      "invoiceDate": "2026-02-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1869.24,
+      "lineSum": 1794.4,
+      "tax": 68.89,
+      "delta": 5.949999999999818,
+      "lineCount": 18
+    },
+    "deltaDollars": 5.949999999999818,
+    "deltaPct": 0.003183111852945485
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945828794 — header $1,985.26 vs Σlines+tax $1,975.26 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo7ju8x7000d04l22whv9d8t",
+      "label": "Sysco 945828794"
+    },
+    "details": {
+      "invoiceDate": "2026-04-18",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1985.26,
+      "lineSum": 1971.5399999999997,
+      "tax": 3.72,
+      "delta": 10.000000000000227,
+      "lineCount": 9
+    },
+    "deltaDollars": 10.000000000000227,
+    "deltaPct": 0.005037123600939035
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Bear State Kitchen 1076 — header $3,398.20 vs Σlines+tax $3,373.20 (Δ $25.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnxuj00iwx5u9e5oixx1f",
+      "label": "Bear State Kitchen 1076"
+    },
+    "details": {
+      "invoiceDate": "2026-01-15",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3398.2,
+      "lineSum": 3373.2,
+      "tax": 0,
+      "delta": 25,
+      "lineCount": 1
+    },
+    "deltaDollars": 25,
+    "deltaPct": 0.007356835971985169
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945798750 — header $3,154.42 vs Σlines+tax $3,144.42 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ufvfk0000keu9xx539jk6",
+      "label": "Sysco 945798750"
+    },
+    "details": {
+      "invoiceDate": "2026-04-09",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3154.42,
+      "lineSum": 3131.2599999999998,
+      "tax": 13.16,
+      "delta": 10.000000000000455,
+      "lineCount": 11
+    },
+    "deltaDollars": 10.000000000000455,
+    "deltaPct": 0.0031701548937682535
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G62143-00 — header $856.84 vs Σlines+tax $850.89 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjo0s700kcx5u9fmgqlivu",
+      "label": "Individual FoodService G62143-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-09",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 856.84,
+      "lineSum": 808.93,
+      "tax": 41.96,
+      "delta": 5.9500000000000455,
+      "lineCount": 12
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.006944120255823777
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945819855 — header $3,075.46 vs Σlines+tax $3,065.46 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo50946m0009lfu9uwispe1v",
+      "label": "Sysco Los Angeles, Inc. 945819855"
+    },
+    "details": {
+      "invoiceDate": "2026-04-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3075.46,
+      "lineSum": 3003.6299999999997,
+      "tax": 61.83,
+      "delta": 10.000000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 10.000000000000455,
+    "deltaPct": 0.0032515461101755364
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945788718 — header $3,060.11 vs Σlines+tax $3,050.11 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ugsb0000jkeu9zll49j8p",
+      "label": "Sysco 945788718"
+    },
+    "details": {
+      "invoiceDate": "2026-04-06",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3060.11,
+      "lineSum": 3029.959999999999,
+      "tax": 20.15,
+      "delta": 10.00000000000091,
+      "lineCount": 12
+    },
+    "deltaDollars": 10.00000000000091,
+    "deltaPct": 0.003267856384247922
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G79241-00 — header $1,094.06 vs Σlines+tax $1,088.11 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us0h000g04jx59bxu356",
+      "label": "Individual FoodService G79241-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1094.06,
+      "lineSum": 1051.32,
+      "tax": 36.79,
+      "delta": 5.9500000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.005438458585452393
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945736383 — header $2,244.39 vs Σlines+tax $2,235.44 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us2m000u04jxdnij8en4",
+      "label": "Sysco Los Angeles, Inc. 945736383"
+    },
+    "details": {
+      "invoiceDate": "2026-03-21",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2244.39,
+      "lineSum": 2231.72,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.00398772049421013
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G84442-00 — header $2,031.02 vs Σlines+tax $2,025.07 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmn80us4e001f04jx1xi974hb",
+      "label": "Individual FoodService G84442-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2031.02,
+      "lineSum": 1934.6100000000001,
+      "tax": 90.46,
+      "delta": 5.949999999999818,
+      "lineCount": 24
+    },
+    "deltaDollars": 5.949999999999818,
+    "deltaPct": 0.0029295624858444616
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G95788-00 — header $1,543.56 vs Σlines+tax $1,535.81 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uhq05000ykeu9hus14h53",
+      "label": "Individual FoodService G95788-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-06",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1543.56,
+      "lineSum": 1474.06,
+      "tax": 61.75,
+      "delta": 7.75,
+      "lineCount": 21
+    },
+    "deltaDollars": 7.75,
+    "deltaPct": 0.005020860867086476
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945786246 — header $1,713.83 vs Σlines+tax $1,703.83 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ui2r3001kkeu92s1rgiga",
+      "label": "Sysco 945786246"
+    },
+    "details": {
+      "invoiceDate": "2026-04-04",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1713.83,
+      "lineSum": 1700.1000000000001,
+      "tax": 3.73,
+      "delta": 9.999999999999773,
+      "lineCount": 8
+    },
+    "deltaDollars": 9.999999999999773,
+    "deltaPct": 0.005834884440113531
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945752339 — header $3,045.88 vs Σlines+tax $3,036.93 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmnc5tbop000004johq0sdjyj",
+      "label": "Sysco Los Angeles, Inc. 945752339"
+    },
+    "details": {
+      "invoiceDate": "2026-03-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 3045.88,
+      "lineSum": 2962.4,
+      "tax": 74.53,
+      "delta": 8.949999999999818,
+      "lineCount": 12
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.0029383954719161024
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService H09376-00 — header $1,157.25 vs Σlines+tax $1,149.50 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5094hc000nlfu9laa6gw8b",
+      "label": "Individual FoodService H09376-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1157.25,
+      "lineSum": 1096.89,
+      "tax": 52.61,
+      "delta": 7.75,
+      "lineCount": 20
+    },
+    "deltaDollars": 7.75,
+    "deltaPct": 0.006696910779866062
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945831303 — header $6,422.52 vs Σlines+tax $6,412.52 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmoa1wl6t000004l29buyl779",
+      "label": "Sysco Los Angeles, Inc. 945831303"
+    },
+    "details": {
+      "invoiceDate": "2026-04-20",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 6422.52,
+      "lineSum": 6408.8099999999995,
+      "tax": 3.71,
+      "delta": 10.00000000000091,
+      "lineCount": 10
+    },
+    "deltaDollars": 10.00000000000091,
+    "deltaPct": 0.0015570212315416548
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945674659 — header $1,939.55 vs Σlines+tax $1,930.60 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnz0300j8x5u9747hpl78",
+      "label": "Sysco Los Angeles, Inc. 945674659"
+    },
+    "details": {
+      "invoiceDate": "2026-03-02",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1939.55,
+      "lineSum": 1926.88,
+      "tax": 3.72,
+      "delta": 8.949999999999818,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.0046144724291716215
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G67225-00 — header $1,056.02 vs Σlines+tax $1,050.07 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uoqwk0055keu9ccdallr1",
+      "label": "Individual FoodService G67225-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-12",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1056.02,
+      "lineSum": 1007.71,
+      "tax": 42.36,
+      "delta": 5.9500000000000455,
+      "lineCount": 12
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.005634362985549559
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945649371 — header $2,613.96 vs Σlines+tax $2,605.01 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm40uiw5000004juh1rz22ai",
+      "label": "Sysco Los Angeles, Inc. 945649371"
+    },
+    "details": {
+      "invoiceDate": "2026-02-23",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2613.96,
+      "lineSum": 2546.8799999999997,
+      "tax": 58.13,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.0034239238549940596
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945660521 — header $2,635.20 vs Σlines+tax $2,626.25 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmm6tja5c01076iu928vqwd7o",
+      "label": "Sysco Los Angeles, Inc. 945660521"
+    },
+    "details": {
+      "invoiceDate": "2026-02-26",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2635.2,
+      "lineSum": 2622.5299999999997,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 10
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.0033963266545234795
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945807489 — header $1,654.83 vs Σlines+tax $1,644.83 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo509640001jlfu9eo42k4ux",
+      "label": "Sysco Los Angeles, Inc. 945807489"
+    },
+    "details": {
+      "invoiceDate": "2026-04-11",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1654.83,
+      "lineSum": 1636.3999999999999,
+      "tax": 8.43,
+      "delta": 10,
+      "lineCount": 9
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.0060429167950786485
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945809694 — header $1,897.47 vs Σlines+tax $1,887.47 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5094sf0018lfu98fmygnux",
+      "label": "Sysco Los Angeles, Inc. 945809694"
+    },
+    "details": {
+      "invoiceDate": "2026-04-13",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1897.47,
+      "lineSum": 1887.47,
+      "tax": 0,
+      "delta": 10,
+      "lineCount": 7
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.005270175549547555
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco Los Angeles, Inc. 945668952 — header $1,892.35 vs Σlines+tax $1,883.40 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnxjm00inx5u9pwfavcw4",
+      "label": "Sysco Los Angeles, Inc. 945668952"
+    },
+    "details": {
+      "invoiceDate": "2026-02-28",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1892.35,
+      "lineSum": 1879.6799999999998,
+      "tax": 3.72,
+      "delta": 8.950000000000045,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.950000000000045,
+    "deltaPct": 0.004729569054350435
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945777245 — header $1,444.14 vs Σlines+tax $1,434.14 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uizpb0022keu9uhoyk0gs",
+      "label": "Sysco 945777245"
+    },
+    "details": {
+      "invoiceDate": "2026-04-02",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1444.14,
+      "lineSum": 1430.41,
+      "tax": 3.73,
+      "delta": 10,
+      "lineCount": 8
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.0069245364022878664
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945763808 — header $2,095.38 vs Σlines+tax $2,085.38 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ujtlg002bkeu9kgoudeyw",
+      "label": "Sysco 945763808"
+    },
+    "details": {
+      "invoiceDate": "2026-03-30",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2095.38,
+      "lineSum": 2060.1,
+      "tax": 25.28,
+      "delta": 10,
+      "lineCount": 10
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.0047724040508165585
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945685538 — header $2,643.91 vs Σlines+tax $2,634.96 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnzw900jpx5u98616a0q8",
+      "label": "Sysco 945685538"
+    },
+    "details": {
+      "invoiceDate": "2026-03-05",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2643.91,
+      "lineSum": 2631.24,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.003385137920731142
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G88326-00 — header $1,363.35 vs Σlines+tax $1,357.40 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ukhtf002mkeu9bocbkrrx",
+      "label": "Individual FoodService G88326-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-30",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1363.35,
+      "lineSum": 1311.4900000000002,
+      "tax": 45.91,
+      "delta": 5.949999999999591,
+      "lineCount": 15
+    },
+    "deltaDollars": 5.949999999999591,
+    "deltaPct": 0.004364249825796451
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945761642 — header $2,979.74 vs Σlines+tax $2,970.79 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ukzlg0032keu9jw10z5te",
+      "label": "Sysco 945761642"
+    },
+    "details": {
+      "invoiceDate": "2026-03-28",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2979.74,
+      "lineSum": 2967.0699999999993,
+      "tax": 3.72,
+      "delta": 8.950000000000728,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000728,
+    "deltaPct": 0.003003617765308627
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G76238-00 — header $922.78 vs Σlines+tax $916.83 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6ulpo6003ekeu9vhilco0n",
+      "label": "Individual FoodService G76238-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-19",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 922.78,
+      "lineSum": 869.93,
+      "tax": 46.9,
+      "delta": 5.9500000000000455,
+      "lineCount": 13
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.006447907410217003
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945719143 — header $1,904.86 vs Σlines+tax $1,895.91 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6um3y5003skeu9jd0d8jd0",
+      "label": "Sysco 945719143"
+    },
+    "details": {
+      "invoiceDate": "2026-03-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1904.86,
+      "lineSum": 1895.91,
+      "tax": 0,
+      "delta": 8.949999999999818,
+      "lineCount": 7
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.004698508026836522
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945717028 — header $2,036.18 vs Σlines+tax $2,027.23 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6umhzp0040keu9granej7o",
+      "label": "Sysco 945717028"
+    },
+    "details": {
+      "invoiceDate": "2026-03-14",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2036.18,
+      "lineSum": 2023.5099999999998,
+      "tax": 3.72,
+      "delta": 8.950000000000273,
+      "lineCount": 9
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.004395485664332364
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService G70746-00 — header $715.94 vs Σlines+tax $709.99 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6un4jp004ckeu9yr2e3mob",
+      "label": "Individual FoodService G70746-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-16",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 715.94,
+      "lineSum": 692.24,
+      "tax": 17.75,
+      "delta": 5.9500000000000455,
+      "lineCount": 10
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.00831075229767864
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945707660 — header $2,182.37 vs Σlines+tax $2,173.42 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6unpkl004pkeu94frmizbp",
+      "label": "Sysco 945707660"
+    },
+    "details": {
+      "invoiceDate": "2026-03-12",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2182.37,
+      "lineSum": 2163.97,
+      "tax": 9.45,
+      "delta": 8.950000000000273,
+      "lineCount": 8
+    },
+    "deltaDollars": 8.950000000000273,
+    "deltaPct": 0.0041010461104213644
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945696984 — header $2,659.36 vs Σlines+tax $2,650.41 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6updms005kkeu9jgzgboe3",
+      "label": "Sysco 945696984"
+    },
+    "details": {
+      "invoiceDate": "2026-03-09",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 2659.36,
+      "lineSum": 2604.9100000000003,
+      "tax": 45.5,
+      "delta": 8.949999999999818,
+      "lineCount": 10
+    },
+    "deltaDollars": 8.949999999999818,
+    "deltaPct": 0.003365471391612951
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Sysco 945828794 — header $1,985.26 vs Σlines+tax $1,975.26 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo77450h000004kvmhf45sen",
+      "label": "Sysco 945828794"
+    },
+    "details": {
+      "invoiceDate": "2026-04-18",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1985.26,
+      "lineSum": 1971.54,
+      "tax": 3.72,
+      "delta": 10,
+      "lineCount": 9
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.00503712360093892
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService G69364-00 — header $439.10 vs Σlines+tax $433.15 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uo135004ykeu94cul52r9",
+      "label": "Individual FoodService G69364-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-13",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 439.1,
+      "lineSum": 399.01,
+      "tax": 34.14,
+      "delta": 5.9500000000000455,
+      "lineCount": 4
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.013550444090184572
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService G53437-00 — header $549.28 vs Σlines+tax $543.33 (Δ $5.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uptj5005vkeu9bw50ga46",
+      "label": "Individual FoodService G53437-00"
+    },
+    "details": {
+      "invoiceDate": "2026-03-02",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 549.28,
+      "lineSum": 506.23999999999995,
+      "tax": 37.09,
+      "delta": 5.9500000000000455,
+      "lineCount": 9
+    },
+    "deltaDollars": 5.9500000000000455,
+    "deltaPct": 0.010832362365278266
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Sysco Los Angeles, Inc. 945679552 — header $387.82 vs Σlines+tax $378.87 (Δ $8.95)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmmjjnzaw00jhx5u9wq57rhx2",
+      "label": "Sysco Los Angeles, Inc. 945679552"
+    },
+    "details": {
+      "invoiceDate": "2026-03-03",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 387.82,
+      "lineSum": 344.42,
+      "tax": 34.45,
+      "delta": 8.949999999999989,
+      "lineCount": 3
+    },
+    "deltaDollars": 8.949999999999989,
+    "deltaPct": 0.023077716466401912
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Sysco 945780455 — header $517.50 vs Σlines+tax $507.50 (Δ $10.00)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo6uig6d001vkeu9i1vb04fd",
+      "label": "Sysco 945780455"
+    },
+    "details": {
+      "invoiceDate": "2026-04-03",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 517.5,
+      "lineSum": 507.5,
+      "tax": 0,
+      "delta": 10,
+      "lineCount": 2
+    },
+    "deltaDollars": 10,
+    "deltaPct": 0.01932367149758454
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "WARNING",
+    "message": "Individual FoodService H04728-00 — header $1,038.89 vs Σlines+tax $1,031.14 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5096qc001wlfu9t9r2us61",
+      "label": "Individual FoodService H04728-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-13",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 1038.89,
+      "lineSum": 993.7500000000002,
+      "tax": 37.39,
+      "delta": 7.749999999999773,
+      "lineCount": 15
+    },
+    "deltaDollars": 7.749999999999773,
+    "deltaPct": 0.007459885069641417
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService H10889-00 — header $363.67 vs Σlines+tax $355.92 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo5093vc0002lfu9sitaow8m",
+      "label": "Individual FoodService H10889-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-17",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 363.67,
+      "lineSum": 330.80999999999995,
+      "tax": 25.11,
+      "delta": 7.750000000000057,
+      "lineCount": 6
+    },
+    "deltaDollars": 7.750000000000057,
+    "deltaPct": 0.021310528776088366
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService H12702-00 — header $704.08 vs Σlines+tax $696.33 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo7ju8zb000n04l284rvw65c",
+      "label": "Individual FoodService H12702-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-20",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 704.08,
+      "lineSum": 675.5099999999999,
+      "tax": 20.82,
+      "delta": 7.750000000000114,
+      "lineCount": 12
+    },
+    "deltaDollars": 7.750000000000114,
+    "deltaPct": 0.01100727190092051
+  },
+  {
+    "domain": "invoices",
+    "check": "header_vs_lines",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService H12702-00 — header $704.08 vs Σlines+tax $696.33 (Δ $7.75)",
+    "entity": {
+      "kind": "invoice",
+      "id": "cmo7ju8r0000004l27v47mhne",
+      "label": "Individual FoodService H12702-00"
+    },
+    "details": {
+      "invoiceDate": "2026-04-20",
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "status": "MATCHED",
+      "header": 704.08,
+      "lineSum": 675.5100000000001,
+      "tax": 20.82,
+      "delta": 7.749999999999886,
+      "lineCount": 12
+    },
+    "deltaDollars": 7.749999999999886,
+    "deltaPct": 0.011007271900920188
+  },
+  {
+    "domain": "invoices",
+    "check": "line_arithmetic",
+    "severity": "CRITICAL",
+    "message": "Sysco Los Angeles, Inc. 945831303 line 2 \"Beef Ground Bulk 75/25 CHUB\" — 15 × $4.51 = $67.60, got $4,098.22",
+    "entity": {
+      "kind": "lineItem",
+      "id": "cmoarc83600205su9ogg1uwzz",
+      "label": "Sysco Los Angeles, Inc. 945831303 / Beef Ground Bulk 75/25 CHUB"
+    },
+    "details": {
+      "invoiceId": "cmoa1wl6t000004l29buyl779",
+      "lineNumber": 2,
+      "productName": "Beef Ground Bulk 75/25 CHUB",
+      "sku": "1029562",
+      "quantity": 15,
+      "unitPrice": 4.507,
+      "extendedPrice": 4098.22,
+      "computed": 67.60499999999999,
+      "delta": 4030.6150000000002
+    },
+    "deltaDollars": 4030.6150000000002,
+    "deltaPct": 0.9835038138508914
+  },
+  {
+    "domain": "invoices",
+    "check": "line_arithmetic",
+    "severity": "CRITICAL",
+    "message": "Premier Meats & Crystal Bay 2232461 line 1 \"GROUND BEEF FINE GRND 73/27 CREEKSTONE\" — 8 × $4.60 = $36.80, got $2,242.59",
+    "entity": {
+      "kind": "lineItem",
+      "id": "cmoar8xwc000l5su9bohb05vd",
+      "label": "Premier Meats & Crystal Bay 2232461 / GROUND BEEF FINE GRND 73/27 CREEKSTONE"
+    },
+    "details": {
+      "invoiceId": "cmn80us56002404jxhelpbyg0",
+      "lineNumber": 1,
+      "productName": "GROUND BEEF FINE GRND 73/27 CREEKSTONE",
+      "sku": "0014046-01",
+      "quantity": 8,
+      "unitPrice": 4.6,
+      "extendedPrice": 2242.59,
+      "computed": 36.8,
+      "delta": 2205.79
+    },
+    "deltaDollars": 2205.79,
+    "deltaPct": 0.9835904021689207
+  },
+  {
+    "domain": "invoices",
+    "check": "line_arithmetic",
+    "severity": "CRITICAL",
+    "message": "Individual FoodService H04728-00 line 7 \"Syrup Hi-C Fruit Punch Flashin\" — 1 × $124.68 = $124.68, got $0.00",
+    "entity": {
+      "kind": "lineItem",
+      "id": "cmoar9z8b000w5su9rlw05qvy",
+      "label": "Individual FoodService H04728-00 / Syrup Hi-C Fruit Punch Flashin"
+    },
+    "details": {
+      "invoiceId": "cmo5096qc001wlfu9t9r2us61",
+      "lineNumber": 7,
+      "productName": "Syrup Hi-C Fruit Punch Flashin",
+      "sku": "NFBGFP",
+      "quantity": 1,
+      "unitPrice": 124.68,
+      "extendedPrice": 0,
+      "computed": 124.68,
+      "delta": -124.68
+    },
+    "deltaDollars": 124.68,
+    "deltaPct": null
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "fuel surcharge — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uav8000s3nu9cnnsen3o",
+      "label": "fuel surcharge"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ketchup vol-pack heinz — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uc5k001e3nu9no4mc4np",
+      "label": "ketchup vol-pack heinz"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ketchup heinz 33% fancy — latest invoice line can't be converted to lb (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58ubom00163nu96d28cmae",
+      "label": "ketchup heinz 33% fancy"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "lb",
+      "lineUnit": "CS",
+      "unitSizeUom": "#",
+      "vendorName": "Individual FoodService",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "sys cls mayonnaise banquet xhv duty — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wdw001jiku91l5vnsuk",
+      "label": "sys cls mayonnaise banquet xhv duty"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "sugar packet — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wk9001liku92r0b9ozh",
+      "label": "sugar packet"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "bleach 6% epa registered — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1vl9001biku9vaoh4w25",
+      "label": "bleach 6% epa registered"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "hellmann mayonnaise extra heavy — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1vsa001diku9vo9c3xpf",
+      "label": "hellmann mayonnaise extra heavy"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "syrup pibb xtra — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wqm001niku9057zgfaa",
+      "label": "syrup pibb xtra"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "cup plastic 10 oz clear pp — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1wwt001piku91stqwcpf",
+      "label": "cup plastic 10 oz clear pp"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "bag t-shirt white 12x7x22 17mic with warning — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo6v1x5v001riku97k5jz2po",
+      "label": "bag t-shirt white 12x7x22 17mic with warning"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ground beef fine grnd 73/27 creekstone — latest invoice line can't be converted to lb (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58ufid002y3nu9f9sbsnoz",
+      "label": "ground beef fine grnd 73/27 creekstone"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "lb",
+      "lineUnit": "CS",
+      "unitSizeUom": null,
+      "vendorName": "Sysco Los Angeles, Inc.",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "imported fresh tomato bulk 5x6 fresh — latest invoice line can't be converted to lb (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uhax003s3nu992dz4iob",
+      "label": "imported fresh tomato bulk 5x6 fresh"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "lb",
+      "lineUnit": "CS",
+      "unitSizeUom": null,
+      "vendorName": "Sysco Los Angeles, Inc.",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "ctecocrft paper wax deli — latest invoice line can't be converted to oz (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58ugcj003c3nu98lwa4t2j",
+      "label": "ctecocrft paper wax deli"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "oz",
+      "lineUnit": "CS",
+      "unitSizeUom": "IN",
+      "vendorName": "Sysco Los Angeles, Inc.",
+      "invoiceDate": "2026-03-03",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "can liner 40 x 46 1.5 mil black roll — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uhwe00423nu9mp6q2rxn",
+      "label": "can liner 40 x 46 1.5 mil black roll"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "paper roll thermal 3-1/8 x 220 ft bpa/bps free — canonical has matched invoice lines but no recipeUnit set (blocks cost derivation)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58upyt00783nu9xdsh382i",
+      "label": "paper roll thermal 3-1/8 x 220 ft bpa/bps free"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b"
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "embossed bath tissue 2-ply recycled individually wrapped — latest invoice line can't be converted to cs (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uq2y007a3nu9e7ljw3u5",
+      "label": "embossed bath tissue 2-ply recycled individually wrapped"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "cs",
+      "lineUnit": "CS",
+      "unitSizeUom": "CT",
+      "vendorName": "Individual FoodService",
+      "invoiceDate": "2026-04-20",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "invoices",
+    "check": "canonical_cost_freshness",
+    "severity": "WARNING",
+    "message": "tray pulp 4-cup carrier 8-32 oz — latest invoice line can't be converted to cs (derive returned null)",
+    "entity": {
+      "kind": "canonical",
+      "id": "cmo58uq74007c3nu99nk8f9sc",
+      "label": "tray pulp 4-cup carrier 8-32 oz"
+    },
+    "details": {
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "recipeUnit": "cs",
+      "lineUnit": "CS",
+      "unitSizeUom": "OZ",
+      "vendorName": "Individual FoodService",
+      "invoiceDate": "2026-04-06",
+      "hasConversion": true
+    }
+  },
+  {
+    "domain": "cogs-materialization",
+    "check": "unmapped_weighted",
+    "severity": "WARNING",
+    "message": "Hollywood — MISSING_COST covers 2.1% of revenue ($18,737.37 over 397 rows)",
+    "entity": {
+      "kind": "store",
+      "id": "cmexd4zia0001jr04ljkdt9na",
+      "label": "Hollywood"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "ownerId": "cmexb2vh30000uq0ryl52v12b",
+      "status": "MISSING_COST",
+      "revenue": 18737.369999999966,
+      "rows": 397,
+      "totalRevenue": 887295.2799999972,
+      "share": 0.021117400737215717
+    },
+    "deltaDollars": 18737.369999999966,
+    "deltaPct": 0.021117400737215717
+  },
+  {
+    "domain": "cogs-materialization",
+    "check": "stale_vs_asof",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-22 \"2 Triples and Fries\" — stored $5.64/unit vs recompute $5.06 (Δ × 2 = $1.15)",
+    "entity": {
+      "kind": "dailyCogsItem",
+      "id": "cmoaqev520372jcu9bv2oefka",
+      "label": "2 Triples and Fries"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-22",
+      "stored": 5.639522461014119,
+      "recomputed": 5.064439246728404,
+      "delta": 0.5750832142857147,
+      "qtySold": 2,
+      "rowImpact": 1.1501664285714295,
+      "lineCost": 11.279044922028238,
+      "recipeId": "cmm48cs5a002ioxu9wgmll7bq"
+    },
+    "deltaDollars": 1.1501664285714295
+  },
+  {
+    "domain": "cogs-materialization",
+    "check": "stale_vs_asof",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-22 \"Signature Double Patty & Cheese Slider (Chris' or Eddy's Way)\" — stored $1.52/unit vs recompute $1.38 (Δ × 59 = $8.44)",
+    "entity": {
+      "kind": "dailyCogsItem",
+      "id": "cmoaqev52036ujcu9ivm0fjhz",
+      "label": "Signature Double Patty & Cheese Slider (Chris' or Eddy's Way)"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-22",
+      "stored": 1.5182969885102104,
+      "recomputed": 1.3752776220856744,
+      "delta": 0.14301936642453605,
+      "qtySold": 59,
+      "rowImpact": 8.438142619047627,
+      "lineCost": 89.57952232210242,
+      "recipeId": "cmm48col00004oxu974h17umo"
+    },
+    "deltaDollars": 8.438142619047627
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-04 — Σ orders $11,860.75 vs daily summary $10,997.75 (Δ $863.00)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-04",
+      "label": "Hollywood 2026-04-04"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-04",
+      "orderSubtotalSum": 11860.749999999967,
+      "summaryGrossSum": 10997.750000000002,
+      "delta": 862.9999999999654,
+      "orderCount": 403
+    },
+    "deltaDollars": 862.9999999999654,
+    "deltaPct": 0.0727609974074125
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-11 — Σ orders $10,530.67 vs daily summary $9,661.34 (Δ $869.33)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-11",
+      "label": "Hollywood 2026-04-11"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-11",
+      "orderSubtotalSum": 10530.669999999978,
+      "summaryGrossSum": 9661.34,
+      "delta": 869.3299999999781,
+      "orderCount": 358
+    },
+    "deltaDollars": 869.3299999999781,
+    "deltaPct": 0.08255220228152434
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-22 — Σ orders $12,176.24 vs daily summary $12,302.37 (Δ -$126.13)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-22",
+      "label": "Hollywood 2026-03-22"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-22",
+      "orderSubtotalSum": 12176.239999999983,
+      "summaryGrossSum": 12302.37,
+      "delta": -126.13000000001739,
+      "orderCount": 412
+    },
+    "deltaDollars": 126.13000000001739,
+    "deltaPct": 0.010252496063767987
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-15 — Σ orders $7,543.31 vs daily summary $7,163.96 (Δ $379.35)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-15",
+      "label": "Hollywood 2026-04-15"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-15",
+      "orderSubtotalSum": 7543.309999999986,
+      "summaryGrossSum": 7163.960000000001,
+      "delta": 379.3499999999849,
+      "orderCount": 259
+    },
+    "deltaDollars": 379.3499999999849,
+    "deltaPct": 0.05028959435579151
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-14 — Σ orders $7,277.15 vs daily summary $6,907.00 (Δ $370.15)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-14",
+      "label": "Hollywood 2026-04-14"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-14",
+      "orderSubtotalSum": 7277.149999999988,
+      "summaryGrossSum": 6907.000000000002,
+      "delta": 370.149999999986,
+      "orderCount": 253
+    },
+    "deltaDollars": 370.149999999986,
+    "deltaPct": 0.0508646929086231
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-09 — Σ orders $8,510.47 vs daily summary $8,124.65 (Δ $385.82)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-09",
+      "label": "Hollywood 2026-04-09"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-09",
+      "orderSubtotalSum": 8510.469999999981,
+      "summaryGrossSum": 8124.650000000001,
+      "delta": 385.8199999999806,
+      "orderCount": 300
+    },
+    "deltaDollars": 385.8199999999806,
+    "deltaPct": 0.04533474649460975
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-24 — Σ orders $10,024.70 vs daily summary $9,415.61 (Δ $609.09)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-24",
+      "label": "Hollywood 2026-03-24"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-24",
+      "orderSubtotalSum": 10024.699999999975,
+      "summaryGrossSum": 9415.61,
+      "delta": 609.0899999999747,
+      "orderCount": 349
+    },
+    "deltaDollars": 609.0899999999747,
+    "deltaPct": 0.06075892545412593
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-13 — Σ orders $9,756.26 vs daily summary $8,956.68 (Δ $799.58)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-13",
+      "label": "Hollywood 2026-04-13"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-13",
+      "orderSubtotalSum": 9756.259999999975,
+      "summaryGrossSum": 8956.68,
+      "delta": 799.5799999999745,
+      "orderCount": 317
+    },
+    "deltaDollars": 799.5799999999745,
+    "deltaPct": 0.08195558543950003
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-19 — Σ orders $11,381.37 vs daily summary $10,854.74 (Δ $526.63)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-19",
+      "label": "Hollywood 2026-04-19"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-19",
+      "orderSubtotalSum": 11381.369999999977,
+      "summaryGrossSum": 10854.74,
+      "delta": 526.6299999999774,
+      "orderCount": 372
+    },
+    "deltaDollars": 526.6299999999774,
+    "deltaPct": 0.04627123096779899
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-07 — Σ orders $9,925.42 vs daily summary $9,241.20 (Δ $684.22)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-07",
+      "label": "Hollywood 2026-04-07"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-07",
+      "orderSubtotalSum": 9925.419999999984,
+      "summaryGrossSum": 9241.2,
+      "delta": 684.219999999983,
+      "orderCount": 322
+    },
+    "deltaDollars": 684.219999999983,
+    "deltaPct": 0.06893612562490899
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-12 — Σ orders $9,977.41 vs daily summary $9,109.55 (Δ $867.86)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-12",
+      "label": "Hollywood 2026-04-12"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-12",
+      "orderSubtotalSum": 9977.409999999993,
+      "summaryGrossSum": 9109.550000000001,
+      "delta": 867.8599999999915,
+      "orderCount": 333
+    },
+    "deltaDollars": 867.8599999999915,
+    "deltaPct": 0.08698249345270888
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-27 — Σ orders $10,560.95 vs daily summary $9,958.04 (Δ $602.91)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-27",
+      "label": "Hollywood 2026-03-27"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-27",
+      "orderSubtotalSum": 10560.949999999983,
+      "summaryGrossSum": 9958.04,
+      "delta": 602.9099999999817,
+      "orderCount": 352
+    },
+    "deltaDollars": 602.9099999999817,
+    "deltaPct": 0.05708861418716902
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-20 — Σ orders $9,040.08 vs daily summary $8,383.33 (Δ $656.75)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-20",
+      "label": "Hollywood 2026-04-20"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-20",
+      "orderSubtotalSum": 9040.079999999984,
+      "summaryGrossSum": 8383.33,
+      "delta": 656.7499999999836,
+      "orderCount": 319
+    },
+    "deltaDollars": 656.7499999999836,
+    "deltaPct": 0.07264869337439324
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-25 — Σ orders $8,826.93 vs daily summary $8,133.45 (Δ $693.48)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-25",
+      "label": "Hollywood 2026-03-25"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-25",
+      "orderSubtotalSum": 8826.929999999977,
+      "summaryGrossSum": 8133.450000000001,
+      "delta": 693.4799999999759,
+      "orderCount": 315
+    },
+    "deltaDollars": 693.4799999999759,
+    "deltaPct": 0.07856412138761469
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-30 — Σ orders $11,423.57 vs daily summary $10,853.03 (Δ $570.54)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-30",
+      "label": "Hollywood 2026-03-30"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-30",
+      "orderSubtotalSum": 11423.56999999997,
+      "summaryGrossSum": 10853.029999999999,
+      "delta": 570.5399999999718,
+      "orderCount": 392
+    },
+    "deltaDollars": 570.5399999999718,
+    "deltaPct": 0.04994410678973151
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-22 — Σ orders $1,925.25 vs daily summary $2,087.30 (Δ -$162.05)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-22",
+      "label": "Hollywood 2026-04-22"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-22",
+      "orderSubtotalSum": 1925.2500000000011,
+      "summaryGrossSum": 2087.3,
+      "delta": -162.04999999999905,
+      "orderCount": 75
+    },
+    "deltaDollars": 162.04999999999905,
+    "deltaPct": 0.07763618071192403
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-18 — Σ orders $11,490.30 vs daily summary $10,859.44 (Δ $630.86)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-18",
+      "label": "Hollywood 2026-04-18"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-18",
+      "orderSubtotalSum": 11490.299999999976,
+      "summaryGrossSum": 10859.439999999999,
+      "delta": 630.8599999999769,
+      "orderCount": 382
+    },
+    "deltaDollars": 630.8599999999769,
+    "deltaPct": 0.05490370138290369
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-29 — Σ orders $13,794.09 vs daily summary $13,104.03 (Δ $690.06)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-29",
+      "label": "Hollywood 2026-03-29"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-29",
+      "orderSubtotalSum": 13794.089999999973,
+      "summaryGrossSum": 13104.03,
+      "delta": 690.0599999999722,
+      "orderCount": 458
+    },
+    "deltaDollars": 690.0599999999722,
+    "deltaPct": 0.05002577190666246
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-26 — Σ orders $9,322.18 vs daily summary $8,571.89 (Δ $750.29)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-26",
+      "label": "Hollywood 2026-03-26"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-26",
+      "orderSubtotalSum": 9322.179999999978,
+      "summaryGrossSum": 8571.89,
+      "delta": 750.289999999979,
+      "orderCount": 319
+    },
+    "deltaDollars": 750.289999999979,
+    "deltaPct": 0.08048439313550916
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-21 — Σ orders $6,739.94 vs daily summary $6,424.25 (Δ $315.69)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-21",
+      "label": "Hollywood 2026-04-21"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-21",
+      "orderSubtotalSum": 6739.939999999987,
+      "summaryGrossSum": 6424.249999999999,
+      "delta": 315.6899999999878,
+      "orderCount": 240
+    },
+    "deltaDollars": 315.6899999999878,
+    "deltaPct": 0.04683869589343353
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-28 — Σ orders $12,781.56 vs daily summary $12,082.54 (Δ $699.02)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-28",
+      "label": "Hollywood 2026-03-28"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-28",
+      "orderSubtotalSum": 12781.559999999969,
+      "summaryGrossSum": 12082.54,
+      "delta": 699.0199999999677,
+      "orderCount": 432
+    },
+    "deltaDollars": 699.0199999999677,
+    "deltaPct": 0.05468972488490993
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-08 — Σ orders $10,507.52 vs daily summary $9,951.21 (Δ $556.31)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-08",
+      "label": "Hollywood 2026-04-08"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-08",
+      "orderSubtotalSum": 10507.519999999979,
+      "summaryGrossSum": 9951.21,
+      "delta": 556.3099999999795,
+      "orderCount": 343
+    },
+    "deltaDollars": 556.3099999999795,
+    "deltaPct": 0.05294398678279752
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-05 — Σ orders $13,803.71 vs daily summary $13,223.48 (Δ $580.23)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-05",
+      "label": "Hollywood 2026-04-05"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-05",
+      "orderSubtotalSum": 13803.709999999983,
+      "summaryGrossSum": 13223.480000000003,
+      "delta": 580.2299999999796,
+      "orderCount": 445
+    },
+    "deltaDollars": 580.2299999999796,
+    "deltaPct": 0.04203435163445047
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-06 — Σ orders $9,023.80 vs daily summary $8,332.51 (Δ $691.29)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-06",
+      "label": "Hollywood 2026-04-06"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-06",
+      "orderSubtotalSum": 9023.799999999981,
+      "summaryGrossSum": 8332.51,
+      "delta": 691.2899999999809,
+      "orderCount": 309
+    },
+    "deltaDollars": 691.2899999999809,
+    "deltaPct": 0.07660741594450035
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-02 — Σ orders $9,198.16 vs daily summary $8,845.08 (Δ $353.08)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-02",
+      "label": "Hollywood 2026-04-02"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-02",
+      "orderSubtotalSum": 9198.159999999987,
+      "summaryGrossSum": 8845.079999999998,
+      "delta": 353.079999999989,
+      "orderCount": 291
+    },
+    "deltaDollars": 353.079999999989,
+    "deltaPct": 0.03838593805717551
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-23 — Σ orders $9,579.91 vs daily summary $9,061.35 (Δ $518.56)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-23",
+      "label": "Hollywood 2026-03-23"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-23",
+      "orderSubtotalSum": 9579.909999999985,
+      "summaryGrossSum": 9061.35,
+      "delta": 518.5599999999849,
+      "orderCount": 334
+    },
+    "deltaDollars": 518.5599999999849,
+    "deltaPct": 0.054129944853342646
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-03-31 — Σ orders $9,469.34 vs daily summary $8,769.57 (Δ $699.77)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-03-31",
+      "label": "Hollywood 2026-03-31"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-03-31",
+      "orderSubtotalSum": 9469.339999999976,
+      "summaryGrossSum": 8769.57,
+      "delta": 699.7699999999768,
+      "orderCount": 325
+    },
+    "deltaDollars": 699.7699999999768,
+    "deltaPct": 0.0738984976777662
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-10 — Σ orders $10,008.27 vs daily summary $9,327.95 (Δ $680.32)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-10",
+      "label": "Hollywood 2026-04-10"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-10",
+      "orderSubtotalSum": 10008.269999999975,
+      "summaryGrossSum": 9327.95,
+      "delta": 680.3199999999742,
+      "orderCount": 344
+    },
+    "deltaDollars": 680.3199999999742,
+    "deltaPct": 0.06797578402660759
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-01 — Σ orders $9,971.09 vs daily summary $9,424.13 (Δ $546.96)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-01",
+      "label": "Hollywood 2026-04-01"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-01",
+      "orderSubtotalSum": 9971.089999999986,
+      "summaryGrossSum": 9424.13,
+      "delta": 546.9599999999864,
+      "orderCount": 304
+    },
+    "deltaDollars": 546.9599999999864,
+    "deltaPct": 0.05485458460408914
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-03 — Σ orders $9,777.54 vs daily summary $9,266.54 (Δ $511.00)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-03",
+      "label": "Hollywood 2026-04-03"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-03",
+      "orderSubtotalSum": 9777.539999999983,
+      "summaryGrossSum": 9266.54,
+      "delta": 510.9999999999818,
+      "orderCount": 314
+    },
+    "deltaDollars": 510.9999999999818,
+    "deltaPct": 0.052262634568611605
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-16 — Σ orders $7,976.06 vs daily summary $7,627.78 (Δ $348.28)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-16",
+      "label": "Hollywood 2026-04-16"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-16",
+      "orderSubtotalSum": 7976.059999999983,
+      "summaryGrossSum": 7627.780000000001,
+      "delta": 348.27999999998246,
+      "orderCount": 282
+    },
+    "deltaDollars": 348.27999999998246,
+    "deltaPct": 0.0436656695160246
+  },
+  {
+    "domain": "otter-sales",
+    "check": "summary_vs_orders_gap",
+    "severity": "CRITICAL",
+    "message": "Hollywood 2026-04-17 — Σ orders $8,890.26 vs daily summary $8,377.59 (Δ $512.67)",
+    "entity": {
+      "kind": "storeDay",
+      "id": "cmexd4zia0001jr04ljkdt9na::2026-04-17",
+      "label": "Hollywood 2026-04-17"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "date": "2026-04-17",
+      "orderSubtotalSum": 8890.259999999978,
+      "summaryGrossSum": 8377.59,
+      "delta": 512.6699999999782,
+      "orderCount": 307
+    },
+    "deltaDollars": 512.6699999999782,
+    "deltaPct": 0.05766647994546611
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"CVT Ice Cream - Vanilla\" has $516.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::CVT Ice Cream - Vanilla",
+      "label": "CVT Ice Cream - Vanilla"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "CVT Ice Cream - Vanilla",
+      "revenue": 516,
+      "qtySold": 76
+    },
+    "deltaDollars": 516
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Viral Dubai Chocolate\" has $84.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Viral Dubai Chocolate",
+      "label": "Viral Dubai Chocolate"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Viral Dubai Chocolate",
+      "revenue": 84,
+      "qtySold": 3
+    },
+    "deltaDollars": 84
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"SUPER BOWL BOX [LIMITED TIME ONLY]\" has $120.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::SUPER BOWL BOX [LIMITED TIME ONLY]",
+      "label": "SUPER BOWL BOX [LIMITED TIME ONLY]"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "SUPER BOWL BOX [LIMITED TIME ONLY]",
+      "revenue": 120,
+      "qtySold": 3
+    },
+    "deltaDollars": 120
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Signature Slider Fries and Drink Combo\" has $271.92 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Signature Slider Fries and Drink Combo",
+      "label": "Signature Slider Fries and Drink Combo"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Signature Slider Fries and Drink Combo",
+      "revenue": 271.91999999999996,
+      "qtySold": 15
+    },
+    "deltaDollars": 271.91999999999996
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Dr. Pepper (20 oz cup)\" has $713.98 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Dr. Pepper (20 oz cup)",
+      "label": "Dr. Pepper (20 oz cup)"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Dr. Pepper (20 oz cup)",
+      "revenue": 713.98,
+      "qtySold": 208
+    },
+    "deltaDollars": 713.98
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"Hi-C Fruit Punch\" has $53.42 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::Hi-C Fruit Punch",
+      "label": "Hi-C Fruit Punch"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "Hi-C Fruit Punch",
+      "revenue": 53.42000000000002,
+      "qtySold": 18
+    },
+    "deltaDollars": 53.42000000000002
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"SUPER BOWL BOX\" has $288.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::SUPER BOWL BOX",
+      "label": "SUPER BOWL BOX"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "SUPER BOWL BOX",
+      "revenue": 288,
+      "qtySold": 6
+    },
+    "deltaDollars": 288
+  },
+  {
+    "domain": "otter-sales",
+    "check": "orphan_menu_item",
+    "severity": "WARNING",
+    "message": "Hollywood — \"CVT Ice Cream - Chocolate\" has $486.00 in sales but no recipe mapping",
+    "entity": {
+      "kind": "menuItem",
+      "id": "cmexd4zia0001jr04ljkdt9na::CVT Ice Cream - Chocolate",
+      "label": "CVT Ice Cream - Chocolate"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "itemName": "CVT Ice Cream - Chocolate",
+      "revenue": 486,
+      "qtySold": 68
+    },
+    "deltaDollars": 486
+  },
+  {
+    "domain": "pnl-aggregation",
+    "check": "cogs_pct_sanity",
+    "severity": "WARNING",
+    "message": "Hollywood — 90d COGS% = 12.3% (revenue $887,295.28, cogs $108,856.71) — outside typical 15–65% band",
+    "entity": {
+      "kind": "store",
+      "id": "cmexd4zia0001jr04ljkdt9na",
+      "label": "Hollywood"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "cogsPct": 12.268374243821201,
+      "cogsDollars": 108856.70559816087,
+      "revenueDollars": 887295.2799999972,
+      "targetCogsPct": 30
+    },
+    "deltaDollars": 157331.8784018383,
+    "deltaPct": 0.122683742438212
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Napkin Dispenser 2-Ply 8.5x6.5 White\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ucon001n3nu908dng0cl",
+      "label": "Napkin Dispenser 2-Ply 8.5x6.5 White"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Napkin Dispenser 2-Ply 8.5x6.5 White",
+      "canonicalIngredientId": "cmo58uie3004a3nu9mo4wnzjl",
+      "canonicalName": "napkin dispenser 2-ply 8.5x6.5 white",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "18418"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"LAMB Potato Fry SS 1/4 Stealth\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58u9j300053nu9h2lcky1m",
+      "label": "LAMB Potato Fry SS 1/4 Stealth"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "LAMB Potato Fry SS 1/4 Stealth",
+      "canonicalIngredientId": "cmo58u9gw00043nu9k25qbxn1",
+      "canonicalName": "lamb potato fry ss 1/4 stealth",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "2141760"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Cup PET 20 OZ C&D PET\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58u9vy000b3nu9y50trdlc",
+      "label": "Greeno Cup PET 20 OZ C&D PET"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Cup PET 20 OZ C&D PET",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7370699"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"CHRSNED Bag Plas Tshirt Logo PTSBCHRISNEDDY\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ua05000d3nu9svh2a10o",
+      "label": "CHRSNED Bag Plas Tshirt Logo PTSBCHRISNEDDY"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "CHRSNED Bag Plas Tshirt Logo PTSBCHRISNEDDY",
+      "canonicalIngredientId": "cmo58u9y5000c3nu9l03pj9oz",
+      "canonicalName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7380317"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Keyston Sanitizer Multi Quat Liq\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ua48000f3nu9by3iz0sq",
+      "label": "Keyston Sanitizer Multi Quat Liq"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Keyston Sanitizer Multi Quat Liq",
+      "canonicalIngredientId": "cmo58ua28000e3nu9qwyo08i7",
+      "canonicalName": "keyston sanitizer multi quat liq",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "8116788"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Packer Onion Sweet Fresh\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uat2000r3nu9q0te4fl4",
+      "label": "Packer Onion Sweet Fresh"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Packer Onion Sweet Fresh",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3812807"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Relish Sweet\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ub9v000z3nu9ogqnd81t",
+      "label": "Relish Sweet"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Relish Sweet",
+      "canonicalIngredientId": "cmo58ub7r000y3nu9t17rhves",
+      "canonicalName": "relish sweet",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G1464"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4036448"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Soda Coke Mexican Glass\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ube200113nu9utj2rj49",
+      "label": "Soda Coke Mexican Glass"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Soda Coke Mexican Glass",
+      "canonicalIngredientId": "cmo58ubc000103nu9yxeujip5",
+      "canonicalName": "soda coke mexican glass",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G7234"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Water Crystal Geyser Spring\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ubib00133nu9rm0nd6oi",
+      "label": "Water Crystal Geyser Spring"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Water Crystal Geyser Spring",
+      "canonicalIngredientId": "cmo58ubg600123nu9095wokzi",
+      "canonicalName": "water crystal geyser spring",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "12345"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Peppers Whole Yellow\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ubmk00153nu9av8k9gmw",
+      "label": "Peppers Whole Yellow"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Peppers Whole Yellow",
+      "canonicalIngredientId": "cmo58ubkh00143nu9b0c14gi1",
+      "canonicalName": "peppers whole yellow",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G299"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Ketchup Heinz 33% Fancy\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ubqs00173nu9fu7t9yrt",
+      "label": "Ketchup Heinz 33% Fancy"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Ketchup Heinz 33% Fancy",
+      "canonicalIngredientId": "cmo58ubom00163nu96d28cmae",
+      "canonicalName": "ketchup heinz 33% fancy",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G212"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Lemonade\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ubv100193nu9dhrdohsv",
+      "label": "Syrup Lemonade"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Lemonade",
+      "canonicalIngredientId": "cmo58ubsx00183nu9x1vcq8nn",
+      "canonicalName": "syrup lemonade",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "NFBGMINLEM"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Hi-C Fruit Punch Flashin\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ubz8001b3nu9gcw9nqfr",
+      "label": "Syrup Hi-C Fruit Punch Flashin"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Hi-C Fruit Punch Flashin",
+      "canonicalIngredientId": "cmo58ubx6001a3nu9rkduccbq",
+      "canonicalName": "syrup hi-c fruit punch flashin",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "NFBGFP"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Coca Cola Zero Sugar\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uc3g001d3nu9j3zumxs0",
+      "label": "Syrup Coca Cola Zero Sugar"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Coca Cola Zero Sugar",
+      "canonicalIngredientId": "cmo58uc1b001c3nu9sok0uwcv",
+      "canonicalName": "syrup coca cola zero sugar",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "203035"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Ketchup Vol-Pack Heinz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uc7o001f3nu93tcs5dgy",
+      "label": "Ketchup Vol-Pack Heinz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Ketchup Vol-Pack Heinz",
+      "canonicalIngredientId": "cmo58uc5k001e3nu9no4mc4np",
+      "canonicalName": "ketchup vol-pack heinz",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G216"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Lyon Medium Syrup Chocolate Free Flow\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58udad001x3nu9410cy3zo",
+      "label": "Lyon Medium Syrup Chocolate Free Flow"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Lyon Medium Syrup Chocolate Free Flow",
+      "canonicalIngredientId": "cmo58ud85001w3nu9ouzgrvwz",
+      "canonicalName": "lyon medium syrup chocolate free flow",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1405521"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sysco Reliable Shortening Fry Liquid Clear ZTF\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58udej001z3nu9lw39lo04",
+      "label": "Sysco Reliable Shortening Fry Liquid Clear ZTF"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sysco Reliable Shortening Fry Liquid Clear ZTF",
+      "canonicalIngredientId": "cmo58udcf001y3nu9qk4wigri",
+      "canonicalName": "sysco reliable shortening fry liquid clear ztf",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4518403"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "5020553"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Lyon Medium Syrup Strawberry RTU\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58udj000213nu9neif9ctt",
+      "label": "Lyon Medium Syrup Strawberry RTU"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Lyon Medium Syrup Strawberry RTU",
+      "canonicalIngredientId": "cmo58udgt00203nu97tiadbcs",
+      "canonicalName": "lyon medium syrup strawberry rtu",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "5296108"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sysco Classic Gloves Nitrile Foodservice Powder Free Black\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58udwi00273nu9qeay94zc",
+      "label": "Sysco Classic Gloves Nitrile Foodservice Powder Free Black"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sysco Classic Gloves Nitrile Foodservice Powder Free Black",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "sysco classic gloves nitrile foodservice powder free black",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"WHLFIMP Butter Solid USDA AA UNSLTD\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58u9eq00033nu9i65fkm24",
+      "label": "WHLFIMP Butter Solid USDA AA UNSLTD"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "WHLFIMP Butter Solid USDA AA UNSLTD",
+      "canonicalIngredientId": "cmo58uoao006g3nu90b3ia5hm",
+      "canonicalName": "whlfimp butter solid usda aa unsltd",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7485170"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Butter Solid USDA AA Unsalted\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ucxa001r3nu9oq9mhq2q",
+      "label": "Butter Solid USDA AA Unsalted"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Butter Solid USDA AA Unsalted",
+      "canonicalIngredientId": "cmo58uoao006g3nu90b3ia5hm",
+      "canonicalName": "butter solid usda aa unsalted",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7485170"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Potato Fry SS 1/4 Stealth\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ud1l001t3nu9bo7qhlmm",
+      "label": "Potato Fry SS 1/4 Stealth"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Potato Fry SS 1/4 Stealth",
+      "canonicalIngredientId": "cmo58u9gw00043nu9k25qbxn1",
+      "canonicalName": "potato fry ss 1/4 stealth",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "2141760"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll SNDW 3.5I\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58u9n700073nu9w7ijb5wp",
+      "label": "Martins Bread Potato Roll SNDW 3.5I"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll SNDW 3.5I",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sndw 3.5i",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll Sandwich 3.5\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uap0000p3nu9sprjh3ne",
+      "label": "Martins Bread Potato Roll Sandwich 3.5"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll Sandwich 3.5",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sandwich 3.5",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll Sandwich 3.5 oz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ub5p000x3nu999dt7234",
+      "label": "Martins Bread Potato Roll Sandwich 3.5 oz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll Sandwich 3.5 oz",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sandwich 3.5 oz",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"SYS Rel Shortening Fry Liq CLR ZTF\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58u9rh00093nu96s1j7y21",
+      "label": "SYS Rel Shortening Fry Liq CLR ZTF"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "SYS Rel Shortening Fry Liq CLR ZTF",
+      "canonicalIngredientId": "cmo58udcf001y3nu9qk4wigri",
+      "canonicalName": "sys rel shortening fry liq clr ztf",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4518403"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "5020553"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Lid Flat W/Hole 20OZ PE PET\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ua8b000h3nu9dk5ljbz7",
+      "label": "Greeno Lid Flat W/Hole 20OZ PE PET"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Lid Flat W/Hole 20OZ PE PET",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat w/hole 20oz pe pet",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7190716"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"IMPFRSH Tomato Bulk 5X6 Fresh\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uacd000j3nu9u9th2d0n",
+      "label": "IMPFRSH Tomato Bulk 5X6 Fresh"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "IMPFRSH Tomato Bulk 5X6 Fresh",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "impfrsh tomato bulk 5x6 fresh",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1763432"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Packer Lettuce BSTN Hydroponic\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uagp000l3nu966tl0w9q",
+      "label": "Packer Lettuce BSTN Hydroponic"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Packer Lettuce BSTN Hydroponic",
+      "canonicalIngredientId": "cmo58udyt00283nu9ufwdn6f5",
+      "canonicalName": "packer lettuce bstn hydroponic",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "2717106"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1008200"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Packer Onion Sweet FRSH\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uaks000n3nu9fimbz9fo",
+      "label": "Packer Onion Sweet FRSH"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Packer Onion Sweet FRSH",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet frsh",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3812807"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Can Liner 40x46 1.5 Mil Blk Roll\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58udnl00233nu9qeqlfm59",
+      "label": "Can Liner 40x46 1.5 Mil Blk Roll"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Can Liner 40x46 1.5 Mil Blk Roll",
+      "canonicalIngredientId": "cmo58uhwe00423nu9mp6q2rxn",
+      "canonicalName": "can liner 40x46 1.5 mil blk roll",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "40X46ROLL"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Packer Lettuce Boston Hydroponic\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ue1100293nu9g68bdvir",
+      "label": "Packer Lettuce Boston Hydroponic"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Packer Lettuce Boston Hydroponic",
+      "canonicalIngredientId": "cmo58udyt00283nu9ufwdn6f5",
+      "canonicalName": "packer lettuce boston hydroponic",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "2717106"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1008200"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Towel Multifold Kraft 1-Ply\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uike004d3nu9b5t0vhja",
+      "label": "Towel Multifold Kraft 1-Ply"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Towel Multifold Kraft 1-Ply",
+      "canonicalIngredientId": "cmo58uii6004c3nu99m25lsip",
+      "canonicalName": "towel multifold kraft 1-ply",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "18369"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Soda Orange Fanta Mexican Glass\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uedz002f3nu9l8qr0r28",
+      "label": "Soda Orange Fanta Mexican Glass"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Soda Orange Fanta Mexican Glass",
+      "canonicalIngredientId": "cmo58uebv002e3nu9qynpmra7",
+      "canonicalName": "soda orange fanta mexican glass",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G7246"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Soap Dish Liquid Premium\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uei4002h3nu9ufl6fh7y",
+      "label": "Soap Dish Liquid Premium"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Soap Dish Liquid Premium",
+      "canonicalIngredientId": "cmo58ueg2002g3nu90wtu7q3x",
+      "canonicalName": "soap dish liquid premium",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "210529"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Degreaser - Regal Brand\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uema002j3nu9vmwssyvr",
+      "label": "Degreaser - Regal Brand"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Degreaser - Regal Brand",
+      "canonicalIngredientId": "cmo58uek8002i3nu9hsanw7jv",
+      "canonicalName": "degreaser - regal brand",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "12158"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Ketchup Packets Foil\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uez6002p3nu9mgbaq31s",
+      "label": "Ketchup Packets Foil"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Ketchup Packets Foil",
+      "canonicalIngredientId": "cmo58ueww002o3nu91r8ou3nb",
+      "canonicalName": "ketchup packets foil",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G1025"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"GROUND BEEF FINE GRND 73/27 CREEKSTONE\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ufkh002z3nu9fv8qcnx8",
+      "label": "GROUND BEEF FINE GRND 73/27 CREEKSTONE"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "GROUND BEEF FINE GRND 73/27 CREEKSTONE",
+      "canonicalIngredientId": "cmo58ufid002y3nu9f9sbsnoz",
+      "canonicalName": "ground beef fine grnd 73/27 creekstone",
+      "activeSkus": [
+        {
+          "vendor": "Premier Meats & Crystal Bay",
+          "sku": "0014046-01"
+        },
+        {
+          "vendor": "Premier Meats",
+          "sku": "0014046-01"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1029562"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Imported Fresh Tomato Bulk 5x6 Fresh\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uhd5003t3nu99gx65k81",
+      "label": "Imported Fresh Tomato Bulk 5x6 Fresh"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Imported Fresh Tomato Bulk 5x6 Fresh",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1763432"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tray Food Paper #50 1/2 lb White Red Check\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uhhg003v3nu9h5p37p6m",
+      "label": "Tray Food Paper #50 1/2 lb White Red Check"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tray Food Paper #50 1/2 lb White Red Check",
+      "canonicalIngredientId": "cmo58uhf6003u3nu9l1qxfq5f",
+      "canonicalName": "tray food paper #50 1/2 lb white red check",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "SQP2650"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Coca Cola Classic\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uhlz003x3nu9s3tqtua9",
+      "label": "Syrup Coca Cola Classic"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Coca Cola Classic",
+      "canonicalIngredientId": "cmo58uhjk003w3nu9cp8e4e1d",
+      "canonicalName": "syrup coca cola classic",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "NFBGCOKE"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Diet Coca Cola\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uhq5003z3nu9g8pdakqh",
+      "label": "Syrup Diet Coca Cola"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Diet Coca Cola",
+      "canonicalIngredientId": "cmo58uho3003y3nu945lzvpgp",
+      "canonicalName": "syrup diet coca cola",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "NFBGDCOK"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Paper Patty 5.5 x 5.5 Dry Wax\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uhuc00413nu9i6akvdez",
+      "label": "Paper Patty 5.5 x 5.5 Dry Wax"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Paper Patty 5.5 x 5.5 Dry Wax",
+      "canonicalIngredientId": "cmo58uhs700403nu9e6qshdnn",
+      "canonicalName": "paper patty 5.5 x 5.5 dry wax",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "PP5"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Can Liner 40 x 46 1.5 Mil Black Roll\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uhyj00433nu9x34qwzs7",
+      "label": "Can Liner 40 x 46 1.5 Mil Black Roll"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Can Liner 40 x 46 1.5 Mil Black Roll",
+      "canonicalIngredientId": "cmo58uhwe00423nu9mp6q2rxn",
+      "canonicalName": "can liner 40 x 46 1.5 mil black roll",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "40X46ROLL"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Container Foam 6x6x3 Medium White Bagged\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uibx00493nu94db3zhqe",
+      "label": "Container Foam 6x6x3 Medium White Bagged"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Container Foam 6x6x3 Medium White Bagged",
+      "canonicalIngredientId": "cmo58ui9p00483nu964sqjnvr",
+      "canonicalName": "container foam 6x6x3 medium white bagged",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "X80-BAG"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Napkin Dispenser 2-Ply 8.5 x 6.5 White\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uig4004b3nu9bjk64luh",
+      "label": "Napkin Dispenser 2-Ply 8.5 x 6.5 White"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Napkin Dispenser 2-Ply 8.5 x 6.5 White",
+      "canonicalIngredientId": "cmo58uie3004a3nu9mo4wnzjl",
+      "canonicalName": "napkin dispenser 2-ply 8.5 x 6.5 white",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "18418"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"WHLFIMP Butter Solid USDA AA Unsalted\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ufow00313nu9urgqwow4",
+      "label": "WHLFIMP Butter Solid USDA AA Unsalted"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "WHLFIMP Butter Solid USDA AA Unsalted",
+      "canonicalIngredientId": "cmo58uoao006g3nu90b3ia5hm",
+      "canonicalName": "whlfimp butter solid usda aa unsalted",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7485170"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll Sandwich 3.5oz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ufxq00353nu9ng1omxk1",
+      "label": "Martins Bread Potato Roll Sandwich 3.5oz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll Sandwich 3.5oz",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sandwich 3.5oz",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"SYS Rel Shortening Fry Liquid Clear ZTF\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ug1u00373nu95jrf61kc",
+      "label": "SYS Rel Shortening Fry Liquid Clear ZTF"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "SYS Rel Shortening Fry Liquid Clear ZTF",
+      "canonicalIngredientId": "cmo58udcf001y3nu9qk4wigri",
+      "canonicalName": "sys rel shortening fry liquid clear ztf",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4518403"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "5020553"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Cup 20 oz Pet\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uh0d003n3nu98ghihmzb",
+      "label": "Greeno Cup 20 oz Pet"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Cup 20 oz Pet",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup 20 oz pet",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7370699"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Ed's Bag Plastic T-shirt Logo\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uh4q003p3nu90xuhhzdg",
+      "label": "Ed's Bag Plastic T-shirt Logo"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Ed's Bag Plastic T-shirt Logo",
+      "canonicalIngredientId": "cmo58u9y5000c3nu9l03pj9oz",
+      "canonicalName": "ed's bag plastic t-shirt logo",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7380317"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Lid Flat with Hole 20oz PE Pet\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uh8v003r3nu9czusj2sj",
+      "label": "Greeno Lid Flat with Hole 20oz PE Pet"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Lid Flat with Hole 20oz PE Pet",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat with hole 20oz pe pet",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7190716"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Imported Fresh Tomato Bulk 5x6\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ugaf003b3nu9rkcydgy5",
+      "label": "Imported Fresh Tomato Bulk 5x6"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Imported Fresh Tomato Bulk 5x6",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1763432"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Container Foam Hinged White\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ui3a00453nu9y58uixzr",
+      "label": "Container Foam Hinged White"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Container Foam Hinged White",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "container foam hinged white",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "965-REY"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sys Cls Glove Nitrile Fdsrv Pf Blk\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ufg9002x3nu9yi636l2x",
+      "label": "Sys Cls Glove Nitrile Fdsrv Pf Blk"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sys Cls Glove Nitrile Fdsrv Pf Blk",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "sys cls glove nitrile fdsrv pf blk",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"SYS CLS Glove Nitrile Foodservice PF Black\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ug6700393nu9agwo6axh",
+      "label": "SYS CLS Glove Nitrile Foodservice PF Black"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "SYS CLS Glove Nitrile Foodservice PF Black",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "sys cls glove nitrile foodservice pf black",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Soda Sprite Mexican Glass\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ue9p002d3nu9fyre1upm",
+      "label": "Soda Sprite Mexican Glass"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Soda Sprite Mexican Glass",
+      "canonicalIngredientId": "cmo58ul6500543nu9i56jxaiz",
+      "canonicalName": "soda sprite mexican glass",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G7244"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Cont Foam 9X9 1-Comp Bagged\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ueql002l3nu9sit66f6b",
+      "label": "Cont Foam 9X9 1-Comp Bagged"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Cont Foam 9X9 1-Comp Bagged",
+      "canonicalIngredientId": "cmo58unxu006a3nu93540g3zt",
+      "canonicalName": "cont foam 9x9 1-comp bagged",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "HT91-BAG"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Container Foam 9x9 1-Comp Bagged\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ui7l00473nu95xpoo03i",
+      "label": "Container Foam 9x9 1-Comp Bagged"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Container Foam 9x9 1-Comp Bagged",
+      "canonicalIngredientId": "cmo58unxu006a3nu93540g3zt",
+      "canonicalName": "container foam 9x9 1-comp bagged",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "HT91-BAG"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tray Food Paper #50 1/2 LB Wht/Red Check\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ueus002n3nu9bqhapn06",
+      "label": "Tray Food Paper #50 1/2 LB Wht/Red Check"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tray Food Paper #50 1/2 LB Wht/Red Check",
+      "canonicalIngredientId": "cmo58uhf6003u3nu9l1qxfq5f",
+      "canonicalName": "tray food paper #50 1/2 lb wht/red check",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "SQP2650"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tray Pulp 4-Cup Carrier 8-32oz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uf3f002r3nu9zpafmku0",
+      "label": "Tray Pulp 4-Cup Carrier 8-32oz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tray Pulp 4-Cup Carrier 8-32oz",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32oz",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "14960"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Emboss Bath Tissue 2ply Recycled Industrial Wrap\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uf7t002t3nu9sjbl17uf",
+      "label": "Emboss Bath Tissue 2ply Recycled Industrial Wrap"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Emboss Bath Tissue 2ply Recycled Industrial Wrap",
+      "canonicalIngredientId": "cmo58uq2y007a3nu9e7ljw3u5",
+      "canonicalName": "emboss bath tissue 2ply recycled industrial wrap",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "30394"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Kosher Flake Coarse Salt\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uixa004j3nu9vei6j86a",
+      "label": "Kosher Flake Coarse Salt"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Kosher Flake Coarse Salt",
+      "canonicalIngredientId": "cmo58uiv2004i3nu95kozrsz2",
+      "canonicalName": "kosher flake coarse salt",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "6040760"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"CHRIS & EDDY'S HOUSE SAUCE\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ukly004v3nu9frc192wz",
+      "label": "CHRIS & EDDY'S HOUSE SAUCE"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "CHRIS & EDDY'S HOUSE SAUCE",
+      "canonicalIngredientId": "cmo58ukjr004u3nu9uvuixnr2",
+      "canonicalName": "chris & eddy's house sauce",
+      "activeSkus": [
+        {
+          "vendor": "Bear State Kitchen",
+          "sku": "17211"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"SYS CLS Salt Granulated Iodized\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ukqb004x3nu96532bekd",
+      "label": "SYS CLS Salt Granulated Iodized"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "SYS CLS Salt Granulated Iodized",
+      "canonicalIngredientId": "cmo58uko2004w3nu9z0wfd37f",
+      "canonicalName": "sys cls salt granulated iodized",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7172848"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"SYS CLS Paper Patty Square 5.5\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ukux004z3nu9zno4gwk6",
+      "label": "SYS CLS Paper Patty Square 5.5"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "SYS CLS Paper Patty Square 5.5",
+      "canonicalIngredientId": "cmo58ukso004y3nu9uxzuhfdg",
+      "canonicalName": "sys cls paper patty square 5.5",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "6854509"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sysco Classic Mayonnaise Banquet XHV Duty\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ul3z00533nu9tbyja1zc",
+      "label": "Sysco Classic Mayonnaise Banquet XHV Duty"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sysco Classic Mayonnaise Banquet XHV Duty",
+      "canonicalIngredientId": "cmo58ul1t00523nu999oce95f",
+      "canonicalName": "sysco classic mayonnaise banquet xhv duty",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4983920"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Soda Sprite Mexican Glass CRV Inc\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ul8g00553nu95f2lv2d4",
+      "label": "Soda Sprite Mexican Glass CRV Inc"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Soda Sprite Mexican Glass CRV Inc",
+      "canonicalIngredientId": "cmo58ul6500543nu9i56jxaiz",
+      "canonicalName": "soda sprite mexican glass crv inc",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G7244"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Orange Fanta\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ulcu00573nu9hxntqcj3",
+      "label": "Syrup Orange Fanta"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Orange Fanta",
+      "canonicalIngredientId": "cmo58ulan00563nu95ofk71rq",
+      "canonicalName": "syrup orange fanta",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "NFBGFAOR"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Cup Portion Plastic 2 OZ Clear\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ullw005b3nu9nr6f1rgp",
+      "label": "Cup Portion Plastic 2 OZ Clear"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Cup Portion Plastic 2 OZ Clear",
+      "canonicalIngredientId": "cmo58uljs005a3nu9ksul9kn5",
+      "canonicalName": "cup portion plastic 2 oz clear",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "61250"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Mustard Packets 5.5GR\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ulur005f3nu9d4vqk2q6",
+      "label": "Mustard Packets 5.5GR"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Mustard Packets 5.5GR",
+      "canonicalIngredientId": "cmo58ulsm005e3nu9zgog7xnx",
+      "canonicalName": "mustard packets 5.5gr",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G106"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Container Foam 6x6x3 Medium Hinged Square\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58um82005l3nu976jjps8u",
+      "label": "Container Foam 6x6x3 Medium Hinged Square"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Container Foam 6x6x3 Medium Hinged Square",
+      "canonicalIngredientId": "cmo58um5o005k3nu95dn9x59n",
+      "canonicalName": "container foam 6x6x3 medium hinged square",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "X80"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"CONT FOAM HING LRG WHT HOAGIE\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58unik00633nu9pvl2mgt4",
+      "label": "CONT FOAM HING LRG WHT HOAGIE"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "CONT FOAM HING LRG WHT HOAGIE",
+      "canonicalIngredientId": "cmo58ungi00623nu95frgtxdz",
+      "canonicalName": "cont foam hing lrg wht hoagie",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "15898"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"TOMATO PASTE HEINZ\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58unmy00653nu9rv6bku77",
+      "label": "TOMATO PASTE HEINZ"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "TOMATO PASTE HEINZ",
+      "canonicalIngredientId": "cmo58unkn00643nu9fl9rrqck",
+      "canonicalName": "tomato paste heinz",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G213"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Syrup Sprite\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58unvp00693nu9mod2jqwg",
+      "label": "Syrup Sprite"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Syrup Sprite",
+      "canonicalIngredientId": "cmo58unti00683nu9vr74zquv",
+      "canonicalName": "syrup sprite",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "NFBGSPRI"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Container Foam 1-Compartment Bagged\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uo07006b3nu9z7m5qwsj",
+      "label": "Container Foam 1-Compartment Bagged"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Container Foam 1-Compartment Bagged",
+      "canonicalIngredientId": "cmo58unxu006a3nu93540g3zt",
+      "canonicalName": "container foam 1-compartment bagged",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "HT91-BAG"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Cutlery Fork Full Size Extra Heavy Black PP\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uo4e006d3nu9dm0kvvbv",
+      "label": "Cutlery Fork Full Size Extra Heavy Black PP"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Cutlery Fork Full Size Extra Heavy Black PP",
+      "canonicalIngredientId": "cmo58uo29006c3nu9xq8wftcu",
+      "canonicalName": "cutlery fork full size extra heavy black pp",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "IFS-PPF-B"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Whole Class Ice Cream Mix Soft Serve Vanilla 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uo8l006f3nu9128ruq2o",
+      "label": "Whole Class Ice Cream Mix Soft Serve Vanilla 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Whole Class Ice Cream Mix Soft Serve Vanilla 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "whole class ice cream mix soft serve vanilla 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Whole Frozen Butter Solid USDA AA Unsalted\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uocx006h3nu9uvl60dm4",
+      "label": "Whole Frozen Butter Solid USDA AA Unsalted"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Whole Frozen Butter Solid USDA AA Unsalted",
+      "canonicalIngredientId": "cmo58uoao006g3nu90b3ia5hm",
+      "canonicalName": "whole frozen butter solid usda aa unsalted",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7485170"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll Sandwich 3.5 inch\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uoh1006j3nu9asz68sh1",
+      "label": "Martins Bread Potato Roll Sandwich 3.5 inch"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll Sandwich 3.5 inch",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sandwich 3.5 inch",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Butter Solid USDA AA Unsltd\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58umkl005n3nu9snnxwa2e",
+      "label": "Butter Solid USDA AA Unsltd"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Butter Solid USDA AA Unsltd",
+      "canonicalIngredientId": "cmo58uoao006g3nu90b3ia5hm",
+      "canonicalName": "butter solid usda aa unsltd",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7485170"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"MARTINS BREAD POTATO ROLL SNDW\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ukhl004t3nu9b0ece2v9",
+      "label": "MARTINS BREAD POTATO ROLL SNDW"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "MARTINS BREAD POTATO ROLL SNDW",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sndw",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Shortening Fry Liquid Clear ZTF\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uisw004h3nu95zlp5way",
+      "label": "Shortening Fry Liquid Clear ZTF"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Shortening Fry Liquid Clear ZTF",
+      "canonicalIngredientId": "cmo58udcf001y3nu9qk4wigri",
+      "canonicalName": "shortening fry liquid clear ztf",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4518403"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "5020553"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Cup PET 20 oz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58un1l005v3nu9how7nqtk",
+      "label": "Greeno Cup PET 20 oz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Cup PET 20 oz",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7370699"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Lid Flat W/Hole 20oz PET\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58un5w005x3nu9tznwpgra",
+      "label": "Greeno Lid Flat W/Hole 20oz PET"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Lid Flat W/Hole 20oz PET",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat w/hole 20oz pet",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7190716"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tomato Bulk 5x6 Fresh\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uj66004n3nu9d5s8sazi",
+      "label": "Tomato Bulk 5x6 Fresh"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tomato Bulk 5x6 Fresh",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "tomato bulk 5x6 fresh",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1763432"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Fresh Tomato Bulk 5x6\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58una3005z3nu9mzfo6rh4",
+      "label": "Fresh Tomato Bulk 5x6"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Fresh Tomato Bulk 5x6",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "fresh tomato bulk 5x6",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1763432"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Lettuce Boston Hydroponic\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ujas004p3nu9fkh55sp7",
+      "label": "Lettuce Boston Hydroponic"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Lettuce Boston Hydroponic",
+      "canonicalIngredientId": "cmo58udyt00283nu9ufwdn6f5",
+      "canonicalName": "lettuce boston hydroponic",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "2717106"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1008200"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Onion Sweet Fresh\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ukd3004r3nu9be94lfp9",
+      "label": "Onion Sweet Fresh"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Onion Sweet Fresh",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "onion sweet fresh",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3812807"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Cutlery Fork Full Size Heavy Black Plastic\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ulz8005h3nu9md8hr6qa",
+      "label": "Cutlery Fork Full Size Heavy Black Plastic"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Cutlery Fork Full Size Heavy Black Plastic",
+      "canonicalIngredientId": "cmo58uo29006c3nu9xq8wftcu",
+      "canonicalName": "cutlery fork full size heavy black plastic",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "IFS-PPF-B"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Napkin Dispenser 2-Ply White\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58um3j005j3nu9lrefr3e5",
+      "label": "Napkin Dispenser 2-Ply White"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Napkin Dispenser 2-Ply White",
+      "canonicalIngredientId": "cmo58uie3004a3nu9mo4wnzjl",
+      "canonicalName": "napkin dispenser 2-ply white",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "18418"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Nitrile Gloves Food Service Powder Free Black\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uj1s004l3nu9fmyp8ipc",
+      "label": "Nitrile Gloves Food Service Powder Free Black"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Nitrile Gloves Food Service Powder Free Black",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "nitrile gloves food service powder free black",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tray Food Paper #50 White Red Check\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ulhh00593nu9w7dzfdrm",
+      "label": "Tray Food Paper #50 White Red Check"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tray Food Paper #50 White Red Check",
+      "canonicalIngredientId": "cmo58uhf6003u3nu9l1qxfq5f",
+      "canonicalName": "tray food paper #50 white red check",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "SQP2650"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Emboss Bath Tissue 2-Ply Recycled Individually Wrapped\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uioj004f3nu9u4ywilah",
+      "label": "Emboss Bath Tissue 2-Ply Recycled Individually Wrapped"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Emboss Bath Tissue 2-Ply Recycled Individually Wrapped",
+      "canonicalIngredientId": "cmo58uq2y007a3nu9e7ljw3u5",
+      "canonicalName": "emboss bath tissue 2-ply recycled individually wrapped",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "30394"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Paper Patty 5.5x5.5 Dry Wax\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ulqh005d3nu9lkdx4d39",
+      "label": "Paper Patty 5.5x5.5 Dry Wax"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Paper Patty 5.5x5.5 Dry Wax",
+      "canonicalIngredientId": "cmo58uhs700403nu9e6qshdnn",
+      "canonicalName": "paper patty 5.5x5.5 dry wax",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "PP5"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"PPR PATTY 5.5X5.5 DRY WAX\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58unrg00673nu930pa0jg5",
+      "label": "PPR PATTY 5.5X5.5 DRY WAX"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "PPR PATTY 5.5X5.5 DRY WAX",
+      "canonicalIngredientId": "cmo58uhs700403nu9e6qshdnn",
+      "canonicalName": "ppr patty 5.5x5.5 dry wax",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "PP5"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Mayonnaise Banquet XHV Duty\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58umta005r3nu9juq2vck1",
+      "label": "Mayonnaise Banquet XHV Duty"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Mayonnaise Banquet XHV Duty",
+      "canonicalIngredientId": "cmo58ul1t00523nu999oce95f",
+      "canonicalName": "mayonnaise banquet xhv duty",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4983920"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Greeno Lid Flat with Hole 20 oz PE PET\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uotv006p3nu93o0swtpz",
+      "label": "Greeno Lid Flat with Hole 20 oz PE PET"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Greeno Lid Flat with Hole 20 oz PE PET",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat with hole 20 oz pe pet",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7190716"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sys Cls Spice Pepper Blk Grnd\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58upfh006z3nu9u2wuoft6",
+      "label": "Sys Cls Spice Pepper Blk Grnd"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sys Cls Spice Pepper Blk Grnd",
+      "canonicalIngredientId": "cmo58upda006y3nu9km1v92fq",
+      "canonicalName": "sys cls spice pepper blk grnd",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "5935689"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Lid Portion Plastic 1.5, 2, 2.5 oz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58upju00713nu9jqwabiwn",
+      "label": "Lid Portion Plastic 1.5, 2, 2.5 oz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Lid Portion Plastic 1.5, 2, 2.5 oz",
+      "canonicalIngredientId": "cmo58uphn00703nu9i90i7s3t",
+      "canonicalName": "lid portion plastic 1.5, 2, 2.5 oz",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "61254"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Container Foam Hinged White 9x6.5x2.5\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58upwp00773nu9tomrx97t",
+      "label": "Container Foam Hinged White 9x6.5x2.5"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Container Foam Hinged White 9x6.5x2.5",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "container foam hinged white 9x6.5x2.5",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "965-REY"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Paper Roll Thermal 3-1/8 x 220 ft BPA/BPS Free\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uq0y00793nu9uvkzgxmd",
+      "label": "Paper Roll Thermal 3-1/8 x 220 ft BPA/BPS Free"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Paper Roll Thermal 3-1/8 x 220 ft BPA/BPS Free",
+      "canonicalIngredientId": "cmo58upyt00783nu9xdsh382i",
+      "canonicalName": "paper roll thermal 3-1/8 x 220 ft bpa/bps free",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "32096"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Embossed Bath Tissue 2-ply Recycled Individually Wrapped\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uq52007b3nu90dl1g6fi",
+      "label": "Embossed Bath Tissue 2-ply Recycled Individually Wrapped"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Embossed Bath Tissue 2-ply Recycled Individually Wrapped",
+      "canonicalIngredientId": "cmo58uq2y007a3nu9e7ljw3u5",
+      "canonicalName": "embossed bath tissue 2-ply recycled individually wrapped",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "30394"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tray Pulp 4-cup Carrier 8-32 oz\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uq99007d3nu9l0iyd64r",
+      "label": "Tray Pulp 4-cup Carrier 8-32 oz"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tray Pulp 4-cup Carrier 8-32 oz",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "14960"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Mustard Packets 5.5 g\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uqdd007f3nu9etx6jpta",
+      "label": "Mustard Packets 5.5 g"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Mustard Packets 5.5 g",
+      "canonicalIngredientId": "cmo58uqbd007e3nu9wupqwutm",
+      "canonicalName": "mustard packets 5.5 g",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "G108"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"WHLFCLS Ice Cream Mix SFTSR VAN 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58u9ac00013nu9u5wwgi30",
+      "label": "WHLFCLS Ice Cream Mix SFTSR VAN 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "WHLFCLS Ice Cream Mix SFTSR VAN 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "whlfcls ice cream mix sftsr van 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Whole Ice Cream Mix Soft Serve Vanilla 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ub1g000v3nu9di0w2zme",
+      "label": "Whole Ice Cream Mix Soft Serve Vanilla 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Whole Ice Cream Mix Soft Serve Vanilla 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "whole ice cream mix soft serve vanilla 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Ice Cream Mix Soft Serve Vanilla 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uct3001p3nu9r1tfre28",
+      "label": "Ice Cream Mix Soft Serve Vanilla 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Ice Cream Mix Soft Serve Vanilla 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "ice cream mix soft serve vanilla 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Ice Cream Mix Sftsr Van 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ufc0002v3nu9qvhlws4s",
+      "label": "Ice Cream Mix Sftsr Van 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Ice Cream Mix Sftsr Van 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "ice cream mix sftsr van 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"WHLFCLS Ice Cream Mix Soft Serve Vanilla 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uft700333nu9xdendn3p",
+      "label": "WHLFCLS Ice Cream Mix Soft Serve Vanilla 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "WHLFCLS Ice Cream Mix Soft Serve Vanilla 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "whlfcls ice cream mix soft serve vanilla 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Whole Fcls Ice Cream Mix Soft Serve Van 5%\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ukzh00513nu9p93kywad",
+      "label": "Whole Fcls Ice Cream Mix Soft Serve Van 5%"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Whole Fcls Ice Cream Mix Soft Serve Van 5%",
+      "canonicalIngredientId": "cmo58uo6j006e3nu9prnc2439",
+      "canonicalName": "whole fcls ice cream mix soft serve van 5%",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7087727"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "1011849"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll Sandwich 3.5\"\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ud5z001v3nu946rfe4xb",
+      "label": "Martins Bread Potato Roll Sandwich 3.5\""
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll Sandwich 3.5\"",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sandwich 3.5\"",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Martins Bread Potato Roll Sandwich 3.5i\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ugw3003l3nu925wc8nsm",
+      "label": "Martins Bread Potato Roll Sandwich 3.5i"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Martins Bread Potato Roll Sandwich 3.5i",
+      "canonicalIngredientId": "cmo58uoez006i3nu95pry78wa",
+      "canonicalName": "martins bread potato roll sandwich 3.5i",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "3589484"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "00500520"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Shortening Fry Liq Clr ZTF\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58ump2005p3nu9wn49vcdg",
+      "label": "Shortening Fry Liq Clr ZTF"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Shortening Fry Liq Clr ZTF",
+      "canonicalIngredientId": "cmo58udcf001y3nu9qk4wigri",
+      "canonicalName": "shortening fry liq clr ztf",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4518403"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "5020553"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Chrsned Bag Plastic T-Shirt Logo\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uopd006n3nu9ha6luzbl",
+      "label": "Chrsned Bag Plastic T-Shirt Logo"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Chrsned Bag Plastic T-Shirt Logo",
+      "canonicalIngredientId": "cmo58u9y5000c3nu9l03pj9oz",
+      "canonicalName": "chrsned bag plastic t-shirt logo",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "7380317"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Cont Foam Hinged White 9x6.5x2.5\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58upsh00753nu9dkc5vgn8",
+      "label": "Cont Foam Hinged White 9x6.5x2.5"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Cont Foam Hinged White 9x6.5x2.5",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "cont foam hinged white 9x6.5x2.5",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "965-REY"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Lyon M Syrup Chocolate Free Flow\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58up2g006t3nu9pkp440jl",
+      "label": "Lyon M Syrup Chocolate Free Flow"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Lyon M Syrup Chocolate Free Flow",
+      "canonicalIngredientId": "cmo58ud85001w3nu9ouzgrvwz",
+      "canonicalName": "lyon m syrup chocolate free flow",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "1405521"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Lyon M Syrup Strawberry RTU\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58up6x006v3nu9r343rr7b",
+      "label": "Lyon M Syrup Strawberry RTU"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Lyon M Syrup Strawberry RTU",
+      "canonicalIngredientId": "cmo58udgt00203nu97tiadbcs",
+      "canonicalName": "lyon m syrup strawberry rtu",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "5296108"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Can Liner 40x46 1.5 mil Black Roll\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58upo700733nu9280fah53",
+      "label": "Can Liner 40x46 1.5 mil Black Roll"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Can Liner 40x46 1.5 mil Black Roll",
+      "canonicalIngredientId": "cmo58uhwe00423nu9mp6q2rxn",
+      "canonicalName": "can liner 40x46 1.5 mil black roll",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "40X46ROLL"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Glove Nitrile Fdsrv PF Blk\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58umxh005t3nu9z4hwb0ms",
+      "label": "Glove Nitrile Fdsrv PF Blk"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Glove Nitrile Fdsrv PF Blk",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "glove nitrile fdsrv pf blk",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sysco Classic Glove Nitrile Foodservice Powder Free Black\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uol8006l3nu9flu5bwj9",
+      "label": "Sysco Classic Glove Nitrile Foodservice Powder Free Black"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sysco Classic Glove Nitrile Foodservice Powder Free Black",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "sysco classic glove nitrile foodservice powder free black",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Sys Cls Glove Nitrile FDSRV PF Black\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58upb7006x3nu9o4widnck",
+      "label": "Sys Cls Glove Nitrile FDSRV PF Black"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Sys Cls Glove Nitrile FDSRV PF Black",
+      "canonicalIngredientId": "cmo58uduf00263nu9a73pi7d5",
+      "canonicalName": "sys cls glove nitrile fdsrv pf black",
+      "activeSkus": [
+        {
+          "vendor": "Sysco",
+          "sku": "4685614"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "4685576"
+        },
+        {
+          "vendor": "Sysco",
+          "sku": "304363443"
+        }
+      ]
+    }
+  },
+  {
+    "domain": "ingredient-matching",
+    "check": "orphan_alias",
+    "severity": "WARNING",
+    "message": "Alias for \"Tray Food Paper #50 White/Red Check\" (store kdt9na) is dead — same product now matches via (vendor, sku). Can silently apply wrong conversion if sku match ever breaks.",
+    "entity": {
+      "kind": "alias",
+      "id": "cmo58uoy4006r3nu9eoz820pc",
+      "label": "Tray Food Paper #50 White/Red Check"
+    },
+    "details": {
+      "storeId": "cmexd4zia0001jr04ljkdt9na",
+      "rawName": "Tray Food Paper #50 White/Red Check",
+      "canonicalIngredientId": "cmo58uhf6003u3nu9l1qxfq5f",
+      "canonicalName": "tray food paper #50 white/red check",
+      "activeSkus": [
+        {
+          "vendor": "Individual FoodService",
+          "sku": "SQP2650"
+        }
+      ]
+    }
+  }
+]
