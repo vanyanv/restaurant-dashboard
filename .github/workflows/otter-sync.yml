@@ -1,8 +1,15 @@
 name: Otter Daily Sync
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    # Every 2 hours. Bumped from every 6h to keep daily/menu totals fresh
+    # through the day as Otter's EOD aggregations land. Concurrency lock
+    # prevents pile-up if a run drags.
+    - cron: '0 */2 * * *'
   workflow_dispatch:
+
+concurrency:
+  group: otter-sync
+  cancel-in-progress: false
 
 jobs:
   sync:

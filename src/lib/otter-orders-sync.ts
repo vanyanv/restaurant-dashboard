@@ -29,7 +29,10 @@ function asNumber(v: any): number {
   return Number.isFinite(n) ? n : 0
 }
 
-export async function runOrdersSync(days: number): Promise<OrdersSyncResult> {
+export async function runOrdersSync(
+  days: number,
+  endDateOverride?: Date
+): Promise<OrdersSyncResult> {
   const otterStores = await prisma.otterStore.findMany({
     include: { store: { select: { id: true, isActive: true } } },
   })
@@ -53,9 +56,9 @@ export async function runOrdersSync(days: number): Promise<OrdersSyncResult> {
     activeOtterStores.map((os) => [os.otterStoreId, os.storeId])
   )
 
-  const endDate = new Date()
-  endDate.setHours(23, 59, 59, 999)
-  const startDate = new Date()
+  const endDate = endDateOverride ? new Date(endDateOverride) : new Date()
+  if (!endDateOverride) endDate.setHours(23, 59, 59, 999)
+  const startDate = new Date(endDate)
   startDate.setDate(startDate.getDate() - (days - 1))
   startDate.setHours(0, 0, 0, 0)
 

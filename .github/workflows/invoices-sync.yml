@@ -1,8 +1,15 @@
 name: Invoices Sync
 on:
   schedule:
+    # Every 6h, offset by 30 min from the others. Vendors deliver invoices on
+    # daily-to-weekly cadences so polling faster gives no benefit. Concurrency
+    # lock prevents pile-up if a run drags.
     - cron: '30 */6 * * *'
   workflow_dispatch:
+
+concurrency:
+  group: invoices-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
