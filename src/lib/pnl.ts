@@ -43,6 +43,7 @@ export const GL_ROWS = [
   { code: "4013", label: "SALES-FOOD - Doordash" },
   { code: "4014", label: "SALES-FOOD - Grubhub" },
   { code: "4015", label: "SALES-FOOD - Chownow" },
+  { code: "4015C", label: "SALES-FOOD - Caviar" },
   { code: "4016", label: "SALES-FOOD - EZ Cater" },
   { code: "4017", label: "SALES-FOOD - Fooda" },
   { code: "4018", label: "SALES-FOOD - Otter Online" },
@@ -228,11 +229,13 @@ export function salesRowValues(rows: OtterSummaryRow[]): number[] {
   const doordash = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "doordash")
   const grubhub = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "grubhub")
   const chownow = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "chownow")
+  const caviar = sumBy(rows, (r) => r.tpGrossSales, (r) => r.platform === "caviar")
 
   const serviceCharge =
     sumBy(rows, (r) => r.fpServiceCharges) + sumBy(rows, (r) => r.tpServiceCharges)
   const tax = -(sumBy(rows, (r) => r.fpTaxCollected) + sumBy(rows, (r) => r.tpTaxCollected))
-  const discounts = -(sumBy(rows, (r) => r.fpDiscounts) + sumBy(rows, (r) => r.tpDiscounts))
+  // fp/tpDiscounts come back signed negative from Otter — do not negate.
+  const discounts = sumBy(rows, (r) => r.fpDiscounts) + sumBy(rows, (r) => r.tpDiscounts)
 
   return [
     creditCards, // 4010
@@ -241,6 +244,7 @@ export function salesRowValues(rows: OtterSummaryRow[]): number[] {
     doordash,    // 4013
     grubhub,     // 4014
     chownow,     // 4015
+    caviar,      // 4015C
     0,           // 4016 EZ Cater (no source)
     0,           // 4017 Fooda (no source)
     0,           // 4018 Otter Online (no source)
@@ -267,6 +271,7 @@ export const CHANNEL_LABELS = [
   "DoorDash",
   "Grubhub",
   "ChowNow",
+  "Caviar",
   "EZ Cater",
   "Fooda",
   "Otter Online",

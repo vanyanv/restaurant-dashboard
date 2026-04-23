@@ -149,7 +149,15 @@ async function main() {
 
   // --- Upsert helpers ---
 
-  function makeDailyUpsert(row: OtterRow) {
+  type DailyExtract = {
+    storeId: string
+    date: Date
+    platform: string
+    paymentMethod: string
+    data: Record<string, number | null>
+  }
+
+  function extractDailyRow(row: OtterRow): DailyExtract | null {
     const otterStoreId = row["store"] as string | null
     if (!otterStoreId) return null
     const storeId = otterToInternal.get(otterStoreId)
@@ -163,7 +171,7 @@ async function main() {
     const isFP = platform === "css-pos" || platform === "bnm-web"
     const orderCount = (row["order_count"] as number | null) ?? null
 
-    const data = {
+    const data: Record<string, number | null> = {
       fpGrossSales: row["fp_sales_financials_gross_sales"] as number | null,
       fpNetSales: row["fp_sales_financials_net_sales"] as number | null,
       fpDiscounts: row["fp_sales_financials_discounts"] as number | null,
@@ -190,14 +198,40 @@ async function main() {
       tpOrderCount: isFP ? null : orderCount,
     }
 
-    return () =>
-      prisma.otterDailySummary.upsert({
-        where: {
-          storeId_date_platform_paymentMethod: { storeId, date, platform, paymentMethod },
-        },
-        create: { storeId, date, platform, paymentMethod, ...data },
-        update: data,
-      })
+    return { storeId, date, platform, paymentMethod, data }
+  }
+
+  // Otter occasionally returns multiple rows per (store, date, platform, paymentMethod)
+  // — e.g. css-pos CASH has a "sales" row and a separate "till session" row. Upserting
+  // them sequentially loses fields to last-write. Merge by key, summing numeric fields
+  // (nulls treated as 0; result is null only when every duplicate is null).
+  function buildDailyUpserts(rows: OtterRow[]): Array<() => any> {
+    const merged = new Map<string, DailyExtract>()
+    for (const row of rows) {
+      const rec = extractDailyRow(row)
+      if (!rec) continue
+      const key = `${rec.storeId}|${rec.date.toISOString()}|${rec.platform}|${rec.paymentMethod}`
+      const existing = merged.get(key)
+      if (!existing) {
+        merged.set(key, { ...rec, data: { ...rec.data } })
+        continue
+      }
+      for (const [k, v] of Object.entries(rec.data)) {
+        const cur = existing.data[k]
+        if (v == null) continue
+        existing.data[k] = cur == null ? v : cur + v
+      }
+    }
+    return [...merged.values()].map(({ storeId, date, platform, paymentMethod, data }) =>
+      () =>
+        prisma.otterDailySummary.upsert({
+          where: {
+            storeId_date_platform_paymentMethod: { storeId, date, platform, paymentMethod },
+          },
+          create: { storeId, date, platform, paymentMethod, ...data },
+          update: data,
+        })
+    )
   }
 
   function makeCategoryUpsert(row: OtterRow, storeId: string, date: Date) {
@@ -273,7 +307,7 @@ async function main() {
       const rows = await queryWithRetry(body, "Daily")
       console.log(`  [Daily] Fetched ${rows.length} rows, upserting...`)
 
-      const ops = rows.map((row) => makeDailyUpsert(row)).filter(Boolean) as Array<() => any>
+      const ops = buildDailyUpserts(rows)
       const { synced, failed } = await batchUpsert(ops, "Daily")
       totalDaily += synced
       totalDailyFailed += failed

@@ -37,6 +37,30 @@ function computeTotalProgress(dailyPct: number, categoryPct: number, itemPct: nu
   )
 }
 
+type DailyFields = Record<string, number | null>
+type DailyRecord = { storeId: string; date: Date; platform: string; paymentMethod: string; fields: DailyFields }
+
+/** Merge duplicate (storeId, date, platform, paymentMethod) records so collisions
+ *  on the unique index don't lose fields. For each numeric field, sum non-null
+ *  values across the group; keep null only when every duplicate is null. */
+function mergeDailyRecords(records: DailyRecord[]): DailyRecord[] {
+  const byKey = new Map<string, DailyRecord>()
+  for (const rec of records) {
+    const key = `${rec.storeId}|${rec.date.toISOString()}|${rec.platform}|${rec.paymentMethod}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, { ...rec, fields: { ...rec.fields } })
+      continue
+    }
+    for (const [k, v] of Object.entries(rec.fields)) {
+      const cur = existing.fields[k]
+      if (v == null) continue
+      existing.fields[k] = cur == null ? v : cur + v
+    }
+  }
+  return [...byKey.values()]
+}
+
 interface SyncResult {
   message: string
   synced: number
@@ -110,7 +134,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   let synced = 0
   let failed = 0
 
-  const dailyRecords = rows
+  const rawRecords = rows
     .filter((row: OtterRow) => {
       const otterStoreId = row["store"] as string | null
       return otterStoreId && otterToInternal.has(otterStoreId) && row["eod_date_with_timezone"]
@@ -152,6 +176,13 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
 
       return { storeId, date, platform, paymentMethod, fields }
     })
+
+  // Otter sometimes returns multiple rows per (store, date, platform, paymentMethod)
+  // — e.g. css-pos CASH has one "sales" row and one "till session" row that
+  // share the unique key. Upserting them sequentially loses data to the last-write.
+  // Merge by key: sum numeric fields across duplicates (nulls treated as 0, but only
+  // kept null when every duplicate's value is null).
+  const dailyRecords = mergeDailyRecords(rawRecords)
 
   emit({
     phase: "daily", status: "writing", totalProgress: computeTotalProgress(10, 0, 0),
