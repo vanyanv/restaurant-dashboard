@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Sparkles } from "lucide-react"
+import { ChevronDown, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,6 +14,14 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { MenuItemList } from "./menu-item-list"
 import { RecipeCanvas, type CanvasInitialValue } from "./recipe-canvas"
@@ -68,6 +76,16 @@ export function RecipesContent({
   const [canonicalIngredients, setCanonicalIngredients] = useState(
     initialCanonicalIngredients
   )
+  const [isPhone, setIsPhone] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)")
+    const sync = () => setIsPhone(mq.matches)
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
 
   async function refreshCanonicals() {
     const next = await listCanonicalIngredients()
@@ -267,33 +285,102 @@ export function RecipesContent({
         </Button>
       </EditorialTopbar>
 
-      <div className="grid h-[calc(100vh-3.5rem)] grid-cols-[280px_1fr] overflow-hidden">
-        <MenuItemList
-          menuItems={initialMenuItems}
-          recipes={initialRecipes}
-          filter={filter}
-          onFilterChange={setFilter}
-          selectedMenuItemName={selectedMenuItemName}
-          selectedRecipeId={selectedRecipeId}
-          onSelectMenuItem={openForMenuItem}
-          onSelectRecipe={openForRecipe}
-          onAddPrepRecipe={startNewPrepRecipe}
-        />
-
-        {editor ? (
-          <RecipeCanvas
-            key={editor.recipeId ?? editor.itemName + (editor.mapOtterItemName ?? "")}
-            initial={editor}
-            canonicalIngredients={canonicalIngredients}
-            recipes={initialRecipes}
-            onSaved={handleSaved}
-            onCancel={handleCancel}
-            onRequestCreateIngredient={() => setCreateDialogOpen(true)}
-            onCanonicalCreated={refreshCanonicals}
-          />
-        ) : (
-          <EmptyState />
+      <div
+        className={cn(
+          "h-[calc(100vh-3.5rem)] overflow-hidden",
+          isPhone ? "flex flex-col" : "grid grid-cols-[280px_1fr]"
         )}
+      >
+        {!isPhone && (
+          <MenuItemList
+            menuItems={initialMenuItems}
+            recipes={initialRecipes}
+            filter={filter}
+            onFilterChange={setFilter}
+            selectedMenuItemName={selectedMenuItemName}
+            selectedRecipeId={selectedRecipeId}
+            onSelectMenuItem={openForMenuItem}
+            onSelectRecipe={openForRecipe}
+            onAddPrepRecipe={startNewPrepRecipe}
+          />
+        )}
+
+        {isPhone && (
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--hairline)] bg-[var(--paper)] px-3 py-2">
+            <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 flex-1 justify-between border-[var(--hairline-bold)] bg-[var(--paper)] font-mono text-[11px] uppercase tracking-[0.12em]"
+                >
+                  <span className="truncate text-left">
+                    {selectedMenuItemName ??
+                      (selectedRecipeId
+                        ? initialRecipes.find((r) => r.id === selectedRecipeId)?.itemName ?? "Recipe"
+                        : "Pick a recipe")}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="w-full max-w-[min(420px,100vw)] border-r border-[#c9beaf] bg-[#fbf6ee] p-0"
+                style={{
+                  ["--ink" as string]: "#1a1613",
+                  ["--ink-muted" as string]: "#6b625a",
+                  ["--ink-faint" as string]: "#a69d92",
+                  ["--paper" as string]: "#fbf6ee",
+                  ["--paper-deep" as string]: "#f4ecdf",
+                  ["--hairline" as string]: "#e8dfd3",
+                  ["--hairline-bold" as string]: "#c9beaf",
+                  ["--accent" as string]: "#dc2626",
+                }}
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Recipes &amp; menu items</SheetTitle>
+                </SheetHeader>
+                <MenuItemList
+                  menuItems={initialMenuItems}
+                  recipes={initialRecipes}
+                  filter={filter}
+                  onFilterChange={setFilter}
+                  selectedMenuItemName={selectedMenuItemName}
+                  selectedRecipeId={selectedRecipeId}
+                  onSelectMenuItem={(m) => {
+                    openForMenuItem(m)
+                    setPickerOpen(false)
+                  }}
+                  onSelectRecipe={(r) => {
+                    openForRecipe(r)
+                    setPickerOpen(false)
+                  }}
+                  onAddPrepRecipe={() => {
+                    startNewPrepRecipe()
+                    setPickerOpen(false)
+                  }}
+                />
+              </SheetContent>
+            </Sheet>
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {editor ? (
+            <RecipeCanvas
+              key={editor.recipeId ?? editor.itemName + (editor.mapOtterItemName ?? "")}
+              initial={editor}
+              canonicalIngredients={canonicalIngredients}
+              recipes={initialRecipes}
+              onSaved={handleSaved}
+              onCancel={handleCancel}
+              onRequestCreateIngredient={() => setCreateDialogOpen(true)}
+              onCanonicalCreated={refreshCanonicals}
+            />
+          ) : (
+            <EmptyState isPhone={isPhone} />
+          )}
+        </div>
       </div>
 
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -361,7 +448,7 @@ export function RecipesContent({
   )
 }
 
-function EmptyState() {
+function EmptyState({ isPhone = false }: { isPhone?: boolean }) {
   return (
     <div className="flex h-full items-center justify-center bg-[var(--paper)]">
       <div className="mx-10 max-w-md text-center">
@@ -372,7 +459,9 @@ function EmptyState() {
           to begin.
         </h2>
         <p className="mt-4 font-mono text-[11px] uppercase leading-relaxed tracking-[0.12em] text-[var(--ink-muted)]">
-          Select a menu item or recipe on the left.
+          {isPhone
+            ? "Tap “Pick a recipe” above."
+            : "Select a menu item or recipe on the left."}
           <br />
           Or start a new prep component.
         </p>

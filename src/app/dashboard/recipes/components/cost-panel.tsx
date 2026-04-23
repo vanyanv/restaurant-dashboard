@@ -33,7 +33,7 @@ export function CostPanel({ cost, loading, servingSize, foodCostOverride }: Prop
     )[0]
 
   return (
-    <aside className="flex h-full flex-col overflow-hidden border-l border-[var(--hairline)] bg-[var(--paper)]">
+    <aside className="flex h-full flex-col overflow-hidden border-t border-[var(--hairline)] bg-[var(--paper)] md:border-t-0 md:border-l">
       <div className="border-b border-[var(--hairline)] px-5 py-4">
         <div className="editorial-section-label">§ cost</div>
         <div className="mt-1 font-display text-[22px] italic leading-tight text-[var(--ink)]">

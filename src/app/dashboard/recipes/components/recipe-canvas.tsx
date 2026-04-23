@@ -241,11 +241,11 @@ export function RecipeCanvas({
   }
 
   return (
-    <div className="grid h-full grid-cols-[1fr_320px] overflow-hidden">
+    <div className="grid h-full grid-cols-1 overflow-hidden md:grid-cols-[1fr_320px]">
       {/* Canvas column */}
       <div className="relative flex h-full flex-col overflow-hidden bg-[var(--paper)]">
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex max-w-[820px] flex-col gap-6 px-10 py-10">
+          <div className="mx-auto flex max-w-[820px] flex-col gap-6 px-4 py-6 md:px-10 md:py-10">
             {/* Title block */}
             <div>
               <div className="editorial-section-label">
@@ -255,7 +255,7 @@ export function RecipeCanvas({
                 value={itemName}
                 onChange={(e) => setItemName(e.target.value)}
                 placeholder="Name this dish…"
-                className="mt-2 w-full bg-transparent font-display text-[38px] italic leading-[1.05] tracking-[-0.02em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+                className="mt-2 w-full bg-transparent font-display text-[28px] italic leading-[1.05] tracking-[-0.02em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none md:text-[38px]"
                 style={{ fontFeatureSettings: "'ss01','dlig','liga'" }}
               />
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-dashed border-[var(--hairline-bold)] pb-4 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--ink-muted)]">

@@ -44,31 +44,35 @@ export function OrderDetailContent({ order }: Props) {
   return (
     <>
       {/* ─── Top strip ─── */}
-      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--hairline)] bg-[color-mix(in_srgb,var(--paper)_90%,transparent)] px-6 backdrop-blur-md">
+      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-[var(--hairline)] bg-[color-mix(in_srgb,var(--paper)_90%,transparent)] px-3 backdrop-blur-md sm:gap-3 sm:px-6">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-1 h-4" />
         <Link
           href="/dashboard/orders"
+          aria-label="All orders"
           className="flex items-center gap-1.5 text-[12px] text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
-          <span className="font-label">All orders</span>
+          <span className="font-label hidden sm:inline">All orders</span>
         </Link>
-        <Separator orientation="vertical" className="mx-2 h-4" />
-        <span className="font-mono text-[11px] text-[var(--ink-muted)]">
-          ORDER · {displayId}
+        <Separator orientation="vertical" className="mx-1 h-4 sm:mx-2" />
+        <span className="font-mono text-[11px] text-[var(--ink-muted)] truncate">
+          <span className="hidden sm:inline">ORDER · </span>
+          <span className="sm:hidden">#</span>
+          {displayId}
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={handleRefetch}
             disabled={pending}
+            aria-label="Re-fetch order"
             className="toolbar-btn inline-flex items-center gap-1.5"
           >
             <RefreshCw
               className={`h-3 w-3 ${pending ? "animate-spin" : ""}`}
             />
-            <span>Re-fetch</span>
+            <span className="hidden sm:inline">Re-fetch</span>
           </button>
         </div>
       </header>
@@ -81,11 +85,11 @@ export function OrderDetailContent({ order }: Props) {
       )}
 
       {/* ─── Masthead ─── */}
-      <section className="px-6 pt-12 pb-10 border-b border-[var(--hairline)] dock-in dock-in-1">
-        <div className="grid grid-cols-[1fr_auto] items-end gap-8">
-          <div>
+      <section className="px-4 pt-6 pb-6 border-b border-[var(--hairline)] sm:px-6 sm:pt-12 sm:pb-10 dock-in dock-in-1">
+        <div className="grid grid-cols-[1fr_auto] items-end gap-4 sm:gap-8">
+          <div className="min-w-0">
             <div className="font-label mb-2">Display ID</div>
-            <h1 className="font-display-tight text-[64px] leading-[0.9] md:text-[96px]">
+            <h1 className="font-display-tight editorial-h1--display leading-[0.9]">
               {displayId}
             </h1>
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -100,7 +104,7 @@ export function OrderDetailContent({ order }: Props) {
           </div>
           <div className="text-right">
             <div className="font-label">Customer</div>
-            <div className="font-display mt-1 text-[22px] italic leading-tight md:text-[28px]">
+            <div className="font-display mt-1 text-[18px] italic leading-tight sm:text-[22px] md:text-[28px]">
               {order.customerName ?? (
                 <span className="text-[var(--ink-faint)]">anonymous</span>
               )}
@@ -117,7 +121,7 @@ export function OrderDetailContent({ order }: Props) {
       {/* ─── Manifest + ledger ─── */}
       <div className="grid gap-0 border-b border-[var(--hairline)] md:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
         {/* Items manifest */}
-        <section className="px-6 py-8 md:border-r md:border-[var(--hairline)] dock-in dock-in-2">
+        <section className="px-4 py-6 sm:px-6 sm:py-8 md:border-r md:border-[var(--hairline)] dock-in dock-in-2">
           <div className="mb-5 flex items-baseline justify-between">
             <h2 className="font-display text-[22px] leading-none">Manifest</h2>
             <span className="font-label">
@@ -145,7 +149,7 @@ export function OrderDetailContent({ order }: Props) {
         </section>
 
         {/* Ledger */}
-        <aside className="px-6 py-8 bg-[rgba(255,255,255,0.4)] md:sticky md:top-14 md:self-start dock-in dock-in-3">
+        <aside className="px-4 py-6 bg-[rgba(255,255,255,0.4)] sm:px-6 sm:py-8 md:sticky md:top-14 md:self-start dock-in dock-in-3">
           <div className="font-label mb-3">Receipt</div>
           <div>
             <div className="font-display-tight text-[56px] leading-[0.9] md:text-[72px]">
@@ -194,10 +198,13 @@ export function OrderDetailContent({ order }: Props) {
       </div>
 
       {/* ─── Footer metadata ─── */}
-      <footer className="px-6 py-6">
+      <footer className="px-4 py-6 sm:px-6">
         <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-faint)] space-y-1">
           <div>
-            OTTER-ID · <span className="text-[var(--ink-muted)]">{order.otterOrderId}</span>
+            OTTER-ID ·{" "}
+            <span className="text-[var(--ink-muted)] break-all">
+              {order.otterOrderId}
+            </span>
           </div>
           {order.detailsFetchedAt && (
             <div>

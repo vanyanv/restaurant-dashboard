@@ -158,7 +158,7 @@ export function MenuCatalogContent({ rows }: Props) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="border-b border-[var(--hairline)] bg-[var(--paper)] px-8 py-3">
+      <div className="border-b border-[var(--hairline)] bg-[var(--paper)] px-4 py-3 sm:px-8">
         <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
           <span className="tabular-nums text-[var(--ink-muted)]">
             {enriched.length} items
@@ -223,7 +223,7 @@ export function MenuCatalogContent({ rows }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-[var(--paper)] px-8 py-8">
+      <div className="flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-6 sm:px-8 sm:py-8">
         <div className="mb-6 flex items-center gap-2 border-b border-[var(--hairline-bold)] pb-3">
           <Search className="h-3.5 w-3.5 text-[var(--ink-faint)]" />
           <Input
@@ -456,7 +456,7 @@ function HeaderRow({
   return (
     <div
       className={cn(
-        "grid gap-4 border-b border-[var(--hairline)] pb-2 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ink-faint)]",
+        "hidden gap-4 border-b border-[var(--hairline)] pb-2 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ink-faint)] sm:grid",
         GRID_COLS
       )}
     >
@@ -521,11 +521,11 @@ function MenuRow({
         onMouseEnter={() => router.prefetch(href)}
         onFocus={() => router.prefetch(href)}
         className={cn(
-          "group grid w-full items-start gap-4 border-b border-[var(--hairline)] py-3 text-left transition hover:bg-[var(--paper-deep)]",
+          "menu-row group grid w-full items-start gap-4 border-b border-[var(--hairline)] py-3 text-left transition hover:bg-[var(--paper-deep)]",
           GRID_COLS
         )}
       >
-        <div className="min-w-0">
+        <div className="menu-row__item min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="font-display text-[16px] italic leading-snug text-[var(--ink)] break-words">
               {row.itemName}
@@ -574,20 +574,20 @@ function MenuRow({
             )}
           </div>
         </div>
-        <span className="text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
+        <span className="menu-row__sell text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
           {sell != null ? `$${sell.toFixed(2)}` : <span className="text-[var(--ink-faint)]">—</span>}
         </span>
-        <span className="text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
+        <span className="menu-row__cost text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
           {cost != null ? `$${cost.toFixed(2)}` : <span className="text-[var(--ink-faint)]">—</span>}
         </span>
-        <span className="text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
+        <span className="menu-row__profit text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
           {profit30d != null ? (
             `$${Math.round(profit30d).toLocaleString()}`
           ) : (
             <span className="text-[var(--ink-faint)]">—</span>
           )}
         </span>
-        <span className="text-right font-mono text-[12px] tabular-nums text-[var(--ink-muted)]">
+        <span className="menu-row__contribution text-right font-mono text-[12px] tabular-nums text-[var(--ink-muted)]">
           {contribution != null ? (
             `${contribution.toFixed(1)}%`
           ) : (
@@ -596,13 +596,13 @@ function MenuRow({
         </span>
         <span
           className={cn(
-            "text-right font-mono text-[13px] tabular-nums",
+            "menu-row__margin text-right font-mono text-[13px] tabular-nums",
             marginBandClass(marginPct)
           )}
         >
           {marginPct != null ? `${marginPct.toFixed(1)}%` : "—"}
         </span>
-        <ChevronRight className="mt-1 h-4 w-4 text-[var(--ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ink)]" />
+        <ChevronRight className="menu-row__chevron mt-1 h-4 w-4 text-[var(--ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ink)]" />
       </Link>
     </li>
   )

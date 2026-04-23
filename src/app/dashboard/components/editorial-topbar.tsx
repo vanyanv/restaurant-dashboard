@@ -26,7 +26,7 @@ export function EditorialTopbar({
           {title}
         </span>
         {stamps ? (
-          <span className="ml-3 hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] lg:flex">
+          <span className="ml-3 hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] sm:flex">
             <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
             {stamps}
           </span>

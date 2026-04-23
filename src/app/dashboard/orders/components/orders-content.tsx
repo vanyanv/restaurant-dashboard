@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
-import { Search, X } from "lucide-react"
+import { useEffect, useMemo, useState, useTransition } from "react"
+import { Search, SlidersHorizontal, X } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
@@ -9,6 +9,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import {
   getOrdersList,
   type OrderListFilters,
@@ -37,6 +44,15 @@ export function OrdersContent({ initial, stores }: Props) {
   const [search, setSearch] = useState<string>("")
   const [pending, startTransition] = useTransition()
   const [isFiltered, setIsFiltered] = useState(false)
+  const [pageSize, setPageSize] = useState<number>(50)
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)")
+    const sync = () => setPageSize(mq.matches ? 25 : 50)
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
 
   const storeName = storeId
     ? stores.find((s) => s.id === storeId)?.name ?? "Store"
@@ -44,13 +60,16 @@ export function OrdersContent({ initial, stores }: Props) {
 
   const todayStats = useMemo(() => summarizeToday(rows), [rows])
 
+  const activeFilterCount =
+    (storeId ? 1 : 0) + (platform ? 1 : 0) + (startDate && endDate ? 1 : 0)
+
   const buildFilters = (): OrderListFilters => ({
     storeId,
     platform,
     startDate: startDate || null,
     endDate: endDate || null,
     search: search || null,
-    limit: 50,
+    limit: pageSize,
   })
 
   function runQuery(filters: OrderListFilters, append = false) {
@@ -80,7 +99,7 @@ export function OrdersContent({ initial, stores }: Props) {
     setEndDate("")
     setSearch("")
     setIsFiltered(false)
-    runQuery({ limit: 50 })
+    runQuery({ limit: pageSize })
   }
 
   function loadMore() {
@@ -105,11 +124,11 @@ export function OrdersContent({ initial, stores }: Props) {
       </header>
 
       {/* ─── Masthead ─── */}
-      <section className="border-b border-[var(--hairline)] px-6 pt-10 pb-8">
-        <div className="flex items-end justify-between gap-6 dock-in dock-in-1">
+      <section className="border-b border-[var(--hairline)] px-4 pt-6 pb-6 sm:px-6 sm:pt-10 sm:pb-8">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between dock-in dock-in-1">
           <div>
             <div className="font-label">Volume 1 · Orders ledger</div>
-            <h1 className="font-display mt-1 text-[44px] leading-[0.98] tracking-[-0.028em] md:text-[56px]">
+            <h1 className="editorial-h1 font-display mt-1 sm:text-[56px]">
               The daily <em className="italic">service</em>.
             </h1>
             <p className="mt-3 max-w-lg text-[13px] leading-[1.55] text-[var(--ink-muted)]">
@@ -118,8 +137,8 @@ export function OrdersContent({ initial, stores }: Props) {
             </p>
           </div>
 
-          {/* KPI trio */}
-          <dl className="hidden shrink-0 items-end gap-10 md:flex dock-in dock-in-2">
+          {/* KPI trio — ribbon on phones, inline trio at ≥640w */}
+          <dl className="editorial-kpi-ribbon shrink-0 items-end sm:flex sm:gap-10 sm:overflow-visible sm:pb-0 dock-in dock-in-2">
             <KpiStat
               label="Recent count"
               value={totalCount.toLocaleString()}
@@ -140,8 +159,172 @@ export function OrdersContent({ initial, stores }: Props) {
       </section>
 
       {/* ─── Toolbar ─── */}
-      <section className="border-b border-[var(--hairline)] px-6 py-4 dock-in dock-in-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <section className="border-b border-[var(--hairline)] px-4 py-3 sm:px-6 sm:py-4 dock-in dock-in-3">
+        {/* Mobile (≤640w): search bar + single Filter button → bottom Sheet */}
+        <div className="flex flex-col gap-2 sm:hidden">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              apply()
+            }}
+            className="search-shell !w-full"
+            role="search"
+          >
+            <Search className="h-3.5 w-3.5 text-[var(--ink-faint)]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search orders…"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("")
+                  apply()
+                }}
+                className="text-[var(--ink-faint)] hover:text-[var(--ink)]"
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </form>
+
+          <div className="flex items-center gap-2">
+            <Sheet>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  className={`toolbar-btn ${activeFilterCount > 0 ? "active" : ""}`}
+                  aria-label="Open filters"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="ml-1 font-mono text-[10px] text-[var(--accent)]">
+                      · {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="bottom"
+                className="max-h-[85vh] overflow-y-auto bg-[var(--paper)] border-t border-[var(--hairline-bold)]"
+              >
+                <SheetHeader>
+                  <SheetTitle className="font-display text-[20px]">
+                    Filter orders
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="flex flex-col gap-5 px-4 pb-6">
+                  <div className="flex flex-col gap-2">
+                    <div className="font-label">Store</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${!storeId ? "active" : ""}`}
+                        onClick={() => {
+                          setStoreId(null)
+                          apply()
+                        }}
+                      >
+                        Any store
+                      </button>
+                      {stores.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`toolbar-btn ${storeId === s.id ? "active" : ""}`}
+                          onClick={() => {
+                            setStoreId(s.id)
+                            apply()
+                          }}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="font-label">Platform</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className={`toolbar-btn ${!platform ? "active" : ""}`}
+                        onClick={() => {
+                          setPlatform(null)
+                          apply()
+                        }}
+                      >
+                        Any platform
+                      </button>
+                      {platforms.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          className={`toolbar-btn ${platform === p ? "active" : ""}`}
+                          onClick={() => {
+                            setPlatform(p)
+                            apply()
+                          }}
+                        >
+                          {formatPlatform(p)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="font-label">Date range</div>
+                    <DateRangePicker
+                      days={30}
+                      customRange={
+                        startDate && endDate ? { startDate, endDate } : null
+                      }
+                      onRangeChange={(s, e) => {
+                        setStartDate(s)
+                        setEndDate(e)
+                        setIsFiltered(
+                          !!(storeId || platform || s || e || search.trim())
+                        )
+                        runQuery({
+                          storeId,
+                          platform,
+                          startDate: s || null,
+                          endDate: e || null,
+                          search: search || null,
+                          limit: 50,
+                        })
+                      }}
+                      isPending={pending}
+                    />
+                  </div>
+
+                  {isFiltered && (
+                    <button
+                      type="button"
+                      onClick={resetAll}
+                      className="toolbar-btn self-start text-[var(--accent)]"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <div className="ml-auto font-mono text-[11px] text-[var(--ink-faint)]">
+              {pending
+                ? "Loading…"
+                : `${rows.length} / ${totalCount.toLocaleString()}`}
+            </div>
+          </div>
+        </div>
+
+        {/* Tablet + desktop (≥640w): original inline toolbar */}
+        <div className="hidden flex-wrap items-center gap-2 sm:flex">
           <form
             onSubmit={(e) => {
               e.preventDefault()
@@ -290,7 +473,7 @@ export function OrdersContent({ initial, stores }: Props) {
               disabled={pending}
               className="toolbar-btn"
             >
-              {pending ? "Loading…" : "Load 50 more"}
+              {pending ? "Loading…" : `Load ${pageSize} more`}
             </button>
           </div>
         )}
@@ -367,7 +550,7 @@ function FilterPopover({
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[220px] p-0 bg-[var(--paper)] border border-[var(--hairline-bold)] shadow-md"
+        className="w-[min(calc(100vw-1rem),280px)] min-w-[220px] p-0 bg-[var(--paper)] border border-[var(--hairline-bold)] shadow-md"
       >
         <div className="py-1.5">{children}</div>
       </PopoverContent>

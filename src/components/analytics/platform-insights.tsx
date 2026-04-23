@@ -118,7 +118,7 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
         <h3 className="text-xs font-semibold text-foreground">Platform Insights</h3>
         <span className="text-[11px] text-muted-foreground">Performance by sales channel</span>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {channels.map((ch) => (
           <Card
             key={ch.key}

@@ -54,3 +54,6 @@ scripts/test-output/
 
 # Local outputs from invoice backfill / diagnostic scripts
 backfill-failures.json
+
+# Mobile-audit screenshot artifacts (Playwright)
+/tmp-screenshots/

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ChevronRight, Search, TableProperties } from "lucide-react"
+import { ChevronDown, ChevronRight, Search, TableProperties } from "lucide-react"
 import { formatCurrency } from "@/lib/format"
 import type { StoreSummaryRow } from "@/types/analytics"
 import { cn } from "@/lib/utils"
@@ -189,8 +189,29 @@ export function FinancialSummaryTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="relative overflow-x-auto">
+      {/* Mobile card list (≤640w). Tablet and desktop render the table below. */}
+      <div className="sm:hidden">
+        {filteredRows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-[color:var(--ink-muted)]">
+            No {viewBy === "location" ? "locations" : "channels"} match
+            &ldquo;{search}&rdquo;
+          </div>
+        ) : (
+          <ul className="divide-y divide-[color:var(--hairline)]">
+            {filteredRows.map((row) => (
+              <MobileSummaryCard
+                key={row.storeId}
+                row={row}
+                linkable={viewBy === "location"}
+              />
+            ))}
+            <MobileSummaryCard row={totals} linkable={false} isTotal />
+          </ul>
+        )}
+      </div>
+
+      {/* Table (≥640w) */}
+      <div className="relative hidden overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[color:var(--hairline-bold)] bg-[rgba(0,0,0,0.02)]">
@@ -292,6 +313,92 @@ export function FinancialSummaryTable({
         </span>
       </div>
     </div>
+  )
+}
+
+function MobileSummaryCard({
+  row,
+  linkable,
+  isTotal = false,
+}: {
+  row: StoreSummaryRow
+  linkable: boolean
+  isTotal?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const gross = row.grossSales ?? 0
+  const orders = row.fulfilledOrders ?? 0
+  const net = row.netSales ?? 0
+
+  const nameEl = linkable ? (
+    <Link
+      href={`/dashboard/analytics/${row.storeId}`}
+      className="font-medium text-[color:var(--ink)] underline-offset-2 hover:text-[color:var(--accent)] hover:underline"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {row.storeName}
+    </Link>
+  ) : (
+    <span
+      className={cn(
+        "text-[color:var(--ink)]",
+        isTotal
+          ? "font-[family-name:var(--font-dm-sans)] text-[11px] font-bold uppercase tracking-[0.22em]"
+          : "font-medium"
+      )}
+    >
+      {isTotal ? "Total" : row.storeName}
+    </span>
+  )
+
+  return (
+    <li className={cn(isTotal && "bg-[rgba(244,236,223,0.55)]")}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        aria-expanded={open}
+      >
+        <span className="flex flex-1 min-w-0 flex-col gap-0.5">
+          <span className="truncate">{nameEl}</span>
+          <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-[color:var(--ink-faint)]">
+            {orders.toLocaleString()} order{orders === 1 ? "" : "s"}
+            {" · "}
+            net {formatCurrency(net)}
+          </span>
+        </span>
+        <span className="font-display-tight text-[20px] leading-none tabular-nums text-[color:var(--ink)]">
+          {formatCurrency(gross)}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-[color:var(--ink-faint)] transition-transform",
+            open && "rotate-180"
+          )}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open && (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-dotted border-[color:var(--hairline)] px-4 py-3 text-[12px]">
+          {COLUMNS.map((col) => (
+            <div key={col.key} className="flex items-baseline justify-between gap-2">
+              <dt className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-[color:var(--ink-faint)]">
+                {col.shortLabel ?? col.label}
+              </dt>
+              <dd className="truncate">
+                <CellValue
+                  value={row[col.key] as number | null}
+                  negative={col.negative}
+                  format={col.format}
+                  bold={isTotal}
+                />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </li>
   )
 }
 

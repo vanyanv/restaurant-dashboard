@@ -40,12 +40,12 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
           <DayHighlightsSection range={range} />
         </Suspense>
 
-        <div className="grid gap-6 lg:grid-cols-5 dock-in dock-in-4">
-          <div className="lg:col-span-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5 dock-in dock-in-4">
+          <div className="min-w-0 lg:col-span-3">
             <SectionHead label="Revenue trend" />
             <RevenueTrendChartSlot />
           </div>
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <SectionHead label="Service by the hour" />
             <Suspense
               fallback={

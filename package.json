@@ -9,6 +9,8 @@
     "analyze": "next experimental-analyze",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
+    "shots:auth": "tsx scripts/mobile-auth.ts",
+    "shots": "tsx scripts/mobile-shots.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -73,6 +75,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.2.4",
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/libsodium-wrappers": "^0.7.14",

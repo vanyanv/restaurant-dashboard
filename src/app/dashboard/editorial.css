@@ -1149,9 +1149,9 @@
 
 /* Preset strip — joined tab-pills that speak the same editorial dialect as the
    dateline group. Sharp corners, hairline-bold frame, warm translucent wash,
-   DM Sans uppercase small caps, red "stamp" active state. */
+   DM Sans uppercase small caps, red "stamp" active state.
+   Gated on ≥1024w so Tailwind's `hidden` wins at narrower widths. */
 .drp-preset-strip {
-  display: inline-flex;
   align-items: stretch;
   gap: 0 !important;
   height: 28px;
@@ -1159,6 +1159,11 @@
   background: rgba(255, 255, 255, 0.55);
   border-radius: 0;
   overflow: hidden;
+}
+@media (min-width: 1024px) {
+  .drp-preset-strip {
+    display: inline-flex;
+  }
 }
 
 .drp-preset-tab {
@@ -4867,8 +4872,8 @@
   text-decoration-thickness: 1px;
 }
 
-/* Responsive: stack invoice row on small screens */
-@media (max-width: 820px) {
+/* Responsive: stack invoice row on phones only (tablet keeps desktop grid) */
+@media (max-width: 640px) {
   .inv-row {
     grid-template-columns: [rule] 20px [main] 1fr [total] auto;
     row-gap: 6px;
@@ -5259,5 +5264,159 @@
 @media (prefers-reduced-motion: reduce) {
   .pantry-alert__dot {
     animation: none;
+  }
+}
+
+/* ============================================================
+   Mobile supplements — fire at ≤640w ONLY.
+   Tablet (768–1023w) mirrors desktop; these rules do not apply
+   at tablet width. Do not widen this breakpoint without a plan.
+   ============================================================ */
+
+/* Fluid hero headings — continuous clamp, applies at all widths. */
+.editorial-h1 {
+  font-family: var(--font-fraunces), ui-serif, serif;
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.028em;
+  font-size: clamp(28px, 7vw, 44px);
+}
+
+.editorial-h1--hero {
+  font-size: clamp(36px, 9.5vw, 64px);
+  letter-spacing: -0.03em;
+}
+
+.editorial-h1--display {
+  font-size: clamp(48px, 12vw, 96px);
+  letter-spacing: -0.035em;
+}
+
+/* KPI ribbon — a single horizontal row that snap-scrolls on phones
+   when more items than will fit. Numbers stay tabular DM Sans, captions
+   stay JetBrains Mono. Used as a mobile fallback for KPI trios. */
+.editorial-kpi-ribbon {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.editorial-kpi-ribbon::-webkit-scrollbar {
+  display: none;
+}
+.editorial-kpi-ribbon > * {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  /* Panels — tighten padding and sit flusher to viewport edge */
+  .inv-panel {
+    padding: 12px;
+    border-radius: 2px;
+  }
+
+  /* Order-row card transform: time · customer · total only.
+     Hide id/platform-count/fetch-status — secondary info. */
+  .order-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px 14px 14px;
+  }
+  .order-row > .row-time {
+    flex: 0 0 auto;
+  }
+  .order-row > .row-customer,
+  .order-row > .row-middle {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .order-row > .row-total {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .order-row > .row-id,
+  .order-row > .row-items,
+  .order-row > .row-platform,
+  .order-row > .row-status {
+    display: none;
+  }
+  .order-row > .row-total .total-num {
+    font-size: 18px;
+  }
+
+  /* Editorial topbar — allow stamps and controls to wrap onto a
+     second line when present; the masthead below handles hero scaling. */
+  .editorial-topbar-inner {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  /* Orders filter popovers — never overflow viewport. The Popover
+     content is width-auto; cap it to viewport-minus-gutter. */
+  [data-slot="popover-content"] {
+    max-width: calc(100vw - 16px);
+  }
+
+  /* Menu-catalog row card transform. Desktop grid is 7 cells; on mobile
+     we stack item + chevron on top, then a compact 2-col stats grid
+     with inline labels via ::before captions. */
+  .menu-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "item chev"
+      "sell cost"
+      "profit margin"
+      "contrib contrib";
+    column-gap: 16px;
+    row-gap: 6px;
+    padding: 14px 0;
+  }
+  .menu-row__item { grid-area: item; }
+  .menu-row__chevron {
+    grid-area: chev;
+    justify-self: end;
+    align-self: start;
+    margin-top: 2px;
+  }
+  .menu-row__sell { grid-area: sell; }
+  .menu-row__cost { grid-area: cost; }
+  .menu-row__profit { grid-area: profit; }
+  .menu-row__margin { grid-area: margin; }
+  .menu-row__contribution { grid-area: contrib; }
+
+  .menu-row__sell,
+  .menu-row__cost,
+  .menu-row__profit,
+  .menu-row__margin,
+  .menu-row__contribution {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    text-align: left !important;
+    border-top: 1px solid var(--hairline);
+    padding-top: 6px;
+  }
+  .menu-row__sell::before { content: "Sell"; }
+  .menu-row__cost::before { content: "Cost"; }
+  .menu-row__profit::before { content: "Profit 30d"; }
+  .menu-row__margin::before { content: "Margin"; }
+  .menu-row__contribution::before { content: "% P&L"; }
+  .menu-row__sell::before,
+  .menu-row__cost::before,
+  .menu-row__profit::before,
+  .menu-row__margin::before,
+  .menu-row__contribution::before {
+    font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-faint);
   }
 }
