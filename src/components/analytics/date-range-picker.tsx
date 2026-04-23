@@ -40,7 +40,18 @@ function parseLocal(s: string): Date {
   return new Date(s + "T00:00:00")
 }
 
-const PRESETS = [
+export interface PresetOption {
+  label: string
+  value: string
+}
+
+export interface DrawerPreset {
+  group: string
+  label: string
+  compute: (today: Date) => [Date, Date]
+}
+
+export const PRESETS: readonly PresetOption[] = [
   { label: "Today", value: "1" },
   { label: "Yday", value: "-1" },
   { label: "7D", value: "7" },
@@ -48,11 +59,7 @@ const PRESETS = [
   { label: "90D", value: "90" },
 ] as const
 
-const DRAWER_PRESETS: Array<{
-  group: string
-  label: string
-  compute: (today: Date) => [Date, Date]
-}> = [
+export const DRAWER_PRESETS: DrawerPreset[] = [
   { group: "Quick views", label: "Today", compute: (t) => [t, t] },
   {
     group: "Quick views",
@@ -103,6 +110,10 @@ interface DateRangePickerProps {
   customRange?: { startDate: string; endDate: string } | null
   onRangeChange: (startDate: string, endDate: string) => void
   isPending?: boolean
+  presets?: readonly PresetOption[]
+  drawerPresets?: DrawerPreset[]
+  activePresetValue?: string
+  onPresetClick?: (value: string) => void
 }
 
 export function DateRangePicker({
@@ -110,11 +121,20 @@ export function DateRangePicker({
   customRange,
   onRangeChange,
   isPending,
+  presets = PRESETS,
+  drawerPresets = DRAWER_PRESETS,
+  activePresetValue,
+  onPresetClick,
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
   const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
 
-  const activePreset = customRange ? undefined : String(days)
+  const activePreset =
+    activePresetValue !== undefined
+      ? activePresetValue
+      : customRange
+        ? undefined
+        : String(days)
 
   // Current effective start/end (as Date objects in local time)
   const { startDate, endDate } = useMemo(() => {
@@ -157,6 +177,10 @@ export function DateRangePicker({
 
   const handlePresetChange = (value: string) => {
     if (!value) return
+    if (onPresetClick) {
+      onPresetClick(value)
+      return
+    }
     if (value === "-1") {
       const y = subDays(new Date(), 1)
       const s = localDateStr(y)
@@ -237,12 +261,15 @@ export function DateRangePicker({
       : `${format(prior.start, "MMM d, yyyy")} – ${format(prior.end, "MMM d, yyyy")}`
 
   const groupedDrawer = useMemo(() => {
-    const order = ["Quick views", "Periods", "To date"] as const
-    return order.map((g) => ({
+    const seen: string[] = []
+    for (const p of drawerPresets) {
+      if (!seen.includes(p.group)) seen.push(p.group)
+    }
+    return seen.map((g) => ({
       group: g,
-      items: DRAWER_PRESETS.filter((p) => p.group === g),
+      items: drawerPresets.filter((p) => p.group === g),
     }))
-  }, [])
+  }, [drawerPresets])
 
   const isDrawerActive = (start: Date, end: Date) =>
     localDateStr(start) === localDateStr(startDate) &&
@@ -260,7 +287,7 @@ export function DateRangePicker({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {PRESETS.map((p) => (
+          {presets.map((p) => (
             <SelectItem key={p.value} value={p.value}>
               {p.label}
             </SelectItem>
@@ -276,7 +303,7 @@ export function DateRangePicker({
         disabled={isPending}
         className="hidden lg:flex overflow-x-auto"
       >
-        {PRESETS.map((p) => (
+        {presets.map((p) => (
           <ToggleGroupItem
             key={p.value}
             value={p.value}

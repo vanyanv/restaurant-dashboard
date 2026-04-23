@@ -15,6 +15,7 @@ import {
   type OrderListResponse,
   type OrderListRow,
 } from "@/app/actions/order-actions"
+import { DateRangePicker } from "@/components/analytics/date-range-picker"
 import { OrderRow } from "./order-row"
 import { formatPlatform } from "./platform-chip"
 
@@ -221,12 +222,28 @@ export function OrdersContent({ initial, stores }: Props) {
             )}
           </FilterPopover>
 
-          <div className="inline-flex items-center gap-1 border border-[var(--hairline-bold)] bg-[rgba(255,255,255,0.55)] px-2 py-[3px]">
-            <span className="font-label text-[10px] px-1">Range</span>
-            <DateCell value={startDate} onChange={setStartDate} onCommit={apply} />
-            <span className="text-[var(--ink-faint)]">→</span>
-            <DateCell value={endDate} onChange={setEndDate} onCommit={apply} />
-          </div>
+          <DateRangePicker
+            days={30}
+            customRange={
+              startDate && endDate ? { startDate, endDate } : null
+            }
+            onRangeChange={(s, e) => {
+              setStartDate(s)
+              setEndDate(e)
+              setIsFiltered(
+                !!(storeId || platform || s || e || search.trim())
+              )
+              runQuery({
+                storeId,
+                platform,
+                startDate: s || null,
+                endDate: e || null,
+                search: search || null,
+                limit: 50,
+              })
+            }}
+            isPending={pending}
+          />
 
           {isFiltered && (
             <button
@@ -382,26 +399,6 @@ function FilterOption({
         <span className="font-mono text-[10px] text-[var(--accent)]">✓</span>
       )}
     </button>
-  )
-}
-
-function DateCell({
-  value,
-  onChange,
-  onCommit,
-}: {
-  value: string
-  onChange: (v: string) => void
-  onCommit: () => void
-}) {
-  return (
-    <input
-      type="date"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onCommit}
-      className="bg-transparent border-0 outline-none font-mono text-[12px] w-[112px] text-[var(--ink)]"
-    />
   )
 }
 
