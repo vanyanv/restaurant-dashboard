@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { InvoiceStatus } from "@/generated/prisma/client"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 
 export async function GET(
   request: NextRequest,
@@ -101,21 +100,6 @@ export async function PATCH(
       ...(status === "MATCHED" || status === "APPROVED" ? { matchedAt: new Date() } : {}),
     },
   })
-
-  if (invoice.invoiceDate) {
-    const affected = new Set<string>()
-    if (invoice.storeId) affected.add(invoice.storeId)
-    if (updated.storeId) affected.add(updated.storeId)
-    for (const sid of affected) {
-      await invalidateDailyCogs({
-        kind: "store-from-date",
-        storeId: sid,
-        fromDate: invoice.invoiceDate,
-      }).catch((e) =>
-        console.error("invalidateDailyCogs failed after invoice PATCH:", e)
-      )
-    }
-  }
 
   return NextResponse.json({ id: updated.id, status: updated.status, storeId: updated.storeId })
 }

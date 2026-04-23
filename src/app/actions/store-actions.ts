@@ -2768,7 +2768,7 @@ export async function recomputeCogsForStore(input: {
   storeId: string
   lookbackDays?: number
 }): Promise<
-  | { daysProcessed: number; rowsWritten: number }
+  | { daysProcessed: number; rowsUpserted: number; rowsDeleted: number }
   | { error: string }
 > {
   try {

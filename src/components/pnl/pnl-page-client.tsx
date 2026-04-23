@@ -64,7 +64,8 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
     },
     onSuccess: (result) => {
       toast.success(
-        `Recomputed COGS: ${result.daysProcessed} day(s), ${result.rowsWritten} row(s)`
+        `Recomputed COGS: ${result.daysProcessed} day(s), ` +
+          `${result.rowsUpserted} upserted, ${result.rowsDeleted} cleaned`
       )
       queryClient.invalidateQueries({ queryKey: ["pnl", storeId] })
     },

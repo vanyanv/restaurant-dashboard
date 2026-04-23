@@ -12,22 +12,42 @@ type ModifierUsage = {
   breakdown: Array<{ skuId: string; name: string; uses: number; unitCost: number | null }>
 }
 
+type ComputedRow = {
+  storeId: string
+  date: Date
+  itemName: string
+  category: string
+  recipeId: string | null
+  qtySold: number
+  salesRevenue: number
+  unitCost: number | null
+  lineCost: number
+  status: CogsStatus
+  partialCost: boolean
+}
+
 /**
- * Compute and upsert DailyCogsItem rows for one (storeId, date).
+ * Compute and idempotently upsert DailyCogsItem rows for one (storeId, date).
  *
- * Deletes any existing rows for that day first, then recomputes from
- * OtterMenuItem + OtterItemMapping + Recipe. Uses an outer recipe-cost
- * memo so each unique recipe is walked once per day even if multiple
- * menu rows map to it.
+ * Two cross-cutting rules:
  *
- * `asOf` for recipe cost is the sale date itself — more accurate than the
- * previous per-request code which used period-end as asOf.
+ *  1. **Cost-knowable cutoff** — an item only gets a row when we can actually
+ *     cost it as-of `date`. Items with no recipe mapping (UNMAPPED) and items
+ *     whose recipe resolves to no cost on or before `date` (no matched invoice
+ *     yet, no manual cost, no override) are skipped entirely. This stops the
+ *     dashboard from showing $0 placeholder rows for the pre-invoice era.
+ *
+ *  2. **No history wipes** — writes are upserts keyed on
+ *     (storeId, date, itemName, category). The only delete is bounded to this
+ *     exact (storeId, date) and only drops items that are no longer in the
+ *     newly-computed set (Otter no longer reports them, or they fell out of
+ *     the cutoff). It can never reach across days.
  */
 export async function recomputeDailyCogsForDay(input: {
   storeId: string
   date: Date
   ownerId: string
-}): Promise<{ rowsWritten: number }> {
+}): Promise<{ rowsUpserted: number; rowsDeleted: number }> {
   const { storeId, ownerId } = input
   const date = startOfDayUTC(input.date)
 
@@ -140,8 +160,8 @@ export async function recomputeDailyCogsForDay(input: {
     })
   }
 
-  const rows = await Promise.all(
-    menuRows.map(async (row) => {
+  const computed = await Promise.all(
+    menuRows.map(async (row): Promise<ComputedRow | null> => {
       const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
       const revenue = (row.fpTotalSales ?? 0) + (row.tpTotalSales ?? 0)
 
@@ -150,34 +170,22 @@ export async function recomputeDailyCogsForDay(input: {
         recipeByName.get(row.itemName.toLowerCase()) ??
         null
 
-      // Modifier cost is additive — compute it whether or not the base item
-      // has a recipe. A partially costed row (no base, has mods) is still
-      // better data than a silent zero.
       const mod = modifierUsageByItem.get(row.itemName)
       const modLineCost = mod?.extraLineCost ?? 0
 
-      if (!recipeId) {
-        // No base recipe. If modifiers were used we still record their cost;
-        // status stays UNMAPPED so you can see the item still needs a base.
-        return {
-          storeId,
-          date,
-          itemName: row.itemName,
-          category: row.category,
-          recipeId: null,
-          qtySold: qty,
-          salesRevenue: revenue,
-          unitCost: modLineCost > 0 && qty > 0 ? modLineCost / qty : null,
-          lineCost: modLineCost,
-          status: CogsStatus.UNMAPPED,
-          partialCost: mod?.missingMappings ?? false,
-        }
-      }
+      // Cutoff: no recipe mapping → no row. UNMAPPED items live in OtterMenuItem;
+      // we don't pollute DailyCogsItem with placeholder $0 rows.
+      if (!recipeId) return null
 
       const result = await costFor(recipeId)
       const baseUnitCost = result?.totalCost ?? null
       const hasBase = baseUnitCost != null && baseUnitCost > 0
-      const baseLineCost = hasBase ? baseUnitCost * qty : 0
+
+      // Cutoff: recipe knowable but no cost as-of this date (no matched invoice,
+      // no manual cost, no foodCostOverride) AND no modifier cost either → skip.
+      if (!hasBase && modLineCost === 0) return null
+
+      const baseLineCost = hasBase ? baseUnitCost! * qty : 0
       const totalLineCost = baseLineCost + modLineCost
       const blendedUnitCost = qty > 0 ? totalLineCost / qty : baseUnitCost
       const status = hasBase ? CogsStatus.COSTED : CogsStatus.MISSING_COST
@@ -199,12 +207,62 @@ export async function recomputeDailyCogsForDay(input: {
     })
   )
 
-  await prisma.$transaction([
-    prisma.dailyCogsItem.deleteMany({ where: { storeId, date } }),
-    prisma.dailyCogsItem.createMany({ data: rows, skipDuplicates: true }),
-  ])
+  const rows = computed.filter((r): r is ComputedRow => r !== null)
 
-  return { rowsWritten: rows.length }
+  // Idempotent write: upsert each row by the (storeId, date, itemName, category)
+  // unique key. The companion deleteMany is scoped to this exact (storeId, date)
+  // and only drops items that are no longer in the new set — bounded to one day,
+  // can never reach across days, so historical data cannot evaporate.
+  const deletePredicate =
+    rows.length > 0
+      ? {
+          storeId,
+          date,
+          NOT: {
+            OR: rows.map((r) => ({
+              itemName: r.itemName,
+              category: r.category,
+            })),
+          },
+        }
+      : { storeId, date }
+
+  const ops = [
+    ...rows.map((r) =>
+      prisma.dailyCogsItem.upsert({
+        where: {
+          storeId_date_itemName_category: {
+            storeId: r.storeId,
+            date: r.date,
+            itemName: r.itemName,
+            category: r.category,
+          },
+        },
+        create: r,
+        update: {
+          recipeId: r.recipeId,
+          qtySold: r.qtySold,
+          salesRevenue: r.salesRevenue,
+          unitCost: r.unitCost,
+          lineCost: r.lineCost,
+          status: r.status,
+          partialCost: r.partialCost,
+          computedAt: new Date(),
+        },
+      })
+    ),
+    prisma.dailyCogsItem.deleteMany({ where: deletePredicate }),
+  ]
+
+  // Run as a single transaction so a partial failure can't leave the day in a
+  // mixed state (some new rows present, stale rows still around).
+  const results = await prisma.$transaction(ops)
+  const deleteResult = results[results.length - 1] as { count: number }
+
+  return {
+    rowsUpserted: rows.length,
+    rowsDeleted: deleteResult.count,
+  }
 }
 
 /**
@@ -217,105 +275,30 @@ export async function recomputeDailyCogsForRange(input: {
   startDate: Date
   endDate: Date
   ownerId: string
-}): Promise<{ daysProcessed: number; rowsWritten: number }> {
+}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number }> {
   const start = startOfDayUTC(input.startDate)
   const end = startOfDayUTC(input.endDate)
 
   let daysProcessed = 0
-  let rowsWritten = 0
+  let rowsUpserted = 0
+  let rowsDeleted = 0
 
   for (
     let cursor = new Date(start);
     cursor.getTime() <= end.getTime();
     cursor = addDaysUTC(cursor, 1)
   ) {
-    const { rowsWritten: n } = await recomputeDailyCogsForDay({
+    const result = await recomputeDailyCogsForDay({
       storeId: input.storeId,
       date: cursor,
       ownerId: input.ownerId,
     })
     daysProcessed++
-    rowsWritten += n
+    rowsUpserted += result.rowsUpserted
+    rowsDeleted += result.rowsDeleted
   }
 
-  return { daysProcessed, rowsWritten }
-}
-
-/**
- * Find (storeId, date) pairs within the lookback window that have OtterMenuItem
- * rows but no DailyCogsItem rows, and refill them. This is what the Otter sync
- * route calls at the end of its menu-items phase; it also picks up days that
- * were invalidated (rows deleted) by an upstream mutation.
- */
-export async function refreshStaleDailyCogs(input: {
-  ownerId: string
-  lookbackDays?: number
-  onProgress?: (done: number, total: number) => void
-  concurrency?: number
-}): Promise<{ daysProcessed: number; rowsWritten: number }> {
-  const lookbackDays = input.lookbackDays ?? 90
-  const concurrency = Math.max(1, input.concurrency ?? 4)
-  const cutoff = startOfDayUTC(new Date())
-  cutoff.setUTCDate(cutoff.getUTCDate() - lookbackDays)
-
-  const stores = await prisma.store.findMany({
-    where: { ownerId: input.ownerId, isActive: true },
-    select: { id: true },
-  })
-  if (stores.length === 0) return { daysProcessed: 0, rowsWritten: 0 }
-
-  const storeIds = stores.map((s) => s.id)
-
-  // Days with menu rows in the window, grouped by (storeId, date).
-  const menuDays = await prisma.otterMenuItem.groupBy({
-    by: ["storeId", "date"],
-    where: {
-      storeId: { in: storeIds },
-      isModifier: false,
-      date: { gte: cutoff },
-    },
-  })
-
-  // Days that already have a DailyCogsItem row (any row → day considered fresh).
-  const cogsDays = await prisma.dailyCogsItem.groupBy({
-    by: ["storeId", "date"],
-    where: {
-      storeId: { in: storeIds },
-      date: { gte: cutoff },
-    },
-  })
-
-  const have = new Set(cogsDays.map((r) => `${r.storeId}::${dateKey(r.date)}`))
-  const missing = menuDays.filter(
-    (r) => !have.has(`${r.storeId}::${dateKey(r.date)}`)
-  )
-
-  const total = missing.length
-  let daysProcessed = 0
-  let rowsWritten = 0
-  input.onProgress?.(0, total)
-
-  // Process N days concurrently. Each recomputeDailyCogsForDay scope is
-  // independent (no shared mutable state), so parallelism is safe.
-  let cursor = 0
-  async function worker(): Promise<void> {
-    while (true) {
-      const i = cursor++
-      if (i >= missing.length) return
-      const { storeId, date } = missing[i]
-      const { rowsWritten: n } = await recomputeDailyCogsForDay({
-        storeId,
-        date,
-        ownerId: input.ownerId,
-      })
-      daysProcessed++
-      rowsWritten += n
-      input.onProgress?.(daysProcessed, total)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, total || 1) }, () => worker()))
-
-  return { daysProcessed, rowsWritten }
+  return { daysProcessed, rowsUpserted, rowsDeleted }
 }
 
 function startOfDayUTC(d: Date): Date {
@@ -328,8 +311,4 @@ function addDaysUTC(d: Date, n: number): Date {
   const r = new Date(d)
   r.setUTCDate(r.getUTCDate() + n)
   return r
-}
-
-function dateKey(d: Date): string {
-  return d.toISOString().slice(0, 10)
 }

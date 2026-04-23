@@ -1,0 +1,37 @@
+name: COGS Audit (daily gap report)
+on:
+  schedule:
+    # 07:30 UTC — runs after cogs-refresh (07:00) has had time to fill the
+    # last 30 days. Reports any (storeId, date) where OtterMenuItem has sales
+    # but DailyCogsItem has no rows. Output goes to $GITHUB_STEP_SUMMARY only;
+    # check the Actions tab to see the gap report.
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: cogs-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Run missing-cogs-days audit
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          report=$(npx tsx scripts/audit/missing-cogs-days.ts)
+          echo "$report"
+          {
+            echo "# COGS gap report — $(date -u +%Y-%m-%d)"
+            echo ""
+            echo '```'
+            echo "$report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

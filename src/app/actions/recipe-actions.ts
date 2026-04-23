@@ -14,7 +14,6 @@ import {
 import { costRecipeCached, costIngredientCached } from "@/lib/cached"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 import { revalidatePath } from "next/cache"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import type { RecipeInput, RecipeSummary } from "@/types/recipe"
 import {
   getMenuItemSellPrices,
@@ -164,13 +163,6 @@ export async function upsertRecipe(
     throw err
   }
 
-  await invalidateDailyCogs({
-    kind: "owner-recipe",
-    ownerId,
-    recipeId: id,
-    itemName: input.itemName.trim(),
-  })
-
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/ingredients")
@@ -199,12 +191,6 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
   }
 
   await prisma.recipe.delete({ where: { id: recipeId } })
-  await invalidateDailyCogs({
-    kind: "owner-recipe",
-    ownerId,
-    recipeId,
-    itemName: recipe.itemName,
-  })
 
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")
@@ -349,15 +335,7 @@ export async function confirmRecipe(
     where: { id: recipeId },
     select: { itemName: true },
   })
-  if (recipe) {
-    await invalidateDailyCogs({
-      kind: "owner-recipe",
-      ownerId,
-      recipeId,
-      itemName: recipe.itemName,
-    })
-  }
-
+  void recipe
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")
 }

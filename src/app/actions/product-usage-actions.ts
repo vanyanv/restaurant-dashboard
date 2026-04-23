@@ -3,7 +3,6 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import OpenAI from "openai"
 import type {
   ProductUsageData,
@@ -900,7 +899,6 @@ export async function upsertIngredientAlias(
     },
   })
 
-  await invalidateDailyCogs({ kind: "store-full", storeId })
   return true
 }
 

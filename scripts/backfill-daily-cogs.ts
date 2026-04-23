@@ -1,7 +1,8 @@
 // scripts/backfill-daily-cogs.ts
-// One-time backfill of DailyCogsItem rows for every owner's active stores.
-// Idempotent: re-running is safe — it only fills days that have OtterMenuItem
-// rows but no DailyCogsItem rows yet.
+// One-shot backfill of DailyCogsItem rows for every owner's active stores.
+// Idempotent: writes are upserts and the per-day cleanup is bounded to that
+// day, so re-running is safe and historical rows from other days are never
+// touched.
 //
 // Run with: npx tsx scripts/backfill-daily-cogs.ts [lookbackDays]
 //   npx tsx scripts/backfill-daily-cogs.ts           # 365 days (default)
@@ -31,7 +32,7 @@ loadEnvLocal()
 
 async function main() {
   const { prisma } = await import("../src/lib/prisma")
-  const { refreshStaleDailyCogs } = await import("../src/lib/cogs-materializer")
+  const { recomputeDailyCogsForRange } = await import("../src/lib/cogs-materializer")
 
   const lookbackDays = Number.parseInt(process.argv[2] ?? "", 10) || 365
 
@@ -40,40 +41,52 @@ async function main() {
     select: { id: true, email: true },
   })
 
-  console.log(`Backfilling DailyCogsItem for ${owners.length} owner(s), lookback ${lookbackDays}d`)
+  const endDate = new Date()
+  endDate.setUTCHours(0, 0, 0, 0)
+  const startDate = new Date(endDate)
+  startDate.setUTCDate(startDate.getUTCDate() - lookbackDays)
+
+  console.log(
+    `Backfilling DailyCogsItem for ${owners.length} owner(s), lookback ${lookbackDays}d ` +
+      `(${startDate.toISOString().slice(0, 10)} → ${endDate.toISOString().slice(0, 10)})`
+  )
 
   let totalDays = 0
-  let totalRows = 0
+  let totalUpserted = 0
+  let totalDeleted = 0
 
   for (const owner of owners) {
-    const start = Date.now()
-    try {
-      let lastLogged = 0
-      const { daysProcessed, rowsWritten } = await refreshStaleDailyCogs({
-        ownerId: owner.id,
-        lookbackDays,
-        concurrency: 4,
-        onProgress: (done, total) => {
-          // Log every ~5 days to keep output readable.
-          if (done === total || done - lastLogged >= 5) {
-            const elapsed = ((Date.now() - start) / 1000).toFixed(1)
-            console.log(`  ${owner.email}: ${done}/${total} days — ${elapsed}s`)
-            lastLogged = done
-          }
-        },
-      })
-      totalDays += daysProcessed
-      totalRows += rowsWritten
-      const ms = Date.now() - start
-      console.log(
-        `  ${owner.email}: ${daysProcessed} day(s), ${rowsWritten} row(s) — ${ms}ms`
-      )
-    } catch (err) {
-      console.error(`  ${owner.email}: FAILED`, err)
+    const stores = await prisma.store.findMany({
+      where: { ownerId: owner.id, isActive: true },
+      select: { id: true, name: true },
+    })
+
+    for (const store of stores) {
+      const start = Date.now()
+      try {
+        const result = await recomputeDailyCogsForRange({
+          storeId: store.id,
+          startDate,
+          endDate,
+          ownerId: owner.id,
+        })
+        totalDays += result.daysProcessed
+        totalUpserted += result.rowsUpserted
+        totalDeleted += result.rowsDeleted
+        const ms = Date.now() - start
+        console.log(
+          `  ${owner.email} / ${store.name}: ${result.daysProcessed} day(s), ` +
+            `${result.rowsUpserted} upserted, ${result.rowsDeleted} cleaned — ${ms}ms`
+        )
+      } catch (err) {
+        console.error(`  ${owner.email} / ${store.name}: FAILED`, err)
+      }
     }
   }
 
-  console.log(`Done: ${totalDays} day(s), ${totalRows} row(s)`)
+  console.log(
+    `Done: ${totalDays} day(s), ${totalUpserted} upserted, ${totalDeleted} cleaned`
+  )
   await prisma.$disconnect()
 }
 

@@ -5,7 +5,6 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 import { revalidatePath } from "next/cache"
 
@@ -312,7 +311,6 @@ export async function confirmSkuMatch(input: {
       console.warn("[confirmSkuMatch] recomputeCanonicalCost failed:", e)
     })
 
-    await invalidateDailyCogs({ kind: "owner-full", ownerId })
     revalidatePath("/dashboard/ingredients")
     revalidatePath("/dashboard/menu/catalog")
     revalidatePath("/dashboard/recipes")
@@ -359,7 +357,6 @@ export async function confirmSkuMatch(input: {
     console.warn("[confirmSkuMatch/alias] recomputeCanonicalCost failed:", e)
   })
 
-  await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/recipes")
@@ -400,7 +397,6 @@ export async function breakSkuMatch(input: {
     },
   })
 
-  await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/recipes")

@@ -3,7 +3,6 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { revalidatePath } from "next/cache"
 import type { MenuItemForCatalog } from "@/types/recipe"
 
@@ -171,16 +170,7 @@ export async function mapOtterItemToRecipe(input: {
     )
   )
 
-  await Promise.all(
-    stores.map((s) =>
-      invalidateDailyCogs({
-        kind: "store-item",
-        storeId: s.id,
-        itemName: input.otterItemName,
-      })
-    )
-  )
-
+  void stores
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
@@ -201,16 +191,7 @@ export async function unmapOtterItem(otterItemName: string): Promise<void> {
     },
   })
 
-  await Promise.all(
-    stores.map((s) =>
-      invalidateDailyCogs({
-        kind: "store-item",
-        storeId: s.id,
-        itemName: otterItemName,
-      })
-    )
-  )
-
+  void stores
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
@@ -423,13 +404,7 @@ export async function mapOtterSubItemToRecipe(input: {
     )
   )
 
-  // Modifier recipe change ripples through every DailyCogsItem for the store —
-  // safest to invalidate all days. The per-item scope doesn't fit here because
-  // one modifier can affect many menu items.
-  await Promise.all(
-    stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
-  )
-
+  void stores
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
@@ -450,10 +425,7 @@ export async function unmapOtterSubItem(skuId: string): Promise<void> {
     },
   })
 
-  await Promise.all(
-    stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
-  )
-
+  void stores
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")

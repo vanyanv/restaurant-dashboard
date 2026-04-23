@@ -16,7 +16,6 @@ import {
 } from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { refreshStaleDailyCogs } from "@/lib/cogs-materializer"
 
 export const maxDuration = 60
 
@@ -543,54 +542,17 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     detail: `${ratingsSynced} ratings synced`, counts,
   })
 
-  // ─── Phase 6: Materialize daily COGS for each owner ───
-  emit({
-    phase: "cogs", status: "writing",
-    totalProgress: computeTotalProgress(100, 100, 100, 100, 100, 0),
-    detail: "Refreshing daily COGS...", counts,
-  })
-
-  const uniqueOwnerIds = Array.from(
-    new Set(activeOtterStores.map((os) => os.store.ownerId))
-  )
-  let cogsDaysProcessed = 0
-  let cogsRowsWritten = 0
-
-  for (let i = 0; i < uniqueOwnerIds.length; i++) {
-    const ownerId = uniqueOwnerIds[i]
-    const ownerStart = cogsDaysProcessed
-    try {
-      // Narrow window on the live sync path — Vercel Hobby caps at 60s.
-      // Bulk/historical refills run via `scripts/backfill-daily-cogs.ts`, which
-      // has no timeout and iterates the full 90-day window.
-      const result = await refreshStaleDailyCogs({
-        ownerId,
-        lookbackDays: 7,
-        concurrency: 4,
-        onProgress: (done, total) => {
-          const withinOwner = total > 0 ? done / total : 1
-          const cogsPct = ((i + withinOwner) / uniqueOwnerIds.length) * 100
-          counts.cogs = ownerStart + done
-          emit({
-            phase: "cogs", status: "writing",
-            totalProgress: computeTotalProgress(100, 100, 100, 100, 100, cogsPct),
-            detail: `COGS: ${ownerStart + done}/${ownerStart + total} day(s) — owner ${i + 1}/${uniqueOwnerIds.length}`,
-            counts,
-          })
-        },
-      })
-      cogsDaysProcessed += result.daysProcessed
-      cogsRowsWritten += result.rowsWritten
-    } catch (err) {
-      console.error(`Failed to refresh daily COGS for owner ${ownerId}:`, err)
-    }
-    counts.cogs = cogsDaysProcessed
-  }
-
+  // COGS materialization is no longer triggered from the sync path. The
+  // standalone /api/cron/cogs/sweep cron (hourly, last 7 days) and
+  // /api/cron/cogs/refresh cron (daily, last 30 days) handle it independently
+  // so a sync issue can't wipe historical COGS rows. The "cogs" phase event
+  // is kept (just done with zero work) so SSE consumers see the same shape.
+  const cogsDaysProcessed = 0
+  const cogsRowsWritten = 0
   emit({
     phase: "cogs", status: "done",
     totalProgress: computeTotalProgress(100, 100, 100, 100, 100, 100),
-    detail: `${cogsDaysProcessed} day(s) materialized (${cogsRowsWritten} rows)`,
+    detail: "COGS materialization runs on its own cron schedule",
     counts,
   })
 

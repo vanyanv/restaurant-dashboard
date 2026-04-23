@@ -1,0 +1,63 @@
+name: COGS Refresh (daily, 30 days)
+on:
+  schedule:
+    # 07:00 UTC = 03:00 America/New_York — quiet time, after the morning Otter
+    # sync window. Catches retroactive invoice corrections within the normal
+    # reporting horizon. For full-year rebuilds use the manual "Recompute COGS"
+    # button on the dashboard or `pnpm tsx scripts/backfill-daily-cogs.ts`.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      lookbackDays:
+        description: 'Days to recompute (default 30)'
+        default: '30'
+
+concurrency:
+  group: cogs-refresh
+  cancel-in-progress: false
+
+jobs:
+  list-stores:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.fetch.outputs.ids }}
+    steps:
+      - name: GET /api/cron/cogs/stores
+        id: fetch
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          payload=$(curl -fsSL "$APP_URL/api/cron/cogs/stores" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 30)
+          ids=$(echo "$payload" | jq -c '[.stores[].id]')
+          echo "Found stores: $ids"
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+
+  refresh:
+    needs: list-stores
+    if: needs.list-stores.outputs.ids != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
+    steps:
+      - name: POST /api/cron/cogs/sweep (last 30 days)
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          STORE_ID: ${{ matrix.storeId }}
+          LOOKBACK: ${{ github.event.inputs.lookbackDays || '30' }}
+        run: |
+          response=$(curl -fsSL -X POST \
+            "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 295)
+          echo "$response" | jq .
+          echo "### Store $STORE_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$response" | jq . >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

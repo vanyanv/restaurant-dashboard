@@ -9,7 +9,6 @@ import {
   type SeedResult,
 } from "@/lib/canonical-ingredients"
 import { batchCanonicalCosts } from "@/lib/canonical-cost-batch"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import type {
   CanonicalIngredientSummary,
@@ -243,7 +242,6 @@ export async function createCanonicalIngredient(input: {
       notes: input.notes ?? null,
     },
   })
-  await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
   return created
@@ -299,7 +297,6 @@ export async function updateCanonicalCost(input: {
     data,
   })
 
-  await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")
@@ -310,7 +307,6 @@ export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
   if (!ownerId) throw new Error("Not authenticated")
   const result = await seedCanonicalIngredientsFromInvoices(ownerId)
   if (result.canonicalsCreated > 0 || result.aliasesCreated > 0) {
-    await invalidateDailyCogs({ kind: "owner-full", ownerId })
     revalidatePath("/dashboard/ingredients")
     revalidatePath("/dashboard/recipes")
     revalidatePath("/dashboard/menu/catalog")
@@ -420,7 +416,6 @@ export async function mergeCanonicalIngredients(input: {
     }
   })
 
-  await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")

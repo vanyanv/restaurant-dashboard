@@ -518,10 +518,12 @@ model OtterSubItemMapping {
   @@index([recipeId])
 }
 
-/// Per-(store, date, itemName) COGS row, materialized at write time so P&L reads
-/// don't have to walk recipes/invoices at request time. Maintained by
-/// `src/lib/cogs-materializer.ts` (fill) and `src/lib/cogs-invalidate.ts` (delete
-/// on upstream mutation). Refill happens in the Otter sync route's COGS phase.
+/// Per-(store, date, itemName) COGS row, materialized by
+/// `src/lib/cogs-materializer.ts` so P&L reads don't walk recipes / invoices
+/// at request time. Materialization is idempotent (upsert + per-day diff
+/// cleanup) and runs on its own cron schedule independent of any sync or
+/// mutation path. Rows only exist when we can actually cost the item as-of
+/// `date`; UNMAPPED items and pre-cost-data dates are not materialized.
 model DailyCogsItem {
   id           String     @id @default(cuid())
   storeId      String
