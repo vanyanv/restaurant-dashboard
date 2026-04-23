@@ -90,7 +90,7 @@ async function main() {
 
   const { prisma } = await import("../src/lib/prisma")
   const { extractInvoiceData } = await import("../src/lib/gemini-invoice")
-  const { sanitizeInvoiceDate } = await import("../src/lib/invoice-sanity")
+  const { sanitizeInvoiceDate, findLineMathMismatches } = await import("../src/lib/invoice-sanity")
   const { matchInvoiceToStore } = await import("../src/lib/address-matcher")
 
   // ── Select candidates ──
@@ -179,8 +179,10 @@ async function main() {
     const ownerStores = storesByOwner.get(inv.ownerId) ?? []
     const match = fresh.deliveryAddress ? matchInvoiceToStore(fresh.deliveryAddress, ownerStores) : null
 
+    const mathMismatches = findLineMathMismatches(fresh.lineItems)
+
     let nextStatus: "MATCHED" | "REVIEW" | "PENDING"
-    if (dateSuspect) nextStatus = "REVIEW"
+    if (dateSuspect || mathMismatches.length > 0) nextStatus = "REVIEW"
     else if (match) nextStatus = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
     else nextStatus = "PENDING"
 
@@ -190,6 +192,13 @@ async function main() {
     console.log(`  fresh date:     ${fresh.invoiceDate ?? "null"} → sanitized ${fmtDateOnly(sanitizedDate)}`)
     console.log(`  fresh lines:    ${fresh.lineItems.length} total, ${withPack} with pack/size, ${missingPackAfter} CS-without-pack`)
     console.log(`  next status:    ${nextStatus}` + (match ? `  (store ${ownerStores.find((s) => s.id === match.storeId)?.name ?? "?"}, conf ${match.confidence.toFixed(2)})` : ""))
+    for (const m of mathMismatches) {
+      console.log(
+        `  ⚠ math mismatch line ${m.lineNumber} "${m.productName.slice(0, 45)}": ` +
+        `${m.quantity} ${m.unit ?? ""} × $${m.unitPrice} = $${m.computed.toFixed(2)} vs ext $${m.extendedPrice.toFixed(2)} ` +
+        `(implied qty ≈ ${m.impliedQuantity?.toFixed(2) ?? "n/a"})`
+      )
+    }
 
     // Show first 3 line items with pack/size so you can eyeball
     for (const li of fresh.lineItems.slice(0, 3)) {

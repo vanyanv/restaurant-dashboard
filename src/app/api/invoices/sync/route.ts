@@ -7,11 +7,10 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches } from "@/lib/invoice-sanity"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
-import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
 
@@ -384,8 +383,18 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
     const dateSuspect =
       Boolean(inv.extraction.invoiceDate) && invoiceDate === null
 
+    const mathMismatches = findLineMathMismatches(inv.extraction.lineItems)
+    for (const m of mathMismatches) {
+      console.warn(
+        `[invoice-sync] math mismatch on ${contextLabel} line ${m.lineNumber} ` +
+        `"${m.productName}": qty ${m.quantity} ${m.unit ?? ""} × $${m.unitPrice} = ` +
+        `$${m.computed.toFixed(2)} but extendedPrice=$${m.extendedPrice.toFixed(2)} ` +
+        `(implied qty ≈ ${m.impliedQuantity?.toFixed(2) ?? "n/a"})`
+      )
+    }
+
     let status: "MATCHED" | "REVIEW" | "PENDING"
-    if (dateSuspect) {
+    if (dateSuspect || mathMismatches.length > 0) {
       status = "REVIEW"
     } else if (match) {
       status = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
@@ -485,16 +494,6 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
       })
       createdInvoiceIds.push(created.id)
       counts.created++
-
-      if (created.storeId && created.invoiceDate) {
-        await invalidateDailyCogs({
-          kind: "store-from-date",
-          storeId: created.storeId,
-          fromDate: created.invoiceDate,
-        }).catch((e) =>
-          console.error("invalidateDailyCogs failed after invoice create:", e)
-        )
-      }
     } catch (err) {
       // Unique constraint violation = already processed (race condition safety)
       const msg = err instanceof Error ? err.message : String(err)

@@ -11,7 +11,7 @@ export interface InvoiceExtractionResult {
   model: string
 }
 
-function buildExtractionPrompt(): string {
+export function buildExtractionPrompt(): string {
   const today = new Date().toISOString().slice(0, 10)
   return `You are an invoice data extraction specialist for restaurant food & beverage suppliers.
 Extract ALL data from this supplier invoice PDF. Common vendors include Sysco, US Foods,
@@ -81,8 +81,23 @@ Format: "<street>, <city>, <state> <zip>" on a single line — e.g.
 "5539 W Sunset Blvd, Los Angeles, CA 90028". Common section labels to look for: "Ship To",
 "Deliver To", "Delivery Address", "Service Address", "Location".
 
+FEES AND SURCHARGES — vendors routinely add a non-product charge that appears on
+the invoice between the last product line and the subtotal/total. Common labels:
+"Fuel Surcharge", "Delivery Fee", "Service Charge", "Handling Fee", "CPI
+Adjustment", "Recycling Fee", "Environmental Fee", "Small Order Fee". You MUST
+extract each of these as its own line item, with:
+  - lineNumber continuing the sequence
+  - productName set to the fee label as printed (e.g. "Fuel Surcharge")
+  - sku null; category "Other"
+  - quantity 1, unit null, packSize/unitSize/unitSizeUom null
+  - unitPrice and extendedPrice both set to the fee amount (dollars only, no %)
+If the invoice shows a standalone dollar amount between the last product line
+and the totals section without a clear label, extract it as "Miscellaneous
+Charge" rather than dropping it — the line-sum must reconcile against subtotal.
+
 If a value cannot be determined, use null. Ensure extendedPrice = quantity * unitPrice
-for each line item. Number the line items starting from 1.
+for each line item (fees have quantity=1 so this always holds). Number the
+line items starting from 1.
 
 If the PDF appears to contain MULTIPLE invoices (e.g. a consolidated statement or a
 "CoPilot Invoices" summary), extract only the single invoice whose invoice number
