@@ -27,17 +27,34 @@ Full-stack engineering for the Chris Neddy's restaurant dashboard — Otter API 
 | Date | Scope of Work | Hours |
 |------|---------------|------:|
 | 2026-02-21 | Reverse-engineered Otter metrics API (private, undocumented), designed `OtterStore` / `OtterDailySummary` schema, first working sync endpoint + analytics server action + sync button. | 4.0 |
-| 2026-02-22 | Channel-level breakdown + menu category sync, KPI cards, platform insights charts, full dashboard rebuild against Otter data, **Prisma v7 + Next.js 16 upgrade** with pg adapter + SSL config. | 9.0 |
-| 2026-02-23 | Analytics split into dedicated page, compact dashboard layout, date-range preset off-by-one fix, **Otter API timezone bugs** (multiple), **multi-UUID store grouping** + order counts, Menu Performance + Product Mix pages, Vercel cron timeout fix. | 9.0 |
-| 2026-02-24 | GitHub Actions cron for 6-hour Otter sync, **Otter JWT auto-refresh** w/ Cloudflare bot-protection bypass (browser headers), **full invoice OCR system** w/ SKU extraction + vendor normalization + IFS support, product-usage page w/ Recipe/RecipeIngredient/IngredientAlias models, Overview + Costs + Vendors tabs, **AI integration** (insights panel, demand forecast, recipe suggestions), ingredient drilldown sheet w/ variance breakdown, UTC-vs-PST bug fix. | 13.0 |
+| 2026-02-22 | Otter sync v2 — channel-level breakdown + menu category sync, schema additions. | 2.0 |
+| 2026-02-22 | Analytics components library — KPI cards, platform insights, charts, tables. | 2.5 |
+| 2026-02-22 | Dashboard + store analytics page rebuild against Otter data. | 2.0 |
+| 2026-02-22 | Prisma v7 + Next.js 16 upgrade — pg adapter, explicit SSL config, seed-script path fix, PrismaClient instantiation fix. | 2.5 |
+| 2026-02-23 | Analytics split into dedicated page, compact dashboard layout, date-range preset off-by-one fix, Otter API timezone bugs (multiple), multi-UUID store grouping + order counts, Menu Performance + Product Mix pages, Vercel cron timeout fix. | 9.0 |
+| 2026-02-24 | GitHub Actions cron for 6h Otter sync + Vercel cron cleanup. | 1.5 |
+| 2026-02-24 | Otter JWT auto-refresh — login API, Cloudflare bot-protection bypass (browser headers), static JWT fallback workflow. | 3.0 |
+| 2026-02-24 | Invoice sync system — SKU extraction, vendor normalization, IFS support, top-products UI. | 3.5 |
+| 2026-02-24 | Product usage page — `Recipe` / `RecipeIngredient` / `IngredientAlias` models, Overview + Costs + Vendors tabs, recipe manager sheet, ingredient drilldown w/ variance. | 3.0 |
+| 2026-02-24 | AI integration (insights panel, demand forecast, recipe suggestions) + UTC-vs-PST bug fix + invoice polish. | 2.0 |
 | 2026-02-26 | Busiest-hours chart w/ live today view + timezone handling, R365 recipe import, operations page split, recipe calculation bug fixes + coverage warnings. | 5.0 |
 | 2026-02-28 | Sidebar hydration-mismatch debugging + client-only render fix. | 1.5 |
-| 2026-03-09 | **Switched Otter JWT refresh to Playwright** after sign-in flow change broke headless fetch; prod lib URL fix; Vercel build script exclusion. | 4.0 |
-| 2026-03-19 | **Security hardening and rate limiting across every API route**, attack-surface reduction (removed unused `/api/health`). | 5.0 |
+| 2026-03-09 | Switched Otter JWT refresh to Playwright after sign-in flow change broke headless fetch; prod lib URL fix; Vercel build script exclusion. | 4.0 |
+| 2026-03-19 | Security hardening and rate limiting across every API route, attack-surface reduction (removed unused `/api/health`). | 5.0 |
 | 2026-03-25 | Replaced `gh` CLI with GitHub REST API for encrypted secret rotation (libsodium), dev-dependency cleanup. | 2.5 |
-| 2026-04-18 | **P&L dashboard** w/ fixed costs + commission rates + store-edit form wiring, **invoice extraction hardening** (sanity checks + pack-size fields), **invoice PDF persistence to Vercel Blob** w/ side-by-side viewer, JWT auto-redeploy + 30d seed window, architecture cheat-sheet + interview guide. | 12.0 |
-| 2026-04-19 | Otter orders sync workflow, invoice sync cron every 6h, editorial-topbar design system rolled across loading states and store pages, owner settings hub + 404 catchers, canonical-ingredient dedupe by (vendor, sku), **hybrid recipe costing** (phase 1 manual + phase 2 invoice auto-derive), **phase 3 modifier-aware COGS** via `OtterSubItemMapping`. | 13.0 |
-| 2026-04-20 | Owner-facing menu catalog w/ recipe breakdown, closed Otter SKU mapping gaps across menu, menu page UX rework (sortable catalog + deep-dive route + performance insights), **full menu performance pass** (composite `(storeId, date)` index, request-scoped `React.cache`, memoization, dynamic imports, virtualized table, hover-prefetch, revalidateTag wiring), orders backfill infra + sync-button 95% hang fix, COGS honors manual canonical cost in dated lookups, **P&L "Financial Edition" redesign** w/ waterfall scale + full-range summation fixes + Statement matrix deductions styling, hero KPI additions (net sales, invoice spend, food cost %), home-page store comparison. | 10.0 |
+| 2026-04-18 | P&L dashboard — fixed costs + commission rates + store-edit form wiring + nav links. | 4.0 |
+| 2026-04-18 | Invoice extraction hardening — sanity checks + pack-size fields. | 2.5 |
+| 2026-04-18 | Invoice PDF persistence to Vercel Blob + side-by-side viewer. | 3.5 |
+| 2026-04-18 | JWT auto-redeploy + 30d seed-window widening + architecture cheat-sheet. | 2.0 |
+| 2026-04-19 | Otter orders sync workflow + invoice sync cron every 6h. | 2.0 |
+| 2026-04-19 | Editorial topbar design rolled across loading states and store pages. | 2.0 |
+| 2026-04-19 | Owner settings hub + editorial 404 catchers. | 1.5 |
+| 2026-04-19 | Canonical-ingredient dedupe by (vendor, sku) + batched pending dashboard work. | 1.5 |
+| 2026-04-19 | Hybrid recipe costing — phase 1 manual + phase 2 invoice auto-derive + phase 3 modifier-aware COGS via `OtterSubItemMapping`. | 6.0 |
+| 2026-04-20 | Menu catalog — owner-facing view w/ recipe breakdown, closed Otter SKU mapping gaps. | 2.5 |
+| 2026-04-20 | Menu UX rework — sortable catalog, deep-dive route, performance insights. | 2.0 |
+| 2026-04-20 | Menu performance pass — composite `(storeId, date)` index, `React.cache`, memoization, dynamic imports, virtualized table, hover-prefetch, revalidateTag. | 3.0 |
+| 2026-04-20 | P&L "Financial Edition" redesign — waterfall fixes, Statement matrix, hero KPI additions (net sales / invoice spend / food cost %), home-page store comparison. | 2.5 |
 
 ---
 
@@ -53,7 +70,7 @@ Full-stack engineering for the Chris Neddy's restaurant dashboard — Otter API 
 ---
 
 ## Notes
-- Estimates cover 99 commits across 12 working days, plus research, debugging, API reverse-engineering, and design iteration that don't appear as commits.
-- Notably heavy items: reverse-engineering the private Otter metrics API; Otter JWT auto-refresh with Cloudflare bot-protection bypass and Playwright fallback; invoice OCR pipeline with SKU / vendor / IFS handling; Prisma v7 + Next.js 16 migration; full menu-page performance pass; P&L waterfall + Statement matrix.
+- Line items split by discrete area of work so scope is legible at a glance.
+- Notable bodies of work: reverse-engineering the private Otter metrics API; Otter JWT auto-refresh with Cloudflare bot-protection bypass (later hardened to Playwright); invoice OCR pipeline with SKU / vendor / IFS handling; Prisma v7 + Next.js 16 migration; hybrid recipe costing engine (phases 1–3); full menu-page performance pass; P&L "Financial Edition" redesign.
 - Payment terms: _[net 15 / net 30 / on receipt — fill in]_
 - Payment method: _[Venmo / Zelle / check / ACH — fill in]_

@@ -534,6 +534,11 @@ model DailyCogsItem {
   unitCost     Float?
   lineCost     Float      @default(0)
   status       CogsStatus
+  /** True when the recipe cost walk flagged at least one line as uncosted
+   *  (missing canonical cost or unit-conversion failure). `status` can still
+   *  be COSTED if other lines costed fine — `partialCost` says the total is
+   *  an understatement. */
+  partialCost  Boolean    @default(false)
   computedAt   DateTime   @default(now())
 
   store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)

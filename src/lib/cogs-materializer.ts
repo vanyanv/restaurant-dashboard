@@ -170,6 +170,7 @@ export async function recomputeDailyCogsForDay(input: {
           unitCost: modLineCost > 0 && qty > 0 ? modLineCost / qty : null,
           lineCost: modLineCost,
           status: CogsStatus.UNMAPPED,
+          partialCost: mod?.missingMappings ?? false,
         }
       }
 
@@ -180,6 +181,7 @@ export async function recomputeDailyCogsForDay(input: {
       const totalLineCost = baseLineCost + modLineCost
       const blendedUnitCost = qty > 0 ? totalLineCost / qty : baseUnitCost
       const status = hasBase ? CogsStatus.COSTED : CogsStatus.MISSING_COST
+      const partialCost = (result?.partial ?? false) || (mod?.missingMappings ?? false)
 
       return {
         storeId,
@@ -192,6 +194,7 @@ export async function recomputeDailyCogsForDay(input: {
         unitCost: hasBase ? blendedUnitCost : null,
         lineCost: totalLineCost,
         status,
+        partialCost,
       }
     })
   )

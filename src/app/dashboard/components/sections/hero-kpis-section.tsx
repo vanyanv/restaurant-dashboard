@@ -1,11 +1,11 @@
 import { HeroKpi, formatMoneyLarge, formatUsd } from "../hero-kpi"
 import type { DashboardRange } from "@/lib/dashboard-utils"
-import { fetchInvoiceSummary, fetchOtter } from "./data"
+import { fetchInvoiceSpend30d, fetchOtter } from "./data"
 
 export async function HeroKpisSection({ range }: { range: DashboardRange }) {
-  const [otter, invoiceSummary] = await Promise.all([
+  const [otter, invoiceSpend30d] = await Promise.all([
     fetchOtter(range),
-    fetchInvoiceSummary(),
+    fetchInvoiceSpend30d(),
   ])
 
   const kpis = otter
@@ -17,7 +17,7 @@ export async function HeroKpisSection({ range }: { range: DashboardRange }) {
       }
     : null
 
-  const invoiceSpend = invoiceSummary?.totalSpend ?? 0
+  const invoiceSpend = invoiceSpend30d?.total ?? 0
 
   return (
     <dl className="editorial-kpi-strip editorial-kpi-strip-wide dock-in dock-in-2">
@@ -47,7 +47,7 @@ export async function HeroKpisSection({ range }: { range: DashboardRange }) {
       />
       <HeroKpi
         label="Invoice spend"
-        value={invoiceSummary ? formatMoneyLarge(invoiceSpend) : "—"}
+        value={invoiceSpend30d ? formatMoneyLarge(invoiceSpend) : "—"}
         unit="last 30d"
         delta={null}
       />

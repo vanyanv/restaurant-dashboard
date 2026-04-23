@@ -187,6 +187,29 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
               ]}
             />
 
+            {data.cogs.refillFailedPeriodIndexes.length > 0 && (
+              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+                <div className="flex items-baseline justify-between gap-4">
+                  <div>
+                    <strong>COGS not yet computed for {data.cogs.refillFailedPeriodIndexes.length} period{data.cogs.refillFailedPeriodIndexes.length === 1 ? "" : "s"}.</strong>{" "}
+                    Sales exist but DailyCogsItem is empty — the scheduled
+                    refresh hasn&apos;t caught up since the last data change.
+                    Click Recompute to fill now, or wait up to 15 min for the
+                    next sweep.
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 border-red-400 bg-white text-xs text-red-900 hover:bg-red-100"
+                    onClick={() => recomputeMutation.mutate()}
+                    disabled={recomputeMutation.isPending}
+                  >
+                    {recomputeMutation.isPending ? "Recomputing…" : "Recompute now"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {data.cogs.unmappedItems.length > 0 && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <div className="flex items-baseline justify-between gap-4">
@@ -204,6 +227,29 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                     className="shrink-0 underline hover:text-amber-700"
                   >
                     Build recipes →
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {data.cogs.missingCostItems.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex items-baseline justify-between gap-4">
+                  <div>
+                    <strong>COGS may be undercounted.</strong>{" "}
+                    {data.cogs.missingCostItems.length} mapped item
+                    {data.cogs.missingCostItems.length === 1 ? "" : "s"} ($
+                    {data.cogs.missingCostItems
+                      .reduce((a, b) => a + b.salesRevenue, 0)
+                      .toFixed(0)}{" "}
+                    of sales) have no costable ingredients — missing canonical
+                    cost or unit-conversion failure.
+                  </div>
+                  <a
+                    href="/dashboard/ingredients"
+                    className="shrink-0 underline hover:text-amber-700"
+                  >
+                    Fix ingredients →
                   </a>
                 </div>
               </div>

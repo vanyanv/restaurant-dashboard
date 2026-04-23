@@ -1,15 +1,14 @@
 "use server"
 
 import { getServerSession } from "next-auth"
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath } from "next/cache"
 import { authOptions } from "@/lib/auth"
-import { MENU_TAGS } from "@/lib/cached"
 import { prisma } from "@/lib/prisma"
 import {
   seedCanonicalIngredientsFromInvoices,
-  getCanonicalIngredientCost,
   type SeedResult,
 } from "@/lib/canonical-ingredients"
+import { batchCanonicalCosts } from "@/lib/canonical-cost-batch"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import type {
@@ -41,12 +40,12 @@ export async function listCanonicalIngredients(): Promise<
   })
 
   const [costs, trendsByCanonical] = await Promise.all([
-    Promise.all(canonicals.map((c) => getCanonicalIngredientCost(c.id))),
+    batchCanonicalCosts(ownerId),
     computeTrendsByCanonical(ownerId),
   ])
 
-  return canonicals.map((c, i) => {
-    const cost = costs[i]
+  return canonicals.map((c) => {
+    const cost = costs.get(c.id)
     return {
       id: c.id,
       name: c.name,
@@ -245,6 +244,8 @@ export async function createCanonicalIngredient(input: {
     },
   })
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
   return created
 }
 
@@ -301,8 +302,7 @@ export async function updateCanonicalCost(input: {
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
-  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
-  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
+  revalidatePath("/dashboard/menu/catalog")
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
@@ -311,6 +311,9 @@ export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
   const result = await seedCanonicalIngredientsFromInvoices(ownerId)
   if (result.canonicalsCreated > 0 || result.aliasesCreated > 0) {
     await invalidateDailyCogs({ kind: "owner-full", ownerId })
+    revalidatePath("/dashboard/ingredients")
+    revalidatePath("/dashboard/recipes")
+    revalidatePath("/dashboard/menu/catalog")
   }
   return result
 }
@@ -419,7 +422,7 @@ export async function mergeCanonicalIngredients(input: {
 
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
   revalidatePath("/dashboard/ingredients")
-  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
-  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
+  revalidatePath("/dashboard/recipes")
+  revalidatePath("/dashboard/menu/catalog")
   return result
 }

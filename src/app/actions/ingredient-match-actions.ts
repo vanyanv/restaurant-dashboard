@@ -3,9 +3,11 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
+import { revalidatePath } from "next/cache"
 
 async function requireOwnerId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
@@ -28,75 +30,126 @@ export type UnmatchedLineItemGroup = {
 }
 
 /**
- * Group unmatched invoice line items by (vendor, sku, productName). Returned
- * sorted by total spend desc — map the most expensive things first.
+ * Capped at 200 groups: owners with deep history can accumulate tens of
+ * thousands of unmatched lines, and the UI surfaces highest-spend first so
+ * the long tail isn't actionable enough to pay the scan cost for.
  */
 export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]> {
   const ownerId = await requireOwnerId()
   if (!ownerId) return []
 
-  const items = await prisma.invoiceLineItem.findMany({
-    where: {
-      canonicalIngredientId: null,
-      invoice: { ownerId },
-    },
+  // Group at the DB — vendor_name on Invoice, plus sku/product_name/unit on
+  // InvoiceLineItem. Pick one sample line id per group (latest by invoiceDate)
+  // so the downstream preview-cost lookup is O(200), not O(all unmatched).
+  const rawGroups = await prisma.$queryRaw<
+    Array<{
+      vendorName: string
+      sku: string | null
+      productName: string
+      unit: string | null
+      occurrences: number
+      totalSpend: Prisma.Decimal | number | null
+      lastSeen: Date | null
+      sampleLineItemId: string
+    }>
+  >(Prisma.sql`
+    SELECT
+      i."vendorName"       AS "vendorName",
+      li.sku               AS "sku",
+      li."productName"     AS "productName",
+      li.unit              AS "unit",
+      COUNT(*)::int        AS "occurrences",
+      SUM(li."extendedPrice") AS "totalSpend",
+      MAX(i."invoiceDate") AS "lastSeen",
+      (ARRAY_AGG(li.id ORDER BY i."invoiceDate" DESC NULLS LAST))[1] AS "sampleLineItemId"
+    FROM "InvoiceLineItem" li
+    JOIN "Invoice" i ON i.id = li."invoiceId"
+    WHERE i."ownerId" = ${ownerId}
+      AND li."canonicalIngredientId" IS NULL
+    GROUP BY i."vendorName", li.sku, li."productName", li.unit
+    ORDER BY SUM(li."extendedPrice") DESC
+    LIMIT 200
+  `)
+
+  if (rawGroups.length === 0) return []
+
+  const sampleIds = rawGroups.map((r) => r.sampleLineItemId)
+  const samples = await prisma.invoiceLineItem.findMany({
+    where: { id: { in: sampleIds } },
     select: {
       id: true,
-      sku: true,
-      productName: true,
-      unit: true,
+      quantity: true,
       packSize: true,
       unitSize: true,
       unitSizeUom: true,
-      quantity: true,
+      unit: true,
       extendedPrice: true,
-      invoice: { select: { vendorName: true, invoiceDate: true } },
     },
   })
 
-  const groups = new Map<string, UnmatchedLineItemGroup>()
-  for (const li of items) {
-    const vendor = normalizeVendorName(li.invoice.vendorName)
-    const key = li.sku
-      ? `${vendor}::sku::${li.sku}`
-      : `${vendor}::name::${li.productName.toLowerCase()}`
+  const previewBySample = new Map<
+    string,
+    UnmatchedLineItemGroup["derivedCostPreview"]
+  >()
+  for (const li of samples) {
+    const packSize = li.packSize ?? 1
+    const unitSize = li.unitSize ?? 1
+    const totalBaseQty = li.quantity * packSize * unitSize
+    const baseUom = li.unitSizeUom ?? li.unit
+    const derivedCostPreview =
+      totalBaseQty > 0 && baseUom && li.extendedPrice > 0
+        ? {
+            costPerBase: li.extendedPrice / totalBaseQty,
+            baseUnit: baseUom.toLowerCase(),
+          }
+        : null
+    previewBySample.set(li.id, derivedCostPreview)
+  }
 
-    const existing = groups.get(key)
+  const toNumber = (v: Prisma.Decimal | number | null | undefined): number => {
+    if (v == null) return 0
+    if (typeof v === "number") return v
+    return Number(v.toString())
+  }
+
+  // Merge by normalized vendor (aliases like "SYSCO" / "Sysco Corp" collapse
+  // to the same display vendor). SQL-side grouping used the raw vendorName,
+  // so two raw-vendor rows can land on the same normalized key here.
+  const merged = new Map<string, UnmatchedLineItemGroup>()
+  for (const r of rawGroups) {
+    const vendor = normalizeVendorName(r.vendorName)
+    const key = r.sku
+      ? `${vendor}::sku::${r.sku}`
+      : `${vendor}::name::${r.productName.toLowerCase()}`
+    const spend = toNumber(r.totalSpend)
+    const existing = merged.get(key)
     if (existing) {
-      existing.occurrences += 1
-      existing.totalSpend += li.extendedPrice
-      const d = li.invoice.invoiceDate
-      if (d && (!existing.lastSeen || d > existing.lastSeen)) existing.lastSeen = d
+      existing.occurrences += Number(r.occurrences)
+      existing.totalSpend += spend
+      if (r.lastSeen && (!existing.lastSeen || r.lastSeen > existing.lastSeen)) {
+        existing.lastSeen = r.lastSeen
+        existing.sampleLineItemId = r.sampleLineItemId
+        existing.derivedCostPreview =
+          previewBySample.get(r.sampleLineItemId) ?? null
+      }
     } else {
-      // Compute a per-base-unit preview cost from the sample line item.
-      const packSize = li.packSize ?? 1
-      const unitSize = li.unitSize ?? 1
-      const totalBaseQty = li.quantity * packSize * unitSize
-      const baseUom = li.unitSizeUom ?? li.unit
-      const derivedCostPreview =
-        totalBaseQty > 0 && baseUom && li.extendedPrice > 0
-          ? {
-              costPerBase: li.extendedPrice / totalBaseQty,
-              baseUnit: baseUom.toLowerCase(),
-            }
-          : null
-
-      groups.set(key, {
+      merged.set(key, {
         key,
         vendorName: vendor,
-        sku: li.sku,
-        productName: li.productName,
-        unit: li.unit,
-        sampleLineItemId: li.id,
-        occurrences: 1,
-        totalSpend: li.extendedPrice,
-        lastSeen: li.invoice.invoiceDate,
-        derivedCostPreview,
+        sku: r.sku,
+        productName: r.productName,
+        unit: r.unit,
+        sampleLineItemId: r.sampleLineItemId,
+        occurrences: Number(r.occurrences),
+        totalSpend: spend,
+        lastSeen: r.lastSeen,
+        derivedCostPreview:
+          previewBySample.get(r.sampleLineItemId) ?? null,
       })
     }
   }
 
-  return [...groups.values()].sort((a, b) => b.totalSpend - a.totalSpend)
+  return [...merged.values()].sort((a, b) => b.totalSpend - a.totalSpend)
 }
 
 export type UnmatchedLineItemHit = {
@@ -260,6 +313,9 @@ export async function confirmSkuMatch(input: {
     })
 
     await invalidateDailyCogs({ kind: "owner-full", ownerId })
+    revalidatePath("/dashboard/ingredients")
+    revalidatePath("/dashboard/menu/catalog")
+    revalidatePath("/dashboard/recipes")
     return { backfilled: backfill.count, canonicalIngredientId: targetCanonicalId }
   }
 
@@ -304,6 +360,9 @@ export async function confirmSkuMatch(input: {
   })
 
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/recipes")
   return { backfilled: backfill.count, canonicalIngredientId: targetCanonicalId }
 }
 
@@ -342,5 +401,8 @@ export async function breakSkuMatch(input: {
   })
 
   await invalidateDailyCogs({ kind: "owner-full", ownerId })
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/recipes")
   return { cleared: cleared.count }
 }

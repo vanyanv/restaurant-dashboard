@@ -2124,6 +2124,14 @@ export type StorePnLResult =
         grossProfit: number
         grossMarginPct: number
         unmappedItems: UnmappedMenuItem[]
+        /** Items mapped to a recipe that produced a $0 cost (missing canonical
+         *  cost, unit-conversion failure, empty recipe). COGS is understated
+         *  by the value of their sales. */
+        missingCostItems: UnmappedMenuItem[]
+        /** Periods where sales exist but no DailyCogsItem rows were found.
+         *  Indicates a refill gap — the cron hasn't run since the last
+         *  invalidation. The user should click Recompute or wait. */
+        refillFailedPeriodIndexes: number[]
       }
       /** Top per-item $ swings between the latest period and the one before it.
        *  Empty when there's only one period. */
@@ -2149,9 +2157,33 @@ type DailyCogsRow = {
 function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   cogsValues: number[]
   unmappedItems: UnmappedMenuItem[]
+  missingCostItems: UnmappedMenuItem[]
+  /** Count of any-status DailyCogsItem rows that fell into each period. */
+  rowCountPerPeriod: number[]
 } {
   const cogsValues = periods.map(() => 0)
+  const rowCountPerPeriod = periods.map(() => 0)
   const unmappedAgg = new Map<string, UnmappedMenuItem>()
+  const missingCostAgg = new Map<string, UnmappedMenuItem>()
+
+  const aggInto = (
+    bucket: Map<string, UnmappedMenuItem>,
+    row: DailyCogsRow
+  ) => {
+    const key = `${row.itemName}:::${row.category}`
+    const existing = bucket.get(key)
+    if (existing) {
+      existing.qtySold += row.qtySold
+      existing.salesRevenue += row.salesRevenue
+    } else {
+      bucket.set(key, {
+        itemName: row.itemName,
+        category: row.category,
+        qtySold: row.qtySold,
+        salesRevenue: row.salesRevenue,
+      })
+    }
+  }
 
   for (const row of rows) {
     const t = row.date.getTime()
@@ -2160,20 +2192,15 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
     )
     if (idx === -1) continue
 
+    rowCountPerPeriod[idx]++
+
     if (row.status === CogsStatus.UNMAPPED) {
-      const key = `${row.itemName}:::${row.category}`
-      const existing = unmappedAgg.get(key)
-      if (existing) {
-        existing.qtySold += row.qtySold
-        existing.salesRevenue += row.salesRevenue
-      } else {
-        unmappedAgg.set(key, {
-          itemName: row.itemName,
-          category: row.category,
-          qtySold: row.qtySold,
-          salesRevenue: row.salesRevenue,
-        })
-      }
+      aggInto(unmappedAgg, row)
+      continue
+    }
+
+    if (row.status === CogsStatus.MISSING_COST) {
+      aggInto(missingCostAgg, row)
       continue
     }
 
@@ -2183,7 +2210,10 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   const unmappedItems = Array.from(unmappedAgg.values()).sort(
     (a, b) => b.salesRevenue - a.salesRevenue
   )
-  return { cogsValues, unmappedItems }
+  const missingCostItems = Array.from(missingCostAgg.values()).sort(
+    (a, b) => b.salesRevenue - a.salesRevenue
+  )
+  return { cogsValues, unmappedItems, missingCostItems, rowCountPerPeriod }
 }
 
 /**
@@ -2309,6 +2339,8 @@ export async function getStorePnL(input: {
           grossProfit: 0,
           grossMarginPct: 0,
           unmappedItems: [],
+          missingCostItems: [],
+          refillFailedPeriodIndexes: [],
         },
         movers: [],
       }
@@ -2362,6 +2394,28 @@ export async function getStorePnL(input: {
       store,
       cogsValues: cogs.cogsValues,
     })
+
+    // Periods where OtterDailySummary reports sales but DailyCogsItem has zero
+    // rows. Signals a refill gap — the cron hasn't run yet since the last
+    // invalidation, or it failed. Surfaced as a banner so the user knows to
+    // click Recompute (or just wait for the next scheduled sweep).
+    const refillFailedPeriodIndexes: number[] = []
+    for (let i = 0; i < periods.length; i++) {
+      if (cogs.rowCountPerPeriod[i] === 0 && computed.totalSales[i] > 0) {
+        refillFailedPeriodIndexes.push(i)
+      }
+    }
+    if (refillFailedPeriodIndexes.length > 0) {
+      console.warn("[getStorePnL] missing DailyCogsItem rows", {
+        storeId: store.id,
+        ownerId: session.user.id,
+        periodsMissing: refillFailedPeriodIndexes.map((i) => ({
+          start: periods[i].startDate.toISOString().slice(0, 10),
+          end: periods[i].endDate.toISOString().slice(0, 10),
+          sales: computed.totalSales[i],
+        })),
+      })
+    }
     const movers = periods.length >= 2
       ? computeMovers(cogsRows, periods, periods.length - 1, periods.length - 2, 5)
       : []
@@ -2413,6 +2467,8 @@ export async function getStorePnL(input: {
         grossProfit,
         grossMarginPct,
         unmappedItems: cogs.unmappedItems,
+        missingCostItems: cogs.missingCostItems,
+        refillFailedPeriodIndexes,
       },
       movers,
     }

@@ -54,12 +54,15 @@ const SYNONYMS: Record<string, CanonicalUnit> = {
   // mass
   "lb": "lb", "lbs": "lb", "pound": "lb", "pounds": "lb",
   "oz": "oz", "ozs": "oz", "ounce": "oz", "ounces": "oz",
+  // R365 weight-vs-fluid disambiguated forms (see also fl oz below).
+  "oz-wt": "oz", "oz wt": "oz", "wt oz": "oz", "oz-w": "oz",
   "g": "g", "gr": "g", "gram": "g", "grams": "g",
   "kg": "kg", "kgs": "kg", "kilo": "kg", "kilogram": "kg", "kilograms": "kg",
   // volume
   "ml": "ml", "milliliter": "ml", "milliliters": "ml",
   "l": "l", "ltr": "l", "liter": "l", "liters": "l", "litre": "l", "litres": "l",
   "floz": "fl oz", "fl oz": "fl oz", "fluid ounce": "fl oz", "fluid ounces": "fl oz",
+  "oz-fl": "fl oz", "oz fl": "fl oz", "fl-oz": "fl oz",
   "cup": "cup", "cups": "cup", "c": "cup",
   "pt": "pt", "pint": "pt", "pints": "pt",
   "qt": "qt", "quart": "qt", "quarts": "qt",

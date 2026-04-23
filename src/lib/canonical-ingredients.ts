@@ -1,6 +1,21 @@
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
+import { canonicalizeUnit } from "@/lib/unit-conversion"
+
+/**
+ * Normalize an invoice-line unit into the canonical token we want stored on
+ * IngredientSkuMatch / CanonicalIngredient. Falls back to a trimmed, lowercased
+ * version of the raw string when we don't have a synonym — keeps round-trip
+ * fidelity while protecting downstream conversion from R365's "OZ-wt" / "OZ-fl"
+ * style tokens.
+ */
+function normalizeUnitToken(raw: string | null | undefined): string {
+  if (!raw) return "unit"
+  const canon = canonicalizeUnit(raw)
+  if (canon) return canon
+  return raw.trim().toLowerCase() || "unit"
+}
 
 /** Rough lowercase + collapse-whitespace + strip-trailing-parens normalizer. */
 function normalizeProductName(raw: string): string {
@@ -94,7 +109,7 @@ export async function seedCanonicalIngredientsFromInvoices(
             data: {
               ownerId,
               name: canonicalName,
-              defaultUnit: li.unit ?? "unit",
+              defaultUnit: normalizeUnitToken(li.unit),
               category: li.category ?? null,
             },
           })
@@ -102,6 +117,7 @@ export async function seedCanonicalIngredientsFromInvoices(
           canonicalByName.set(canonicalName, canonicalId)
           canonicalsCreated++
         }
+        const normalizedUnit = normalizeUnitToken(li.unit)
         await prisma.ingredientSkuMatch.upsert({
           where: {
             ownerId_vendorName_sku: { ownerId, vendorName: vendor, sku: li.sku },
@@ -113,8 +129,8 @@ export async function seedCanonicalIngredientsFromInvoices(
             sku: li.sku,
             canonicalIngredientId: canonicalId,
             conversionFactor: 1,
-            fromUnit: li.unit ?? "unit",
-            toUnit: li.unit ?? "unit",
+            fromUnit: normalizedUnit,
+            toUnit: normalizedUnit,
             confirmedBy: ownerId,
           },
         })
@@ -140,13 +156,14 @@ export async function seedCanonicalIngredientsFromInvoices(
       continue
     }
 
+    const normalizedUnit = normalizeUnitToken(li.unit)
     let canonicalId = canonicalByName.get(canonicalName)
     if (!canonicalId) {
       const created = await prisma.canonicalIngredient.create({
         data: {
           ownerId,
           name: canonicalName,
-          defaultUnit: li.unit ?? "unit",
+          defaultUnit: normalizedUnit,
           category: li.category ?? null,
         },
       })
@@ -161,8 +178,8 @@ export async function seedCanonicalIngredientsFromInvoices(
         canonicalIngredientId: canonicalId,
         canonicalName,
         rawName: li.productName,
-        fromUnit: li.unit ?? "unit",
-        toUnit: li.unit ?? "unit",
+        fromUnit: normalizedUnit,
+        toUnit: normalizedUnit,
         conversionFactor: 1,
       },
     })

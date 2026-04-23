@@ -43,6 +43,55 @@ export class RecipeCycleError extends Error {
 }
 
 /**
+ * Deduped log of unit-conversion failures, keyed by the (from → to) pair.
+ * Logs once per unique pair per process to avoid spam during batch costing.
+ * Surfaces the top offenders in Vercel logs so "N recipes fail from 'head' to
+ * 'oz'" is greppable.
+ */
+const loggedConversionFailures = new Set<string>()
+
+/**
+ * Reconcile a recipe-line's quantity/unit against the canonical cost's unit
+ * and produce a line cost. Single source of truth for both the single-recipe
+ * walker and the batched loader.
+ *
+ * Returns `qtyInCostUnit: null` (and `lineCost: 0`) when the units can't be
+ * reconciled — callers should mark the line as missing in that case.
+ */
+export function computeIngredientLineCost(args: {
+  ingredientQuantity: number
+  ingredientUnit: string
+  costUnitCost: number
+  costUnit: string
+}): { lineCost: number; qtyInCostUnit: number | null } {
+  const { ingredientQuantity, ingredientUnit, costUnitCost, costUnit } = args
+  const recipeUnit = canonicalizeUnit(ingredientUnit)
+  const normalizedCostUnit = canonicalizeUnit(costUnit)
+  let qtyInCostUnit: number | null = ingredientQuantity
+  if (recipeUnit && normalizedCostUnit && recipeUnit !== normalizedCostUnit) {
+    qtyInCostUnit = convert(ingredientQuantity, ingredientUnit, costUnit)
+  } else if (!recipeUnit || !normalizedCostUnit) {
+    const same =
+      ingredientUnit.trim().toLowerCase() === costUnit.trim().toLowerCase()
+    if (!same) qtyInCostUnit = null
+  }
+  if (qtyInCostUnit == null) {
+    const key = `${ingredientUnit.trim().toLowerCase()}→${costUnit.trim().toLowerCase()}`
+    if (!loggedConversionFailures.has(key)) {
+      loggedConversionFailures.add(key)
+      console.warn("[recipe-cost] unit conversion failed — line costed as $0", {
+        ingredientUnit,
+        costUnit,
+        canonicalizedIngredientUnit: recipeUnit,
+        canonicalizedCostUnit: normalizedCostUnit,
+      })
+    }
+    return { lineCost: 0, qtyInCostUnit: null }
+  }
+  return { lineCost: costUnitCost * qtyInCostUnit, qtyInCostUnit }
+}
+
+/**
  * Compute the cost of a single recipe, recursively resolving sub-recipes.
  *
  * - `asOf` undefined  → latest invoice price (builder mode)
@@ -146,21 +195,12 @@ async function walk(
         continue
       }
 
-      // Reconcile the recipe line's unit against the canonical's cost unit.
-      // Example: cost is $3.30/lb, recipe asks for 0.48 oz — convert 0.48 oz
-      // into lb before multiplying. If units are cross-category or unknown,
-      // the line is flagged as missing.
-      const recipeUnit = canonicalizeUnit(ing.unit)
-      const costUnit = canonicalizeUnit(cost.unit)
-      let qtyInCostUnit: number | null = ing.quantity
-      if (recipeUnit && costUnit && recipeUnit !== costUnit) {
-        qtyInCostUnit = convert(ing.quantity, ing.unit, cost.unit)
-      } else if (!recipeUnit || !costUnit) {
-        // At least one side is unrecognized. If the raw strings match (after trim/lc)
-        // we assume 1:1; otherwise we can't trust a naive multiply — mark missing.
-        const same = ing.unit.trim().toLowerCase() === cost.unit.trim().toLowerCase()
-        if (!same) qtyInCostUnit = null
-      }
+      const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
+        ingredientQuantity: ing.quantity,
+        ingredientUnit: ing.unit,
+        costUnitCost: cost.unitCost,
+        costUnit: cost.unit,
+      })
 
       if (qtyInCostUnit == null) {
         partial = true
@@ -184,7 +224,6 @@ async function walk(
         continue
       }
 
-      const lineCost = cost.unitCost * qtyInCostUnit
       total += lineCost
       lines.push({
         kind: "ingredient",

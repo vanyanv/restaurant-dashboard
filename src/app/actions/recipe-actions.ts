@@ -5,13 +5,15 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
   computeRecipeCost,
+  computeIngredientLineCost,
   assertNoCycles,
   RecipeCycleError,
   type RecipeCostLine,
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
-import { costRecipeCached, costIngredientCached, MENU_TAGS } from "@/lib/cached"
-import { revalidateTag } from "next/cache"
+import { costRecipeCached, costIngredientCached } from "@/lib/cached"
+import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
+import { revalidatePath } from "next/cache"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
 import type { RecipeInput, RecipeSummary } from "@/types/recipe"
 import {
@@ -61,23 +63,22 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
     },
   })
 
-  const costs = await Promise.all(
-    recipes.map((r) =>
-      costRecipeCached(r.id).catch(() => null)
-    )
-  )
+  const costs = await batchRecipeCosts(ownerId)
 
-  return recipes.map((r, i) => ({
-    id: r.id,
-    itemName: r.itemName,
-    category: r.category,
-    isSellable: r.isSellable,
-    isConfirmed: r.isConfirmed,
-    ingredientCount: r.ingredients.length,
-    computedCost: costs[i]?.totalCost ?? null,
-    partialCost: costs[i]?.partial ?? true,
-    updatedAt: r.updatedAt,
-  }))
+  return recipes.map((r) => {
+    const cost = costs.get(r.id)
+    return {
+      id: r.id,
+      itemName: r.itemName,
+      category: r.category,
+      isSellable: r.isSellable,
+      isConfirmed: r.isConfirmed,
+      ingredientCount: r.ingredients.length,
+      computedCost: cost?.totalCost ?? null,
+      partialCost: cost?.partial ?? true,
+      updatedAt: r.updatedAt,
+    }
+  })
 }
 
 export async function getRecipeDetail(recipeId: string) {
@@ -170,8 +171,9 @@ export async function upsertRecipe(
     itemName: input.itemName.trim(),
   })
 
-  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
-  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
+  revalidatePath("/dashboard/recipes")
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
 
   return { id }
 }
@@ -204,8 +206,9 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
     itemName: recipe.itemName,
   })
 
-  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
-  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
+  revalidatePath("/dashboard/recipes")
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
 }
 
 /**
@@ -276,7 +279,32 @@ export async function previewRecipeCost(input: {
         })
         continue
       }
-      const lineCost = cost.unitCost * ing.quantity
+      const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
+        ingredientQuantity: ing.quantity,
+        ingredientUnit: ing.unit,
+        costUnitCost: cost.unitCost,
+        costUnit: cost.unit,
+      })
+      if (qtyInCostUnit == null) {
+        partial = true
+        lines.push({
+          kind: "ingredient",
+          refId: ing.canonicalIngredientId,
+          name: ing.ingredientName ?? "ingredient",
+          quantity: ing.quantity,
+          unit: ing.unit,
+          unitCost: cost.unitCost,
+          costUnit: cost.unit,
+          lineCost: 0,
+          missingCost: true,
+          sourceInvoiceId: cost.sourceInvoiceId,
+          sourceLineItemId: cost.sourceLineItemId,
+          sourceVendor: cost.sourceVendor,
+          sourceSku: cost.sourceSku,
+          sourceInvoiceDate: cost.asOfDate,
+        })
+        continue
+      }
       total += lineCost
       lines.push({
         kind: "ingredient",
@@ -285,6 +313,7 @@ export async function previewRecipeCost(input: {
         quantity: ing.quantity,
         unit: ing.unit,
         unitCost: cost.unitCost,
+        costUnit: cost.unit,
         lineCost,
         missingCost: false,
         sourceInvoiceId: cost.sourceInvoiceId,
@@ -329,8 +358,8 @@ export async function confirmRecipe(
     })
   }
 
-  revalidateTag(MENU_TAGS.recipes(ownerId), "max")
-  revalidateTag(MENU_TAGS.catalog(ownerId), "max")
+  revalidatePath("/dashboard/recipes")
+  revalidatePath("/dashboard/menu/catalog")
 }
 
 export type RecipeCatalogSummary = {

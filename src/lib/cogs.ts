@@ -211,6 +211,10 @@ export interface DataQualityCounts {
   costed: number
   unmapped: number
   missingCost: number
+  /** Count of rows where the recipe cost walk flagged at least one ingredient
+   *  line uncostable. Can overlap with COSTED — a mostly-costed recipe that
+   *  failed on one line still lands as COSTED + partialCost=true. */
+  partialCost: number
 }
 
 export async function getDataQualityCounts(
@@ -218,17 +222,23 @@ export async function getDataQualityCounts(
   startDate: Date,
   endDate: Date
 ): Promise<DataQualityCounts> {
-  const rows = await prisma.dailyCogsItem.groupBy({
-    by: ["status"],
-    where: dateWindow(storeId, startDate, endDate),
-    _count: { _all: true },
-  })
+  const [byStatus, partialCount] = await Promise.all([
+    prisma.dailyCogsItem.groupBy({
+      by: ["status"],
+      where: dateWindow(storeId, startDate, endDate),
+      _count: { _all: true },
+    }),
+    prisma.dailyCogsItem.count({
+      where: { ...dateWindow(storeId, startDate, endDate), partialCost: true },
+    }),
+  ])
   const by = (s: "COSTED" | "UNMAPPED" | "MISSING_COST") =>
-    rows.find((r) => r.status === s)?._count?._all ?? 0
+    byStatus.find((r) => r.status === s)?._count?._all ?? 0
   return {
     costed: by("COSTED"),
     unmapped: by("UNMAPPED"),
     missingCost: by("MISSING_COST"),
+    partialCost: partialCount,
   }
 }
 

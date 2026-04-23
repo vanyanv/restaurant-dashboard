@@ -45,9 +45,16 @@ export async function getInvoiceSummary(options?: {
       lte: isoToEndOfDay(endDate),
     }
   } else if (days) {
-    const sinceDate = new Date()
-    sinceDate.setDate(sinceDate.getDate() - days)
-    where.invoiceDate = { gte: sinceDate }
+    // Calendar-aligned window: N full days ending today at 23:59:59.999,
+    // so the "days: 30" home KPI matches the invoices page's "month" preset
+    // which spans the last 29 days + today (also 30 calendar days inclusive).
+    // Also bounds-above now() so future-dated rows don't silently inflate the total.
+    const end = new Date()
+    end.setHours(23, 59, 59, 999)
+    const start = new Date(end)
+    start.setHours(0, 0, 0, 0)
+    start.setDate(start.getDate() - (days - 1))
+    where.invoiceDate = { gte: start, lte: end }
   }
 
   const [invoices, pendingReview, lineItems] = await Promise.all([

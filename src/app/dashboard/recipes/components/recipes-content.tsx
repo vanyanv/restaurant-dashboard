@@ -1,9 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useState, useTransition } from "react"
-import Link from "next/link"
+import { useCallback, useEffect, useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Sparkles, ListChecks } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -35,7 +34,12 @@ type Props = {
   initialMenuItems: MenuItemForCatalog[]
   initialRecipes: RecipeSummary[]
   initialCanonicalIngredients: CanonicalIngredientSummary[]
-  unmatchedLineItemCount: number
+  /**
+   * Rendered inside the editorial topbar's stamps/actions area. Used by the
+   * Suspense shell to stream the unmatched-line-items count badge independently
+   * so the editor UI never waits on that invoice scan.
+   */
+  unmatchedCountSlot?: ReactNode
 }
 
 type Filter = "unbuilt" | "all" | "prep" | "confirmed"
@@ -44,7 +48,7 @@ export function RecipesContent({
   initialMenuItems,
   initialRecipes,
   initialCanonicalIngredients,
-  unmatchedLineItemCount,
+  unmatchedCountSlot,
 }: Props) {
   const router = useRouter()
   const [filter, setFilter] = useState<Filter>("unbuilt")
@@ -250,18 +254,7 @@ export function RecipesContent({
             {seedMessage}
           </span>
         )}
-        <Link
-          href="/dashboard/ingredients?tab=review"
-          className="inline-flex h-8 items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
-        >
-          <ListChecks className="h-3 w-3" />
-          Needs review
-          {unmatchedLineItemCount > 0 && (
-            <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center bg-[var(--accent)] px-1 text-[9px] text-white">
-              {unmatchedLineItemCount}
-            </span>
-          )}
-        </Link>
+        {unmatchedCountSlot}
         <Button
           size="sm"
           variant="outline"

@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { invalidateDailyCogs } from "@/lib/cogs-invalidate"
+import { revalidatePath } from "next/cache"
 import type { MenuItemForCatalog } from "@/types/recipe"
 
 async function requireOwnerId(): Promise<string | null> {
@@ -13,13 +14,20 @@ async function requireOwnerId(): Promise<string | null> {
 
 /**
  * All distinct Otter-sold items across the owner's stores, with:
- *   - aggregate all-time units sold
+ *   - aggregate units sold over the window (default last 90 days)
  *   - first/last seen
  *   - whether it's already mapped to a Recipe (via OtterItemMapping or name match)
  *
+ * Defaults to a 90-day window because the catalog surface is "items worth
+ * mapping right now" — items that haven't sold in 90 days aren't actionable
+ * and their rollup rows dominate the scan. Pass `sinceDays: null` to opt
+ * into the full-history behaviour (reporting/backfill workflows).
+ *
  * Sorted by total qty sold DESC so the most-impactful items surface first.
  */
-export async function getMenuItemsForCatalog(): Promise<MenuItemForCatalog[]> {
+export async function getMenuItemsForCatalog(
+  options?: { sinceDays?: number | null }
+): Promise<MenuItemForCatalog[]> {
   const ownerId = await requireOwnerId()
   if (!ownerId) return []
 
@@ -30,47 +38,44 @@ export async function getMenuItemsForCatalog(): Promise<MenuItemForCatalog[]> {
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return []
 
-  const menuRows = await prisma.otterMenuItem.findMany({
-    where: {
-      storeId: { in: storeIds },
-      isModifier: false,
-      category: { not: "Uncategorized" },
-    },
-    select: {
-      storeId: true,
-      itemName: true,
-      category: true,
-      date: true,
-      fpQuantitySold: true,
-      tpQuantitySold: true,
-    },
-  })
-
-  // Aggregate by (itemName, category) across stores.
-  type Agg = {
-    totalQty: number
-    firstSeen: Date
-    lastSeen: Date
-    storeIds: Set<string>
+  const sinceDays = options?.sinceDays === undefined ? 90 : options.sinceDays
+  let dateFloor: Date | null = null
+  if (sinceDays !== null) {
+    dateFloor = new Date()
+    dateFloor.setDate(dateFloor.getDate() - sinceDays)
   }
-  const agg = new Map<string, Agg>()
-  for (const row of menuRows) {
-    const key = `${row.itemName}:::${row.category}`
-    const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
-    const existing = agg.get(key)
-    if (existing) {
-      existing.totalQty += qty
-      if (row.date < existing.firstSeen) existing.firstSeen = row.date
-      if (row.date > existing.lastSeen) existing.lastSeen = row.date
-      existing.storeIds.add(row.storeId)
-    } else {
-      agg.set(key, {
-        totalQty: qty,
-        firstSeen: row.date,
-        lastSeen: row.date,
-        storeIds: new Set([row.storeId]),
-      })
+
+  const baseWhere = {
+    storeId: { in: storeIds },
+    isModifier: false,
+    category: { not: "Uncategorized" },
+    ...(dateFloor ? { date: { gte: dateFloor } } : {}),
+  } as const
+
+  const [aggRows, storeKeyRows] = await Promise.all([
+    prisma.otterMenuItem.groupBy({
+      by: ["itemName", "category"],
+      where: baseWhere,
+      _sum: { fpQuantitySold: true, tpQuantitySold: true },
+      _min: { date: true },
+      _max: { date: true },
+    }),
+    prisma.otterMenuItem.findMany({
+      where: baseWhere,
+      distinct: ["storeId", "itemName", "category"],
+      select: { storeId: true, itemName: true, category: true },
+    }),
+  ])
+
+  const storeIdsByKey = new Map<string, Set<string>>()
+  for (const r of storeKeyRows) {
+    const k = `${r.itemName}:::${r.category}`
+    let set = storeIdsByKey.get(k)
+    if (!set) {
+      set = new Set()
+      storeIdsByKey.set(k, set)
     }
+    set.add(r.storeId)
   }
 
   const mappings = await prisma.otterItemMapping.findMany({
@@ -99,8 +104,13 @@ export async function getMenuItemsForCatalog(): Promise<MenuItemForCatalog[]> {
   )
 
   const rows: MenuItemForCatalog[] = []
-  for (const [key, data] of agg) {
-    const [itemName, category] = key.split(":::")
+  for (const row of aggRows) {
+    const { itemName, category } = row
+    const totalQty =
+      (row._sum.fpQuantitySold ?? 0) + (row._sum.tpQuantitySold ?? 0)
+    const firstSeen = row._min.date
+    const lastSeen = row._max.date
+    if (!firstSeen || !lastSeen) continue
     const explicitMapping = mappingByItemName.get(itemName)
     const fallbackRecipe = explicitMapping
       ? null
@@ -108,14 +118,16 @@ export async function getMenuItemsForCatalog(): Promise<MenuItemForCatalog[]> {
     rows.push({
       otterItemName: itemName,
       category,
-      totalQtySoldAllTime: data.totalQty,
-      firstSeen: data.firstSeen,
-      lastSeen: data.lastSeen,
+      totalQtySoldAllTime: totalQty,
+      firstSeen,
+      lastSeen,
       mappedRecipeId:
         explicitMapping?.recipeId ?? fallbackRecipe?.id ?? null,
       mappedRecipeName:
         explicitMapping?.recipeName ?? fallbackRecipe?.itemName ?? null,
-      storeIds: Array.from(data.storeIds),
+      storeIds: Array.from(
+        storeIdsByKey.get(`${itemName}:::${category}`) ?? new Set<string>()
+      ),
     })
   }
 
@@ -168,6 +180,10 @@ export async function mapOtterItemToRecipe(input: {
       })
     )
   )
+
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
 }
 
 export async function unmapOtterItem(otterItemName: string): Promise<void> {
@@ -194,6 +210,10 @@ export async function unmapOtterItem(otterItemName: string): Promise<void> {
       })
     )
   )
+
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
 }
 
 /* ─────────────────────────────── sub-items (modifiers) ─────────────────────────────── */
@@ -222,8 +242,15 @@ export type OtterSubItemForCatalog = {
  * skuIds that happen to mean the same thing (e.g. "Add Pickle" vs
  * "Add Pickles" on different menu platforms) can each map to the same
  * modifier recipe.
+ *
+ * Defaults to a 90-day window on OtterOrder.referenceTimeLocal — the
+ * underlying join grows by millions of rows per year and only recent
+ * modifiers are actionable for mapping. Pass `sinceDays: null` to opt into
+ * full-history behaviour.
  */
-export async function getOtterSubItemsForCatalog(): Promise<OtterSubItemForCatalog[]> {
+export async function getOtterSubItemsForCatalog(
+  options?: { sinceDays?: number | null }
+): Promise<OtterSubItemForCatalog[]> {
   const ownerId = await requireOwnerId()
   if (!ownerId) return []
 
@@ -234,9 +261,21 @@ export async function getOtterSubItemsForCatalog(): Promise<OtterSubItemForCatal
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return []
 
+  const sinceDays = options?.sinceDays === undefined ? 90 : options.sinceDays
+  let refTimeFloor: Date | null = null
+  if (sinceDays !== null) {
+    refTimeFloor = new Date()
+    refTimeFloor.setDate(refTimeFloor.getDate() - sinceDays)
+  }
+
   const subs = await prisma.otterOrderSubItem.findMany({
     where: {
-      orderItem: { order: { storeId: { in: storeIds } } },
+      orderItem: {
+        order: {
+          storeId: { in: storeIds },
+          ...(refTimeFloor ? { referenceTimeLocal: { gte: refTimeFloor } } : {}),
+        },
+      },
     },
     select: {
       skuId: true,
@@ -390,6 +429,10 @@ export async function mapOtterSubItemToRecipe(input: {
   await Promise.all(
     stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
   )
+
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
 }
 
 export async function unmapOtterSubItem(skuId: string): Promise<void> {
@@ -410,6 +453,10 @@ export async function unmapOtterSubItem(skuId: string): Promise<void> {
   await Promise.all(
     stores.map((s) => invalidateDailyCogs({ kind: "store-full", storeId: s.id }))
   )
+
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
 }
 
 export type MenuItemSellPrice = {

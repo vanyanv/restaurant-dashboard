@@ -15,7 +15,8 @@ export async function DataQualityStripSection({
     filters.endDate
   )
 
-  if (dq.unmapped === 0 && dq.missingCost === 0) return null
+  if (dq.unmapped === 0 && dq.missingCost === 0 && dq.partialCost === 0)
+    return null
 
   const parts: string[] = []
   if (dq.unmapped > 0)
@@ -23,6 +24,10 @@ export async function DataQualityStripSection({
   if (dq.missingCost > 0)
     parts.push(
       `${dq.missingCost} item${dq.missingCost === 1 ? "" : "s"} missing cost`
+    )
+  if (dq.partialCost > 0)
+    parts.push(
+      `${dq.partialCost} item${dq.partialCost === 1 ? "" : "s"} partial cost`
     )
 
   return (

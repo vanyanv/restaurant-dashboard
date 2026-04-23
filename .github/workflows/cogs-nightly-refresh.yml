@@ -1,0 +1,21 @@
+name: COGS Nightly Refresh
+on:
+  schedule:
+    # 07:00 UTC = 03:00 America/New_York (EDT) — quiet time, well after
+    # same-day Otter sync. Handles cost drift when invoices for past days
+    # arrive and retroactively change what that day's COGS should have been.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/cron/cogs/nightly-refresh
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsSL -X POST "$APP_URL/api/cron/cogs/nightly-refresh" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 295
