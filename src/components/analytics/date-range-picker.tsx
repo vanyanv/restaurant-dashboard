@@ -295,20 +295,19 @@ export function DateRangePicker({
         </SelectContent>
       </Select>
 
-      {/* Desktop: preset strip */}
+      {/* Desktop: preset strip — joined tab-pills matching the dateline chrome */}
       <ToggleGroup
         type="single"
         value={activePreset}
         onValueChange={handlePresetChange}
         disabled={isPending}
-        className="hidden lg:flex overflow-x-auto"
+        className="drp-preset-strip hidden lg:inline-flex"
       >
         {presets.map((p) => (
           <ToggleGroupItem
             key={p.value}
             value={p.value}
-            size="sm"
-            className="text-xs px-2.5 h-8 shrink-0"
+            className="drp-preset-tab"
           >
             {p.label}
           </ToggleGroupItem>
