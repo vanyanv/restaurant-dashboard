@@ -211,6 +211,7 @@ const OVERVIEW_SYSTEM_PROMPT = `You are the morning briefing analyst for a small
 
 Rules:
 - Use ONLY values that appear verbatim in the source data block. Do NOT invent or derive new percentages or dollars.
+- CRITICAL — copy dollar amounts character-for-character including cents. Write "$2887.50" not "$288"; "$23243.89" not "$232"; "$1873.60" not "$181". Truncating digits is a hard error.
 - Each insight has a one-line headline and a 1-3 sentence body. The body must reference at least one concrete value from the source data.
 - Cover at most 4 insights. Quality over quantity.
 - Set impactDollars to the dollar magnitude of the change you are flagging when one is identifiable from the source data, otherwise null.

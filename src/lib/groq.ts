@@ -12,7 +12,7 @@ function getGroqClient(): Groq {
   return cachedClient
 }
 
-export const GROQ_GENERATOR_MODEL = "llama-3.1-8b-instant"
+export const GROQ_GENERATOR_MODEL = "llama-3.3-70b-versatile"
 export const GROQ_CRITIC_MODEL = "llama-3.3-70b-versatile"
 
 export interface GroqUsage {

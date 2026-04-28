@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { isCronRequest } from "@/lib/rate-limit"
 import { prisma } from "@/lib/prisma"
-import { runAiAnalyticsRoute, type RouteHandlerArgs } from "./pipeline"
+import { runPhasePrompt, type RunPhasePromptArgs } from "./orchestrator"
 import type {
   AiAnalyticsRoute,
   AiAnalyticsScope,
 } from "@/generated/prisma/client"
 
 /**
- * Shared cron-handler wrapper. Each per-route POST handler delegates to this
- * with its route-specific source-data fetcher and prompt builders. The wrapper
- * handles auth, scope resolution, and ownerId lookup.
+ * Shared cron-handler wrapper for the START phase of the phased AI analytics
+ * pipeline. Each per-route POST handler delegates to this with its
+ * route-specific source-data fetcher and prompt builders. The wrapper handles
+ * auth, scope resolution, and ownerId lookup, then runs Phase 1 (prompt) and
+ * returns `{ runId, nextStep: "generate" }` so the caller can chain into the
+ * route-agnostic `/api/cron/ai-analytics/run/[id]/generate` and `.../critique`
+ * endpoints.
  */
 
 interface BuildHandlerArgs<TSource> {
@@ -69,7 +73,7 @@ export function makeAiAnalyticsCronHandler<TSource>(
       ownerId = anyActive.ownerId
     }
 
-    const result = await runAiAnalyticsRoute<TSource>({
+    const result = await runPhasePrompt<TSource>({
       route: args.route,
       scope: isRollup ? "ALL" : "STORE",
       storeId,
@@ -80,7 +84,7 @@ export function makeAiAnalyticsCronHandler<TSource>(
       collectAllowedEntities: args.collectAllowedEntities,
       materialityThresholdDollars: args.materialityThresholdDollars,
       validateEntities: args.validateEntities,
-    } satisfies RouteHandlerArgs<TSource>)
+    } satisfies RunPhasePromptArgs<TSource>)
 
     return NextResponse.json(result)
   }

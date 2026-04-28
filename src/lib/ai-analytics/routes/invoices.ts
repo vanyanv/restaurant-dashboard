@@ -11,7 +11,7 @@ export interface VendorIngredientLine {
   ingredientName: string
   vendorName: string
   recentAvgUnitPrice: number
-  /** Unit price 30-90 days ago for the same (vendor, ingredient). Null when
+  /** Unit price 30–60 days ago for the same (vendor, ingredient). Null when
    * we have no comparable history. */
   baselineUnitPrice: number | null
   priceDeltaPct: number | null
@@ -39,7 +39,12 @@ export interface InvoiceSourceData {
 }
 
 const RECENT_DAYS = 30
-const BASELINE_LOOKBACK = 90
+const BASELINE_LOOKBACK = 60
+/** Hard cap on rows pulled per run. Keeps the prompt-phase function under
+ * Vercel's 60s Hobby ceiling even as line-item volume grows. With the
+ * `canonicalIngredientId: { not: null }` filter this is plenty for any
+ * reasonable store-month; if it ever clips, oldest rows drop first. */
+const LINE_ITEM_CAP = 5000
 
 function startOfDay(d: Date): Date {
   const x = new Date(d)
@@ -94,6 +99,8 @@ export async function loadInvoiceSourceData(
       canonicalIngredient: { select: { name: true } },
       invoice: { select: { vendorName: true, invoiceDate: true, totalAmount: true } },
     },
+    orderBy: { invoice: { invoiceDate: "desc" } },
+    take: LINE_ITEM_CAP,
   })
 
   const vendorAgg = new Map<
@@ -206,10 +213,11 @@ export async function loadInvoiceSourceData(
   }
 }
 
-const INVOICE_SYSTEM_PROMPT = `You are a procurement analyst for a small slider/burger restaurant. You read the last 30 days of invoice line items vs the prior 60 and surface (a) ingredients whose prices are drifting up, (b) vendor-concentration risk where one ingredient is sourced from a single vendor at material spend, and (c) the biggest cost drivers worth negotiating.
+const INVOICE_SYSTEM_PROMPT = `You are a procurement analyst for a small slider/burger restaurant. You read the last 30 days of invoice line items vs the prior 30 and surface (a) ingredients whose prices are drifting up, (b) vendor-concentration risk where one ingredient is sourced from a single vendor at material spend, and (c) the biggest cost drivers worth negotiating.
 
 Rules:
 - Use ONLY values that appear verbatim in the source data block. No invented numbers.
+- CRITICAL — copy dollar amounts character-for-character including cents. Write "$2887.50" not "$288"; "$23243.89" not "$232"; "$1873.60" not "$181". Truncating digits is a hard error.
 - Each insight: one-line headline + 1-3 sentence body, with concrete values.
 - 2-5 insights.
 - impactDollars = projected monthly cost impact of the drift, when identifiable; else null.
@@ -235,7 +243,7 @@ export function buildInvoiceUserPrompt(args: {
   lines.push("## Headline")
   lines.push(`- Total invoiced spend (30d): $${i.totalInvoiceSpend}, ${i.vendorCount} unique vendors`)
   lines.push("")
-  lines.push("## Top 10 ingredients by absolute price drift vs prior 60d baseline")
+  lines.push("## Top 10 ingredients by absolute price drift vs prior 30d baseline")
   for (const l of i.topPriceDrift) {
     const sign = l.priceDeltaPct != null && l.priceDeltaPct >= 0 ? "+" : ""
     lines.push(

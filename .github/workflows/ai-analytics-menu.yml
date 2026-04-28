@@ -40,10 +40,32 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           STORE_ID: ${{ matrix.storeId }}
         run: |
-          response=$(curl -fsSL -X POST \
+          set -euo pipefail
+          AUTH="Authorization: Bearer $CRON_SECRET"
+
+          # Phase 1: prompt — fetch source data, build prompts, return runId
+          start=$(curl -fsSL -X POST \
             "$APP_URL/api/cron/ai-analytics/menu?storeId=$STORE_ID" \
-            -H "Authorization: Bearer $CRON_SECRET" --max-time 295)
-          echo "$response" | jq .
+            -H "$AUTH" --max-time 55)
+          echo "$start" | jq .
+          RUN_ID=$(echo "$start" | jq -r .runId)
+          NEXT=$(echo "$start" | jq -r .nextStep)
+
+          # Phase 2: generator
+          if [ "$NEXT" = "generate" ]; then
+            gen=$(curl -fsSL -X POST \
+              "$APP_URL/api/cron/ai-analytics/run/$RUN_ID/generate" \
+              -H "$AUTH" --max-time 55)
+            echo "$gen" | jq .
+            NEXT=$(echo "$gen" | jq -r .nextStep)
+          fi
+
+          # Phase 3: critic + persist insights
+          if [ "$NEXT" = "critique" ]; then
+            curl -fsSL -X POST \
+              "$APP_URL/api/cron/ai-analytics/run/$RUN_ID/critique" \
+              -H "$AUTH" --max-time 55 | jq .
+          fi
 
   rollup:
     needs: list-stores
@@ -54,7 +76,26 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          response=$(curl -fsSL -X POST \
+          set -euo pipefail
+          AUTH="Authorization: Bearer $CRON_SECRET"
+
+          start=$(curl -fsSL -X POST \
             "$APP_URL/api/cron/ai-analytics/menu?scope=all" \
-            -H "Authorization: Bearer $CRON_SECRET" --max-time 295)
-          echo "$response" | jq .
+            -H "$AUTH" --max-time 55)
+          echo "$start" | jq .
+          RUN_ID=$(echo "$start" | jq -r .runId)
+          NEXT=$(echo "$start" | jq -r .nextStep)
+
+          if [ "$NEXT" = "generate" ]; then
+            gen=$(curl -fsSL -X POST \
+              "$APP_URL/api/cron/ai-analytics/run/$RUN_ID/generate" \
+              -H "$AUTH" --max-time 55)
+            echo "$gen" | jq .
+            NEXT=$(echo "$gen" | jq -r .nextStep)
+          fi
+
+          if [ "$NEXT" = "critique" ]; then
+            curl -fsSL -X POST \
+              "$APP_URL/api/cron/ai-analytics/run/$RUN_ID/critique" \
+              -H "$AUTH" --max-time 55 | jq .
+          fi

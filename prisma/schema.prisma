@@ -55,6 +55,9 @@ enum AiAnalyticsScope {
 /// validator rejected twice or the LLM call errored; the page renders a
 /// "data unavailable" placeholder for the affected scope.
 enum AiAnalyticsRunStatus {
+  QUEUED
+  PROMPT_READY
+  GENERATED
   OK
   PARTIAL
   FAILED
@@ -744,6 +747,16 @@ model AiAnalyticsRun {
   errorDetails     String?
   startedAt        DateTime             @default(now())
   completedAt      DateTime?
+
+  /// Phased-pipeline state. Persisted between Vercel function invocations so
+  /// each phase stays under the 60s Hobby-plan timeout. Cleared after critique.
+  systemPrompt     String?
+  userPrompt       String?
+  /// `{ summary: string, allowedNumbers: { dollars: number[]; percents: number[] }, allowedEntities: string[], materialityThresholdDollars: number, validateEntities: boolean }`
+  sourceSnapshot   Json?
+  /// `{ candidates: AiInsightCandidatePayload[] }` — generator output kept for
+  /// the critic phase.
+  generatorPayload Json?
 
   store    Store?      @relation(fields: [storeId], references: [id], onDelete: Cascade)
   insights AiInsight[]
