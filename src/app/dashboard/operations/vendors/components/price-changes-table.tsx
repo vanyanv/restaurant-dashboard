@@ -2,13 +2,6 @@
 
 import { useMemo } from "react"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
-import {
   Table,
   TableBody,
   TableCell,
@@ -16,58 +9,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/format"
-import { cn } from "@/lib/utils"
 import type { PriceAlert } from "@/types/product-usage"
 
 interface PriceChangesTableProps {
   data: PriceAlert[]
 }
 
-function getChangeColor(pct: number): string {
-  if (pct > 5) return "text-red-600 dark:text-red-400"
-  if (pct > 0) return "text-amber-600 dark:text-amber-400"
-  return "text-emerald-600 dark:text-emerald-400"
+const NUM_CLASS =
+  "[font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+
+function changeColor(pct: number): string {
+  if (pct > 5) return "var(--accent)"
+  if (pct > 0) return "var(--subtract)"
+  return "var(--ink)"
 }
 
-function getSeverityBadge(severity: PriceAlert["severity"], pct: number) {
+function SeverityStamp({ severity, pct }: { severity: PriceAlert["severity"]; pct: number }) {
   if (severity === "spike") {
-    return (
-      <Badge variant="destructive" className="text-xs">
-        Alert
-      </Badge>
-    )
+    return <span className="inv-stamp" data-tone="alert">Alert</span>
   }
   if (severity === "increase") {
-    return (
-      <Badge
-        variant="outline"
-        className="text-xs border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"
-      >
-        Watch
-      </Badge>
-    )
+    return <span className="inv-stamp" data-tone="watch">Watch</span>
   }
-  // severity === "decrease"
   if (pct < -5) {
-    return (
-      <Badge
-        variant="outline"
-        className="text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400"
-      >
-        Decrease
-      </Badge>
-    )
+    return <span className="inv-stamp" data-tone="info">Decrease</span>
   }
-  return (
-    <Badge
-      variant="outline"
-      className="text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"
-    >
-      Stable
-    </Badge>
-  )
+  return <span className="inv-stamp" data-tone="ok">Stable</span>
 }
 
 export function PriceChangesTable({ data }: PriceChangesTableProps) {
@@ -79,90 +47,183 @@ export function PriceChangesTable({ data }: PriceChangesTableProps) {
     [data]
   )
 
+  const headStyle = { color: "var(--ink-faint)" } as const
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base">
-              Price Changes ({data.length})
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Products with recent price movements vs 30-day average
-            </CardDescription>
-          </div>
+    <section className="inv-panel inv-panel--flush">
+      <div className="px-5 pt-4 pb-3 flex items-baseline justify-between">
+        <div>
+          <span className="inv-panel__dept">§ Vendors</span>
+          <p
+            className="font-display italic text-[18px] mt-0.5"
+            style={{ color: "var(--ink)" }}
+          >
+            Price changes{" "}
+            <span style={{ color: "var(--ink-faint)" }}>· {data.length} products</span>
+          </p>
+          <p className="text-[12px] mt-0.5" style={{ color: "var(--ink-muted)" }}>
+            Recent movements vs the 30-day average.
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="max-h-[500px] overflow-auto">
-          <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead className="pl-4">Product</TableHead>
-                <TableHead className="pl-4">Category</TableHead>
-                <TableHead className="pl-4">30d Average</TableHead>
-                <TableHead className="pl-4">Latest Price</TableHead>
-                <TableHead className="pl-4">Change</TableHead>
-                <TableHead className="pl-4">Severity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.length > 0 ? (
-                sorted.map((alert, idx) => (
-                  <TableRow key={`${alert.productName}-${idx}`}>
-                    <TableCell className="pl-4 font-medium">
-                      {alert.productName}
-                    </TableCell>
-                    <TableCell className="pl-4">
-                      {alert.category ? (
-                        <Badge
-                          variant="outline"
-                          className="text-xs font-normal"
-                        >
-                          {alert.category}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">
-                          —
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="pl-4 font-mono-numbers">
-                      {formatCurrency(alert.previousAvgPrice)}
-                    </TableCell>
-                    <TableCell className="pl-4 font-mono-numbers">
-                      {formatCurrency(alert.currentPrice)}
-                    </TableCell>
-                    <TableCell className="pl-4">
-                      <span
-                        className={cn(
-                          "font-mono-numbers font-medium",
-                          getChangeColor(alert.changePercent)
-                        )}
-                      >
-                        {alert.changePercent > 0 ? "+" : ""}
-                        {alert.changePercent.toFixed(1)}%
+      </div>
+      {/* Mobile: change-% leads (the whole point of the panel — flagging
+          movement). Avg → latest sits below as a price arc. */}
+      <ul
+        className="sm:hidden"
+        style={{ borderTop: "1px solid var(--hairline-bold)" }}
+      >
+        {sorted.length === 0 ? (
+          <li
+            className="px-4 py-12 text-center text-[13px]"
+            style={{ color: "var(--ink-muted)" }}
+          >
+            No price changes detected.
+          </li>
+        ) : (
+          sorted.map((alert, idx) => (
+            <li
+              key={`${alert.productName}-${idx}`}
+              className="px-4 py-3"
+              style={{ borderTop: "1px solid var(--hairline)" }}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span
+                  className="font-display italic text-[16px] leading-tight"
+                  style={{
+                    color: "var(--ink)",
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {alert.productName}
+                </span>
+                <SeverityStamp
+                  severity={alert.severity}
+                  pct={alert.changePercent}
+                />
+              </div>
+              {alert.category && (
+                <div
+                  className="mt-1"
+                  style={{
+                    fontFamily: "var(--font-jetbrains-mono), monospace",
+                    fontSize: 10,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "var(--ink-muted)",
+                  }}
+                >
+                  {alert.category}
+                </div>
+              )}
+              <div
+                className="mt-2 flex items-baseline justify-between gap-3"
+                style={{
+                  fontFamily: "var(--font-dm-sans), sans-serif",
+                  fontVariantNumeric: "tabular-nums lining-nums",
+                }}
+              >
+                <span
+                  className="text-[12.5px]"
+                  style={{ color: "var(--ink-muted)" }}
+                >
+                  {formatCurrency(alert.previousAvgPrice)}
+                  <span aria-hidden style={{ margin: "0 6px" }}>→</span>
+                  <span style={{ color: "var(--ink)", fontWeight: 600 }}>
+                    {formatCurrency(alert.currentPrice)}
+                  </span>
+                </span>
+                <span
+                  className="text-[18px] font-semibold"
+                  style={{ color: changeColor(alert.changePercent) }}
+                >
+                  {alert.changePercent > 0 ? "+" : ""}
+                  {alert.changePercent.toFixed(1)}%
+                </span>
+              </div>
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div
+        className="hidden sm:block max-h-125 overflow-auto"
+        style={{ borderTop: "1px solid var(--hairline-bold)" }}
+      >
+        <Table>
+          <TableHeader className="sticky top-0 z-10" style={{ background: "var(--paper)" }}>
+            <TableRow style={{ borderBottom: "1px solid var(--hairline)" }}>
+              <TableHead className="pl-4" style={headStyle}>Product</TableHead>
+              <TableHead className="pl-4" style={headStyle}>Category</TableHead>
+              <TableHead className="pl-4" style={headStyle}>30d avg</TableHead>
+              <TableHead className="pl-4" style={headStyle}>Latest</TableHead>
+              <TableHead className="pl-4" style={headStyle}>Change</TableHead>
+              <TableHead className="pl-4" style={headStyle}>Severity</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.length > 0 ? (
+              sorted.map((alert, idx) => (
+                <TableRow
+                  key={`${alert.productName}-${idx}`}
+                  className="editorial-tr"
+                  style={{ borderBottom: "1px solid var(--hairline)" }}
+                >
+                  <TableCell className="pl-4 text-[13px] font-medium" style={{ color: "var(--ink)" }}>
+                    {alert.productName}
+                  </TableCell>
+                  <TableCell className="pl-4">
+                    {alert.category ? (
+                      <span className="text-[11px]" style={{ color: "var(--ink-muted)" }}>
+                        {alert.category}
                       </span>
-                    </TableCell>
-                    <TableCell className="pl-4">
-                      {getSeverityBadge(alert.severity, alert.changePercent)}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
+                    ) : (
+                      <span className="text-[11px]" style={{ color: "var(--ink-faint)" }}>·</span>
+                    )}
+                  </TableCell>
                   <TableCell
-                    colSpan={6}
-                    className="h-24 text-center text-muted-foreground"
+                    className={`pl-4 text-[13px] ${NUM_CLASS}`}
+                    style={{ color: "var(--ink-muted)" }}
                   >
-                    No price changes detected.
+                    {formatCurrency(alert.previousAvgPrice)}
+                  </TableCell>
+                  <TableCell
+                    className={`pl-4 text-[13px] ${NUM_CLASS}`}
+                    style={{ color: "var(--ink)" }}
+                  >
+                    {formatCurrency(alert.currentPrice)}
+                  </TableCell>
+                  <TableCell className="pl-4">
+                    <span
+                      className={`text-[13px] font-semibold ${NUM_CLASS}`}
+                      style={{ color: changeColor(alert.changePercent) }}
+                    >
+                      {alert.changePercent > 0 ? "+" : ""}
+                      {alert.changePercent.toFixed(1)}%
+                    </span>
+                  </TableCell>
+                  <TableCell className="pl-4">
+                    <SeverityStamp
+                      severity={alert.severity}
+                      pct={alert.changePercent}
+                    />
                   </TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="h-24 text-center text-[13px]"
+                  style={{ color: "var(--ink-muted)" }}
+                >
+                  No price changes detected.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   )
 }

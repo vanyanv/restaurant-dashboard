@@ -10,12 +10,6 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Table,
   TableBody,
   TableCell,
@@ -23,11 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { ArrowUpDown } from "lucide-react"
 import { formatCurrency } from "@/lib/format"
-import { cn } from "@/lib/utils"
 import type { IngredientUsageRow } from "@/types/product-usage"
 
 interface IngredientVarianceTableProps {
@@ -35,46 +26,94 @@ interface IngredientVarianceTableProps {
   onRowClick?: (ingredientName: string) => void
 }
 
-function getVarianceColor(pct: number): string {
+const NUM_CLASS =
+  "[font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+
+function varianceColor(pct: number): string {
   const abs = Math.abs(pct)
-  if (abs > 10) return "text-red-600 dark:text-red-400"
-  if (abs > 5) return "text-amber-600 dark:text-amber-400"
-  return "text-emerald-600 dark:text-emerald-400"
+  if (abs > 10) return "var(--accent)"
+  if (abs > 5) return "var(--subtract)"
+  return "var(--ink)"
 }
 
-function getStatusBadge(status: IngredientUsageRow["status"]) {
+function StatusStamp({ status }: { status: IngredientUsageRow["status"] }) {
   switch (status) {
     case "over_ordered":
-      return (
-        <Badge variant="destructive" className="text-xs">
-          Over
-        </Badge>
-      )
+      return <span className="inv-stamp" data-tone="alert">Over</span>
     case "under_ordered":
-      return (
-        <Badge
-          variant="outline"
-          className="text-xs border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"
-        >
-          Under
-        </Badge>
-      )
+      return <span className="inv-stamp" data-tone="watch">Under</span>
     case "balanced":
-      return (
-        <Badge
-          variant="outline"
-          className="text-xs border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"
-        >
-          Good
-        </Badge>
-      )
+      return <span className="inv-stamp" data-tone="info">Balanced</span>
     case "no_recipe":
-      return (
-        <Badge variant="secondary" className="text-xs">
-          No Recipe
-        </Badge>
-      )
+      return <span className="inv-stamp" data-tone="muted">No recipe</span>
   }
+}
+
+function CardStat({
+  label,
+  value,
+  color,
+  muted,
+  bold,
+}: {
+  label: string
+  value: string
+  color?: string
+  muted?: boolean
+  bold?: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span
+        style={{
+          fontFamily: "var(--font-jetbrains-mono), monospace",
+          fontSize: 9.5,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "var(--ink-faint)",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          color: color ?? (muted ? "var(--ink-muted)" : "var(--ink)"),
+          fontWeight: bold ? 600 : 500,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function SortHeader({
+  label,
+  isSorted,
+  onClick,
+}: {
+  label: string
+  isSorted: false | "asc" | "desc"
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 -ml-1"
+      style={{
+        color: isSorted ? "var(--ink)" : "var(--ink-faint)",
+        fontFamily: "var(--font-jetbrains-mono), monospace",
+        fontSize: 10,
+        letterSpacing: "0.18em",
+        textTransform: "uppercase",
+        fontWeight: 600,
+      }}
+    >
+      {label}
+      <ArrowUpDown className="ml-0.5 h-3 w-3" />
+    </button>
+  )
 }
 
 export function IngredientVarianceTable({
@@ -90,65 +129,61 @@ export function IngredientVarianceTable({
       {
         accessorKey: "canonicalName",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Ingredient"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Ingredient
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
         cell: ({ row }) => (
-          <span className="font-medium">{row.getValue("canonicalName")}</span>
+          <span className="text-[13px] font-medium" style={{ color: "var(--ink)" }}>
+            {row.getValue("canonicalName")}
+          </span>
         ),
       },
       {
         accessorKey: "category",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Category"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Category
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
         cell: ({ row }) => {
           const cat = row.getValue("category") as string | null
           return cat ? (
-            <Badge variant="outline" className="text-xs font-normal">
+            <span className="text-[11px]" style={{ color: "var(--ink-muted)" }}>
               {cat}
-            </Badge>
+            </span>
           ) : (
-            <span className="text-muted-foreground text-xs">--</span>
+            <span className="text-[11px]" style={{ color: "var(--ink-faint)" }}>·</span>
           )
         },
       },
       {
         accessorKey: "purchasedQuantity",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Purchased"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Purchased
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
         cell: ({ row }) => {
           const orig = row.original
           return (
             <div>
-              <span className="font-mono-numbers">
+              <span
+                className={`text-[13px] ${NUM_CLASS}`}
+                style={{ color: "var(--ink)" }}
+              >
                 {orig.purchasedQuantity.toFixed(1)} {orig.purchasedUnit}
               </span>
-              <div className="text-xs text-muted-foreground font-mono-numbers">
+              <div
+                className={`text-[11px] mt-0.5 ${NUM_CLASS}`}
+                style={{ color: "var(--ink-muted)" }}
+              >
                 {formatCurrency(orig.purchasedCost)}
               </div>
             </div>
@@ -158,18 +193,14 @@ export function IngredientVarianceTable({
       {
         accessorKey: "theoreticalUsage",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Theoretical"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Theoretical
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
         cell: ({ row }) => (
-          <span className="font-mono-numbers">
+          <span className={`text-[13px] ${NUM_CLASS}`} style={{ color: "var(--ink-muted)" }}>
             {(row.getValue("theoreticalUsage") as number).toFixed(1)}
           </span>
         ),
@@ -177,21 +208,18 @@ export function IngredientVarianceTable({
       {
         accessorKey: "variancePct",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Variance %"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Variance %
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
         cell: ({ row }) => {
           const pct = row.getValue("variancePct") as number
           return (
             <span
-              className={cn("font-mono-numbers font-medium", getVarianceColor(pct))}
+              className={`text-[13px] font-semibold ${NUM_CLASS}`}
+              style={{ color: varianceColor(pct) }}
             >
               {pct > 0 ? "+" : ""}
               {pct.toFixed(1)}%
@@ -202,18 +230,16 @@ export function IngredientVarianceTable({
       {
         accessorKey: "wasteEstimatedCost",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Waste cost"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Waste Cost
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
         cell: ({ row }) => (
-          <span className="font-mono-numbers">
+          <span
+            className={`editorial-tr__total text-[13px] font-semibold ${NUM_CLASS}`}
+          >
             {formatCurrency(row.getValue("wasteEstimatedCost") as number)}
           </span>
         ),
@@ -221,18 +247,15 @@ export function IngredientVarianceTable({
       {
         accessorKey: "status",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-3 h-8 text-xs"
+          <SortHeader
+            label="Status"
+            isSorted={column.getIsSorted()}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Status
-            <ArrowUpDown className="ml-1 h-3 w-3" />
-          </Button>
+          />
         ),
-        cell: ({ row }) =>
-          getStatusBadge(row.getValue("status") as IngredientUsageRow["status"]),
+        cell: ({ row }) => (
+          <StatusStamp status={row.getValue("status") as IngredientUsageRow["status"]} />
+        ),
       },
     ],
     []
@@ -248,69 +271,226 @@ export function IngredientVarianceTable({
   })
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">
-            All Ingredients ({data.length})
-          </CardTitle>
+    <section className="inv-panel inv-panel--flush">
+      <div className="px-5 pt-4 pb-3 flex items-baseline justify-between">
+        <div>
+          <span className="inv-panel__dept">§ Ingredients</span>
+          <p
+            className="font-display italic text-[18px] mt-0.5"
+            style={{ color: "var(--ink)" }}
+          >
+            All ingredients{" "}
+            <span style={{ color: "var(--ink-faint)" }}>· {data.length}</span>
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="max-h-[500px] overflow-auto">
-          <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="pl-4">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
+      </div>
+      {/* Mobile: card stack — preserves the table's sort. The whole card
+          opens the same drilldown as desktop's row click, so the dense
+          numeric grid below is informational, not interactive. */}
+      <div className="sm:hidden">
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3"
+          style={{
+            borderTop: "1px solid var(--hairline-bold)",
+            borderBottom: "1px solid var(--hairline)",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-jetbrains-mono), monospace",
+              fontSize: 9.5,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "var(--ink-faint)",
+            }}
+          >
+            Sort by
+          </span>
+          <select
+            value={sorting[0]?.id ?? "wasteEstimatedCost"}
+            onChange={(e) =>
+              setSorting([{ id: e.target.value, desc: true }])
+            }
+            className="border bg-transparent px-2 py-1 text-[12px]"
+            style={{
+              borderColor: "var(--hairline-bold)",
+              color: "var(--ink)",
+              fontFamily: "var(--font-dm-sans), sans-serif",
+              borderRadius: 0,
+            }}
+          >
+            <option value="wasteEstimatedCost">Waste cost</option>
+            <option value="variancePct">Variance %</option>
+            <option value="purchasedQuantity">Purchased</option>
+            <option value="theoreticalUsage">Theoretical</option>
+            <option value="canonicalName">Ingredient</option>
+            <option value="category">Category</option>
+            <option value="status">Status</option>
+          </select>
+        </div>
+        <ul>
+          {table.getRowModel().rows.length === 0 ? (
+            <li
+              className="px-4 py-12 text-center text-[13px]"
+              style={{ color: "var(--ink-muted)" }}
+            >
+              No ingredient data available.
+            </li>
+          ) : (
+            table.getRowModel().rows.map((row) => {
+              const r = row.original
+              const interactive = !!onRowClick
+              return (
+                <li
+                  key={row.id}
+                  style={{ borderTop: "1px solid var(--hairline)" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onRowClick?.(r.canonicalName)}
+                    disabled={!interactive}
+                    className="w-full text-left px-4 py-3 disabled:cursor-default"
+                    style={{
+                      cursor: interactive ? "pointer" : "default",
+                      background: "transparent",
+                      transition: "background 160ms ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (interactive)
+                        e.currentTarget.style.background =
+                          "rgba(220, 38, 38, 0.045)"
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent"
+                    }}
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span
+                        className="font-display italic text-[16px] leading-tight"
+                        style={{
+                          color: "var(--ink)",
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        {r.canonicalName}
+                      </span>
+                      <StatusStamp status={r.status} />
+                    </div>
+                    {r.category && (
+                      <div
+                        className="mt-1"
+                        style={{
+                          fontFamily: "var(--font-jetbrains-mono), monospace",
+                          fontSize: 10,
+                          letterSpacing: "0.14em",
+                          textTransform: "uppercase",
+                          color: "var(--ink-muted)",
+                        }}
+                      >
+                        {r.category}
+                      </div>
+                    )}
+                    <div
+                      className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5"
+                      style={{
+                        fontFamily: "var(--font-dm-sans), sans-serif",
+                        fontSize: 13,
+                        fontVariantNumeric: "tabular-nums lining-nums",
+                      }}
+                    >
+                      <CardStat
+                        label="Variance"
+                        value={`${r.variancePct > 0 ? "+" : ""}${r.variancePct.toFixed(1)}%`}
+                        color={varianceColor(r.variancePct)}
+                        bold
+                      />
+                      <CardStat
+                        label="Waste cost"
+                        value={formatCurrency(r.wasteEstimatedCost)}
+                        bold
+                      />
+                      <CardStat
+                        label={`Purchased${r.purchasedUnit ? ` (${r.purchasedUnit})` : ""}`}
+                        value={r.purchasedQuantity.toFixed(1)}
+                      />
+                      <CardStat
+                        label="Theoretical"
+                        value={r.theoreticalUsage.toFixed(1)}
+                        muted
+                      />
+                    </div>
+                  </button>
+                </li>
+              )
+            })
+          )}
+        </ul>
+      </div>
+
+      <div
+        className="hidden sm:block max-h-125 overflow-auto"
+        style={{ borderTop: "1px solid var(--hairline-bold)" }}
+      >
+        <Table>
+          <TableHeader
+            className="sticky top-0 z-10"
+            style={{ background: "var(--paper)" }}
+          >
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow
+                key={headerGroup.id}
+                style={{ borderBottom: "1px solid var(--hairline)" }}
+              >
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id} className="pl-4">
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows.length > 0 ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="editorial-tr"
+                  style={{
+                    borderBottom: "1px solid var(--hairline)",
+                    cursor: onRowClick ? "pointer" : undefined,
+                  }}
+                  onClick={() => onRowClick?.(row.original.canonicalName)}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className="pl-4">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </TableCell>
                   ))}
                 </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length > 0 ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className={cn(
-                      onRowClick && "cursor-pointer hover:bg-muted/50"
-                    )}
-                    onClick={() =>
-                      onRowClick?.(row.original.canonicalName)
-                    }
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="pl-4">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext()
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center text-muted-foreground"
-                  >
-                    No ingredient data available.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-[13px]"
+                  style={{ color: "var(--ink-muted)" }}
+                >
+                  No ingredient data available.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
   )
 }

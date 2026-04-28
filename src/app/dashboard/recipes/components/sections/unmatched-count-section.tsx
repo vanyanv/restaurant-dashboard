@@ -20,7 +20,7 @@ export async function UnmatchedCountSection() {
       <ListChecks className="h-3 w-3" />
       Needs review
       {count > 0 && (
-        <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center bg-[var(--accent)] px-1 text-[9px] text-white">
+        <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center bg-[var(--accent)] px-1 text-[9px] text-(--paper)">
           {count}
         </span>
       )}

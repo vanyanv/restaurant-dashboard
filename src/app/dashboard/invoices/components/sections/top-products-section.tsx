@@ -1,13 +1,5 @@
 import { Package, ChevronDown } from "lucide-react"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
@@ -39,93 +31,141 @@ export async function TopProductsSection({
 
   return (
     <Collapsible defaultOpen={false}>
-      <Card>
+      <div className="inv-panel inv-panel--flush">
         <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer select-none hover:bg-muted/50 transition-colors">
+          <button
+            type="button"
+            className="editorial-tr w-full cursor-pointer select-none px-5 py-4 text-left"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-muted-foreground" />
+                <Package className="h-5 w-5 text-(--ink-faint)" aria-hidden />
                 <div>
-                  <CardTitle className="text-base">Top Products</CardTitle>
-                  <CardDescription>
+                  <span className="font-display text-base italic text-(--ink)">
+                    Top Products
+                  </span>
+                  <p className="text-xs text-(--ink-muted) mt-0.5">
                     Most ordered items by total spend in this period
-                  </CardDescription>
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
+              <div className="flex items-center gap-3">
+                <span className="inv-stamp" data-tone="muted">
                   {products.topProducts.length} items
-                </Badge>
-                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 in-data-[state=open]:rotate-180" />
+                </span>
+                <ChevronDown className="h-4 w-4 text-(--ink-faint) transition-transform duration-200 in-data-[state=open]:rotate-180" />
               </div>
             </div>
-          </CardHeader>
+          </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent>
-            <div className="rounded-md border overflow-x-auto">
+          <div className="px-5 pb-5">
+            <div
+              className="overflow-x-auto"
+              style={{ borderTop: "1px solid var(--hairline-bold)" }}
+            >
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">#</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Avg Price</TableHead>
-                    <TableHead className="text-right">Total Spend</TableHead>
-                    <TableHead className="w-[120px]"></TableHead>
+                  <TableRow style={{ borderBottom: "1px solid var(--hairline)" }}>
+                    <TableHead className="w-10" style={{ color: "var(--ink-faint)" }}>
+                      #
+                    </TableHead>
+                    <TableHead style={{ color: "var(--ink-faint)" }}>Product</TableHead>
+                    <TableHead style={{ color: "var(--ink-faint)" }}>SKU</TableHead>
+                    <TableHead style={{ color: "var(--ink-faint)" }}>Category</TableHead>
+                    <TableHead className="text-right" style={{ color: "var(--ink-faint)" }}>
+                      Qty
+                    </TableHead>
+                    <TableHead className="text-right" style={{ color: "var(--ink-faint)" }}>
+                      Avg price
+                    </TableHead>
+                    <TableHead className="text-right" style={{ color: "var(--ink-faint)" }}>
+                      Total spend
+                    </TableHead>
+                    <TableHead className="w-30" style={{ color: "var(--ink-faint)" }}></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {products.topProducts.map((p, i) => {
                     const pct = (p.totalSpend / maxSpend) * 100
+                    const isLeader = i === 0
                     return (
-                      <TableRow key={`${p.productName}-${i}`}>
-                        <TableCell className="font-mono text-muted-foreground text-xs">
-                          {i + 1}
+                      <TableRow
+                        key={`${p.productName}-${i}`}
+                        className="editorial-tr"
+                        style={{ borderBottom: "1px solid var(--hairline)" }}
+                      >
+                        <TableCell
+                          className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-[0.12em]"
+                          style={{ color: "var(--ink-faint)" }}
+                        >
+                          {String(i + 1).padStart(2, "0")}
                         </TableCell>
-                        <TableCell className="font-medium max-w-[250px]">
-                          <span className="truncate block">
-                            {p.productName}
-                          </span>
+                        <TableCell
+                          className="text-[13px] font-medium"
+                          style={{ color: "var(--ink)", maxWidth: 250 }}
+                        >
+                          <span className="truncate block">{p.productName}</span>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {p.sku ?? "—"}
+                        <TableCell
+                          className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] tracking-[0.12em] uppercase"
+                          style={{ color: "var(--ink-muted)" }}
+                        >
+                          {p.sku ?? "·"}
                         </TableCell>
                         <TableCell>
                           {p.category ? (
-                            <Badge
-                              variant="outline"
-                              className="text-xs font-normal"
+                            <span
+                              className="text-[11px]"
+                              style={{ color: "var(--ink-muted)" }}
                             >
                               {p.category}
-                            </Badge>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {p.totalQuantity.toFixed(0)}
-                          {p.unit ? (
-                            <span className="text-muted-foreground text-xs ml-1">
-                              {p.unit}
                             </span>
                           ) : (
-                            ""
+                            <span style={{ color: "var(--ink-faint)" }}>·</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell
+                          className="text-right text-[13px] [font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+                          style={{ color: "var(--ink)" }}
+                        >
+                          {p.totalQuantity.toFixed(0)}
+                          {p.unit ? (
+                            <span
+                              className="text-[10px] ml-1"
+                              style={{ color: "var(--ink-faint)" }}
+                            >
+                              {p.unit}
+                            </span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell
+                          className="text-right text-[13px] [font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+                          style={{ color: "var(--ink-muted)" }}
+                        >
                           {formatCurrency(p.avgUnitPrice)}
                         </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
+                        <TableCell
+                          className="editorial-tr__total text-right text-[13px] font-semibold [font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+                        >
                           {formatCurrency(p.totalSpend)}
                         </TableCell>
                         <TableCell>
-                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-1 overflow-hidden relative"
+                            style={{ background: "var(--hairline)" }}
+                          >
                             <div
-                              className="h-full bg-primary/25 rounded-full transition-all"
-                              style={{ width: `${pct}%` }}
+                              className="absolute inset-0 origin-left"
+                              style={{
+                                background: isLeader
+                                  ? "var(--accent)"
+                                  : "var(--ink)",
+                                opacity: isLeader ? 0.85 : 0.35,
+                                ["--bar-scale" as string]: pct / 100,
+                                transform: `scaleX(var(--bar-scale))`,
+                                transition: "transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1)",
+                              }}
                             />
                           </div>
                         </TableCell>
@@ -135,9 +175,9 @@ export async function TopProductsSection({
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
+          </div>
         </CollapsibleContent>
-      </Card>
+      </div>
     </Collapsible>
   )
 }

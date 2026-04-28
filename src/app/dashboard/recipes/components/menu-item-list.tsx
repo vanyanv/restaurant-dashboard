@@ -122,7 +122,7 @@ export function MenuItemList({
             emptyLabel={
               filter === "unbuilt"
                 ? "Every menu item has a recipe."
-                : "No menu items yet — sync Otter first."
+                : "No menu items yet. Sync Otter first."
             }
           />
         )}

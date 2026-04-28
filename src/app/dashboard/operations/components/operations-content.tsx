@@ -24,7 +24,7 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
 } from "@/components/charts/recharts"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EditorialChartTooltip } from "@/components/charts/editorial-chart-tooltip"
 import {
   Select,
   SelectContent,
@@ -46,6 +46,9 @@ interface OperationsContentProps {
   stores: { id: string; name: string }[]
   userRole: string
 }
+
+const AXIS_TICK = { fontSize: 11, fill: "var(--ink-muted)" }
+const AXIS_TICK_SM = { fontSize: 10, fill: "var(--ink-faint)" }
 
 export function OperationsContent({
   initialData,
@@ -141,7 +144,7 @@ export function OperationsContent({
       >
         {stores.length > 1 && (
           <Select value={storeFilter} onValueChange={handleStoreChange}>
-            <SelectTrigger className="w-[160px] h-8 text-xs">
+            <SelectTrigger className="w-40 h-8 text-xs">
               <SelectValue placeholder="All Stores" />
             </SelectTrigger>
             <SelectContent>
@@ -162,255 +165,294 @@ export function OperationsContent({
         />
       </EditorialTopbar>
 
-      {/* Content */}
       <div className={`flex-1 overflow-auto p-3 sm:p-4 space-y-6 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
         {!hasData && !isPending ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Activity className="h-12 w-12 text-muted-foreground/40 mb-4" />
-            <h3 className="text-lg font-medium text-muted-foreground mb-1">No operational data yet</h3>
-            <p className="text-sm text-muted-foreground/60 max-w-md">
+            <Activity className="h-10 w-10 mb-4" style={{ color: "var(--ink-faint)" }} />
+            <h3
+              className="font-display italic text-[22px] mb-1"
+              style={{ color: "var(--ink)" }}
+            >
+              No operational data yet
+            </h3>
+            <p
+              className="text-[13px] max-w-md"
+              style={{ color: "var(--ink-muted)" }}
+            >
               Sync your Otter data and import invoices to see cost-per-order, margins, and spending trends.
             </p>
           </div>
         ) : (
           <>
-            {/* KPI Cards */}
             {comp && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <KpiCard
-                  title="Cost / Order"
+                  emphasis="lede"
+                  title="Cost / order"
                   value={formatCurrency(comp.current.costPerOrder)}
                   change={comp.costPerOrderChange}
                   invertColor
                   icon={<ShoppingCart className="h-4 w-4" />}
-                  borderColor="hsl(0, 72%, 51%)"
                 />
                 <KpiCard
-                  title="Gross Margin"
-                  value={comp.current.grossMarginPct !== null ? `${comp.current.grossMarginPct.toFixed(1)}%` : "—"}
+                  title="Gross margin"
+                  value={comp.current.grossMarginPct !== null ? `${comp.current.grossMarginPct.toFixed(1)}%` : "·"}
                   change={comp.grossMarginChange}
                   isAbsoluteChange
                   icon={<Percent className="h-4 w-4" />}
-                  borderColor="hsl(142, 71%, 45%)"
                 />
                 <KpiCard
-                  title="Total Spending"
+                  title="Total spending"
                   value={formatCompact(comp.current.totalSpending)}
                   change={comp.spendingChange}
                   invertColor
                   icon={<DollarSign className="h-4 w-4" />}
-                  borderColor="hsl(35, 85%, 45%)"
                 />
                 <KpiCard
-                  title="Total Revenue"
+                  title="Total revenue"
                   value={formatCompact(comp.current.totalRevenue)}
                   change={comp.revenueChange}
                   icon={<BarChart3 className="h-4 w-4" />}
-                  borderColor="hsl(221, 83%, 53%)"
                 />
                 <KpiCard
-                  title="Total Orders"
+                  title="Total orders"
                   value={formatNumber(comp.current.totalOrders)}
                   change={comp.ordersChange}
                   icon={<ShoppingCart className="h-4 w-4" />}
-                  borderColor="hsl(262, 83%, 58%)"
                 />
               </div>
             )}
 
-            {/* Spend vs Revenue Chart */}
             {data && data.weeklyBuckets.length > 1 && (
               <DashboardSection title="Spend vs Revenue (Weekly)">
-                <Card>
-                  <CardContent className="pt-6">
+                <div className="inv-panel">
+                  <div className="pt-2">
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={data.weeklyBuckets}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                        <XAxis
-                          dataKey="weekLabel"
-                          tick={{ fontSize: 12 }}
-                          className="text-muted-foreground"
-                        />
+                        <CartesianGrid strokeDasharray="2 4" stroke="var(--chart-grid)" />
+                        <XAxis dataKey="weekLabel" tick={AXIS_TICK} stroke="var(--hairline-bold)" />
                         <YAxis
-                          tick={{ fontSize: 12 }}
+                          tick={AXIS_TICK}
                           tickFormatter={(v) => formatCompact(v)}
-                          className="text-muted-foreground"
+                          stroke="var(--hairline-bold)"
                         />
                         <RechartsTooltip
-                          formatter={(value: number, name: string) => [
-                            formatCurrency(value),
-                            name === "totalRevenue" ? "Revenue" : "Spending",
-                          ]}
-                          contentStyle={{
-                            backgroundColor: "hsl(var(--popover))",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "8px",
-                            fontSize: "12px",
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload?.length) return null
+                            const rev = payload.find((p) => p.dataKey === "totalRevenue")
+                            const spend = payload.find((p) => p.dataKey === "totalSpending")
+                            return (
+                              <EditorialChartTooltip
+                                active
+                                caption={String(label)}
+                                rows={[
+                                  ...(rev
+                                    ? [{ label: "Revenue", value: formatCurrency(Number(rev.value)), tone: "ink" as const }]
+                                    : []),
+                                  ...(spend
+                                    ? [{ label: "Spending", value: formatCurrency(Number(spend.value)), tone: "subtract" as const }]
+                                    : []),
+                                ]}
+                              />
+                            )
                           }}
                         />
                         <Legend
-                          formatter={(value) =>
-                            value === "totalRevenue" ? "Revenue" : "Spending"
-                          }
+                          formatter={(value) => (
+                            <span
+                              style={{
+                                fontFamily: "var(--font-jetbrains-mono), monospace",
+                                fontSize: 10,
+                                letterSpacing: "0.16em",
+                                textTransform: "uppercase",
+                                color: "var(--ink-muted)",
+                              }}
+                            >
+                              {value === "totalRevenue" ? "Revenue" : "Spending"}
+                            </span>
+                          )}
+                          iconType="plainline"
                         />
                         <Line
                           type="monotone"
                           dataKey="totalRevenue"
-                          stroke="hsl(221, 83%, 53%)"
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
+                          stroke="var(--chart-ink)"
+                          strokeWidth={1.75}
+                          dot={false}
+                          activeDot={{ r: 3, fill: "var(--chart-ink)" }}
                         />
                         <Line
                           type="monotone"
                           dataKey="totalSpending"
-                          stroke="hsl(35, 85%, 45%)"
-                          strokeWidth={2}
-                          strokeDasharray="5 5"
-                          dot={{ r: 3 }}
+                          stroke="var(--chart-subtract)"
+                          strokeWidth={1.5}
+                          strokeDasharray="4 4"
+                          dot={false}
+                          activeDot={{ r: 3, fill: "var(--chart-subtract)" }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </DashboardSection>
-            )}
-
-            {/* Cost per Order + Gross Margin side by side */}
-            {data && data.weeklyBuckets.length > 1 && (
-              <DashboardSection title="Operational Metrics">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Cost per Order */}
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Cost per Order (Weekly)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={220}>
-                        <LineChart data={data.weeklyBuckets}>
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                          <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
-                          <YAxis
-                            tick={{ fontSize: 11 }}
-                            tickFormatter={(v) => `$${v.toFixed(0)}`}
-                          />
-                          <RechartsTooltip
-                            formatter={(value: number) => [formatCurrency(value), "Cost / Order"]}
-                            contentStyle={{
-                              backgroundColor: "hsl(var(--popover))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px",
-                              fontSize: "12px",
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="costPerOrder"
-                            stroke="hsl(0, 72%, 51%)"
-                            strokeWidth={2}
-                            dot={{ r: 3 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-
-                  {/* Gross Margin */}
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Gross Margin % (Weekly)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={220}>
-                        <AreaChart data={data.weeklyBuckets}>
-                          <defs>
-                            <linearGradient id="marginGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                          <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
-                          <YAxis
-                            tick={{ fontSize: 11 }}
-                            tickFormatter={(v) => `${v}%`}
-                          />
-                          <RechartsTooltip
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            formatter={(value: any) => [
-                              value !== null ? `${Number(value).toFixed(1)}%` : "—",
-                              "Gross Margin",
-                            ]}
-                            contentStyle={{
-                              backgroundColor: "hsl(var(--popover))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px",
-                              fontSize: "12px",
-                            }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="grossMarginPct"
-                            stroke="hsl(142, 71%, 45%)"
-                            fill="url(#marginGradient)"
-                            strokeWidth={2}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
+                  </div>
                 </div>
               </DashboardSection>
             )}
 
-            {/* Category Spending Breakdown */}
+            {data && data.weeklyBuckets.length > 1 && (
+              <DashboardSection title="Operational Metrics">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="inv-panel">
+                    <div className="inv-panel__head">
+                      <span className="inv-panel__dept">Cost per order (weekly)</span>
+                    </div>
+                    <div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <LineChart data={data.weeklyBuckets}>
+                          <CartesianGrid strokeDasharray="2 4" stroke="var(--chart-grid)" />
+                          <XAxis dataKey="weekLabel" tick={AXIS_TICK_SM} stroke="var(--hairline-bold)" />
+                          <YAxis
+                            tick={AXIS_TICK_SM}
+                            tickFormatter={(v) => `$${v.toFixed(0)}`}
+                            stroke="var(--hairline-bold)"
+                          />
+                          <RechartsTooltip
+                            content={({ active, payload, label }) => (
+                              <EditorialChartTooltip
+                                active={active}
+                                caption={String(label ?? "")}
+                                rows={
+                                  payload?.length
+                                    ? [{
+                                        label: "Cost / order",
+                                        value: formatCurrency(Number(payload[0].value)),
+                                        tone: "accent",
+                                      }]
+                                    : []
+                                }
+                              />
+                            )}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="costPerOrder"
+                            stroke="var(--chart-accent)"
+                            strokeWidth={1.75}
+                            dot={false}
+                            activeDot={{ r: 3, fill: "var(--chart-accent)" }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="inv-panel">
+                    <div className="inv-panel__head">
+                      <span className="inv-panel__dept">Gross margin % (weekly)</span>
+                    </div>
+                    <div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <AreaChart data={data.weeklyBuckets}>
+                          <defs>
+                            <linearGradient id="marginGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="var(--chart-ink)" stopOpacity={0.18} />
+                              <stop offset="95%" stopColor="var(--chart-ink)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="2 4" stroke="var(--chart-grid)" />
+                          <XAxis dataKey="weekLabel" tick={AXIS_TICK_SM} stroke="var(--hairline-bold)" />
+                          <YAxis
+                            tick={AXIS_TICK_SM}
+                            tickFormatter={(v) => `${v}%`}
+                            stroke="var(--hairline-bold)"
+                          />
+                          <RechartsTooltip
+                            content={({ active, payload, label }) => (
+                              <EditorialChartTooltip
+                                active={active}
+                                caption={String(label ?? "")}
+                                rows={
+                                  payload?.length && payload[0].value != null
+                                    ? [{
+                                        label: "Gross margin",
+                                        value: `${Number(payload[0].value).toFixed(1)}%`,
+                                        tone: "ink",
+                                      }]
+                                    : []
+                                }
+                              />
+                            )}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="grossMarginPct"
+                            stroke="var(--chart-ink)"
+                            fill="url(#marginGradient)"
+                            strokeWidth={1.75}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </DashboardSection>
+            )}
+
             {data && data.categoryBreakdown.length > 0 && (
               <DashboardSection title="Spending by Category">
-                <Card>
-                  <CardContent className="pt-6">
+                <div className="inv-panel">
+                  <div className="pt-2">
                     <ResponsiveContainer width="100%" height={Math.max(200, data.categoryBreakdown.slice(0, 8).length * 40)}>
                       <BarChart
                         data={data.categoryBreakdown.slice(0, 8)}
                         layout="vertical"
                         margin={{ left: 80 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
+                        <CartesianGrid strokeDasharray="2 4" stroke="var(--chart-grid)" horizontal={false} />
                         <XAxis
                           type="number"
-                          tick={{ fontSize: 11 }}
+                          tick={AXIS_TICK_SM}
                           tickFormatter={(v) => formatCompact(v)}
+                          stroke="var(--hairline-bold)"
                         />
                         <YAxis
                           type="category"
                           dataKey="category"
-                          tick={{ fontSize: 12 }}
+                          tick={AXIS_TICK}
                           width={75}
+                          stroke="var(--hairline-bold)"
                         />
                         <RechartsTooltip
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          formatter={(value: any, _name: any, props: any) => [
-                            `${formatCurrency(Number(value))} (${props?.payload?.percentOfTotal?.toFixed(1) ?? 0}%)`,
-                            "Spend",
-                          ]}
-                          contentStyle={{
-                            backgroundColor: "hsl(var(--popover))",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "8px",
-                            fontSize: "12px",
+                          content={({ active, payload }) => {
+                            if (!active || !payload?.length) return null
+                            const datum = payload[0].payload as {
+                              category: string
+                              totalSpend: number
+                              percentOfTotal?: number
+                            }
+                            return (
+                              <EditorialChartTooltip
+                                active
+                                caption={datum.category}
+                                rows={[
+                                  {
+                                    label: "Spend",
+                                    value: formatCurrency(datum.totalSpend),
+                                    tone: "ink",
+                                  },
+                                  {
+                                    label: "Share",
+                                    value: `${(datum.percentOfTotal ?? 0).toFixed(1)}%`,
+                                    tone: "muted",
+                                  },
+                                ]}
+                              />
+                            )
                           }}
                         />
-                        <Bar
-                          dataKey="totalSpend"
-                          fill="hsl(221, 83%, 53%)"
-                          radius={[0, 4, 4, 0]}
-                        />
+                        <Bar dataKey="totalSpend" fill="var(--chart-ink)" radius={[0, 0, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </DashboardSection>
             )}
           </>
@@ -420,8 +462,6 @@ export function OperationsContent({
   )
 }
 
-// ─── KPI Card Component ───
-
 function KpiCard({
   title,
   value,
@@ -429,7 +469,7 @@ function KpiCard({
   invertColor,
   isAbsoluteChange,
   icon,
-  borderColor,
+  emphasis,
 }: {
   title: string
   value: string
@@ -437,37 +477,39 @@ function KpiCard({
   invertColor?: boolean
   isAbsoluteChange?: boolean
   icon: React.ReactNode
-  borderColor: string
+  emphasis?: "lede"
 }) {
   const isPositive = change !== null && change > 0
   const isNegative = change !== null && change < 0
   const isGood = invertColor ? isNegative : isPositive
   const isBad = invertColor ? isPositive : isNegative
+  const tone: "alert" | "down" | "up" = isBad ? "alert" : isGood ? "up" : "down"
 
   return (
-    <Card className="relative overflow-hidden" style={{ borderTopColor: borderColor, borderTopWidth: "2px" }}>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-muted-foreground">{title}</span>
-          <span className="text-muted-foreground/50">{icon}</span>
-        </div>
-        <div className="text-xl font-bold tracking-tight">{value}</div>
-        {change !== null && (
-          <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${isGood ? "text-emerald-600" : isBad ? "text-red-500" : "text-muted-foreground"}`}>
-            {isPositive ? (
-              <TrendingUp className="h-3 w-3" />
-            ) : isNegative ? (
-              <TrendingDown className="h-3 w-3" />
-            ) : null}
-            <span>
-              {isAbsoluteChange
-                ? `${change > 0 ? "+" : ""}${change.toFixed(1)}pp`
-                : formatPct(change)}
-            </span>
-            <span className="text-muted-foreground/60">vs prev</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="editorial-kpi" data-emphasis={emphasis}>
+      <div className="flex items-center justify-between">
+        <span className="editorial-kpi__label">{title}</span>
+        <span style={{ color: "var(--ink-faint)" }}>{icon}</span>
+      </div>
+      <span className="editorial-kpi__value">{value}</span>
+      {change !== null && (
+        <span
+          className="editorial-kpi__delta inline-flex items-center gap-1"
+          data-tone={tone}
+        >
+          {isPositive ? (
+            <TrendingUp className="h-3 w-3" aria-hidden />
+          ) : isNegative ? (
+            <TrendingDown className="h-3 w-3" aria-hidden />
+          ) : null}
+          <span>
+            {isAbsoluteChange
+              ? `${change > 0 ? "+" : ""}${change.toFixed(1)}pp`
+              : formatPct(change)}
+          </span>
+          <span style={{ color: "var(--ink-faint)" }}>vs prev</span>
+        </span>
+      )}
+    </div>
   )
 }

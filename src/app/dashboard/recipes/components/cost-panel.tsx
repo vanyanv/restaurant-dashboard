@@ -9,9 +9,16 @@ type Props = {
   loading: boolean
   servingSize: number
   foodCostOverride: number | null
+  className?: string
 }
 
-export function CostPanel({ cost, loading, servingSize, foodCostOverride }: Props) {
+export function CostPanel({
+  cost,
+  loading,
+  servingSize,
+  foodCostOverride,
+  className,
+}: Props) {
   const total = cost?.totalCost ?? 0
   const partial = cost?.partial ?? false
   const perServing = servingSize > 0 ? total / servingSize : total
@@ -33,7 +40,12 @@ export function CostPanel({ cost, loading, servingSize, foodCostOverride }: Prop
     )[0]
 
   return (
-    <aside className="flex h-full flex-col overflow-hidden border-t border-[var(--hairline)] bg-[var(--paper)] md:border-t-0 md:border-l">
+    <aside
+      className={cn(
+        "flex max-h-[55vh] flex-col overflow-hidden border-t border-(--hairline) bg-(--paper) md:h-full md:max-h-none md:border-t-0 md:border-l",
+        className
+      )}
+    >
       <div className="border-b border-[var(--hairline)] px-5 py-4">
         <div className="editorial-section-label">§ cost</div>
         <div className="mt-1 font-display text-[22px] italic leading-tight text-[var(--ink)]">

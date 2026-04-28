@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   AlertTriangle,
   TrendingUp,
@@ -13,7 +10,6 @@ import {
   ChevronUp,
   Sparkles,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import type { PriceAlert, OrderAnomaly } from "@/types/product-usage"
 
 interface AlertsBannerProps {
@@ -21,59 +17,54 @@ interface AlertsBannerProps {
   orderAnomalies: OrderAnomaly[]
 }
 
-function getPriceAlertStyle(alert: PriceAlert) {
+type Tone = "alert" | "watch" | "info" | "ok"
+
+function priceAlertMeta(alert: PriceAlert): {
+  Icon: typeof TrendingUp
+  tone: Tone
+  severityLabel: string
+} {
   if (alert.severity === "decrease") {
-    return {
-      icon: TrendingDown,
-      bg: "bg-emerald-50 dark:bg-emerald-950/30",
-      border: "border-emerald-200 dark:border-emerald-800",
-      iconColor: "text-emerald-600 dark:text-emerald-400",
-      badgeVariant: "outline" as const,
-      badgeClass:
-        "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400",
-    }
+    return { Icon: TrendingDown, tone: "ok", severityLabel: "Decrease" }
   }
   if (Math.abs(alert.changePercent) > 15) {
+    return { Icon: AlertTriangle, tone: "alert", severityLabel: "High" }
+  }
+  return { Icon: TrendingUp, tone: "watch", severityLabel: "Watch" }
+}
+
+function anomalyMeta(anomaly: OrderAnomaly): {
+  Icon: typeof Sparkles
+  tone: Tone
+  severityLabel: string
+  typeLabel: string
+} {
+  if (anomaly.type === "new_product") {
     return {
-      icon: AlertTriangle,
-      bg: "bg-red-50 dark:bg-red-950/30",
-      border: "border-red-200 dark:border-red-800",
-      iconColor: "text-red-600 dark:text-red-400",
-      badgeVariant: "destructive" as const,
-      badgeClass: "",
+      Icon: Sparkles,
+      tone: "info",
+      severityLabel: "New",
+      typeLabel: "New product",
+    }
+  }
+  if (anomaly.type === "quantity_spike") {
+    return {
+      Icon: Package,
+      tone: "watch",
+      severityLabel: "Spike",
+      typeLabel: "Quantity spike",
     }
   }
   return {
-    icon: TrendingUp,
-    bg: "bg-amber-50 dark:bg-amber-950/30",
-    border: "border-amber-200 dark:border-amber-800",
-    iconColor: "text-amber-600 dark:text-amber-400",
-    badgeVariant: "outline" as const,
-    badgeClass:
-      "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400",
+    Icon: Package,
+    tone: "info",
+    severityLabel: "New",
+    typeLabel: "New vendor",
   }
 }
 
-function getAnomalyStyle(anomaly: OrderAnomaly) {
-  if (anomaly.type === "new_product") {
-    return {
-      icon: Sparkles,
-      bg: "bg-purple-50 dark:bg-purple-950/30",
-      border: "border-purple-200 dark:border-purple-800",
-      iconColor: "text-purple-600 dark:text-purple-400",
-      badgeClass:
-        "border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-400",
-    }
-  }
-  return {
-    icon: Package,
-    bg: "bg-blue-50 dark:bg-blue-950/30",
-    border: "border-blue-200 dark:border-blue-800",
-    iconColor: "text-blue-600 dark:text-blue-400",
-    badgeClass:
-      "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400",
-  }
-}
+const NUM_CLASS =
+  "[font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
 
 export function AlertsBanner({
   priceAlerts,
@@ -85,64 +76,102 @@ export function AlertsBanner({
   if (totalAlerts === 0) return null
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <section className="inv-panel inv-panel--flush">
+      <div className="px-5 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <CardTitle className="text-base">
-              {totalAlerts} Alert{totalAlerts !== 1 ? "s" : ""}
-            </CardTitle>
-            <Badge variant="secondary" className="text-xs">
-              {priceAlerts.length} price
-            </Badge>
-            <Badge variant="secondary" className="text-xs">
-              {orderAnomalies.length} order
-            </Badge>
+          <div className="flex items-baseline gap-3">
+            <span className="inv-panel__dept">§ Alerts</span>
+            <span
+              className="font-display italic text-[18px]"
+              style={{ color: "var(--ink)" }}
+            >
+              {totalAlerts} alert{totalAlerts !== 1 ? "s" : ""} this period
+            </span>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsOpen(!isOpen)}
-            className="h-8 w-8 p-0"
-          >
-            {isOpen ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <span className="inv-stamp" data-tone="muted">
+              {priceAlerts.length} price
+            </span>
+            <span className="inv-stamp" data-tone="muted">
+              {orderAnomalies.length} order
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(!isOpen)}
+              className="toolbar-btn h-7 px-2"
+              aria-label={isOpen ? "Collapse alerts" : "Expand alerts"}
+            >
+              {isOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         </div>
-      </CardHeader>
+      </div>
+
       {isOpen && (
-        <CardContent className="space-y-2 pt-0">
+        <div
+          className="space-y-0"
+          style={{ borderTop: "1px solid var(--hairline-bold)" }}
+        >
           {priceAlerts.map((alert, idx) => {
-            const style = getPriceAlertStyle(alert)
-            const Icon = style.icon
+            const meta = priceAlertMeta(alert)
+            const Icon = meta.Icon
             return (
               <div
                 key={`price-${idx}`}
-                className={cn(
-                  "flex items-start gap-3 rounded-md border p-3",
-                  style.bg,
-                  style.border
-                )}
+                className="flex items-start gap-3 px-5 py-3"
+                style={{
+                  borderBottom:
+                    idx === priceAlerts.length - 1 && orderAnomalies.length === 0
+                      ? "none"
+                      : "1px solid var(--hairline)",
+                }}
               >
-                <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.iconColor)} />
+                <Icon
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  style={{
+                    color:
+                      meta.tone === "alert"
+                        ? "var(--accent)"
+                        : meta.tone === "watch"
+                          ? "var(--subtract)"
+                          : "var(--ink-muted)",
+                  }}
+                  aria-hidden
+                />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className="text-[13px] font-medium truncate"
+                      style={{ color: "var(--ink)" }}
+                    >
                       {alert.productName}
                     </span>
-                    <Badge
-                      variant={style.badgeVariant}
-                      className={cn("text-xs shrink-0", style.badgeClass)}
+                    <span className="inv-stamp" data-tone={meta.tone}>
+                      {meta.severityLabel}
+                    </span>
+                    <span
+                      className={`text-[11px] ${NUM_CLASS}`}
+                      style={{
+                        color:
+                          meta.tone === "alert"
+                            ? "var(--accent)"
+                            : meta.tone === "watch"
+                              ? "var(--subtract)"
+                              : "var(--ink-muted)",
+                      }}
                     >
                       {alert.changePercent > 0 ? "+" : ""}
                       {alert.changePercent.toFixed(1)}%
-                    </Badge>
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p
+                    className="text-[12px] mt-0.5"
+                    style={{ color: "var(--ink-muted)" }}
+                  >
                     {alert.message}
                   </p>
                 </div>
@@ -150,43 +179,51 @@ export function AlertsBanner({
             )
           })}
           {orderAnomalies.map((anomaly, idx) => {
-            const style = getAnomalyStyle(anomaly)
-            const Icon = style.icon
+            const meta = anomalyMeta(anomaly)
+            const Icon = meta.Icon
             return (
               <div
                 key={`anomaly-${idx}`}
-                className={cn(
-                  "flex items-start gap-3 rounded-md border p-3",
-                  style.bg,
-                  style.border
-                )}
+                className="flex items-start gap-3 px-5 py-3"
+                style={{
+                  borderBottom:
+                    idx === orderAnomalies.length - 1
+                      ? "none"
+                      : "1px solid var(--hairline)",
+                }}
               >
-                <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.iconColor)} />
+                <Icon
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  style={{
+                    color:
+                      meta.tone === "watch" ? "var(--subtract)" : "var(--ink-muted)",
+                  }}
+                  aria-hidden
+                />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className="text-[13px] font-medium truncate"
+                      style={{ color: "var(--ink)" }}
+                    >
                       {anomaly.productName}
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-xs shrink-0", style.badgeClass)}
-                    >
-                      {anomaly.type === "new_product"
-                        ? "New Product"
-                        : anomaly.type === "quantity_spike"
-                          ? "Qty Spike"
-                          : "New Vendor"}
-                    </Badge>
+                    <span className="inv-stamp" data-tone={meta.tone}>
+                      {meta.typeLabel}
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p
+                    className="text-[12px] mt-0.5"
+                    style={{ color: "var(--ink-muted)" }}
+                  >
                     {anomaly.details}
                   </p>
                 </div>
               </div>
             )
           })}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </section>
   )
 }

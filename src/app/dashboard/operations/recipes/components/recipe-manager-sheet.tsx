@@ -8,7 +8,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -18,10 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   Plus,
   Trash2,
@@ -32,12 +27,12 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import {
   upsertRecipe,
   deleteRecipe,
   getMenuItemsForRecipeBuilder,
 } from "@/app/actions/product-usage-actions"
+import { useIsPhone } from "@/hooks/use-is-phone"
 import type {
   RecipeWithIngredients,
   RecipeIngredientInput,
@@ -46,6 +41,9 @@ import type {
 } from "@/types/product-usage"
 
 const UNITS = ["EA", "LB", "OZ", "CS", "GAL", "SLICE", "PUMP", "PORTION"] as const
+
+const NUM_CLASS =
+  "[font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
 
 interface IngredientRow {
   ingredientName: string
@@ -61,6 +59,8 @@ interface RecipeManagerSheetProps {
   onRecipeChange: () => void
 }
 
+type ListTab = "configured" | "unconfigured"
+
 export function RecipeManagerSheet({
   open,
   onOpenChange,
@@ -68,14 +68,13 @@ export function RecipeManagerSheet({
   storeId,
   onRecipeChange,
 }: RecipeManagerSheetProps) {
-  // ── Mode state ──
   const [mode, setMode] = useState<"list" | "edit">("list")
+  const [tab, setTab] = useState<ListTab>("configured")
+  const isPhone = useIsPhone()
 
-  // ── List mode state ──
   const [menuItems, setMenuItems] = useState<MenuItemForRecipeBuilder[]>([])
   const [isLoadingMenuItems, startMenuItemsTransition] = useTransition()
 
-  // ── Edit mode state ──
   const [editingRecipe, setEditingRecipe] = useState<RecipeWithIngredients | null>(null)
   const [editItemName, setEditItemName] = useState("")
   const [editCategory, setEditCategory] = useState("")
@@ -85,13 +84,12 @@ export function RecipeManagerSheet({
   const [error, setError] = useState("")
   const [isSaving, startSaveTransition] = useTransition()
   const [isDeleting, startDeleteTransition] = useTransition()
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
-  // ── AI suggestion state ──
   const [aiSuggestions, setAiSuggestions] = useState<AiRecipeSuggestion[]>([])
   const [isGeneratingAi, setIsGeneratingAi] = useState(false)
   const [aiError, setAiError] = useState("")
 
-  // ── Load menu items on open ──
   useEffect(() => {
     if (open) {
       startMenuItemsTransition(async () => {
@@ -101,16 +99,15 @@ export function RecipeManagerSheet({
     }
   }, [open, storeId])
 
-  // ── Reset to list mode when sheet closes ──
   useEffect(() => {
     if (!open) {
       setMode("list")
       setEditingRecipe(null)
       setError("")
+      setConfirmDelete(false)
     }
   }, [open])
 
-  // ── Enter edit mode for an existing recipe ──
   function handleEditRecipe(recipe: RecipeWithIngredients) {
     setEditingRecipe(recipe)
     setEditItemName(recipe.itemName)
@@ -125,12 +122,11 @@ export function RecipeManagerSheet({
       }))
     )
     setError("")
+    setConfirmDelete(false)
     setMode("edit")
   }
 
-  // ── Enter edit mode for a new/unconfigured item ──
   function handleConfigureItem(item: MenuItemForRecipeBuilder) {
-    // Check if there's already a recipe (could have been created since list loaded)
     const existingRecipe = recipes.find(
       (r) => r.itemName === item.itemName && r.category === item.category
     )
@@ -146,17 +142,17 @@ export function RecipeManagerSheet({
     setFoodCost("")
     setIngredients([{ ingredientName: "", quantity: "", unit: "EA" }])
     setError("")
+    setConfirmDelete(false)
     setMode("edit")
   }
 
-  // ── Back to list ──
   function handleBackToList() {
     setMode("list")
     setEditingRecipe(null)
     setError("")
+    setConfirmDelete(false)
   }
 
-  // ── Ingredient row management ──
   function addIngredientRow() {
     setIngredients((prev) => [
       ...prev,
@@ -178,7 +174,6 @@ export function RecipeManagerSheet({
     )
   }
 
-  // ── Save recipe ──
   function handleSave() {
     setError("")
 
@@ -187,7 +182,6 @@ export function RecipeManagerSheet({
       return
     }
 
-    // Validate
     if (ingredients.length === 0) {
       setError("Add at least one ingredient.")
       return
@@ -228,7 +222,6 @@ export function RecipeManagerSheet({
       }
 
       onRecipeChange()
-      // Refresh menu items for the list
       const items = await getMenuItemsForRecipeBuilder(storeId)
       setMenuItems(items)
       setMode("list")
@@ -236,9 +229,12 @@ export function RecipeManagerSheet({
     })
   }
 
-  // ── Delete recipe ──
   function handleDelete() {
     if (!editingRecipe) return
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
 
     startDeleteTransition(async () => {
       const success = await deleteRecipe(editingRecipe.id)
@@ -248,17 +244,16 @@ export function RecipeManagerSheet({
       }
 
       onRecipeChange()
-      // Refresh menu items for the list
       if (storeId) {
         const items = await getMenuItemsForRecipeBuilder(storeId)
         setMenuItems(items)
       }
       setMode("list")
       setEditingRecipe(null)
+      setConfirmDelete(false)
     })
   }
 
-  // ── Generate AI suggestions for unconfigured items ──
   async function handleGenerateAiSuggestions() {
     if (!storeId) return
     setIsGeneratingAi(true)
@@ -290,7 +285,6 @@ export function RecipeManagerSheet({
     }
   }
 
-  // ── Apply an AI suggestion to edit mode ──
   function handleApplySuggestion(suggestion: AiRecipeSuggestion) {
     setEditingRecipe(null)
     setEditItemName(suggestion.itemName)
@@ -307,245 +301,350 @@ export function RecipeManagerSheet({
     setMode("edit")
   }
 
-  // ── Derived data ──
   const configuredRecipes = recipes
   const unconfiguredItems = menuItems.filter((item) => !item.hasRecipe)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        side="right"
+        side={isPhone ? "bottom" : "right"}
+        data-mobile-bottom={isPhone ? "true" : undefined}
         className="w-full sm:max-w-lg overflow-y-auto"
+        style={{
+          background: "var(--paper)",
+          borderColor: "var(--hairline-bold)",
+        }}
       >
         {mode === "list" ? (
           <>
             <SheetHeader>
-              <SheetTitle className="flex items-center gap-2">
-                <ChefHat className="h-5 w-5" />
-                Recipe Manager
+              <span className="inv-panel__dept">§ Recipes</span>
+              <SheetTitle
+                className="font-display italic flex items-center gap-2 mt-0.5"
+                style={{ fontSize: 22, color: "var(--ink)" }}
+              >
+                <ChefHat className="h-5 w-5" style={{ color: "var(--ink-faint)" }} />
+                Recipe manager
               </SheetTitle>
-              <SheetDescription>
-                Configure recipes to map menu items to their ingredients for
-                usage tracking.
+              <SheetDescription className="text-[12px]" style={{ color: "var(--ink-muted)" }}>
+                Map menu items to ingredients for usage tracking.
               </SheetDescription>
             </SheetHeader>
 
-            <div className="px-4 pb-4">
-              <Tabs defaultValue="configured" className="space-y-4">
-                <TabsList className="w-full">
-                  <TabsTrigger value="configured" className="flex-1">
-                    Configured ({configuredRecipes.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="unconfigured" className="flex-1">
-                    Not Configured ({unconfiguredItems.length})
-                  </TabsTrigger>
-                </TabsList>
+            <div className="px-4 pb-4 space-y-4">
+              <div
+                className="flex items-center gap-1 p-0.5"
+                style={{ borderBottom: "1px solid var(--hairline-bold)" }}
+                role="tablist"
+              >
+                <TabButton
+                  active={tab === "configured"}
+                  onClick={() => setTab("configured")}
+                >
+                  Configured ({configuredRecipes.length})
+                </TabButton>
+                <TabButton
+                  active={tab === "unconfigured"}
+                  onClick={() => setTab("unconfigured")}
+                >
+                  Not configured ({unconfiguredItems.length})
+                </TabButton>
+              </div>
 
-                {/* Configured tab */}
-                <TabsContent value="configured" className="space-y-2">
+              {tab === "configured" && (
+                <div className="space-y-0">
                   {configuredRecipes.length === 0 ? (
-                    <div className="text-center py-8 text-sm text-muted-foreground">
+                    <div
+                      className="text-center py-8 text-[13px]"
+                      style={{ color: "var(--ink-muted)" }}
+                    >
                       No recipes configured yet.
                     </div>
                   ) : (
-                    configuredRecipes.map((recipe) => (
-                      <div
+                    configuredRecipes.map((recipe, i) => (
+                      <button
                         key={recipe.id}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                        type="button"
+                        onClick={() => handleEditRecipe(recipe)}
+                        className="editorial-tr w-full text-left flex items-center justify-between gap-3 px-3 py-3"
+                        style={{
+                          borderTop:
+                            i === 0 ? "1px solid var(--hairline-bold)" : "1px solid var(--hairline)",
+                          borderBottom:
+                            i === configuredRecipes.length - 1
+                              ? "1px solid var(--hairline-bold)"
+                              : undefined,
+                        }}
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium truncate">
+                            <span
+                              className="text-[13px] font-medium truncate"
+                              style={{ color: "var(--ink)" }}
+                            >
                               {recipe.itemName}
-                            </p>
-                            <Badge variant="secondary" className="text-xs">
+                            </span>
+                            <span
+                              className="text-[10px] uppercase tracking-[0.16em]"
+                              style={{
+                                color: "var(--ink-faint)",
+                                fontFamily: "var(--font-jetbrains-mono), monospace",
+                              }}
+                            >
                               {recipe.category}
-                            </Badge>
+                            </span>
                             {recipe.isConfirmed && (
-                              <Badge
-                                variant="outline"
-                                className="text-emerald-600 text-xs"
-                              >
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                              <span className="inv-stamp" data-tone="info">
+                                <CheckCircle2 className="h-2.5 w-2.5" />
                                 Confirmed
-                              </Badge>
+                              </span>
                             )}
                             {recipe.isAiGenerated && !recipe.isConfirmed && (
-                              <Badge
-                                variant="outline"
-                                className="text-amber-600 text-xs"
-                              >
-                                AI
-                              </Badge>
+                              <span className="inv-stamp" data-tone="watch">
+                                AI draft
+                              </span>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p
+                            className="text-[11px] mt-0.5"
+                            style={{ color: "var(--ink-muted)" }}
+                          >
                             {recipe.ingredients.length} ingredient
                             {recipe.ingredients.length !== 1 ? "s" : ""}
                             {recipe.foodCostOverride != null && (
-                              <span className="ml-2 text-emerald-600 font-medium">
+                              <span
+                                className={`ml-2 font-medium ${NUM_CLASS}`}
+                                style={{ color: "var(--ink)" }}
+                              >
                                 ${recipe.foodCostOverride.toFixed(2)}/serving
                               </span>
                             )}
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditRecipe(recipe)}
+                        <span
+                          className="text-[10px] uppercase tracking-[0.18em] shrink-0"
+                          style={{
+                            color: "var(--ink-faint)",
+                            fontFamily: "var(--font-jetbrains-mono), monospace",
+                          }}
                         >
-                          Edit
-                        </Button>
-                      </div>
+                          Edit →
+                        </span>
+                      </button>
                     ))
                   )}
-                </TabsContent>
+                </div>
+              )}
 
-                {/* Not Configured tab */}
-                <TabsContent value="unconfigured" className="space-y-2">
+              {tab === "unconfigured" && (
+                <div className="space-y-3">
                   {isLoadingMenuItems ? (
                     <div className="space-y-2">
                       {Array.from({ length: 5 }).map((_, i) => (
-                        <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                        <div
+                          key={i}
+                          className="h-14 w-full animate-pulse"
+                          style={{ background: "var(--hairline)" }}
+                        />
                       ))}
                     </div>
                   ) : unconfiguredItems.length === 0 ? (
-                    <div className="text-center py-8 text-sm text-muted-foreground">
+                    <div
+                      className="text-center py-8 text-[13px]"
+                      style={{ color: "var(--ink-muted)" }}
+                    >
                       All menu items have recipes configured.
                     </div>
                   ) : (
                     <>
-                      {/* AI Suggestion Button */}
                       {storeId && unconfiguredItems.length > 0 && (
-                        <div className="pb-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-2"
+                        <div className="pb-1">
+                          <button
+                            type="button"
                             onClick={handleGenerateAiSuggestions}
                             disabled={isGeneratingAi}
+                            className="toolbar-btn w-full justify-center inline-flex items-center gap-2"
                           >
                             {isGeneratingAi ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                              <Sparkles className="h-4 w-4" />
+                              <Sparkles className="h-3.5 w-3.5" />
                             )}
                             {isGeneratingAi
-                              ? "Generating AI Suggestions..."
-                              : "Generate AI Suggestions"}
-                          </Button>
+                              ? "Generating AI suggestions…"
+                              : "Generate AI suggestions"}
+                          </button>
                           {aiError && (
-                            <p className="text-xs text-destructive mt-1 text-center">
+                            <p
+                              className="text-[11px] mt-1.5 text-center"
+                              style={{ color: "var(--accent)" }}
+                            >
                               {aiError}
                             </p>
                           )}
                         </div>
                       )}
 
-                      {/* AI Suggestions */}
                       {aiSuggestions.length > 0 && (
                         <div className="space-y-2 pb-2">
-                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <p
+                            className="text-[10px] uppercase tracking-[0.2em] flex items-center gap-1.5"
+                            style={{
+                              color: "var(--ink-faint)",
+                              fontFamily: "var(--font-jetbrains-mono), monospace",
+                            }}
+                          >
                             <Sparkles className="h-3 w-3" />
-                            AI Suggestions
+                            AI suggestions
                           </p>
                           {aiSuggestions.map((suggestion) => (
                             <div
                               key={`${suggestion.itemName}:::${suggestion.category}`}
-                              className="p-3 rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20"
+                              className="editorial-subpanel editorial-subpanel--bold"
+                              style={{ background: "var(--accent-bg)" }}
                             >
-                              <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center justify-between mb-1.5 gap-3">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-medium truncate">
+                                  <span
+                                    className="text-[13px] font-medium truncate"
+                                    style={{ color: "var(--ink)" }}
+                                  >
                                     {suggestion.itemName}
-                                  </p>
-                                  <Badge variant="secondary" className="text-xs">
+                                  </span>
+                                  <span
+                                    className="text-[10px] uppercase tracking-[0.16em]"
+                                    style={{
+                                      color: "var(--ink-faint)",
+                                      fontFamily: "var(--font-jetbrains-mono), monospace",
+                                    }}
+                                  >
                                     {suggestion.category}
-                                  </Badge>
-                                  <Badge variant="outline" className="text-xs text-amber-600">
+                                  </span>
+                                  <span className="inv-stamp" data-tone="watch">
                                     {Math.round(suggestion.confidence * 100)}% confidence
-                                  </Badge>
+                                  </span>
                                 </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="shrink-0"
+                                <button
+                                  type="button"
                                   onClick={() => handleApplySuggestion(suggestion)}
+                                  className="toolbar-btn shrink-0"
                                 >
                                   Use
-                                </Button>
+                                </button>
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                {suggestion.ingredients.map(
-                                  (i) => `${i.quantity} ${i.unit} ${i.ingredientName}`
-                                ).join(", ")}
+                              <p
+                                className="text-[11px]"
+                                style={{ color: "var(--ink-muted)" }}
+                              >
+                                {suggestion.ingredients
+                                  .map(
+                                    (i) => `${i.quantity} ${i.unit} ${i.ingredientName}`
+                                  )
+                                  .join(", ")}
                               </p>
                               {suggestion.reasoning && (
-                                <p className="text-[10px] text-muted-foreground/80 mt-1 italic">
+                                <p
+                                  className="text-[10px] mt-1 italic"
+                                  style={{ color: "var(--ink-faint)" }}
+                                >
                                   {suggestion.reasoning}
                                 </p>
                               )}
                             </div>
                           ))}
-                          <Separator />
+                          <div className="perforation" />
                         </div>
                       )}
 
-                      {/* Unconfigured items list */}
-                      {unconfiguredItems.map((item) => (
-                        <div
-                          key={`${item.itemName}:::${item.category}`}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-medium truncate">
-                                {item.itemName}
-                              </p>
-                              <Badge variant="secondary" className="text-xs">
-                                {item.category}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {item.totalQuantitySold} sold (last 30d)
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
+                      <div>
+                        {unconfiguredItems.map((item, i) => (
+                          <button
+                            key={`${item.itemName}:::${item.category}`}
+                            type="button"
                             onClick={() => handleConfigureItem(item)}
                             disabled={!storeId}
+                            className="editorial-tr w-full text-left flex items-center justify-between gap-3 px-3 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{
+                              borderTop:
+                                i === 0
+                                  ? "1px solid var(--hairline-bold)"
+                                  : "1px solid var(--hairline)",
+                              borderBottom:
+                                i === unconfiguredItems.length - 1
+                                  ? "1px solid var(--hairline-bold)"
+                                  : undefined,
+                            }}
                           >
-                            Configure
-                          </Button>
-                        </div>
-                      ))}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-[13px] font-medium truncate"
+                                  style={{ color: "var(--ink)" }}
+                                >
+                                  {item.itemName}
+                                </span>
+                                <span
+                                  className="text-[10px] uppercase tracking-[0.16em]"
+                                  style={{
+                                    color: "var(--ink-faint)",
+                                    fontFamily:
+                                      "var(--font-jetbrains-mono), monospace",
+                                  }}
+                                >
+                                  {item.category}
+                                </span>
+                              </div>
+                              <p
+                                className={`text-[11px] mt-0.5 ${NUM_CLASS}`}
+                                style={{ color: "var(--ink-muted)" }}
+                              >
+                                {item.totalQuantitySold} sold (last 30d)
+                              </p>
+                            </div>
+                            <span
+                              className="text-[10px] uppercase tracking-[0.18em] shrink-0"
+                              style={{
+                                color: "var(--ink-faint)",
+                                fontFamily:
+                                  "var(--font-jetbrains-mono), monospace",
+                              }}
+                            >
+                              Configure →
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </>
                   )}
                   {!storeId && unconfiguredItems.length > 0 && (
-                    <p className="text-xs text-muted-foreground text-center pt-2">
+                    <p
+                      className="text-[11px] text-center pt-2"
+                      style={{ color: "var(--ink-muted)" }}
+                    >
                       Select a specific store to configure recipes.
                     </p>
                   )}
-                </TabsContent>
-              </Tabs>
+                </div>
+              )}
             </div>
           </>
         ) : (
-          /* ── Edit Mode ── */
           <>
             <SheetHeader>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
+                  type="button"
                   onClick={handleBackToList}
-                  className="h-8 w-8 p-0"
+                  className="toolbar-btn h-8 w-8 p-0 inline-flex items-center justify-center"
+                  aria-label="Back to list"
                 >
                   <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <SheetTitle className="text-base">
-                  {editingRecipe ? "Edit Recipe" : "New Recipe"}
+                </button>
+                <SheetTitle
+                  className="font-display italic"
+                  style={{ fontSize: 20, color: "var(--ink)" }}
+                >
+                  {editingRecipe ? "Edit recipe" : "New recipe"}
                 </SheetTitle>
               </div>
               <SheetDescription className="sr-only">
@@ -555,35 +654,52 @@ export function RecipeManagerSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="px-4 pb-4 space-y-6">
-              {/* Item info */}
+            <div className="px-4 pb-4 space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold">{editItemName}</span>
-                  <Badge variant="secondary">{editCategory}</Badge>
+                  <span
+                    className="text-[14px] font-semibold"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    {editItemName}
+                  </span>
+                  <span
+                    className="text-[10px] uppercase tracking-[0.16em]"
+                    style={{
+                      color: "var(--ink-faint)",
+                      fontFamily: "var(--font-jetbrains-mono), monospace",
+                    }}
+                  >
+                    {editCategory}
+                  </span>
                   {editingRecipe?.isConfirmed && (
-                    <Badge
-                      variant="outline"
-                      className="text-emerald-600"
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                    <span className="inv-stamp" data-tone="info">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
                       Confirmed
-                    </Badge>
+                    </span>
                   )}
                   {editingRecipe?.isAiGenerated && !editingRecipe?.isConfirmed && (
-                    <Badge variant="outline" className="text-amber-600">
-                      AI Generated
-                    </Badge>
+                    <span className="inv-stamp" data-tone="watch">
+                      AI generated
+                    </span>
                   )}
                 </div>
               </div>
 
-              <Separator />
+              <div className="perforation" />
 
-              {/* Serving size & food cost */}
               <div className="flex gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="serving-size">Serving Size</Label>
+                  <Label
+                    htmlFor="serving-size"
+                    className="text-[10px] uppercase tracking-[0.18em]"
+                    style={{
+                      color: "var(--ink-faint)",
+                      fontFamily: "var(--font-jetbrains-mono), monospace",
+                    }}
+                  >
+                    Serving size
+                  </Label>
                   <Input
                     id="serving-size"
                     type="number"
@@ -595,7 +711,16 @@ export function RecipeManagerSheet({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="food-cost">Food Cost / Serving ($)</Label>
+                  <Label
+                    htmlFor="food-cost"
+                    className="text-[10px] uppercase tracking-[0.18em]"
+                    style={{
+                      color: "var(--ink-faint)",
+                      fontFamily: "var(--font-jetbrains-mono), monospace",
+                    }}
+                  >
+                    Food cost / serving ($)
+                  </Label>
                   <Input
                     id="food-cost"
                     type="number"
@@ -609,22 +734,26 @@ export function RecipeManagerSheet({
                 </div>
               </div>
 
-              <Separator />
+              <div className="perforation" />
 
-              {/* Ingredients */}
               <div className="space-y-3">
-                <Label>Ingredients</Label>
+                <Label
+                  className="text-[10px] uppercase tracking-[0.18em]"
+                  style={{
+                    color: "var(--ink-faint)",
+                    fontFamily: "var(--font-jetbrains-mono), monospace",
+                  }}
+                >
+                  Ingredients
+                </Label>
                 {ingredients.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-[12px]" style={{ color: "var(--ink-muted)" }}>
                     No ingredients added. Click below to add one.
                   </p>
                 )}
                 <div className="space-y-2">
                   {ingredients.map((row, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2"
-                    >
+                    <div key={index} className="flex items-center gap-2">
                       <Input
                         placeholder="Ingredient name"
                         value={row.ingredientName}
@@ -661,54 +790,73 @@ export function RecipeManagerSheet({
                           ))}
                         </SelectContent>
                       </Select>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
+                        type="button"
                         onClick={() => removeIngredientRow(index)}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        className="h-8 w-8 inline-flex items-center justify-center"
+                        style={{ color: "var(--ink-faint)" }}
+                        aria-label={`Remove ingredient ${index + 1}`}
                       >
                         <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </button>
                     </div>
                   ))}
                 </div>
 
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
+                  type="button"
                   onClick={addIngredientRow}
-                  className="w-full"
+                  className="toolbar-btn w-full justify-center inline-flex items-center gap-2"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Ingredient
-                </Button>
+                  <Plus className="h-4 w-4" />
+                  Add ingredient
+                </button>
               </div>
 
-              {/* Error message */}
               {error && (
-                <p className="text-sm text-destructive font-medium">{error}</p>
+                <p className="text-[13px] font-medium" style={{ color: "var(--accent)" }}>
+                  {error}
+                </p>
               )}
 
-              <Separator />
+              <div className="perforation" />
 
-              {/* Action buttons */}
               <div className="flex flex-col gap-2">
-                <Button
+                <button
+                  type="button"
                   onClick={handleSave}
                   disabled={isSaving || isDeleting}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] uppercase tracking-[0.16em] font-semibold disabled:opacity-50"
+                  style={{
+                    background: "var(--ink)",
+                    color: "var(--paper)",
+                    border: "1px solid var(--ink)",
+                    fontFamily: "var(--font-jetbrains-mono), monospace",
+                  }}
                 >
-                  <Save className="h-4 w-4 mr-2" />
-                  {isSaving ? "Saving..." : "Save Recipe"}
-                </Button>
+                  <Save className="h-4 w-4" />
+                  {isSaving ? "Saving…" : "Save recipe"}
+                </button>
                 {editingRecipe && (
-                  <Button
-                    variant="destructive"
+                  <button
+                    type="button"
                     onClick={handleDelete}
                     disabled={isSaving || isDeleting}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] uppercase tracking-[0.16em] font-semibold disabled:opacity-50"
+                    style={{
+                      background: confirmDelete ? "var(--accent)" : "transparent",
+                      color: confirmDelete ? "var(--paper)" : "var(--accent)",
+                      border: "1px solid var(--accent)",
+                      fontFamily: "var(--font-jetbrains-mono), monospace",
+                    }}
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    {isDeleting ? "Deleting..." : "Delete Recipe"}
-                  </Button>
+                    <Trash2 className="h-4 w-4" />
+                    {isDeleting
+                      ? "Deleting…"
+                      : confirmDelete
+                        ? "Tap again to confirm"
+                        : "Delete recipe"}
+                  </button>
                 )}
               </div>
             </div>
@@ -716,5 +864,32 @@ export function RecipeManagerSheet({
         )}
       </SheetContent>
     </Sheet>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className="flex-1 px-3 py-2 text-[11px] uppercase tracking-[0.16em] font-semibold relative"
+      style={{
+        color: active ? "var(--accent)" : "var(--ink-muted)",
+        fontFamily: "var(--font-jetbrains-mono), monospace",
+        background: active ? "var(--accent-bg)" : "transparent",
+      }}
+    >
+      {children}
+    </button>
   )
 }

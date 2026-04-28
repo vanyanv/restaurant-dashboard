@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency, formatNumber, formatPct } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { useIsPhone } from "@/hooks/use-is-phone"
 import { getMenuItemDetail } from "@/app/actions/store-actions"
 import type { ItemExplorerData } from "@/types/analytics"
 
@@ -40,6 +41,7 @@ export function ItemExplorerSheet({
 }: ItemExplorerSheetProps) {
   const [data, setData] = useState<ItemExplorerData | null>(null)
   const [isPending, startTransition] = useTransition()
+  const isPhone = useIsPhone()
 
   useEffect(() => {
     if (!itemName || !category) {
@@ -67,7 +69,11 @@ export function ItemExplorerSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="overflow-y-auto">
+      <SheetContent
+        side={isPhone ? "bottom" : "right"}
+        data-mobile-bottom={isPhone ? "true" : undefined}
+        className="overflow-y-auto"
+      >
         <SheetHeader>
           <SheetTitle className="text-lg">{itemName}</SheetTitle>
           <SheetDescription className="sr-only">

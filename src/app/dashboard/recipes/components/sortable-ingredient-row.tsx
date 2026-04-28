@@ -159,7 +159,7 @@ export function SortableIngredientRow({
             <button
               type="button"
               onClick={() => setPickerOpen(true)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center font-mono text-[16px] font-bold text-white transition hover:scale-[1.04]"
+              className="flex h-11 w-11 shrink-0 items-center justify-center font-mono text-[16px] font-bold text-(--paper) transition hover:scale-[1.04]"
               style={{
                 background: hasPick ? swatch.bg : "var(--hairline-bold)",
               }}

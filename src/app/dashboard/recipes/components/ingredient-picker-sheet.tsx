@@ -521,7 +521,7 @@ export function IngredientPickerSheet({
                           )}
                         >
                           <div
-                            className="flex h-11 w-11 shrink-0 items-center justify-center text-base font-bold text-white"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center text-base font-bold text-(--paper)"
                             style={{
                               background: categorySwatch("sub-recipe").bg,
                             }}
@@ -777,7 +777,7 @@ function IngredientTile({
     >
       <div className="flex items-start gap-2.5 px-3 pt-3">
         <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center font-mono text-[15px] font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center font-mono text-[15px] font-bold text-(--paper)"
           style={{ background: sw.bg }}
           title={sw.label}
         >
@@ -846,7 +846,7 @@ function RecentChip({
     >
       <span
         aria-hidden
-        className="h-5 w-5 shrink-0 text-center font-mono text-[10px] font-bold leading-5 text-white"
+        className="h-5 w-5 shrink-0 text-center font-mono text-[10px] font-bold leading-5 text-(--paper)"
         style={{ background: sw.bg }}
       >
         {sw.letter}

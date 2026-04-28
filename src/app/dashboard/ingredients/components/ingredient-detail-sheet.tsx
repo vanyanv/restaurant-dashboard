@@ -202,7 +202,7 @@ export function IngredientDetailSheet({
           targetId: target.id,
         })
         toast.success(
-          `Merged into "${target.name}" — ${result.lineItems} line item${result.lineItems === 1 ? "" : "s"}, ${result.aliases} alias${result.aliases === 1 ? "" : "es"} moved`
+          `Merged into "${target.name}": ${result.lineItems} line item${result.lineItems === 1 ? "" : "s"}, ${result.aliases} alias${result.aliases === 1 ? "" : "es"} moved`
         )
         onOpenChange(false)
         router.refresh()
@@ -251,7 +251,7 @@ export function IngredientDetailSheet({
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <span
-                className="flex h-11 w-11 shrink-0 items-center justify-center font-mono text-[18px] font-bold text-white"
+                className="flex h-11 w-11 shrink-0 items-center justify-center font-mono text-[18px] font-bold text-(--paper)"
                 style={{ background: sw.bg }}
               >
                 {sw.letter}
@@ -366,8 +366,8 @@ export function IngredientDetailSheet({
                   disabled={saving}
                   title={
                     locked
-                      ? "Locked — invoice matches won't overwrite"
-                      : "Unlocked — invoice matches can overwrite this price"
+                      ? "Locked: invoice matches won't overwrite"
+                      : "Unlocked: invoice matches can overwrite this price"
                   }
                   className={cn(
                     "mt-2 flex h-11 w-11 items-center justify-center border-2 transition",
@@ -449,7 +449,7 @@ export function IngredientDetailSheet({
               § merge
             </div>
             <p className="mt-2 max-w-md font-mono text-[10px] leading-relaxed text-[var(--ink-muted)]">
-              If this is a duplicate of another ingredient, merge it in — all
+              If this is a duplicate of another ingredient, merge it in. All
               invoice history, aliases, and recipe uses re-point to the target.
               This can&apos;t be undone.
             </p>
@@ -790,7 +790,7 @@ function PriceHistoryReceipts({
               </span>
               <span className={cn("ph-row__delta", deltaClass)}>
                 {d == null
-                  ? "—"
+                  ? "·"
                   : `${d > 0 ? "+" : ""}${d.toFixed(d >= 10 || d <= -10 ? 0 : 1)}%`}
               </span>
             </div>

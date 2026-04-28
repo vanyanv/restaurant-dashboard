@@ -90,9 +90,10 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
             barBottomPct = Math.max(before, after)
           }
 
+          const heightPct = Math.max(1, barBottomPct - barTopPct)
           const barStyle = {
-            top: `${barTopPct}%`,
-            height: `${Math.max(1, barBottomPct - barTopPct)}%`,
+            ["--bar-top" as string]: `${barTopPct}%`,
+            ["--bar-scale" as string]: heightPct / 100,
           }
 
           const tone = s.kind === "total" ? "total" : "subtract"

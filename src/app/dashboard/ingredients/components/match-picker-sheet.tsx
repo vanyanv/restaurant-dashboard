@@ -583,7 +583,7 @@ function SuggestionCard({
         className="group flex w-full items-center gap-3 border-2 border-[var(--hairline-bold)] bg-[var(--paper)] px-3.5 py-3 text-left transition hover:border-[var(--ink)] hover:shadow-[3px_3px_0_var(--accent)] disabled:opacity-60"
       >
         <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center font-mono text-[14px] font-bold text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center font-mono text-[14px] font-bold text-(--paper)"
           style={{ background: sw.bg }}
         >
           {sw.letter}
@@ -648,7 +648,7 @@ function RowCard({
       >
         <span
           aria-hidden
-          className="h-6 w-6 shrink-0 text-center font-mono text-[11px] font-bold leading-6 text-white"
+          className="h-6 w-6 shrink-0 text-center font-mono text-[11px] font-bold leading-6 text-(--paper)"
           style={{ background: sw.bg }}
         >
           {sw.letter}

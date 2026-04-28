@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { ChevronDown, ChevronRight, Search, TableProperties } from "lucide-react"
 import { formatCurrency } from "@/lib/format"
+import { CountUp } from "@/components/ui/count-up"
 import type { StoreSummaryRow } from "@/types/analytics"
 import { cn } from "@/lib/utils"
 
@@ -94,19 +95,23 @@ function CellValue({
 }) {
   const num = value ?? 0
   const isNeg = num < 0
+  const isDeduction = negative && num !== 0 && !isNeg
+  const fmt = (n: number) => {
+    const s = format(n)
+    return isDeduction ? `(${s})` : s
+  }
 
   return (
-    <span
+    <CountUp
+      value={num}
+      format={fmt}
+      duration={bold ? 420 : 320}
       className={cn(
-        "text-sm tabular-nums whitespace-nowrap",
+        "text-sm whitespace-nowrap [font-variant-numeric:tabular-nums_lining-nums]",
         bold && "font-semibold",
-        isNeg && "text-rose-600 dark:text-rose-400",
-        negative && num !== 0 && !isNeg && "text-rose-600 dark:text-rose-400",
-        !isNeg && !negative && "text-(--ink)"
+        (isNeg || isDeduction) ? "text-[color:var(--subtract)]" : "text-[color:var(--ink)]"
       )}
-    >
-      {format(value)}
-    </span>
+    />
   )
 }
 
@@ -367,37 +372,43 @@ function MobileSummaryCard({
             net {formatCurrency(net)}
           </span>
         </span>
-        <span className="font-display-tight text-[20px] leading-none tabular-nums text-[color:var(--ink)]">
-          {formatCurrency(gross)}
-        </span>
+        <CountUp
+          value={gross}
+          format={(n) => formatCurrency(n)}
+          duration={420}
+          className="font-display-tight text-[20px] leading-none tabular-nums text-[color:var(--ink)]"
+        />
         <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 text-[color:var(--ink-faint)] transition-transform",
-            open && "rotate-180"
-          )}
+          className="detail-chevron h-3.5 w-3.5 shrink-0 text-[color:var(--ink-faint)]"
+          data-open={open}
           aria-hidden="true"
         />
       </button>
 
-      {open && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-dotted border-[color:var(--hairline)] px-4 py-3 text-[12px]">
-          {COLUMNS.map((col) => (
-            <div key={col.key} className="flex items-baseline justify-between gap-2">
-              <dt className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-[color:var(--ink-faint)]">
-                {col.shortLabel ?? col.label}
-              </dt>
-              <dd className="truncate">
-                <CellValue
-                  value={row[col.key] as number | null}
-                  negative={col.negative}
-                  format={col.format}
-                  bold={isTotal}
-                />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <div
+        className={cn("detail-collapse", open && "detail-collapse--open")}
+        aria-hidden={!open}
+      >
+        <div className="detail-collapse__inner">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-dotted border-[color:var(--hairline)] px-4 py-3 text-[12px]">
+            {COLUMNS.map((col) => (
+              <div key={col.key} className="flex items-baseline justify-between gap-2">
+                <dt className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-[color:var(--ink-faint)]">
+                  {col.shortLabel ?? col.label}
+                </dt>
+                <dd className="truncate">
+                  <CellValue
+                    value={row[col.key] as number | null}
+                    negative={col.negative}
+                    format={col.format}
+                    bold={isTotal}
+                  />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
     </li>
   )
 }

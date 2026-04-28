@@ -205,9 +205,10 @@ export function SpendTrendClient({
                 fontSize: 15,
               }}
             >
-              No spend in this period — choose a wider range above.
+              No spend in this period. Choose a wider range above.
             </div>
           ) : (
+            <div className="chart-reveal">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart
                 data={buckets}
@@ -270,6 +271,7 @@ export function SpendTrendClient({
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
           )}
         </div>
       </div>

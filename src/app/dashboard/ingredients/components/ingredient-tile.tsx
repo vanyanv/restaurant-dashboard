@@ -39,7 +39,7 @@ export function IngredientTile({ ingredient, onClick }: Props) {
     >
       <div className="flex items-start gap-2.5 px-3 pt-3">
         <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center font-mono text-[15px] font-bold text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center font-mono text-[15px] font-bold text-(--paper)"
           style={{ background: sw.bg }}
           title={sw.label}
         >

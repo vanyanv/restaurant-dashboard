@@ -241,9 +241,9 @@ export function RecipeCanvas({
   }
 
   return (
-    <div className="grid h-full grid-cols-1 overflow-hidden md:grid-cols-[1fr_320px]">
+    <div className="flex h-full flex-col overflow-hidden md:grid md:grid-cols-[1fr_320px]">
       {/* Canvas column */}
-      <div className="relative flex h-full flex-col overflow-hidden bg-[var(--paper)]">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-(--paper) md:h-full md:flex-none">
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-[820px] flex-col gap-6 px-4 py-6 md:px-10 md:py-10">
             {/* Title block */}
@@ -302,7 +302,7 @@ export function RecipeCanvas({
                     onClick={() => handleConfirm(!isConfirmed)}
                     className={`ml-auto inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] transition ${
                       isConfirmed
-                        ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                        ? "border-[var(--accent)] bg-[var(--accent)] text-(--paper)"
                         : "border-[var(--hairline-bold)] text-[var(--ink-muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
                     }`}
                   >

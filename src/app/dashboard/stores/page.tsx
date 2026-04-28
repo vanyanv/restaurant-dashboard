@@ -3,23 +3,13 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
-import { MapPin, Phone, Plus, Edit, Eye, Receipt, Store } from "lucide-react"
+import { Plus, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { StoreSelector } from "@/components/store-selector"
 import { DeleteStoreButton } from "./delete-store-button"
 import { StarRatingCompact } from "@/components/ui/star-rating"
 import { YelpSyncAllButton } from "@/components/yelp-sync-button"
 import { EditorialTopbar } from "../components/editorial-topbar"
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 
 export default async function StoresPage() {
   const session = await getServerSession(authOptions)
@@ -29,9 +19,10 @@ export default async function StoresPage() {
   }
 
   const stores = await getStores()
+  const isOwner = session.user.role === "OWNER"
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       <EditorialTopbar
         section="§ 05"
         title="Stores"
@@ -41,10 +32,8 @@ export default async function StoresPage() {
           </span>
         }
       >
-        {session.user.role === "OWNER" && stores.length > 0 && (
-          <YelpSyncAllButton />
-        )}
-        {session.user.role === "OWNER" && (
+        {isOwner && stores.length > 0 && <YelpSyncAllButton />}
+        {isOwner && (
           <Link href="/dashboard/stores/new">
             <Button size="sm">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -54,122 +43,126 @@ export default async function StoresPage() {
         )}
       </EditorialTopbar>
 
-      <div className="flex-1 p-3 sm:p-4 space-y-3">
-        {/* Store Selector */}
+      <div className="flex-1 space-y-3 p-3 sm:p-4">
         {stores.length > 0 && (
           <div className="flex items-center gap-3">
             <StoreSelector stores={stores} currentStoreId="all" />
-            <div className="text-sm text-muted-foreground hidden sm:block">
-              Select a store to view details, or browse all stores below
+            <div className="hidden text-[12px] text-(--ink-muted) sm:block">
+              Select a store to view details, or browse all stores below.
             </div>
           </div>
         )}
 
         {stores.length === 0 ? (
-          <div className="rounded-xl border bg-card text-card-foreground shadow p-12">
-            <div className="text-center">
-              <Store className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No stores found</h3>
-              <p className="text-muted-foreground mb-4">
-                {session.user.role === "OWNER"
+          <div className="inv-panel">
+            <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+              <Store
+                className="h-10 w-10 text-(--ink-faint)"
+                strokeWidth={1.25}
+              />
+              <h3 className="font-display text-[22px] italic text-(--ink)">
+                No stores yet
+              </h3>
+              <p className="max-w-sm text-[13px] text-(--ink-muted)">
+                {isOwner
                   ? "Get started by adding your first store location."
-                  : "You are not assigned to manage any stores yet."
-                }
+                  : "You are not assigned to manage any stores yet."}
               </p>
-              {session.user.role === "OWNER" && (
-                <Link href="/dashboard/stores/new">
+              {isOwner && (
+                <Link href="/dashboard/stores/new" className="mt-2">
                   <Button>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Store
+                    Add your first store
                   </Button>
                 </Link>
               )}
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border bg-card">
-            <Table>
-              <TableCaption>A list of all your restaurant locations</TableCaption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Store Name</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stores.map((store) => (
-                  <TableRow key={store.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                          <Store className="h-4 w-4 text-primary" />
-                        </div>
-                        {store.name}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StarRatingCompact
-                        rating={store.yelpRating}
-                        reviewCount={store.yelpReviewCount}
-                        url={store.yelpUrl}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm">
-                        <MapPin className="h-3 w-3 text-muted-foreground" />
-                        {store.address || "Not specified"}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm">
-                        <Phone className="h-3 w-3 text-muted-foreground" />
-                        {store.phone || "Not specified"}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={store.isActive ? "default" : "secondary"}>
-                        {store.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link href={`/dashboard/stores/${store.id}`}>
-                          <Button variant="outline" size="sm">
-                            <Eye className="mr-1 h-3 w-3" />
-                            View
-                          </Button>
-                        </Link>
-                        {session.user.role === "OWNER" && (
+          <section className="inv-panel inv-panel--flush">
+            <header className="inv-panel__head px-5 pt-5 pb-3 sm:px-5">
+              <span className="inv-panel__dept">All locations</span>
+            </header>
+            <div role="list">
+              {stores.map((store) => {
+                const addressLine = store.address || "Address not set"
+                const phone = store.phone
+                const statusLabel = store.isActive ? "Active" : "Inactive"
+                const statusTone = store.isActive ? "ok" : "muted"
+                return (
+                  <div
+                    key={store.id}
+                    role="listitem"
+                    className="store-row"
+                  >
+                    <Link
+                      href={`/dashboard/stores/${store.id}`}
+                      className="store-row__main"
+                      aria-label={`Open ${store.name}`}
+                    >
+                      <span className="store-row__name">
+                        <span className="store-row__name-text">
+                          {store.name}
+                        </span>
+                      </span>
+                      <span className="store-row__address">
+                        {addressLine}
+                        {phone ? (
                           <>
-                            <Link href={`/dashboard/pnl/${store.id}`}>
-                              <Button variant="outline" size="sm">
-                                <Receipt className="mr-1 h-3 w-3" />
-                                P&amp;L
-                              </Button>
-                            </Link>
-                            <Link href={`/dashboard/stores/${store.id}/edit`}>
-                              <Button variant="outline" size="sm">
-                                <Edit className="mr-1 h-3 w-3" />
-                                Edit
-                              </Button>
-                            </Link>
-                            <DeleteStoreButton
-                              storeId={store.id}
-                              storeName={store.name}
-                            />
+                            <span aria-hidden> · </span>
+                            <span className="normal-case tracking-normal">
+                              {phone}
+                            </span>
                           </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                        ) : null}
+                      </span>
+                      {(store.yelpRating || store.yelpReviewCount) && (
+                        <span className="store-row__rating">
+                          <StarRatingCompact
+                            rating={store.yelpRating}
+                            reviewCount={store.yelpReviewCount}
+                            url={store.yelpUrl}
+                          />
+                        </span>
+                      )}
+                    </Link>
+
+                    <span className="store-row__stamp-cell">
+                      <span
+                        className="inv-stamp"
+                        data-tone={statusTone}
+                      >
+                        {statusLabel}
+                      </span>
+                    </span>
+
+                    <div className="store-row__actions">
+                      {isOwner && (
+                        <>
+                          <Link
+                            href={`/dashboard/pnl/${store.id}`}
+                            className="toolbar-btn"
+                          >
+                            P&amp;L
+                          </Link>
+                          <Link
+                            href={`/dashboard/stores/${store.id}/edit`}
+                            className="toolbar-btn"
+                          >
+                            Edit
+                          </Link>
+                          <DeleteStoreButton
+                            storeId={store.id}
+                            storeName={store.name}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
         )}
       </div>
     </div>

@@ -19,13 +19,6 @@ import { StarRatingLarge } from "@/components/ui/star-rating"
 import { YelpSyncButton } from "@/components/yelp-sync-button"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { Badge } from "@/components/ui/badge"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 
 export default async function StoreDetailPage(props: {
   params: Promise<{ id: string }>
@@ -77,86 +70,87 @@ export default async function StoreDetailPage(props: {
 
       <div className="flex flex-1 flex-col gap-4 p-4">
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Store className="h-8 w-8 text-primary" />
+        <div className="inv-panel">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-(--accent-bg) flex items-center justify-center rounded-none">
+                <Store className="h-8 w-8 text-(--accent-dark)" aria-hidden />
+              </div>
+              <div>
+                <h2 className="font-display text-2xl text-(--ink) italic">
+                  {store.name}
+                </h2>
+                <div className="flex items-center gap-4 mt-1 text-sm text-(--ink-muted)">
+                  {store.address && (
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-4 w-4" aria-hidden />
+                      {store.address}
+                    </div>
+                  )}
+                  {store.phone && (
+                    <div className="flex items-center gap-1">
+                      <Phone className="h-4 w-4" aria-hidden />
+                      {store.phone}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <CardTitle className="text-2xl">{store.name}</CardTitle>
-                  <CardDescription className="flex items-center gap-4 mt-1">
-                    {store.address && (
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {store.address}
-                      </div>
-                    )}
-                    {store.phone && (
-                      <div className="flex items-center gap-1">
-                        <Phone className="h-4 w-4" />
-                        {store.phone}
-                      </div>
-                    )}
-                  </CardDescription>
-                  <div className="mt-3">
-                    <StarRatingLarge
-                      rating={store.yelpRating}
-                      reviewCount={store.yelpReviewCount}
-                      url={store.yelpUrl}
-                      lastUpdated={store.yelpUpdatedAt}
-                    />
-                  </div>
+                <div className="mt-3">
+                  <StarRatingLarge
+                    rating={store.yelpRating}
+                    reviewCount={store.yelpReviewCount}
+                    url={store.yelpUrl}
+                    lastUpdated={store.yelpUpdatedAt}
+                  />
                 </div>
               </div>
-              <Badge variant={store.isActive ? "default" : "secondary"} className="text-sm">
-                {store.isActive ? (
-                  <>
-                    <CheckCircle className="mr-1 h-3 w-3" />
-                    Active
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="mr-1 h-3 w-3" />
-                    Inactive
-                  </>
-                )}
-              </Badge>
             </div>
-          </CardHeader>
-        </Card>
+            <Badge
+              variant={store.isActive ? "default" : "secondary"}
+              className="text-sm"
+            >
+              {store.isActive ? (
+                <>
+                  <CheckCircle className="mr-1 h-3 w-3" aria-hidden />
+                  Active
+                </>
+              ) : (
+                <>
+                  <XCircle className="mr-1 h-3 w-3" aria-hidden />
+                  Inactive
+                </>
+              )}
+            </Badge>
+          </div>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Yelp Rating</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {store.yelpRating ? store.yelpRating.toFixed(1) : "—"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {store.yelpReviewCount ? `${store.yelpReviewCount.toLocaleString()} reviews` : "No Yelp data"}
-              </p>
-            </CardContent>
-          </Card>
+          <div className="inv-panel">
+            <div className="inv-panel__head">
+              <span className="inv-panel__dept">Yelp Rating</span>
+              <BarChart3 className="h-4 w-4 text-(--ink-faint)" aria-hidden />
+            </div>
+            <div className="font-display-tight text-3xl text-(--ink) [font-variant-numeric:tabular-nums_lining-nums]">
+              {store.yelpRating ? store.yelpRating.toFixed(1) : "—"}
+            </div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint) mt-1">
+              {store.yelpReviewCount
+                ? `${store.yelpReviewCount.toLocaleString()} reviews`
+                : "No Yelp data"}
+            </p>
+          </div>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Store Status</CardTitle>
-              <Store className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {store.isActive ? "Active" : "Inactive"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Current operational status
-              </p>
-            </CardContent>
-          </Card>
+          <div className="inv-panel">
+            <div className="inv-panel__head">
+              <span className="inv-panel__dept">Store Status</span>
+              <Store className="h-4 w-4 text-(--ink-faint)" aria-hidden />
+            </div>
+            <div className="font-display text-2xl italic text-(--ink)">
+              {store.isActive ? "Active" : "Inactive"}
+            </div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint) mt-1">
+              Current operational status
+            </p>
+          </div>
         </div>
       </div>
     </div>

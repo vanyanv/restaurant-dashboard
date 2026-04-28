@@ -32,7 +32,10 @@ export function BulletMeter({ value, target, max, width = 80, className, ariaLab
       role="img"
       aria-label={ariaLabel ?? `${(value * 100).toFixed(1)}% of target ${(target * 100).toFixed(0)}%`}
     >
-      <span className="bullet-meter__fill" style={{ width: `${fillPct}%` }} />
+      <span
+        className="bullet-meter__fill"
+        style={{ ["--bullet-fill" as string]: fillPct / 100 }}
+      />
       <span className="bullet-meter__target" style={{ left: `${targetPct}%` }} aria-hidden />
     </span>
   )
