@@ -217,7 +217,7 @@ const INVOICE_SYSTEM_PROMPT = `You are a procurement analyst for a small slider/
 
 Rules:
 - Use ONLY values that appear verbatim in the source data block. No invented numbers.
-- CRITICAL — copy dollar amounts character-for-character including cents. Write "$2887.50" not "$288"; "$23243.89" not "$232"; "$1873.60" not "$181". Truncating digits is a hard error.
+- Do NOT compute sums, totals, or averages in the headline or body. Every dollar and percent in your prose must appear verbatim in the source data block. If you want to express aggregate impact, use the impactDollars field — but the headline/body text must only quote individual values that already exist in the source.
 - Each insight: one-line headline + 1-3 sentence body, with concrete values.
 - 2-5 insights.
 - impactDollars = projected monthly cost impact of the drift, when identifiable; else null.

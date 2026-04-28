@@ -19,6 +19,7 @@ function getOpenAIClient(): OpenAI {
 }
 
 export const OPENAI_GENERATOR_MODEL = "gpt-4.1-mini"
+export const OPENAI_CRITIC_MODEL = "gpt-4.1-mini"
 
 export interface OpenAIUsage {
   promptTokens: number
@@ -38,25 +39,29 @@ export interface GenerateInsightsArgs {
   maxTokens?: number
 }
 
-export async function generateInsights<T>(
-  args: GenerateInsightsArgs,
-): Promise<OpenAIJsonResult<T>> {
+async function callJson<T>(opts: {
+  model: string
+  systemPrompt: string
+  userPrompt: string
+  temperature: number
+  maxTokens: number
+}): Promise<OpenAIJsonResult<T>> {
   const client = getOpenAIClient()
   const response = await client.chat.completions.create({
-    model: OPENAI_GENERATOR_MODEL,
+    model: opts.model,
     response_format: { type: "json_object" },
-    temperature: args.temperature ?? 0.5,
-    max_tokens: args.maxTokens ?? 2500,
+    temperature: opts.temperature,
+    max_tokens: opts.maxTokens,
     messages: [
-      { role: "system", content: args.systemPrompt },
-      { role: "user", content: args.userPrompt },
+      { role: "system", content: opts.systemPrompt },
+      { role: "user", content: opts.userPrompt },
     ],
   })
 
   const choice = response.choices[0]
   const content = choice?.message?.content
   if (!content) {
-    throw new Error(`OpenAI returned empty content (model=${OPENAI_GENERATOR_MODEL})`)
+    throw new Error(`OpenAI returned empty content (model=${opts.model})`)
   }
 
   let parsed: T
@@ -64,7 +69,7 @@ export async function generateInsights<T>(
     parsed = JSON.parse(content) as T
   } catch (err) {
     throw new Error(
-      `OpenAI returned non-JSON content (model=${OPENAI_GENERATOR_MODEL}): ${(err as Error).message}\nContent: ${content.slice(0, 500)}`,
+      `OpenAI returned non-JSON content (model=${opts.model}): ${(err as Error).message}\nContent: ${content.slice(0, 500)}`,
     )
   }
 
@@ -76,4 +81,35 @@ export async function generateInsights<T>(
       completionTokens: response.usage?.completion_tokens ?? 0,
     },
   }
+}
+
+export async function generateInsights<T>(
+  args: GenerateInsightsArgs,
+): Promise<OpenAIJsonResult<T>> {
+  return callJson<T>({
+    model: OPENAI_GENERATOR_MODEL,
+    systemPrompt: args.systemPrompt,
+    userPrompt: args.userPrompt,
+    temperature: args.temperature ?? 0,
+    maxTokens: args.maxTokens ?? 2500,
+  })
+}
+
+export interface CriticReviewArgs {
+  systemPrompt: string
+  userPrompt: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export async function criticReview<T>(
+  args: CriticReviewArgs,
+): Promise<OpenAIJsonResult<T>> {
+  return callJson<T>({
+    model: OPENAI_CRITIC_MODEL,
+    systemPrompt: args.systemPrompt,
+    userPrompt: args.userPrompt,
+    temperature: args.temperature ?? 0.2,
+    maxTokens: args.maxTokens ?? 2500,
+  })
 }

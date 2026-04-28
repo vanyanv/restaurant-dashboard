@@ -93,7 +93,7 @@ async function main() {
 
   if (phase2.status === "FAILED") {
     console.log("\n--- Phase 2 failed; calling generator directly to inspect raw LLM output ---")
-    const { generateInsights } = await import("../../src/lib/groq")
+    const { generateInsights } = await import("../../src/lib/openai-insights")
     const raw = await generateInsights<{ insights: { headline: string; body: string; impactDollars: number | null; severityHint?: string }[] }>({
       systemPrompt: run1.systemPrompt!,
       userPrompt: run1.userPrompt!,

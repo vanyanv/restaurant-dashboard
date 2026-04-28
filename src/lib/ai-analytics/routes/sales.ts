@@ -213,7 +213,6 @@ const SALES_SYSTEM_PROMPT = `You are a sales analyst for a small slider/burger r
 
 Rules:
 - Use ONLY values that appear verbatim in the source data block. Do NOT invent or derive new percentages or dollars.
-- CRITICAL — copy dollar amounts character-for-character including cents. Write "$2887.50" not "$288"; "$23243.89" not "$232"; "$1873.60" not "$181". Truncating digits is a hard error.
 - Each insight has a one-line headline and a 1-3 sentence body. Reference at least one concrete value.
 - Cover 2-5 insights. Lean toward fewer and sharper.
 - impactDollars = the dollar magnitude of the change you flag, when identifiable; otherwise null.

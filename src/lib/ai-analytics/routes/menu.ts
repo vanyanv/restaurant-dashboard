@@ -159,7 +159,6 @@ const MENU_SYSTEM_PROMPT = `You are a menu engineering analyst for a small slide
 
 Rules:
 - Use ONLY values that appear verbatim in the source data block. Do NOT invent or derive new percentages or dollars.
-- CRITICAL — copy dollar amounts character-for-character including cents. Write "$2887.50" not "$288"; "$23243.89" not "$232"; "$1873.60" not "$181". Truncating digits is a hard error.
 - Each insight: one-line headline + 1-3 sentence body referencing concrete values.
 - 2-5 insights. Quality over quantity.
 - impactDollars = dollar magnitude of the issue, when identifiable; else null.

@@ -24,7 +24,7 @@ export interface ValidationResult {
   failures: string[]
 }
 
-const DOLLAR_RE = /\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/g
+const DOLLAR_RE = /\$\s?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)/g
 const PERCENT_RE = /([+-]?\d+(?:\.\d+)?)\s?%/g
 
 const DOLLAR_TOLERANCE = 0.51 // half-cent rounding plus pennies on display

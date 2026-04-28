@@ -56,11 +56,11 @@ interface SourceSnapshot {
 
 interface GeneratorPayload {
   candidates: AiInsightCandidatePayload[]
-  totalUsage: GroqUsage
+  totalUsage: OpenAIUsage
   retryCount: number
 }
 
-const RETRY_LIMIT = 3
+const RETRY_LIMIT = 1
 const MAX_VALIDATOR_FEEDBACK = 10
 
 export interface RunPhasePromptArgs<TSource> {
@@ -93,7 +93,7 @@ export async function runPhasePrompt<TSource>(
       scope: args.scope,
       storeId: args.storeId,
       status: "QUEUED",
-      generatorModel: GROQ_GENERATOR_MODEL,
+      generatorModel: OPENAI_GENERATOR_MODEL,
     },
   })
 
@@ -206,7 +206,7 @@ export async function runPhaseGenerate(runId: string): Promise<PhaseGenerateResu
 
   let candidates: AiInsightCandidatePayload[] = []
   let retryCount = 0
-  let totalUsage: GroqUsage = { promptTokens: 0, completionTokens: 0 }
+  let totalUsage: OpenAIUsage = { promptTokens: 0, completionTokens: 0 }
   let lastValidationFailures: string[] = []
 
   try {

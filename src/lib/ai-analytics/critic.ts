@@ -1,4 +1,4 @@
-import { criticReview, GROQ_CRITIC_MODEL, type GroqUsage } from "@/lib/groq"
+import { criticReview, OPENAI_CRITIC_MODEL, type OpenAIUsage } from "@/lib/openai-insights"
 import type { AiInsightSeverity } from "@/generated/prisma/client"
 
 /**
@@ -44,7 +44,7 @@ export interface ReviewedInsight {
 export interface CriticPassResult {
   reviewed: ReviewedInsight[]
   droppedCount: number
-  usage: GroqUsage
+  usage: OpenAIUsage
   modelUsed: string
 }
 
@@ -122,7 +122,7 @@ export async function runCriticPass(opts: CriticPassOpts): Promise<CriticPassRes
       reviewed: [],
       droppedCount: 0,
       usage: { promptTokens: 0, completionTokens: 0 },
-      modelUsed: GROQ_CRITIC_MODEL,
+      modelUsed: OPENAI_CRITIC_MODEL,
     }
   }
 
@@ -199,6 +199,6 @@ export async function runCriticPass(opts: CriticPassOpts): Promise<CriticPassRes
     reviewed,
     droppedCount: dropped,
     usage: result.usage,
-    modelUsed: GROQ_CRITIC_MODEL,
+    modelUsed: OPENAI_CRITIC_MODEL,
   }
 }

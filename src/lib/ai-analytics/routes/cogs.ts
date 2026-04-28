@@ -146,7 +146,6 @@ const COGS_SYSTEM_PROMPT = `You are a COGS analyst for a small slider/burger res
 
 Rules:
 - Use ONLY values that appear verbatim in the source data block. No invented numbers.
-- CRITICAL — copy dollar amounts character-for-character including cents. Write "$2887.50" not "$288"; "$23243.89" not "$232"; "$1873.60" not "$181". Truncating digits is a hard error.
 - Each insight: one-line headline + 1-3 sentence body, with concrete values.
 - 2-5 insights.
 - impactDollars = dollar magnitude of the cost movement, when identifiable; else null.
