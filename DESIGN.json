@@ -1,0 +1,339 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-27T00:00:00.000Z",
+  "title": "Design System: Chris Neddy's Restaurant Dashboard",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(22% 0.01 40)",
+        "tonalRamp": [
+          "oklch(15% 0.012 40)",
+          "oklch(22% 0.01 40)",
+          "oklch(34% 0.01 40)",
+          "oklch(46% 0.01 40)",
+          "oklch(58% 0.009 40)",
+          "oklch(70% 0.008 40)",
+          "oklch(82% 0.006 40)",
+          "oklch(92% 0.005 40)"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "oklch(48% 0.012 50)",
+        "tonalRamp": [
+          "oklch(20% 0.012 50)",
+          "oklch(30% 0.012 50)",
+          "oklch(40% 0.012 50)",
+          "oklch(48% 0.012 50)",
+          "oklch(60% 0.012 50)",
+          "oklch(72% 0.01 50)",
+          "oklch(84% 0.008 50)",
+          "oklch(94% 0.005 50)"
+        ]
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Ink Faint",
+        "canonical": "oklch(70% 0.011 60)",
+        "tonalRamp": [
+          "oklch(35% 0.011 60)",
+          "oklch(45% 0.011 60)",
+          "oklch(55% 0.011 60)",
+          "oklch(65% 0.011 60)",
+          "oklch(70% 0.011 60)",
+          "oklch(78% 0.009 60)",
+          "oklch(86% 0.007 60)",
+          "oklch(94% 0.004 60)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(96.5% 0.018 80)",
+        "tonalRamp": [
+          "oklch(40% 0.022 80)",
+          "oklch(54% 0.022 80)",
+          "oklch(68% 0.022 80)",
+          "oklch(80% 0.02 80)",
+          "oklch(88% 0.02 80)",
+          "oklch(93% 0.019 80)",
+          "oklch(96.5% 0.018 80)",
+          "oklch(99% 0.012 80)"
+        ]
+      },
+      "paper-deep": {
+        "role": "neutral",
+        "displayName": "Paper Deep",
+        "canonical": "oklch(94% 0.025 80)",
+        "tonalRamp": [
+          "oklch(60% 0.03 80)",
+          "oklch(72% 0.028 80)",
+          "oklch(82% 0.026 80)",
+          "oklch(88% 0.025 80)",
+          "oklch(91% 0.025 80)",
+          "oklch(94% 0.025 80)",
+          "oklch(97% 0.018 80)",
+          "oklch(99% 0.01 80)"
+        ]
+      },
+      "paper-soft": {
+        "role": "neutral",
+        "displayName": "Paper Soft Highlight",
+        "canonical": "oklch(98% 0.018 90)"
+      },
+      "paper-warm": {
+        "role": "neutral",
+        "displayName": "Paper Warm Highlight",
+        "canonical": "oklch(95% 0.04 80)"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(89% 0.018 75)"
+      },
+      "hairline-bold": {
+        "role": "neutral",
+        "displayName": "Hairline Bold",
+        "canonical": "oklch(78% 0.025 75)"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Proofmark Red",
+        "canonical": "oklch(57.7% 0.245 27)",
+        "tonalRamp": [
+          "oklch(28% 0.18 27)",
+          "oklch(38% 0.21 27)",
+          "oklch(48% 0.235 27)",
+          "oklch(57.7% 0.245 27)",
+          "oklch(68% 0.22 27)",
+          "oklch(78% 0.16 27)",
+          "oklch(88% 0.09 27)",
+          "oklch(96% 0.04 27)"
+        ]
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "Proofmark Red Deep",
+        "canonical": "oklch(36% 0.18 27)"
+      },
+      "accent-bg": {
+        "role": "primary",
+        "displayName": "Proofmark Wash",
+        "canonical": "oklch(95% 0.035 25)"
+      },
+      "subtract": {
+        "role": "primary",
+        "displayName": "Subtract Red",
+        "canonical": "oklch(44% 0.13 25)"
+      },
+      "platform-doordash": {
+        "role": "tertiary",
+        "displayName": "DoorDash Red",
+        "canonical": "oklch(56% 0.245 30)"
+      },
+      "platform-ubereats": {
+        "role": "tertiary",
+        "displayName": "UberEats Black",
+        "canonical": "oklch(8% 0 0)"
+      },
+      "platform-grubhub": {
+        "role": "tertiary",
+        "displayName": "Grubhub Orange",
+        "canonical": "oklch(64% 0.21 38)"
+      },
+      "platform-chownow": {
+        "role": "tertiary",
+        "displayName": "ChowNow Green",
+        "canonical": "oklch(56% 0.11 175)"
+      },
+      "platform-neutral": {
+        "role": "tertiary",
+        "displayName": "In-House Neutral",
+        "canonical": "oklch(38% 0.012 50)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles, masthead-style section headers. One per view. Fraunces with opsz 144 + SOFT 30."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Panel heads, brand name in sidebar, prose intros. Fraunces italic with opsz 96 + SOFT 50."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Vendor names, secondary headings inside panels. Fraunces 17px, italic-capable."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default running text, nav items, non-numeric table cells. DM Sans 13px. Cap line length at 65–75ch."
+      },
+      "number": {
+        "displayName": "Number",
+        "purpose": "Every total, KPI, currency figure. DM Sans 600 with tabular-nums lining-nums. Inherits ink at rest, accent on parent row hover."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Section captions, panel-head departments. DM Sans uppercase, 10px, 0.18em tracking."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Folios, SKUs, brand-issue strings, kbd chips. JetBrains Mono 10px, 0.12em tracking, tabular figures."
+      }
+    },
+    "shadows": [
+      {
+        "name": "focus-rail",
+        "value": "inset 3px 0 0 var(--accent)",
+        "purpose": "The only shadow allowed. A red focus rail on .inv-row / .order-row :focus-visible — not elevation, a focus ring on a non-rectangular target."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-editorial",
+        "value": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+        "purpose": "Default exponential ease-out for state transitions and the dock-in reveal. No bounce, no elastic."
+      },
+      {
+        "name": "duration-state",
+        "value": "120-180ms",
+        "purpose": "State transitions: background-color (120ms), color/transform (180ms), border-color (120ms)."
+      },
+      {
+        "name": "duration-row-bar",
+        "value": "220ms",
+        "purpose": "The .inv-row / .order-row red proofmark bar scaleY(0→1) transition."
+      },
+      {
+        "name": "duration-dock-in",
+        "value": "480ms",
+        "purpose": "First-paint dock-in reveal duration. Stagger steps at 60ms increments via .dock-in-1 through .dock-in-12."
+      },
+      {
+        "name": "live-pulse",
+        "value": "1.8s ease-in-out infinite",
+        "purpose": "The .live-dot opacity pulse (1 → 0.35 → 1) marking real-time data."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Inv Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Warm-paper panel framed by a hairline-bold border. Replaces shadcn <Card> on /dashboard/*. No shadow, no rounded-xl.",
+      "html": "<section class=\"ds-inv-panel\"><header class=\"ds-inv-panel__head\"><span class=\"ds-inv-panel__dept\">Department</span><span class=\"ds-inv-panel__folio\">No. 042</span></header><p class=\"ds-inv-panel__body\">Body content sits on the warm paper, inheriting ink as the default text color.</p></section>",
+      "css": ".ds-inv-panel { position: relative; background: rgba(255, 253, 247, 0.72); border: 1px solid #c9beaf; border-radius: 2px; padding: 18px 20px; color: #1a1613; font-family: 'DM Sans', ui-sans-serif, sans-serif; font-size: 13px; line-height: 1.5; } .ds-inv-panel__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid #e8dfd3; margin-bottom: 14px; } .ds-inv-panel__dept { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: #a69d92; } .ds-inv-panel__folio { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.12em; color: #a69d92; font-variant-numeric: tabular-nums; } .ds-inv-panel__body { margin: 0; max-width: 65ch; }"
+    },
+    {
+      "name": "Inv Row",
+      "kind": "custom",
+      "refersTo": "row-default",
+      "description": "Pressable ledger line. Hover reveals a 4px red proofmark bar (scaleY 0→1, 220ms ease-out-quart) and recolors the total to accent.",
+      "html": "<button class=\"ds-inv-row\" type=\"button\"><span class=\"ds-inv-row__folio\">042</span><span class=\"ds-inv-row__vendor\"><span class=\"ds-inv-row__vendor-name\">Sysco Foodservice</span><span class=\"ds-inv-row__store\">Astoria <em>· today</em></span></span><span class=\"ds-inv-row__total\">$1,284.50</span><svg class=\"ds-inv-row__chev\" width=\"12\" height=\"12\" viewBox=\"0 0 12 12\" fill=\"none\"><path d=\"M4 2l4 4-4 4\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button>",
+      "css": ".ds-inv-row { position: relative; display: grid; grid-template-columns: 28px minmax(0, 2.2fr) minmax(130px, 0.9fr) 28px; gap: 18px; align-items: center; padding: 18px 20px; border: none; border-top: 1px solid #e8dfd3; background: transparent; color: #1a1613; text-align: left; width: 100%; cursor: pointer; font-family: inherit; transition: background-color 160ms ease; } .ds-inv-row:first-child { border-top: 0; } .ds-inv-row:hover, .ds-inv-row:focus-visible { background: rgba(220, 38, 38, 0.045); outline: none; } .ds-inv-row:focus-visible { box-shadow: inset 3px 0 0 #dc2626; } .ds-inv-row::before { content: ''; position: absolute; left: 0; top: 8%; bottom: 8%; width: 4px; background: #dc2626; transform: scaleY(0); transform-origin: center; transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1); } .ds-inv-row:hover::before, .ds-inv-row:focus-visible::before { transform: scaleY(1); } .ds-inv-row__folio { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #a69d92; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; text-align: right; } .ds-inv-row__vendor { min-width: 0; display: flex; flex-direction: column; gap: 3px; } .ds-inv-row__vendor-name { font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif; font-variation-settings: 'opsz' 96, 'SOFT' 40; font-style: italic; font-weight: 500; font-size: 17px; color: #1a1613; } .ds-inv-row__store { font-family: 'DM Sans', ui-sans-serif, sans-serif; font-size: 12px; color: #6b625a; } .ds-inv-row__store em { font-style: italic; color: #a69d92; font-family: 'Fraunces', serif; font-size: 13px; } .ds-inv-row__total { font-family: 'DM Sans', ui-sans-serif, sans-serif; font-weight: 600; font-size: 15.5px; letter-spacing: -0.014em; color: #1a1613; font-feature-settings: 'tnum', 'lnum'; font-variant-numeric: tabular-nums lining-nums; text-align: right; transition: color 180ms ease; } .ds-inv-row:hover .ds-inv-row__total { color: #dc2626; } .ds-inv-row__chev { color: #a69d92; opacity: 0; transform: translateX(-4px); transition: opacity 180ms ease, transform 180ms ease, color 180ms ease; justify-self: end; } .ds-inv-row:hover .ds-inv-row__chev { opacity: 1; transform: translateX(0); color: #dc2626; }"
+    },
+    {
+      "name": "Toolbar Button",
+      "kind": "button",
+      "refersTo": "toolbar-btn",
+      "description": "Hairline-stroked rectangle, sharp corners. Hover darkens the stroke to ink; active flips border + text to accent on the wash.",
+      "html": "<button class=\"ds-toolbar-btn\" type=\"button\">All stores</button> <button class=\"ds-toolbar-btn ds-toolbar-btn--active\" type=\"button\">This week</button>",
+      "css": ".ds-toolbar-btn { background: transparent; border: 1px solid #c9beaf; color: #1a1613; padding: 7px 12px; font-size: 12px; font-family: 'DM Sans', ui-sans-serif, sans-serif; letter-spacing: -0.005em; border-radius: 0; cursor: pointer; transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease; } .ds-toolbar-btn:hover { border-color: #1a1613; background: rgba(0, 0, 0, 0.02); } .ds-toolbar-btn:focus-visible { outline: 2px solid #dc2626; outline-offset: 2px; } .ds-toolbar-btn--active { border-color: #dc2626; color: #dc2626; background: #fcecec; }"
+    },
+    {
+      "name": "Search Shell",
+      "kind": "input",
+      "refersTo": "search-shell",
+      "description": "Hairline-bordered input shell with leading icon and trailing kbd chip. Sharp corners, focuses by darkening the border to ink.",
+      "html": "<label class=\"ds-search-shell\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 14 14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><circle cx=\"6\" cy=\"6\" r=\"4.5\"/><path d=\"M9.5 9.5l3 3\" stroke-linecap=\"round\"/></svg><input type=\"search\" placeholder=\"Search invoices, vendors, SKUs\" /><span class=\"ds-kbd-chip\">⌘K</span></label>",
+      "css": ".ds-search-shell { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #c9beaf; padding: 6px 10px; background: rgba(255, 255, 255, 0.55); min-width: 260px; transition: border-color 120ms ease; color: #6b625a; border-radius: 0; } .ds-search-shell:focus-within { border-color: #1a1613; } .ds-search-shell input { background: transparent; border: none; outline: none; font-family: inherit; font-size: 13px; width: 100%; color: #1a1613; } .ds-search-shell input::placeholder { color: #a69d92; } .ds-kbd-chip { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; padding: 1px 5px; border: 1px solid #c9beaf; color: #6b625a; letter-spacing: 0.04em; }"
+    },
+    {
+      "name": "Editorial Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-default",
+      "description": "Sidebar nav row with a 2px red rail that scales Y on hover (half) and active (full). DM Sans 13px body, accent-dark text on accent-bg when active.",
+      "html": "<a class=\"ds-nav-item\" href=\"#\"><svg class=\"ds-nav-item__icon\" width=\"13\" height=\"13\" viewBox=\"0 0 13 13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><rect x=\"1.5\" y=\"1.5\" width=\"4\" height=\"4\"/><rect x=\"7.5\" y=\"1.5\" width=\"4\" height=\"4\"/><rect x=\"1.5\" y=\"7.5\" width=\"4\" height=\"4\"/><rect x=\"7.5\" y=\"7.5\" width=\"4\" height=\"4\"/></svg>Operations</a> <a class=\"ds-nav-item ds-nav-item--active\" href=\"#\"><svg class=\"ds-nav-item__icon\" width=\"13\" height=\"13\" viewBox=\"0 0 13 13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M2 11l3-4 3 2 3-5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\"/></svg>Analytics</a>",
+      "css": ".ds-nav-item { position: relative; display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 18px; color: #1a1613; font-family: 'DM Sans', ui-sans-serif, sans-serif; font-size: 13px; letter-spacing: -0.005em; cursor: pointer; text-decoration: none; transition: color 120ms ease, background-color 120ms ease; } .ds-nav-item::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 2px; background: #dc2626; transform: scaleY(0); transform-origin: center; transition: transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1); } .ds-nav-item:hover { color: #1a1613; background: rgba(0, 0, 0, 0.025); } .ds-nav-item:hover::before { transform: scaleY(0.55); } .ds-nav-item--active { color: #7c1515; background: #fcecec; font-weight: 600; } .ds-nav-item--active::before { transform: scaleY(1); } .ds-nav-item__icon { width: 13px; height: 13px; color: #6b625a; flex-shrink: 0; } .ds-nav-item--active .ds-nav-item__icon { color: #dc2626; }"
+    },
+    {
+      "name": "Platform Stamp",
+      "kind": "chip",
+      "refersTo": "stamp",
+      "description": "Rotated rubber-stamp label for an order's source. Border drawn in currentColor, 0.5deg tilt, paper ground at 40% white. Color is data-only; always paired with a text label.",
+      "html": "<span class=\"ds-stamp\" data-platform=\"doordash\">DOORDASH</span> <span class=\"ds-stamp\" data-platform=\"ubereats\">UBEREATS</span> <span class=\"ds-stamp\" data-platform=\"grubhub\">GRUBHUB</span> <span class=\"ds-stamp\" data-platform=\"chownow\">CHOWNOW</span>",
+      "css": ".ds-stamp { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px 2px; border: 1.5px solid currentColor; border-radius: 2px; font-family: 'DM Sans', ui-sans-serif, sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 9.5px; font-weight: 700; line-height: 1.1; transform: rotate(-0.5deg); background: rgba(255, 255, 255, 0.4); margin-right: 6px; } .ds-stamp[data-platform=\"doordash\"] { color: #eb1700; } .ds-stamp[data-platform=\"ubereats\"] { color: #0b0b0b; } .ds-stamp[data-platform=\"grubhub\"] { color: #f15c26; } .ds-stamp[data-platform=\"chownow\"] { color: #16a085; } .ds-stamp[data-platform=\"in-house\"] { color: #4a4541; }"
+    },
+    {
+      "name": "Live Dot",
+      "kind": "custom",
+      "refersTo": "accent",
+      "description": "A 6px red dot pulsing on a 1.8s cycle. Always paired with a JetBrains Mono 'LIVE' label.",
+      "html": "<span class=\"ds-live\"><span class=\"ds-live__dot\"></span>LIVE</span>",
+      "css": "@keyframes ds-live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } } .ds-live { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b625a; } .ds-live__dot { display: inline-block; width: 6px; height: 6px; border-radius: 9999px; background: #dc2626; animation: ds-live-pulse 1.8s ease-in-out infinite; } @media (prefers-reduced-motion: reduce) { .ds-live__dot { animation: none; } }"
+    },
+    {
+      "name": "Perforation",
+      "kind": "custom",
+      "refersTo": "hairline-bold",
+      "description": "Dashed horizontal rule used to break ledger groups by date or store. Mimics the perforated tear-line on a printed report.",
+      "html": "<div class=\"ds-perforation\">Wed, 23 Apr 2026</div>",
+      "css": ".ds-perforation { display: flex; align-items: center; gap: 8px; color: #a69d92; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; margin: 8px 0; } .ds-perforation::before, .ds-perforation::after { content: ''; flex: 1; border-top: 1px dashed #c9beaf; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Late-Edition Ledger",
+    "overview": "This is a back-office newspaper, not a SaaS dashboard. The surface is warm cream paper with a fine SVG fiber grain, hairline-ruled like a financial broadsheet's tables, set in Fraunces italic display, DM Sans for figures, and JetBrains Mono for folios and stamps. A single red proofmark — #dc2626 — sits in for the editor's pencil: it underlines totals on hover, fills the active nav rail, and marks state changes. Nothing else is colored unless it's a platform stamp.\n\nThe system explicitly rejects three failure modes named in PRODUCT.md: Toast / Square POS brightness (oversized blue buttons, friendly emoji), Notion / Coda card sprawl (rounded-xl cards with soft shadows nested inside other cards), and Linear / Vercel dark SaaS (slate-900 with neon accents). Density and reconciliation legibility win over visual flourish — the user is closing books at 11pm, not browsing screenshots.",
+    "keyCharacteristics": [
+      "Warm cream paper (#fbf6ee → #f4ecdf gradient with radial highlights and a 5%-opacity fractal-noise grain overlay).",
+      "Hairline frames at 1px (#e8dfd3 and #c9beaf). No shadows. No rounded-xl. Radius is 2px or 0.",
+      "Two-tier type: Fraunces italic for prose and display; DM Sans 500–600 with tabular-nums lining-nums for every number; JetBrains Mono for captions, folios, SKUs, status stamps.",
+      "One accent (red #dc2626) reserved for state. A red bar that scales Y(0→1) on row hover; the row's total turns red simultaneously.",
+      "A staggered dock-in reveal (60ms steps, 480ms duration, cubic-bezier(0.2, 0.7, 0.2, 1)) on first paint."
+    ],
+    "rules": [
+      { "name": "The Earn-the-Red Rule", "body": "Red is reserved for state changes. If --accent appears at rest on more than one element on a screen — outside an .is-active nav item or an inv-stamp — something is wrong. The proofmark works because it's rare.", "section": "colors" },
+      { "name": "The No-Pure-Black Rule", "body": "Both ink and paper are tinted toward warm hues. #000 and #fff never appear on /dashboard/*. Even icon strokes inherit currentColor from var(--ink) or var(--ink-muted).", "section": "colors" },
+      { "name": "The Color-Plus-Label Rule", "body": "Platform stamps are color-coded but always paired with the platform's text label. No color-only signaling — the user closing books at 11pm may be color-blind, tired, or both.", "section": "colors" },
+      { "name": "The Two-Tier Rule", "body": "Fraunces is for prose and display. DM Sans is for numbers. JetBrains Mono is for captions and folios. Crossing the lines is a regression — a Fraunces-italic dollar amount or a DM Sans display heading both fail the system.", "section": "typography" },
+      { "name": "The Tabular Rule", "body": "Every figure is set with font-variant-numeric: tabular-nums lining-nums and font-feature-settings: 'tnum', 'lnum'. Columns must reconcile to the pixel; proportional figures break the ledger metaphor.", "section": "typography" },
+      { "name": "The Optical-Size Rule", "body": "Fraunces is variable — set font-variation-settings: 'opsz' 96 for headlines, 'opsz' 144 for display, 'SOFT' 30–50 to match the era. Default Fraunces (no axis settings) reads literary, not editorial.", "section": "typography" },
+      { "name": "The No-Shadow Rule", "body": "box-shadow for elevation is forbidden on /dashboard/*. If a surface needs to feel 'lifted', increase its background opacity against the cream — don't add a shadow.", "section": "elevation" },
+      { "name": "The Hairline Rule", "body": "Every visible boundary is 1px solid of either --hairline (#e8dfd3) for inner rules and row separators or --hairline-bold (#c9beaf) for panel outer borders, toolbar strokes, and search-shell frames. Two weights — that's the entire vocabulary.", "section": "elevation" },
+      { "name": "The Grain Rule", "body": "The fractal-noise overlay sits at opacity: 0.05 with mix-blend-mode: multiply. Lifting the opacity above 0.07 makes the surface look dirty; dropping it below 0.03 makes the paper look flat. Don't tune it.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use the editorial tokens — --ink, --ink-muted, --ink-faint, --paper, --paper-deep, --hairline, --hairline-bold, --accent — for every color decision on /dashboard/*.",
+      "Do set every figure (KPI, total, count, currency) in DM Sans 500–600 with font-variant-numeric: tabular-nums lining-nums.",
+      "Do wrap interactive list rows with .inv-row or .order-row and let the existing ::before red-bar pattern carry the hover state.",
+      "Do compose page sections with .inv-panel (warm-cream background, 1px solid var(--hairline-bold), 2px radius, no shadow).",
+      "Do set Fraunces with explicit font-variation-settings (opsz 96 for headlines, opsz 144 for display, SOFT 30–50) — default Fraunces reads too literary.",
+      "Do stagger first-paint reveals with .dock-in-1 through .dock-in-12 (60ms steps, 480ms duration, cubic-bezier(0.2, 0.7, 0.2, 1)).",
+      "Do pair every platform stamp with a text label.",
+      "Do respect prefers-reduced-motion: reduce — disable the dock-in stagger and the row-hover scaleY transition."
+    ],
+    "donts": [
+      "Don't use generic Tailwind colors on /dashboard/* — no bg-sky-*, text-emerald-*, border-violet-*, no slate-900 backgrounds. The four CLAUDE.md tripwires are non-negotiable.",
+      "Don't ship Toast / Square POS aesthetics — bright primary blues, oversized buttons, friendly-emoji empty states are explicit anti-references from PRODUCT.md.",
+      "Don't ship Notion / Coda card sprawl — <Card className=\"rounded-xl shadow-sm\"> is wrong everywhere on the dashboard. Use .inv-panel.",
+      "Don't ship Linear / Vercel dark SaaS — slate-900 with neon-gradient accents is exactly what this is rejecting.",
+      "Don't apply a box-shadow for elevation. The system has no shadow vocabulary; tonal layering and hairlines do that work.",
+      "Don't set Fraunces italic on a number, or DM Sans on a display title. Crossing the type lanes breaks the system.",
+      "Don't use hover:bg-muted/50 on a list row. Use .inv-row or .order-row.",
+      "Don't use #000 or #fff anywhere on /dashboard/*. Tint every neutral toward the warm-paper hue.",
+      "Don't scale the proofmark red beyond state. If --accent appears at rest on more than one element per screen (outside an active nav item or a stamp), the design has lost its line.",
+      "Don't color-code without labeling. Platform stamps are color + text, never color alone."
+    ]
+  }
+}
