@@ -398,6 +398,23 @@ export interface HourlyOrderPoint {
   label: string
   orderCount: number
   totalSales: number
+  avgOrderCount: number
+  avgTotalSales: number
+}
+
+export type HourlyComparisonPeriod =
+  | "today"
+  | "yesterday"
+  | "this-week"
+  | "last-week"
+
+export interface OrderPatternsHourlyComparison {
+  period: HourlyComparisonPeriod
+  currentTotal: number
+  baselineTotal: number
+  pacePct: number | null
+  baselineWeeks: number
+  weekdayLabel: string
 }
 
 export interface DayOfWeekOrderPoint {
@@ -417,6 +434,7 @@ export interface MonthlyOrderPoint {
 
 export interface OrderPatternsData {
   hourly: HourlyOrderPoint[]
+  hourlyComparison: OrderPatternsHourlyComparison | null
   byDayOfWeek: DayOfWeekOrderPoint[]
   byMonth: MonthlyOrderPoint[]
 }

@@ -1910,9 +1910,17 @@ export async function toggleStoreStatus(storeId: string) {
 
 // ========== Order Patterns ==========
 
+type HourlyComparisonPeriod =
+  import("@/types/analytics").HourlyComparisonPeriod
+
 export async function getOrderPatterns(
   storeId?: string,
-  options?: { days?: number; startDate?: string; endDate?: string }
+  options?: {
+    days?: number
+    startDate?: string
+    endDate?: string
+    period?: HourlyComparisonPeriod
+  }
 ): Promise<import("@/types/analytics").OrderPatternsData | null> {
   try {
     const session = await getServerSession(authOptions)
@@ -1923,12 +1931,20 @@ export async function getOrderPatterns(
 
     const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
 
-    // Determine date range
+    // Determine date range. When `period` is set, the range covers the broader
+    // 4-week comparison window so byDayOfWeek/byMonth still have data to show.
     const days = options?.days ?? 30
     let rangeStart: Date
     let rangeEnd: Date
 
-    if (options?.startDate && options?.endDate) {
+    if (options?.period) {
+      const today = todayInLA()
+      rangeEnd = endOfDayLA(today)
+      const start = startOfDayLA(today)
+      // 35 days back covers 4 same-weekday comparisons + buffer for week views
+      start.setDate(start.getDate() - 35)
+      rangeStart = start
+    } else if (options?.startDate && options?.endDate) {
       rangeStart = new Date(options.startDate + "T00:00:00Z")
       rangeEnd = new Date(options.endDate + "T23:59:59.999Z")
     } else {
@@ -1948,9 +1964,15 @@ export async function getOrderPatterns(
       }
     }
 
+    const hourlyPromise = options?.period
+      ? getHourlyOrderDistributionWithComparison(storeIds, options.period)
+      : getHourlyOrderDistribution(storeIds, rangeStart, rangeEnd).then(
+          (hourly) => ({ hourly, hourlyComparison: null })
+        )
+
     // Fetch hourly data from Otter API + daily data from DB in parallel
-    const [hourly, summaries] = await Promise.all([
-      getHourlyOrderDistribution(storeIds, rangeStart, rangeEnd),
+    const [hourlyResult, summaries] = await Promise.all([
+      hourlyPromise,
       prisma.otterDailySummary.findMany({
         where: {
           storeId: { in: storeIds },
@@ -2020,11 +2042,36 @@ export async function getOrderPatterns(
         }
       })
 
-    return { hourly, byDayOfWeek, byMonth }
+    return {
+      hourly: hourlyResult.hourly,
+      hourlyComparison: hourlyResult.hourlyComparison,
+      byDayOfWeek,
+      byMonth,
+    }
   } catch (error) {
     console.error("Get order patterns error:", error)
     return null
   }
+}
+
+const HOUR_LABELS = [
+  "12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM",
+  "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM",
+  "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM",
+  "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM",
+]
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+function emptyHourly(): import("@/types/analytics").HourlyOrderPoint[] {
+  return Array.from({ length: 24 }, (_, i) => ({
+    hour: i,
+    label: HOUR_LABELS[i],
+    orderCount: 0,
+    totalSales: 0,
+    avgOrderCount: 0,
+    avgTotalSales: 0,
+  }))
 }
 
 async function getHourlyOrderDistribution(
@@ -2034,27 +2081,13 @@ async function getHourlyOrderDistribution(
 ): Promise<import("@/types/analytics").HourlyOrderPoint[]> {
   const { queryMetrics, buildCustomerOrdersBody } = await import("@/lib/otter")
 
-  // Look up Otter UUIDs for the given stores
   const otterStores = await prisma.otterStore.findMany({
     where: { storeId: { in: storeIds } },
     select: { otterStoreId: true },
   })
 
-  const HOUR_LABELS = [
-    "12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM",
-    "6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM",
-    "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM",
-    "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "11 PM",
-  ]
-
-  const emptyHourly = Array.from({ length: 24 }, (_, i) => ({
-    hour: i,
-    label: HOUR_LABELS[i],
-    orderCount: 0,
-    totalSales: 0,
-  }))
-
-  if (otterStores.length === 0) return emptyHourly
+  const hourly = emptyHourly()
+  if (otterStores.length === 0) return hourly
 
   const otterIds = otterStores.map((s) => s.otterStoreId)
   const body = buildCustomerOrdersBody(otterIds, rangeStart, rangeEnd)
@@ -2062,7 +2095,6 @@ async function getHourlyOrderDistribution(
   try {
     const rows = await queryMetrics(body)
 
-    const hourly = [...emptyHourly]
     for (const row of rows) {
       const epochMs = row.reference_time_local_without_tz as number | null
       if (epochMs == null) continue
@@ -2074,7 +2106,6 @@ async function getHourlyOrderDistribution(
       }
     }
 
-    // Round sales
     for (const h of hourly) {
       h.totalSales = Math.round(h.totalSales * 100) / 100
     }
@@ -2082,7 +2113,275 @@ async function getHourlyOrderDistribution(
     return hourly
   } catch (error) {
     console.error("Failed to fetch hourly order data from Otter:", error)
-    return emptyHourly
+    return hourly
+  }
+}
+
+/** Current LA hour (0–23). */
+function getCurrentLAHour(): number {
+  return parseInt(
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      hour: "numeric",
+      hour12: false,
+    })
+  )
+}
+
+/** YYYY-MM-DD `n` days before `dateStr` (LA-naive arithmetic via UTC noon). */
+function laDateMinusDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + "T12:00:00Z")
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
+}
+
+interface PeriodSpec {
+  currentDates: string[]              // LA YYYY-MM-DD list, ascending
+  comparisonGroups: string[][]        // 4 same-shape groups for last 4 weeks
+  hourCutoff: number | null           // hour past which the LAST current day has no data yet
+  weekdayLabel: string
+}
+
+function derivePeriodSpec(
+  period: HourlyComparisonPeriod
+): PeriodSpec {
+  const today = todayInLA()
+  const todayDow = new Date(today + "T12:00:00Z").getUTCDay()
+  const currentLAHour = getCurrentLAHour()
+
+  if (period === "today") {
+    return {
+      currentDates: [today],
+      comparisonGroups: [7, 14, 21, 28].map((n) => [laDateMinusDays(today, n)]),
+      hourCutoff: currentLAHour,
+      weekdayLabel: DAY_NAMES[todayDow],
+    }
+  }
+
+  if (period === "yesterday") {
+    const yday = laDateMinusDays(today, 1)
+    const ydayDow = new Date(yday + "T12:00:00Z").getUTCDay()
+    return {
+      currentDates: [yday],
+      comparisonGroups: [7, 14, 21, 28].map((n) => [laDateMinusDays(yday, n)]),
+      hourCutoff: null,
+      weekdayLabel: DAY_NAMES[ydayDow],
+    }
+  }
+
+  // ISO-ish: Monday is week start. dow=0(Sun) → 6 days since Monday.
+  const daysSinceMonday = (todayDow + 6) % 7
+
+  if (period === "this-week") {
+    const monday = laDateMinusDays(today, daysSinceMonday)
+    const currentDates = Array.from({ length: daysSinceMonday + 1 }, (_, i) =>
+      laDateMinusDays(monday, -i)
+    )
+    const comparisonGroups = [1, 2, 3, 4].map((wk) =>
+      currentDates.map((d) => laDateMinusDays(d, wk * 7))
+    )
+    return {
+      currentDates,
+      comparisonGroups,
+      hourCutoff: currentLAHour,
+      weekdayLabel:
+        currentDates.length === 1
+          ? DAY_NAMES[1]
+          : `Mon–${DAY_NAMES[todayDow]}`,
+    }
+  }
+
+  // last-week: previous full Mon–Sun.
+  const lastMonday = laDateMinusDays(today, daysSinceMonday + 7)
+  const currentDates = Array.from({ length: 7 }, (_, i) =>
+    laDateMinusDays(lastMonday, -i)
+  )
+  const comparisonGroups = [1, 2, 3, 4].map((wk) =>
+    currentDates.map((d) => laDateMinusDays(d, wk * 7))
+  )
+  return {
+    currentDates,
+    comparisonGroups,
+    hourCutoff: null,
+    weekdayLabel: "last week",
+  }
+}
+
+/**
+ * Hourly distribution + 4-week same-weekday baseline. Single Otter query covers
+ * the union range; rows are bucketed in JS into current vs comparison.
+ *
+ * Bars (`orderCount`) are avg orders-per-day at hour H over the current period.
+ * Line (`avgOrderCount`) is avg orders-per-day at hour H over the 4-week baseline.
+ * Both are normalized to "per day instance" so they're directly comparable.
+ */
+async function getHourlyOrderDistributionWithComparison(
+  storeIds: string[],
+  period: HourlyComparisonPeriod
+): Promise<{
+  hourly: import("@/types/analytics").HourlyOrderPoint[]
+  hourlyComparison:
+    | import("@/types/analytics").OrderPatternsHourlyComparison
+    | null
+}> {
+  const { queryMetrics, buildCustomerOrdersBody } = await import("@/lib/otter")
+  const spec = derivePeriodSpec(period)
+
+  const hourly = emptyHourly()
+
+  const otterStores = await prisma.otterStore.findMany({
+    where: { storeId: { in: storeIds } },
+    select: { otterStoreId: true },
+  })
+  if (otterStores.length === 0) {
+    return { hourly, hourlyComparison: null }
+  }
+  const otterIds = otterStores.map((s) => s.otterStoreId)
+
+  // Query window: earliest comparison day → end of current period
+  const allComparisonDates = spec.comparisonGroups.flat()
+  const earliestComparison = allComparisonDates.reduce(
+    (min, d) => (d < min ? d : min),
+    allComparisonDates[0] ?? spec.currentDates[0]
+  )
+  const latestCurrent = spec.currentDates[spec.currentDates.length - 1]
+  const queryStart = startOfDayLA(earliestComparison)
+  const queryEnd = endOfDayLA(latestCurrent)
+
+  // 35-day window across the 4-week baseline can exceed the default 5000-row limit.
+  const body = buildCustomerOrdersBody(otterIds, queryStart, queryEnd) as Record<
+    string,
+    unknown
+  >
+  body.limit = 50000
+
+  let rows: Awaited<ReturnType<typeof queryMetrics>>
+  try {
+    rows = await queryMetrics(body)
+  } catch (error) {
+    console.error(
+      "Failed to fetch hourly order data with comparison from Otter:",
+      error
+    )
+    return { hourly, hourlyComparison: null }
+  }
+
+  const currentDateSet = new Set(spec.currentDates)
+  const comparisonDateSet = new Set(allComparisonDates)
+  // Index each comparison date → its group index, so we can compute group totals
+  const comparisonDateToGroup = new Map<string, number>()
+  spec.comparisonGroups.forEach((group, gi) => {
+    for (const d of group) comparisonDateToGroup.set(d, gi)
+  })
+
+  // currentByHour: total orders/sales at hour H across current dates
+  const currentByHour = Array.from({ length: 24 }, () => ({ count: 0, sales: 0 }))
+  // comparisonByHour: total across all comparison day instances
+  const comparisonByHour = Array.from({ length: 24 }, () => ({ count: 0, sales: 0 }))
+
+  // For pace KPI: per-group totals (so we can avg group totals, not lump together)
+  const groupTotals = spec.comparisonGroups.map(() => 0)
+  let currentTotal = 0
+
+  // Truncation rule: the LAST day of a multi-day current period (and its
+  // matching last days in each comparison group) is partial when hourCutoff
+  // is set. Map each comparison date to whether it's the "last day" of its
+  // group, mirroring the position of latestCurrent within currentDates.
+  const lastCurrentDate = spec.currentDates[spec.currentDates.length - 1]
+  const comparisonLastDayPerGroup = spec.comparisonGroups.map(
+    (group) => group[group.length - 1]
+  )
+  const isComparisonLastDay = (date: string): boolean =>
+    comparisonLastDayPerGroup.includes(date)
+
+  for (const row of rows) {
+    const epochMs = row.reference_time_local_without_tz as number | null
+    if (epochMs == null) continue
+    const d = new Date(epochMs)
+    const hour = d.getUTCHours()
+    if (hour < 0 || hour >= 24) continue
+    const dateStr = d.toISOString().slice(0, 10)
+    const sales = (row.net_sales as number) ?? 0
+
+    if (currentDateSet.has(dateStr)) {
+      currentByHour[hour].count += 1
+      currentByHour[hour].sales += sales
+
+      // Pace numerator: truncate last current day to hourCutoff
+      if (
+        spec.hourCutoff == null ||
+        dateStr !== lastCurrentDate ||
+        hour <= spec.hourCutoff
+      ) {
+        currentTotal += 1
+      }
+    } else if (comparisonDateSet.has(dateStr)) {
+      comparisonByHour[hour].count += 1
+      comparisonByHour[hour].sales += sales
+
+      // Pace denominator: truncate last day of each comparison group symmetrically
+      if (
+        spec.hourCutoff == null ||
+        !isComparisonLastDay(dateStr) ||
+        hour <= spec.hourCutoff
+      ) {
+        const gi = comparisonDateToGroup.get(dateStr)
+        if (gi != null) groupTotals[gi] += 1
+      }
+    }
+  }
+
+  // Per-day-instance averaging for bars and line.
+  const currentInstances = spec.currentDates.length
+  const baselineInstances = allComparisonDates.length // 4 × group size
+
+  for (let h = 0; h < 24; h++) {
+    hourly[h].orderCount =
+      currentInstances > 0
+        ? Math.round((currentByHour[h].count / currentInstances) * 10) / 10
+        : 0
+    hourly[h].totalSales =
+      currentInstances > 0
+        ? Math.round((currentByHour[h].sales / currentInstances) * 100) / 100
+        : 0
+    hourly[h].avgOrderCount =
+      baselineInstances > 0
+        ? Math.round((comparisonByHour[h].count / baselineInstances) * 10) / 10
+        : 0
+    hourly[h].avgTotalSales =
+      baselineInstances > 0
+        ? Math.round((comparisonByHour[h].sales / baselineInstances) * 100) /
+          100
+        : 0
+  }
+
+  // For single-day periods, bars should display the actual count, not divided by 1.
+  // (Math is identical when currentInstances === 1, but round to int to avoid `.0`.)
+  if (currentInstances === 1) {
+    for (let h = 0; h < 24; h++) {
+      hourly[h].orderCount = currentByHour[h].count
+    }
+  }
+
+  // Pace metric.
+  const baselineWeeks = groupTotals.filter((t) => t > 0).length
+  const baselineTotal =
+    baselineWeeks > 0
+      ? groupTotals.reduce((a, b) => a + b, 0) / spec.comparisonGroups.length
+      : 0
+  const pacePct =
+    baselineTotal > 0 ? ((currentTotal - baselineTotal) / baselineTotal) * 100 : null
+
+  return {
+    hourly,
+    hourlyComparison: {
+      period,
+      currentTotal,
+      baselineTotal: Math.round(baselineTotal * 10) / 10,
+      pacePct: pacePct == null ? null : Math.round(pacePct * 10) / 10,
+      baselineWeeks,
+      weekdayLabel: spec.weekdayLabel,
+    },
   }
 }
 

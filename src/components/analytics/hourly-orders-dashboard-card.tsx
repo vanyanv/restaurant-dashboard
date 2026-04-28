@@ -18,8 +18,11 @@ import {
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { getOrderPatterns } from "@/app/actions/store-actions"
-import { todayInLA } from "@/lib/dashboard-utils"
-import type { HourlyOrderPoint } from "@/types/analytics"
+import type {
+  HourlyComparisonPeriod,
+  HourlyOrderPoint,
+  OrderPatternsHourlyComparison,
+} from "@/types/analytics"
 import { cn } from "@/lib/utils"
 
 const HourlyOrdersChart = dynamic(
@@ -47,13 +50,6 @@ interface HourlyOrdersDashboardCardProps {
   className?: string
 }
 
-function getDateStr(period: "today" | "yesterday"): string {
-  if (period === "today") return todayInLA()
-  const d = new Date(todayInLA() + "T12:00:00Z")
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
-}
-
 function getCurrentLAHour(): number {
   return parseInt(
     new Date().toLocaleString("en-US", {
@@ -64,37 +60,64 @@ function getCurrentLAHour(): number {
   )
 }
 
+const PERIOD_LABELS: Record<HourlyComparisonPeriod, string> = {
+  today: "Today",
+  yesterday: "Yday",
+  "this-week": "Wk",
+  "last-week": "Last Wk",
+}
+
+const PACE_LABELS: Record<HourlyComparisonPeriod, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  "this-week": "This week",
+  "last-week": "Last week",
+}
+
+function formatPace(pct: number): string {
+  const sign = pct > 0 ? "+" : ""
+  return `${sign}${pct.toFixed(0)}%`
+}
+
 export function HourlyOrdersDashboardCard({
   stores,
   className,
 }: HourlyOrdersDashboardCardProps) {
   const [hourlyData, setHourlyData] = useState<HourlyOrderPoint[] | null>(null)
+  const [comparison, setComparison] =
+    useState<OrderPatternsHourlyComparison | null>(null)
   const [selectedStore, setSelectedStore] = useState("all")
-  const [period, setPeriod] = useState<"today" | "yesterday">("today")
+  const [period, setPeriod] = useState<HourlyComparisonPeriod>("today")
   const [isPending] = useTransition()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
     const storeId = selectedStore === "all" ? undefined : selectedStore
-    const dateStr = getDateStr(period)
 
-    getOrderPatterns(storeId, { startDate: dateStr, endDate: dateStr })
-      .then((result) => setHourlyData(result?.hourly ?? null))
+    getOrderPatterns(storeId, { period })
+      .then((result) => {
+        setHourlyData(result?.hourly ?? null)
+        setComparison(result?.hourlyComparison ?? null)
+      })
       .finally(() => setLoading(false))
   }, [period, selectedStore])
 
-  const handleStoreChange = (value: string) => {
-    setSelectedStore(value)
-  }
-
   const isLoading = loading || isPending
 
+  // Slice to the current LA hour only for "today" (matches the prior behavior
+  // of not showing future-hour empty bars). Other periods show all 24 hours.
+  const currentLAHour = period === "today" ? getCurrentLAHour() : null
   const chartData =
-    hourlyData && period === "today"
-      ? hourlyData.slice(0, getCurrentLAHour() + 1)
+    hourlyData && currentLAHour !== null
+      ? hourlyData.slice(0, currentLAHour + 1)
       : hourlyData
   const xInterval = chartData ? Math.max(1, Math.floor(chartData.length / 6)) : 3
+
+  const showPace =
+    comparison &&
+    comparison.pacePct !== null &&
+    comparison.baselineWeeks > 0
 
   return (
     <Card className={cn("flex flex-col py-3 gap-2", className)}>
@@ -106,20 +129,30 @@ export function HourlyOrdersDashboardCard({
               type="single"
               value={period}
               onValueChange={(v) =>
-                v && setPeriod(v as "today" | "yesterday")
+                v && setPeriod(v as HourlyComparisonPeriod)
               }
               disabled={isLoading}
             >
-              <ToggleGroupItem value="today" className="h-6 px-2 text-xs">
-                Today
-              </ToggleGroupItem>
-              <ToggleGroupItem value="yesterday" className="h-6 px-2 text-xs">
-                Yday
-              </ToggleGroupItem>
+              {(
+                [
+                  "today",
+                  "yesterday",
+                  "this-week",
+                  "last-week",
+                ] as const
+              ).map((p) => (
+                <ToggleGroupItem
+                  key={p}
+                  value={p}
+                  className="h-6 px-2 text-xs"
+                >
+                  {PERIOD_LABELS[p]}
+                </ToggleGroupItem>
+              ))}
             </ToggleGroup>
           </div>
           {stores.length > 1 && (
-            <Select value={selectedStore} onValueChange={handleStoreChange}>
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
               <SelectTrigger className="h-7 w-[140px] text-xs">
                 <Store className="mr-1 h-3 w-3 text-muted-foreground" />
                 <SelectValue />
@@ -135,6 +168,48 @@ export function HourlyOrdersDashboardCard({
             </Select>
           )}
         </div>
+        {showPace && comparison && (
+          <div
+            className="mt-1 flex items-baseline gap-2 text-xs"
+            style={{
+              fontFamily: "var(--font-dm-sans), sans-serif",
+              fontVariantNumeric: "tabular-nums lining-nums",
+            }}
+          >
+            <span style={{ color: "var(--ink-muted)" }}>
+              {PACE_LABELS[comparison.period]}:
+            </span>
+            <span
+              style={{
+                fontWeight: 600,
+                color: "var(--ink)",
+              }}
+            >
+              {comparison.currentTotal} orders
+            </span>
+            <span
+              style={{
+                fontWeight: 600,
+                color:
+                  comparison.pacePct! > 0
+                    ? "var(--accent)"
+                    : comparison.pacePct! < 0
+                    ? "var(--subtract)"
+                    : "var(--ink-muted)",
+              }}
+            >
+              {formatPace(comparison.pacePct!)}
+            </span>
+            <span style={{ color: "var(--ink-muted)" }}>
+              vs avg {comparison.weekdayLabel}
+              {comparison.baselineWeeks < 4
+                ? ` (${comparison.baselineWeeks} wk${
+                    comparison.baselineWeeks === 1 ? "" : "s"
+                  })`
+                : " (4 wks)"}
+            </span>
+          </div>
+        )}
       </CardHeader>
       <CardContent
         className={cn(
@@ -146,8 +221,18 @@ export function HourlyOrdersDashboardCard({
           <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
             Loading...
           </div>
-        ) : chartData && chartData.some((h) => h.orderCount > 0) ? (
-          <HourlyOrdersChart chartData={chartData} xInterval={xInterval} />
+        ) : chartData &&
+          chartData.some(
+            (h) => h.orderCount > 0 || h.avgOrderCount > 0
+          ) ? (
+          <HourlyOrdersChart
+            chartData={chartData}
+            xInterval={xInterval}
+            currentLAHour={currentLAHour}
+            showAvgLine={
+              comparison !== null && comparison.baselineWeeks > 0
+            }
+          />
         ) : (
           <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
             No order data available
