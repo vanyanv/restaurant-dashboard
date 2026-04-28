@@ -139,6 +139,7 @@ model Store {
   prepTasks            PrepTask[]
   otterStores          OtterStore[]
   otterSummaries       OtterDailySummary[]
+  otterHourlySummaries OtterHourlySummary[]
   otterMenuCategories  OtterMenuCategory[]
   otterMenuItems       OtterMenuItem[]
   otterRatings         OtterRating[]
@@ -212,6 +213,22 @@ model OtterDailySummary {
   @@unique([storeId, date, platform, paymentMethod])
   @@index([storeId])
   @@index([date])
+}
+
+model OtterHourlySummary {
+  id         String   @id @default(cuid())
+  storeId    String
+  date       DateTime @db.Date // LA calendar date
+  hour       Int // 0–23, LA local hour
+  orderCount Int      @default(0)
+  netSales   Float    @default(0)
+  updatedAt  DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, hour])
+  @@index([date])
+  @@index([storeId, date])
 }
 
 model OtterMenuCategory {

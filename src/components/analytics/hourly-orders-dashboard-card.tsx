@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useTransition } from "react"
+import { useEffect, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import dynamic from "next/dynamic"
 import { Store } from "lucide-react"
 import {
@@ -17,11 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { getOrderPatterns } from "@/app/actions/store-actions"
+import { getHourlyOrderPatterns } from "@/app/actions/hourly-orders-actions"
 import type {
   HourlyComparisonPeriod,
-  HourlyOrderPoint,
-  OrderPatternsHourlyComparison,
 } from "@/types/analytics"
 import { cn } from "@/lib/utils"
 
@@ -79,31 +78,46 @@ function formatPace(pct: number): string {
   return `${sign}${pct.toFixed(0)}%`
 }
 
+const ALL_PERIODS: HourlyComparisonPeriod[] = [
+  "today",
+  "yesterday",
+  "this-week",
+  "last-week",
+]
+
 export function HourlyOrdersDashboardCard({
   stores,
   className,
 }: HourlyOrdersDashboardCardProps) {
-  const [hourlyData, setHourlyData] = useState<HourlyOrderPoint[] | null>(null)
-  const [comparison, setComparison] =
-    useState<OrderPatternsHourlyComparison | null>(null)
   const [selectedStore, setSelectedStore] = useState("all")
   const [period, setPeriod] = useState<HourlyComparisonPeriod>("today")
-  const [isPending] = useTransition()
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
+  const storeIdArg = selectedStore === "all" ? undefined : selectedStore
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["hourly-orders", selectedStore, period],
+    queryFn: () => getHourlyOrderPatterns(storeIdArg, period),
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+  })
+
+  // Prefetch the other periods on mount / store change so tab switches feel
+  // instant. Each prefetch hits the precompute table — well under 100 ms.
   useEffect(() => {
-    setLoading(true)
-    const storeId = selectedStore === "all" ? undefined : selectedStore
-
-    getOrderPatterns(storeId, { period })
-      .then((result) => {
-        setHourlyData(result?.hourly ?? null)
-        setComparison(result?.hourlyComparison ?? null)
+    for (const p of ALL_PERIODS) {
+      if (p === period) continue
+      queryClient.prefetchQuery({
+        queryKey: ["hourly-orders", selectedStore, p],
+        queryFn: () => getHourlyOrderPatterns(storeIdArg, p),
+        staleTime: 5 * 60_000,
       })
-      .finally(() => setLoading(false))
-  }, [period, selectedStore])
+    }
+  }, [selectedStore, period, queryClient, storeIdArg])
 
-  const isLoading = loading || isPending
+  const hourlyData = data?.hourly ?? null
+  const comparison = data?.hourlyComparison ?? null
 
   // Slice to the current LA hour only for "today" (matches the prior behavior
   // of not showing future-hour empty bars). Other periods show all 24 hours.
@@ -214,7 +228,7 @@ export function HourlyOrdersDashboardCard({
       <CardContent
         className={cn(
           "flex-1 pb-0",
-          isLoading && "opacity-50 pointer-events-none"
+          isFetching && !isLoading && "opacity-80 transition-opacity"
         )}
       >
         {isLoading && !hourlyData ? (
