@@ -16,6 +16,7 @@ import {
   ChefHat,
   Package,
   UtensilsCrossed,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
@@ -68,7 +69,18 @@ const NAV: NavSection[] = [
           { title: "COGS", url: "/dashboard/cogs" },
           { title: "Menu Performance", url: "/dashboard/menu" },
           { title: "Product Mix", url: "/dashboard/product-mix" },
-          { title: "AI Analytics", url: "/dashboard/ai-analytics" },
+        ],
+      },
+      {
+        title: "AI Analytics",
+        url: "/dashboard/ai-analytics",
+        icon: Sparkles,
+        items: [
+          { title: "Overview", url: "/dashboard/ai-analytics" },
+          { title: "Sales", url: "/dashboard/ai-analytics/sales" },
+          { title: "Menu", url: "/dashboard/ai-analytics/menu" },
+          { title: "COGS", url: "/dashboard/ai-analytics/cogs" },
+          { title: "Invoices", url: "/dashboard/ai-analytics/invoices" },
         ],
       },
       {
