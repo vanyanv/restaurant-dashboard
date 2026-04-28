@@ -1,0 +1,61 @@
+name: AI Analytics — Sales (every 2h)
+on:
+  schedule:
+    # Every 2 hours at :45, offset from the hourly Overview to keep cron
+    # invocations spread out.
+    - cron: '45 1-23/2 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ai-analytics-sales
+  cancel-in-progress: false
+
+jobs:
+  list-stores:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.fetch.outputs.ids }}
+    steps:
+      - id: fetch
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          payload=$(curl -fsSL "$APP_URL/api/cron/ai-analytics/stores" \
+            -H "Authorization: Bearer $CRON_SECRET" --max-time 30)
+          ids=$(echo "$payload" | jq -c '[.stores[].id]')
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+
+  per-store:
+    needs: list-stores
+    if: needs.list-stores.outputs.ids != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
+    steps:
+      - env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          STORE_ID: ${{ matrix.storeId }}
+        run: |
+          response=$(curl -fsSL -X POST \
+            "$APP_URL/api/cron/ai-analytics/sales?storeId=$STORE_ID" \
+            -H "Authorization: Bearer $CRON_SECRET" --max-time 295)
+          echo "$response" | jq .
+
+  rollup:
+    needs: list-stores
+    if: needs.list-stores.outputs.ids != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -fsSL -X POST \
+            "$APP_URL/api/cron/ai-analytics/sales?scope=all" \
+            -H "Authorization: Bearer $CRON_SECRET" --max-time 295)
+          echo "$response" | jq .

@@ -1,0 +1,29 @@
+name: AI Analytics — Forecast Reconciliation (daily)
+on:
+  schedule:
+    # Daily at 08:00 UTC, after morning cogs-refresh (07:00) and cogs-audit
+    # (07:30) have settled. Compares closed-window forecasts against actuals
+    # and writes back residuals so the next forecast prompt self-calibrates.
+    - cron: '0 8 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ai-analytics-forecast-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -fsSL -X POST \
+            "$APP_URL/api/cron/ai-analytics/forecast-reconcile" \
+            -H "Authorization: Bearer $CRON_SECRET" --max-time 295)
+          echo "$response" | jq .
+          echo "### Forecast reconciliation" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$response" | jq . >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

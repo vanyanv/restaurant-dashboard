@@ -31,19 +31,56 @@ enum CogsStatus {
   MISSING_COST
 }
 
+/// Which sub-route of the AI analytics surface this insight/run belongs to.
+/// `OVERVIEW` is the landing page; `SALES`, `MENU`, `COGS`, `INVOICES` are the
+/// four domain dropdowns.
+enum AiAnalyticsRoute {
+  OVERVIEW
+  SALES
+  MENU
+  COGS
+  INVOICES
+}
+
+/// `STORE` rows are pinned to a specific Store via `storeId`; `ALL` rows are
+/// the network-wide rollup with `storeId = null`.
+enum AiAnalyticsScope {
+  STORE
+  ALL
+}
+
+/// Lifecycle of a run. `OK` = generator + validator + critic all passed; the
+/// `AiInsight` rows for this run are renderable. `PARTIAL` = some insights
+/// were dropped by the critic but the run still produced output. `FAILED` =
+/// validator rejected twice or the LLM call errored; the page renders a
+/// "data unavailable" placeholder for the affected scope.
+enum AiAnalyticsRunStatus {
+  OK
+  PARTIAL
+  FAILED
+}
+
+/// Per-insight severity used for sorting and the "store of concern" callout.
+/// Set by the critic during the validation pass.
+enum AiInsightSeverity {
+  INFO
+  WATCH
+  ALERT
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  name          String
-  role          Role
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Profile
-  phone         String?
-  avatarUrl     String?
-  timezone      String    @default("America/New_York")
+  phone     String?
+  avatarUrl String?
+  timezone  String  @default("America/New_York")
 
   // Notification standing orders
   notifyInvoices     Boolean @default(true)
@@ -51,7 +88,7 @@ model User {
   notifyAnomaly      Boolean @default(true)
 
   // Relations
-  ownedStores          Store[]   @relation("StoreOwner")
+  ownedStores          Store[]               @relation("StoreOwner")
   invoices             Invoice[]
   recipes              Recipe[]
   canonicalIngredients CanonicalIngredient[]
@@ -61,23 +98,23 @@ model User {
 }
 
 model Store {
-  id          String    @id @default(cuid())
-  name        String
-  address     String?
-  phone       String?
-  ownerId     String
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  phone     String?
+  ownerId   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Yelp integration fields
-  yelpBusinessId   String?   // Yelp's unique business ID
-  yelpRating       Float?    // 1-5 star rating
-  yelpReviewCount  Int?      // Total number of reviews
-  yelpUrl          String?   // Link to Yelp business page
-  yelpUpdatedAt    DateTime? // Last time Yelp data was fetched
-  yelpSearchTerm   String?   // Store name + address used for search
-  yelpLastSearch   DateTime? // Prevent excessive API calls
+  yelpBusinessId  String? // Yelp's unique business ID
+  yelpRating      Float? // 1-5 star rating
+  yelpReviewCount Int? // Total number of reviews
+  yelpUrl         String? // Link to Yelp business page
+  yelpUpdatedAt   DateTime? // Last time Yelp data was fetched
+  yelpSearchTerm  String? // Store name + address used for search
+  yelpLastSearch  DateTime? // Prevent excessive API calls
 
   // Fixed cost inputs for P&L (monthly figures; converted per period when displayed)
   fixedMonthlyLabor    Float?
@@ -92,22 +129,25 @@ model Store {
   // Per-store COGS target as a percent (e.g. 28.5 for 28.5%). Drives the
   // /dashboard/cogs target band and the "vs target" KPI. Nullable so existing
   // stores remain valid until set via the topbar chip.
-  targetCogsPct          Float?
+  targetCogsPct Float?
 
   // Relations
-  owner           User      @relation("StoreOwner", fields: [ownerId], references: [id])
-  prepTasks       PrepTask[]
-  otterStores     OtterStore[]
-  otterSummaries      OtterDailySummary[]
-  otterMenuCategories OtterMenuCategory[]
-  otterMenuItems      OtterMenuItem[]
-  otterRatings        OtterRating[]
+  owner                User                  @relation("StoreOwner", fields: [ownerId], references: [id])
+  prepTasks            PrepTask[]
+  otterStores          OtterStore[]
+  otterSummaries       OtterDailySummary[]
+  otterMenuCategories  OtterMenuCategory[]
+  otterMenuItems       OtterMenuItem[]
+  otterRatings         OtterRating[]
   invoices             Invoice[]
   ingredientAliases    IngredientAlias[]
   otterItemMappings    OtterItemMapping[]
   otterSubItemMappings OtterSubItemMapping[]
   otterOrders          OtterOrder[]
   dailyCogsItems       DailyCogsItem[]
+  aiInsights           AiInsight[]
+  aiForecastRuns       AiForecastRun[]
+  aiAnalyticsRuns      AiAnalyticsRun[]
 
   @@index([ownerId])
   @@index([yelpBusinessId])
@@ -120,7 +160,7 @@ model OtterStore {
   lastSyncAt   DateTime?
   createdAt    DateTime  @default(now())
 
-  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 }
 
 model OtterDailySummary {
@@ -164,7 +204,7 @@ model OtterDailySummary {
 
   syncedAt DateTime @default(now()) @updatedAt
 
-  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, date, platform, paymentMethod])
   @@index([storeId])
@@ -172,17 +212,17 @@ model OtterDailySummary {
 }
 
 model OtterMenuCategory {
-  id        String   @id @default(cuid())
-  storeId   String
-  date      DateTime @db.Date
-  category  String
+  id       String   @id @default(cuid())
+  storeId  String
+  date     DateTime @db.Date
+  category String
 
-  fpQuantitySold         Float @default(0)
-  fpTotalInclModifiers   Float @default(0)
-  fpTotalSales           Float @default(0)
-  tpQuantitySold         Float @default(0)
-  tpTotalInclModifiers   Float @default(0)
-  tpTotalSales           Float @default(0)
+  fpQuantitySold       Float @default(0)
+  fpTotalInclModifiers Float @default(0)
+  fpTotalSales         Float @default(0)
+  tpQuantitySold       Float @default(0)
+  tpTotalInclModifiers Float @default(0)
+  tpTotalSales         Float @default(0)
 
   syncedAt DateTime @default(now()) @updatedAt
 
@@ -193,20 +233,20 @@ model OtterMenuCategory {
 }
 
 model OtterMenuItem {
-  id        String   @id @default(cuid())
-  storeId   String
-  date      DateTime @db.Date
-  category  String
-  itemName  String
+  id       String   @id @default(cuid())
+  storeId  String
+  date     DateTime @db.Date
+  category String
+  itemName String
 
   isModifier Boolean @default(false)
 
-  fpQuantitySold         Float @default(0)
-  fpTotalInclModifiers   Float @default(0)
-  fpTotalSales           Float @default(0)
-  tpQuantitySold         Float @default(0)
-  tpTotalInclModifiers   Float @default(0)
-  tpTotalSales           Float @default(0)
+  fpQuantitySold       Float @default(0)
+  fpTotalInclModifiers Float @default(0)
+  fpTotalSales         Float @default(0)
+  tpQuantitySold       Float @default(0)
+  tpTotalInclModifiers Float @default(0)
+  tpTotalSales         Float @default(0)
 
   syncedAt DateTime @default(now()) @updatedAt
 
@@ -240,29 +280,29 @@ model OtterRating {
 }
 
 model PrepTask {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   storeId     String
   taskName    String
   description String?
   shift       Shift
-  isActive    Boolean   @default(true)
-  orderIndex  Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  isActive    Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Relations
-  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId])
 }
 
 model Invoice {
-  id              String        @id @default(cuid())
-  ownerId         String
-  storeId         String?
+  id      String  @id @default(cuid())
+  ownerId String
+  storeId String?
 
   // Source tracking
-  emailMessageId  String        @unique
+  emailMessageId  String    @unique
   emailSubject    String?
   emailReceivedAt DateTime?
   attachmentName  String?
@@ -270,14 +310,14 @@ model Invoice {
   // Extracted header
   vendorName      String
   invoiceNumber   String
-  invoiceDate     DateTime?     @db.Date
-  dueDate         DateTime?     @db.Date
+  invoiceDate     DateTime? @db.Date
+  dueDate         DateTime? @db.Date
   deliveryAddress String?
 
   // Totals
-  subtotal        Float?
-  taxAmount       Float?
-  totalAmount     Float
+  subtotal    Float?
+  taxAmount   Float?
+  totalAmount Float
 
   // Matching
   status          InvoiceStatus @default(PENDING)
@@ -294,13 +334,13 @@ model Invoice {
   pdfSize         Int?
   pdfUploadedAt   DateTime?
 
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  owner           User          @relation(fields: [ownerId], references: [id])
-  store           Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  lineItems       InvoiceLineItem[]
+  owner     User              @relation(fields: [ownerId], references: [id])
+  store     Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  lineItems InvoiceLineItem[]
 
   @@index([ownerId])
   @@index([storeId])
@@ -312,7 +352,7 @@ model Invoice {
 }
 
 model InvoiceLineItem {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   invoiceId     String
   lineNumber    Int
   sku           String?
@@ -330,7 +370,7 @@ model InvoiceLineItem {
   // Ingredient unification. Populated at sync time via (vendor, sku) match,
   // or at review-queue time by a manual confirm. Null = unmatched.
   canonicalIngredientId String?
-  matchSource           String?   // "sku" | "manual" | "alias"
+  matchSource           String? // "sku" | "manual" | "alias"
   matchedAt             DateTime?
 
   invoice             Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -355,22 +395,22 @@ model InvoiceSyncLog {
 }
 
 model Recipe {
-  id                 String   @id @default(cuid())
-  ownerId            String
-  itemName           String
-  category           String
-  servingSize        Float    @default(1)
-  notes              String?
-  foodCostOverride   Float?
-  isSellable         Boolean  @default(true)
-  isAiGenerated      Boolean  @default(false)
-  isConfirmed        Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(cuid())
+  ownerId          String
+  itemName         String
+  category         String
+  servingSize      Float    @default(1)
+  notes            String?
+  foodCostOverride Float?
+  isSellable       Boolean  @default(true)
+  isAiGenerated    Boolean  @default(false)
+  isConfirmed      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  owner              User               @relation(fields: [ownerId], references: [id])
+  owner                User                  @relation(fields: [ownerId], references: [id])
   ingredients          RecipeIngredient[]
-  usedInIngredients    RecipeIngredient[] @relation("ComponentRecipe")
+  usedInIngredients    RecipeIngredient[]    @relation("ComponentRecipe")
   otterItemMappings    OtterItemMapping[]
   otterSubItemMappings OtterSubItemMapping[]
   dailyCogsItems       DailyCogsItem[]
@@ -393,9 +433,9 @@ model RecipeIngredient {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  recipe               Recipe               @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  canonicalIngredient  CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: Restrict)
-  componentRecipe      Recipe?              @relation("ComponentRecipe", fields: [componentRecipeId], references: [id], onDelete: Restrict)
+  recipe              Recipe               @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: Restrict)
+  componentRecipe     Recipe?              @relation("ComponentRecipe", fields: [componentRecipeId], references: [id], onDelete: Restrict)
 
   @@index([recipeId])
   @@index([canonicalIngredientId])
@@ -423,11 +463,11 @@ model CanonicalIngredient {
   costLocked        Boolean   @default(false)
   costUpdatedAt     DateTime?
 
-  owner              User                 @relation(fields: [ownerId], references: [id])
-  aliases            IngredientAlias[]
-  recipeIngredients  RecipeIngredient[]
-  invoiceLineItems   InvoiceLineItem[]
-  skuMatches         IngredientSkuMatch[]
+  owner             User                 @relation(fields: [ownerId], references: [id])
+  aliases           IngredientAlias[]
+  recipeIngredients RecipeIngredient[]
+  invoiceLineItems  InvoiceLineItem[]
+  skuMatches        IngredientSkuMatch[]
 
   @@unique([ownerId, name])
   @@index([ownerId])
@@ -467,8 +507,8 @@ model IngredientAlias {
   toUnit                String
   createdAt             DateTime @default(now())
 
-  store                Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  canonicalIngredient  CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: SetNull)
+  store               Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient? @relation(fields: [canonicalIngredientId], references: [id], onDelete: SetNull)
 
   @@unique([storeId, rawName])
   @@index([storeId, canonicalName])
@@ -485,8 +525,8 @@ model OtterItemMapping {
   confirmedAt   DateTime @default(now())
   createdAt     DateTime @default(now())
 
-  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  recipe        Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, otterItemName])
   @@index([storeId])
@@ -500,15 +540,15 @@ model OtterItemMapping {
 /// "Add Pickle" vs "Add Pickles" with distinct Otter SKUs) can share one
 /// recipe. Drives modifier cost in the daily COGS walker.
 model OtterSubItemMapping {
-  id                String   @id @default(cuid())
-  storeId           String
+  id               String   @id @default(cuid())
+  storeId          String
   /// Stable Otter sub-item SKU — our primary key. Every OtterOrderSubItem has one.
-  skuId             String
+  skuId            String
   /// Last seen display name for this SKU (for UI). Not used as identity.
-  otterSubItemName  String
-  recipeId          String
-  confirmedAt       DateTime @default(now())
-  createdAt         DateTime @default(now())
+  otterSubItemName String
+  recipeId         String
+  confirmedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
   recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
@@ -536,10 +576,12 @@ model DailyCogsItem {
   unitCost     Float?
   lineCost     Float      @default(0)
   status       CogsStatus
-  /** True when the recipe cost walk flagged at least one line as uncosted
-   *  (missing canonical cost or unit-conversion failure). `status` can still
-   *  be COSTED if other lines costed fine — `partialCost` says the total is
-   *  an understatement. */
+  /**
+   * True when the recipe cost walk flagged at least one line as uncosted
+   * (missing canonical cost or unit-conversion failure). `status` can still
+   * be COSTED if other lines costed fine — `partialCost` says the total is
+   * an understatement.
+   */
   partialCost  Boolean    @default(false)
   computedAt   DateTime   @default(now())
 
@@ -552,8 +594,8 @@ model DailyCogsItem {
 }
 
 model OtterOrder {
-  id                 String   @id @default(cuid())
-  otterOrderId       String   @unique
+  id                 String    @id @default(cuid())
+  otterOrderId       String    @unique
   externalDisplayId  String?
   storeId            String
   otterStoreId       String
@@ -562,17 +604,17 @@ model OtterOrder {
   fulfillmentMode    String?
   orderStatus        String?
   acceptanceStatus   String?
-  subtotal           Float    @default(0)
-  tax                Float    @default(0)
-  tip                Float    @default(0)
-  commission         Float    @default(0)
-  discount           Float    @default(0)
-  total              Float    @default(0)
+  subtotal           Float     @default(0)
+  tax                Float     @default(0)
+  tip                Float     @default(0)
+  commission         Float     @default(0)
+  discount           Float     @default(0)
+  total              Float     @default(0)
   customerName       String?
   detailsFetchedAt   DateTime?
-  syncedAt           DateTime @default(now()) @updatedAt
+  syncedAt           DateTime  @default(now()) @updatedAt
 
-  store Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items OtterOrderItem[]
 
   @@index([storeId, referenceTimeLocal])
@@ -581,14 +623,14 @@ model OtterOrder {
 }
 
 model OtterOrderItem {
-  id        String @id @default(cuid())
-  orderId   String
-  skuId     String
-  name      String
-  quantity  Float
-  price     Float  @default(0)
+  id       String @id @default(cuid())
+  orderId  String
+  skuId    String
+  name     String
+  quantity Float
+  price    Float  @default(0)
 
-  order    OtterOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order    OtterOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   subItems OtterOrderSubItem[]
 
   @@index([orderId])
@@ -608,4 +650,104 @@ model OtterOrderSubItem {
 
   @@index([orderItemId])
   @@index([skuId])
+}
+
+/// A single insight generated by the AI analytics pipeline. One row per insight
+/// per (route, scope) cron run. Memory layer reads the trailing 14d of rows for
+/// the same (route, storeId) into the next generator prompt so the model
+/// escalates recurring issues and avoids repeating itself.
+///
+/// `storeId` is null when `scope = ALL` (the network rollup). The compound
+/// index supports the page-load query path: "give me the latest insights for
+/// this route and the user's selected store (or rollup)".
+model AiInsight {
+  id            String            @id @default(cuid())
+  runId         String
+  route         AiAnalyticsRoute
+  scope         AiAnalyticsScope
+  storeId       String?
+  /// Short headline shown as the card title.
+  headline      String
+  /// Full prose body / recommendation. Already validated against source data
+  /// and reviewed by the critic before being persisted.
+  body          String
+  severity      AiInsightSeverity @default(INFO)
+  /// Estimated $ impact per period (for ranking and the materiality threshold
+  /// applied by the critic). Null when the insight is qualitative.
+  impactDollars Float?
+  /// Compact JSON sidecar holding structured fields the page may render
+  /// (e.g. line items, charts, comparison tables). Schema is route-specific.
+  payload       Json?
+  generatedAt   DateTime          @default(now())
+
+  run   AiAnalyticsRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  store Store?         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([route, scope, storeId, generatedAt])
+  @@index([runId])
+  @@index([storeId, generatedAt])
+}
+
+/// One row per AI demand/sales prediction. After the target window closes,
+/// the daily reconciliation job writes back `actualValue` and `errorPct` so
+/// the next forecast run can self-calibrate per (storeId, target).
+///
+/// `storeId` is required — forecasts are always store-scoped (ingredient
+/// usage patterns differ across kitchens).
+model AiForecastRun {
+  id                String    @id @default(cuid())
+  storeId           String
+  /// Stable identifier for the thing being predicted (e.g. canonical
+  /// ingredient name, menu item slug). The next-run prompt uses this to
+  /// look up the most recent residual.
+  target            String
+  /// Predicted quantity for the target window, in `unit`.
+  predictedValue    Float
+  unit              String
+  confidence        String? // "high" | "medium" | "low"
+  /// Inclusive start / exclusive end of the window the prediction covers.
+  targetWindowStart DateTime
+  targetWindowEnd   DateTime
+  /// Set by the reconciliation job after `targetWindowEnd` passes.
+  actualValue       Float?
+  errorPct          Float?
+  reconciledAt      DateTime?
+  generatedAt       DateTime  @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, target, generatedAt])
+  @@index([targetWindowEnd, reconciledAt])
+}
+
+/// Audit log for every AI analytics cron invocation. Captures timing, status,
+/// model identifiers, retry count from the validator, and any error so we can
+/// debug failed runs and verify Groq budget usage.
+model AiAnalyticsRun {
+  id               String               @id @default(cuid())
+  route            AiAnalyticsRoute
+  scope            AiAnalyticsScope
+  storeId          String?
+  status           AiAnalyticsRunStatus
+  /// Number of generator retries triggered by validator failures (0–1 in
+  /// the steady-state pipeline; 2 means we wrote a placeholder).
+  retryCount       Int                  @default(0)
+  generatorModel   String?
+  criticModel      String?
+  promptTokens     Int?
+  completionTokens Int?
+  /// Number of insights persisted from this run (post-critic-pass).
+  insightCount     Int                  @default(0)
+  /// Number of insights the critic dropped for being unsupported, immaterial,
+  /// or non-actionable.
+  droppedByCritic  Int                  @default(0)
+  errorDetails     String?
+  startedAt        DateTime             @default(now())
+  completedAt      DateTime?
+
+  store    Store?      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  insights AiInsight[]
+
+  @@index([route, scope, storeId, startedAt])
+  @@index([startedAt])
 }
