@@ -46,9 +46,9 @@ type ComputedRow = {
 export async function recomputeDailyCogsForDay(input: {
   storeId: string
   date: Date
-  ownerId: string
+  accountId: string
 }): Promise<{ rowsUpserted: number; rowsDeleted: number }> {
-  const { storeId, ownerId } = input
+  const { storeId, accountId } = input
   const date = startOfDayUTC(input.date)
 
   const dayEnd = new Date(date)
@@ -76,7 +76,7 @@ export async function recomputeDailyCogsForDay(input: {
       select: { otterItemName: true, recipeId: true },
     }),
     prisma.recipe.findMany({
-      where: { ownerId },
+      where: { accountId },
       select: { id: true, itemName: true },
     }),
   ])
@@ -274,7 +274,7 @@ export async function recomputeDailyCogsForRange(input: {
   storeId: string
   startDate: Date
   endDate: Date
-  ownerId: string
+  accountId: string
 }): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number }> {
   const start = startOfDayUTC(input.startDate)
   const end = startOfDayUTC(input.endDate)
@@ -291,7 +291,7 @@ export async function recomputeDailyCogsForRange(input: {
     const result = await recomputeDailyCogsForDay({
       storeId: input.storeId,
       date: cursor,
-      ownerId: input.ownerId,
+      accountId: input.accountId,
     })
     daysProcessed++
     rowsUpserted += result.rowsUpserted

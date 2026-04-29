@@ -8,6 +8,18 @@ const prisma = new PrismaClient({ adapter })
 async function main() {
   console.log('🌱 Starting database seed...')
 
+  // Default Account — every seeded user/store/etc. lives under this single
+  // tenant. Matches the id used by the manual migration backfill so the
+  // local dev DB and any production-restored DB end up with the same row.
+  const defaultAccount = await prisma.account.upsert({
+    where: { id: 'acc_default_chrisneddys' },
+    update: {},
+    create: {
+      id: 'acc_default_chrisneddys',
+      name: "Chris Neddy's"
+    }
+  })
+
   // Create demo owner user
   const hashedPassword = await bcrypt.hash('demo123', 10)
 
@@ -18,7 +30,8 @@ async function main() {
       email: 'demo@restaurantos.com',
       password: hashedPassword,
       name: 'Mario Rossi',
-      role: 'OWNER'
+      role: 'OWNER',
+      accountId: defaultAccount.id
     }
   })
 
@@ -58,7 +71,8 @@ async function main() {
           name: storeData.name,
           address: storeData.address,
           phone: storeData.phone,
-          ownerId: owner.id
+          ownerId: owner.id,
+          accountId: owner.accountId
         }
       })
 

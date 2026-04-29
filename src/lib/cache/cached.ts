@@ -5,10 +5,10 @@ import { getRedis } from "./redis"
  *
  * Usage:
  *   await cached(
- *     `pnl:owner:${ownerId}:range:${range}`,
- *     300,                          // TTL in seconds
- *     ["pnl", `owner:${ownerId}`],  // tags this key belongs to
- *     () => loadPnLUncached(...),   // loader; runs on miss
+ *     `pnl:account:${accountId}:range:${range}`,
+ *     300,                              // TTL in seconds
+ *     ["pnl", `account:${accountId}`],  // tags this key belongs to
+ *     () => loadPnLUncached(...),       // loader; runs on miss
  *   )
  *
  * Each tag is backed by a Redis Set named `tag:{tag}` whose members are

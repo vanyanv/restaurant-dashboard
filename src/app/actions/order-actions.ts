@@ -52,7 +52,7 @@ export async function getOrdersList(
   }
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     select: { id: true, name: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -198,7 +198,7 @@ export async function getOrderDetail(
   if (!session?.user) return null
 
   const order = await prisma.otterOrder.findFirst({
-    where: { id: orderId, store: { ownerId: session.user.id } },
+    where: { id: orderId, store: { accountId: session.user.accountId } },
     include: {
       store: { select: { name: true } },
       items: {
@@ -257,7 +257,7 @@ export async function refetchOrderDetail(
   if (!session?.user) return { ok: false, message: "Unauthorized" }
 
   const order = await prisma.otterOrder.findFirst({
-    where: { id: orderId, store: { ownerId: session.user.id } },
+    where: { id: orderId, store: { accountId: session.user.accountId } },
     select: { id: true, otterOrderId: true },
   })
   if (!order) return { ok: false, message: "Not found" }

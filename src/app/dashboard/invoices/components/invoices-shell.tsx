@@ -20,11 +20,11 @@ import {
 import { resolvePeriod, type InvoiceFilters } from "./sections/data"
 
 interface InvoicesShellProps {
-  userId: string
+  accountId: string
   filters: InvoiceFilters
 }
 
-export function InvoicesShell({ userId, filters }: InvoicesShellProps) {
+export function InvoicesShell({ accountId, filters }: InvoicesShellProps) {
   const currentStore = filters.storeId ?? "all"
   const resolved = resolvePeriod(filters.period, filters.startDate, filters.endDate)
 
@@ -40,7 +40,7 @@ export function InvoicesShell({ userId, filters }: InvoicesShellProps) {
         }
       >
         <Suspense fallback={<Skeleton className="h-8 w-[160px] rounded-md" />}>
-          <InvoicesTopbarStoreFilter userId={userId} current={currentStore} />
+          <InvoicesTopbarStoreFilter accountId={accountId} current={currentStore} />
         </Suspense>
         <Suspense fallback={<Skeleton className="h-8 w-20 rounded-md" />}>
           <InvoicesTopbarSyncButton />

@@ -63,11 +63,12 @@ export async function createStore(formData: FormData) {
       data: {
         ...validatedData,
         ownerId: session.user.id,
+        accountId: session.user.accountId,
         isActive: true,
       },
     })
 
-    invalidateOwnerStoreCache(session.user.id)
+    invalidateOwnerStoreCache(session.user.accountId)
     revalidatePath("/dashboard")
     return { success: true, store }
   } catch (error) {
@@ -89,7 +90,7 @@ export async function getStores() {
 
     const stores = await prisma.store.findMany({
       where: {
-        ownerId: session.user.id,
+        accountId: session.user.accountId,
         isActive: true
       },
       orderBy: { createdAt: 'desc' }
@@ -108,12 +109,12 @@ export async function getOtterAnalytics(
 ): Promise<import("@/types/analytics").StoreAnalyticsData | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return null
-  const ownerId = session.user.id
+  const accountId = session.user.accountId
 
   return cached(
-    `otter:owner:${ownerId}:${stableKey({ storeId, ...(options ?? {}) })}`,
+    `otter:account:${accountId}:${stableKey({ storeId, ...(options ?? {}) })}`,
     300,
-    ["otter", `owner:${ownerId}`],
+    ["otter", `account:${accountId}`],
     async () => {
   try {
     const stores = await getStores()
@@ -462,12 +463,12 @@ export async function getDashboardAnalytics(
 ): Promise<import("@/types/analytics").DashboardData | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return null
-  const ownerId = session.user.id
+  const accountId = session.user.accountId
 
   return cached(
-    `dash:owner:${ownerId}:${stableKey(options ?? {})}`,
+    `dash:account:${accountId}:${stableKey(options ?? {})}`,
     300,
-    ["dash", `owner:${ownerId}`],
+    ["dash", `account:${accountId}`],
     async () => {
   try {
     const stores = await getStores()
@@ -1427,7 +1428,7 @@ export async function getStoreById(storeId: string) {
     const store = await prisma.store.findFirst({
       where: {
         id: storeId,
-        ownerId: session.user.id,
+        accountId: session.user.accountId,
       },
     })
 
@@ -1485,7 +1486,7 @@ export async function updateStore(storeId: string, formData: FormData) {
     const existingStore = await prisma.store.findFirst({
       where: { 
         id: storeId,
-        ownerId: session.user.id
+        accountId: session.user.accountId
       }
     })
 
@@ -1498,7 +1499,7 @@ export async function updateStore(storeId: string, formData: FormData) {
       data: validatedData,
     })
 
-    invalidateOwnerStoreCache(session.user.id)
+    invalidateOwnerStoreCache(session.user.accountId)
     revalidatePath("/dashboard/stores")
     revalidatePath(`/dashboard/stores/${storeId}`)
     return { success: true, store: updatedStore }
@@ -1527,7 +1528,7 @@ export async function deleteStore(storeId: string) {
     const existingStore = await prisma.store.findFirst({
       where: {
         id: storeId,
-        ownerId: session.user.id
+        accountId: session.user.accountId
       },
     })
 
@@ -1541,7 +1542,7 @@ export async function deleteStore(storeId: string) {
       data: { isActive: false }
     })
 
-    invalidateOwnerStoreCache(session.user.id)
+    invalidateOwnerStoreCache(session.user.accountId)
     revalidatePath("/dashboard/stores")
     revalidatePath("/dashboard")
     return { success: true }
@@ -1567,7 +1568,7 @@ export async function toggleStoreStatus(storeId: string) {
     const store = await prisma.store.findFirst({
       where: { 
         id: storeId,
-        ownerId: session.user.id
+        accountId: session.user.accountId
       }
     })
 
@@ -1581,7 +1582,7 @@ export async function toggleStoreStatus(storeId: string) {
       data: { isActive: !store.isActive }
     })
 
-    invalidateOwnerStoreCache(session.user.id)
+    invalidateOwnerStoreCache(session.user.accountId)
     revalidatePath("/dashboard/stores")
     revalidatePath(`/dashboard/stores/${storeId}`)
     return { success: true, store: updatedStore }
@@ -2285,7 +2286,7 @@ export async function getStorePnL(input: {
     if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
 
     const store = await prisma.store.findFirst({
-      where: { id: input.storeId, ownerId: session.user.id },
+      where: { id: input.storeId, accountId: session.user.accountId },
       select: {
         id: true,
         name: true,
@@ -2390,7 +2391,7 @@ export async function getStorePnL(input: {
     if (refillFailedPeriodIndexes.length > 0) {
       console.warn("[getStorePnL] missing DailyCogsItem rows", {
         storeId: store.id,
-        ownerId: session.user.id,
+        accountId: session.user.accountId,
         periodsMissing: refillFailedPeriodIndexes.map((i) => ({
           start: periods[i].startDate.toISOString().slice(0, 10),
           end: periods[i].endDate.toISOString().slice(0, 10),
@@ -2514,20 +2515,20 @@ export async function getAllStoresPnL(input: {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { error: "Unauthorized" }
   if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
-  const ownerId = session.user.id
+  const accountId = session.user.accountId
 
   return cached(
-    `pnl:owner:${ownerId}:${stableKey({
+    `pnl:account:${accountId}:${stableKey({
       s: input.startDate.toISOString(),
       e: input.endDate.toISOString(),
       g: input.granularity,
     })}`,
     600,
-    ["pnl", `owner:${ownerId}`],
+    ["pnl", `account:${accountId}`],
     async () => {
   try {
     const stores = await prisma.store.findMany({
-      where: { ownerId: session.user.id, isActive: true },
+      where: { accountId: session.user.accountId, isActive: true },
       select: {
         id: true,
         name: true,
@@ -2772,7 +2773,7 @@ export async function recomputeCogsForStore(input: {
       return { error: "P&L is restricted to owners" }
 
     const store = await prisma.store.findFirst({
-      where: { id: input.storeId, ownerId: session.user.id },
+      where: { id: input.storeId, accountId: session.user.accountId },
       select: { id: true },
     })
     if (!store) return { error: "Store not found" }
@@ -2787,7 +2788,7 @@ export async function recomputeCogsForStore(input: {
       storeId: store.id,
       startDate,
       endDate,
-      ownerId: session.user.id,
+      accountId: session.user.accountId,
     })
 
     revalidatePath(`/dashboard/pnl/${store.id}`)

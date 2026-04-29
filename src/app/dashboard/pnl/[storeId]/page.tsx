@@ -15,11 +15,11 @@ export default async function StorePnLPage(props: {
 
   const [store, allStores] = await Promise.all([
     prisma.store.findFirst({
-      where: { id: storeId, ownerId: session.user.id },
+      where: { id: storeId, accountId: session.user.accountId },
       select: { id: true, name: true },
     }),
     prisma.store.findMany({
-      where: { ownerId: session.user.id, isActive: true },
+      where: { accountId: session.user.accountId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   const store = await prisma.store.findFirst({
     where: { id: storeId, isActive: true },
-    select: { id: true, name: true, ownerId: true },
+    select: { id: true, name: true, accountId: true },
   })
   if (!store) {
     return NextResponse.json(
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await recomputeDailyCogsForRange({
       storeId: store.id,
-      ownerId: store.ownerId,
+      accountId: store.accountId,
       startDate,
       endDate,
     })

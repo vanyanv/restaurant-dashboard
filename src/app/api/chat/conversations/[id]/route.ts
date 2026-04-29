@@ -21,7 +21,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
   const { id } = await ctx.params
   try {
-    const detail = await getConversation(chatPrisma, session.user.id, id)
+    const detail = await getConversation(chatPrisma, session.user.accountId, id)
     return NextResponse.json({ conversation: detail })
   } catch (err) {
     if (err instanceof ConversationAccessError) {
@@ -59,7 +59,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   try {
     // Asserts ownership before we mutate.
-    await getConversation(chatPrisma, session.user.id, id)
+    await getConversation(chatPrisma, session.user.accountId, id)
     await setConversationTitle(chatPrisma, id, raw)
     return NextResponse.json({ ok: true, title: raw })
   } catch (err) {
@@ -81,7 +81,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   }
   const { id } = await ctx.params
   try {
-    await deleteConversation(chatPrisma, session.user.id, id)
+    await deleteConversation(chatPrisma, session.user.accountId, id)
     return NextResponse.json({ ok: true })
   } catch (err) {
     if (err instanceof ConversationAccessError) {

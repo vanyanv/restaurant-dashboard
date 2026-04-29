@@ -15,7 +15,7 @@ export default async function InvoiceDetailPage({
   const { id } = await params
 
   const invoice = await prisma.invoice.findFirst({
-    where: { id, ownerId: session.user.id },
+    where: { id, accountId: session.user.accountId },
     select: {
       id: true,
       vendorName: true,
@@ -59,7 +59,7 @@ export default async function InvoiceDetailPage({
   if (!invoice) notFound()
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id, isActive: true },
+    where: { accountId: session.user.accountId, isActive: true },
     select: { id: true, name: true },
   })
 

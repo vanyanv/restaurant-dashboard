@@ -41,52 +41,55 @@ const storeCache = new Map<
   { stores: OwnerStoreRow[]; expiresAt: number }
 >()
 
-/** Returns every active store owned by `ownerId`. Used to inject the store
+/** Returns every active store on `accountId`. Used to inject the store
  * list into the system prompt and to resolve "all my stores" tool calls. */
 export async function listOwnerStores(
-  ownerId: string,
+  accountId: string,
 ): Promise<OwnerStoreRow[]> {
-  const cached = storeCache.get(ownerId)
+  const cached = storeCache.get(accountId)
   if (cached && cached.expiresAt > Date.now()) return cached.stores
 
   const stores = await prisma.store.findMany({
-    where: { ownerId, isActive: true },
+    where: { accountId, isActive: true },
     select: { id: true, name: true, address: true },
     orderBy: { name: "asc" },
   })
-  storeCache.set(ownerId, {
+  storeCache.set(accountId, {
     stores,
     expiresAt: Date.now() + STORE_CACHE_TTL_MS,
   })
   return stores
 }
 
-/** Drop the cached store list for one owner. Call after store create/edit/
- * delete mutations so the chat picks up changes within the turn. */
-export function invalidateOwnerStoreCache(ownerId: string): void {
-  storeCache.delete(ownerId)
+/** Drop the cached store list for one account. Call after store create/edit/
+ * delete mutations so the chat picks up changes within the turn. The
+ * parameter is named `ownerId` for backwards compatibility with existing
+ * callers; in single-account land it is identical to the accountId for the
+ * cache lookup, but to be safe pass either consistently. */
+export function invalidateOwnerStoreCache(key: string): void {
+  storeCache.delete(key)
 }
 
 /**
- * Confirms every id in `requestedStoreIds` belongs to `ownerId`. Throws
+ * Confirms every id in `requestedStoreIds` belongs to `accountId`. Throws
  * `OwnerScopeError("STORE_NOT_OWNED", ...)` on the first mismatch — fail
  * closed, never silently drop. Returns the validated id list (deduped, in
  * the order it was passed) on success.
  *
- * If `requestedStoreIds` is empty or omitted, returns the owner's full list
+ * If `requestedStoreIds` is empty or omitted, returns the account's full list
  * — the convention is "no scope = all my stores".
  */
 export async function assertOwnerOwnsStores(
-  ownerId: string,
+  accountId: string,
   requestedStoreIds: string[] | null | undefined,
 ): Promise<string[]> {
-  if (!ownerId) {
-    throw new OwnerScopeError("UNAUTHORIZED", "missing ownerId")
+  if (!accountId) {
+    throw new OwnerScopeError("UNAUTHORIZED", "missing accountId")
   }
 
   const requested = Array.from(new Set(requestedStoreIds ?? []))
   const owned = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   const ownedSet = new Set(owned.map((s) => s.id))

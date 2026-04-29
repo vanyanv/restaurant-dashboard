@@ -14,7 +14,7 @@ export default async function AllStoresPnLPage() {
   if (session.user.role !== "OWNER") redirect("/dashboard")
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id, isActive: true },
+    where: { accountId: session.user.accountId, isActive: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   })

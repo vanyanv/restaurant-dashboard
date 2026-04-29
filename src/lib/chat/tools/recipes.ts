@@ -124,7 +124,7 @@ async function loadRecipeById(
   id: string,
 ): Promise<RecipePayload | null> {
   return ctx.prisma.recipe.findFirst({
-    where: { id, ownerId: ctx.ownerId },
+    where: { id, accountId: ctx.accountId },
     select: recipeSelect,
   })
 }
@@ -279,11 +279,11 @@ export const searchRecipes: ChatTool<typeof searchParams, RecipeSearchRow[]> = {
               (1 - (e.embedding <=> $1::vector))::float8 AS score
          FROM "RecipeEmbedding" e
          JOIN "Recipe" r ON r.id = e."recipeId"
-        WHERE e."ownerId" = $2
+        WHERE e."accountId" = $2
         ORDER BY e.embedding <=> $1::vector
         LIMIT $3`,
       lit,
-      ctx.ownerId,
+      ctx.accountId,
       args.limit ?? 10,
     )
 
@@ -318,7 +318,7 @@ export const getRecipeByName: ChatTool<typeof byNameParams, RecipeResult | null>
   async execute(args, ctx) {
     const matches = await ctx.prisma.recipe.findMany({
       where: {
-        ownerId: ctx.ownerId,
+        accountId: ctx.accountId,
         itemName: { equals: args.name, mode: "insensitive" },
         ...(args.category
           ? { category: { equals: args.category, mode: "insensitive" } }
@@ -395,7 +395,7 @@ export const getMenuMargin: ChatTool<typeof marginParams, MenuMarginResult> = {
         })()
 
     const recipe = await ctx.prisma.recipe.findFirst({
-      where: { id: args.recipeId, ownerId: ctx.ownerId },
+      where: { id: args.recipeId, accountId: ctx.accountId },
       select: { id: true, itemName: true, category: true, foodCostOverride: true },
     })
     if (!recipe) {
@@ -545,7 +545,7 @@ export const rankRecipes: ChatTool<typeof rankParams, RankRecipesRow[]> = {
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
     const recipes = await ctx.prisma.recipe.findMany({
-      where: { ownerId: ctx.ownerId, isSellable: true },
+      where: { accountId: ctx.accountId, isSellable: true },
       select: { id: true, itemName: true, category: true },
     })
 
@@ -692,7 +692,7 @@ export const listRecipesByCategory: ChatTool<typeof byCategoryParams, RecipeByCa
   async execute(args, ctx) {
     const rows = await ctx.prisma.recipe.findMany({
       where: {
-        ownerId: ctx.ownerId,
+        accountId: ctx.accountId,
         category: { equals: args.category, mode: "insensitive" },
         ...(args.sellableOnly === false ? {} : { isSellable: true }),
       },

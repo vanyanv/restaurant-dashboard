@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   // Verify ownership
   const store = await prisma.store.findFirst({
-    where: { id: storeId, ownerId: session.user.id },
+    where: { id: storeId, accountId: session.user.accountId },
   })
   if (!store) {
     return NextResponse.json({ error: "Store not found" }, { status: 404 })
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
   // Get invoice products to inform the AI about available ingredients
   const invoiceWhere = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     storeId,
     invoiceDate: { gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
   }
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
   // Get existing recipes for context (owner-level)
   const existingRecipes = await prisma.recipe.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     include: { ingredients: true },
     take: 10,
   })

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const where: any = {}
 
   if (session.user.role === "OWNER") {
-    where.ownerId = session.user.id
+    where.accountId = session.user.accountId
   }
   if (storeId) where.storeId = storeId
   if (status) where.status = status as InvoiceStatus
@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest) {
   const updated = await prisma.invoice.updateMany({
     where: {
       id: { in: invoiceIds },
-      ownerId: session.user.id,
+      accountId: session.user.accountId,
     },
     data: {
       status,
@@ -102,6 +102,6 @@ export async function PATCH(request: NextRequest) {
     },
   })
 
-  await bustTags([`owner:${session.user.id}`])
+  await bustTags([`account:${session.user.accountId}`])
   return NextResponse.json({ updated: updated.count })
 }

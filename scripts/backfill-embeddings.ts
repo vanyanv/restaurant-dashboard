@@ -157,6 +157,7 @@ async function backfillInvoices(c: Client, limit: number | null) {
         select: {
           id: true,
           ownerId: true,
+          accountId: true,
           vendorName: true,
         },
       },
@@ -184,6 +185,7 @@ async function backfillInvoices(c: Client, limit: number | null) {
     lineId: string
     invoiceId: string
     ownerId: string
+    accountId: string
     text: string
     hash: string
   }> = []
@@ -205,6 +207,7 @@ async function backfillInvoices(c: Client, limit: number | null) {
       lineId: l.id,
       invoiceId: l.invoice.id,
       ownerId: l.invoice.ownerId,
+      accountId: l.invoice.accountId,
       text,
       hash,
     })
@@ -226,9 +229,9 @@ async function backfillInvoices(c: Client, limit: number | null) {
         )
         await c.query(
           `INSERT INTO "InvoiceLineEmbedding"
-             (id, "invoiceId", "invoiceLineId", "ownerId", "contentSnapshot", embedding, "createdAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5::vector, NOW())`,
-          [row.invoiceId, row.lineId, row.ownerId, row.hash, toVectorLiteral(vec)],
+             (id, "invoiceId", "invoiceLineId", "ownerId", "accountId", "contentSnapshot", embedding, "createdAt")
+           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::vector, NOW())`,
+          [row.invoiceId, row.lineId, row.ownerId, row.accountId, row.hash, toVectorLiteral(vec)],
         )
       }
       await c.query("COMMIT")
@@ -255,7 +258,7 @@ async function backfillMenu(c: Client, limit: number | null) {
   const storeIds = Array.from(new Set(grouped.map((g) => g.storeId)))
   const stores = await prisma.store.findMany({
     where: { id: { in: storeIds } },
-    select: { id: true, name: true, ownerId: true },
+    select: { id: true, name: true, ownerId: true, accountId: true },
   })
   const storeById = new Map(stores.map((s) => [s.id, s]))
 
@@ -267,6 +270,7 @@ async function backfillMenu(c: Client, limit: number | null) {
     return {
       menuItemId,
       ownerId: store.ownerId,
+      accountId: store.accountId,
       storeId: g.storeId,
       category: g.category,
       itemName: g.itemName,
@@ -308,12 +312,13 @@ async function backfillMenu(c: Client, limit: number | null) {
         )
         await c.query(
           `INSERT INTO "MenuItemEmbedding"
-             (id, "menuItemId", "ownerId", "storeId", "category", "itemName",
+             (id, "menuItemId", "ownerId", "accountId", "storeId", "category", "itemName",
               "contentSnapshot", embedding, "createdAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7::vector, NOW())`,
+           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8::vector, NOW())`,
           [
             row.menuItemId,
             row.ownerId,
+            row.accountId,
             row.storeId,
             row.category,
             row.itemName,
@@ -336,6 +341,7 @@ async function backfillRecipes(c: Client, limit: number | null) {
     select: {
       id: true,
       ownerId: true,
+      accountId: true,
       itemName: true,
       category: true,
       ingredients: {
@@ -365,6 +371,7 @@ async function backfillRecipes(c: Client, limit: number | null) {
     return {
       recipeId: r.id,
       ownerId: r.ownerId,
+      accountId: r.accountId,
       category: r.category,
       itemName: r.itemName,
       text,
@@ -405,12 +412,13 @@ async function backfillRecipes(c: Client, limit: number | null) {
         )
         await c.query(
           `INSERT INTO "RecipeEmbedding"
-             (id, "recipeId", "ownerId", "category", "itemName",
+             (id, "recipeId", "ownerId", "accountId", "category", "itemName",
               "contentSnapshot", embedding, "createdAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::vector, NOW())`,
+           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7::vector, NOW())`,
           [
             row.recipeId,
             row.ownerId,
+            row.accountId,
             row.category,
             row.itemName,
             row.hash,
@@ -432,6 +440,7 @@ async function backfillCanonicalIngredients(c: Client, limit: number | null) {
     select: {
       id: true,
       ownerId: true,
+      accountId: true,
       name: true,
       category: true,
       aliases: { select: { rawName: true } },
@@ -448,6 +457,7 @@ async function backfillCanonicalIngredients(c: Client, limit: number | null) {
     return {
       canonicalIngredientId: ci.id,
       ownerId: ci.ownerId,
+      accountId: ci.accountId,
       category: ci.category,
       name: ci.name,
       text,
@@ -489,12 +499,13 @@ async function backfillCanonicalIngredients(c: Client, limit: number | null) {
         )
         await c.query(
           `INSERT INTO "CanonicalIngredientEmbedding"
-             (id, "canonicalIngredientId", "ownerId", "category", "name",
+             (id, "canonicalIngredientId", "ownerId", "accountId", "category", "name",
               "contentSnapshot", embedding, "createdAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::vector, NOW())`,
+           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7::vector, NOW())`,
           [
             row.canonicalIngredientId,
             row.ownerId,
+            row.accountId,
             row.category,
             row.name,
             row.hash,

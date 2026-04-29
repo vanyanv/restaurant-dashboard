@@ -88,7 +88,7 @@ interface SyncResult {
  * Failures here are logged but never propagated — a flaky email path must not
  * break an otherwise-successful invoice sync.
  */
-async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string): Promise<void> {
+async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, accountId: string): Promise<void> {
   const recipient = process.env.PRICE_ALERT_EMAIL || process.env.OTTER_EMAIL
   if (!recipient) {
     console.warn("PRICE_ALERT_EMAIL / OTTER_EMAIL not set — skipping price-hike email")
@@ -119,7 +119,7 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string): P
     ? await prisma.invoiceLineItem.findMany({
         where: {
           invoice: {
-            ownerId: userId,
+            accountId,
             vendorName: { in: vendorNames },
             invoiceDate: { not: null },
           },
@@ -215,7 +215,7 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string): P
   }
 }
 
-async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResult> {
+async function runSync(emit: ProgressEmitter, userId: string, accountId: string): Promise<SyncResult> {
   const counts = { scanned: 0, created: 0, skipped: 0, errors: 0 }
 
   // ─── Phase 1: Fetch emails ───
@@ -299,7 +299,7 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
   // ─── Phase 2: Extract data from PDFs via OpenAI ───
   // Fetch stores for address matching
   const stores = await prisma.store.findMany({
-    where: { ownerId: userId, isActive: true },
+    where: { accountId, isActive: true },
     select: { id: true, address: true },
   })
 
@@ -405,6 +405,7 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
 
     return {
       ownerId: userId,
+      accountId,
       storeId: match?.storeId ?? null,
       emailMessageId: inv.messageId,
       emailSubject: inv.subject,
@@ -445,6 +446,7 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
       const created = await prisma.invoice.create({
         data: {
           ownerId: inv.ownerId,
+          accountId: inv.accountId,
           storeId: inv.storeId,
           emailMessageId: inv.emailMessageId,
           emailSubject: inv.emailSubject,
@@ -517,7 +519,7 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
   // ─── Phase 5: auto-match line items to canonical ingredients ───
   if (createdInvoiceIds.length > 0) {
     try {
-      const matchResult = await matchNewLineItems(userId, createdInvoiceIds)
+      const matchResult = await matchNewLineItems(accountId, createdInvoiceIds)
       console.log(
         `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
         `${matchResult.matchedByAlias} by alias, ${matchResult.unmatched} unmatched, ` +
@@ -531,7 +533,7 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
   // ─── Phase 6: detect price hikes vs prior orders and email the owner ───
   if (createdInvoiceIds.length > 0) {
     try {
-      await detectAndAlertPriceHikes(createdInvoiceIds, userId)
+      await detectAndAlertPriceHikes(createdInvoiceIds, userId, accountId)
     } catch (err) {
       console.error("Price-alert detection failed:", err)
     }
@@ -559,7 +561,7 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
   // Skipping the call when `created === 0` keeps idle cron runs from
   // burning a Redis round-trip every minute.
   if (counts.created > 0) {
-    await bustTags([`owner:${userId}`])
+    await bustTags([`account:${accountId}`])
   }
 
   return { message: `${message} (log: ${syncLog.id})`, ...counts }
@@ -571,12 +573,14 @@ export async function POST(request: NextRequest) {
 
   const fromCron = isCronRequest(request)
   let userId: string
+  let accountId: string
 
   if (fromCron) {
     // For cron, use the first OWNER user
-    const owner = await prisma.user.findFirst({ where: { role: "OWNER" } })
+    const owner = await prisma.user.findFirst({ where: { role: "OWNER" }, select: { id: true, accountId: true } })
     if (!owner) return NextResponse.json({ error: "No owner user found" }, { status: 500 })
     userId = owner.id
+    accountId = owner.accountId
   } else {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -586,6 +590,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Only owners can sync invoices" }, { status: 403 })
     }
     userId = session.user.id
+    accountId = session.user.accountId
   }
 
   const wantsSSE = request.headers.get("accept")?.includes("text/event-stream")
@@ -600,7 +605,7 @@ export async function POST(request: NextRequest) {
           } catch { /* client disconnected */ }
         }
         try {
-          await runSync(emit, userId)
+          await runSync(emit, userId, accountId)
         } catch (error) {
           console.error("Invoice sync error:", error)
           emit({
@@ -627,7 +632,7 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE)
   try {
-    const result = await runSync(() => {}, userId)
+    const result = await runSync(() => {}, userId, accountId)
     return NextResponse.json(result)
   } catch (error) {
     console.error("Invoice sync error:", error)

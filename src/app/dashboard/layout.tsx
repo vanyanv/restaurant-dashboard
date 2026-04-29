@@ -4,7 +4,7 @@ import { AppSidebarClient } from "@/components/app-sidebar-client"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ChatDrawerProvider } from "@/components/chat/chat-drawer-context"
 import { ChatDrawer } from "@/components/chat/chat-drawer"
-import "./editorial.css"
+import "@/styles/editorial.css"
 import "@/components/chat/chat.css"
 
 const fraunces = Fraunces({

@@ -12,7 +12,7 @@ export default async function OrdersPage() {
   const [initial, stores] = await Promise.all([
     getOrdersList({ limit: 50 }),
     prisma.store.findMany({
-      where: { ownerId: session.user.id, isActive: true },
+      where: { accountId: session.user.accountId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

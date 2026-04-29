@@ -82,7 +82,7 @@ interface SyncResult {
 async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   // Fetch all configured Otter stores
   const otterStores = await prisma.otterStore.findMany({
-    include: { store: { select: { id: true, name: true, isActive: true, ownerId: true } } },
+    include: { store: { select: { id: true, name: true, isActive: true, accountId: true } } },
   })
 
   if (otterStores.length === 0) {

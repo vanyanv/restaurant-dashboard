@@ -34,17 +34,17 @@ export async function getInvoiceSummary(options?: {
       spendByVendor: [], spendByCategory: [],
     }
   }
-  const ownerId = session.user.id
+  const accountId = session.user.accountId
 
   return cached(
-    `inv:owner:${ownerId}:${stableKey(options ?? {})}`,
+    `inv:account:${accountId}:${stableKey(options ?? {})}`,
     300,
-    ["invoices", `owner:${ownerId}`],
+    ["invoices", `account:${accountId}`],
     async () => {
   const { storeId, days, startDate, endDate } = options ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { ownerId }
+  const where: any = { accountId }
   if (storeId) where.storeId = storeId
   if (startDate && endDate) {
     where.invoiceDate = {
@@ -143,7 +143,7 @@ export async function getInvoiceList(filters?: {
   } = filters ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { ownerId: session.user.id }
+  const where: any = { accountId: session.user.accountId }
   if (storeId) where.storeId = storeId
   if (status) where.status = status
   if (vendor) {
@@ -214,7 +214,7 @@ export async function getProductAnalytics(options?: {
   const { storeId, days, startDate, endDate } = options ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invoiceWhere: any = { ownerId: session.user.id }
+  const invoiceWhere: any = { accountId: session.user.accountId }
   if (storeId) invoiceWhere.storeId = storeId
   if (startDate && endDate) {
     invoiceWhere.invoiceDate = {
@@ -313,7 +313,7 @@ export async function getInvoiceStoreBreakdown(options?: {
   sinceDate.setDate(sinceDate.getDate() - days)
 
   const baseWhere = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     invoiceDate: { gte: sinceDate },
   }
 
@@ -347,7 +347,7 @@ export async function getInvoiceStoreBreakdown(options?: {
         _sum: { totalAmount: true },
       }),
       prisma.store.findMany({
-        where: { ownerId: session.user.id, isActive: true },
+        where: { accountId: session.user.accountId, isActive: true },
         select: { id: true, name: true },
       }),
     ])
@@ -483,7 +483,7 @@ export async function getInvoiceSpendTimeline(options: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     invoiceDate: {
       gte: isoToStartOfDay(startDate),
       lte: isoToEndOfDay(endDate),

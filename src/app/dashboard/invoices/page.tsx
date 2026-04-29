@@ -23,5 +23,5 @@ export default async function InvoicesPage({
   const sp = await searchParams
   const filters = parseInvoiceFilters(sp)
 
-  return <InvoicesShell userId={session.user.id} filters={filters} />
+  return <InvoicesShell accountId={session.user.accountId} filters={filters} />
 }

@@ -52,7 +52,7 @@ export async function getProductUsageData(options?: {
 
   // Get all stores for the owner
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -62,7 +62,7 @@ export async function getProductUsageData(options?: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invoiceWhere: any = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     invoiceDate: { gte: startDate, lte: endDate },
   }
   if (storeId) invoiceWhere.storeId = storeId
@@ -98,7 +98,7 @@ export async function getProductUsageData(options?: {
       }),
       // All recipes with ingredients for the owner
       prisma.recipe.findMany({
-        where: { ownerId: session.user.id },
+        where: { accountId: session.user.accountId },
         include: {
           ingredients: {
             select: {
@@ -118,7 +118,7 @@ export async function getProductUsageData(options?: {
       // All-time line items for anomaly detection (new product check)
       prisma.invoiceLineItem.findMany({
         where: {
-          invoice: { ownerId: session.user.id },
+          invoice: { accountId: session.user.accountId },
         },
         select: {
           productName: true,
@@ -695,7 +695,7 @@ export async function getRecipes(
   if (!session?.user) return []
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -705,7 +705,7 @@ export async function getRecipes(
 
   const _unusedTargetStoreIds = targetStoreIds // eslint-disable-line @typescript-eslint/no-unused-vars
   const recipes = await prisma.recipe.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     include: {
       ingredients: {
         select: {
@@ -750,7 +750,7 @@ export async function upsertRecipe(
 
   // Verify ownership
   const store = await prisma.store.findFirst({
-    where: { id: storeId, ownerId: session.user.id },
+    where: { id: storeId, accountId: session.user.accountId },
   })
   if (!store) return null
 
@@ -758,14 +758,15 @@ export async function upsertRecipe(
     // Upsert the recipe (owner-level)
     const recipe = await tx.recipe.upsert({
       where: {
-        ownerId_itemName_category: {
-          ownerId: session.user.id,
+        accountId_itemName_category: {
+          accountId: session.user.accountId,
           itemName: data.itemName,
           category: data.category,
         },
       },
       create: {
         ownerId: session.user.id,
+        accountId: session.user.accountId,
         itemName: data.itemName,
         category: data.category,
         servingSize: data.servingSize ?? 1,
@@ -846,7 +847,7 @@ export async function deleteRecipe(recipeId: string): Promise<boolean> {
 
   // Owner-level check
   const recipe = await prisma.recipe.findFirst({
-    where: { id: recipeId, ownerId: session.user.id },
+    where: { id: recipeId, accountId: session.user.accountId },
     select: { id: true },
   })
   if (!recipe) return false
@@ -872,7 +873,7 @@ export async function upsertIngredientAlias(
 
   // Verify ownership
   const store = await prisma.store.findFirst({
-    where: { id: storeId, ownerId: session.user.id },
+    where: { id: storeId, accountId: session.user.accountId },
   })
   if (!store) return false
 
@@ -911,7 +912,7 @@ export async function getMenuItemsForRecipeBuilder(
   if (!session?.user) return []
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -937,7 +938,7 @@ export async function getMenuItemsForRecipeBuilder(
       },
     }),
     prisma.recipe.findMany({
-      where: { ownerId: session.user.id },
+      where: { accountId: session.user.accountId },
       select: { itemName: true, category: true },
     }),
   ])
@@ -1003,7 +1004,7 @@ export async function getVendorPriceTrends(options?: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invoiceWhere: any = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     invoiceDate: { gte: startDate, lte: endDate },
   }
   if (storeId) invoiceWhere.storeId = storeId
@@ -1117,7 +1118,7 @@ export async function generateDemandForecast(
   if (!session?.user) return []
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -1145,7 +1146,7 @@ export async function generateDemandForecast(
       orderBy: { date: "asc" },
     }),
     prisma.recipe.findMany({
-      where: { ownerId: session.user.id },
+      where: { accountId: session.user.accountId },
       include: { ingredients: true },
     }),
     prisma.ingredientAlias.findMany({
@@ -1155,7 +1156,7 @@ export async function generateDemandForecast(
     prisma.invoiceLineItem.findMany({
       where: {
         invoice: {
-          ownerId: session.user.id,
+          accountId: session.user.accountId,
           ...(storeId ? { storeId } : {}),
           invoiceDate: {
             gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
@@ -1318,7 +1319,7 @@ export async function generateWeeklyComparison(
   if (!session?.user) return null
 
   const stores = await prisma.store.findMany({
-    where: { ownerId: session.user.id },
+    where: { accountId: session.user.accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -1346,7 +1347,7 @@ export async function generateWeeklyComparison(
   thisSunday.setHours(23, 59, 59, 999)
 
   const invoiceWhere = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     ...(storeId ? { storeId } : {}),
   }
 

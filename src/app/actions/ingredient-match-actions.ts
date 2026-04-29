@@ -13,6 +13,12 @@ async function requireOwnerId(): Promise<string | null> {
   return session?.user?.id ?? null
 }
 
+async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  return { ownerId: session.user.id, accountId: session.user.accountId }
+}
+
 export type UnmatchedLineItemGroup = {
   /** Stable key combining vendor+sku (or vendor+productName when sku is null). */
   key: string
@@ -34,8 +40,9 @@ export type UnmatchedLineItemGroup = {
  * the long tail isn't actionable enough to pay the scan cost for.
  */
 export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return []
+  const scope = await requireScope()
+  if (!scope) return []
+  const { ownerId, accountId } = scope
 
   // Group at the DB — vendor_name on Invoice, plus sku/product_name/unit on
   // InvoiceLineItem. Pick one sample line id per group (latest by invoiceDate)
@@ -63,7 +70,7 @@ export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]
       (ARRAY_AGG(li.id ORDER BY i."invoiceDate" DESC NULLS LAST))[1] AS "sampleLineItemId"
     FROM "InvoiceLineItem" li
     JOIN "Invoice" i ON i.id = li."invoiceId"
-    WHERE i."ownerId" = ${ownerId}
+    WHERE i."accountId" = ${accountId}
       AND li."canonicalIngredientId" IS NULL
     GROUP BY i."vendorName", li.sku, li."productName", li.unit
     ORDER BY SUM(li."extendedPrice") DESC
@@ -171,8 +178,9 @@ export async function searchUnmatchedLineItems(
   query: string,
   limit: number = 20
 ): Promise<UnmatchedLineItemHit[]> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return []
+  const scope = await requireScope()
+  if (!scope) return []
+  const { ownerId, accountId } = scope
 
   const q = query.trim()
   if (!q) return []
@@ -180,7 +188,7 @@ export async function searchUnmatchedLineItems(
   const matches = await prisma.invoiceLineItem.findMany({
     where: {
       canonicalIngredientId: null,
-      invoice: { ownerId },
+      invoice: { accountId },
       productName: { contains: q, mode: "insensitive" },
     },
     orderBy: { invoice: { invoiceDate: "desc" } },
@@ -238,11 +246,12 @@ export async function confirmSkuMatch(input: {
   canonicalIngredientId?: string
   newCanonical?: { name: string; defaultUnit: string; category?: string | null }
 }): Promise<{ backfilled: number; canonicalIngredientId: string }> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const li = await prisma.invoiceLineItem.findFirst({
-    where: { id: input.lineItemId, invoice: { ownerId } },
+    where: { id: input.lineItemId, invoice: { accountId } },
     select: {
       id: true,
       sku: true,
@@ -260,6 +269,7 @@ export async function confirmSkuMatch(input: {
     const created = await prisma.canonicalIngredient.create({
       data: {
         ownerId,
+        accountId,
         name: input.newCanonical.name.trim(),
         defaultUnit: input.newCanonical.defaultUnit,
         category: input.newCanonical.category ?? null,
@@ -282,6 +292,7 @@ export async function confirmSkuMatch(input: {
       },
       create: {
         ownerId,
+        accountId,
         vendorName: vendor,
         sku: li.sku,
         canonicalIngredientId: targetCanonicalId,
@@ -296,7 +307,7 @@ export async function confirmSkuMatch(input: {
       where: {
         sku: li.sku,
         canonicalIngredientId: null,
-        invoice: { ownerId, vendorName: { equals: li.invoice.vendorName } },
+        invoice: { accountId, vendorName: { equals: li.invoice.vendorName } },
       },
       data: {
         canonicalIngredientId: targetCanonicalId,
@@ -344,7 +355,7 @@ export async function confirmSkuMatch(input: {
     where: {
       productName: li.productName,
       canonicalIngredientId: null,
-      invoice: { ownerId, storeId: li.invoice.storeId },
+      invoice: { accountId, storeId: li.invoice.storeId },
     },
     data: {
       canonicalIngredientId: targetCanonicalId,
@@ -371,8 +382,9 @@ export async function breakSkuMatch(input: {
   vendorName: string
   sku: string
 }): Promise<{ cleared: number }> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const vendor = normalizeVendorName(input.vendorName)
 
@@ -388,7 +400,7 @@ export async function breakSkuMatch(input: {
     where: {
       sku: input.sku,
       matchSource: "sku",
-      invoice: { ownerId, vendorName: { equals: input.vendorName } },
+      invoice: { accountId, vendorName: { equals: input.vendorName } },
     },
     data: {
       canonicalIngredientId: null,

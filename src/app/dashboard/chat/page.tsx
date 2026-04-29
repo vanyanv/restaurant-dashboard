@@ -12,7 +12,7 @@ export default async function ChatPage() {
   if (!session?.user) redirect("/login")
   if (session.user.role !== "OWNER") redirect("/dashboard")
 
-  const conversations = await listConversations(chatPrisma, session.user.id, 100)
+  const conversations = await listConversations(chatPrisma, session.user.accountId, 100)
 
   return (
     <ChatPageClient

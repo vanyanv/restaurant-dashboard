@@ -169,9 +169,9 @@ export const fetchSpendTimeline = cache(
     getInvoiceSpendTimeline({ storeId, startDate, endDate, granularity })
 )
 
-export const fetchStoresForUser = cache(async (userId: string) =>
+export const fetchStoresForUser = cache(async (accountId: string) =>
   prisma.store.findMany({
-    where: { ownerId: userId, isActive: true },
+    where: { accountId, isActive: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   })

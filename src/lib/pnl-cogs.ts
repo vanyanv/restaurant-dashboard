@@ -28,10 +28,10 @@ export type PeriodCogs = {
  */
 export async function computeCogsForPeriods(input: {
   storeId: string
-  ownerId: string
+  accountId: string
   periods: Period[]
 }): Promise<PeriodCogs> {
-  const { storeId, ownerId, periods } = input
+  const { storeId, accountId, periods } = input
 
   if (periods.length === 0) {
     return {
@@ -67,7 +67,7 @@ export async function computeCogsForPeriods(input: {
       select: { otterItemName: true, recipeId: true },
     }),
     prisma.recipe.findMany({
-      where: { ownerId },
+      where: { accountId },
       select: { id: true, itemName: true },
     }),
   ])

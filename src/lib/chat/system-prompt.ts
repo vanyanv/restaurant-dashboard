@@ -148,10 +148,10 @@ No em dashes. Use a period, comma, semicolon, colon, or parentheses instead. Nev
  * edits to the per-request block don't matter (it's never the prefix).
  */
 export async function buildSystemPrompt(
-  ownerId: string,
+  accountId: string,
   now: Date = new Date(),
 ): Promise<string> {
-  const stores = await listOwnerStores(ownerId)
+  const stores = await listOwnerStores(accountId)
   const storeBlock = renderStoreListForPrompt(stores)
   const today = now.toISOString().slice(0, 10)
 

@@ -22,7 +22,7 @@ export default async function StoreCogsPage(props: {
   const sp = await props.searchParams
 
   const store = await prisma.store.findFirst({
-    where: { id: storeId, ownerId: session.user.id },
+    where: { id: storeId, accountId: session.user.accountId },
     select: { id: true, name: true, targetCogsPct: true },
   })
   if (!store) notFound()

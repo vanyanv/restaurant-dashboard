@@ -3,12 +3,14 @@ import type { PrismaClient } from "@/generated/prisma/client"
 
 /**
  * Shared context every chat tool receives. The route handler resolves
- * `ownerId` from the authenticated session and passes its own `prisma`
- * client. Tools must never accept an `ownerId` from the model — every
- * scope check is rooted in this context.
+ * `ownerId` (the actor) and `accountId` (the tenant boundary used for every
+ * data filter) from the authenticated session and passes its own `prisma`
+ * client. Tools must never accept an `ownerId`/`accountId` from the model —
+ * every scope check is rooted in this context.
  */
 export interface ChatToolContext {
   ownerId: string
+  accountId: string
   prisma: PrismaClient
 }
 

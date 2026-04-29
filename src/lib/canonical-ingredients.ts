@@ -49,10 +49,11 @@ export type SeedResult = {
  * Lines without a SKU keep the existing per-store IngredientAlias fallback.
  */
 export async function seedCanonicalIngredientsFromInvoices(
-  ownerId: string
+  ownerId: string,
+  accountId: string
 ): Promise<SeedResult> {
   const lineItems = await prisma.invoiceLineItem.findMany({
-    where: { invoice: { ownerId }, canonicalIngredientId: null },
+    where: { invoice: { accountId }, canonicalIngredientId: null },
     select: {
       id: true,
       sku: true,
@@ -64,7 +65,7 @@ export async function seedCanonicalIngredientsFromInvoices(
   })
 
   const existingSkuMatches = await prisma.ingredientSkuMatch.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { vendorName: true, sku: true, canonicalIngredientId: true },
   })
   const skuIndex = new Map<string, string>(
@@ -72,7 +73,7 @@ export async function seedCanonicalIngredientsFromInvoices(
   )
 
   const existingAliases = await prisma.ingredientAlias.findMany({
-    where: { store: { ownerId } },
+    where: { store: { accountId } },
     select: { storeId: true, rawName: true },
   })
   const seenAlias = new Set(
@@ -80,7 +81,7 @@ export async function seedCanonicalIngredientsFromInvoices(
   )
 
   const existingCanonicals = await prisma.canonicalIngredient.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true, name: true },
   })
   const canonicalByName = new Map(
@@ -108,6 +109,7 @@ export async function seedCanonicalIngredientsFromInvoices(
           const created = await prisma.canonicalIngredient.create({
             data: {
               ownerId,
+              accountId,
               name: canonicalName,
               defaultUnit: normalizeUnitToken(li.unit),
               category: li.category ?? null,
@@ -125,6 +127,7 @@ export async function seedCanonicalIngredientsFromInvoices(
           update: { canonicalIngredientId: canonicalId, confirmedAt: now },
           create: {
             ownerId,
+            accountId,
             vendorName: vendor,
             sku: li.sku,
             canonicalIngredientId: canonicalId,
@@ -162,6 +165,7 @@ export async function seedCanonicalIngredientsFromInvoices(
       const created = await prisma.canonicalIngredient.create({
         data: {
           ownerId,
+          accountId,
           name: canonicalName,
           defaultUnit: normalizedUnit,
           category: li.category ?? null,

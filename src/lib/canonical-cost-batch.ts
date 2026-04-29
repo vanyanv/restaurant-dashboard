@@ -24,8 +24,8 @@ type ProvenanceRow = {
 }
 
 /**
- * Batched equivalent of `getCanonicalIngredientCost` for every canonical owned
- * by `ownerId`. Runs in two queries: one `findMany` for the canonical rows and
+ * Batched equivalent of `getCanonicalIngredientCost` for every canonical on
+ * `accountId`. Runs in two queries: one `findMany` for the canonical rows and
  * one `DISTINCT ON` raw query for the latest matched invoice line per canonical.
  *
  * Mirrors the "useCanonical" / derive / raw-invoice branches of the single-row
@@ -34,10 +34,10 @@ type ProvenanceRow = {
  * latest-invoice fields when no FK match exists.
  */
 export async function batchCanonicalCosts(
-  ownerId: string
+  accountId: string
 ): Promise<Map<string, CanonicalIngredientCost>> {
   const canonicals = await prisma.canonicalIngredient.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: {
       id: true,
       recipeUnit: true,
@@ -73,7 +73,7 @@ export async function batchCanonicalCosts(
       i."vendorName"     AS "vendorName"
     FROM "InvoiceLineItem" li
     JOIN "Invoice" i ON i."id" = li."invoiceId"
-    WHERE i."ownerId" = ${ownerId}
+    WHERE i."accountId" = ${accountId}
       AND li."canonicalIngredientId" = ANY(${ids}::text[])
       AND li."quantity" > 0
       AND i."invoiceDate" IS NOT NULL

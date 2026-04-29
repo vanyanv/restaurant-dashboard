@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     }
 
     const stores = await prisma.store.findMany({
-      where: { ownerId: session.user.id },
+      where: { accountId: session.user.accountId },
     });
 
     return NextResponse.json(stores);
@@ -61,6 +61,7 @@ export async function POST(req: Request) {
       data: {
         ...validatedData,
         ownerId: session.user.id,
+        accountId: session.user.accountId,
       },
     });
 

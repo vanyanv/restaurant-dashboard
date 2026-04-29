@@ -13,7 +13,7 @@ export async function GET() {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  const rows = await listConversations(chatPrisma, session.user.id, 100)
+  const rows = await listConversations(chatPrisma, session.user.accountId, 100)
   return NextResponse.json({ conversations: rows })
 }
 
@@ -23,6 +23,6 @@ export async function POST() {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  const c = await createConversation(chatPrisma, session.user.id)
+  const c = await createConversation(chatPrisma, session.user.id, session.user.accountId)
   return NextResponse.json({ id: c.id })
 }

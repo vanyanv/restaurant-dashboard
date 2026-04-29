@@ -60,7 +60,7 @@ export const getIngredientPrices: ChatTool<typeof pricesParams, IngredientPriceR
 
     const canonicals = await ctx.prisma.canonicalIngredient.findMany({
       where: {
-        ownerId: ctx.ownerId,
+        accountId: ctx.accountId,
         name: { contains: args.query, mode: "insensitive" },
       },
       select: {
@@ -82,7 +82,7 @@ export const getIngredientPrices: ChatTool<typeof pricesParams, IngredientPriceR
       const lastLine = await ctx.prisma.invoiceLineItem.findFirst({
         where: {
           canonicalIngredientId: c.id,
-          invoice: { ownerId: ctx.ownerId },
+          invoice: { accountId: ctx.accountId },
         },
         orderBy: { invoice: { invoiceDate: "desc" } },
         select: {
@@ -149,11 +149,11 @@ export const searchCanonicalIngredients: ChatTool<typeof searchParams, Canonical
               e."category",
               (1 - (e.embedding <=> $1::vector))::float8 AS score
          FROM "CanonicalIngredientEmbedding" e
-        WHERE e."ownerId" = $2
+        WHERE e."accountId" = $2
         ORDER BY e.embedding <=> $1::vector
         LIMIT $3`,
       lit,
-      ctx.ownerId,
+      ctx.accountId,
       args.limit ?? 10,
     )
 
@@ -205,7 +205,7 @@ export const getIngredientPrice: ChatTool<typeof byIdParams, IngredientPriceResu
   parameters: byIdParams,
   async execute(args, ctx) {
     const c = await ctx.prisma.canonicalIngredient.findFirst({
-      where: { id: args.canonicalIngredientId, ownerId: ctx.ownerId },
+      where: { id: args.canonicalIngredientId, accountId: ctx.accountId },
       select: {
         id: true,
         name: true,
@@ -223,7 +223,7 @@ export const getIngredientPrice: ChatTool<typeof byIdParams, IngredientPriceResu
     const recent = await ctx.prisma.invoiceLineItem.findMany({
       where: {
         canonicalIngredientId: c.id,
-        invoice: { ownerId: ctx.ownerId },
+        invoice: { accountId: ctx.accountId },
       },
       orderBy: { invoice: { invoiceDate: "desc" } },
       take: 3,
@@ -303,7 +303,7 @@ export const getIngredientPriceHistory: ChatTool<typeof historyParams, Ingredien
   parameters: historyParams,
   async execute(args, ctx) {
     const c = await ctx.prisma.canonicalIngredient.findFirst({
-      where: { id: args.canonicalIngredientId, ownerId: ctx.ownerId },
+      where: { id: args.canonicalIngredientId, accountId: ctx.accountId },
       select: { id: true, name: true },
     })
     if (!c) return null
@@ -314,7 +314,7 @@ export const getIngredientPriceHistory: ChatTool<typeof historyParams, Ingredien
       where: {
         canonicalIngredientId: c.id,
         invoice: {
-          ownerId: ctx.ownerId,
+          accountId: ctx.accountId,
           invoiceDate: { gte: since },
         },
       },
@@ -392,7 +392,7 @@ export const compareVendorPrices: ChatTool<typeof compareParams, CompareVendorPr
   parameters: compareParams,
   async execute(args, ctx) {
     const c = await ctx.prisma.canonicalIngredient.findFirst({
-      where: { id: args.canonicalIngredientId, ownerId: ctx.ownerId },
+      where: { id: args.canonicalIngredientId, accountId: ctx.accountId },
       select: { id: true, name: true },
     })
     if (!c) return null
@@ -404,7 +404,7 @@ export const compareVendorPrices: ChatTool<typeof compareParams, CompareVendorPr
     // unmapped lines still get attributed when their (vendor, sku) is
     // confirmed.
     const skuMatches = await ctx.prisma.ingredientSkuMatch.findMany({
-      where: { canonicalIngredientId: c.id, ownerId: ctx.ownerId },
+      where: { canonicalIngredientId: c.id, accountId: ctx.accountId },
       select: { vendorName: true, sku: true },
     })
 
@@ -418,7 +418,7 @@ export const compareVendorPrices: ChatTool<typeof compareParams, CompareVendorPr
           })),
         ],
         invoice: {
-          ownerId: ctx.ownerId,
+          accountId: ctx.accountId,
           invoiceDate: { gte: since },
         },
       },
@@ -503,7 +503,7 @@ export const listRecipesByIngredient: ChatTool<typeof recipesByIngredientParams,
     const rows = await ctx.prisma.recipeIngredient.findMany({
       where: {
         canonicalIngredientId: args.canonicalIngredientId,
-        recipe: { ownerId: ctx.ownerId },
+        recipe: { accountId: ctx.accountId },
       },
       select: {
         quantity: true,
@@ -556,7 +556,7 @@ export const listIngredientGaps: ChatTool<typeof gapsParams, IngredientGapRow[]>
     const since = new Date(Date.now() - GAPS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
 
     const canonicals = await ctx.prisma.canonicalIngredient.findMany({
-      where: { ownerId: ctx.ownerId },
+      where: { accountId: ctx.accountId },
       select: {
         id: true,
         name: true,
@@ -573,8 +573,8 @@ export const listIngredientGaps: ChatTool<typeof gapsParams, IngredientGapRow[]>
 
     const recentLinks = await ctx.prisma.invoiceLineItem.findMany({
       where: {
-        canonicalIngredient: { ownerId: ctx.ownerId },
-        invoice: { invoiceDate: { gte: since }, ownerId: ctx.ownerId },
+        canonicalIngredient: { accountId: ctx.accountId },
+        invoice: { invoiceDate: { gte: since }, accountId: ctx.accountId },
       },
       select: { canonicalIngredientId: true },
     })

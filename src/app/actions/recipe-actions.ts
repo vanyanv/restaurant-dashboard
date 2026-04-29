@@ -21,6 +21,12 @@ import {
 } from "@/app/actions/menu-item-actions"
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
 
+async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  return { ownerId: session.user.id, accountId: session.user.accountId }
+}
+
 async function requireOwnerId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
   return session?.user?.id ?? null
@@ -45,11 +51,12 @@ function validateIngredients(input: RecipeInput): void {
 }
 
 export async function listRecipes(): Promise<RecipeSummary[]> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return []
+  const scope = await requireScope()
+  if (!scope) return []
+  const { accountId } = scope
 
   const recipes = await prisma.recipe.findMany({
-    where: { ownerId, category: { not: "Uncategorized" } },
+    where: { accountId, category: { not: "Uncategorized" } },
     orderBy: [{ isSellable: "desc" }, { itemName: "asc" }],
     select: {
       id: true,
@@ -62,7 +69,7 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
     },
   })
 
-  const costs = await batchRecipeCosts(ownerId)
+  const costs = await batchRecipeCosts(accountId)
 
   return recipes.map((r) => {
     const cost = costs.get(r.id)
@@ -81,11 +88,14 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
 }
 
 export async function getRecipeDetail(recipeId: string) {
-  const ownerId = await requireOwnerId()
+  const scope = await requireScope()
+  if (!scope) return null
+  const { ownerId, accountId } = scope
+  void ownerId
   if (!ownerId) return null
 
   const recipe = await prisma.recipe.findFirst({
-    where: { id: recipeId, ownerId },
+    where: { id: recipeId, accountId },
     include: {
       ingredients: {
         include: {
@@ -106,8 +116,9 @@ export async function getRecipeDetail(recipeId: string) {
 export async function upsertRecipe(
   input: RecipeInput
 ): Promise<{ id: string }> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
   validateIngredients(input)
 
   const { id } = await prisma.$transaction(async (tx) => {
@@ -126,6 +137,7 @@ export async function upsertRecipe(
       : await tx.recipe.create({
           data: {
             ownerId,
+            accountId,
             itemName: input.itemName.trim(),
             category: input.category,
             servingSize: input.servingSize,
@@ -171,11 +183,12 @@ export async function upsertRecipe(
 }
 
 export async function deleteRecipe(recipeId: string): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const recipe = await prisma.recipe.findFirst({
-    where: { id: recipeId, ownerId },
+    where: { id: recipeId, accountId },
     select: { id: true, itemName: true },
   })
   if (!recipe) throw new Error("Recipe not found")
@@ -210,8 +223,9 @@ export async function previewRecipeCost(input: {
     ingredientName?: string | null
   }>
 }): Promise<RecipeCostResult> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const lines: RecipeCostLine[] = []
   let total = 0
@@ -324,10 +338,11 @@ export async function confirmRecipe(
   recipeId: string,
   confirmed: boolean
 ): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
   const updated = await prisma.recipe.updateMany({
-    where: { id: recipeId, ownerId },
+    where: { id: recipeId, accountId },
     data: { isConfirmed: confirmed },
   })
   if (updated.count === 0) return
@@ -357,11 +372,14 @@ export type RecipeCatalogSummary = {
 export async function getRecipeCatalogSummary(
   recipeId: string
 ): Promise<RecipeCatalogSummary | null> {
-  const ownerId = await requireOwnerId()
+  const scope = await requireScope()
+  if (!scope) return null
+  const { ownerId, accountId } = scope
+  void ownerId
   if (!ownerId) return null
 
   const recipe = await prisma.recipe.findFirst({
-    where: { id: recipeId, ownerId },
+    where: { id: recipeId, accountId },
     select: {
       id: true,
       itemName: true,

@@ -20,7 +20,7 @@ export async function GET(
   const { id } = await params
 
   const invoice = await prisma.invoice.findFirst({
-    where: { id, ownerId: session.user.id },
+    where: { id, accountId: session.user.accountId },
     select: { pdfBlobPathname: true },
   })
 

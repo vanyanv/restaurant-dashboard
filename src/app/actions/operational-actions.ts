@@ -69,14 +69,14 @@ export async function getOperationalAnalytics(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invoiceWhereCurrent: any = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     invoiceDate: { not: null, gte: rangeStart, lte: rangeEnd },
   }
   if (storeId) invoiceWhereCurrent.storeId = storeId
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invoiceWherePrevious: any = {
-    ownerId: session.user.id,
+    accountId: session.user.accountId,
     invoiceDate: { not: null, gte: prevStart, lte: prevEnd },
   }
   if (storeId) invoiceWherePrevious.storeId = storeId

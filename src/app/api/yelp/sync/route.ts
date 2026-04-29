@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     // Get all active stores owned by the user
     const stores = await prisma.store.findMany({
       where: {
-        ownerId: session.user.id,
+        accountId: session.user.accountId,
         isActive: true,
         address: {
           not: null

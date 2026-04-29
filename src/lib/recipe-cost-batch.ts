@@ -9,7 +9,7 @@ export type BatchRecipeCostResult = {
 }
 
 /**
- * Compute `{ totalCost, partial }` for every recipe owned by `ownerId` in a
+ * Compute `{ totalCost, partial }` for every recipe on `accountId` in a
  * bounded number of queries — one `recipe.findMany` for the whole graph, plus
  * the batched canonical cost map.
  *
@@ -17,12 +17,12 @@ export type BatchRecipeCostResult = {
  * should stay on `computeRecipeCost` which returns the full line-by-line shape.
  */
 export async function batchRecipeCosts(
-  ownerId: string,
+  accountId: string,
   canonicalCostMap?: Map<string, CanonicalIngredientCost>
 ): Promise<Map<string, BatchRecipeCostResult>> {
   const [recipes, canonicalCosts] = await Promise.all([
     prisma.recipe.findMany({
-      where: { ownerId },
+      where: { accountId },
       select: {
         id: true,
         foodCostOverride: true,
@@ -36,7 +36,7 @@ export async function batchRecipeCosts(
         },
       },
     }),
-    canonicalCostMap ? Promise.resolve(canonicalCostMap) : batchCanonicalCosts(ownerId),
+    canonicalCostMap ? Promise.resolve(canonicalCostMap) : batchCanonicalCosts(accountId),
   ])
 
   type RecipeRow = (typeof recipes)[number]

@@ -24,14 +24,21 @@ async function requireOwnerId(): Promise<string | null> {
   return session?.user?.id ?? null
 }
 
+async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  return { ownerId: session.user.id, accountId: session.user.accountId }
+}
+
 export async function listCanonicalIngredients(): Promise<
   CanonicalIngredientSummary[]
 > {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return []
+  const scope = await requireScope()
+  if (!scope) return []
+  const { accountId } = scope
 
   const canonicals = await prisma.canonicalIngredient.findMany({
-    where: { ownerId },
+    where: { accountId },
     orderBy: { name: "asc" },
     include: {
       aliases: { select: { id: true } },
@@ -39,8 +46,8 @@ export async function listCanonicalIngredients(): Promise<
   })
 
   const [costs, trendsByCanonical] = await Promise.all([
-    batchCanonicalCosts(ownerId),
-    computeTrendsByCanonical(ownerId),
+    batchCanonicalCosts(accountId),
+    computeTrendsByCanonical(accountId),
   ])
 
   return canonicals.map((c) => {
@@ -74,7 +81,7 @@ export async function listCanonicalIngredients(): Promise<
  * trends, the one with the largest |pctChange| wins.
  */
 async function computeTrendsByCanonical(
-  ownerId: string
+  accountId: string
 ): Promise<Map<string, IngredientTrend>> {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 90)
@@ -83,7 +90,7 @@ async function computeTrendsByCanonical(
     where: {
       canonicalIngredientId: { not: null },
       invoice: {
-        ownerId,
+        accountId,
         invoiceDate: { gte: cutoff, not: null },
       },
       unitPrice: { gt: 0 },
@@ -165,11 +172,12 @@ export async function getIngredientPriceHistory(
   canonicalIngredientId: string,
   options?: { periodDays?: number }
 ): Promise<IngredientPriceHistory> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return { points: [] }
+  const scope = await requireScope()
+  if (!scope) return { points: [] }
+  const { accountId } = scope
 
   const canonical = await prisma.canonicalIngredient.findFirst({
-    where: { id: canonicalIngredientId, ownerId },
+    where: { id: canonicalIngredientId, accountId },
     select: { id: true },
   })
   if (!canonical) return { points: [] }
@@ -184,7 +192,7 @@ export async function getIngredientPriceHistory(
       unitPrice: { gt: 0 },
       quantity: { gt: 0 },
       invoice: {
-        ownerId,
+        accountId,
         invoiceDate: { gte: cutoff, not: null },
       },
     },
@@ -230,12 +238,13 @@ export async function createCanonicalIngredient(input: {
   category?: string | null
   notes?: string | null
 }) {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
 
   const created = await prisma.canonicalIngredient.create({
     data: {
-      ownerId,
+      ownerId: scope.ownerId,
+      accountId: scope.accountId,
       name: input.name.trim(),
       defaultUnit: input.defaultUnit,
       category: input.category ?? null,
@@ -261,11 +270,12 @@ export async function updateCanonicalCost(input: {
   costPerRecipeUnit?: number | null
   costLocked?: boolean
 }): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { accountId } = scope
 
   const existing = await prisma.canonicalIngredient.findFirst({
-    where: { id: input.canonicalIngredientId, ownerId },
+    where: { id: input.canonicalIngredientId, accountId },
     select: { id: true },
   })
   if (!existing) throw new Error("Canonical ingredient not found")
@@ -303,9 +313,9 @@ export async function updateCanonicalCost(input: {
 }
 
 export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
-  const result = await seedCanonicalIngredientsFromInvoices(ownerId)
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const result = await seedCanonicalIngredientsFromInvoices(scope.ownerId, scope.accountId)
   if (result.canonicalsCreated > 0 || result.aliasesCreated > 0) {
     revalidatePath("/dashboard/ingredients")
     revalidatePath("/dashboard/recipes")
@@ -329,8 +339,9 @@ export async function mergeCanonicalIngredients(input: {
   skuMatches: number
   recipeUses: number
 }> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { accountId } = scope
 
   if (input.sourceId === input.targetId) {
     throw new Error("Cannot merge an ingredient into itself")
@@ -341,7 +352,7 @@ export async function mergeCanonicalIngredients(input: {
     prisma.canonicalIngredient.findUnique({ where: { id: input.targetId } }),
   ])
   if (!source || !target) throw new Error("Ingredient not found")
-  if (source.ownerId !== ownerId || target.ownerId !== ownerId) {
+  if (source.accountId !== accountId || target.accountId !== accountId) {
     throw new Error("Not authorized")
   }
 

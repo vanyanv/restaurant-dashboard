@@ -52,6 +52,7 @@ export async function POST(req: Request) {
   }
 
   const ownerId = session.user.id
+  const accountId = session.user.accountId
   let body: ChatRequestBody
   try {
     body = (await req.json()) as ChatRequestBody
@@ -68,14 +69,14 @@ export async function POST(req: Request) {
   let conversationId = body.conversationId
   if (conversationId) {
     try {
-      await getConversation(chatPrisma, ownerId, conversationId)
+      await getConversation(chatPrisma, accountId, conversationId)
     } catch (err) {
       const code = (err as { code?: string }).code
       const status = code === "NOT_OWNED" ? 403 : 404
       return NextResponse.json({ error: code ?? "not found" }, { status })
     }
   } else {
-    const created = await createConversation(chatPrisma, ownerId)
+    const created = await createConversation(chatPrisma, ownerId, accountId)
     conversationId = created.id
   }
 
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const ctx = { ownerId, prisma: chatPrisma }
+  const ctx = { ownerId, accountId, prisma: chatPrisma }
 
   // Wrap each domain tool in the AI SDK `tool()` shape. The owner-scope
   // helpers inside `execute` enforce auth on every call.
@@ -111,7 +112,7 @@ export async function POST(req: Request) {
 
   const requestStartMs = performance.now()
   const systemPromptStartMs = performance.now()
-  const system = await buildSystemPrompt(ownerId)
+  const system = await buildSystemPrompt(accountId)
   const systemPromptMs = Math.round(performance.now() - systemPromptStartMs)
 
   // First-token latency captured from the first `text-delta` chunk.

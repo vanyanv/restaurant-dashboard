@@ -155,12 +155,12 @@ export const searchMenuItems: ChatTool<typeof searchMenuParams, MenuSearchRow[]>
               (1 - (e.embedding <=> $1::vector))::float8 AS score
          FROM "MenuItemEmbedding" e
          JOIN "Store" s ON s.id = e."storeId"
-        WHERE e."ownerId" = $2
+        WHERE e."accountId" = $2
           AND e."storeId" = ANY($3::text[])
         ORDER BY e.embedding <=> $1::vector
         LIMIT $4`,
       lit,
-      ctx.ownerId,
+      ctx.accountId,
       storeIds,
       args.limit ?? 5,
     )

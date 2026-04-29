@@ -32,7 +32,7 @@ export async function setStoreTargetCogsPct(
   }
 
   const store = await prisma.store.findFirst({
-    where: { id: input.storeId, ownerId: session.user.id },
+    where: { id: input.storeId, accountId: session.user.accountId },
     select: { id: true },
   })
   if (!store) return { error: "Store not found" }

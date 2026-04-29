@@ -12,7 +12,7 @@ export default async function OperationsPage() {
   const [data, stores] = await Promise.all([
     getOperationalAnalytics(undefined, { days: 30 }),
     prisma.store.findMany({
-      where: { ownerId: session.user.id, isActive: true },
+      where: { accountId: session.user.accountId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

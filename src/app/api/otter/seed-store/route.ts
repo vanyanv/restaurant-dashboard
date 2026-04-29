@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     // Verify the store exists and belongs to this owner
     const store = await prisma.store.findFirst({
-      where: { id: storeId, ownerId: session.user.id },
+      where: { id: storeId, accountId: session.user.accountId },
     })
     if (!store) {
       return NextResponse.json({ error: "Store not found or access denied" }, { status: 404 })

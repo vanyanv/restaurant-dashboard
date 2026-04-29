@@ -11,6 +11,12 @@ async function requireOwnerId(): Promise<string | null> {
   return session?.user?.id ?? null
 }
 
+async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  return { ownerId: session.user.id, accountId: session.user.accountId }
+}
+
 /**
  * All distinct Otter-sold items across the owner's stores, with:
  *   - aggregate units sold over the window (default last 90 days)
@@ -27,11 +33,12 @@ async function requireOwnerId(): Promise<string | null> {
 export async function getMenuItemsForCatalog(
   options?: { sinceDays?: number | null }
 ): Promise<MenuItemForCatalog[]> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return []
+  const scope = await requireScope()
+  if (!scope) return []
+  const { accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -95,7 +102,7 @@ export async function getMenuItemsForCatalog(
   }
 
   const recipes = await prisma.recipe.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true, itemName: true },
   })
   const recipeByName = new Map(
@@ -138,15 +145,16 @@ export async function mapOtterItemToRecipe(input: {
   otterItemName: string
   recipeId: string
 }): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   const recipe = await prisma.recipe.findFirst({
-    where: { id: input.recipeId, ownerId },
+    where: { id: input.recipeId, accountId },
     select: { id: true },
   })
   if (!recipe) throw new Error("Recipe not found")
@@ -177,11 +185,12 @@ export async function mapOtterItemToRecipe(input: {
 }
 
 export async function unmapOtterItem(otterItemName: string): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   await prisma.otterItemMapping.deleteMany({
@@ -232,11 +241,12 @@ export type OtterSubItemForCatalog = {
 export async function getOtterSubItemsForCatalog(
   options?: { sinceDays?: number | null }
 ): Promise<OtterSubItemForCatalog[]> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return []
+  const scope = await requireScope()
+  if (!scope) return []
+  const { accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
@@ -370,15 +380,16 @@ export async function mapOtterSubItemToRecipe(input: {
   otterSubItemName: string
   recipeId: string
 }): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   const recipe = await prisma.recipe.findFirst({
-    where: { id: input.recipeId, ownerId },
+    where: { id: input.recipeId, accountId },
     select: { id: true },
   })
   if (!recipe) throw new Error("Recipe not found")
@@ -411,11 +422,12 @@ export async function mapOtterSubItemToRecipe(input: {
 }
 
 export async function unmapOtterSubItem(skuId: string): Promise<void> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) throw new Error("Not authenticated")
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { ownerId, accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   await prisma.otterSubItemMapping.deleteMany({
@@ -450,11 +462,12 @@ export type MenuItemSellPrice = {
 export async function getMenuItemSellPrices(
   lookbackDays: number = 30
 ): Promise<Map<string, MenuItemSellPrice>> {
-  const ownerId = await requireOwnerId()
-  if (!ownerId) return new Map()
+  const scope = await requireScope()
+  if (!scope) return new Map()
+  const { accountId } = scope
 
   const stores = await prisma.store.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)

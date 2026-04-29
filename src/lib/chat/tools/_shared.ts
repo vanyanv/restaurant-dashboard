@@ -43,7 +43,7 @@ export async function resolveStoreIds(
   ctx: ChatToolContext,
   requested: string[] | undefined,
 ): Promise<string[]> {
-  return assertOwnerOwnsStores(ctx.ownerId, requested ?? null)
+  return assertOwnerOwnsStores(ctx.accountId, requested ?? null)
 }
 
 /** Format a Date as `YYYY-MM-DD` in UTC — matches `@db.Date` semantics. */

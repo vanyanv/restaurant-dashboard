@@ -57,25 +57,26 @@ export interface ConversationDetail extends ConversationSummary {
 export async function createConversation(
   prisma: PrismaClient,
   ownerId: string,
+  accountId: string,
 ): Promise<{ id: string }> {
   if (!ownerId) {
     throw new ConversationAccessError("NOT_OWNED", "missing ownerId")
   }
   const c = await prisma.conversation.create({
-    data: { ownerId },
+    data: { ownerId, accountId },
     select: { id: true },
   })
   return c
 }
 
-/** Lists the owner's conversations, newest-updated first. */
+/** Lists conversations on the caller's account, newest-updated first. */
 export async function listConversations(
   prisma: PrismaClient,
-  ownerId: string,
+  accountId: string,
   limit = 50,
 ): Promise<ConversationSummary[]> {
   const rows = await prisma.conversation.findMany({
-    where: { ownerId },
+    where: { accountId },
     orderBy: { updatedAt: "desc" },
     take: limit,
     select: {
@@ -96,17 +97,17 @@ export async function listConversations(
 }
 
 /** Loads one conversation with all messages + tool calls. Throws if the
- * conversation isn't owned by `ownerId`. */
+ * conversation isn't on `accountId`. */
 export async function getConversation(
   prisma: PrismaClient,
-  ownerId: string,
+  accountId: string,
   conversationId: string,
 ): Promise<ConversationDetail> {
   const c = await prisma.conversation.findUnique({
     where: { id: conversationId },
     select: {
       id: true,
-      ownerId: true,
+      accountId: true,
       title: true,
       createdAt: true,
       updatedAt: true,
@@ -134,10 +135,10 @@ export async function getConversation(
   if (!c) {
     throw new ConversationAccessError("NOT_FOUND", "conversation not found")
   }
-  if (c.ownerId !== ownerId) {
+  if (c.accountId !== accountId) {
     throw new ConversationAccessError(
       "NOT_OWNED",
-      "conversation not owned by this user",
+      "conversation not on this account",
     )
   }
   return {
@@ -206,9 +207,9 @@ export async function setConversationTitle(
  * happens via `getConversation` upstream. */
 export async function deleteConversation(
   prisma: PrismaClient,
-  ownerId: string,
+  accountId: string,
   conversationId: string,
 ): Promise<void> {
-  await getConversation(prisma, ownerId, conversationId)
+  await getConversation(prisma, accountId, conversationId)
   await prisma.conversation.delete({ where: { id: conversationId } })
 }

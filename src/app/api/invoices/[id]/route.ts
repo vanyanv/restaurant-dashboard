@@ -21,7 +21,7 @@ export async function GET(
   const { id } = await params
 
   const invoice = await prisma.invoice.findFirst({
-    where: { id, ownerId: session.user.id },
+    where: { id, accountId: session.user.accountId },
     include: {
       store: { select: { name: true } },
       lineItems: { orderBy: { lineNumber: "asc" } },
@@ -86,7 +86,7 @@ export async function PATCH(
   const { status, storeId } = body as { status?: InvoiceStatus; storeId?: string | null }
 
   const invoice = await prisma.invoice.findFirst({
-    where: { id, ownerId: session.user.id },
+    where: { id, accountId: session.user.accountId },
   })
 
   if (!invoice) {
@@ -102,6 +102,6 @@ export async function PATCH(
     },
   })
 
-  await bustTags([`owner:${session.user.id}`])
+  await bustTags([`account:${session.user.accountId}`])
   return NextResponse.json({ id: updated.id, status: updated.status, storeId: updated.storeId })
 }

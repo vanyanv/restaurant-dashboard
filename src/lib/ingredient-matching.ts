@@ -21,7 +21,7 @@ export type MatchResult = {
  * Safe to re-run: only touches line items where canonicalIngredientId is null.
  */
 export async function matchNewLineItems(
-  ownerId: string,
+  accountId: string,
   invoiceIds: string[]
 ): Promise<MatchResult> {
   if (invoiceIds.length === 0) {
@@ -29,7 +29,7 @@ export async function matchNewLineItems(
   }
 
   const invoices = await prisma.invoice.findMany({
-    where: { id: { in: invoiceIds }, ownerId },
+    where: { id: { in: invoiceIds }, accountId },
     select: {
       id: true,
       vendorName: true,
@@ -41,9 +41,9 @@ export async function matchNewLineItems(
     },
   })
 
-  // Pre-load sku matches for this owner in one go.
+  // Pre-load sku matches for this account in one go.
   const skuMatches = await prisma.ingredientSkuMatch.findMany({
-    where: { ownerId },
+    where: { accountId },
     select: { vendorName: true, sku: true, canonicalIngredientId: true },
   })
   const skuIndex = new Map<string, string>()

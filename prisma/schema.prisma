@@ -33,12 +33,63 @@ enum CogsStatus {
   MISSING_COST
 }
 
+/// Tenant boundary for the dashboard. Every user, store, invoice, recipe,
+/// etc. belongs to exactly one Account. Multiple users can share an account
+/// (via the Invite flow) and see the same data. For now there is exactly
+/// one Account row in production; the model is in place for future
+/// multi-tenancy.
+model Account {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                         User[]
+  stores                        Store[]
+  invoices                      Invoice[]
+  recipes                       Recipe[]
+  canonicalIngredients          CanonicalIngredient[]
+  ingredientSkuMatches          IngredientSkuMatch[]
+  conversations                 Conversation[]
+  invoiceLineEmbeddings         InvoiceLineEmbedding[]
+  menuItemEmbeddings            MenuItemEmbedding[]
+  recipeEmbeddings              RecipeEmbedding[]
+  canonicalIngredientEmbeddings CanonicalIngredientEmbedding[]
+  invites                       Invite[]
+}
+
+/// Single-use, time-limited signup token. An OWNER on an account creates
+/// an Invite locally; the invitee opens /signup/{token}, signs up, and is
+/// attached to the same accountId. The invite is marked consumed on
+/// successful signup. Creation is gated to NODE_ENV !== "production" — the
+/// dashboard should not expose invite generation in production. The
+/// public consumption route is always live.
+model Invite {
+  id              String    @id @default(cuid())
+  token           String    @unique
+  accountId       String
+  createdByUserId String
+  expiresAt       DateTime
+  usedAt          DateTime?
+  usedByUserId    String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("InvitesCreated", fields: [createdByUserId], references: [id])
+  usedBy    User?   @relation("InvitesUsed", fields: [usedByUserId], references: [id])
+
+  @@index([accountId])
+  @@index([token])
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   password  String
   name      String
   role      Role
+  accountId String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -53,14 +104,18 @@ model User {
   notifyAnomaly      Boolean @default(true)
 
   // Relations
+  account              Account               @relation(fields: [accountId], references: [id])
   ownedStores          Store[]               @relation("StoreOwner")
   invoices             Invoice[]
   recipes              Recipe[]
   canonicalIngredients CanonicalIngredient[]
   ingredientSkuMatches IngredientSkuMatch[]
   conversations        Conversation[]
+  invitesCreated       Invite[]              @relation("InvitesCreated")
+  invitesUsed          Invite[]              @relation("InvitesUsed")
 
   @@index([email])
+  @@index([accountId])
 }
 
 model Store {
@@ -69,6 +124,7 @@ model Store {
   address   String?
   phone     String?
   ownerId   String
+  accountId String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -99,6 +155,7 @@ model Store {
 
   // Relations
   owner                User                  @relation("StoreOwner", fields: [ownerId], references: [id])
+  account              Account               @relation(fields: [accountId], references: [id])
   prepTasks            PrepTask[]
   otterStores          OtterStore[]
   otterSummaries       OtterDailySummary[]
@@ -115,6 +172,7 @@ model Store {
   aiForecastRuns       AiForecastRun[]
 
   @@index([ownerId])
+  @@index([accountId])
   @@index([yelpBusinessId])
 }
 
@@ -278,9 +336,10 @@ model PrepTask {
 }
 
 model Invoice {
-  id      String  @id @default(cuid())
-  ownerId String
-  storeId String?
+  id        String  @id @default(cuid())
+  ownerId   String
+  accountId String
+  storeId   String?
 
   // Source tracking
   emailMessageId  String    @unique
@@ -320,16 +379,20 @@ model Invoice {
 
   // Relations
   owner     User              @relation(fields: [ownerId], references: [id])
+  account   Account           @relation(fields: [accountId], references: [id])
   store     Store?            @relation(fields: [storeId], references: [id], onDelete: SetNull)
   lineItems InvoiceLineItem[]
 
   @@index([ownerId])
+  @@index([accountId])
   @@index([storeId])
   @@index([vendorName])
   @@index([invoiceDate])
   @@index([status])
   @@index([ownerId, createdAt])
+  @@index([accountId, createdAt])
   @@index([ownerId, vendorName, invoiceDate])
+  @@index([accountId, vendorName, invoiceDate])
 }
 
 model InvoiceLineItem {
@@ -378,6 +441,7 @@ model InvoiceSyncLog {
 model Recipe {
   id               String   @id @default(cuid())
   ownerId          String
+  accountId        String
   itemName         String
   category         String
   servingSize      Float    @default(1)
@@ -390,6 +454,7 @@ model Recipe {
   updatedAt        DateTime @updatedAt
 
   owner                User                  @relation(fields: [ownerId], references: [id])
+  account              Account               @relation(fields: [accountId], references: [id])
   ingredients          RecipeIngredient[]
   usedInIngredients    RecipeIngredient[]    @relation("ComponentRecipe")
   otterItemMappings    OtterItemMapping[]
@@ -397,7 +462,9 @@ model Recipe {
   dailyCogsItems       DailyCogsItem[]
 
   @@unique([ownerId, itemName, category])
+  @@unique([accountId, itemName, category])
   @@index([ownerId])
+  @@index([accountId])
 }
 
 /// A line in a recipe. Exactly one of `canonicalIngredientId` or `componentRecipeId`
@@ -426,6 +493,7 @@ model RecipeIngredient {
 model CanonicalIngredient {
   id          String   @id @default(cuid())
   ownerId     String
+  accountId   String
   name        String
   defaultUnit String
   category    String?
@@ -445,13 +513,16 @@ model CanonicalIngredient {
   costUpdatedAt     DateTime?
 
   owner             User                 @relation(fields: [ownerId], references: [id])
+  account           Account              @relation(fields: [accountId], references: [id])
   aliases           IngredientAlias[]
   recipeIngredients RecipeIngredient[]
   invoiceLineItems  InvoiceLineItem[]
   skuMatches        IngredientSkuMatch[]
 
   @@unique([ownerId, name])
+  @@unique([accountId, name])
   @@index([ownerId])
+  @@index([accountId])
 }
 
 /// Learned (vendor, sku) → canonical ingredient matches. Future invoice line
@@ -460,6 +531,7 @@ model CanonicalIngredient {
 model IngredientSkuMatch {
   id                    String   @id @default(cuid())
   ownerId               String
+  accountId             String
   vendorName            String
   sku                   String
   canonicalIngredientId String
@@ -470,11 +542,14 @@ model IngredientSkuMatch {
   confirmedAt           DateTime @default(now())
 
   owner               User                @relation(fields: [ownerId], references: [id])
+  account             Account             @relation(fields: [accountId], references: [id])
   canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, vendorName, sku])
+  @@unique([accountId, vendorName, sku])
   @@index([canonicalIngredientId])
   @@index([ownerId])
+  @@index([accountId])
 }
 
 model IngredientAlias {
@@ -671,7 +746,9 @@ model AiForecastRun {
 model Conversation {
   id        String    @id @default(cuid())
   ownerId   String
+  accountId String
   owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// LLM-generated short title written after the first assistant turn. Null
   /// until then; the rail falls back to "Untitled".
   title     String?
@@ -680,6 +757,7 @@ model Conversation {
   messages  Message[]
 
   @@index([ownerId, updatedAt])
+  @@index([accountId, updatedAt])
 }
 
 /// One turn in a conversation. `role` is "user" | "assistant" | "tool".
@@ -719,15 +797,19 @@ model ToolCall {
 /// `contentSnapshot` is the exact text that was embedded — used to skip
 /// re-embedding unchanged rows.
 model InvoiceLineEmbedding {
-  id              String   @id @default(cuid())
+  id              String                      @id @default(cuid())
   invoiceId       String
   invoiceLineId   String?
   ownerId         String
+  accountId       String
   contentSnapshot String
   embedding       Unsupported("vector(1536)")
-  createdAt       DateTime @default(now())
+  createdAt       DateTime                    @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
+  @@index([accountId])
   @@index([invoiceId])
 }
 
@@ -738,17 +820,21 @@ model InvoiceLineEmbedding {
 /// denormalized so `searchMenuItems` can return ready-to-display rows
 /// without joining back to OtterMenuItem.
 model MenuItemEmbedding {
-  id              String   @id @default(cuid())
-  menuItemId      String   @unique
+  id              String                      @id @default(cuid())
+  menuItemId      String                      @unique
   ownerId         String
+  accountId       String
   storeId         String
   category        String
   itemName        String
   contentSnapshot String
   embedding       Unsupported("vector(1536)")
-  createdAt       DateTime @default(now())
+  createdAt       DateTime                    @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
+  @@index([accountId])
   @@index([storeId])
 }
 
@@ -758,16 +844,20 @@ model MenuItemEmbedding {
 /// the recipe is just named "Smash Burger". `category` is denormalized so
 /// `searchRecipes` can return ready-to-display rows without joining back.
 model RecipeEmbedding {
-  id              String   @id @default(cuid())
-  recipeId        String   @unique
+  id              String                      @id @default(cuid())
+  recipeId        String                      @unique
   ownerId         String
+  accountId       String
   category        String
   itemName        String
   contentSnapshot String
   embedding       Unsupported("vector(1536)")
-  createdAt       DateTime @default(now())
+  createdAt       DateTime                    @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
+  @@index([accountId])
 }
 
 /// pgvector embedding for one owner CanonicalIngredient. Chunk text folds
@@ -776,14 +866,18 @@ model RecipeEmbedding {
 /// `searchCanonicalIngredients` can return ready-to-display rows without
 /// joining back.
 model CanonicalIngredientEmbedding {
-  id                    String   @id @default(cuid())
-  canonicalIngredientId String   @unique
+  id                    String                      @id @default(cuid())
+  canonicalIngredientId String                      @unique
   ownerId               String
+  accountId             String
   category              String?
   name                  String
   contentSnapshot       String
   embedding             Unsupported("vector(1536)")
-  createdAt             DateTime @default(now())
+  createdAt             DateTime                    @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
+  @@index([accountId])
 }

@@ -73,14 +73,14 @@ export const searchInvoices: ChatTool<typeof searchParams, InvoiceSearchRow[]> =
          FROM "InvoiceLineEmbedding" e
          JOIN "InvoiceLineItem" l ON l.id = e."invoiceLineId"
          JOIN "Invoice"         i ON i.id = e."invoiceId"
-        WHERE e."ownerId" = $2
+        WHERE e."accountId" = $2
           AND (i."storeId" IS NULL OR i."storeId" = ANY($3::text[]))
           AND ($4::date IS NULL OR i."invoiceDate" >= $4::date)
           AND ($5::date IS NULL OR i."invoiceDate" <= $5::date)
         ORDER BY e.embedding <=> $1::vector
         LIMIT $6`,
       lit,
-      ctx.ownerId,
+      ctx.accountId,
       storeIds,
       range ? range.from.toISOString().slice(0, 10) : null,
       range ? range.to.toISOString().slice(0, 10) : null,
@@ -129,7 +129,7 @@ export const getTopInvoices: ChatTool<typeof topInvoicesParams, TopInvoiceRow[]>
 
     const rows = await ctx.prisma.invoice.findMany({
       where: {
-        ownerId: ctx.ownerId,
+        accountId: ctx.accountId,
         OR: [
           { storeId: null },
           { storeId: { in: storeIds } },
@@ -185,7 +185,7 @@ export const getInvoiceSpend: ChatTool<typeof spendParams, InvoiceSpendResult> =
 
     const rows = await ctx.prisma.invoice.findMany({
       where: {
-        ownerId: ctx.ownerId,
+        accountId: ctx.accountId,
         OR: [
           { storeId: null },
           { storeId: { in: storeIds } },
@@ -277,7 +277,7 @@ export const getInvoiceById: ChatTool<typeof invoiceByIdParams, InvoiceByIdResul
   parameters: invoiceByIdParams,
   async execute(args, ctx) {
     const inv = await ctx.prisma.invoice.findFirst({
-      where: { id: args.id, ownerId: ctx.ownerId },
+      where: { id: args.id, accountId: ctx.accountId },
       select: {
         id: true,
         vendorName: true,
@@ -359,7 +359,7 @@ export const sumInvoiceLines: ChatTool<typeof sumParams, SumInvoiceLinesResult> 
     const lines = await ctx.prisma.invoiceLineItem.findMany({
       where: {
         id: { in: args.lineIds },
-        invoice: { ownerId: ctx.ownerId },
+        invoice: { accountId: ctx.accountId },
       },
       select: {
         id: true,

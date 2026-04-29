@@ -16,12 +16,12 @@ export async function InvoicesTopbarSyncButton() {
 }
 
 export async function InvoicesTopbarStoreFilter({
-  userId,
+  accountId,
   current,
 }: {
-  userId: string
+  accountId: string
   current: string
 }) {
-  const stores = await fetchStoresForUser(userId)
+  const stores = await fetchStoresForUser(accountId)
   return <InvoicesStoreFilter stores={stores} current={current} />
 }

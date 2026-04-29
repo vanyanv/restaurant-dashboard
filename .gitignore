@@ -60,3 +60,6 @@ backfill-failures.json
 
 # Local Playwright MCP browser snapshots (page YAML + console logs per session)
 .playwright-mcp/
+
+# Chat eval harness output (markdown reports per run, kept local)
+scripts/eval-chat/runs/

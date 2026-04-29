@@ -11,6 +11,7 @@
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "shots:auth": "tsx scripts/mobile-auth.ts",
     "shots": "tsx scripts/mobile-shots.ts",
+    "eval:chat": "tsx scripts/eval-chat/run.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

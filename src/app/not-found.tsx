@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Fraunces } from "next/font/google"
-import "./dashboard/editorial.css"
+import "@/styles/editorial.css"
 
 const fraunces = Fraunces({
   subsets: ["latin"],

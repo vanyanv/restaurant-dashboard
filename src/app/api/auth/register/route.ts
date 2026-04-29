@@ -44,13 +44,14 @@ export async function POST(req: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(validatedData.password, 10)
 
-    // Create user
+    // Create user on the calling owner's account
     const user = await prisma.user.create({
       data: {
         email: validatedData.email,
         password: hashedPassword,
         name: validatedData.name,
-        role: "OWNER"
+        role: "OWNER",
+        accountId: session.user.accountId
       },
       select: {
         id: true,
