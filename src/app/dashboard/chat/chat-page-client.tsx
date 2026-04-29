@@ -34,6 +34,11 @@ export function ChatPageClient({ initialConversations }: Props) {
     id: string | null
     messages: UIMessage[]
   }>({ id: null, messages: [] })
+  // Marker set when the active <ChatThread> bubbles up its server-assigned
+  // conversation id mid-stream. The hydration effect below skips when the
+  // context's conversationId matches this — re-fetching would change the
+  // thread's remount key and drop the live "Thinking" state.
+  const capturedIdRef = useRef<string | null>(null)
 
   // Whenever the active conversation id changes, fetch its prior messages
   // so the thread can hydrate. The thread is keyed by conversation id —
@@ -41,6 +46,12 @@ export function ChatPageClient({ initialConversations }: Props) {
   // initialMessages.
   useEffect(() => {
     let cancelled = false
+    if (conversationId && conversationId === capturedIdRef.current) {
+      // Change came from the in-flight thread itself; consume marker and
+      // leave the live useChat state alone.
+      capturedIdRef.current = null
+      return
+    }
     if (!conversationId) {
       setHydrated({ id: null, messages: [] })
       return
@@ -60,11 +71,15 @@ export function ChatPageClient({ initialConversations }: Props) {
     }
   }, [conversationId])
 
-  // Refresh the rail after each new turn lands. Cheap polling beats
-  // wiring a websocket for v1.
+  // Refresh the rail when the tab regains focus — covers the case where
+  // another tab created or renamed a conversation. The post-turn refresh
+  // is wired through `<ChatThread onTurnFinish>` below.
   useEffect(() => {
-    const i = setInterval(refresh, 8000)
-    return () => clearInterval(i)
+    function onFocus() {
+      refresh()
+    }
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
   }, [])
 
   async function refresh() {
@@ -81,11 +96,13 @@ export function ChatPageClient({ initialConversations }: Props) {
   }
 
   async function newConversation() {
+    capturedIdRef.current = null
     resetConversation()
     await refresh()
   }
 
   async function pick(id: string) {
+    capturedIdRef.current = null
     setConversationId(id)
   }
 
@@ -162,6 +179,11 @@ export function ChatPageClient({ initialConversations }: Props) {
           // useChat picks up the new initialMessages.
           key={hydrated.id ?? "new"}
           initialMessages={hydrated.messages}
+          onTurnFinish={refresh}
+          onConversationCaptured={(id) => {
+            capturedIdRef.current = id
+            setConversationId(id)
+          }}
         />
       </section>
     </div>

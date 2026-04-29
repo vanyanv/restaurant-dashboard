@@ -16,8 +16,13 @@ import {
  * fetch the saved messages and hydrate them — including tool-call output
  * parts so inline cards (TrendCard, InvoiceCard, ...) survive a close. */
 export function ChatDrawer() {
-  const { open, closeDrawer, resetConversation, conversationId } =
-    useChatDrawer()
+  const {
+    open,
+    closeDrawer,
+    resetConversation,
+    conversationId,
+    setConversationId,
+  } = useChatDrawer()
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false)
   const [hydrated, setHydrated] = useState<{
     id: string | null
@@ -26,6 +31,11 @@ export function ChatDrawer() {
   const [hydrating, setHydrating] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
+  // Marker set when the active <ChatThread> bubbles up its server-assigned
+  // conversation id mid-stream. The hydration effect below skips when the
+  // context's conversationId matches this — re-fetching would change the
+  // thread's remount key and drop the live "Thinking" state.
+  const capturedIdRef = useRef<string | null>(null)
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {
@@ -50,6 +60,13 @@ export function ChatDrawer() {
     if (!open) return
     if (!conversationId) {
       setHydrated({ id: null, messages: [] })
+      return
+    }
+    if (conversationId === capturedIdRef.current) {
+      // Change came from the in-flight thread bubbling up its server-
+      // assigned id; the live useChat already has the messages. Consume
+      // marker and skip the refetch + remount.
+      capturedIdRef.current = null
       return
     }
     if (hydrated.id === conversationId) return
@@ -151,6 +168,7 @@ export function ChatDrawer() {
               type="button"
               className="chat-drawer__close"
               onClick={() => {
+                capturedIdRef.current = null
                 resetConversation()
                 setHydrated({ id: null, messages: [] })
               }}
@@ -176,6 +194,10 @@ export function ChatDrawer() {
           <ChatThread
             key={hydrated.id ?? "new"}
             initialMessages={hydrated.messages}
+            onConversationCaptured={(id) => {
+              capturedIdRef.current = id
+              setConversationId(id)
+            }}
           />
         )}
         {hasOpenedOnce && hydrating && (

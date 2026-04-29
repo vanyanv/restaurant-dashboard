@@ -13,6 +13,16 @@ interface Props {
    * first mount. Pair with a unique `key` on the parent so swapping
    * conversations triggers a remount. */
   initialMessages?: UIMessage[]
+  /** Fires once per assistant turn after the model finishes streaming.
+   * Used by the chat page to refresh its conversation rail without
+   * polling. */
+  onTurnFinish?: () => void
+  /** Fires the first time the server-assigned conversation id arrives on
+   * an in-flight stream's `x-conversation-id` header. The parent surface
+   * uses this to update its drawer-context id without triggering its own
+   * hydration effect — re-fetching here would change the thread's remount
+   * key and drop the live `useChat` streaming state mid-turn. */
+  onConversationCaptured?: (id: string) => void
 }
 
 /** Wraps `useChat` for the drawer + page surfaces. Exports a single
@@ -22,9 +32,23 @@ interface Props {
  * server-assigned conversation id to the `x-conversation-id` response
  * header. We override `fetch` so the response can be inspected for that
  * header before the body is consumed by the transport. */
-export function ChatThread({ initialMessages }: Props = {}) {
-  const { conversationId, setConversationId } = useChatDrawer()
+export function ChatThread({
+  initialMessages,
+  onTurnFinish,
+  onConversationCaptured,
+}: Props = {}) {
+  const { conversationId } = useChatDrawer()
   const [seedText, setSeedText] = useState<string | undefined>(undefined)
+  // Hold the latest onTurnFinish in a ref so the status-watching effect
+  // doesn't need it as a dependency (which would re-run on every prop
+  // change and could double-fire).
+  const onTurnFinishRef = useRef(onTurnFinish)
+  onTurnFinishRef.current = onTurnFinish
+  // Same trick for onConversationCaptured so the transport useMemo doesn't
+  // re-run (and replace the in-flight transport) when the parent passes a
+  // fresh inline callback.
+  const onConversationCapturedRef = useRef(onConversationCaptured)
+  onConversationCapturedRef.current = onConversationCaptured
 
   // Stash the latest conversation id in a ref so the transport can attach
   // it to every outgoing request without forcing a remount.
@@ -48,12 +72,12 @@ export function ChatThread({ initialMessages }: Props = {}) {
             if (id && id !== conversationIdRef.current) {
               conversationIdRef.current = id
               // Defer to next tick so we don't update parent state during render.
-              setTimeout(() => setConversationId(id), 0)
+              setTimeout(() => onConversationCapturedRef.current?.(id), 0)
             }
             return res
           }),
       }),
-    [setConversationId],
+    [],
   )
 
   const { messages, sendMessage, status, error } = useChat({
@@ -72,6 +96,20 @@ export function ChatThread({ initialMessages }: Props = {}) {
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [messages])
+
+  // Fire `onTurnFinish` once per turn — when status transitions from an
+  // active state (`submitted` / `streaming`) back to `ready`. The chat
+  // page uses this to refresh its conversation rail in place of polling.
+  const wasActiveRef = useRef(false)
+  useEffect(() => {
+    const active = status === "submitted" || status === "streaming"
+    if (!active && wasActiveRef.current) {
+      wasActiveRef.current = false
+      onTurnFinishRef.current?.()
+    } else if (active) {
+      wasActiveRef.current = true
+    }
+  }, [status])
 
   const isStreaming = status === "submitted" || status === "streaming"
   const hasMessages = messages.length > 0
