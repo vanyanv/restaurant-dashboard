@@ -23,6 +23,11 @@ interface Props {
    * hydration effect — re-fetching here would change the thread's remount
    * key and drop the live `useChat` streaming state mid-turn. */
   onConversationCaptured?: (id: string) => void
+  /** Fires when /api/chat returns 404 for the pinned conversation id —
+   * meaning the conversation was deleted server-side (or was never owned
+   * by the caller). Parent surfaces clear their context id so the next
+   * send creates a fresh conversation instead of failing again. */
+  onConversationLost?: () => void
 }
 
 /** Wraps `useChat` for the drawer + page surfaces. Exports a single
@@ -36,6 +41,7 @@ export function ChatThread({
   initialMessages,
   onTurnFinish,
   onConversationCaptured,
+  onConversationLost,
 }: Props = {}) {
   const { conversationId } = useChatDrawer()
   const [seedText, setSeedText] = useState<string | undefined>(undefined)
@@ -49,6 +55,8 @@ export function ChatThread({
   // fresh inline callback.
   const onConversationCapturedRef = useRef(onConversationCaptured)
   onConversationCapturedRef.current = onConversationCaptured
+  const onConversationLostRef = useRef(onConversationLost)
+  onConversationLostRef.current = onConversationLost
 
   // Stash the latest conversation id in a ref so the transport can attach
   // it to every outgoing request without forcing a remount.
@@ -68,6 +76,15 @@ export function ChatThread({
         }),
         fetch: (input, init) =>
           fetch(input as RequestInfo, init).then((res) => {
+            // Stale conversation id (deleted server-side, or owned by a
+            // different account). Clear the ref + bubble up so the parent
+            // surface drops its context id; the very next send will hit
+            // the route's create-conversation branch and start fresh.
+            if (res.status === 404 && conversationIdRef.current) {
+              conversationIdRef.current = null
+              setTimeout(() => onConversationLostRef.current?.(), 0)
+              return res
+            }
             const id = res.headers.get("x-conversation-id")
             if (id && id !== conversationIdRef.current) {
               conversationIdRef.current = id
@@ -113,7 +130,7 @@ export function ChatThread({
 
   const isStreaming = status === "submitted" || status === "streaming"
   const hasMessages = messages.length > 0
-  const errorText = error ? error.message || "Something went wrong." : null
+  const errorText = error ? friendlyError(error.message) : null
 
   return (
     <>
@@ -154,4 +171,23 @@ export function ChatThread({
       />
     </>
   )
+}
+
+/** Translate the AI SDK's raw error.message (often the JSON error body or an
+ * HTTP status) into one short, owner-facing line. The 404 case is recovered
+ * upstream — by the time it surfaces here, the next send will already land
+ * on a fresh conversation, so the message just acknowledges the hiccup. */
+function friendlyError(raw: string | undefined): string {
+  if (!raw) return "Something went wrong."
+  const lower = raw.toLowerCase()
+  if (lower.includes("not_found") || lower.includes("not found")) {
+    return "That thread is gone — try again to start a new one."
+  }
+  if (lower.includes("not_owned") || lower.includes("forbidden")) {
+    return "You don't have access to this thread."
+  }
+  if (lower.includes("unauthorized") || lower.includes("401")) {
+    return "Please sign in again."
+  }
+  return raw
 }

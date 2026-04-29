@@ -90,7 +90,12 @@ export function ChatDrawerProvider({ children }: { children: React.ReactNode }) 
     [],
   )
 
-  // ⌘K / Ctrl+K toggles the drawer. Esc closes when open.
+  // ⌘K / Ctrl+K toggles the drawer. Esc closes when open — but only when the
+  // keystroke originates outside the drawer. Mobile virtual keyboards (Gboard
+  // back-arrow, iOS Safari accessory bar) sometimes emit Escape on submit,
+  // which would otherwise dismiss the drawer right after the owner sends a
+  // question. The composer has its own local Escape handler that clears the
+  // draft first, then closes on a second press via the close button.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey
@@ -98,6 +103,14 @@ export function ChatDrawerProvider({ children }: { children: React.ReactNode }) 
         e.preventDefault()
         toggleDrawer()
       } else if (e.key === "Escape") {
+        // Mobile virtual keyboards (Gboard back-arrow, iOS Safari accessory)
+        // sometimes emit Escape when committing a textarea, which would
+        // otherwise dismiss the drawer right after the owner sends a
+        // question. The composer has its own local Escape handler for the
+        // "clear draft" path; let the close button and backdrop be the
+        // close affordances when focus is inside the input.
+        const target = e.target as Element | null
+        if (target?.classList?.contains("chat-input")) return
         setState((s) => (s.open ? { ...s, open: false } : s))
       }
     }

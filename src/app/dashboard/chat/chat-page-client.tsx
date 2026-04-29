@@ -57,7 +57,19 @@ export function ChatPageClient({ initialConversations }: Props) {
       return
     }
     fetch(`/api/chat/conversations/${conversationId}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        // Stale id (deleted, cascaded, or owned by a different user). Drop
+        // it so the next send creates a fresh thread instead of POSTing
+        // /api/chat with a dead id and surfacing "NOT_FOUND" to the owner.
+        if (r.status === 404) {
+          if (!cancelled) {
+            resetConversation()
+            setHydrated({ id: null, messages: [] })
+          }
+          return null
+        }
+        return r.ok ? r.json() : null
+      })
       .then((data) => {
         if (cancelled || !data?.conversation) return
         const msgs: UIMessage[] = hydrateConversationMessages(
@@ -183,6 +195,11 @@ export function ChatPageClient({ initialConversations }: Props) {
           onConversationCaptured={(id) => {
             capturedIdRef.current = id
             setConversationId(id)
+          }}
+          onConversationLost={() => {
+            capturedIdRef.current = null
+            resetConversation()
+            setHydrated({ id: null, messages: [] })
           }}
         />
       </section>
