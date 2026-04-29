@@ -16,7 +16,7 @@ import {
   ChefHat,
   Package,
   UtensilsCrossed,
-  Sparkles,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react"
 import { signOut } from "next-auth/react"
@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/sidebar"
 import { NavFrequent } from "@/components/nav-frequent"
 import { recordNavClick } from "@/lib/nav-frequency"
+import { useChatDrawer } from "@/components/chat/chat-drawer-context"
 
 export type NavItem = {
   title: string
@@ -67,21 +68,13 @@ const NAV: NavSection[] = [
           { title: "Analytics", url: "/dashboard/analytics" },
           { title: "P&L", url: "/dashboard/pnl" },
           { title: "COGS", url: "/dashboard/cogs" },
-          { title: "Menu Performance", url: "/dashboard/menu" },
           { title: "Product Mix", url: "/dashboard/product-mix" },
         ],
       },
       {
-        title: "AI Analytics",
-        url: "/dashboard/ai-analytics",
-        icon: Sparkles,
-        items: [
-          { title: "Overview", url: "/dashboard/ai-analytics" },
-          { title: "Sales", url: "/dashboard/ai-analytics/sales" },
-          { title: "Menu", url: "/dashboard/ai-analytics/menu" },
-          { title: "COGS", url: "/dashboard/ai-analytics/cogs" },
-          { title: "Invoices", url: "/dashboard/ai-analytics/invoices" },
-        ],
+        title: "Ask",
+        url: "/dashboard/chat",
+        icon: MessageSquare,
       },
       {
         title: "Orders",
@@ -190,6 +183,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     >
       <SidebarHeader className="p-0">
         <EditorialBrand />
+        <ChatTriggerRow />
       </SidebarHeader>
 
       <SidebarContent className="px-0 gap-0">
@@ -210,6 +204,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarRail />
     </Sidebar>
+  )
+}
+
+/** Sidebar entry point for the owner-analytics chat. Lives directly under
+ * the masthead so it reads as a primary affordance, not a secondary nav
+ * item. Clicking opens the drawer; the kbd chip echoes the global ⌘K
+ * shortcut. */
+function ChatTriggerRow() {
+  const { openDrawer, open } = useChatDrawer()
+  return (
+    <div className="editorial-chat-trigger-row">
+      <button
+        type="button"
+        onClick={openDrawer}
+        aria-pressed={open}
+        aria-label="Open chat"
+        className={
+          "editorial-chat-trigger" + (open ? " is-active" : "")
+        }
+      >
+        <span className="editorial-chat-trigger__label">Ask</span>
+        <span className="editorial-chat-trigger__hint">⌘K</span>
+      </button>
+    </div>
   )
 }
 

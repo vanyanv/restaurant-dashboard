@@ -2,7 +2,10 @@ import { cookies } from "next/headers"
 import { Fraunces } from "next/font/google"
 import { AppSidebarClient } from "@/components/app-sidebar-client"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { ChatDrawerProvider } from "@/components/chat/chat-drawer-context"
+import { ChatDrawer } from "@/components/chat/chat-drawer"
 import "./editorial.css"
+import "@/components/chat/chat.css"
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -21,10 +24,13 @@ export default async function DashboardLayout({
 
   return (
     <div className={`${fraunces.variable} editorial-surface`}>
-      <SidebarProvider defaultOpen={defaultPinned}>
-        <AppSidebarClient />
-        <SidebarInset>{children}</SidebarInset>
-      </SidebarProvider>
+      <ChatDrawerProvider>
+        <SidebarProvider defaultOpen={defaultPinned}>
+          <AppSidebarClient />
+          <SidebarInset>{children}</SidebarInset>
+        </SidebarProvider>
+        <ChatDrawer />
+      </ChatDrawerProvider>
     </div>
   )
 }
