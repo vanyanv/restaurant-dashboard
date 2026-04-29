@@ -28,16 +28,43 @@ export interface OwnerStoreRow {
   address: string | null
 }
 
+/**
+ * Module-scoped cache for the owner store list. Stores change rarely; the
+ * chat layer reads this on every turn to render the system prompt and to
+ * resolve "all my stores" tool calls. A 60s TTL is short enough that a new
+ * store appears within a minute and long enough to make repeat chat turns
+ * skip a Postgres round-trip.
+ */
+const STORE_CACHE_TTL_MS = 60_000
+const storeCache = new Map<
+  string,
+  { stores: OwnerStoreRow[]; expiresAt: number }
+>()
+
 /** Returns every active store owned by `ownerId`. Used to inject the store
  * list into the system prompt and to resolve "all my stores" tool calls. */
 export async function listOwnerStores(
   ownerId: string,
 ): Promise<OwnerStoreRow[]> {
-  return prisma.store.findMany({
+  const cached = storeCache.get(ownerId)
+  if (cached && cached.expiresAt > Date.now()) return cached.stores
+
+  const stores = await prisma.store.findMany({
     where: { ownerId, isActive: true },
     select: { id: true, name: true, address: true },
     orderBy: { name: "asc" },
   })
+  storeCache.set(ownerId, {
+    stores,
+    expiresAt: Date.now() + STORE_CACHE_TTL_MS,
+  })
+  return stores
+}
+
+/** Drop the cached store list for one owner. Call after store create/edit/
+ * delete mutations so the chat picks up changes within the turn. */
+export function invalidateOwnerStoreCache(ownerId: string): void {
+  storeCache.delete(ownerId)
 }
 
 /**

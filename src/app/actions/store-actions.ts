@@ -19,6 +19,8 @@ import {
 import type { UnmappedMenuItem } from "@/lib/pnl-cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
+import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
+import { cached, stableKey } from "@/lib/cache/cached"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -65,6 +67,7 @@ export async function createStore(formData: FormData) {
       },
     })
 
+    invalidateOwnerStoreCache(session.user.id)
     revalidatePath("/dashboard")
     return { success: true, store }
   } catch (error) {
@@ -103,13 +106,16 @@ export async function getOtterAnalytics(
   storeId?: string,
   options?: { days?: number; startDate?: string; endDate?: string }
 ): Promise<import("@/types/analytics").StoreAnalyticsData | null> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  const ownerId = session.user.id
+
+  return cached(
+    `otter:owner:${ownerId}:${stableKey({ storeId, ...(options ?? {}) })}`,
+    300,
+    ["otter", `owner:${ownerId}`],
+    async () => {
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return null
-    }
-
     const stores = await getStores()
     if (stores.length === 0) {
       return null
@@ -376,6 +382,8 @@ export async function getOtterAnalytics(
     console.error("Get Otter analytics error:", error)
     return null
   }
+    },
+  )
 }
 
 export async function getRevenueTrendData(
@@ -452,10 +460,16 @@ export async function getRevenueTrendData(
 export async function getDashboardAnalytics(
   options?: { days?: number; startDate?: string; endDate?: string }
 ): Promise<import("@/types/analytics").DashboardData | null> {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) return null
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  const ownerId = session.user.id
 
+  return cached(
+    `dash:owner:${ownerId}:${stableKey(options ?? {})}`,
+    300,
+    ["dash", `owner:${ownerId}`],
+    async () => {
+  try {
     const stores = await getStores()
     if (stores.length === 0) return null
 
@@ -645,6 +659,8 @@ export async function getDashboardAnalytics(
     console.error("Get dashboard analytics error:", error)
     return null
   }
+    },
+  )
 }
 
 export async function getMenuCategoryAnalytics(
@@ -1482,6 +1498,7 @@ export async function updateStore(storeId: string, formData: FormData) {
       data: validatedData,
     })
 
+    invalidateOwnerStoreCache(session.user.id)
     revalidatePath("/dashboard/stores")
     revalidatePath(`/dashboard/stores/${storeId}`)
     return { success: true, store: updatedStore }
@@ -1524,6 +1541,7 @@ export async function deleteStore(storeId: string) {
       data: { isActive: false }
     })
 
+    invalidateOwnerStoreCache(session.user.id)
     revalidatePath("/dashboard/stores")
     revalidatePath("/dashboard")
     return { success: true }
@@ -1563,6 +1581,7 @@ export async function toggleStoreStatus(storeId: string) {
       data: { isActive: !store.isActive }
     })
 
+    invalidateOwnerStoreCache(session.user.id)
     revalidatePath("/dashboard/stores")
     revalidatePath(`/dashboard/stores/${storeId}`)
     return { success: true, store: updatedStore }
@@ -2492,11 +2511,21 @@ export async function getAllStoresPnL(input: {
   endDate: Date
   granularity: Granularity
 }): Promise<AllStoresPnLResult> {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) return { error: "Unauthorized" }
-    if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { error: "Unauthorized" }
+  if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
+  const ownerId = session.user.id
 
+  return cached(
+    `pnl:owner:${ownerId}:${stableKey({
+      s: input.startDate.toISOString(),
+      e: input.endDate.toISOString(),
+      g: input.granularity,
+    })}`,
+    600,
+    ["pnl", `owner:${ownerId}`],
+    async () => {
+  try {
     const stores = await prisma.store.findMany({
       where: { ownerId: session.user.id, isActive: true },
       select: {
@@ -2720,6 +2749,8 @@ export async function getAllStoresPnL(input: {
     const msg = error instanceof Error ? error.message : String(error)
     return { error: `Failed to load P&L: ${msg.slice(0, 300)}` }
   }
+    },
+  )
 }
 
 /**

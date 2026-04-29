@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, useTransition, type ReactNode } from "react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { ChevronDown, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,15 @@ import {
 import { cn } from "@/lib/utils"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { MenuItemList } from "./menu-item-list"
-import { RecipeCanvas, type CanvasInitialValue } from "./recipe-canvas"
+import type { CanvasInitialValue } from "./recipe-canvas"
+
+// `RecipeCanvas` pulls in @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/modifiers,
+// and a chunk of recipe-editor logic. The canvas only renders once the user
+// picks an item to edit, so defer the bundle until then.
+const RecipeCanvas = dynamic(
+  () => import("./recipe-canvas").then((m) => ({ default: m.RecipeCanvas })),
+  { ssr: false },
+)
 import type { IngredientRowData } from "./sortable-ingredient-row"
 import { getRecipeDetail } from "@/app/actions/recipe-actions"
 import {

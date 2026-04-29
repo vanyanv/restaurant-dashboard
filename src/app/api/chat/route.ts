@@ -109,7 +109,14 @@ export async function POST(req: Request) {
     ]),
   )
 
+  const requestStartMs = performance.now()
+  const systemPromptStartMs = performance.now()
   const system = await buildSystemPrompt(ownerId)
+  const systemPromptMs = Math.round(performance.now() - systemPromptStartMs)
+
+  // First-token latency captured from the first `text-delta` chunk.
+  const streamStartMs = performance.now()
+  let firstTokenMs: number | null = null
 
   // Captured per-step so we can persist tool-call provenance alongside
   // the assistant's final text.
@@ -129,6 +136,11 @@ export async function POST(req: Request) {
     messages: modelMessages,
     tools: toolSet,
     stopWhen: stepCountIs(8),
+    onChunk: ({ chunk }) => {
+      if (firstTokenMs === null && chunk.type === "text-delta") {
+        firstTokenMs = Math.round(performance.now() - streamStartMs)
+      }
+    },
     onStepFinish: ({ toolCalls, toolResults }) => {
       const now = Date.now()
       for (const call of toolCalls) {
@@ -144,7 +156,21 @@ export async function POST(req: Request) {
         })
       }
     },
-    onFinish: async ({ text }) => {
+    onFinish: async ({ text, usage, providerMetadata }) => {
+      const totalMs = Math.round(performance.now() - requestStartMs)
+      const toolMs = capturedToolCalls.map((c) => c.durationMs)
+      const cachedTokens =
+        (providerMetadata?.openai as { cachedPromptTokens?: number } | undefined)
+          ?.cachedPromptTokens ?? 0
+      const promptTokens = (usage as { inputTokens?: number } | undefined)
+        ?.inputTokens
+      console.log(
+        `[chat] ownerId=${ownerId} convId=${conversationId} ` +
+          `systemPromptMs=${systemPromptMs} firstTokenMs=${firstTokenMs ?? "n/a"} ` +
+          `totalMs=${totalMs} tools=${capturedToolCalls.length} ` +
+          `toolMs=[${toolMs.join(",")}] ` +
+          `inputTokens=${promptTokens ?? "n/a"} cachedTokens=${cachedTokens}`,
+      )
       try {
         await appendMessage(chatPrisma, {
           conversationId: conversationId!,

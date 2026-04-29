@@ -751,3 +751,39 @@ model MenuItemEmbedding {
   @@index([ownerId])
   @@index([storeId])
 }
+
+/// pgvector embedding for one owner-built Recipe. Chunk text folds in the
+/// recipe's first few RecipeIngredient names so a query like "cheese
+/// burger" can hit a recipe whose ingredients include cheddar even when
+/// the recipe is just named "Smash Burger". `category` is denormalized so
+/// `searchRecipes` can return ready-to-display rows without joining back.
+model RecipeEmbedding {
+  id              String   @id @default(cuid())
+  recipeId        String   @unique
+  ownerId         String
+  category        String
+  itemName        String
+  contentSnapshot String
+  embedding       Unsupported("vector(1536)")
+  createdAt       DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+/// pgvector embedding for one owner CanonicalIngredient. Chunk text folds
+/// in the per-store IngredientAlias `rawName`s so vendor jargon ("16/20
+/// EZ peel", "EVOO") matches the canonical. `category` is denormalized so
+/// `searchCanonicalIngredients` can return ready-to-display rows without
+/// joining back.
+model CanonicalIngredientEmbedding {
+  id                    String   @id @default(cuid())
+  canonicalIngredientId String   @unique
+  ownerId               String
+  category              String?
+  name                  String
+  contentSnapshot       String
+  embedding             Unsupported("vector(1536)")
+  createdAt             DateTime @default(now())
+
+  @@index([ownerId])
+}

@@ -13,6 +13,7 @@ import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
+import { bustTags } from "@/lib/cache/cached"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
 const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
@@ -553,6 +554,13 @@ async function runSync(emit: ProgressEmitter, userId: string): Promise<SyncResul
     phase: "complete", status: "done", totalProgress: 100,
     detail: message, counts,
   })
+
+  // Bust the owner's invoice/dash/pnl caches if anything actually changed.
+  // Skipping the call when `created === 0` keeps idle cron runs from
+  // burning a Redis round-trip every minute.
+  if (counts.created > 0) {
+    await bustTags([`owner:${userId}`])
+  }
 
   return { message: `${message} (log: ${syncLog.id})`, ...counts }
 }

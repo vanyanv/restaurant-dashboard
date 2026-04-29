@@ -8,7 +8,15 @@ import {
   getTopMenuItems,
   searchMenuItems,
 } from "./menu"
-import { getIngredientPrices } from "./ingredients"
+import {
+  compareVendorPrices,
+  getIngredientPrice,
+  getIngredientPriceHistory,
+  getIngredientPrices,
+  listIngredientGaps,
+  listRecipesByIngredient,
+  searchCanonicalIngredients,
+} from "./ingredients"
 import {
   getInvoiceById,
   getInvoiceSpend,
@@ -16,7 +24,14 @@ import {
   searchInvoices,
   sumInvoiceLines,
 } from "./invoices"
-import { getRecipeById, getRecipeByName, searchRecipes } from "./recipes"
+import {
+  getMenuMargin,
+  getRecipeById,
+  getRecipeByName,
+  listRecipesByCategory,
+  rankRecipes,
+  searchRecipes,
+} from "./recipes"
 import { getOperationalCosts, getStoreBreakdown } from "./store-summary"
 import { getRefunds } from "./refunds"
 
@@ -47,6 +62,12 @@ export const chatTools = {
   // COGS / ingredients
   getCogsByItem,
   getIngredientPrices,
+  searchCanonicalIngredients,
+  getIngredientPrice,
+  getIngredientPriceHistory,
+  compareVendorPrices,
+  listRecipesByIngredient,
+  listIngredientGaps,
   // Invoices
   searchInvoices,
   sumInvoiceLines,
@@ -57,6 +78,9 @@ export const chatTools = {
   searchRecipes,
   getRecipeByName,
   getRecipeById,
+  getMenuMargin,
+  rankRecipes,
+  listRecipesByCategory,
   // Refunds
   getRefunds,
 } as const

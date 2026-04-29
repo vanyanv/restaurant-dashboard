@@ -16,6 +16,7 @@ import {
 } from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { bustTags } from "@/lib/cache/cached"
 
 export const maxDuration = 60
 
@@ -611,6 +612,13 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     phase: "complete", status: "done", totalProgress: 100,
     detail: message, counts,
   })
+
+  // Otter sync runs globally for all owners' active stores. If anything
+  // wrote, bust the otter/dash/pnl tags so dashboards reflect the new data
+  // on the next page load. Skips when nothing changed to save Redis ops.
+  if (synced > 0 || itemSynced > 0 || cogsRowsWritten > 0) {
+    await bustTags(["otter", "dash", "pnl"])
+  }
 
   return {
     message,

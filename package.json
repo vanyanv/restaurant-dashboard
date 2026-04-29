@@ -50,6 +50,7 @@
     "@tanstack/react-query-devtools": "^5.85.5",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.24",
+    "@upstash/redis": "^1.37.0",
     "@vercel/blob": "^2.3.3",
     "ai": "^6.0.169",
     "bcryptjs": "^3.0.2",

@@ -119,9 +119,9 @@ export function ChatArtifacts({ parts }: Props) {
                 { header: "Name", render: (r) => r.itemName },
                 { header: "Category", render: (r) => r.category },
                 {
-                  header: "Ingredients",
+                  header: "Match",
                   align: "right",
-                  render: (r) => fmtCount(r.ingredientCount),
+                  render: (r) => `${(r.score * 100).toFixed(0)}%`,
                 },
               ]}
             />,

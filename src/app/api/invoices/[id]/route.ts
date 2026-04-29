@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { InvoiceStatus } from "@/generated/prisma/client"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { bustTags } from "@/lib/cache/cached"
 
 export async function GET(
   request: NextRequest,
@@ -101,5 +102,6 @@ export async function PATCH(
     },
   })
 
+  await bustTags([`owner:${session.user.id}`])
   return NextResponse.json({ id: updated.id, status: updated.status, storeId: updated.storeId })
 }

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { runHourlySync } from "@/lib/hourly-sync"
+import { bustTags } from "@/lib/cache/cached"
 
 export const maxDuration = 60
 
@@ -27,6 +28,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await runHourlySync()
+    if (result.bucketsWritten > 0) {
+      await bustTags(["otter", "dash", "pnl"])
+    }
     return NextResponse.json(result)
   } catch (error) {
     console.error("Otter hourly sync error:", error)

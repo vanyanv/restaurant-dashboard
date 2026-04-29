@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { cached, stableKey } from "@/lib/cache/cached"
 import type {
   InvoiceKpis,
   ProductAnalytics,
@@ -33,11 +34,17 @@ export async function getInvoiceSummary(options?: {
       spendByVendor: [], spendByCategory: [],
     }
   }
+  const ownerId = session.user.id
 
+  return cached(
+    `inv:owner:${ownerId}:${stableKey(options ?? {})}`,
+    300,
+    ["invoices", `owner:${ownerId}`],
+    async () => {
   const { storeId, days, startDate, endDate } = options ?? {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { ownerId: session.user.id }
+  const where: any = { ownerId }
   if (storeId) where.storeId = storeId
   if (startDate && endDate) {
     where.invoiceDate = {
@@ -57,10 +64,16 @@ export async function getInvoiceSummary(options?: {
     where.invoiceDate = { gte: start, lte: end }
   }
 
-  const [invoices, pendingReview, lineItems] = await Promise.all([
-    prisma.invoice.findMany({
+  // One groupBy across vendors avoids pulling every matching invoice row
+  // out of Postgres just to sum + bucket them in JS. For owners with
+  // hundreds of vendors and thousands of invoices, this is the difference
+  // between a multi-MB result and a few KB.
+  const [vendorGroups, pendingReview, lineItems] = await Promise.all([
+    prisma.invoice.groupBy({
+      by: ["vendorName"],
       where,
-      select: { vendorName: true, totalAmount: true },
+      _sum: { totalAmount: true },
+      _count: { _all: true },
     }),
     prisma.invoice.count({
       where: { ...where, status: "REVIEW" },
@@ -71,18 +84,16 @@ export async function getInvoiceSummary(options?: {
     }),
   ])
 
-  const totalSpend = invoices.reduce((sum, i) => sum + i.totalAmount, 0)
-  const invoiceCount = invoices.length
+  const totalSpend = vendorGroups.reduce(
+    (sum, g) => sum + (g._sum.totalAmount ?? 0),
+    0,
+  )
+  const invoiceCount = vendorGroups.reduce((sum, g) => sum + g._count._all, 0)
   const avgInvoiceTotal = invoiceCount > 0 ? totalSpend / invoiceCount : 0
-  const vendorSet = new Set(invoices.map((i) => i.vendorName))
+  const vendorCount = vendorGroups.length
 
-  // Spend by vendor
-  const vendorMap: Record<string, number> = {}
-  for (const inv of invoices) {
-    vendorMap[inv.vendorName] = (vendorMap[inv.vendorName] ?? 0) + inv.totalAmount
-  }
-  const spendByVendor = Object.entries(vendorMap)
-    .map(([vendor, total]) => ({ vendor, total }))
+  const spendByVendor = vendorGroups
+    .map((g) => ({ vendor: g.vendorName, total: g._sum.totalAmount ?? 0 }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
 
@@ -101,10 +112,12 @@ export async function getInvoiceSummary(options?: {
     invoiceCount,
     avgInvoiceTotal,
     pendingReviewCount: pendingReview,
-    vendorCount: vendorSet.size,
+    vendorCount,
     spendByVendor,
     spendByCategory,
   }
+    },
+  )
 }
 
 export async function getInvoiceList(filters?: {
