@@ -35,7 +35,12 @@ export default withAuth(
     const token = req.nextauth.token
     const path = req.nextUrl.pathname
 
-    if (path === "/" || path === "/login" || path === "/register") {
+    if (
+      path === "/" ||
+      path === "/login" ||
+      path === "/register" ||
+      path.startsWith("/signup/")
+    ) {
       return NextResponse.next()
     }
 
