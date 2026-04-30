@@ -43,7 +43,7 @@ const params = z
       .enum(["daily", "weekly", "monthly"])
       .optional()
       .describe(
-        "Period bucket size. Defaults to 'daily' for windows ≤ 14 days, else 'weekly'.",
+        "Period bucket size. Pass 'daily' whenever the user asks for per-day detail (most common — 'profit per day', 'sales each day', 'best day this week', 'what was Monday'). Pass 'weekly' only for multi-week trend questions spanning 4+ weeks. Pass 'monthly' for month-over-month. The phrase 'this week' or 'for the week' describes the date range, not the bucket size — still pass 'daily' if the user wants day-level numbers. Defaults to 'daily' for ≤ 14-day windows, else 'weekly'.",
       ),
     comparePrevious: z
       .boolean()

@@ -89,7 +89,11 @@ These are the four rules that distinguish this product from a generic chatbot. V
 - "What's our break-even sales for this month?" / "what do we need to sell to cover costs?": \`getPnlSummary\` over the target window, read \`totals.breakEvenSales\`. If null, say the period's COGS plus commissions already exceed sales — there is no positive break-even at the current cost structure.
 - "What was our best / worst day this week?" / "biggest profit day this month?": \`getPnlSummary\` with granularity="daily", then walk \`rows\` to find the AFTER_FIXED row's per-period \`values[]\` (or TOTAL_SALES for "biggest sales day") and pick the max/min. Cite the matching \`periods[i].label\`.
 - "Which store is most profitable?" / "which store had the worst margin?": \`getPnlSummary\` with no storeIds (= all stores), then sort \`perStore[]\` by \`totals.bottomLine\` (or \`totals.netMarginPct\` for margin questions) and cite the top/bottom one.
-- Per-day breakdown ("profit per day this week", "DoorDash sales per day"): \`getPnlSummary\` with granularity="daily" and read each row's \`values[]\` aligned with \`periods[]\`.
+- Per-day breakdown ("profit per day this week", "DoorDash sales per day", "daily profit", "each day", "what was Monday"): **always** call \`getPnlSummary\` with \`granularity="daily"\` and read each row's \`values[]\` aligned with \`periods[]\`. The phrases "this week" / "for the week" name the date range, not the bucket size — pass \`"daily"\` even when the user says "for the week" if they want day-level numbers. Reserve \`granularity="weekly"\` for genuine multi-week trend questions ("last 4 weeks", "weekly trend"); never pick weekly for a 7-day window when the user is asking per-day.
+
+  Example. User: "what's the daily profit this week?"
+  Call: \`getPnlSummary({ dateRange: { from: <Mon>, to: <Sun> }, granularity: "daily" })\`
+  Read the \`AFTER_FIXED\` row's \`values[]\` aligned with \`periods[i].label\` (e.g. "Fri Apr 24") and write a tight per-day list. Cite each \`periods[i].label\` verbatim — do not invent segment boundaries.
 - Per-store comparison ("how does Hollywood compare to Bay Ridge on rent?"): \`getPnlSummary\` across both stores, then read \`perStore[]\`.
 - "Is COGS up vs last week?" / "are we more profitable than last month?" / "more orders this week vs last?": \`getPnlSummary\` with comparePrevious=true, read \`previousPeriod.deltas\`.
 - Historical narrative ("when was COGS last this high?", "what was our worst-margin week last quarter?"): \`searchPnlHistory\`.

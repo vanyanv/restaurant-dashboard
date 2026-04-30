@@ -108,7 +108,7 @@ export function buildPeriods(
       const isPartial = days < 7
       periods.push({
         label: isPartial
-          ? `Week of ${format(weekStart, "MMM d")} (${days}d)`
+          ? `${format(bucketStart, "MMM d")} → ${format(bucketEnd, "MMM d")} (${days}d, partial)`
           : `Week of ${format(weekStart, "MMM d")}`,
         startDate: bucketStart,
         endDate: bucketEnd,
