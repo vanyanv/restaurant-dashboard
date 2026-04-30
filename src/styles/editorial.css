@@ -7225,7 +7225,6 @@
   display: flex;
   flex-direction: column;
   animation: mSheetUp 220ms cubic-bezier(0.32, 0.72, 0, 1);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .m-sheet__head {
@@ -7281,7 +7280,7 @@
 .m-sheet__foot {
   display: flex;
   gap: 10px;
-  padding: 12px 16px 14px;
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--hairline);
 }
 
