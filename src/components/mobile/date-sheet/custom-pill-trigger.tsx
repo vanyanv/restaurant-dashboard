@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import type { Granularity } from "@/lib/pnl"
 
 const MToolbarCustomSheet = dynamic(
@@ -21,6 +21,9 @@ type Props = {
   isActive: boolean
   /** Short label shown on the pill when active (e.g. "MAR 5 → APR 20"). */
   activeLabel?: string
+  /** UTC-midnight Date from the URL parser. We normalize to local-time
+   *  inside this component so the calendar's local-time comparisons line
+   *  up with the user's expected calendar day. */
   initialStart: Date | null
   initialEnd: Date | null
   /** P&L only: granularity from URL (or null if auto). */
@@ -38,6 +41,10 @@ export function CustomPillTrigger({
   initialGrain,
 }: Props) {
   const [open, setOpen] = useState(false)
+
+  const localStart = useMemo(() => toLocalMidnight(initialStart), [initialStart])
+  const localEnd = useMemo(() => toLocalMidnight(initialEnd), [initialEnd])
+
   return (
     <>
       <button
@@ -50,26 +57,35 @@ export function CustomPillTrigger({
       >
         {isActive && activeLabel ? activeLabel : "CUSTOM"}
       </button>
-      {variant === "toolbar" ? (
+      {open && variant === "toolbar" && (
         <MToolbarCustomSheet
           open={open}
           onClose={() => setOpen(false)}
           pathname={pathname}
           searchParams={searchParams}
-          initialStart={initialStart}
-          initialEnd={initialEnd}
+          initialStart={localStart}
+          initialEnd={localEnd}
         />
-      ) : (
+      )}
+      {open && variant === "pnl" && (
         <MPnLCustomSheet
           open={open}
           onClose={() => setOpen(false)}
           pathname={pathname}
           searchParams={searchParams}
-          initialStart={initialStart}
-          initialEnd={initialEnd}
+          initialStart={localStart}
+          initialEnd={localEnd}
           initialGrain={initialGrain ?? null}
         />
       )}
     </>
   )
+}
+
+/** UTC-midnight Date (from `startOfDayLA`) → local-midnight Date with the
+ *  same calendar Y/M/D, so calendar cells (which are constructed via
+ *  `new Date(year, m, day)`, i.e. local) compare correctly. */
+function toLocalMidnight(d: Date | null): Date | null {
+  if (!d) return null
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
