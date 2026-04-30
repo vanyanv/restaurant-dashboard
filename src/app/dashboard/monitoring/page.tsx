@@ -3,6 +3,7 @@ import { FrontPageLede } from "@/components/monitoring/front-page-lede"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import "@/components/monitoring/monitoring.css"
 
 export const dynamic = "force-dynamic"
 
@@ -15,9 +16,12 @@ export default async function MonitoringPage() {
     orderBy: { name: "asc" },
   })
 
+  const commitSha = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"
+  const tzLabel = "PT"
+
   return (
     <main className="px-6 max-w-275 mx-auto pb-16">
-      <Masthead stores={stores} />
+      <Masthead stores={stores} commitSha={commitSha} tzLabel={tzLabel} />
       <FrontPageLede />
       <div className="space-y-6">
         <PanelPlaceholder label="SYNCS" />

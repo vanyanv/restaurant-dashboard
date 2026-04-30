@@ -209,7 +209,7 @@ Route: **`/dashboard/monitoring`**. Server component for the shell + historicals
 Single column, three zones:
 
 1. **Masthead** — Fraunces display title `Monitoring` (`opsz 144, SOFT 30`); JetBrains Mono folio strip beneath: `MON · 30 APR 2026 · 00:42 PT · sha 6dc112e · last refresh 23s ago · ↻`. To the right: a `.toolbar-btn` segmented store filter (`All · Chris Neddy's`), persisted in the URL (`?store=...`). Below the folio: one editorial status sentence in DM Sans body, `var(--ink-muted)` at rest, only the failing clause turning `var(--accent)`.
-   - All-good: *"All five syncs current. No errors in the last 4 hours. AI spend $2.40 today, on baseline. Database 17%. Cache 67% hit."*
+   - All-good: *"All five syncs current. No errors in the last 4 hours. AI spend $2.40 today, on baseline. Database 17%. Cache memory 4%."* (Hit-rate isn't surfaced in the masthead — it requires a per-prefix aggregate, which lives in the cache panel only, not at the tile level.)
    - Degraded: *"otter.orders.sync overdue 2 hours. 3 errors logged today. AI spend +43% over 7-day baseline."*
 
 2. **Front-page lede (conditional)** — present only when one or more concerns are in `FAILURE`. Separated from the masthead by `.perforation`. Headline-Fraunces sentence naming the most severe failure, one body sentence with last-success time + next-attempt time, an inline click-target opening the relevant panel's drilldown. **When everything is fine, this zone is absent — not a green badge, not "All systems operational." Absent.**

@@ -17,7 +17,15 @@ type Summary = {
   todayCostUsd: number
 }
 
-export function Masthead({ stores }: { stores: { id: string; name: string }[] }) {
+export function Masthead({
+  stores,
+  commitSha,
+  tzLabel,
+}: {
+  stores: { id: string; name: string }[]
+  commitSha: string
+  tzLabel: string
+}) {
   const router = useRouter()
   const params = useSearchParams()
   const selected = params.get("store") || "all"
@@ -59,7 +67,7 @@ export function Masthead({ stores }: { stores: { id: string; name: string }[] })
       <div className="flex items-baseline justify-between gap-4">
         <h1
           style={{
-            fontFamily: "Fraunces, Iowan Old Style, Georgia, serif",
+            fontFamily: "var(--font-fraunces), serif",
             fontSize: "clamp(28px, 4vw, 44px)",
             fontWeight: 500,
             fontVariationSettings: '"opsz" 144, "SOFT" 30',
@@ -77,16 +85,14 @@ export function Masthead({ stores }: { stores: { id: string; name: string }[] })
         className="mt-3 font-mono uppercase"
         style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--ink-faint)" }}
       >
-        {formatFolio(dataUpdatedAt)} · last refresh {ago(dataUpdatedAt)} ·{" "}
+        {formatFolio(dataUpdatedAt, tzLabel)}
+        {dataUpdatedAt ? ` · sha ${commitSha}` : ""} · last refresh {ago(dataUpdatedAt)} ·{" "}
         <button
           type="button"
           onClick={() => refetch()}
           aria-label="Refresh"
-          style={{
-            display: "inline-block",
-            transition: "transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1)",
-            transform: isFetching ? "rotate(360deg)" : "rotate(0deg)",
-          }}
+          className="monitoring-refresh-icon"
+          data-spinning={isFetching ? "true" : undefined}
         >
           ↻
         </button>
@@ -95,15 +101,16 @@ export function Masthead({ stores }: { stores: { id: string; name: string }[] })
       <p
         className="mt-4"
         style={{
-          fontFamily: "DM Sans, ui-sans-serif, sans-serif",
+          fontFamily: "var(--font-dm-sans), ui-sans-serif, sans-serif",
           fontSize: 13,
           lineHeight: 1.5,
           color: "var(--ink-muted)",
           maxWidth: "70ch",
+          fontVariantNumeric: "tabular-nums lining-nums",
         }}
       >
         {data === undefined ? (
-          <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+          <span style={{ fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}>
             loading
           </span>
         ) : allGood ? (
@@ -178,13 +185,13 @@ function StoreFilter({
   )
 }
 
-function formatFolio(t: number): string {
+function formatFolio(t: number, tz: string): string {
   if (!t) return ""
   const d = new Date(t)
   const day = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()
   const date = d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()
   const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-  return `${day} · ${date} · ${time}`
+  return `${day} · ${date} · ${time} ${tz}`
 }
 
 function ago(t: number): string {
