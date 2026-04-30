@@ -33,10 +33,14 @@ export function EditorialCalendar({
   const [start, setStart] = useState<Date | null>(initialStart)
   const [end, setEnd] = useState<Date | null>(initialEnd)
 
-  const todayStr = localDateStr(new Date())
-  const maxStr = maxDateStr ?? todayStr
+  // Pinned at mount so a sheet left open across midnight doesn't flip
+  // the "today" label or future-disable rule mid-session.
+  const todayStr = useMemo(() => localDateStr(new Date()), [])
+  const maxStr = useMemo(() => maxDateStr ?? localDateStr(new Date()), [maxDateStr])
 
   const olderMonth = useMemo(() => addMonths(anchor, -1), [anchor])
+  const anchorMonthStr = useMemo(() => localDateStr(anchor).slice(0, 7), [anchor])
+  const todayMonthStr = todayStr.slice(0, 7)
 
   function handleDayClick(d: Date) {
     if (!start || (start && end)) {
@@ -79,7 +83,7 @@ export function EditorialCalendar({
         onDayClick={handleDayClick}
         onPrev={null}
         onNext={() => setAnchor(addMonths(anchor, 1))}
-        nextDisabled={isSameMonth(anchor, todayDate())}
+        nextDisabled={anchorMonthStr >= todayMonthStr}
       />
     </div>
   )
@@ -160,7 +164,7 @@ function Month({
         ))}
       </div>
 
-      <div className="ed-cal__grid" role="grid">
+      <div className="ed-cal__grid">
         {cells.map((c) => {
           if (!c.date) {
             return <span key={c.key} className="ed-cal__day ed-cal__day--blank" />
@@ -205,13 +209,4 @@ function Month({
 
 function addMonths(d: Date, delta: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + delta, 1)
-}
-
-function isSameMonth(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
-}
-
-function todayDate(): Date {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1)
 }
