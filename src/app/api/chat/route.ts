@@ -10,6 +10,8 @@ import {
 } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { chatTools } from "@/lib/chat/tools"
 import {
@@ -83,15 +85,16 @@ export async function POST(req: Request) {
   // Persist the user's latest turn before invoking the model so the
   // conversation reflects what the model saw.
   const lastMessage = body.messages[body.messages.length - 1]
-  if (lastMessage.role === "user") {
-    const text = extractText(lastMessage)
-    if (text) {
-      await appendMessage(chatPrisma, {
-        conversationId,
-        role: "user",
-        content: text,
-      })
-    }
+  const userMessageText =
+    lastMessage.role === "user" ? extractText(lastMessage) : ""
+  // ChatTurn truncates to 4KB on each side.
+  const userMessageStored = userMessageText.slice(0, 4000)
+  if (lastMessage.role === "user" && userMessageText) {
+    await appendMessage(chatPrisma, {
+      conversationId,
+      role: "user",
+      content: userMessageText,
+    })
   }
 
   const ctx = { ownerId, accountId, prisma: chatPrisma }
@@ -127,11 +130,15 @@ export async function POST(req: Request) {
     result: unknown
     durationMs: number
   }> = []
+  const capturedToolErrors: Record<string, string> = {}
   const stepStartTimes = new Map<string, number>()
+  const turnStartMs = Date.now()
 
   const modelMessages = await convertToModelMessages(body.messages)
 
-  const result = streamText({
+  let result: ReturnType<typeof streamText>
+  try {
+    result = streamText({
     model: openai(CHAT_ROUTING_MODEL),
     system,
     messages: modelMessages,
@@ -155,9 +162,13 @@ export async function POST(req: Request) {
           result: tr.output,
           durationMs: Math.max(0, now - start),
         })
+        const maybeError = (tr as { error?: unknown }).error
+        if (maybeError !== undefined && maybeError !== null) {
+          capturedToolErrors[tr.toolName] = String(maybeError).slice(0, 1000)
+        }
       }
     },
-    onFinish: async ({ text, usage, providerMetadata }) => {
+    onFinish: async ({ text, usage, providerMetadata, finishReason }) => {
       const totalMs = Math.round(performance.now() - requestStartMs)
       const toolMs = capturedToolCalls.map((c) => c.durationMs)
       const cachedTokens =
@@ -165,6 +176,8 @@ export async function POST(req: Request) {
           ?.cachedPromptTokens ?? 0
       const promptTokens = (usage as { inputTokens?: number } | undefined)
         ?.inputTokens
+      const completionTokens = (usage as { outputTokens?: number } | undefined)
+        ?.outputTokens
       console.log(
         `[chat] ownerId=${ownerId} convId=${conversationId} ` +
           `systemPromptMs=${systemPromptMs} firstTokenMs=${firstTokenMs ?? "n/a"} ` +
@@ -172,6 +185,47 @@ export async function POST(req: Request) {
           `toolMs=[${toolMs.join(",")}] ` +
           `inputTokens=${promptTokens ?? "n/a"} cachedTokens=${cachedTokens}`,
       )
+
+      // Record token usage. Wrapper never throws — returns null on failure.
+      const aiUsageEventId = await recordAiUsage({
+        feature: "chat",
+        provider: "openai",
+        model: CHAT_ROUTING_MODEL,
+        inputTokens: promptTokens ?? 0,
+        outputTokens: completionTokens ?? 0,
+        cachedTokens,
+        userId: ownerId,
+        durationMs: Date.now() - turnStartMs,
+      })
+
+      // Classify the turn.
+      let status: "OK" | "EMPTY" | "TRUNCATED" | "REFUSED" | "TOOL_FAILED" = "OK"
+      if (Object.keys(capturedToolErrors).length > 0) status = "TOOL_FAILED"
+      else if (finishReason === "length") status = "TRUNCATED"
+      else if (finishReason === "content-filter") status = "REFUSED"
+      else if (!text || text.trim().length === 0) status = "EMPTY"
+
+      try {
+        await prisma.chatTurn.create({
+          data: {
+            conversationId: conversationId!,
+            userId: ownerId,
+            userMessage: userMessageStored,
+            assistantMessage: String(text ?? "").slice(0, 4000),
+            toolsUsed: capturedToolCalls.map((c) => c.toolName),
+            aiUsageEventId,
+            status,
+            finishReason: finishReason ?? null,
+            toolErrors:
+              Object.keys(capturedToolErrors).length > 0
+                ? (capturedToolErrors as never)
+                : undefined,
+          },
+        })
+      } catch (err) {
+        console.error("[chat] failed to write ChatTurn (non-fatal)", err)
+      }
+
       try {
         await appendMessage(chatPrisma, {
           conversationId: conversationId!,
@@ -203,6 +257,26 @@ export async function POST(req: Request) {
       }
     },
   })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    const isRateLimit = /rate.?limit|429/i.test(message)
+    try {
+      await prisma.chatTurn.create({
+        data: {
+          conversationId: conversationId!,
+          userId: ownerId,
+          userMessage: userMessageStored,
+          assistantMessage: null,
+          toolsUsed: [],
+          status: isRateLimit ? "RATE_LIMITED" : "ERROR",
+          errorMessage: message.slice(0, 4000),
+        },
+      })
+    } catch (writeErr) {
+      console.error("[chat] failed to write error ChatTurn", writeErr)
+    }
+    throw err
+  }
 
   const response = result.toUIMessageStreamResponse()
   // Surface the conversation id so the client can pin it after first turn.
