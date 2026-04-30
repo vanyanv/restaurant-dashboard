@@ -6431,6 +6431,48 @@
   }
 }
 
+/* Mobile chat shell — anchored between the viewport top and the top edge
+   of the bottom tab bar so the composer never moves while the thread
+   scrolls. Bypasses .m-shell__main padding entirely; the main element
+   underneath stays empty + 100dvh-clamped, so the body itself never
+   scrolls. */
+.m-chat-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  z-index: 30;
+}
+
+.m-chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline-bold);
+  background: rgba(255, 253, 247, 0.55);
+  flex: 0 0 auto;
+}
+
+.m-chat-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Composer here sits just above the fixed tab bar — the safe-area inset
+   is already absorbed by the m-chat-shell `bottom`, so the default
+   chat-input-shell `max(16px, env(safe-area-inset-bottom))` would double
+   up. Pin it to a flat 12px instead. */
+.m-chat-shell .chat-input-shell {
+  padding-bottom: 12px;
+}
+
 /* Mobile masthead — Pattern C "totals tray" used by analytics, P&L, COGS,
    product-mix and the Home page. Hairline-ruled tray with two or three
    tabular figures lined up. */

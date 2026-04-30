@@ -39,11 +39,12 @@ function MobileChatInner({
 }) {
   const { conversationId, setConversationId, resetConversation } =
     useChatDrawer()
-  const [conversations] = useState(initial)
+  const [conversations, setConversations] = useState(initial)
   const [hydrated, setHydrated] = useState<{
     id: string | null
     messages: UIMessage[]
   }>({ id: null, messages: [] })
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -75,25 +76,33 @@ function MobileChatInner({
     }
   }, [conversationId, resetConversation])
 
+  const handleClear = async () => {
+    if (!conversationId || deleting) return
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm("Delete this conversation? This cannot be undone.")
+    ) {
+      return
+    }
+    const id = conversationId
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/chat/conversations/${id}`, {
+        method: "DELETE",
+      })
+      if (res.ok || res.status === 404) {
+        setConversations((cs) => cs.filter((c) => c.id !== id))
+        resetConversation()
+        setHydrated({ id: null, messages: [] })
+      }
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "calc(100dvh - 56px - env(safe-area-inset-bottom, 0px) - 18px)",
-        margin: "-18px -16px 0",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "12px 16px",
-          borderBottom: "1px solid var(--hairline-bold)",
-          background: "rgba(255, 253, 247, 0.55)",
-        }}
-      >
+    <div className="m-chat-shell">
+      <div className="m-chat-toolbar">
         <select
           value={conversationId ?? ""}
           onChange={(e) =>
@@ -101,7 +110,7 @@ function MobileChatInner({
           }
           aria-label="Conversation"
           className="m-select"
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 0 }}
         >
           <option value="">+ New conversation</option>
           {conversations.map((c) => (
@@ -113,21 +122,16 @@ function MobileChatInner({
         {conversationId ? (
           <button
             type="button"
-            onClick={resetConversation}
+            onClick={handleClear}
             className="m-toolbar-btn"
+            disabled={deleting}
+            aria-label="Delete this conversation"
           >
-            New
+            {deleting ? "…" : "Clear"}
           </button>
         ) : null}
       </div>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      <div className="m-chat-body">
         <ChatThread
           key={hydrated.id ?? "new"}
           initialMessages={hydrated.messages}
