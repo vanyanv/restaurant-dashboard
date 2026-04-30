@@ -18,6 +18,10 @@ Multi-store restaurant analytics dashboard. Next.js 15 (App Router), React 19, P
 
 4. **Page sections are `.inv-panel`, not shadcn `<Card>`.** Hairline-bold border, 2px radius, warm paper background, no shadow. shadcn `<Card className="rounded-xl shadow-sm">` is wrong for dashboard composition.
 
+## Before any `prisma db push` or schema change, read this
+
+**This project has TWO databases sharing one `prisma/schema.prisma`:** `DATABASE_URL` (primary, dashboard reads/writes) and `DATABASE_URL2` (dedicated chat / vector branch — holds all `*Embedding` rows + a clone of source data). Pushing to one and forgetting the other is how the chat layer breaks at runtime with `column "(not available)" does not exist`. **Read [`docs/two-database-sync.md`](docs/two-database-sync.md)** for the dual-push workflow, the data-preserving migration pattern, and the `migrate diff` drift check that must print `No difference detected.` on both DBs as the last step of every schema change.
+
 ## Other references
 
 - Backend / architecture / data-fetching: [`docs/architecture-cheat-sheet.md`](docs/architecture-cheat-sheet.md)
