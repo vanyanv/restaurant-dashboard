@@ -11,10 +11,9 @@ import {
 import { Panel } from "@/components/mobile/panel"
 import { MToolbar } from "@/components/mobile/m-toolbar"
 import {
-  parsePeriod,
+  parseMobileRange,
   periodToDateRange,
   MOBILE_PERIODS,
-  type MobileNamedPeriod,
 } from "@/lib/mobile/period"
 
 export const dynamic = "force-dynamic"
@@ -30,13 +29,6 @@ const fmtMoney = (n: number) =>
 const fmtPct = (n: number | null) =>
   n == null ? "—" : `${n.toFixed(1)}%`
 
-function periodToOpsOptions(p: MobileNamedPeriod) {
-  const range = periodToDateRange(p)
-  return {
-    startDate: range.startDate.toISOString().slice(0, 10),
-    endDate: range.endDate.toISOString().slice(0, 10),
-  }
-}
 
 export default async function MobileOperationsPage({
   searchParams,
@@ -47,7 +39,7 @@ export default async function MobileOperationsPage({
   if (!session) redirect("/login")
 
   const sp = await searchParams
-  const period = parsePeriod(sp.period)
+  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
   const storeId = sp.store && sp.store !== "" ? sp.store : null
 
   const stores = await getStores()
@@ -55,11 +47,23 @@ export default async function MobileOperationsPage({
     ? storeId
     : null
 
-  const opts = periodToOpsOptions(period)
+  const window =
+    range.kind === "custom"
+      ? { startDate: range.start, endDate: range.end }
+      : (() => {
+          const r = periodToDateRange(range.period)
+          return { startDate: r.startDate, endDate: r.endDate }
+        })()
+  const opts = {
+    startDate: window.startDate.toISOString().slice(0, 10),
+    endDate: window.endDate.toISOString().slice(0, 10),
+  }
   const data = await getOperationalAnalytics(validStoreId ?? undefined, opts)
 
   const periodLabel =
-    MOBILE_PERIODS.find((p) => p.value === period)?.short ?? "TODAY"
+    range.kind === "named"
+      ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.short ?? "TODAY")
+      : "CUSTOM"
 
   return (
     <>
@@ -68,7 +72,7 @@ export default async function MobileOperationsPage({
         searchParams={sp}
         stores={stores.map((s) => ({ id: s.id, name: s.name }))}
         storeId={validStoreId}
-        period={period}
+        range={range}
       />
 
       <PageHead

@@ -8,7 +8,7 @@ import { PageHead } from "@/components/mobile/page-head"
 import { Panel } from "@/components/mobile/panel"
 import { MToolbar } from "@/components/mobile/m-toolbar"
 import {
-  parsePeriod,
+  parseMobileRange,
   periodToDateRange,
   MOBILE_PERIODS,
 } from "@/lib/mobile/period"
@@ -49,7 +49,7 @@ export default async function MobileOrdersPage({
   if (!session) redirect("/login")
 
   const sp = await searchParams
-  const period = parsePeriod(sp.period)
+  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
   const storeId = sp.store && sp.store !== "" ? sp.store : null
 
   const stores = await getStores()
@@ -57,9 +57,15 @@ export default async function MobileOrdersPage({
     ? storeId
     : null
 
-  const range = periodToDateRange(period)
-  const startStr = range.startDate.toISOString().slice(0, 10)
-  const endStr = range.endDate.toISOString().slice(0, 10)
+  const window =
+    range.kind === "custom"
+      ? { startDate: range.start, endDate: range.end }
+      : (() => {
+          const r = periodToDateRange(range.period)
+          return { startDate: r.startDate, endDate: r.endDate }
+        })()
+  const startStr = window.startDate.toISOString().slice(0, 10)
+  const endStr = window.endDate.toISOString().slice(0, 10)
 
   const list = await getOrdersList({
     storeId: validStoreId ?? undefined,
@@ -70,7 +76,9 @@ export default async function MobileOrdersPage({
   })
 
   const periodLabel =
-    MOBILE_PERIODS.find((p) => p.value === period)?.label ?? "Today"
+    range.kind === "named"
+      ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.label ?? "Today")
+      : "Custom range"
 
   return (
     <>
@@ -79,7 +87,7 @@ export default async function MobileOrdersPage({
         searchParams={sp}
         stores={stores.map((s) => ({ id: s.id, name: s.name }))}
         storeId={validStoreId}
-        period={period}
+        range={range}
       />
 
       <PageHead

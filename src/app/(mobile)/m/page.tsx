@@ -11,7 +11,11 @@ import {
 import { MToolbar } from "@/components/mobile/m-toolbar"
 import { HourlyChart } from "@/components/mobile/hourly-chart"
 import { DailyRevenueChart } from "@/components/mobile/daily-revenue-chart"
-import { parsePeriod, MOBILE_PERIODS, periodDateStrings } from "@/lib/mobile/period"
+import {
+  parseMobileRange,
+  periodToDateRange,
+  MOBILE_PERIODS,
+} from "@/lib/mobile/period"
 import { todayInLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
 
@@ -52,7 +56,7 @@ export default async function MobileHomePage({
   if (!session) redirect("/login")
 
   const sp = await searchParams
-  const period = parsePeriod(sp.period)
+  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
   const storeId = sp.store && sp.store !== "" ? sp.store : null
 
   const stores = await getStores()
@@ -67,14 +71,22 @@ export default async function MobileHomePage({
   // so the masthead never shows a stale zero just because the hourly precompute
   // table is behind. The 14-day chart trails the period's end so a yesterday
   // selection still gives meaningful context.
-  const periodDates = periodDateStrings(period)
-  const periodStart = periodDates[0]
-  const periodEnd = periodDates[periodDates.length - 1]
+  const window =
+    range.kind === "custom"
+      ? { startDate: range.start, endDate: range.end }
+      : (() => {
+          const r = periodToDateRange(range.period)
+          return { startDate: r.startDate, endDate: r.endDate }
+        })()
+  const periodStart = window.startDate.toISOString().slice(0, 10)
+  const periodEnd = window.endDate.toISOString().slice(0, 10)
   const trendEnd = periodEnd
   const trendStart = laDateMinusDays(trendEnd, 13)
 
   const [hourlyResult, otterPeriod, otterTrend] = await Promise.all([
-    getHourlyOrderPatterns(validStoreId ?? undefined, period),
+    range.kind === "named"
+      ? getHourlyOrderPatterns(validStoreId ?? undefined, range.period)
+      : Promise.resolve(null),
     getOtterAnalytics(validStoreId ?? undefined, {
       startDate: periodStart,
       endDate: periodEnd,
@@ -85,7 +97,7 @@ export default async function MobileHomePage({
     }),
   ])
 
-  const hourly = hourlyResult?.hourly ?? []
+  const hourly = hourlyResult?.hourly ?? null
 
   const totalSales = otterPeriod?.kpis.netRevenue ?? 0
   const totalOrders = otterPeriod?.kpis.totalOrders ?? 0
@@ -93,7 +105,9 @@ export default async function MobileHomePage({
   const previousNet = otterPeriod?.comparison.previousNet ?? 0
 
   const periodLabel =
-    MOBILE_PERIODS.find((p) => p.value === period)?.short ?? "TODAY"
+    range.kind === "named"
+      ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.short ?? "TODAY")
+      : "CUSTOM"
 
   const cells: MastheadCell[] = [
     {
@@ -114,7 +128,7 @@ export default async function MobileHomePage({
   const trendIsTrailing = trendEnd === todayInLA()
   const trendLabel = trendIsTrailing
     ? "DAILY REVENUE · LAST 14D"
-    : `DAILY REVENUE · 14D TO ${periodLabel}`
+    : `DAILY REVENUE · 14D TO ${range.kind === "named" ? periodLabel : periodEnd}`
 
   return (
     <>
@@ -123,15 +137,17 @@ export default async function MobileHomePage({
         searchParams={sp}
         stores={stores.map((s) => ({ id: s.id, name: s.name }))}
         storeId={validStoreId}
-        period={period}
+        range={range}
       />
 
       <PageHead
         dept="DAILY EDITION"
         title={
-          period === "today"
+          range.kind === "named" && range.period === "today"
             ? fmtTodayTitle()
-            : (PERIOD_TITLE[period] ?? "Today")
+            : range.kind === "named"
+            ? (PERIOD_TITLE[range.period] ?? "Today")
+            : "Custom range"
         }
         sub={
           activeStoreName
@@ -142,9 +158,11 @@ export default async function MobileHomePage({
 
       <MastheadFigures cells={cells} />
 
-      <div style={{ marginTop: 14 }}>
-        <HourlyChart data={hourly} metric="orders" showBaseline />
-      </div>
+      {range.kind === "named" && (
+        <div style={{ marginTop: 14 }}>
+          <HourlyChart data={hourly ?? []} metric="orders" showBaseline />
+        </div>
+      )}
 
       <div style={{ marginTop: 14 }}>
         <DailyRevenueChart

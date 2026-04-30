@@ -12,7 +12,12 @@ import {
 } from "@/components/mobile/masthead-figures"
 import { Panel } from "@/components/mobile/panel"
 import { MToolbar } from "@/components/mobile/m-toolbar"
-import { parsePeriod, periodDateStrings, MOBILE_PERIODS } from "@/lib/mobile/period"
+import {
+  parseMobileRange,
+  periodToDateRange,
+  periodDateStrings,
+  MOBILE_PERIODS,
+} from "@/lib/mobile/period"
 
 export const dynamic = "force-dynamic"
 
@@ -38,7 +43,7 @@ export default async function MobileAnalyticsPage({
   if (!session) redirect("/login")
 
   const sp = await searchParams
-  const period = parsePeriod(sp.period)
+  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
   const storeId = sp.store && sp.store !== "" ? sp.store : null
 
   const stores = await getStores()
@@ -48,17 +53,45 @@ export default async function MobileAnalyticsPage({
 
   // The trend action is owner-wide today (no per-store filter). We pull
   // enough history to cover the period window — last-week + this-week
-  // means up to 14 days back is sufficient for any of the four periods.
-  const trend = await getRevenueTrendData({ days: 14 })
+  // means up to 14 days back is sufficient for any of the four named periods.
+  // For custom ranges, we pull the exact window by computing how many days back
+  // the start is from today.
+  const window =
+    range.kind === "custom"
+      ? { startDate: range.start, endDate: range.end }
+      : (() => {
+          const r = periodToDateRange(range.period)
+          return { startDate: r.startDate, endDate: r.endDate }
+        })()
+  const windowStartStr = window.startDate.toISOString().slice(0, 10)
+  const windowEndStr = window.endDate.toISOString().slice(0, 10)
+
+  const daysToFetch =
+    range.kind === "named"
+      ? 14
+      : Math.max(
+          14,
+          Math.ceil(
+            (Date.now() - window.startDate.getTime()) / (24 * 60 * 60 * 1000),
+          ) + 1,
+        )
+
+  const trend = await getRevenueTrendData({ days: daysToFetch })
   const all = trend?.dailyTrends ?? []
-  const wantedDates = new Set(periodDateStrings(period))
-  const days = all.filter((d) => wantedDates.has(d.date))
+
+  // For named periods we filter by the exact date set; for custom we filter by range.
+  const days =
+    range.kind === "named"
+      ? all.filter((d) => new Set(periodDateStrings(range.period)).has(d.date))
+      : all.filter((d) => d.date >= windowStartStr && d.date <= windowEndStr)
 
   const totalNet = days.reduce((s, d) => s + d.netRevenue, 0)
   const totalGross = days.reduce((s, d) => s + d.grossRevenue, 0)
   const avgDaily = days.length > 0 ? totalNet / days.length : 0
   const periodLabel =
-    MOBILE_PERIODS.find((p) => p.value === period)?.short ?? "TODAY"
+    range.kind === "named"
+      ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.short ?? "TODAY")
+      : "CUSTOM"
 
   const cells: MastheadCell[] = [
     {
@@ -80,7 +113,7 @@ export default async function MobileAnalyticsPage({
         searchParams={sp}
         stores={stores.map((s) => ({ id: s.id, name: s.name }))}
         storeId={validStoreId}
-        period={period}
+        range={range}
       />
 
       <PageHead

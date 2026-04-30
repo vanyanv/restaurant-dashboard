@@ -1,9 +1,11 @@
 import Link from "next/link"
 import {
   MOBILE_PERIODS,
-  type MobilePeriod,
+  formatCustomRangeShort,
+  type MobileRange,
 } from "@/lib/mobile/period"
 import { MobileStoreSelect, type ToolbarStore } from "./m-store-select"
+import { CustomPillTrigger } from "./date-sheet/custom-pill-trigger"
 
 export type { ToolbarStore }
 
@@ -17,21 +19,23 @@ type Props = {
   searchParams: Record<string, string | undefined>
   stores: ToolbarStore[]
   storeId: string | null
-  period: MobilePeriod
+  /** Resolved range — either a named period or a custom window. */
+  range: MobileRange
 }
 
 /**
- * Server-rendered toolbar. The period is a row of <a> tags so navigation is
- * pure URL — back/forward + opening in new tab Just Works. The store
- * selector is a tiny client island only because <select onChange> needs JS.
+ * Server-rendered toolbar. Named pills are <a> tags so navigation is pure
+ * URL — back/forward + opening in new tab Just Works. The Custom pill is a
+ * tiny client island because it opens an interactive bottom sheet.
  */
 export function MToolbar({
   pathname,
   searchParams,
   stores,
   storeId,
-  period,
+  range,
 }: Props) {
+  const isCustom = range.kind === "custom"
   return (
     <div
       className="dock-in dock-in-1 m-toolbar"
@@ -64,8 +68,14 @@ export function MToolbar({
         style={{ margin: "0 -16px" }}
       >
         {MOBILE_PERIODS.map((p) => {
-          const active = period === p.value
-          const next = withParams(searchParams, { period: p.value })
+          const active = !isCustom && range.period === p.value
+          // When swapping to a named period, drop start/end/grain.
+          const next = withParams(searchParams, {
+            period: p.value,
+            start: null,
+            end: null,
+            grain: null,
+          })
           const href = next ? `${pathname}?${next}` : pathname
           return (
             <Link
@@ -81,6 +91,15 @@ export function MToolbar({
             </Link>
           )
         })}
+        <CustomPillTrigger
+          variant="toolbar"
+          pathname={pathname}
+          searchParams={searchParams}
+          isActive={isCustom}
+          activeLabel={isCustom ? formatCustomRangeShort(range.start, range.end) : undefined}
+          initialStart={isCustom ? range.start : null}
+          initialEnd={isCustom ? range.end : null}
+        />
       </div>
     </div>
   )
@@ -88,7 +107,7 @@ export function MToolbar({
 
 function withParams(
   current: Record<string, string | undefined>,
-  patch: Record<string, string | null | undefined>
+  patch: Record<string, string | null | undefined>,
 ): string {
   const merged: Record<string, string> = {}
   for (const [k, v] of Object.entries(current)) {
