@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { getStores } from "@/app/actions/store-actions"
+import { getStores, getOtterAnalytics } from "@/app/actions/store-actions"
 import { getHourlyOrderPatterns } from "@/app/actions/hourly-orders-actions"
 import { PageHead } from "@/components/mobile/page-head"
 import {
@@ -10,7 +10,10 @@ import {
 } from "@/components/mobile/masthead-figures"
 import { MToolbar } from "@/components/mobile/m-toolbar"
 import { HourlyChart } from "@/components/mobile/hourly-chart"
-import { parsePeriod, MOBILE_PERIODS } from "@/lib/mobile/period"
+import { DailyRevenueChart } from "@/components/mobile/daily-revenue-chart"
+import { parsePeriod, MOBILE_PERIODS, periodDateStrings } from "@/lib/mobile/period"
+import { todayInLA } from "@/lib/dashboard-utils"
+import { laDateMinusDays } from "@/lib/hourly-orders"
 
 export const dynamic = "force-dynamic"
 
@@ -60,15 +63,35 @@ export default async function MobileHomePage({
     ? stores.find((s) => s.id === validStoreId)?.name ?? null
     : null
 
-  const result = await getHourlyOrderPatterns(
-    validStoreId ?? undefined,
-    period
-  )
-  const hourly = result?.hourly ?? []
-  const cmp = result?.hourlyComparison ?? null
+  // Period totals come from `otterDailySummary` (same source the desktop uses)
+  // so the masthead never shows a stale zero just because the hourly precompute
+  // table is behind. The 14-day chart trails the period's end so a yesterday
+  // selection still gives meaningful context.
+  const periodDates = periodDateStrings(period)
+  const periodStart = periodDates[0]
+  const periodEnd = periodDates[periodDates.length - 1]
+  const trendEnd = periodEnd
+  const trendStart = laDateMinusDays(trendEnd, 13)
 
-  const totalOrders = hourly.reduce((s, h) => s + h.orderCount, 0)
-  const totalSales = hourly.reduce((s, h) => s + h.totalSales, 0)
+  const [hourlyResult, otterPeriod, otterTrend] = await Promise.all([
+    getHourlyOrderPatterns(validStoreId ?? undefined, period),
+    getOtterAnalytics(validStoreId ?? undefined, {
+      startDate: periodStart,
+      endDate: periodEnd,
+    }),
+    getOtterAnalytics(validStoreId ?? undefined, {
+      startDate: trendStart,
+      endDate: trendEnd,
+    }),
+  ])
+
+  const hourly = hourlyResult?.hourly ?? []
+
+  const totalSales = otterPeriod?.kpis.netRevenue ?? 0
+  const totalOrders = otterPeriod?.kpis.totalOrders ?? 0
+  const netGrowth = otterPeriod?.comparison.netGrowth ?? null
+  const previousNet = otterPeriod?.comparison.previousNet ?? 0
+
   const periodLabel =
     MOBILE_PERIODS.find((p) => p.value === period)?.short ?? "TODAY"
 
@@ -76,9 +99,10 @@ export default async function MobileHomePage({
     {
       label: `NET ${periodLabel}`,
       value: fmtMoney(totalSales),
-      sub: cmp?.pacePct != null
-        ? `${cmp.pacePct >= 0 ? "+" : ""}${cmp.pacePct.toFixed(0)}% vs prior`
-        : "no prior comparison",
+      sub:
+        netGrowth != null && previousNet > 0
+          ? `${netGrowth >= 0 ? "+" : ""}${netGrowth.toFixed(0)}% vs prior`
+          : "no prior comparison",
     },
     {
       label: "ORDERS",
@@ -86,6 +110,11 @@ export default async function MobileHomePage({
       sub: activeStoreName ?? `${stores.length} stores`,
     },
   ]
+
+  const trendIsTrailing = trendEnd === todayInLA()
+  const trendLabel = trendIsTrailing
+    ? "DAILY REVENUE · LAST 14D"
+    : `DAILY REVENUE · 14D TO ${periodLabel}`
 
   return (
     <>
@@ -118,7 +147,10 @@ export default async function MobileHomePage({
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <HourlyChart data={hourly} metric="sales" showBaseline />
+        <DailyRevenueChart
+          data={otterTrend?.dailyTrends ?? []}
+          label={trendLabel}
+        />
       </div>
     </>
   )
