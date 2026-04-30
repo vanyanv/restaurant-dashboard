@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
 import { Plus, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ export default async function StoresPage() {
   }
 
   const stores = await getStores()
-  const isOwner = session.user.role === "OWNER"
+  const isOwner = hasOwnerAccess(session.user.role)
 
   return (
     <div className="flex h-full flex-col">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { InvoiceStatus } from "@/generated/prisma/client"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {}
 
-  if (session.user.role === "OWNER") {
+  if (hasOwnerAccess(session.user.role)) {
     where.accountId = session.user.accountId
   }
   if (storeId) where.storeId = storeId
@@ -75,7 +75,7 @@ export async function PATCH(request: NextRequest) {
   if (limited) return limited
 
   const session = await getServerSession(authOptions)
-  if (!session?.user || session.user.role !== "OWNER") {
+  if (!session?.user || !hasOwnerAccess(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

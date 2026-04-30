@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { CreateStoreForm } from "./create-store-form"
 import { Store, ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -15,7 +15,7 @@ export default async function NewStorePage() {
     redirect("/login")
   }
 
-  if (session.user.role !== "OWNER") {
+  if (!hasOwnerAccess(session.user.role)) {
     redirect("/dashboard/stores")
   }
 

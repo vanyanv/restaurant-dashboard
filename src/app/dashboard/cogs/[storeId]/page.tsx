@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CogsShell } from "./cogs-shell"
 import { parseCogsFilters } from "../components/sections/data"
@@ -16,7 +16,7 @@ export default async function StoreCogsPage(props: {
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/dashboard")
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const { storeId } = await props.params
   const sp = await props.searchParams

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
@@ -49,7 +49,7 @@ export async function createStore(formData: FormData) {
       return { error: "Unauthorized" }
     }
 
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return { error: "Only owners can create stores" }
     }
 
@@ -1447,7 +1447,7 @@ export async function updateStore(storeId: string, formData: FormData) {
       return { error: "Unauthorized" }
     }
 
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return { error: "Only owners can update stores" }
     }
 
@@ -1520,7 +1520,7 @@ export async function deleteStore(storeId: string) {
       return { error: "Unauthorized" }
     }
 
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return { error: "Only owners can delete stores" }
     }
 
@@ -1560,7 +1560,7 @@ export async function toggleStoreStatus(storeId: string) {
       return { error: "Unauthorized" }
     }
 
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return { error: "Only owners can change store status" }
     }
 
@@ -2283,7 +2283,7 @@ export async function getStorePnL(input: {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) return { error: "Unauthorized" }
-    if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
+    if (!hasOwnerAccess(session.user.role)) return { error: "P&L is restricted to owners" }
 
     const store = await prisma.store.findFirst({
       where: { id: input.storeId, accountId: session.user.accountId },
@@ -2514,7 +2514,7 @@ export async function getAllStoresPnL(input: {
 }): Promise<AllStoresPnLResult> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { error: "Unauthorized" }
-  if (session.user.role !== "OWNER") return { error: "P&L is restricted to owners" }
+  if (!hasOwnerAccess(session.user.role)) return { error: "P&L is restricted to owners" }
   const accountId = session.user.accountId
 
   return cached(
@@ -2769,7 +2769,7 @@ export async function recomputeCogsForStore(input: {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) return { error: "Unauthorized" }
-    if (session.user.role !== "OWNER")
+    if (!hasOwnerAccess(session.user.role))
       return { error: "P&L is restricted to owners" }
 
     const store = await prisma.store.findFirst({

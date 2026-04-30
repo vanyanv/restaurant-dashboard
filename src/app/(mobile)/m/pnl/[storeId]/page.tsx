@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getStorePnL } from "@/app/actions/store-actions"
 import { parsePnLRange, pnlRangeToState } from "@/lib/mobile/pnl-period"
 import { PageHead } from "@/components/mobile/page-head"
@@ -44,7 +44,7 @@ export default async function MobileStorePnLPage({
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/m")
+  if (!hasOwnerAccess(session.user.role)) redirect("/m")
 
   const { storeId } = await params
   const sp = normalize(await searchParams)

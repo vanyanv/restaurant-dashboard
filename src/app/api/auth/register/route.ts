@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
 const registerSchema = z.object({
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     // Only authenticated OWNERs can create new users
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== "OWNER") {
+    if (!session || !hasOwnerAccess(session.user.role)) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }

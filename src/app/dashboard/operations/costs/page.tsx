@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getProductUsageData } from "@/app/actions/product-usage-actions"
 import { getStores } from "@/app/actions/store-actions"
 import { CostsContent } from "./components/costs-content"
@@ -12,7 +12,7 @@ export default async function CostsPage() {
     redirect("/login")
   }
 
-  if (session.user.role !== "OWNER") {
+  if (!hasOwnerAccess(session.user.role)) {
     redirect("/dashboard")
   }
 

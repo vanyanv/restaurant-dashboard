@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getProductMixData, getStores } from "@/app/actions/store-actions"
 import { ProductMixContent } from "./components/product-mix-content"
 
@@ -11,7 +11,7 @@ export default async function ProductMixPage() {
     redirect("/login")
   }
 
-  if (session.user.role !== "OWNER") {
+  if (!hasOwnerAccess(session.user.role)) {
     redirect("/dashboard")
   }
 

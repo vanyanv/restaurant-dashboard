@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions, hasOwnerAccess } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { rateLimit, RATE_LIMIT_TIERS } from '@/lib/rate-limit';
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (session.user.role !== 'OWNER') {
+    if (!hasOwnerAccess(session.user.role)) {
       return NextResponse.json(
         { error: 'Only owners can create stores' },
         { status: 403 }

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PageHead } from "@/components/mobile/page-head"
 import { Panel } from "@/components/mobile/panel"
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 export default async function MobileCogsPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/m")
+  if (!hasOwnerAccess(session.user.role)) redirect("/m")
 
   const stores = await prisma.store.findMany({
     where: { accountId: session.user.accountId, isActive: true },

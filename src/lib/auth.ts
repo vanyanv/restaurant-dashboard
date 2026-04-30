@@ -124,3 +124,13 @@ export const authOptions: NextAuthOptions = {
     signOut: "/login"
   }
 }
+
+/**
+ * Owner-level access. DEVELOPER is a superset of OWNER (full owner access
+ * plus the monitoring page), so any gate that previously read `role === "OWNER"`
+ * should use this helper instead. The literal `role === "DEVELOPER"` checks
+ * are reserved for monitoring-only routes.
+ */
+export function hasOwnerAccess(role: Role | null | undefined): boolean {
+  return role === "OWNER" || role === "DEVELOPER"
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { runOrdersSync } from "@/lib/otter-orders-sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return NextResponse.json(
         { error: "Only owners can sync Otter orders" },
         { status: 403 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { fetchInvoiceEmails, getEmailAttachments } from "@/lib/microsoft-graph"
 import { extractInvoiceData } from "@/lib/gemini-invoice"
@@ -577,7 +577,7 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return NextResponse.json({ error: "Only owners can sync invoices" }, { status: 403 })
     }
     userId = session.user.id

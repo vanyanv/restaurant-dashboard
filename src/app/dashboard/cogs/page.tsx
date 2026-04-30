@@ -1,14 +1,14 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 
 export default async function CogsLandingPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/dashboard")
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const stores = await prisma.store.findMany({
     where: { accountId: session.user.accountId, isActive: true },

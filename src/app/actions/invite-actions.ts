@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto"
 import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export type ActionResult<T = void> =
@@ -26,7 +26,7 @@ export async function createInvite(): Promise<ActionResult<{ url: string; id: st
   if (!isLocalOnly()) return { error: "Invite creation is disabled in production" }
 
   const session = await getServerSession(authOptions)
-  if (!session?.user || session.user.role !== "OWNER") return { error: "Unauthorized" }
+  if (!session?.user || !hasOwnerAccess(session.user.role)) return { error: "Unauthorized" }
 
   const token = randomBytes(32).toString("base64url")
   const invite = await prisma.invite.create({
@@ -47,7 +47,7 @@ export async function revokeInvite(id: string): Promise<ActionResult> {
   if (!isLocalOnly()) return { error: "Invite management is disabled in production" }
 
   const session = await getServerSession(authOptions)
-  if (!session?.user || session.user.role !== "OWNER") return { error: "Unauthorized" }
+  if (!session?.user || !hasOwnerAccess(session.user.role)) return { error: "Unauthorized" }
 
   const result = await prisma.invite.updateMany({
     where: {
@@ -82,7 +82,7 @@ export async function listInvites(): Promise<InviteRow[]> {
   if (!isLocalOnly()) return []
 
   const session = await getServerSession(authOptions)
-  if (!session?.user || session.user.role !== "OWNER") return []
+  if (!session?.user || !hasOwnerAccess(session.user.role)) return []
 
   const rows = await prisma.invite.findMany({
     where: { accountId: session.user.accountId },

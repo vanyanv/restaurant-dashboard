@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect, notFound } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PnLPageClient } from "@/components/pnl/pnl-page-client"
 
@@ -11,7 +11,7 @@ export default async function StorePnLPage(props: {
   const session = await getServerSession(authOptions)
 
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/dashboard")
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const [store, allStores] = await Promise.all([
     prisma.store.findFirst({

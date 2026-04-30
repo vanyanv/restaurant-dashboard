@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export interface SetTargetInput {
@@ -20,7 +20,7 @@ export async function setStoreTargetCogsPct(
 ): Promise<SetTargetResult> {
   const session = await getServerSession(authOptions)
   if (!session) return { error: "Not signed in" }
-  if (session.user.role !== "OWNER") return { error: "Forbidden" }
+  if (!hasOwnerAccess(session.user.role)) return { error: "Forbidden" }
 
   let value: number | null = null
   if (input.targetCogsPct !== null) {

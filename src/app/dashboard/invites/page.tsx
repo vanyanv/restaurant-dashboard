@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { listInvites } from "@/app/actions/invite-actions"
 import { CreateInviteButton } from "./components/create-invite-button"
 import { RevokeInviteButton } from "./components/revoke-invite-button"
@@ -15,7 +15,7 @@ export default async function InvitesPage() {
 
   const session = await getServerSession(authOptions)
   if (!session?.user) redirect("/login")
-  if (session.user.role !== "OWNER") notFound()
+  if (!hasOwnerAccess(session.user.role)) notFound()
 
   const invites = await listInvites()
   const pending = invites.filter((i) => i.status === "pending")

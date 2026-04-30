@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getProductUsageData } from "@/app/actions/product-usage-actions"
 import { getStores } from "@/app/actions/store-actions"
 import { VendorsContent } from "./components/vendors-content"
@@ -12,7 +12,7 @@ export default async function VendorsPage() {
     redirect("/login")
   }
 
-  if (session.user.role !== "OWNER") {
+  if (!hasOwnerAccess(session.user.role)) {
     redirect("/dashboard")
   }
 

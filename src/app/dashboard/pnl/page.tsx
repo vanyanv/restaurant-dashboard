@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PnLAllStoresClient } from "@/components/pnl/pnl-all-stores-client"
 import { defaultPnLRangeState } from "@/components/pnl/pnl-date-presets"
@@ -11,7 +11,7 @@ export default async function AllStoresPnLPage() {
   const session = await getServerSession(authOptions)
 
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/dashboard")
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const stores = await prisma.store.findMany({
     where: { accountId: session.user.accountId, isActive: true },

@@ -1,7 +1,7 @@
 "use server"
 
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { bustTags, cached, stableKey } from "@/lib/cache/cached"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
@@ -619,7 +619,7 @@ export async function setInvoiceIsReturn(
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { ok: false, reason: "unauthenticated" }
-  if (session.user.role !== "OWNER") return { ok: false, reason: "forbidden" }
+  if (!hasOwnerAccess(session.user.role)) return { ok: false, reason: "forbidden" }
   const accountId = session.user.accountId
 
   const invoice = await prisma.invoice.findFirst({

@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getRecipes } from "@/app/actions/product-usage-actions"
 import { getStores } from "@/app/actions/store-actions"
 import { RecipesContent } from "./components/recipes-content"
@@ -8,7 +8,7 @@ import { RecipesContent } from "./components/recipes-content"
 export default async function RecipesPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/dashboard")
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const [recipes, stores] = await Promise.all([
     getRecipes(),

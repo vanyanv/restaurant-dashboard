@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { queryMetrics, utcMultiDayRange } from "@/lib/otter"
 
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    if (session.user.role !== "OWNER") {
+    if (!hasOwnerAccess(session.user.role)) {
       return NextResponse.json({ error: "Only owners can seed Otter stores" }, { status: 403 })
     }
 

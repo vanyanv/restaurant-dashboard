@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { listConversations } from "@/lib/chat/conversation"
 import { ChatPageClient } from "./chat-page-client"
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 export default async function ChatPage() {
   const session = await getServerSession(authOptions)
   if (!session?.user) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/dashboard")
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const conversations = await listConversations(chatPrisma, session.user.accountId, 100)
 

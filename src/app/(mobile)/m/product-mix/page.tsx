@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getProductMixData } from "@/app/actions/store-actions"
 import { PageHead } from "@/components/mobile/page-head"
 import {
@@ -26,7 +26,7 @@ export default async function MobileProductMixPage({
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
-  if (session.user.role !== "OWNER") redirect("/m")
+  if (!hasOwnerAccess(session.user.role)) redirect("/m")
 
   const sp = await searchParams
   const presetDays = Math.max(1, Number.parseInt(sp.days ?? "7", 10) || 7)

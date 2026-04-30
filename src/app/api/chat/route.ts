@@ -10,7 +10,7 @@ import {
 } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { Prisma } from "@/generated/prisma/client"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  if (session.user.role !== "OWNER") {
+  if (!hasOwnerAccess(session.user.role)) {
     return NextResponse.json(
       { error: "Chat is owner-only for now" },
       { status: 403 },
