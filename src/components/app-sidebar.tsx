@@ -19,7 +19,7 @@ import {
   MessageSquare,
   type LucideIcon,
 } from "lucide-react"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -175,6 +175,24 @@ export const flatNavItems: Map<string, FlatNavEntry> = (() => {
 })()
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { data: session } = useSession()
+  const isDev = session?.user.role === "DEVELOPER"
+
+  const nav = React.useMemo(() => {
+    if (!isDev) return NAV
+    return NAV.map((section) =>
+      section.label === "Back of House"
+        ? {
+            ...section,
+            items: [
+              ...section.items,
+              { title: "Monitoring", url: "/dashboard/monitoring", icon: Activity },
+            ],
+          }
+        : section,
+    )
+  }, [isDev])
+
   return (
     <Sidebar
       collapsible="icon"
@@ -188,7 +206,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarContent className="px-0 gap-0">
         <NavFrequent />
-        {NAV.map((section) => (
+        {nav.map((section) => (
           <div key={section.label} className="editorial-nav-section">
             <div className="editorial-nav-section-label">
               <span>{section.label}</span>
