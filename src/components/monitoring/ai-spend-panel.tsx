@@ -80,15 +80,10 @@ export function AiSpendPanel({
       )}
 
       {byDay.length > 0 && (
-        <div
-          style={{
-            borderTop: "1px dashed var(--hairline-bold)",
-            marginTop: 14,
-            paddingTop: 14,
-          }}
-        >
+        <div style={{ marginTop: 14 }}>
+          <div className="perforation" />
           <div
-            style={{ ...monoLabel, color: "var(--ink-faint)", marginBottom: 6 }}
+            style={{ ...monoLabel, color: "var(--ink-faint)", margin: "14px 0 6px" }}
           >
             last 7 days
           </div>
