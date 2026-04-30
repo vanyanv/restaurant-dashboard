@@ -7329,3 +7329,52 @@
   .m-sheet, .m-sheet__backdrop { animation: none; }
 }
 
+/* Granularity toggle inside the P&L date sheet. Three pills, JetBrains
+   Mono caps, accent fill on the active state — same accent visual register
+   as the segmented toolbar but smaller. */
+.m-grain-toggle {
+  display: flex;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+.m-grain-toggle__item {
+  flex: 1;
+  padding: 10px 0;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.m-grain-toggle__item:last-child { border-right: 0; }
+.m-grain-toggle__item:hover { color: var(--ink); }
+.m-grain-toggle__item.is-active {
+  color: var(--accent-dark);
+  background: var(--accent-bg);
+}
+.m-grain-toggle__label {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 4px;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.m-grain-toggle__hint {
+  margin-top: 6px;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
