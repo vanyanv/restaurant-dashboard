@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai"
 import OpenAI from "openai"
 import type { InvoiceExtraction } from "@/types/invoice"
+import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 
 export const PRIMARY_MODEL = "gpt-4.1-mini"
 export const FALLBACK_MODEL = "gemini-2.5-flash"
@@ -154,6 +155,7 @@ async function extractViaOpenAI(
   if (!apiKey) throw new Error("OPENAI_API_KEY env var is required")
   const openai = new OpenAI({ apiKey, timeout: 60_000 })
 
+  const start = Date.now()
   const response = await openai.chat.completions.create({
     model: PRIMARY_MODEL,
     messages: [
@@ -175,6 +177,19 @@ async function extractViaOpenAI(
     max_tokens: 16000,
   })
 
+  // Additive monitoring — wrapper never throws.
+  await recordAiUsage({
+    feature: "invoice-ocr",
+    provider: "openai",
+    model: PRIMARY_MODEL,
+    inputTokens: response.usage?.prompt_tokens ?? 0,
+    outputTokens: response.usage?.completion_tokens ?? 0,
+    cachedTokens:
+      (response.usage?.prompt_tokens_details as { cached_tokens?: number } | undefined)
+        ?.cached_tokens ?? 0,
+    durationMs: Date.now() - start,
+  })
+
   const text = response.choices[0]?.message?.content
   if (!text) throw new Error("OpenAI returned empty response for invoice extraction")
   return JSON.parse(text) as InvoiceExtraction
@@ -185,6 +200,7 @@ async function extractViaGemini(pdfBase64: string): Promise<InvoiceExtraction> {
   if (!apiKey) throw new Error("GEMINI_API_KEY env var is required")
   const ai = new GoogleGenAI({ apiKey })
 
+  const start = Date.now()
   const response = await ai.models.generateContent({
     model: FALLBACK_MODEL,
     contents: [
@@ -197,6 +213,18 @@ async function extractViaGemini(pdfBase64: string): Promise<InvoiceExtraction> {
       },
     ],
     config: { responseMimeType: "application/json" },
+  })
+
+  // Additive monitoring — wrapper never throws. SDK shape varies; default to 0.
+  const usage = (response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number } }).usageMetadata
+  await recordAiUsage({
+    feature: "invoice-ocr",
+    provider: "google",
+    model: FALLBACK_MODEL,
+    inputTokens: usage?.promptTokenCount ?? 0,
+    outputTokens: usage?.candidatesTokenCount ?? 0,
+    cachedTokens: usage?.cachedContentTokenCount ?? 0,
+    durationMs: Date.now() - start,
   })
 
   const text = response.text

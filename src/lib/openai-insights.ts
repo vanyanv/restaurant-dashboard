@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 
 /**
  * Generator-side LLM client for the AI analytics pipeline. We use OpenAI
@@ -45,8 +46,11 @@ async function callJson<T>(opts: {
   userPrompt: string
   temperature: number
   maxTokens: number
+  storeId?: string | null
+  userId?: string | null
 }): Promise<OpenAIJsonResult<T>> {
   const client = getOpenAIClient()
+  const start = Date.now()
   const response = await client.chat.completions.create({
     model: opts.model,
     response_format: { type: "json_object" },
@@ -56,6 +60,25 @@ async function callJson<T>(opts: {
       { role: "system", content: opts.systemPrompt },
       { role: "user", content: opts.userPrompt },
     ],
+  })
+
+  const promptTokens = response.usage?.prompt_tokens ?? 0
+  const completionTokens = response.usage?.completion_tokens ?? 0
+  const cachedPromptTokens =
+    (response.usage?.prompt_tokens_details as { cached_tokens?: number } | undefined)
+      ?.cached_tokens ?? 0
+
+  // Fire-and-record — wrapper never throws, returns null on failure.
+  await recordAiUsage({
+    feature: "pnl-insights",
+    provider: "openai",
+    model: opts.model,
+    inputTokens: promptTokens,
+    outputTokens: completionTokens,
+    cachedTokens: cachedPromptTokens,
+    storeId: opts.storeId ?? null,
+    userId: opts.userId ?? null,
+    durationMs: Date.now() - start,
   })
 
   const choice = response.choices[0]
@@ -77,8 +100,8 @@ async function callJson<T>(opts: {
     data: parsed,
     rawContent: content,
     usage: {
-      promptTokens: response.usage?.prompt_tokens ?? 0,
-      completionTokens: response.usage?.completion_tokens ?? 0,
+      promptTokens,
+      completionTokens,
     },
   }
 }

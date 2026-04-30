@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import OpenAI from "openai"
+import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import type {
   ProductUsageData,
   RecipeWithIngredients,
@@ -1085,12 +1086,26 @@ Guidelines:
 - alertId format: "productName:::increase" for price alerts, "productName:::new_product" or "productName:::quantity_spike" for anomalies`
 
   try {
+    const start = Date.now()
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       max_tokens: 2000,
+    })
+
+    await recordAiUsage({
+      feature: "usage-insights",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      cachedTokens:
+        (response.usage?.prompt_tokens_details as { cached_tokens?: number } | undefined)
+          ?.cached_tokens ?? 0,
+      userId: session.user.id,
+      durationMs: Date.now() - start,
     })
 
     const content = response.choices[0]?.message?.content
@@ -1291,12 +1306,27 @@ Guidelines:
 - confidence: "high" if consistent daily pattern, "medium" if some variance, "low" if erratic`
 
   try {
+    const start = Date.now()
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
       max_tokens: 3000,
+    })
+
+    await recordAiUsage({
+      feature: "usage-demand",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      cachedTokens:
+        (response.usage?.prompt_tokens_details as { cached_tokens?: number } | undefined)
+          ?.cached_tokens ?? 0,
+      storeId: storeId ?? null,
+      userId: session.user.id,
+      durationMs: Date.now() - start,
     })
 
     const content = response.choices[0]?.message?.content
@@ -1514,12 +1544,27 @@ Guidelines:
 - topSpendChanges should include the top 5-8 products by absolute dollar change`
 
   try {
+    const start = Date.now()
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
       temperature: 0.5,
       max_tokens: 2000,
+    })
+
+    await recordAiUsage({
+      feature: "usage-weekly",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      cachedTokens:
+        (response.usage?.prompt_tokens_details as { cached_tokens?: number } | undefined)
+          ?.cached_tokens ?? 0,
+      storeId: storeId ?? null,
+      userId: session.user.id,
+      durationMs: Date.now() - start,
     })
 
     const content = response.choices[0]?.message?.content
