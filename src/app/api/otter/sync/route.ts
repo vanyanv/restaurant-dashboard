@@ -17,6 +17,7 @@ import {
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { bustTags } from "@/lib/cache/cached"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 export const maxDuration = 60
 
@@ -649,6 +650,7 @@ export async function POST(request: NextRequest) {
   }
 
   const wantsSSE = request.headers.get("accept")?.includes("text/event-stream")
+  const triggeredBy: "cron" | "manual" = fromCron ? "cron" : "manual"
 
   if (wantsSSE) {
     const encoder = new TextEncoder()
@@ -662,7 +664,14 @@ export async function POST(request: NextRequest) {
           }
         }
         try {
-          await runSync(emit)
+          await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ addRows }) => {
+            const result = await runSync(emit)
+            addRows(
+              result.synced + result.categorySynced + result.itemSynced +
+              result.modifierSynced + result.ratingsSynced + result.cogsRowsWritten
+            )
+            return result
+          })
         } catch (error) {
           console.error("Otter sync error:", error)
           emit({
@@ -689,7 +698,14 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE clients)
   try {
-    const result = await runSync(() => {})
+    const result = await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ addRows }) => {
+      const r = await runSync(() => {})
+      addRows(
+        r.synced + r.categorySynced + r.itemSynced +
+        r.modifierSynced + r.ratingsSynced + r.cogsRowsWritten
+      )
+      return r
+    })
     return NextResponse.json(result)
   } catch (error) {
     console.error("Otter sync error:", error)

@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await runHourlySync()
+    const result = await runHourlySync({
+      triggeredBy: fromCron ? "cron" : "manual",
+    })
     if (result.bucketsWritten > 0) {
       await bustTags(["otter", "dash", "pnl"])
     }

@@ -26,7 +26,7 @@ loadEnvLocal()
 
 async function main() {
   const { runHourlySync } = await import("../src/lib/hourly-sync")
-  const result = await runHourlySync()
+  const result = await runHourlySync({ triggeredBy: "github-actions" })
   console.log("Hourly sync complete:", result)
 }
 

@@ -5,6 +5,7 @@ import {
   fetchOrderDetails,
   withConcurrency,
 } from "@/lib/otter"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 export type OrdersSyncResult = {
   storesProcessed: number
@@ -30,6 +31,23 @@ function asNumber(v: any): number {
 }
 
 export async function runOrdersSync(
+  days: number,
+  endDateOverride?: Date,
+  opts?: { triggeredBy?: "cron" | "manual" }
+): Promise<OrdersSyncResult> {
+  const triggeredBy = opts?.triggeredBy ?? "manual"
+  return withJobRun(
+    "otter.orders.sync",
+    { triggeredBy, metadata: { windowDays: days } },
+    async ({ addRows }) => {
+      const result = await runOrdersSyncInner(days, endDateOverride)
+      addRows(result.ordersCreated + result.ordersUpdated)
+      return result
+    }
+  )
+}
+
+async function runOrdersSyncInner(
   days: number,
   endDateOverride?: Date
 ): Promise<OrdersSyncResult> {

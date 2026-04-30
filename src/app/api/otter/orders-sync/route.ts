@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
   const days = Math.min(Math.max(Number(body.days) || 2, 1), 14)
 
   try {
-    const result = await runOrdersSync(days)
+    const result = await runOrdersSync(days, undefined, {
+      triggeredBy: fromCron ? "cron" : "manual",
+    })
     return NextResponse.json(result)
   } catch (error) {
     console.error("Orders sync error:", error)

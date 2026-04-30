@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma"
 import { queryMetrics, buildCustomerOrdersBody } from "@/lib/otter"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 export interface HourlySyncResult {
   storesProcessed: number
@@ -37,6 +38,29 @@ interface BucketValue {
 export async function runHourlySync(opts?: {
   windowDays?: number  // default 2 (today + yesterday)
   rowLimit?: number    // default 10000
+  triggeredBy?: "cron" | "manual" | "github-actions"
+}): Promise<HourlySyncResult> {
+  const triggeredBy = opts?.triggeredBy ?? "manual"
+  return withJobRun(
+    "otter.hourly.sync",
+    {
+      triggeredBy,
+      metadata: {
+        windowDays: opts?.windowDays ?? 2,
+        rowLimit: opts?.rowLimit ?? 10000,
+      },
+    },
+    async ({ addRows }) => {
+      const result = await runHourlySyncInner(opts)
+      addRows(result.bucketsWritten)
+      return result
+    }
+  )
+}
+
+async function runHourlySyncInner(opts?: {
+  windowDays?: number
+  rowLimit?: number
 }): Promise<HourlySyncResult> {
   const windowDays = opts?.windowDays ?? 2
   const rowLimit = opts?.rowLimit ?? 10000

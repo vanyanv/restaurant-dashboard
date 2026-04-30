@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isCronRequest } from "@/lib/rate-limit"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 export const maxDuration = 300
 
@@ -54,12 +55,24 @@ export async function POST(request: NextRequest) {
   startDate.setUTCDate(startDate.getUTCDate() - lookbackDays)
 
   try {
-    const result = await recomputeDailyCogsForRange({
-      storeId: store.id,
-      accountId: store.accountId,
-      startDate,
-      endDate,
-    })
+    const result = await withJobRun(
+      "cogs.sweep",
+      {
+        storeId: store.id,
+        triggeredBy: "github-actions",
+        metadata: { lookbackDays },
+      },
+      async ({ addRows }) => {
+        const r = await recomputeDailyCogsForRange({
+          storeId: store.id,
+          accountId: store.accountId,
+          startDate,
+          endDate,
+        })
+        addRows(r.rowsUpserted)
+        return r
+      }
+    )
 
     return NextResponse.json({
       storeId: store.id,

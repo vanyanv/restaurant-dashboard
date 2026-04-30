@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { isCronRequest } from "@/lib/rate-limit"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 /**
  * Enumerate active store IDs for matrix fan-out from GitHub Actions. The
@@ -13,11 +14,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const stores = await prisma.store.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true, accountId: true },
-    orderBy: { name: "asc" },
-  })
+  const stores = await withJobRun(
+    "cogs.stores",
+    { triggeredBy: "github-actions" },
+    async ({ addRows }) => {
+      const rows = await prisma.store.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, accountId: true },
+        orderBy: { name: "asc" },
+      })
+      addRows(rows.length)
+      return rows
+    }
+  )
 
   return NextResponse.json({ stores })
 }
