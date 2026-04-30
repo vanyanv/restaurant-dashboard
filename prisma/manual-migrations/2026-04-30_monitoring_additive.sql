@@ -19,7 +19,7 @@ EXCEPTION
 END $$;
 
 -- ─── JobRun ────────────────────────────────────────────────────────────────
-CREATE TABLE "JobRun" (
+CREATE TABLE IF NOT EXISTS "JobRun" (
   "id"           TEXT NOT NULL,
   "jobName"      TEXT NOT NULL,
   "storeId"      TEXT,
@@ -36,15 +36,19 @@ CREATE TABLE "JobRun" (
   CONSTRAINT "JobRun_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "JobRun_jobName_startedAt_idx" ON "JobRun" ("jobName", "startedAt" DESC);
-CREATE INDEX "JobRun_status_startedAt_idx"  ON "JobRun" ("status", "startedAt" DESC);
+CREATE INDEX IF NOT EXISTS "JobRun_jobName_startedAt_idx" ON "JobRun" ("jobName", "startedAt" DESC);
+CREATE INDEX IF NOT EXISTS "JobRun_status_startedAt_idx"  ON "JobRun" ("status", "startedAt" DESC);
 
-ALTER TABLE "JobRun"
-  ADD CONSTRAINT "JobRun_storeId_fkey"
-  FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "JobRun"
+    ADD CONSTRAINT "JobRun_storeId_fkey"
+    FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ─── AiUsageEvent ──────────────────────────────────────────────────────────
-CREATE TABLE "AiUsageEvent" (
+CREATE TABLE IF NOT EXISTS "AiUsageEvent" (
   "id"               TEXT NOT NULL,
   "occurredAt"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "feature"          TEXT NOT NULL,
@@ -61,11 +65,11 @@ CREATE TABLE "AiUsageEvent" (
   CONSTRAINT "AiUsageEvent_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "AiUsageEvent_occurredAt_idx"          ON "AiUsageEvent" ("occurredAt" DESC);
-CREATE INDEX "AiUsageEvent_feature_occurredAt_idx"  ON "AiUsageEvent" ("feature", "occurredAt" DESC);
+CREATE INDEX IF NOT EXISTS "AiUsageEvent_occurredAt_idx"          ON "AiUsageEvent" ("occurredAt" DESC);
+CREATE INDEX IF NOT EXISTS "AiUsageEvent_feature_occurredAt_idx"  ON "AiUsageEvent" ("feature", "occurredAt" DESC);
 
 -- ─── ErrorEvent ────────────────────────────────────────────────────────────
-CREATE TABLE "ErrorEvent" (
+CREATE TABLE IF NOT EXISTS "ErrorEvent" (
   "id"         TEXT NOT NULL,
   "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "source"     TEXT NOT NULL,
@@ -81,11 +85,11 @@ CREATE TABLE "ErrorEvent" (
   CONSTRAINT "ErrorEvent_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ErrorEvent_occurredAt_idx"         ON "ErrorEvent" ("occurredAt" DESC);
-CREATE INDEX "ErrorEvent_source_occurredAt_idx"  ON "ErrorEvent" ("source", "occurredAt" DESC);
+CREATE INDEX IF NOT EXISTS "ErrorEvent_occurredAt_idx"         ON "ErrorEvent" ("occurredAt" DESC);
+CREATE INDEX IF NOT EXISTS "ErrorEvent_source_occurredAt_idx"  ON "ErrorEvent" ("source", "occurredAt" DESC);
 
 -- ─── ChatTurn ──────────────────────────────────────────────────────────────
-CREATE TABLE "ChatTurn" (
+CREATE TABLE IF NOT EXISTS "ChatTurn" (
   "id"               TEXT NOT NULL,
   "conversationId"   TEXT NOT NULL,
   "occurredAt"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -104,11 +108,11 @@ CREATE TABLE "ChatTurn" (
   CONSTRAINT "ChatTurn_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "ChatTurn_occurredAt_idx"                ON "ChatTurn" ("occurredAt" DESC);
-CREATE INDEX "ChatTurn_conversationId_occurredAt_idx" ON "ChatTurn" ("conversationId", "occurredAt");
+CREATE INDEX IF NOT EXISTS "ChatTurn_occurredAt_idx"                ON "ChatTurn" ("occurredAt" DESC);
+CREATE INDEX IF NOT EXISTS "ChatTurn_conversationId_occurredAt_idx" ON "ChatTurn" ("conversationId", "occurredAt");
 
 -- ─── CacheStat ─────────────────────────────────────────────────────────────
-CREATE TABLE "CacheStat" (
+CREATE TABLE IF NOT EXISTS "CacheStat" (
   "id"         TEXT NOT NULL,
   "hourBucket" TIMESTAMP(3) NOT NULL,
   "keyPrefix"  TEXT NOT NULL,
@@ -121,5 +125,16 @@ CREATE TABLE "CacheStat" (
   CONSTRAINT "CacheStat_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "CacheStat_hourBucket_keyPrefix_key" ON "CacheStat" ("hourBucket", "keyPrefix");
-CREATE INDEX        "CacheStat_hourBucket_idx"           ON "CacheStat" ("hourBucket" DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS "CacheStat_hourBucket_keyPrefix_key" ON "CacheStat" ("hourBucket", "keyPrefix");
+CREATE INDEX        IF NOT EXISTS "CacheStat_hourBucket_idx"           ON "CacheStat" ("hourBucket" DESC);
+
+-- ─── ChatTurn → AiUsageEvent FK + supporting index ─────────────────────────
+DO $$ BEGIN
+  ALTER TABLE "ChatTurn"
+    ADD CONSTRAINT "ChatTurn_aiUsageEventId_fkey"
+    FOREIGN KEY ("aiUsageEventId") REFERENCES "AiUsageEvent"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS "ChatTurn_aiUsageEventId_idx" ON "ChatTurn" ("aiUsageEventId");

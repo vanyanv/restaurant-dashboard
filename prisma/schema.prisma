@@ -959,6 +959,8 @@ model AiUsageEvent {
   userId           String?
   durationMs       Int?
 
+  chatTurns ChatTurn[]
+
   @@index([occurredAt(sort: Desc)])
   @@index([feature, occurredAt(sort: Desc)])
 }
@@ -981,16 +983,17 @@ model ErrorEvent {
 }
 
 model ChatTurn {
-  id               String   @id @default(cuid())
+  id               String        @id @default(cuid())
   conversationId   String
-  occurredAt       DateTime @default(now())
+  occurredAt       DateTime      @default(now())
   userId           String?
   storeId          String?
-  userMessage      String   @db.Text
-  assistantMessage String?  @db.Text
+  userMessage      String        @db.Text
+  assistantMessage String?       @db.Text
   toolsUsed        String[]
   aiUsageEventId   String?
-  status           String   @default("OK")
+  aiUsageEvent     AiUsageEvent? @relation(fields: [aiUsageEventId], references: [id], onDelete: SetNull)
+  status           String        @default("OK")
   finishReason     String?
   errorMessage     String?
   toolErrors       Json?
