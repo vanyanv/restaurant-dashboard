@@ -1,9 +1,15 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import { monoLabel } from "./styles"
 
 type Summary = {
-  syncs: { jobName: string; lastRunAt: string | null; status: string | null; overdue: boolean }[]
+  syncs: {
+    jobName: string
+    lastRunAt: string | null
+    status: string | null
+    overdue: boolean
+  }[]
 }
 
 export function FrontPageLede() {
@@ -24,37 +30,25 @@ export function FrontPageLede() {
   if (!failing) return null
 
   return (
-    <>
-      <div className="perforation" />
-      <section className="my-2" style={{ padding: "18px 0" }}>
-        <h2
-          style={{
-            fontFamily: "var(--font-fraunces), serif",
-            fontSize: 26,
-            fontWeight: 450,
-            fontVariationSettings: '"opsz" 96, "SOFT" 50',
-            letterSpacing: "-0.022em",
-            lineHeight: 1.1,
-            color: "var(--ink)",
-          }}
-        >
-          <em style={{ fontStyle: "italic" }}>{failing.jobName}</em>{" "}
-          {failing.status === "FAILURE" ? "is failing." : "is overdue."}
-        </h2>
-        <p
-          style={{
-            fontFamily: "var(--font-dm-sans), ui-sans-serif, sans-serif",
-            fontSize: 13,
-            color: "var(--ink-muted)",
-            marginTop: 8,
-            fontVariantNumeric: "tabular-nums lining-nums",
-          }}
-        >
-          Last run{" "}
-          {failing.lastRunAt ? new Date(failing.lastRunAt).toLocaleString() : "never"}.
-        </p>
-      </section>
-      <div className="perforation" />
-    </>
+    <div
+      className="mb-4"
+      style={{
+        background: "var(--accent-bg)",
+        border: "1px solid var(--accent)",
+        borderRadius: 2,
+        padding: "8px 14px",
+        ...monoLabel,
+        color: "var(--accent-dark)",
+        fontVariantNumeric: "tabular-nums lining-nums",
+      }}
+      role="status"
+    >
+      {failing.jobName}{" "}
+      {failing.status === "FAILURE" ? "is failing" : "is overdue"}
+      {" · "}
+      {failing.lastRunAt
+        ? `last run ${new Date(failing.lastRunAt).toLocaleString()}`
+        : "never run"}
+    </div>
   )
 }

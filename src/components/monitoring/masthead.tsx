@@ -2,19 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
+import { monoLabel } from "./styles"
 
 type Summary = {
   refreshedAt: string
-  db: { totalBytes: number; capBytes: number; pct: number }
-  redis: {
-    keys: number
-    memoryPct: number | null
-    commandsPct: number | null
-    available: { keys: boolean; memory: boolean; commands: boolean }
-  }
-  syncs: { jobName: string; status: string | null; overdue: boolean }[]
-  errorsCount: number
-  todayCostUsd: number
 }
 
 export function Masthead({
@@ -30,7 +21,7 @@ export function Masthead({
   const params = useSearchParams()
   const selected = params.get("store") || "all"
 
-  const { data, dataUpdatedAt, refetch, isFetching } = useQuery<Summary>({
+  const { dataUpdatedAt, refetch, isFetching } = useQuery<Summary>({
     queryKey: ["monitoring-summary", selected],
     queryFn: async () => {
       const url = `/api/monitoring/summary${selected !== "all" ? `?store=${selected}` : ""}`
@@ -41,116 +32,66 @@ export function Masthead({
     refetchInterval: 60_000,
   })
 
-  const overdueCount = data?.syncs.filter((s) => s.overdue && s.status !== "FAILURE").length ?? 0
-  const failingCount = data?.syncs.filter((s) => s.status === "FAILURE").length ?? 0
-  const dbPct = Math.round(data?.db.pct ?? 0)
-  const errCount = data?.errorsCount ?? 0
-  const cost = data?.todayCostUsd ?? 0
-  const cachePct = data?.redis.memoryPct ?? null
-
-  const allGood =
-    !!data &&
-    failingCount === 0 &&
-    overdueCount === 0 &&
-    errCount === 0 &&
-    dbPct < 75 &&
-    (cachePct === null || cachePct < 80)
-
   const onStoreChange = (v: string) => {
     const sp = new URLSearchParams(params.toString())
-    if (v === "all") sp.delete("store"); else sp.set("store", v)
+    if (v === "all") sp.delete("store")
+    else sp.set("store", v)
     router.replace(`?${sp.toString()}`)
   }
 
   return (
-    <header className="mb-10 mt-6">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1
-          style={{
-            fontFamily: "var(--font-fraunces), serif",
-            fontSize: "clamp(28px, 4vw, 44px)",
-            fontWeight: 500,
-            fontVariationSettings: '"opsz" 144, "SOFT" 30',
-            letterSpacing: "-0.03em",
-            lineHeight: 0.95,
-            color: "var(--ink)",
-          }}
-        >
-          Monitoring
-        </h1>
-        <StoreFilter stores={stores} selected={selected} onChange={onStoreChange} />
-      </div>
-
-      <div
-        className="mt-3 font-mono uppercase"
-        style={{ fontSize: 10, letterSpacing: "0.12em", color: "var(--ink-faint)" }}
-      >
-        {formatFolio(dataUpdatedAt, tzLabel)}
-        {dataUpdatedAt ? ` · sha ${commitSha}` : ""} · last refresh {ago(dataUpdatedAt)} ·{" "}
-        <button
-          type="button"
-          onClick={() => refetch()}
-          aria-label="Refresh"
-          className="monitoring-refresh-icon"
-          data-spinning={isFetching ? "true" : undefined}
-        >
-          ↻
-        </button>
-      </div>
-
-      <p
-        className="mt-4"
+    <header className="mb-4 mt-6 flex items-baseline justify-between gap-4 flex-wrap">
+      <h1
         style={{
-          fontFamily: "var(--font-dm-sans), ui-sans-serif, sans-serif",
-          fontSize: 13,
-          lineHeight: 1.5,
-          color: "var(--ink-muted)",
-          maxWidth: "70ch",
-          fontVariantNumeric: "tabular-nums lining-nums",
+          fontFamily: "var(--font-fraunces), serif",
+          fontSize: 28,
+          fontWeight: 500,
+          fontVariationSettings: '"opsz" 96, "SOFT" 30',
+          letterSpacing: "-0.02em",
+          lineHeight: 1,
+          color: "var(--ink)",
         }}
       >
-        {data === undefined ? (
-          <span style={{ fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-            loading
-          </span>
-        ) : allGood ? (
-          <>
-            All {data.syncs.length} syncs current. No errors in the last 24 hours. AI spend ${cost.toFixed(2)} today, on baseline. Database {dbPct}%
-            {cachePct !== null ? <>. Cache memory {Math.round(cachePct)}%.</> : <>.</>}
-          </>
-        ) : (
-          <Degraded data={data} dbPct={dbPct} errCount={errCount} cachePct={cachePct} />
-        )}
-      </p>
+        Monitoring
+      </h1>
+      <div className="flex items-baseline gap-4 flex-wrap">
+        <span
+          style={{
+            ...monoLabel,
+            color: "var(--ink-faint)",
+            fontVariantNumeric: "tabular-nums lining-nums",
+          }}
+        >
+          {formatFolio(dataUpdatedAt, tzLabel)}
+          {dataUpdatedAt ? ` · sha ${commitSha}` : ""} · {ago(dataUpdatedAt)}{" "}
+          ·{" "}
+          <button
+            type="button"
+            onClick={() => refetch()}
+            aria-label="Refresh"
+            className="monitoring-refresh-icon"
+            data-spinning={isFetching ? "true" : undefined}
+            style={{
+              cursor: "pointer",
+              background: "none",
+              border: "none",
+              padding: 0,
+              color: "inherit",
+              font: "inherit",
+              letterSpacing: "inherit",
+            }}
+          >
+            ↻
+          </button>
+        </span>
+        <StoreFilter
+          stores={stores}
+          selected={selected}
+          onChange={onStoreChange}
+        />
+      </div>
     </header>
   )
-}
-
-function Degraded({
-  data,
-  dbPct,
-  errCount,
-  cachePct,
-}: {
-  data: Summary
-  dbPct: number
-  errCount: number
-  cachePct: number | null
-}) {
-  const parts: React.ReactNode[] = []
-  for (const f of data.syncs.filter((s) => s.status === "FAILURE")) {
-    parts.push(<span key={`fail-${f.jobName}`} style={{ color: "var(--accent)" }}>{f.jobName} failing</span>)
-  }
-  for (const o of data.syncs.filter((s) => s.overdue && s.status !== "FAILURE")) {
-    parts.push(<span key={`over-${o.jobName}`} style={{ color: "var(--accent)" }}>{o.jobName} overdue</span>)
-  }
-  if (errCount > 0) parts.push(<span key="err" style={{ color: "var(--accent)" }}>{errCount} errors logged today</span>)
-  if (dbPct >= 75) parts.push(<span key="db" style={{ color: "var(--accent)" }}>DB at {dbPct}%</span>)
-  if (cachePct !== null && cachePct >= 80) parts.push(<span key="cache" style={{ color: "var(--accent)" }}>cache memory at {Math.round(cachePct)}%</span>)
-  if (parts.length === 0) {
-    return <>Loading status…</>
-  }
-  return <>{parts.flatMap((p, i) => i === 0 ? [p] : [", ", p])}.</>
 }
 
 function StoreFilter({
@@ -188,9 +129,21 @@ function StoreFilter({
 function formatFolio(t: number, tz: string): string {
   if (!t) return ""
   const d = new Date(t)
-  const day = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()
-  const date = d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()
-  const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+  const day = d
+    .toLocaleDateString("en-US", { weekday: "short" })
+    .toUpperCase()
+  const date = d
+    .toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+    .toUpperCase()
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
   return `${day} · ${date} · ${time} ${tz}`
 }
 
