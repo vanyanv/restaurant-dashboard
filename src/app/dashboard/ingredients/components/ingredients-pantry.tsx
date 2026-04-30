@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import dynamic from "next/dynamic"
 import { AlertCircle, EyeOff, Search, Sparkles, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -11,8 +12,13 @@ import {
   type CategoryBucket,
 } from "../../recipes/components/ingredient-picker-utils"
 import { IngredientTile } from "./ingredient-tile"
-import { IngredientDetailSheet } from "./ingredient-detail-sheet"
 import type { CanonicalIngredientSummary } from "@/types/recipe"
+
+const IngredientDetailSheet = dynamic(
+  () =>
+    import("./ingredient-detail-sheet").then((m) => m.IngredientDetailSheet),
+  { ssr: false }
+)
 
 type Props = {
   canonicals: CanonicalIngredientSummary[]
@@ -302,14 +308,16 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
         </div>
       </div>
 
-      <IngredientDetailSheet
-        ingredient={openIngredient}
-        allIngredients={canonicals}
-        open={openId != null}
-        onOpenChange={(o) => {
-          if (!o) setOpenId(null)
-        }}
-      />
+      {openId != null && (
+        <IngredientDetailSheet
+          ingredient={openIngredient}
+          allIngredients={canonicals}
+          open
+          onOpenChange={(o) => {
+            if (!o) setOpenId(null)
+          }}
+        />
+      )}
     </>
   )
 }

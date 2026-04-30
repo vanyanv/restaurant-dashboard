@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
@@ -16,13 +17,18 @@ import { cn } from "@/lib/utils"
 import { ProvenanceChip } from "@/components/recipe/provenance-chip"
 import type { CanonicalIngredientSummary, RecipeSummary } from "@/types/recipe"
 import type { RecipeCostLine } from "@/lib/recipe-cost"
-import { IngredientPickerSheet } from "./ingredient-picker-sheet"
 import {
   categorySwatch,
   COMMON_UNITS,
   prettifyIngredientName,
   type IngredientPickerValue,
 } from "./ingredient-picker-utils"
+
+const IngredientPickerSheet = dynamic(
+  () =>
+    import("./ingredient-picker-sheet").then((m) => m.IngredientPickerSheet),
+  { ssr: false }
+)
 
 export type IngredientRowData = {
   id: string
@@ -340,27 +346,29 @@ export function SortableIngredientRow({
         </div>
       </div>
 
-      <IngredientPickerSheet
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        value={row.picker}
-        canonicalIngredients={canonicalIngredients}
-        recipes={recipes}
-        excludeRecipeIds={excludeRecipeIds}
-        onChange={(v) => {
-          const patch: Partial<IngredientRowData> = { picker: v }
-          if (v?.kind === "ingredient" && !row.unit) {
-            patch.unit = v.defaultUnit
-          }
-          if (v?.kind === "recipe" && !row.unit) {
-            patch.unit = "serving"
-          }
-          onChange(patch)
-        }}
-        onCanonicalCreated={onCanonicalCreated}
-        onCreateIngredient={onOpenCreateDialog}
-        title={hasPick ? "Swap ingredient" : "Pick an ingredient"}
-      />
+      {pickerOpen && (
+        <IngredientPickerSheet
+          open
+          onOpenChange={setPickerOpen}
+          value={row.picker}
+          canonicalIngredients={canonicalIngredients}
+          recipes={recipes}
+          excludeRecipeIds={excludeRecipeIds}
+          onChange={(v) => {
+            const patch: Partial<IngredientRowData> = { picker: v }
+            if (v?.kind === "ingredient" && !row.unit) {
+              patch.unit = v.defaultUnit
+            }
+            if (v?.kind === "recipe" && !row.unit) {
+              patch.unit = "serving"
+            }
+            onChange(patch)
+          }}
+          onCanonicalCreated={onCanonicalCreated}
+          onCreateIngredient={onOpenCreateDialog}
+          title={hasPick ? "Swap ingredient" : "Pick an ingredient"}
+        />
+      )}
     </>
   )
 }

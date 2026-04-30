@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useWindowVirtualizer } from "@tanstack/react-virtual"
 import { Search, SlidersHorizontal, X } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -458,11 +459,7 @@ export function OrdersContent({ initial, stores }: Props) {
             </p>
           </div>
         ) : (
-          <div role="list" className="border-b border-[var(--hairline)]">
-            {rows.map((r, i) => (
-              <OrderRow key={r.id} order={r} index={i} />
-            ))}
-          </div>
+          <VirtualOrderList rows={rows} />
         )}
 
         {nextCursor && (
@@ -479,6 +476,50 @@ export function OrdersContent({ initial, stores }: Props) {
         )}
       </section>
     </>
+  )
+}
+
+function VirtualOrderList({ rows }: { rows: OrderListRow[] }) {
+  const parentRef = useRef<HTMLDivElement | null>(null)
+
+  const virtualizer = useWindowVirtualizer({
+    count: rows.length,
+    estimateSize: () => 86,
+    overscan: 8,
+    scrollMargin: parentRef.current?.offsetTop ?? 0,
+  })
+
+  const items = virtualizer.getVirtualItems()
+  const totalSize = virtualizer.getTotalSize()
+  const scrollMargin = virtualizer.options.scrollMargin
+
+  return (
+    <div
+      ref={parentRef}
+      role="list"
+      className="border-b border-[var(--hairline)]"
+      style={{ position: "relative", height: totalSize }}
+    >
+      {items.map((vRow) => {
+        const r = rows[vRow.index]
+        return (
+          <div
+            key={r.id}
+            data-index={vRow.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${vRow.start - scrollMargin}px)`,
+            }}
+          >
+            <OrderRow order={r} index={vRow.index} />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

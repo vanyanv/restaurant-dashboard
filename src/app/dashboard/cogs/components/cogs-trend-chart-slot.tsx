@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { ChartSkeleton } from "@/components/skeletons"
 
-export const RevenueTrendChartSlot = dynamic(
-  () => import("@/components/charts/revenue-trend-chart").then((m) => m.RevenueTrendChart),
+export const CogsTrendChart = dynamic(
+  () => import("./cogs-trend-chart").then((m) => m.CogsTrendChart),
   { ssr: false, loading: () => <ChartSkeleton /> }
 )

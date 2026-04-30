@@ -1,5 +1,5 @@
 import { getCostByCategory } from "@/lib/cogs"
-import { CostByCategoryDonut } from "../cost-by-category-donut"
+import { CostByCategoryDonut } from "../cost-by-category-donut-slot"
 import type { CogsFilters } from "./data"
 
 export async function CostByCategorySection({

@@ -1,6 +1,6 @@
 import { getCogsTrend } from "@/lib/cogs"
 import { prisma } from "@/lib/prisma"
-import { CogsTrendChart } from "../cogs-trend-chart"
+import { CogsTrendChart } from "../cogs-trend-chart-slot"
 import type { CogsFilters } from "./data"
 
 export async function CogsTrendSection({
