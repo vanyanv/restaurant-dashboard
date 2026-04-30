@@ -81,14 +81,25 @@ export function formatDateRange(startDate: string, endDate: string): string {
 }
 
 export function getLastSyncText(lastSyncAt: Date | string | null | undefined): string {
-  if (!lastSyncAt) return "Never synced"
+  if (!lastSyncAt) return "Awaiting first sync"
   const date =
     typeof lastSyncAt === "string" ? new Date(lastSyncAt) : lastSyncAt
   const diffMs = Date.now() - date.getTime()
   const diffMin = Math.floor(diffMs / 60000)
   if (diffMin < 1) return "Just synced"
-  if (diffMin < 60) return `Last synced ${diffMin}m ago`
+  if (diffMin < 60) return `Synced ${diffMin}m ago`
   const diffHours = Math.floor(diffMin / 60)
-  if (diffHours < 24) return `Last synced ${diffHours}h ago`
-  return `Last synced ${Math.floor(diffHours / 24)}d ago`
+  if (diffHours < 24) return `Synced ${diffHours}h ago`
+  return `Synced ${Math.floor(diffHours / 24)}d ago`
+}
+
+export function getRangeStamp(range: DashboardRange): string {
+  if (range.kind === "custom") {
+    return formatDateRange(range.startDate, range.endDate).toUpperCase()
+  }
+  const d = range.days
+  if (d === 1) return "TODAY"
+  if (d === -1) return "YDAY"
+  if (d > 1) return `LAST ${d}D`
+  return `${d}D`
 }

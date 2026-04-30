@@ -4,12 +4,6 @@ import { useEffect, useState, useTransition } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
@@ -18,7 +12,7 @@ import {
   ChartLegendContent,
 } from "@/components/ui/chart"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { formatCurrency, formatDate } from "@/lib/format"
+import { formatCompact, formatCurrency, formatDate } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { getRevenueTrendData } from "@/app/actions/store-actions"
 import { ChartSkeleton } from "@/components/skeletons"
@@ -34,11 +28,11 @@ const TREND_PRESETS = [
 const chartConfig: ChartConfig = {
   grossRevenue: {
     label: "Gross Revenue",
-    color: "hsl(var(--primary))",
+    color: "var(--accent)",
   },
   netRevenue: {
     label: "Net Revenue",
-    color: "hsl(var(--chart-2))",
+    color: "var(--ink)",
   },
 }
 
@@ -83,32 +77,33 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
   if (!data || data.length === 0) return null
 
   return (
-    <Card className={cn("py-3 gap-3", className)}>
-      <CardHeader className="pb-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <CardTitle className="text-sm">Revenue Trend</CardTitle>
-          </div>
-          <ToggleGroup
-            type="single"
-            value={String(days)}
-            onValueChange={(v) => v && handleDaysChange(Number(v))}
-            disabled={isPending}
-          >
-            {TREND_PRESETS.map((p) => (
-              <ToggleGroupItem
-                key={p.value}
-                value={p.value}
-                size="sm"
-                className="text-xs px-2.5 h-7"
-              >
-                {p.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-      </CardHeader>
-      <CardContent className={cn(isPending && "opacity-50 transition-opacity duration-200")}>
+    <div className={cn("flex flex-col gap-3", className)}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <h3
+          className="font-display italic text-[17px] font-medium leading-tight tracking-[-0.01em] text-(--ink)"
+          style={{ fontVariationSettings: '"opsz" 96, "SOFT" 40' }}
+        >
+          Revenue Trend
+        </h3>
+        <ToggleGroup
+          type="single"
+          value={String(days)}
+          onValueChange={(v) => v && handleDaysChange(Number(v))}
+          disabled={isPending}
+        >
+          {TREND_PRESETS.map((p) => (
+            <ToggleGroupItem
+              key={p.value}
+              value={p.value}
+              size="sm"
+              className="text-xs px-2.5 h-7 rounded-none font-mono tracking-[0.08em]"
+            >
+              {p.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </div>
+      <div className={cn(isPending && "opacity-50 transition-opacity duration-200")}>
         <ChartContainer config={chartConfig} className={cn(chartHeight, "w-full")}>
           <LineChart
             accessibilityLayer
@@ -118,8 +113,8 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
             <CartesianGrid
               strokeDasharray="3 3"
               vertical={false}
-              stroke="hsl(var(--border))"
-              strokeOpacity={0.5}
+              stroke="var(--hairline)"
+              strokeOpacity={1}
             />
             <XAxis
               dataKey="date"
@@ -127,15 +122,17 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
               axisLine={false}
               tickMargin={12}
               tickFormatter={formatDate}
-              fontSize={12}
+              fontSize={11}
+              tick={{ fill: "var(--ink-muted)" }}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tickFormatter={(v) => formatCurrency(v)}
-              width={isMobile ? 55 : 80}
-              fontSize={12}
+              tickFormatter={(v) => formatCompact(v)}
+              width={isMobile ? 44 : 56}
+              fontSize={11}
+              tick={{ fill: "var(--ink-muted)" }}
             />
             <ChartTooltip
               content={
@@ -161,14 +158,15 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
               dataKey="netRevenue"
               type="monotone"
               stroke="var(--color-netRevenue)"
-              strokeWidth={2}
-              strokeDasharray="5 3"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              strokeOpacity={0.55}
               dot={false}
               connectNulls
             />
           </LineChart>
         </ChartContainer>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

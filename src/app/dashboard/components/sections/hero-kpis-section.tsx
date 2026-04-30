@@ -1,5 +1,5 @@
 import { HeroKpi, formatMoneyLarge, formatUsd } from "../hero-kpi"
-import type { DashboardRange } from "@/lib/dashboard-utils"
+import { getRangeStamp, type DashboardRange } from "@/lib/dashboard-utils"
 import { fetchInvoiceSpend30d, fetchOtter } from "./data"
 
 export async function HeroKpisSection({ range }: { range: DashboardRange }) {
@@ -18,37 +18,38 @@ export async function HeroKpisSection({ range }: { range: DashboardRange }) {
     : null
 
   const invoiceSpend = invoiceSpend30d?.total ?? 0
+  const scope = getRangeStamp(range)
 
   return (
     <dl className="editorial-kpi-strip editorial-kpi-strip-wide dock-in dock-in-2">
       <HeroKpi
         label="Gross sales"
         value={kpis ? formatMoneyLarge(kpis.gross) : "—"}
-        unit="USD"
+        unit={`USD · ${scope}`}
         delta={null}
       />
       <HeroKpi
         label="Net sales"
         value={kpis ? formatMoneyLarge(kpis.net) : "—"}
-        unit="USD"
+        unit={`USD · ${scope}`}
         delta={null}
       />
       <HeroKpi
         label="Orders"
         value={kpis ? kpis.orders.toLocaleString() : "—"}
-        unit="tickets"
+        unit={`tickets · ${scope}`}
         delta={null}
       />
       <HeroKpi
         label="Avg ticket"
         value={kpis ? formatUsd(kpis.avg) : "—"}
-        unit="per order"
+        unit={`per order · ${scope}`}
         delta={null}
       />
       <HeroKpi
         label="Invoice spend"
         value={invoiceSpend30d ? formatMoneyLarge(invoiceSpend) : "—"}
-        unit="last 30d"
+        unit="USD · LAST 30D"
         delta={null}
       />
     </dl>

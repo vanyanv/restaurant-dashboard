@@ -5,12 +5,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import dynamic from "next/dynamic"
 import { Store } from "lucide-react"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -134,11 +128,16 @@ export function HourlyOrdersDashboardCard({
     comparison.baselineWeeks > 0
 
   return (
-    <Card className={cn("flex flex-col py-3 gap-2", className)}>
-      <CardHeader className="pb-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-sm">Busiest Hours</CardTitle>
+    <div className={cn("flex flex-col gap-2", className)}>
+      <div>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h3
+              className="font-display italic text-[17px] font-medium leading-tight tracking-[-0.01em] text-(--ink)"
+              style={{ fontVariationSettings: '"opsz" 96, "SOFT" 40' }}
+            >
+              Busiest Hours
+            </h3>
             <ToggleGroup
               type="single"
               value={period}
@@ -158,7 +157,7 @@ export function HourlyOrdersDashboardCard({
                 <ToggleGroupItem
                   key={p}
                   value={p}
-                  className="h-6 px-2 text-xs"
+                  className="h-6 px-2 text-xs rounded-none font-mono tracking-[0.08em]"
                 >
                   {PERIOD_LABELS[p]}
                 </ToggleGroupItem>
@@ -167,8 +166,8 @@ export function HourlyOrdersDashboardCard({
           </div>
           {stores.length > 1 && (
             <Select value={selectedStore} onValueChange={setSelectedStore}>
-              <SelectTrigger className="h-7 w-[140px] text-xs">
-                <Store className="mr-1 h-3 w-3 text-muted-foreground" />
+              <SelectTrigger className="h-7 w-[140px] text-xs rounded-none border-(--hairline-bold) shadow-none bg-(--paper-soft)">
+                <Store className="mr-1 h-3 w-3 text-(--ink-muted)" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -224,15 +223,15 @@ export function HourlyOrdersDashboardCard({
             </span>
           </div>
         )}
-      </CardHeader>
-      <CardContent
+      </div>
+      <div
         className={cn(
-          "flex-1 pb-0",
+          "flex-1",
           isFetching && !isLoading && "opacity-80 transition-opacity"
         )}
       >
         {isLoading && !hourlyData ? (
-          <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
+          <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-(--ink-muted)">
             Loading...
           </div>
         ) : chartData &&
@@ -248,11 +247,11 @@ export function HourlyOrdersDashboardCard({
             }
           />
         ) : (
-          <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-muted-foreground">
+          <div className="h-[280px] md:h-[340px] lg:h-[380px] flex items-center justify-center text-sm text-(--ink-muted)">
             No order data available
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

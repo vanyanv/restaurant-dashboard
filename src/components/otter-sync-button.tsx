@@ -15,7 +15,7 @@ interface OtterSyncButtonProps {
 }
 
 function getLastSyncText(lastSyncAt: Date | string | null | undefined): string {
-  if (!lastSyncAt) return "Never synced"
+  if (!lastSyncAt) return "Awaiting first sync"
   const date = typeof lastSyncAt === "string" ? new Date(lastSyncAt) : lastSyncAt
   const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60))
   if (diffHours < 1) return "Synced recently"

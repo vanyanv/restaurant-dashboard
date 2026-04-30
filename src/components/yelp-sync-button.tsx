@@ -61,7 +61,7 @@ export function YelpSyncButton({
   }
 
   const getLastSyncText = () => {
-    if (!lastSync) return "Never synced"
+    if (!lastSync) return "Awaiting first sync"
     const date = typeof lastSync === 'string' ? new Date(lastSync) : lastSync
     const now = new Date()
     const diffHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))

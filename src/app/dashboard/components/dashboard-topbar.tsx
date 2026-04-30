@@ -14,7 +14,7 @@ interface DashboardTopbarProps {
   range: DashboardRange
 }
 
-export function DashboardTopbar({ userRole, range }: DashboardTopbarProps) {
+export function DashboardTopbar({ userRole: _userRole, range }: DashboardTopbarProps) {
   const stamps = (
     <>
       <Suspense fallback={<span className="opacity-40">loading…</span>}>
@@ -32,11 +32,9 @@ export function DashboardTopbar({ userRole, range }: DashboardTopbarProps) {
       <Suspense fallback={null}>
         <TopbarMobileStoreSwitcher range={range} />
       </Suspense>
-      {userRole === "OWNER" && (
-        <Suspense fallback={null}>
-          <TopbarSyncButton range={range} />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <TopbarSyncButton range={range} />
+      </Suspense>
       <DashboardTopbarControls range={range} />
     </EditorialTopbar>
   )

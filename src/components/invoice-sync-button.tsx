@@ -15,7 +15,7 @@ interface InvoiceSyncButtonProps {
 }
 
 function getLastSyncText(lastSyncAt: string | null | undefined): string {
-  if (!lastSyncAt) return "Never synced"
+  if (!lastSyncAt) return "Awaiting first sync"
   const date = new Date(lastSyncAt)
   const diffHours = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60))
   if (diffHours < 1) return "Synced recently"
