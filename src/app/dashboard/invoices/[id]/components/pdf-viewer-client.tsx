@@ -45,6 +45,13 @@ const documentOptions = {
   cMapPacked: true,
 } as const
 
+function getPdfLoadErrorMessage(error: Error): string {
+  if (error.message.includes("503")) {
+    return "PDF storage is temporarily unavailable. Check Vercel Blob usage or try again later."
+  }
+  return error.message
+}
+
 export default function PdfViewerClient({ invoiceId }: PdfViewerClientProps) {
   const fileUrl = useMemo(() => `/api/invoices/${invoiceId}/pdf`, [invoiceId])
 
@@ -129,7 +136,7 @@ export default function PdfViewerClient({ invoiceId }: PdfViewerClientProps) {
           <div>
             <p className="font-medium">Failed to load PDF</p>
             <p className="text-sm text-muted-foreground mt-1">
-              {loadError.message}
+              {getPdfLoadErrorMessage(loadError)}
             </p>
           </div>
           <Button

@@ -32,7 +32,21 @@ export async function GET(
     return NextResponse.json({ error: "PDF not available" }, { status: 404 })
   }
 
-  const result = await getInvoicePdfStream(invoice.pdfBlobPathname)
+  let result
+  try {
+    result = await getInvoicePdfStream(invoice.pdfBlobPathname)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[invoice-pdf] Blob fetch failed", {
+      invoiceId: id,
+      message,
+    })
+    return NextResponse.json(
+      { error: "PDF storage is temporarily unavailable" },
+      { status: 503 },
+    )
+  }
+
   if (!result || result.statusCode !== 200) {
     return NextResponse.json({ error: "PDF not found in storage" }, { status: 404 })
   }
