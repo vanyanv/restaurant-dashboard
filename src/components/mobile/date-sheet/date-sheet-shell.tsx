@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 
 type Props = {
   open: boolean
@@ -13,6 +14,11 @@ type Props = {
 
 export function DateSheetShell({ open, onClose, dept, children, footer }: Props) {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -48,9 +54,9 @@ export function DateSheetShell({ open, onClose, dept, children, footer }: Props)
     }
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || !mounted) return null
 
-  return (
+  return createPortal(
     <>
       <div className="m-sheet__backdrop" onClick={onClose} aria-hidden />
       <div
@@ -78,6 +84,7 @@ export function DateSheetShell({ open, onClose, dept, children, footer }: Props)
         <div className="m-sheet__body">{children}</div>
         <div className="m-sheet__foot">{footer}</div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

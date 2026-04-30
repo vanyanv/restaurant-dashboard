@@ -7212,12 +7212,25 @@
 }
 
 .m-sheet {
+  /* Sheet is portaled to <body> so it sits outside .editorial-surface
+     and the toolbar's transformed stacking context. Re-declare the
+     editorial vars locally — same trick .drp-popover uses. */
+  --ink: #1a1613;
+  --ink-muted: #6b625a;
+  --ink-faint: #a69d92;
+  --paper: #fbf6ee;
+  --hairline: #e8dfd3;
+  --hairline-bold: #c9beaf;
+  --accent: #dc2626;
+  --accent-dark: #7c1515;
+
   position: fixed;
   left: 0;
   right: 0;
   top: 0;
   z-index: 81;
   background: var(--paper);
+  color: var(--ink);
   border-bottom: 1px solid var(--hairline-bold);
   border-bottom-left-radius: 2px;
   border-bottom-right-radius: 2px;
@@ -7225,6 +7238,7 @@
   max-height: 92dvh;
   display: flex;
   flex-direction: column;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
   animation: mSheetDown 220ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
