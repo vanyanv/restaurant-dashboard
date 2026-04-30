@@ -6,15 +6,12 @@ import {
   getInvoiceList,
   getInvoiceSummary,
 } from "@/app/actions/invoice-actions"
-import { getStores } from "@/app/actions/store-actions"
 import { PageHead } from "@/components/mobile/page-head"
 import {
   MastheadFigures,
   type MastheadCell,
 } from "@/components/mobile/masthead-figures"
 import { Panel } from "@/components/mobile/panel"
-import { MToolbar } from "@/components/mobile/m-toolbar"
-import { parseMobileRange } from "@/lib/mobile/period"
 
 export const dynamic = "force-dynamic"
 
@@ -75,7 +72,7 @@ const FILTERS: Array<{ value: FilterValue; label: string; href: string }> = [
 export default async function MobileInvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<{ status?: string; page?: string }>
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
@@ -85,18 +82,10 @@ export default async function MobileInvoicesPage({
   const activeFilter: FilterValue = (status as FilterValue) ?? "ALL"
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1)
 
-  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
-  const storeId = sp.store && sp.store !== "" ? sp.store : null
-
-  const [stores, list, summary] = await Promise.all([
-    getStores(),
+  const [list, summary] = await Promise.all([
     getInvoiceList({ status, page, limit: 50 }),
     getInvoiceSummary({ days: 30 }),
   ])
-
-  const validStoreId = storeId && stores.some((s) => s.id === storeId)
-    ? storeId
-    : null
 
   const cells: MastheadCell[] = [
     {
@@ -118,14 +107,6 @@ export default async function MobileInvoicesPage({
 
   return (
     <>
-      <MToolbar
-        pathname="/m/invoices"
-        searchParams={sp}
-        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
-        storeId={validStoreId}
-        range={range}
-      />
-
       <PageHead
         dept="LEDGER"
         title="Invoices"
