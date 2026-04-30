@@ -18,4 +18,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(result)
 }
 
+// Aliased to GET so it can be hit ad-hoc from the browser/curl during dev.
+// Cron platforms (Vercel/GH Actions) use POST.
 export const GET = POST

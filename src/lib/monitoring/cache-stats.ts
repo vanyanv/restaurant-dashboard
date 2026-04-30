@@ -19,7 +19,9 @@ function getOrCreate(prefix: string): Counter {
 function maybeFlush() {
   opsSinceFlush++
   if (opsSinceFlush >= FLUSH_EVERY_OPS) {
-    void flushCacheStats()
+    void flushCacheStats().catch((err) =>
+      console.error("[cache-stats] maybeFlush failed", err),
+    )
   }
 }
 
@@ -37,6 +39,14 @@ export function bumpFailure(prefix: string) { getOrCreate(prefix).failures++; ma
  *
  * On per-prefix failure, restores that prefix's counts so the next pass
  * retries — counts are never lost to a transient DB blip.
+ *
+ * Note on serverless: counters are PER-PROCESS. On Vercel each lambda
+ * instance has its own Map. Counts below FLUSH_EVERY_OPS that haven't
+ * been picked up by the 10-min cron are lost when the process exits.
+ * The CacheStat panel is therefore directional, not exact — typically
+ * within a few percent of true on steady traffic; can drift more on
+ * bursty cold-start workloads. Acceptable for monitoring; not for
+ * billing.
  */
 export async function flushCacheStats(): Promise<{ flushed: number }> {
   if (counters.size === 0) return { flushed: 0 }
