@@ -184,6 +184,8 @@ export function HourlyChart({
               ) : null}
               {v > 0 ? (
                 <rect
+                  className="m-chart-bar"
+                  style={{ "--i": i } as React.CSSProperties}
                   x={x}
                   y={baseY - barH}
                   width={barW}

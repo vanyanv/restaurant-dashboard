@@ -34,11 +34,10 @@ export function MToolbar({
 }: Props) {
   return (
     <div
-      className="dock-in dock-in-1"
+      className="dock-in dock-in-1 m-toolbar"
       style={{
         margin: "0 -16px 14px",
         padding: "0 16px",
-        borderBottom: "1px solid var(--hairline-bold)",
         background: "rgba(255, 253, 247, 0.55)",
       }}
     >
@@ -50,19 +49,7 @@ export function MToolbar({
           padding: "10px 0",
         }}
       >
-        <span
-          style={{
-            fontFamily:
-              "var(--font-jetbrains-mono), ui-monospace, monospace",
-            fontSize: 9.5,
-            fontWeight: 500,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: "var(--ink-faint)",
-          }}
-        >
-          STORE
-        </span>
+        <span className="m-cap">STORE</span>
         <MobileStoreSelect
           stores={stores}
           storeId={storeId}
@@ -71,13 +58,10 @@ export function MToolbar({
         />
       </div>
       <div
+        className="m-segmented"
         role="tablist"
         aria-label="Period"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          borderTop: "1px solid var(--hairline)",
-        }}
+        style={{ margin: "0 -16px" }}
       >
         {MOBILE_PERIODS.map((p) => {
           const active = period === p.value
@@ -90,20 +74,8 @@ export function MToolbar({
               role="tab"
               aria-selected={active}
               prefetch={false}
-              style={{
-                textAlign: "center",
-                padding: "10px 4px",
-                fontFamily:
-                  "var(--font-jetbrains-mono), ui-monospace, monospace",
-                fontSize: 9.5,
-                fontWeight: 500,
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                textDecoration: "none",
-                color: active ? "var(--accent-dark)" : "var(--ink-muted)",
-                background: active ? "var(--accent-bg)" : "transparent",
-                borderRight: "1px solid var(--hairline)",
-              }}
+              className={`m-segmented__item${active ? " is-active" : ""}`}
+              style={{ padding: "10px 6px", fontSize: 9.5 }}
             >
               {p.short}
             </Link>
