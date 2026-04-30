@@ -55,9 +55,19 @@ export function toHourlyPeriod(p: MobileNamedPeriod): HourlyComparisonPeriod {
 }
 
 function isValidIsoDate(s: string | undefined): s is string {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
-  const d = new Date(s + "T00:00:00.000Z")
-  return !Number.isNaN(d.getTime())
+  if (!s) return false
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return false
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  const d = new Date(Date.UTC(year, month - 1, day))
+  if (Number.isNaN(d.getTime())) return false
+  return (
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() + 1 === month &&
+    d.getUTCDate() === day
+  )
 }
 
 function parseCustomRange(
@@ -137,9 +147,14 @@ export function periodDateStrings(p: MobileNamedPeriod): string[] {
   return out
 }
 
-/** Inclusive day count between two LA-local Dates. */
+/**
+ * Inclusive day count between two LA-local Dates.
+ * Convention: `start` must be at T00:00:00.000 and `end` at T23:59:59.999
+ * (i.e. the values returned by `startOfDayLA` / `endOfDayLA`). The ~86 400 s
+ * millisecond diff already encodes the inclusive count, so no `+ 1` is needed.
+ */
 export function rangeDayCount(start: Date, end: Date): number {
-  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
 }
 
 /** Format a custom range as "MAR 5 → APR 20" (caps, em-arrow) for the active pill. */
