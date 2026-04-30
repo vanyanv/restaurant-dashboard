@@ -95,9 +95,23 @@ If the invoice shows a standalone dollar amount between the last product line
 and the totals section without a clear label, extract it as "Miscellaneous
 Charge" rather than dropping it — the line-sum must reconcile against subtotal.
 
+RETURNS / CREDIT MEMOS — if the document is a return, credit memo, RMA, refund,
+or correction (look for headers like "CREDIT MEMO", "RETURN", "CREDIT INVOICE",
+"RMA", a stamped "CREDIT" watermark, or a vendor row labeled "Returned"), set
+isReturn: true and emit NEGATIVE values for every monetary field that
+represents money flowing back to the buyer:
+  - totalAmount, subtotal, taxAmount → all negative
+  - per line item: extendedPrice negative, quantity negative
+  - unitPrice: keep positive UNLESS the document explicitly prints it negative
+The product of (negative quantity) × (positive unitPrice) must equal the
+(negative) extendedPrice — i.e. the math still reconciles. If the document
+is a regular invoice, set isReturn: false and keep all values positive
+as usual. NEVER mix: a single document is either a return or a regular
+invoice in this v1.
+
 If a value cannot be determined, use null. Ensure extendedPrice = quantity * unitPrice
-for each line item (fees have quantity=1 so this always holds). Number the
-line items starting from 1.
+for each line item (fees have quantity=1 so this always holds; for returns the
+identity holds with negative quantity). Number the line items starting from 1.
 
 If the PDF appears to contain MULTIPLE invoices (e.g. a consolidated statement or a
 "CoPilot Invoices" summary), extract only the single invoice whose invoice number
@@ -127,7 +141,8 @@ Return valid JSON matching this schema EXACTLY (every field must be present):
   }],
   "subtotal": number or null,
   "taxAmount": number or null,
-  "totalAmount": number
+  "totalAmount": number,
+  "isReturn": boolean
 }`
 }
 

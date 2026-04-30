@@ -95,7 +95,8 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
   }
 
   const newLines = await prisma.invoiceLineItem.findMany({
-    where: { invoiceId: { in: invoiceIds } },
+    // Returns / credit memos can't be price hikes — exclude them.
+    where: { invoiceId: { in: invoiceIds }, invoice: { isReturn: false } },
     select: {
       sku: true,
       productName: true,
@@ -215,7 +216,12 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
   }
 }
 
-async function runSync(emit: ProgressEmitter, userId: string, accountId: string): Promise<SyncResult> {
+async function runSync(
+  emit: ProgressEmitter,
+  userId: string,
+  accountId: string,
+  lookbackDaysOverride?: number,
+): Promise<SyncResult> {
   const counts = { scanned: 0, created: 0, skipped: 0, errors: 0 }
 
   // ─── Phase 1: Fetch emails ───
@@ -224,12 +230,14 @@ async function runSync(emit: ProgressEmitter, userId: string, accountId: string)
     detail: "Fetching emails with attachments...", counts,
   })
 
-  // Look back 30 days for first sync, 7 days for subsequent
+  // Look back 30 days for first sync, 7 days for subsequent. Owners can pass
+  // ?lookbackDays=N to widen the window for one-off backfills (e.g. re-pulling
+  // a misclassified return after extractor improvements).
   const lastSync = await prisma.invoiceSyncLog.findFirst({
     orderBy: { startedAt: "desc" },
     where: { completedAt: { not: null } },
   })
-  const lookbackDays = lastSync ? 7 : 30
+  const lookbackDays = lookbackDaysOverride ?? (lastSync ? 7 : 30)
   const sinceDate = new Date()
   sinceDate.setDate(sinceDate.getDate() - lookbackDays)
 
@@ -419,6 +427,7 @@ async function runSync(emit: ProgressEmitter, userId: string, accountId: string)
       subtotal: inv.extraction.subtotal,
       taxAmount: inv.extraction.taxAmount,
       totalAmount: inv.extraction.totalAmount,
+      isReturn: inv.extraction.isReturn ?? false,
       status,
       matchConfidence: match?.confidence ?? null,
       matchedAt: match ? new Date() : null,
@@ -460,6 +469,7 @@ async function runSync(emit: ProgressEmitter, userId: string, accountId: string)
           subtotal: inv.subtotal,
           taxAmount: inv.taxAmount,
           totalAmount: inv.totalAmount,
+          isReturn: inv.isReturn,
           status: inv.status,
           matchConfidence: inv.matchConfidence,
           matchedAt: inv.matchedAt,
@@ -593,6 +603,19 @@ export async function POST(request: NextRequest) {
     accountId = session.user.accountId
   }
 
+  // Optional ?lookbackDays=N override for owner-driven backfills (e.g. re-pulling
+  // a misclassified return after extractor improvements). Cron requests ignore it.
+  let lookbackDaysOverride: number | undefined
+  if (!fromCron) {
+    const raw = new URL(request.url).searchParams.get("lookbackDays")
+    if (raw) {
+      const parsed = Number.parseInt(raw, 10)
+      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 365) {
+        lookbackDaysOverride = parsed
+      }
+    }
+  }
+
   const wantsSSE = request.headers.get("accept")?.includes("text/event-stream")
 
   if (wantsSSE) {
@@ -605,7 +628,7 @@ export async function POST(request: NextRequest) {
           } catch { /* client disconnected */ }
         }
         try {
-          await runSync(emit, userId, accountId)
+          await runSync(emit, userId, accountId, lookbackDaysOverride)
         } catch (error) {
           console.error("Invoice sync error:", error)
           emit({
@@ -632,7 +655,7 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE)
   try {
-    const result = await runSync(() => {}, userId, accountId)
+    const result = await runSync(() => {}, userId, accountId, lookbackDaysOverride)
     return NextResponse.json(result)
   } catch (error) {
     console.error("Invoice sync error:", error)

@@ -5195,6 +5195,27 @@
   color: var(--accent);
 }
 
+/* Returns / credit memos — totals stored with their natural negative sign. */
+.inv-row__total[data-negative="true"] {
+  color: var(--accent);
+}
+
+.inv-row__return-mark {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
 .inv-row__chev {
   color: var(--ink-faint);
   opacity: 0;

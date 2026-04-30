@@ -43,6 +43,7 @@ export async function GET(
     subtotal: invoice.subtotal,
     taxAmount: invoice.taxAmount,
     status: invoice.status,
+    isReturn: invoice.isReturn,
     storeName: invoice.store?.name ?? null,
     storeId: invoice.storeId,
     matchConfidence: invoice.matchConfidence,

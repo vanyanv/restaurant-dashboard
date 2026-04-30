@@ -43,11 +43,12 @@ export function deriveCostFromLineItem(
   ingredientConv?: IngredientConversion
 ): number | null {
   // Treat 0 as null for pack/size — bad extraction shouldn't cause div-by-zero.
+  // packSize / unitSize are always positive (no negative pack counts even on returns).
   const packSize = line.packSize && line.packSize > 0 ? line.packSize : 1
   const rawUnitSize = line.unitSize && line.unitSize > 0 ? line.unitSize : null
   const unitSize = rawUnitSize ?? 1
   const totalBaseQty = line.quantity * packSize * unitSize
-  if (!isFinite(totalBaseQty) || totalBaseQty <= 0) return null
+  if (!isFinite(totalBaseQty) || totalBaseQty === 0) return null
 
   // Base UOM: prefer explicit unitSizeUom when we have a real unitSize, else
   // fall back to the order unit (e.g. unit=LB when bought loose by the pound,
@@ -55,8 +56,14 @@ export function deriveCostFromLineItem(
   const baseUom = (rawUnitSize ? line.unitSizeUom : null) ?? line.unit ?? line.unitSizeUom ?? ""
   if (!baseUom) return null
 
-  const costPerBase = line.extendedPrice / totalBaseQty
-  if (!isFinite(costPerBase) || costPerBase < 0) return null
+  // A coherent invoice line has matching signs on quantity and extendedPrice
+  // (both positive for a purchase, both negative for a return). Mismatched
+  // signs are bad data; bail rather than guess. Otherwise the abs() below
+  // collapses both cases to the same positive $/unit.
+  if (Math.sign(line.extendedPrice) !== Math.sign(totalBaseQty)) return null
+
+  const costPerBase = Math.abs(line.extendedPrice) / Math.abs(totalBaseQty)
+  if (!isFinite(costPerBase) || costPerBase <= 0) return null
 
   // Exact match (normalized): no conversion needed.
   const baseCanonical = canonicalizeUnit(baseUom)
@@ -127,9 +134,10 @@ export async function recomputeCanonicalCost(
   if (canonical.costLocked) return { status: "unchanged", reason: "locked" }
   if (!canonical.recipeUnit) return { status: "unchanged", reason: "no-recipe-unit" }
 
-  // Most recent matched line item for this canonical.
+  // Most recent matched line item for this canonical. Returns (negative qty)
+  // are eligible — they still establish a unit price for the ingredient.
   const line = await prisma.invoiceLineItem.findFirst({
-    where: { canonicalIngredientId: canonicalId, quantity: { gt: 0 } },
+    where: { canonicalIngredientId: canonicalId, quantity: { not: 0 } },
     orderBy: { invoice: { invoiceDate: "desc" } },
     select: {
       id: true,

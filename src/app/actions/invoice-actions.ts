@@ -3,7 +3,8 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { cached, stableKey } from "@/lib/cache/cached"
+import { bustTags, cached, stableKey } from "@/lib/cache/cached"
+import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 import type {
   InvoiceKpis,
   ProductAnalytics,
@@ -166,6 +167,7 @@ export async function getInvoiceList(filters?: {
         invoiceDate: true,
         totalAmount: true,
         status: true,
+        isReturn: true,
         storeId: true,
         matchConfidence: true,
         createdAt: true,
@@ -190,6 +192,7 @@ export async function getInvoiceList(filters?: {
       invoiceDate: inv.invoiceDate?.toISOString().slice(0, 10) ?? null,
       totalAmount: inv.totalAmount,
       status: inv.status,
+      isReturn: inv.isReturn,
       storeName: inv.store?.name ?? null,
       storeId: inv.storeId,
       matchConfidence: inv.matchConfidence,
@@ -595,4 +598,95 @@ export async function getLastInvoiceSyncAt(): Promise<string | null> {
     select: { completedAt: true },
   })
   return lastSync?.completedAt?.toISOString() ?? null
+}
+
+/**
+ * Toggle an invoice between regular-purchase and return/credit-memo.
+ *
+ * When `isReturn` flips, every monetary field (totalAmount, subtotal,
+ * taxAmount, and per-line quantity / unitPrice / extendedPrice) is rewritten
+ * with `Math.abs(...) * (isReturn ? -1 : 1)`. That makes the operation
+ * idempotent — toggling twice converges on the original signs — and survives
+ * accidental double-clicks. Canonical ingredient costs are re-derived for any
+ * affected ingredient so unit-price history stays consistent.
+ *
+ * Owner-only. Returns `{ ok: true }` on success, `{ ok: false, reason }` for
+ * permission/lookup failures.
+ */
+export async function setInvoiceIsReturn(
+  invoiceId: string,
+  isReturn: boolean,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false, reason: "unauthenticated" }
+  if (session.user.role !== "OWNER") return { ok: false, reason: "forbidden" }
+  const accountId = session.user.accountId
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, accountId },
+    select: {
+      id: true,
+      isReturn: true,
+      totalAmount: true,
+      subtotal: true,
+      taxAmount: true,
+      lineItems: {
+        select: {
+          id: true,
+          quantity: true,
+          unitPrice: true,
+          extendedPrice: true,
+          canonicalIngredientId: true,
+        },
+      },
+    },
+  })
+  if (!invoice) return { ok: false, reason: "not-found" }
+  if (invoice.isReturn === isReturn) return { ok: true }
+
+  const sign = isReturn ? -1 : 1
+
+  await prisma.$transaction([
+    prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        isReturn,
+        totalAmount: Math.abs(invoice.totalAmount) * sign,
+        subtotal: invoice.subtotal === null ? null : Math.abs(invoice.subtotal) * sign,
+        taxAmount: invoice.taxAmount === null ? null : Math.abs(invoice.taxAmount) * sign,
+      },
+    }),
+    ...invoice.lineItems.map((li) =>
+      prisma.invoiceLineItem.update({
+        where: { id: li.id },
+        data: {
+          quantity: Math.abs(li.quantity) * sign,
+          // unitPrice stays positive — only quantity flips. extendedPrice
+          // mirrors the (signed) total so quantity * unitPrice = extendedPrice.
+          extendedPrice: Math.abs(li.extendedPrice) * sign,
+        },
+      }),
+    ),
+  ])
+
+  // Re-derive canonical cost for any matched ingredient touched by this
+  // invoice — toggling the sign can change which line is "most recent" or
+  // make a previously-skipped line eligible.
+  const canonicalIds = Array.from(
+    new Set(
+      invoice.lineItems
+        .map((li) => li.canonicalIngredientId)
+        .filter((id): id is string => id !== null),
+    ),
+  )
+  for (const id of canonicalIds) {
+    try {
+      await recomputeCanonicalCost(id)
+    } catch (err) {
+      console.error(`recomputeCanonicalCost(${id}) failed after isReturn toggle:`, err)
+    }
+  }
+
+  await bustTags(["invoices", `account:${accountId}`])
+  return { ok: true }
 }

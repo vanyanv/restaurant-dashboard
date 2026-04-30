@@ -267,7 +267,7 @@ export async function getCanonicalIngredientCost(
     const latest = await prisma.invoiceLineItem.findFirst({
       where: {
         canonicalIngredientId,
-        quantity: { gt: 0 },
+        quantity: { not: 0 },
         invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
       },
       orderBy: { invoice: { invoiceDate: "desc" } },
@@ -298,7 +298,7 @@ export async function getCanonicalIngredientCost(
     where: {
       canonicalIngredientId,
       invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
-      quantity: { gt: 0 },
+      quantity: { not: 0 },
     },
     orderBy: { invoice: { invoiceDate: "desc" } },
     select: {

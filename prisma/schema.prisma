@@ -359,6 +359,11 @@ model Invoice {
   taxAmount   Float?
   totalAmount Float
 
+  // True for returns / credit memos. totalAmount, subtotal, taxAmount, and
+  // line-item extendedPrice/quantity are all stored with their natural
+  // negative sign so SUM() yields net spend without special-casing.
+  isReturn Boolean @default(false)
+
   // Matching
   status          InvoiceStatus @default(PENDING)
   matchConfidence Float?
@@ -393,6 +398,7 @@ model Invoice {
   @@index([accountId, createdAt])
   @@index([ownerId, vendorName, invoiceDate])
   @@index([accountId, vendorName, invoiceDate])
+  @@index([accountId, isReturn])
 }
 
 model InvoiceLineItem {

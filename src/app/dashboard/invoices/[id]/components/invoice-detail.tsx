@@ -10,7 +10,9 @@ import {
   Calendar,
   CheckCircle2,
   XCircle,
+  Undo2,
 } from "lucide-react"
+import { setInvoiceIsReturn } from "@/app/actions/invoice-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -61,6 +63,20 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
   const [status, setStatus] = useState(invoice.status)
   const [selectedStoreId, setSelectedStoreId] = useState(invoice.storeId ?? "unmatched")
   const [isPending, startTransition] = useTransition()
+  const [isReturnPending, startReturnTransition] = useTransition()
+
+  const handleToggleReturn = () => {
+    const next = !invoice.isReturn
+    startReturnTransition(async () => {
+      const res = await setInvoiceIsReturn(invoice.id, next)
+      if (res.ok) {
+        toast.success(next ? "Marked as return / credit memo" : "Marked as regular invoice")
+        router.refresh()
+      } else {
+        toast.error("Failed to update return flag")
+      }
+    })
+  }
 
   const handleUpdateStatus = (newStatus: string) => {
     startTransition(async () => {
@@ -142,6 +158,31 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
           {/* Right: extracted fields + line items */}
           <div className="min-h-0 overflow-auto space-y-4 sm:space-y-6 pr-1">
 
+        {invoice.isReturn ? (
+          <div
+            role="status"
+            aria-label="This document is a return or credit memo"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "8px 14px",
+              border: "1px solid var(--accent)",
+              borderRadius: 2,
+              background: "var(--accent-bg)",
+              fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace",
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "var(--accent)",
+            }}
+          >
+            <span>Return / Credit memo · subtracted from spend</span>
+          </div>
+        ) : null}
+
         {/* Invoice Header */}
         <div className="grid gap-4 grid-cols-1">
           <Card>
@@ -187,7 +228,12 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
               </div>
               <div className="col-span-2">
                 <p className="text-xs text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold">{formatCurrency(invoice.totalAmount)}</p>
+                <p
+                  className="text-2xl font-bold tabular-nums"
+                  style={invoice.totalAmount < 0 ? { color: "var(--accent)" } : undefined}
+                >
+                  {formatCurrency(invoice.totalAmount)}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -244,6 +290,17 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                   Reject
                 </Button>
               </div>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={handleToggleReturn}
+                disabled={isReturnPending}
+              >
+                <Undo2 className="h-4 w-4 mr-1" />
+                {invoice.isReturn ? "Mark as regular invoice" : "Mark as return / credit memo"}
+              </Button>
 
               {/* Email Info */}
               <div className="border-t pt-4 space-y-2">
@@ -317,7 +374,10 @@ export function InvoiceDetailContent({ invoice, stores }: InvoiceDetailContentPr
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(li.unitPrice)}
                       </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
+                      <TableCell
+                        className="text-right font-medium tabular-nums"
+                        style={li.extendedPrice < 0 ? { color: "var(--accent)" } : undefined}
+                      >
                         {formatCurrency(li.extendedPrice)}
                       </TableCell>
                     </TableRow>

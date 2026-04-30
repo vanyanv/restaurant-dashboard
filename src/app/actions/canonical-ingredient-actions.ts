@@ -190,7 +190,7 @@ export async function getIngredientPriceHistory(
     where: {
       canonicalIngredientId,
       unitPrice: { gt: 0 },
-      quantity: { gt: 0 },
+      quantity: { not: 0 },
       invoice: {
         accountId,
         invoiceDate: { gte: cutoff, not: null },

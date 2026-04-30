@@ -108,14 +108,22 @@ export function InvoicesListClient({
               onMouseEnter={() => prefetchInvoice(inv.id)}
               onFocus={() => prefetchInvoice(inv.id)}
               onTouchStart={() => prefetchInvoice(inv.id)}
-              aria-label={`Open invoice ${inv.invoiceNumber} from ${inv.vendorName} for ${formatCurrency(inv.totalAmount)}`}
+              aria-label={`${inv.isReturn ? "Return / credit memo" : "Invoice"} ${inv.invoiceNumber} from ${inv.vendorName} for ${formatCurrency(inv.totalAmount)}`}
+              data-return={inv.isReturn ? "true" : undefined}
             >
               <span className="inv-row__folio">
                 {String(i + 1 + (page - 1) * 25).padStart(3, "0")}
               </span>
 
               <span className="inv-row__vendor">
-                <span className="inv-row__vendor-name">{inv.vendorName}</span>
+                <span className="inv-row__vendor-name">
+                  {inv.vendorName}
+                  {inv.isReturn ? (
+                    <span className="inv-row__return-mark" aria-hidden="true">
+                      Return
+                    </span>
+                  ) : null}
+                </span>
                 <span className="inv-row__vendor-meta">
                   <em>№ {inv.invoiceNumber}</em>
                   <span aria-hidden>·</span>
@@ -139,7 +147,10 @@ export function InvoicesListClient({
                 )}
               </span>
 
-              <span className="inv-row__total total-num">
+              <span
+                className="inv-row__total total-num"
+                data-negative={inv.totalAmount < 0 ? "true" : undefined}
+              >
                 {formatCurrency(inv.totalAmount)}
               </span>
 

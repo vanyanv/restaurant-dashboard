@@ -44,6 +44,8 @@ export interface InvoiceExtraction {
   subtotal: number | null
   taxAmount: number | null
   totalAmount: number
+  /** True for returns / credit memos. Monetary fields are signed accordingly. */
+  isReturn: boolean
 }
 
 // ─── Dashboard types ───
@@ -75,6 +77,7 @@ export interface InvoiceListItem {
   invoiceDate: string | null
   totalAmount: number
   status: string
+  isReturn: boolean
   storeName: string | null
   storeId: string | null
   matchConfidence: number | null
