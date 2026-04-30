@@ -3,13 +3,14 @@ import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getStorePnL } from "@/app/actions/store-actions"
-import { defaultPnLRangeState } from "@/components/pnl/pnl-date-presets"
+import { parsePnLRange, pnlRangeToState } from "@/lib/mobile/pnl-period"
 import { PageHead } from "@/components/mobile/page-head"
 import {
   MastheadFigures,
   type MastheadCell,
 } from "@/components/mobile/masthead-figures"
 import { Panel } from "@/components/mobile/panel"
+import { MPnLToolbar } from "@/components/mobile/m-pnl-toolbar"
 
 export const dynamic = "force-dynamic"
 
@@ -26,31 +27,49 @@ const fmtPct = (n: number) => `${n.toFixed(1)}%`
 const fmtSigned = (n: number) =>
   `${n >= 0 ? "" : "−"}${fmtMoney(Math.abs(n))}`
 
+const PNL_PERIOD_LABELS: Record<string, string> = {
+  "this-week": "this week",
+  "last-week": "last week",
+  "this-month": "this month",
+  "last-month": "last month",
+  "last-8-weeks": "last 8 weeks",
+}
+
 export default async function MobileStorePnLPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ storeId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
   if (session.user.role !== "OWNER") redirect("/m")
 
   const { storeId } = await params
-  const range = defaultPnLRangeState()
+  const sp = normalize(await searchParams)
+  const range = parsePnLRange(sp)
+  const state = pnlRangeToState(range)
 
   const result = await getStorePnL({
     storeId,
-    startDate: range.startDate,
-    endDate: range.endDate,
-    granularity: range.granularity,
+    startDate: state.startDate,
+    endDate: state.endDate,
+    granularity: state.granularity,
   })
+
+  const subLabel =
+    range.kind === "custom"
+      ? `Custom · ${state.granularity}`
+      : PNL_PERIOD_LABELS[range.period] ?? range.period
 
   if ("error" in result) {
     if (result.error === "Store not found") notFound()
     return (
       <>
         <BackLink href="/m/pnl" label="All stores" />
-        <PageHead dept="P&L" title="Error" />
+        <PageHead dept="P&L" title="Error" sub={subLabel} />
+        <MPnLToolbar pathname={`/m/pnl/${storeId}`} searchParams={sp} range={range} />
         <div className="m-empty dock-in dock-in-2">
           <strong>Couldn&apos;t load.</strong> {result.error}
         </div>
@@ -62,7 +81,7 @@ export default async function MobileStorePnLPage({
     {
       label: "GROSS",
       value: fmtMoney(result.kpis.grossSales),
-      sub: "last 8 weeks",
+      sub: subLabel,
     },
     {
       label: "MARGIN",
@@ -90,10 +109,12 @@ export default async function MobileStorePnLPage({
       <BackLink href="/m/pnl" label="All stores" />
 
       <PageHead
-        dept="P&L · § 8 WEEKS"
+        dept="P&L"
         title={result.storeName}
-        sub={`${result.periods.length} periods · ${range.granularity}`}
+        sub={`${result.periods.length} periods · ${state.granularity}`}
       />
+
+      <MPnLToolbar pathname={`/m/pnl/${storeId}`} searchParams={sp} range={range} />
 
       <MastheadFigures cells={cells} />
 
@@ -232,4 +253,15 @@ function BackLink({ href, label }: { href: string; label: string }) {
       <span className="m-cap m-cap--ink">← {label}</span>
     </Link>
   )
+}
+
+function normalize(
+  raw: Record<string, string | string[] | undefined>,
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (Array.isArray(v)) out[k] = v[0]
+    else out[k] = v
+  }
+  return out
 }
