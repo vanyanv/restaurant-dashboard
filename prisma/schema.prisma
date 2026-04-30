@@ -55,6 +55,7 @@ model Account {
   menuItemEmbeddings            MenuItemEmbedding[]
   recipeEmbeddings              RecipeEmbedding[]
   canonicalIngredientEmbeddings CanonicalIngredientEmbedding[]
+  pnlNarrativeEmbeddings        PnlNarrativeEmbedding[]
   invites                       Invite[]
 }
 
@@ -886,4 +887,27 @@ model CanonicalIngredientEmbedding {
 
   @@index([ownerId])
   @@index([accountId])
+}
+
+/// pgvector embedding for one weekly P&L narrative snapshot — one per
+/// (account, store|null, weekStart). storeId=null is the all-stores rollup
+/// for the account. `snapshotId` is sha256 of the (account, store|all,
+/// weekStart) tuple so re-embeds upsert. Used by `searchPnlHistory` for
+/// historical narrative questions ("when was COGS last this high?"). Live
+/// numerics for the current week come from `getPnlSummary`, never from here.
+model PnlNarrativeEmbedding {
+  id              String                      @id @default(cuid())
+  snapshotId      String                      @unique
+  accountId       String
+  storeId         String?
+  weekStart       DateTime                    @db.Date
+  contentSnapshot String
+  embedding       Unsupported("vector(1536)")
+  createdAt       DateTime                    @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([storeId])
+  @@index([weekStart])
 }

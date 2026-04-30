@@ -38,6 +38,12 @@ import {
   snapshotHash,
   toVectorLiteral,
 } from "../src/lib/chat/embeddings"
+import {
+  bucketSummariesByPeriod,
+  computeStorePnL,
+  type Period,
+} from "../src/lib/pnl"
+import { CogsStatus } from "../src/generated/prisma/client"
 
 interface Args {
   limit: number | null
@@ -45,6 +51,7 @@ interface Args {
   menuOnly: boolean
   recipesOnly: boolean
   ingredientsOnly: boolean
+  pnlOnly: boolean
 }
 
 function parseArgs(): Args {
@@ -54,6 +61,7 @@ function parseArgs(): Args {
     menuOnly: false,
     recipesOnly: false,
     ingredientsOnly: false,
+    pnlOnly: false,
   }
   const argv = process.argv.slice(2)
   for (let i = 0; i < argv.length; i++) {
@@ -71,6 +79,8 @@ function parseArgs(): Args {
       args.recipesOnly = true
     } else if (a === "--ingredients-only") {
       args.ingredientsOnly = true
+    } else if (a === "--pnl-only") {
+      args.pnlOnly = true
     } else {
       throw new Error(`unknown arg: ${a}`)
     }
@@ -522,21 +532,364 @@ async function backfillCanonicalIngredients(c: Client, limit: number | null) {
   }
 }
 
+// ─── Weekly P&L narrative snapshots ──────────────────────────────────────
+
+const MS_PER_DAY = 86_400_000
+
+/** Sunday at UTC 00:00 of the week containing `d`. */
+function weekStartUTC(d: Date): Date {
+  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+  out.setUTCDate(out.getUTCDate() - out.getUTCDay())
+  return out
+}
+
+function ymdUTC(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+function fmtMoney(v: number): string {
+  return `$${Math.round(v).toLocaleString("en-US")}`
+}
+
+function fmtPct(v: number, digits = 1): string {
+  return `${(v * 100).toFixed(digits)}%`
+}
+
+interface PnlSnapshot {
+  snapshotId: string
+  accountId: string
+  storeId: string | null
+  weekStart: Date
+  text: string
+}
+
+function deriveSnapshotId(
+  accountId: string,
+  storeId: string | null,
+  weekStart: Date,
+): string {
+  const key = `${accountId}|${storeId ?? "all"}|${ymdUTC(weekStart)}`
+  return createHash("sha256").update(key).digest("hex").slice(0, 32)
+}
+
+function buildPnlText(input: {
+  scope: string
+  weekStart: Date
+  netSales: number
+  cogsDollars: number
+  cogsPct: number
+  laborDollars: number
+  laborPct: number
+  grossProfit: number
+  grossMarginPct: number
+  bottomLine: number
+  netMarginPct: number
+  laborConfigured: boolean
+}): string {
+  const labor = input.laborConfigured
+    ? `${fmtMoney(input.laborDollars)} (${fmtPct(input.laborPct)} budgeted)`
+    : "not configured"
+  return [
+    `Week of ${ymdUTC(input.weekStart)}, ${input.scope}:`,
+    `net sales ${fmtMoney(input.netSales)},`,
+    `COGS ${fmtMoney(input.cogsDollars)} (${fmtPct(input.cogsPct)}),`,
+    `labor ${labor},`,
+    `gross profit ${fmtMoney(input.grossProfit)} (${fmtPct(input.grossMarginPct)}),`,
+    `bottom line ${fmtMoney(input.bottomLine)} (${fmtPct(input.netMarginPct)} margin).`,
+  ].join(" ")
+}
+
+async function backfillPnlNarratives(c: Client) {
+  // Find every account that has at least one OtterDailySummary row, with the
+  // earliest date so we know how far back to walk. The primary table lives on
+  // DATABASE_URL2 in the chat-layer Neon branch — same prisma client.
+  const accounts = await prisma.account.findMany({
+    select: {
+      id: true,
+      stores: {
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          fixedMonthlyLabor: true,
+          fixedMonthlyRent: true,
+          fixedMonthlyTowels: true,
+          fixedMonthlyCleaning: true,
+          uberCommissionRate: true,
+          doordashCommissionRate: true,
+        },
+      },
+    },
+  })
+
+  const today = new Date()
+  // Cutoff = Sunday of the *current* week, exclusive — only embed weeks that
+  // are fully closed.
+  const currentWeekStart = weekStartUTC(today)
+
+  const snapshots: PnlSnapshot[] = []
+
+  for (const account of accounts) {
+    if (account.stores.length === 0) continue
+    const storeIds = account.stores.map((s) => s.id)
+
+    // Earliest summary date for this account's stores bounds the backfill.
+    const earliest = await prisma.otterDailySummary.findFirst({
+      where: { storeId: { in: storeIds } },
+      select: { date: true },
+      orderBy: { date: "asc" },
+    })
+    if (!earliest) continue
+
+    const earliestWeek = weekStartUTC(earliest.date)
+    const weekStarts: Date[] = []
+    for (
+      let w = earliestWeek;
+      w.getTime() < currentWeekStart.getTime();
+      w = new Date(w.getTime() + 7 * MS_PER_DAY)
+    ) {
+      weekStarts.push(new Date(w))
+    }
+    if (weekStarts.length === 0) continue
+
+    for (const weekStart of weekStarts) {
+      const weekEnd = new Date(weekStart.getTime() + 6 * MS_PER_DAY)
+      const period: Period = {
+        label: `Week of ${ymdUTC(weekStart)}`,
+        startDate: weekStart,
+        endDate: weekEnd,
+        days: 7,
+        isPartial: false,
+      }
+      const periods = [period]
+
+      const [summaries, cogsRows] = await Promise.all([
+        prisma.otterDailySummary.findMany({
+          where: {
+            storeId: { in: storeIds },
+            date: { gte: weekStart, lte: weekEnd },
+          },
+          select: {
+            storeId: true,
+            date: true,
+            platform: true,
+            paymentMethod: true,
+            fpGrossSales: true,
+            tpGrossSales: true,
+            fpTaxCollected: true,
+            tpTaxCollected: true,
+            fpDiscounts: true,
+            tpDiscounts: true,
+            fpServiceCharges: true,
+            tpServiceCharges: true,
+          },
+        }),
+        prisma.dailyCogsItem.findMany({
+          where: {
+            storeId: { in: storeIds },
+            date: { gte: weekStart, lte: weekEnd },
+            status: CogsStatus.COSTED,
+          },
+          select: { storeId: true, date: true, lineCost: true },
+        }),
+      ])
+
+      // No data for this week → skip.
+      if (summaries.length === 0 && cogsRows.length === 0) continue
+
+      const summariesByStore = new Map<string, typeof summaries>()
+      for (const s of summaries) {
+        const arr = summariesByStore.get(s.storeId) ?? []
+        arr.push(s)
+        summariesByStore.set(s.storeId, arr)
+      }
+      const cogsByStore = new Map<string, typeof cogsRows>()
+      for (const r of cogsRows) {
+        const arr = cogsByStore.get(r.storeId) ?? []
+        arr.push(r)
+        cogsByStore.set(r.storeId, arr)
+      }
+
+      // Per-store snapshots + accumulators for the all-stores rollup.
+      let allNetSales = 0
+      let allCogs = 0
+      let allLabor = 0
+      let allLaborConfigured = false
+      let allGrossProfit = 0
+      let allBottomLine = 0
+      const fmtSnap = (
+        scope: string,
+        netSales: number,
+        cogsDollars: number,
+        laborDollars: number,
+        grossProfit: number,
+        bottomLine: number,
+        laborConfigured: boolean,
+      ): string => {
+        const cogsPct = netSales > 0 ? cogsDollars / netSales : 0
+        const laborPct = netSales > 0 ? laborDollars / netSales : 0
+        const grossMarginPct = netSales > 0 ? grossProfit / netSales : 0
+        const netMarginPct = netSales > 0 ? bottomLine / netSales : 0
+        return buildPnlText({
+          scope,
+          weekStart,
+          netSales,
+          cogsDollars,
+          cogsPct,
+          laborDollars,
+          laborPct,
+          grossProfit,
+          grossMarginPct,
+          bottomLine,
+          netMarginPct,
+          laborConfigured,
+        })
+      }
+
+      for (const store of account.stores) {
+        const storeSummaries = summariesByStore.get(store.id) ?? []
+        const storeCogs = cogsByStore.get(store.id) ?? []
+        const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
+        const cogsValues = [storeCogs.reduce((acc, r) => acc + r.lineCost, 0)]
+        const computed = computeStorePnL({
+          bucketed,
+          periods,
+          store,
+          cogsValues,
+        })
+        const netSales = computed.totalSales[0] ?? 0
+        const cogsDollars = computed.cogsValues[0] ?? 0
+        const laborDollars = computed.laborValues[0] ?? 0
+        const grossProfit = computed.grossProfit[0] ?? 0
+        const bottomLine = computed.bottomLine[0] ?? 0
+        const laborConfigured = store.fixedMonthlyLabor != null
+
+        if (netSales === 0 && cogsDollars === 0) continue
+
+        const text = fmtSnap(
+          store.name,
+          netSales,
+          cogsDollars,
+          laborDollars,
+          grossProfit,
+          bottomLine,
+          laborConfigured,
+        )
+        snapshots.push({
+          snapshotId: deriveSnapshotId(account.id, store.id, weekStart),
+          accountId: account.id,
+          storeId: store.id,
+          weekStart,
+          text,
+        })
+
+        allNetSales += netSales
+        allCogs += cogsDollars
+        allLabor += laborDollars
+        allLaborConfigured = allLaborConfigured || laborConfigured
+        allGrossProfit += grossProfit
+        allBottomLine += bottomLine
+      }
+
+      if (allNetSales > 0 || allCogs > 0) {
+        const text = fmtSnap(
+          "All stores",
+          allNetSales,
+          allCogs,
+          allLabor,
+          allGrossProfit,
+          allBottomLine,
+          allLaborConfigured,
+        )
+        snapshots.push({
+          snapshotId: deriveSnapshotId(account.id, null, weekStart),
+          accountId: account.id,
+          storeId: null,
+          weekStart,
+          text,
+        })
+      }
+    }
+  }
+
+  console.log(`[pnl] ${snapshots.length} candidate snapshots`)
+  if (snapshots.length === 0) return
+
+  const existing = await c.query<{ snapshotId: string; contentSnapshot: string }>(
+    `SELECT "snapshotId", "contentSnapshot"
+       FROM "PnlNarrativeEmbedding"
+      WHERE "snapshotId" = ANY($1::text[])`,
+    [snapshots.map((s) => s.snapshotId)],
+  )
+  // Skip-detection compares the stored narrative text against the freshly
+  // generated text — see the INSERT below for why we store text rather than
+  // a hash here.
+  const existingText = new Map(
+    existing.rows.map((r) => [r.snapshotId, r.contentSnapshot]),
+  )
+
+  const toEmbed = snapshots.filter((s) => existingText.get(s.snapshotId) !== s.text)
+  const skipped = snapshots.length - toEmbed.length
+  console.log(`[pnl] ${skipped} skipped (unchanged), ${toEmbed.length} to embed`)
+
+  for (let i = 0; i < toEmbed.length; i += 100) {
+    const chunk = toEmbed.slice(i, i + 100)
+    const vectors = await embedBatch(chunk.map((c) => c.text))
+
+    await c.query("BEGIN")
+    try {
+      for (let j = 0; j < chunk.length; j++) {
+        const row = chunk[j]
+        const vec = vectors[j]
+        await c.query(
+          `DELETE FROM "PnlNarrativeEmbedding" WHERE "snapshotId" = $1`,
+          [row.snapshotId],
+        )
+        // Unlike the other embedding tables (which store the SHA hash in
+        // contentSnapshot for skip-detection), we store the actual narrative
+        // text — searchPnlHistory returns it directly as the prose snippet.
+        // Skip-detection in this corpus compares the text itself.
+        await c.query(
+          `INSERT INTO "PnlNarrativeEmbedding"
+             (id, "snapshotId", "accountId", "storeId", "weekStart",
+              "contentSnapshot", embedding, "createdAt")
+           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::vector, NOW())`,
+          [
+            row.snapshotId,
+            row.accountId,
+            row.storeId,
+            ymdUTC(row.weekStart),
+            row.text,
+            toVectorLiteral(vec),
+          ],
+        )
+      }
+      await c.query("COMMIT")
+      console.log(`[pnl] wrote ${i + chunk.length}/${toEmbed.length}`)
+    } catch (err) {
+      await c.query("ROLLBACK")
+      throw err
+    }
+  }
+}
+
 async function main() {
   const args = parseArgs()
-  // Determine which corpora to run. With no flags, run all four. Any
+  // Determine which corpora to run. With no flags, run all five. Any
   // *Only flag restricts to that corpus exclusively.
   const onlyFlags = [
     args.invoicesOnly,
     args.menuOnly,
     args.recipesOnly,
     args.ingredientsOnly,
+    args.pnlOnly,
   ]
   const anyOnly = onlyFlags.some(Boolean)
   const runInvoices = !anyOnly || args.invoicesOnly
   const runMenu = !anyOnly || args.menuOnly
   const runRecipes = !anyOnly || args.recipesOnly
   const runIngredients = !anyOnly || args.ingredientsOnly
+  const runPnl = !anyOnly || args.pnlOnly
 
   const c = rawClient()
   await c.connect()
@@ -545,6 +898,7 @@ async function main() {
     if (runMenu) await backfillMenu(c, args.limit)
     if (runRecipes) await backfillRecipes(c, args.limit)
     if (runIngredients) await backfillCanonicalIngredients(c, args.limit)
+    if (runPnl) await backfillPnlNarratives(c)
   } finally {
     await c.end()
     await prisma.$disconnect()

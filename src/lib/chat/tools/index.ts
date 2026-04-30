@@ -34,6 +34,8 @@ import {
 } from "./recipes"
 import { getOperationalCosts, getStoreBreakdown } from "./store-summary"
 import { getRefunds } from "./refunds"
+import { getPnlSummary } from "./pnl"
+import { searchPnlHistory } from "./pnl-history"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -83,6 +85,9 @@ export const chatTools = {
   listRecipesByCategory,
   // Refunds
   getRefunds,
+  // P&L
+  getPnlSummary,
+  searchPnlHistory,
 } as const
 
 export type ChatToolName = keyof typeof chatTools

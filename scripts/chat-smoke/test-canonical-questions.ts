@@ -77,6 +77,31 @@ const QUESTIONS: CanonicalQuestion[] = [
     ask: "What will sales look like next week?",
     expectAny: ["__none__"],
   },
+  {
+    ask: "What's our COGS percentage this week?",
+    expectAny: ["getPnlSummary"],
+  },
+  {
+    ask: "What's our profit per day this week?",
+    expectAny: ["getPnlSummary"],
+  },
+  {
+    ask: "What's our labor percentage this week?",
+    expectAny: ["getPnlSummary"],
+  },
+  {
+    ask: "How much did we pay in DoorDash commission last month?",
+    expectAny: ["getPnlSummary"],
+  },
+  {
+    ask: "Is COGS up vs last week?",
+    expectAny: ["getPnlSummary"],
+  },
+  {
+    ask: "How many hours did we pay our staff last week?",
+    // Refusal — no tool calls expected.
+    expectAny: ["__none__"],
+  },
 ]
 
 async function main() {
