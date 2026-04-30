@@ -11,6 +11,7 @@ datasource db {
 
 enum Role {
   OWNER
+  DEVELOPER
 }
 
 enum Shift {
@@ -171,6 +172,7 @@ model Store {
   otterOrders          OtterOrder[]
   dailyCogsItems       DailyCogsItem[]
   aiForecastRuns       AiForecastRun[]
+  jobRuns              JobRun[]
 
   @@index([ownerId])
   @@index([accountId])
@@ -910,4 +912,104 @@ model PnlNarrativeEmbedding {
   @@index([accountId])
   @@index([storeId])
   @@index([weekStart])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Monitoring (dev-only) — see docs/superpowers/specs/2026-04-30-dev-monitoring-design.md
+// ─────────────────────────────────────────────────────────────────────────
+
+enum JobStatus {
+  RUNNING
+  SUCCESS
+  FAILURE
+  PARTIAL
+}
+
+model JobRun {
+  id           String    @id @default(cuid())
+  jobName      String
+  storeId      String?
+  triggeredBy  String
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  durationMs   Int?
+  status       JobStatus @default(RUNNING)
+  rowsWritten  Int?
+  metadata     Json?
+  errorMessage String?
+  errorStack   String?
+
+  store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([jobName, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+}
+
+model AiUsageEvent {
+  id               String   @id @default(cuid())
+  occurredAt       DateTime @default(now())
+  feature          String
+  provider         String
+  model            String
+  inputTokens      Int
+  outputTokens     Int
+  cachedTokens     Int      @default(0)
+  estimatedCostUsd Decimal  @db.Decimal(10, 6)
+  storeId          String?
+  userId           String?
+  durationMs       Int?
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([feature, occurredAt(sort: Desc)])
+}
+
+model ErrorEvent {
+  id         String   @id @default(cuid())
+  occurredAt DateTime @default(now())
+  source     String
+  route      String?
+  method     String?
+  status     Int?
+  message    String
+  stack      String?
+  userId     String?
+  storeId    String?
+  metadata   Json?
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([source, occurredAt(sort: Desc)])
+}
+
+model ChatTurn {
+  id               String   @id @default(cuid())
+  conversationId   String
+  occurredAt       DateTime @default(now())
+  userId           String?
+  storeId          String?
+  userMessage      String   @db.Text
+  assistantMessage String?  @db.Text
+  toolsUsed        String[]
+  aiUsageEventId   String?
+  status           String   @default("OK")
+  finishReason     String?
+  errorMessage     String?
+  toolErrors       Json?
+  feedback         String?
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([conversationId, occurredAt])
+}
+
+model CacheStat {
+  id         String   @id @default(cuid())
+  hourBucket DateTime
+  keyPrefix  String
+  hits       Int      @default(0)
+  misses     Int      @default(0)
+  writes     Int      @default(0)
+  busts      Int      @default(0)
+  failures   Int      @default(0)
+
+  @@unique([hourBucket, keyPrefix])
+  @@index([hourBucket(sort: Desc)])
 }
