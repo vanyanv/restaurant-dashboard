@@ -14,6 +14,7 @@ import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
 import { bustTags } from "@/lib/cache/cached"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
 const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
@@ -233,9 +234,10 @@ async function runSync(
   // Look back 30 days for first sync, 7 days for subsequent. Owners can pass
   // ?lookbackDays=N to widen the window for one-off backfills (e.g. re-pulling
   // a misclassified return after extractor improvements).
-  const lastSync = await prisma.invoiceSyncLog.findFirst({
+  const lastSync = await prisma.jobRun.findFirst({
+    where: { jobName: "invoices.email.sync", status: "SUCCESS" },
     orderBy: { startedAt: "desc" },
-    where: { completedAt: { not: null } },
+    select: { startedAt: true },
   })
   const lookbackDays = lookbackDaysOverride ?? (lastSync ? 7 : 30)
   const sinceDate = new Date()
@@ -264,14 +266,11 @@ async function runSync(
   })
 
   if (messages.length === 0) {
-    const syncLog = await prisma.invoiceSyncLog.create({
-      data: { triggeredBy: userId, completedAt: new Date(), emailsScanned: 0 },
-    })
     emit({
       phase: "complete", status: "done", totalProgress: 100,
       detail: "No emails with attachments found", counts,
     })
-    return { message: `Sync complete (log: ${syncLog.id})`, ...counts }
+    return { message: `Sync complete`, ...counts }
   }
 
   // ─── Dedup: skip already-processed emails ───
@@ -291,17 +290,11 @@ async function runSync(
   })
 
   if (newMessages.length === 0) {
-    const syncLog = await prisma.invoiceSyncLog.create({
-      data: {
-        triggeredBy: userId, completedAt: new Date(),
-        emailsScanned: counts.scanned, invoicesSkipped: counts.skipped,
-      },
-    })
     emit({
       phase: "complete", status: "done", totalProgress: 100,
       detail: `All ${counts.skipped} emails already synced`, counts,
     })
-    return { message: `Sync complete (log: ${syncLog.id})`, ...counts }
+    return { message: `Sync complete`, ...counts }
   }
 
   // ─── Phase 2: Extract data from PDFs via OpenAI ───
@@ -549,18 +542,6 @@ async function runSync(
     }
   }
 
-  // Create sync log
-  const syncLog = await prisma.invoiceSyncLog.create({
-    data: {
-      triggeredBy: userId,
-      completedAt: new Date(),
-      emailsScanned: counts.scanned,
-      invoicesCreated: counts.created,
-      invoicesSkipped: counts.skipped,
-      errors: counts.errors,
-    },
-  })
-
   const message = `Invoice sync complete: ${counts.created} created, ${counts.skipped} skipped, ${counts.errors} errors`
   emit({
     phase: "complete", status: "done", totalProgress: 100,
@@ -574,7 +555,7 @@ async function runSync(
     await bustTags([`account:${accountId}`])
   }
 
-  return { message: `${message} (log: ${syncLog.id})`, ...counts }
+  return { message, ...counts }
 }
 
 export async function POST(request: NextRequest) {
@@ -617,6 +598,11 @@ export async function POST(request: NextRequest) {
   }
 
   const wantsSSE = request.headers.get("accept")?.includes("text/event-stream")
+  const triggeredBy = fromCron ? "cron" : "manual"
+  const jobOpts = {
+    triggeredBy: triggeredBy as "cron" | "manual",
+    metadata: lookbackDaysOverride !== undefined ? { lookbackDays: lookbackDaysOverride } : undefined,
+  }
 
   if (wantsSSE) {
     const encoder = new TextEncoder()
@@ -628,7 +614,11 @@ export async function POST(request: NextRequest) {
           } catch { /* client disconnected */ }
         }
         try {
-          await runSync(emit, userId, accountId, lookbackDaysOverride)
+          await withJobRun("invoices.email.sync", jobOpts, async ({ addRows }) => {
+            const result = await runSync(emit, userId, accountId, lookbackDaysOverride)
+            addRows(result.created)
+            return result
+          })
         } catch (error) {
           console.error("Invoice sync error:", error)
           emit({
@@ -655,7 +645,11 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE)
   try {
-    const result = await runSync(() => {}, userId, accountId, lookbackDaysOverride)
+    const result = await withJobRun("invoices.email.sync", jobOpts, async ({ addRows }) => {
+      const r = await runSync(() => {}, userId, accountId, lookbackDaysOverride)
+      addRows(r.created)
+      return r
+    })
     return NextResponse.json(result)
   } catch (error) {
     console.error("Invoice sync error:", error)

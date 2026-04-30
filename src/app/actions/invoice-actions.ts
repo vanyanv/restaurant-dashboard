@@ -592,8 +592,8 @@ export async function getInvoiceSpendTimeline(options: {
 }
 
 export async function getLastInvoiceSyncAt(): Promise<string | null> {
-  const lastSync = await prisma.invoiceSyncLog.findFirst({
-    where: { completedAt: { not: null } },
+  const lastSync = await prisma.jobRun.findFirst({
+    where: { jobName: "invoices.email.sync", status: "SUCCESS" },
     orderBy: { startedAt: "desc" },
     select: { completedAt: true },
   })
