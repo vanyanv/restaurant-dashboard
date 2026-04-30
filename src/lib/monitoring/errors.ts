@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import type { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@/generated/prisma/client"
 
 export type ErrorSource = "api" | "server-action" | "cron" | "client" | "alerter" | "cache" | "uncaught"
 
@@ -29,7 +29,7 @@ export async function recordError(args: {
         stack: args.stack?.slice(0, 16000) ?? null,
         userId: args.userId ?? null,
         storeId: args.storeId ?? null,
-        metadata: (args.metadata ?? null) as never,
+        metadata: args.metadata ? (args.metadata as Prisma.InputJsonValue) : Prisma.DbNull,
       },
     })
   } catch (err) {
@@ -37,30 +37,40 @@ export async function recordError(args: {
   }
 }
 
-type RouteHandler = (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => Promise<NextResponse> | Promise<Response>
+type AnyHandler = (...args: never[]) => Promise<Response>
 
 /**
  * Wrap a route handler. Catches uncaught throws, persists to ErrorEvent, re-throws
- * so Next still returns a 500. Apply selectively — not blanket.
+ * so Next still returns a 500. Apply selectively — not blanket. The wrapper
+ * preserves the wrapped handler's exact signature so it works for any of the
+ * project's route shapes (Request vs NextRequest, with-ctx vs no-ctx).
  */
-export function withApiHandler(handler: RouteHandler): RouteHandler {
-  return async (req, ctx) => {
+export function withApiHandler<H extends AnyHandler>(handler: H): H {
+  const wrapped = (async (...args: Parameters<H>): Promise<Response> => {
     try {
-      return await handler(req, ctx)
+      return await handler(...args)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       const stack = err instanceof Error ? err.stack : undefined
+      const req = args[0] as Request | undefined
+      let route: string | null = null
+      let method: string | null = null
+      if (req && typeof req === "object" && "url" in req) {
+        try { route = new URL((req as Request).url).pathname } catch {}
+        if ("method" in req) method = (req as Request).method
+      }
       await recordError({
         source: "api",
-        route: new URL(req.url).pathname,
-        method: req.method,
+        route,
+        method,
         status: 500,
         message,
         stack,
       })
       throw err
     }
-  }
+  }) as H
+  return wrapped
 }
 
 /**

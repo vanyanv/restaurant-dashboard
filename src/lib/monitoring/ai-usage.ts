@@ -40,9 +40,9 @@ export function computeCostUsd(
 /**
  * Record one AI call. Returns the created event id so callers (e.g. /api/chat)
  * can FK it from ChatTurn.aiUsageEventId. Never throws — pricing miss logs a
- * warning and writes 0; DB error logs and returns "".
+ * warning and writes 0; DB error logs and returns `null`.
  */
-export async function recordAiUsage(input: AiUsageInput): Promise<string> {
+export async function recordAiUsage(input: AiUsageInput): Promise<string | null> {
   try {
     const cached = input.cachedTokens ?? 0
     const cost = computeCostUsd(input.model, input.inputTokens, input.outputTokens, cached)
@@ -64,6 +64,6 @@ export async function recordAiUsage(input: AiUsageInput): Promise<string> {
     return row.id
   } catch (err) {
     console.error("[ai-usage] write failed", err)
-    return ""
+    return null
   }
 }

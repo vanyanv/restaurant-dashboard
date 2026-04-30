@@ -23,7 +23,7 @@ export async function getDbSize(): Promise<DbSize> {
   const rows = await prisma.$queryRaw<{ size: bigint }[]>`
     SELECT pg_database_size(current_database())::bigint AS size
   `
-  const totalBytes = Number(rows[0]?.size ?? BigInt(0))
+  const totalBytes = Number(rows[0]?.size ?? 0)
   const capBytes = Number(process.env.NEON_STORAGE_CAP_BYTES ?? DEFAULT_CAP)
   return { totalBytes, capBytes, pct: capBytes > 0 ? (totalBytes / capBytes) * 100 : 0 }
 }
@@ -49,5 +49,5 @@ export async function getConnections(): Promise<DbConnections> {
       (SELECT COUNT(*)::bigint FROM pg_stat_activity WHERE datname = current_database()) AS active,
       (SELECT setting::bigint FROM pg_settings WHERE name = 'max_connections') AS max
   `
-  return { active: Number(rows[0]?.active ?? BigInt(0)), max: Number(rows[0]?.max ?? BigInt(0)) }
+  return { active: Number(rows[0]?.active ?? 0), max: Number(rows[0]?.max ?? 0) }
 }

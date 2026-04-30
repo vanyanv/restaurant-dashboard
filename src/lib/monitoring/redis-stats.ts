@@ -1,56 +1,54 @@
 import { getRedis } from "@/lib/cache/redis"
 
+/**
+ * What the live Cache panel can show.
+ *
+ * `keys` is reliable on Upstash REST via `DBSIZE`.
+ *
+ * `memoryBytes` / `commandsToday` are NOT obtainable via the @upstash/redis
+ * REST client — Upstash's serverless gateway doesn't expose `INFO` and blocks
+ * `EVAL "redis.call('INFO')"`. To surface those, configure a separate
+ * UPSTASH_EMAIL + UPSTASH_API_KEY pair and we'll add a Management-API path in
+ * a follow-up. Until then they render as "—" in the UI.
+ *
+ * `available.keys` / `available.memory` / `available.commands` tell the panel
+ * which cells to render vs. mask.
+ */
 export type RedisLive = {
-  available: boolean
+  available: {
+    keys: boolean
+    memory: boolean
+    commands: boolean
+  }
   keys: number
-  memoryBytes: number
-  memoryMaxBytes: number
-  memoryPct: number
-  commandsToday: number
-  commandsLimit: number
-  commandsPct: number
+  memoryBytes: number | null
+  memoryMaxBytes: number | null
+  memoryPct: number | null
+  commandsToday: number | null
+  commandsLimit: number | null
+  commandsPct: number | null
 }
 
 const DEFAULT_DAILY_CMD_LIMIT = Number(process.env.UPSTASH_DAILY_COMMAND_LIMIT ?? 500_000)
 
-/**
- * Pull DBSIZE + memory + command counters from Upstash. Best-effort — any field
- * that fails parsing returns 0. If Upstash isn't configured, returns
- * { available: false } and zeros so the panel can render an empty state.
- */
-export async function getRedisLive(): Promise<RedisLive> {
-  const r = getRedis()
-  if (!r) {
-    return {
-      available: false,
-      keys: 0,
-      memoryBytes: 0, memoryMaxBytes: 0, memoryPct: 0,
-      commandsToday: 0, commandsLimit: DEFAULT_DAILY_CMD_LIMIT, commandsPct: 0,
-    }
-  }
-
-  const [keys, info] = await Promise.all([
-    r.dbsize().catch(() => 0),
-    r.eval<string[], string>(`return redis.call('INFO')`, [], []).catch(() => ""),
-  ])
-
-  const used = parseInfoNumber(info, "used_memory")
-  const max = parseInfoNumber(info, "maxmemory") || (256 * 1024 * 1024) // free-tier default
-  const cmds = parseInfoNumber(info, "total_commands_processed")
-
-  return {
-    available: true,
-    keys: Number(keys ?? 0),
-    memoryBytes: used,
-    memoryMaxBytes: max,
-    memoryPct: max > 0 ? (used / max) * 100 : 0,
-    commandsToday: cmds,
-    commandsLimit: DEFAULT_DAILY_CMD_LIMIT,
-    commandsPct: DEFAULT_DAILY_CMD_LIMIT > 0 ? (cmds / DEFAULT_DAILY_CMD_LIMIT) * 100 : 0,
-  }
+const UNAVAILABLE: RedisLive = {
+  available: { keys: false, memory: false, commands: false },
+  keys: 0,
+  memoryBytes: null, memoryMaxBytes: null, memoryPct: null,
+  commandsToday: null, commandsLimit: DEFAULT_DAILY_CMD_LIMIT, commandsPct: null,
 }
 
-function parseInfoNumber(info: string, key: string): number {
-  const match = info.match(new RegExp(`^${key}:(\\d+)`, "m"))
-  return match ? Number(match[1]) : 0
+export async function getRedisLive(): Promise<RedisLive> {
+  const r = getRedis()
+  if (!r) return UNAVAILABLE
+
+  const keys = await r.dbsize().catch(() => null)
+  if (keys === null) return UNAVAILABLE
+
+  return {
+    available: { keys: true, memory: false, commands: false },
+    keys: Number(keys),
+    memoryBytes: null, memoryMaxBytes: null, memoryPct: null,
+    commandsToday: null, commandsLimit: DEFAULT_DAILY_CMD_LIMIT, commandsPct: null,
+  }
 }

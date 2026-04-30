@@ -6,6 +6,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return
 
+  const flag = "__monitoring_hooked__" as const
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((process as any)[flag]) return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(process as any)[flag] = true
+
   const { recordError } = await import("@/lib/monitoring/errors")
 
   process.on("uncaughtException", (err) => {

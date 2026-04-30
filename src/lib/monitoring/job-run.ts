@@ -1,5 +1,9 @@
+/**
+ * Job-run wrapper. Two DB writes per call (start + end) — fine for sync/cron
+ * work, NOT for per-request handlers. Don't wrap a hot HTTP path in this.
+ */
 import { prisma } from "@/lib/prisma"
-import { JobStatus } from "@/generated/prisma/client"
+import { JobStatus, Prisma } from "@/generated/prisma/client"
 
 export type JobRunCtx = {
   jobRunId: string
@@ -28,7 +32,7 @@ export async function withJobRun<T>(
       jobName,
       storeId: opts.storeId ?? null,
       triggeredBy: opts.triggeredBy,
-      metadata: (opts.metadata ?? null) as never,
+      metadata: opts.metadata ? (opts.metadata as Prisma.InputJsonValue) : Prisma.DbNull,
       status: JobStatus.RUNNING,
     },
     select: { id: true, startedAt: true },
