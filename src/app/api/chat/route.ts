@@ -9,6 +9,7 @@ import {
   type UIMessage,
 } from "ai"
 import { openai } from "@ai-sdk/openai"
+import { Prisma } from "@/generated/prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
@@ -149,7 +150,7 @@ export async function POST(req: Request) {
         firstTokenMs = Math.round(performance.now() - streamStartMs)
       }
     },
-    onStepFinish: ({ toolCalls, toolResults }) => {
+    onStepFinish: ({ toolCalls, toolResults, content }) => {
       const now = Date.now()
       for (const call of toolCalls) {
         stepStartTimes.set(call.toolCallId, now)
@@ -162,18 +163,33 @@ export async function POST(req: Request) {
           result: tr.output,
           durationMs: Math.max(0, now - start),
         })
-        const maybeError = (tr as { error?: unknown }).error
-        if (maybeError !== undefined && maybeError !== null) {
-          capturedToolErrors[tr.toolName] = String(maybeError).slice(0, 1000)
+      }
+      // AI SDK v6 surfaces tool errors as `tool-error` parts in `step.content`,
+      // NOT as a property on `toolResults`. See `node_modules/ai/dist/index.d.ts`
+      // (ContentPart union ~line 560, TypedToolError ~line 488).
+      for (const part of content ?? []) {
+        const p = part as { type?: string; toolName?: string; error?: unknown }
+        if (p.type === "tool-error" && p.toolName) {
+          capturedToolErrors[p.toolName] = String(p.error).slice(0, 1000)
         }
       }
     },
-    onFinish: async ({ text, usage, providerMetadata, finishReason }) => {
+    onFinish: async ({ text, usage, finishReason }) => {
       const totalMs = Math.round(performance.now() - requestStartMs)
       const toolMs = capturedToolCalls.map((c) => c.durationMs)
+      // Cached input tokens live on `usage.inputTokenDetails.cacheReadTokens`
+      // in AI SDK v6 (`LanguageModelUsage` ~line 267 of ai/dist/index.d.ts);
+      // `usage.cachedInputTokens` is the deprecated alias kept as a fallback.
+      const usageObj = usage as
+        | {
+            inputTokenDetails?: { cacheReadTokens?: number }
+            cachedInputTokens?: number
+          }
+        | undefined
       const cachedTokens =
-        (providerMetadata?.openai as { cachedPromptTokens?: number } | undefined)
-          ?.cachedPromptTokens ?? 0
+        usageObj?.inputTokenDetails?.cacheReadTokens ??
+        usageObj?.cachedInputTokens ??
+        0
       const promptTokens = (usage as { inputTokens?: number } | undefined)
         ?.inputTokens
       const completionTokens = (usage as { outputTokens?: number } | undefined)
@@ -218,8 +234,8 @@ export async function POST(req: Request) {
             finishReason: finishReason ?? null,
             toolErrors:
               Object.keys(capturedToolErrors).length > 0
-                ? (capturedToolErrors as never)
-                : undefined,
+                ? (capturedToolErrors as Prisma.InputJsonValue)
+                : Prisma.DbNull,
           },
         })
       } catch (err) {

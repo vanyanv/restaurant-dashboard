@@ -1054,24 +1054,47 @@ import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { prisma } from "@/lib/prisma"
 
 // ... existing streamText call ...
-onFinish: async ({ text, finishReason, usage, toolCalls, toolResults }) => {
+//
+// NOTE: AI SDK v6 surfaces tool errors via `step.content` parts of
+// `type: "tool-error"`, NOT as a property on `toolResults`
+// (see `node_modules/ai/dist/index.d.ts`: ContentPart union ~line 560,
+// TypedToolError ~line 488, StepResult.content ~line 750).
+// Cached input tokens live on `usage.inputTokenDetails.cacheReadTokens`
+// (LanguageModelUsage ~line 267); `usage.cachedInputTokens` is the
+// deprecated alias retained as a fallback. Errors and cache reads must
+// therefore be captured in `onStepFinish({ content })` and via the
+// `inputTokenDetails` path respectively — NOT from `toolResults` or
+// `providerMetadata.openai.cachedPromptTokens`.
+const capturedToolErrors: Record<string, string> = {}
+// ... in onStepFinish, walk content for tool-error parts (see Fix 2 below) ...
+
+onFinish: async ({ text, finishReason, usage, toolCalls }) => {
+  const usageObj = usage as
+    | {
+        inputTokens?: number
+        outputTokens?: number
+        inputTokenDetails?: { cacheReadTokens?: number }
+        cachedInputTokens?: number
+      }
+    | undefined
+  const cachedTokens =
+    usageObj?.inputTokenDetails?.cacheReadTokens ??
+    usageObj?.cachedInputTokens ??
+    0
+
   const aiUsageEventId = await recordAiUsage({
     feature: "chat",
     provider: "openai",
     model: "gpt-4.1-mini",
-    inputTokens: usage.promptTokens ?? 0,
-    outputTokens: usage.completionTokens ?? 0,
-    cachedTokens: usage.cachedPromptTokens ?? 0,
+    inputTokens: usageObj?.inputTokens ?? 0,
+    outputTokens: usageObj?.outputTokens ?? 0,
+    cachedTokens,
     userId: session.user.id,
     durationMs: Date.now() - start,
   })
 
-  const toolErrors: Record<string, string> = {}
-  for (const r of toolResults ?? []) {
-    if ((r as { error?: unknown }).error) {
-      toolErrors[r.toolName] = String((r as { error: unknown }).error)
-    }
-  }
+  // capturedToolErrors is populated in onStepFinish — see snippet below.
+  const toolErrors = capturedToolErrors
 
   let status: "OK" | "EMPTY" | "TRUNCATED" | "REFUSED" | "TOOL_FAILED" = "OK"
   if (Object.keys(toolErrors).length > 0) status = "TOOL_FAILED"
@@ -1089,10 +1112,35 @@ onFinish: async ({ text, finishReason, usage, toolCalls, toolResults }) => {
       aiUsageEventId,
       status,
       finishReason: finishReason ?? null,
-      toolErrors: Object.keys(toolErrors).length > 0 ? (toolErrors as never) : undefined,
+      toolErrors:
+        Object.keys(toolErrors).length > 0
+          ? (toolErrors as Prisma.InputJsonValue)
+          : Prisma.DbNull,
     },
   })
 },
+```
+
+The matching `onStepFinish` (capturing tool errors from `step.content`):
+
+```ts
+onStepFinish: ({ toolCalls, toolResults, content }) => {
+  // ... existing toolCalls / toolResults bookkeeping ...
+
+  // Tool errors arrive as content parts in AI SDK v6, not on toolResults.
+  for (const part of content ?? []) {
+    const p = part as { type?: string; toolName?: string; error?: unknown }
+    if (p.type === "tool-error" && p.toolName) {
+      capturedToolErrors[p.toolName] = String(p.error).slice(0, 1000)
+    }
+  }
+},
+```
+
+Required import for the `Prisma.InputJsonValue` / `Prisma.DbNull` cast:
+
+```ts
+import { Prisma } from "@/generated/prisma/client"
 ```
 
 - [ ] **Step 5:** Wrap the entire chat handler body (the `try` containing the `streamText` call) with a top-level catch that classifies hard failures:
