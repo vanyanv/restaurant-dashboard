@@ -1,4 +1,3 @@
-import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
@@ -69,7 +68,9 @@ export default async function SettingsMastheadPage() {
       <section className="settings-masthead-grid dock-in dock-in-1">
         <div className="flex items-start gap-6">
           {user.avatarUrl ? (
-            <Image
+            // Use a plain browser image for user-supplied URLs so the Next
+            // image optimizer never fetches arbitrary remote hosts server-side.
+            <img
               src={user.avatarUrl}
               alt={user.name}
               width={96}

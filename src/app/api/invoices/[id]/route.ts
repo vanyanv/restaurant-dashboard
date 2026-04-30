@@ -6,6 +6,8 @@ import type { InvoiceStatus } from "@/generated/prisma/client"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { bustTags } from "@/lib/cache/cached"
 
+const invoiceStatusValues = ["PENDING", "MATCHED", "REVIEW", "APPROVED", "REJECTED"] as const
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -86,12 +88,26 @@ export async function PATCH(
   const body = await request.json()
   const { status, storeId } = body as { status?: InvoiceStatus; storeId?: string | null }
 
+  if (status && !invoiceStatusValues.includes(status)) {
+    return NextResponse.json({ error: "Invalid invoice status" }, { status: 400 })
+  }
+
   const invoice = await prisma.invoice.findFirst({
     where: { id, accountId: session.user.accountId },
   })
 
   if (!invoice) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 })
+  }
+
+  if (storeId) {
+    const store = await prisma.store.findFirst({
+      where: { id: storeId, accountId: session.user.accountId },
+      select: { id: true },
+    })
+    if (!store) {
+      return NextResponse.json({ error: "Store not found" }, { status: 404 })
+    }
   }
 
   const updated = await prisma.invoice.update({

@@ -41,7 +41,9 @@ export async function GET(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="invoice-${id}.pdf"`,
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "private, no-store, max-age=0",
+      "Pragma": "no-cache",
+      "X-Content-Type-Options": "nosniff",
     },
   })
 }

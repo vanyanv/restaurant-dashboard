@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getRedis } from "@/lib/cache/redis"
 
 // --- Cron request helper (consolidated from 3 duplicated copies) ---
 
@@ -63,6 +64,80 @@ function getClientIp(request: Request): string {
   )
 }
 
+function rateLimitResponse(config: RateLimitConfig, retryAfter: number, resetAt: number) {
+  return NextResponse.json(
+    { error: "Too many requests. Please try again later." },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(retryAfter),
+        "X-RateLimit-Limit": String(config.limit),
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": String(Math.ceil(resetAt / 1000)),
+      },
+    }
+  )
+}
+
+async function resolveIdentity(
+  request: Request,
+  identifyBy: RateLimitConfig["identifyBy"]
+): Promise<string> {
+  if (identifyBy === "ip") return `ip:${getClientIp(request)}`
+
+  const session = await getServerSession(authOptions)
+  if (session?.user?.id) return `user:${session.user.id}`
+
+  return `ip:${getClientIp(request)}`
+}
+
+async function redisRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<NextResponse | null | undefined> {
+  const redis = getRedis()
+  if (!redis) return undefined
+
+  const redisKey = `rate:${key}`
+  try {
+    const count = await redis.incr(redisKey)
+    if (count === 1) {
+      await redis.pexpire(redisKey, config.windowMs)
+    }
+
+    if (count <= config.limit) return null
+
+    const ttlMs = await redis.pttl(redisKey).catch(() => config.windowMs)
+    const retryAfter = Math.max(1, Math.ceil(ttlMs / 1000))
+    const resetAt = Date.now() + Math.max(ttlMs, 0)
+    return rateLimitResponse(config, retryAfter, resetAt)
+  } catch (err) {
+    console.error("[rate-limit] Redis limiter failed; falling back to in-memory", err)
+    return undefined
+  }
+}
+
+function memoryRateLimit(key: string, config: RateLimitConfig): NextResponse | null {
+  ensureCleanup()
+
+  const now = Date.now()
+  const entry = store.get(key)
+
+  if (!entry || entry.resetAt < now) {
+    store.set(key, { count: 1, resetAt: now + config.windowMs })
+    return null
+  }
+
+  entry.count++
+
+  if (entry.count > config.limit) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000)
+    return rateLimitResponse(config, retryAfter, entry.resetAt)
+  }
+
+  return null
+}
+
 /**
  * Rate limit a request. Returns null if allowed, or a 429 NextResponse if blocked.
  * Call at the top of route handlers before any business logic.
@@ -74,50 +149,13 @@ export async function rateLimit(
   // Cron requests bypass rate limiting
   if (isCronRequest(request)) return null
 
-  ensureCleanup()
-
   const pathname = new URL(request.url).pathname
   const identifyBy = config.identifyBy ?? "auto"
-
-  let identity: string
-  if (identifyBy === "ip") {
-    identity = `ip:${getClientIp(request)}`
-  } else if (identifyBy === "user") {
-    const session = await getServerSession(authOptions)
-    identity = session?.user?.id ? `user:${session.user.id}` : `ip:${getClientIp(request)}`
-  } else {
-    // "auto": try user first, fall back to IP
-    const session = await getServerSession(authOptions)
-    identity = session?.user?.id ? `user:${session.user.id}` : `ip:${getClientIp(request)}`
-  }
-
+  const identity = await resolveIdentity(request, identifyBy)
   const key = `${identity}:${pathname}`
-  const now = Date.now()
-  const entry = store.get(key)
 
-  if (!entry || entry.resetAt < now) {
-    // New window
-    store.set(key, { count: 1, resetAt: now + config.windowMs })
-    return null
-  }
+  const redisResult = await redisRateLimit(key, config)
+  if (redisResult !== undefined) return redisResult
 
-  entry.count++
-
-  if (entry.count > config.limit) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000)
-    return NextResponse.json(
-      { error: "Too many requests. Please try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(retryAfter),
-          "X-RateLimit-Limit": String(config.limit),
-          "X-RateLimit-Remaining": "0",
-          "X-RateLimit-Reset": String(Math.ceil(entry.resetAt / 1000)),
-        },
-      }
-    )
-  }
-
-  return null
+  return memoryRateLimit(key, config)
 }

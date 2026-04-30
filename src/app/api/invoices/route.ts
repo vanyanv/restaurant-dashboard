@@ -6,6 +6,8 @@ import type { InvoiceStatus } from "@/generated/prisma/client"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { bustTags } from "@/lib/cache/cached"
 
+const invoiceStatusValues = ["PENDING", "MATCHED", "REVIEW", "APPROVED", "REJECTED"] as const
+
 export async function GET(request: NextRequest) {
   const limited = await rateLimit(request, RATE_LIMIT_TIERS.moderate)
   if (limited) return limited
@@ -24,14 +26,18 @@ export async function GET(request: NextRequest) {
   const page = parseInt(url.searchParams.get("page") ?? "1", 10)
   const limit = parseInt(url.searchParams.get("limit") ?? "25", 10)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {}
+  const where: {
+    accountId: string
+    storeId?: string
+    status?: InvoiceStatus
+    vendorName?: { contains: string; mode: "insensitive" }
+    invoiceDate?: { gte?: Date; lte?: Date }
+  } = { accountId: session.user.accountId }
 
-  if (hasOwnerAccess(session.user.role)) {
-    where.accountId = session.user.accountId
-  }
   if (storeId) where.storeId = storeId
-  if (status) where.status = status as InvoiceStatus
+  if (status && invoiceStatusValues.includes(status as InvoiceStatus)) {
+    where.status = status as InvoiceStatus
+  }
   if (vendorName) where.vendorName = { contains: vendorName, mode: "insensitive" }
   if (startDate) where.invoiceDate = { ...where.invoiceDate, gte: new Date(startDate) }
   if (endDate) where.invoiceDate = { ...where.invoiceDate, lte: new Date(endDate) }
@@ -88,6 +94,20 @@ export async function PATCH(request: NextRequest) {
 
   if (!invoiceIds?.length || !status) {
     return NextResponse.json({ error: "invoiceIds and status are required" }, { status: 400 })
+  }
+
+  if (!invoiceStatusValues.includes(status)) {
+    return NextResponse.json({ error: "Invalid invoice status" }, { status: 400 })
+  }
+
+  if (storeId !== undefined) {
+    const store = await prisma.store.findFirst({
+      where: { id: storeId, accountId: session.user.accountId },
+      select: { id: true },
+    })
+    if (!store) {
+      return NextResponse.json({ error: "Store not found" }, { status: 404 })
+    }
   }
 
   const updated = await prisma.invoice.updateMany({
