@@ -7046,3 +7046,156 @@
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Editorial date-range calendar (mobile sheet) — paired with
+   <EditorialCalendar />. Two stacked month grids; range fill uses
+   the same red wash as .inv-row hover so the system reads as one. */
+
+.ed-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ed-cal__month {
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--paper);
+  padding: 14px 12px 12px;
+}
+
+.ed-cal__month-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ed-cal__month-title {
+  font-family: var(--font-fraunces, "Fraunces"), Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+  letter-spacing: 0.005em;
+}
+
+.ed-cal__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.ed-cal__nav:hover { color: var(--ink); background: rgba(0,0,0,0.02); }
+.ed-cal__nav:disabled { color: var(--ink-faint); cursor: not-allowed; }
+
+.ed-cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  margin-bottom: 4px;
+}
+
+.ed-cal__weekday {
+  text-align: center;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 6px 0;
+}
+
+.ed-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+}
+
+.ed-cal__day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease;
+}
+
+.ed-cal__day--blank { cursor: default; pointer-events: none; }
+
+.ed-cal__day--disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.ed-cal__day--in-range {
+  background: rgba(220, 38, 38, 0.045);
+}
+
+.ed-cal__day--start,
+.ed-cal__day--end {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
+.ed-cal__day--start::after,
+.ed-cal__day--end::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 6px;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: center;
+  animation: edCalUnderline 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+
+.ed-cal__day--today::before {
+  content: "TODAY";
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 7px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+
+.ed-cal__day:not(.ed-cal__day--blank):not(.ed-cal__day--disabled):hover {
+  color: var(--accent);
+}
+
+.ed-cal__day:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+@keyframes edCalUnderline {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ed-cal__day--start::after,
+  .ed-cal__day--end::after { animation: none; }
+}
+
