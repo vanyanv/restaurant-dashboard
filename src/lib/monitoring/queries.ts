@@ -153,3 +153,135 @@ export async function getCacheStats(hours = 168) {
     }
   })
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Phase 7c.1: chart-data queries for the redesigned monitoring dashboard
+// ───────────────────────────────────────────────────────────────────────
+
+export type DbGrowthPoint = {
+  date: Date
+  totalBytes: number
+}
+
+export async function getDbGrowth(days = 30): Promise<DbGrowthPoint[]> {
+  const since = new Date()
+  since.setHours(0, 0, 0, 0)
+  since.setDate(since.getDate() - days)
+  const rows = await prisma.dbSnapshot.findMany({
+    where: { date: { gte: since } },
+    orderBy: { date: "asc" },
+    select: { date: true, totalBytes: true },
+  })
+  return rows.map((r) => ({ date: r.date, totalBytes: Number(r.totalBytes) }))
+}
+
+export type SyncRunsByDayPoint = {
+  day: Date
+  success: number
+  failure: number
+  partial: number
+  running: number
+}
+
+export async function getSyncRunsByDay(days = 7): Promise<SyncRunsByDayPoint[]> {
+  const since = new Date(Date.now() - days * 86_400_000)
+  const rows = await prisma.$queryRaw<{ day: Date; status: string; count: bigint }[]>`
+    SELECT
+      date_trunc('day', "startedAt") AS day,
+      status::text AS status,
+      COUNT(*)::bigint AS count
+    FROM "JobRun"
+    WHERE "startedAt" >= ${since}
+    GROUP BY 1, 2
+    ORDER BY 1 ASC
+  `
+  // Pivot status rows into per-day buckets
+  const byDay = new Map<string, SyncRunsByDayPoint>()
+  for (const r of rows) {
+    const key = r.day.toISOString()
+    let bucket = byDay.get(key)
+    if (!bucket) {
+      bucket = { day: r.day, success: 0, failure: 0, partial: 0, running: 0 }
+      byDay.set(key, bucket)
+    }
+    const n = Number(r.count)
+    if (r.status === "SUCCESS") bucket.success += n
+    else if (r.status === "FAILURE") bucket.failure += n
+    else if (r.status === "PARTIAL") bucket.partial += n
+    else if (r.status === "RUNNING") bucket.running += n
+  }
+  return Array.from(byDay.values()).sort((a, b) => a.day.getTime() - b.day.getTime())
+}
+
+export type CacheHitRateByDayPoint = {
+  day: Date
+  hits: number
+  misses: number
+  hitPct: number
+}
+
+export async function getCacheHitRateByDay(days = 7): Promise<CacheHitRateByDayPoint[]> {
+  const since = new Date(Date.now() - days * 86_400_000)
+  const rows = await prisma.$queryRaw<{ day: Date; hits: bigint; misses: bigint }[]>`
+    SELECT
+      date_trunc('day', "hourBucket") AS day,
+      SUM(hits)::bigint   AS hits,
+      SUM(misses)::bigint AS misses
+    FROM "CacheStat"
+    WHERE "hourBucket" >= ${since}
+    GROUP BY 1
+    ORDER BY 1 ASC
+  `
+  return rows.map((r) => {
+    const hits = Number(r.hits)
+    const misses = Number(r.misses)
+    const total = hits + misses
+    return { day: r.day, hits, misses, hitPct: total > 0 ? (hits / total) * 100 : 0 }
+  })
+}
+
+export type ActivityRow = {
+  id: string
+  occurredAt: Date
+  kind: "sync" | "error"
+  label: string                // job name or error route
+  detail: string | null        // status word, error message, etc.
+  isFailure: boolean
+}
+
+export async function getRecentActivity(limit = 20): Promise<ActivityRow[]> {
+  const [syncs, errors] = await Promise.all([
+    prisma.jobRun.findMany({
+      orderBy: { startedAt: "desc" },
+      take: limit,
+      select: { id: true, startedAt: true, jobName: true, status: true, rowsWritten: true, errorMessage: true },
+    }),
+    prisma.errorEvent.findMany({
+      orderBy: { occurredAt: "desc" },
+      take: limit,
+      select: { id: true, occurredAt: true, source: true, route: true, message: true },
+    }),
+  ])
+
+  const merged: ActivityRow[] = [
+    ...syncs.map((s): ActivityRow => ({
+      id: `sync-${s.id}`,
+      occurredAt: s.startedAt,
+      kind: "sync",
+      label: s.jobName,
+      detail: s.status === "FAILURE" ? (s.errorMessage ?? "failed") : `${s.status?.toLowerCase() ?? "—"}${s.rowsWritten != null ? ` · ${s.rowsWritten} rows` : ""}`,
+      isFailure: s.status === "FAILURE",
+    })),
+    ...errors.map((e): ActivityRow => ({
+      id: `err-${e.id}`,
+      occurredAt: e.occurredAt,
+      kind: "error",
+      label: e.route ?? e.source,
+      detail: e.message.slice(0, 120),
+      isFailure: true,
+    })),
+  ]
+
+  merged.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+  return merged.slice(0, limit)
+}

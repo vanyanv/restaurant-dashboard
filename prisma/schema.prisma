@@ -1016,3 +1016,13 @@ model CacheStat {
   @@unique([hourBucket, keyPrefix])
   @@index([hourBucket(sort: Desc)])
 }
+
+model DbSnapshot {
+  id         String   @id @default(cuid())
+  capturedAt DateTime @default(now())
+  date       DateTime @unique @db.Date
+  totalBytes BigInt
+  perTable   Json
+
+  @@index([date(sort: Desc)])
+}
