@@ -44,6 +44,7 @@ next-env.d.ts
 
 # test output (screenshots, PDFs, API responses)
 scripts/test-output/
+dashboard-*.png
 
 # worktrees
 .worktrees/
