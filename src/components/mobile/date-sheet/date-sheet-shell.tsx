@@ -1,0 +1,59 @@
+"use client"
+
+import { useEffect, type ReactNode } from "react"
+
+type Props = {
+  open: boolean
+  onClose: () => void
+  /** Caps cap shown in the header, e.g. "DATE RANGE". */
+  dept: string
+  children: ReactNode
+  footer: ReactNode
+}
+
+export function DateSheetShell({ open, onClose, dept, children, footer }: Props) {
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+    }
+    document.addEventListener("keydown", onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <>
+      <div className="m-sheet__backdrop" onClick={onClose} aria-hidden />
+      <div
+        className="m-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={dept}
+      >
+        <div className="m-sheet__head">
+          <span className="m-sheet__head-left">
+            <span className="m-sheet__proofmark" aria-hidden />
+            <span className="m-cap">{dept}</span>
+          </span>
+          <button
+            type="button"
+            className="m-sheet__close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="m-sheet__body">{children}</div>
+        <div className="m-sheet__foot">{footer}</div>
+      </div>
+    </>
+  )
+}

@@ -7199,3 +7199,134 @@
   .ed-cal__day--end::after { animation: none; }
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Mobile bottom sheet — paired with <DateSheetShell />.
+   Editorial register: hairline-bold border on top, paper bg, no shadow. */
+
+.m-sheet__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 14, 0.32);
+  z-index: 80;
+  animation: mSheetFade 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.m-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 81;
+  background: var(--paper);
+  border-top: 1px solid var(--hairline-bold);
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  animation: mSheetUp 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.m-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.m-sheet__head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.m-sheet__proofmark {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 1px;
+  display: inline-block;
+}
+
+.m-sheet__close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.m-sheet__close:hover { color: var(--ink); }
+
+.m-sheet__body {
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.m-sheet__readout {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.m-sheet__readout--placeholder { color: var(--ink-faint); font-weight: 400; }
+
+.m-sheet__foot {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.m-sheet__btn {
+  flex: 1;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 14px 0;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.m-sheet__btn--ghost {
+  background: transparent;
+  color: var(--ink-muted);
+  border: 1px solid var(--hairline-bold);
+}
+.m-sheet__btn--ghost:hover { color: var(--ink); }
+
+.m-sheet__btn--primary {
+  background: var(--accent);
+  color: var(--paper);
+  border: 1px solid var(--accent);
+}
+.m-sheet__btn--primary:disabled {
+  background: var(--hairline);
+  border-color: var(--hairline);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+@keyframes mSheetUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes mSheetFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-sheet, .m-sheet__backdrop { animation: none; }
+}
+
