@@ -26,7 +26,7 @@
 | 6 | `/dashboard/monitoring` route gate, layout, skeleton page, sidebar nav (DEVELOPER-conditional) | ✓ (page is empty shell) |
 | 7 | All six panels + summary endpoint + shared spark / drawer components | ✓ (full UI live) |
 | 8 | Discord alerter, sweep cron, evaluator wired into `withJobRun` | ✓ |
-| 9 | 90-day cleanup cron, contract migration drops `InvoiceSyncLog` | ✓ (final state) |
+| 9 | 90-day cleanup cron only — `InvoiceSyncLog` stays forever (operator's call: invoices area is fragile, currently hitting Vercel limits, leave the legacy table in place) | ✓ (final state) |
 
 ---
 
@@ -2659,42 +2659,24 @@ export async function POST(req: NextRequest) {
 
 - [ ] **Step 3:** Curl with cron secret. Verify `{ deleted: { ... } }` returned (zeros on a fresh DB).
 
-### Task 9.2: Contract migration — drop `InvoiceSyncLog`
+### Task 9.2: ~~Drop `InvoiceSyncLog`~~ — REMOVED
 
-- [ ] **Step 1:** Verify the model is no longer referenced anywhere:
+Operator decision (2026-04-30): the invoices subsystem is currently fragile (hitting Vercel execution limits) and `InvoiceSyncLog` stays as a legacy table indefinitely. Phase 3 already removed all readers/writers from app/lib code, so the table sits dormant — it costs nothing to keep and removes deploy risk to a touchy area.
 
-```bash
-grep -rn "invoiceSyncLog\|InvoiceSyncLog" src/ --exclude-dir=generated
-```
-
-Expect zero matches.
-
-- [ ] **Step 2:** Open `prisma/schema.prisma`. Delete the entire `model InvoiceSyncLog { ... }` block.
-
-- [ ] **Step 3:** Generate the migration:
-
-```bash
-npx prisma migrate dev --name monitoring_drop_invoice_sync_log
-```
-
-- [ ] **Step 4:** Verify the resulting `migration.sql` contains exactly `DROP TABLE "InvoiceSyncLog";`.
-
-- [ ] **Step 5:** Apply locally; confirm the table is gone.
-
-- [ ] **Step 6:** `npx tsc --noEmit` succeeds (the generated Prisma client no longer exports the model).
+**No schema change in Phase 9.** Skip directly to commit.
 
 ### Task 9.3: Commit
 
 ```bash
-git add src/app/api/cron/monitoring/cleanup prisma/schema.prisma prisma/migrations
-git commit -m "monitoring: cleanup cron + contract migration drops InvoiceSyncLog"
+git add src/app/api/cron/monitoring/cleanup
+git commit -m "monitoring: 90-day cleanup cron"
 ```
 
 ### Phase 9 verification
 
 - `/api/cron/monitoring/cleanup` deletes nothing on a freshly-seeded DB; deletes correctly when seeded with rows older than 90 days.
-- `InvoiceSyncLog` is gone from `\d` output in psql.
-- `/dashboard/invoices` page still loads correctly (last-sync now reads from `JobRun`).
+- `InvoiceSyncLog` table still exists (intentional — see Task 9.2 note).
+- `/dashboard/invoices` page still loads correctly (last-sync reads from `JobRun` per Phase 3).
 - Full app `npm run build` succeeds.
 
 ---
