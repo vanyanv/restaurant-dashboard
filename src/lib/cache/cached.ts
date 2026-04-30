@@ -1,4 +1,13 @@
 import { getRedis } from "./redis"
+import {
+  bumpHit,
+  bumpMiss,
+  bumpWrite,
+  bumpBust,
+  bumpFailure,
+  prefixOf,
+} from "@/lib/monitoring/cache-stats"
+import { recordError } from "@/lib/monitoring/errors"
 
 /**
  * Tag-aware read-through cache backed by Upstash Redis.
@@ -33,14 +42,27 @@ export async function cached<T>(
   const redis = getRedis()
   if (!redis) return loader()
 
+  const prefix = prefixOf(key)
+
   try {
     const hit = await redis.get<T>(key)
-    if (hit !== null && hit !== undefined) return hit
+    if (hit !== null && hit !== undefined) {
+      bumpHit(prefix)
+      return hit
+    }
   } catch (err) {
     console.error("[cache] read failed", { key, err })
+    bumpFailure(prefix)
+    await recordError({
+      source: "cache",
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      metadata: { op: "read", key },
+    })
     return loader()
   }
 
+  bumpMiss(prefix)
   const value = await loader()
 
   // Don't cache null/undefined — Upstash JSON-decodes "null" back to null,
@@ -57,8 +79,16 @@ export async function cached<T>(
       pipe.sadd(`${TAG_PREFIX}${tag}`, key)
     }
     await pipe.exec()
+    bumpWrite(prefix)
   } catch (err) {
     console.error("[cache] write failed", { key, err })
+    bumpFailure(prefix)
+    await recordError({
+      source: "cache",
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      metadata: { op: "write", key },
+    })
   }
 
   return value
@@ -98,15 +128,24 @@ export async function bustTags(tags: string[]): Promise<void> {
         const members = (await redis.smembers(setKey)) as string[]
         if (members.length === 0) {
           await redis.del(setKey)
+          bumpBust(tag)
           return
         }
         const pipe = redis.pipeline()
         for (const k of members) pipe.del(k)
         pipe.del(setKey)
         await pipe.exec()
+        bumpBust(tag)
       }),
     )
   } catch (err) {
     console.error("[cache] bustTags failed", { tags, err })
+    for (const tag of tags) bumpFailure(tag)
+    await recordError({
+      source: "cache",
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      metadata: { op: "bust", tags },
+    })
   }
 }
