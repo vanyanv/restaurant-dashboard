@@ -1,32 +1,83 @@
-import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
+import { todayInLA, startOfDayLA, endOfDayLA, localDateStr } from "@/lib/dashboard-utils"
 import type { HourlyComparisonPeriod } from "@/types/analytics"
 
-export type MobilePeriod = "today" | "yesterday" | "this-week" | "last-week"
+export type MobileNamedPeriod = "today" | "yesterday" | "this-week" | "last-week"
+export type MobilePeriod = MobileNamedPeriod | "custom"
 
-export const MOBILE_PERIODS: Array<{ value: MobilePeriod; label: string; short: string }> = [
+export const MOBILE_PERIODS: Array<{ value: MobileNamedPeriod; label: string; short: string }> = [
   { value: "today", label: "Today", short: "TODAY" },
   { value: "yesterday", label: "Yesterday", short: "YEST" },
   { value: "this-week", label: "This week", short: "WK" },
   { value: "last-week", label: "Last week", short: "LAST WK" },
 ]
 
-const PERIOD_VALUES = new Set<MobilePeriod>(MOBILE_PERIODS.map((p) => p.value))
+const NAMED_VALUES = new Set<MobileNamedPeriod>(MOBILE_PERIODS.map((p) => p.value))
 
-export function parsePeriod(raw: string | undefined | null): MobilePeriod {
-  if (raw && PERIOD_VALUES.has(raw as MobilePeriod)) return raw as MobilePeriod
+/** Max custom range we'll honor before falling back to default. */
+export const MAX_CUSTOM_RANGE_DAYS = 365
+
+export type MobileRange =
+  | { kind: "named"; period: MobileNamedPeriod }
+  | { kind: "custom"; start: Date; end: Date; startStr: string; endStr: string }
+
+/**
+ * Read `?period=…&start=…&end=…` from a Next.js page's searchParams.
+ * Falls back to "today" for invalid combos (bad ISO, end<start, range too long).
+ */
+export function parseMobileRange(sp: {
+  period?: string
+  start?: string
+  end?: string
+}): MobileRange {
+  const raw = sp.period
+  if (raw === "custom") {
+    const custom = parseCustomRange(sp.start, sp.end)
+    if (custom) return custom
+    // Invalid custom → silent fallback.
+    return { kind: "named", period: "today" }
+  }
+  if (raw && NAMED_VALUES.has(raw as MobileNamedPeriod)) {
+    return { kind: "named", period: raw as MobileNamedPeriod }
+  }
+  return { kind: "named", period: "today" }
+}
+
+/** Back-compat: old callers that just want a named period. Returns "today" for "custom". */
+export function parsePeriod(raw: string | undefined | null): MobileNamedPeriod {
+  if (raw && NAMED_VALUES.has(raw as MobileNamedPeriod)) return raw as MobileNamedPeriod
   return "today"
 }
 
-/** Mobile period maps 1:1 to the hourly-pattern enum on the analytics action. */
-export function toHourlyPeriod(p: MobilePeriod): HourlyComparisonPeriod {
+/** Mobile period maps 1:1 to the hourly-pattern enum on the analytics action.
+ *  Custom currently isn't supported by that action, so callers must guard. */
+export function toHourlyPeriod(p: MobileNamedPeriod): HourlyComparisonPeriod {
   return p
+}
+
+function isValidIsoDate(s: string | undefined): s is string {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  const d = new Date(s + "T00:00:00.000Z")
+  return !Number.isNaN(d.getTime())
+}
+
+function parseCustomRange(
+  startStr: string | undefined,
+  endStr: string | undefined,
+): Extract<MobileRange, { kind: "custom" }> | null {
+  if (!isValidIsoDate(startStr) || !isValidIsoDate(endStr)) return null
+  const start = startOfDayLA(startStr)
+  const end = endOfDayLA(endStr)
+  if (end.getTime() < start.getTime()) return null
+  const days = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
+  if (days > MAX_CUSTOM_RANGE_DAYS) return null
+  return { kind: "custom", start, end, startStr, endStr }
 }
 
 /**
  * Resolve a mobile period into a concrete date range in LA local time.
  * Weeks are Sunday-anchored (matches the dashboard's existing convention).
  */
-export function periodToDateRange(p: MobilePeriod): {
+export function periodToDateRange(p: MobileNamedPeriod): {
   startDate: Date
   endDate: Date
   /** Number of LA-local days in the window (inclusive). */
@@ -75,7 +126,7 @@ export function periodToDateRange(p: MobilePeriod): {
 }
 
 /** YYYY-MM-DD strings for every LA-local day in the window (inclusive). */
-export function periodDateStrings(p: MobilePeriod): string[] {
+export function periodDateStrings(p: MobileNamedPeriod): string[] {
   const { startDate, endDate } = periodToDateRange(p)
   const out: string[] = []
   const d = new Date(startDate)
@@ -85,3 +136,31 @@ export function periodDateStrings(p: MobilePeriod): string[] {
   }
   return out
 }
+
+/** Inclusive day count between two LA-local Dates. */
+export function rangeDayCount(start: Date, end: Date): number {
+  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+}
+
+/** Format a custom range as "MAR 5 → APR 20" (caps, em-arrow) for the active pill. */
+export function formatCustomRangeShort(start: Date, end: Date): string {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  })
+  return `${fmt.format(start).toUpperCase()} → ${fmt.format(end).toUpperCase()}`
+}
+
+/** Format a custom range as "MAR 5 — APR 20 · 47 DAYS" for the sheet readout. */
+export function formatCustomRangeLong(start: Date, end: Date): string {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  })
+  const days = rangeDayCount(start, end)
+  return `${fmt.format(start).toUpperCase()} — ${fmt.format(end).toUpperCase()} · ${days} DAY${days === 1 ? "" : "S"}`
+}
+
+export { localDateStr }

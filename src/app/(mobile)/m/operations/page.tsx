@@ -14,7 +14,7 @@ import {
   parsePeriod,
   periodToDateRange,
   MOBILE_PERIODS,
-  type MobilePeriod,
+  type MobileNamedPeriod,
 } from "@/lib/mobile/period"
 
 export const dynamic = "force-dynamic"
@@ -30,7 +30,7 @@ const fmtMoney = (n: number) =>
 const fmtPct = (n: number | null) =>
   n == null ? "—" : `${n.toFixed(1)}%`
 
-function periodToOpsOptions(p: MobilePeriod) {
+function periodToOpsOptions(p: MobileNamedPeriod) {
   const range = periodToDateRange(p)
   return {
     startDate: range.startDate.toISOString().slice(0, 10),
