@@ -131,6 +131,9 @@ export function pnlRangeToState(range: MobilePnLRange): PnLRangeState {
     }
   }
   const meta = MOBILE_PNL_PERIODS.find((p) => p.value === range.period)!
-  const preset = PNL_PRESETS.find((p) => p.key === meta.presetKey)!
+  const preset = PNL_PRESETS.find((p) => p.key === meta.presetKey)
+  if (!preset) {
+    throw new Error(`pnlRangeToState: no PNL_PRESETS entry for key "${meta.presetKey}"`)
+  }
   return preset.compute()
 }
