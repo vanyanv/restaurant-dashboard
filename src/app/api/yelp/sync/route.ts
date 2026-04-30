@@ -12,17 +12,29 @@ export async function POST(request: Request) {
     const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
     if (limited) return limited
 
-    const session = await getServerSession(authOptions)
-    
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const fromCron = isCronRequest(request)
+    let accountId: string
+
+    if (fromCron) {
+      // For cron, use the first OWNER user's account (matches invoices/sync pattern)
+      const owner = await prisma.user.findFirst({ where: { role: "OWNER" }, select: { accountId: true } })
+      if (!owner) return NextResponse.json({ error: "No owner user found" }, { status: 500 })
+      accountId = owner.accountId
+    } else {
+      const session = await getServerSession(authOptions)
+
+      if (!session?.user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
+
+      if (session.user.role !== "OWNER") {
+        return NextResponse.json({ error: "Only owners can sync Yelp data" }, { status: 403 })
+      }
+
+      accountId = session.user.accountId
     }
 
-    if (session.user.role !== "OWNER") {
-      return NextResponse.json({ error: "Only owners can sync Yelp data" }, { status: 403 })
-    }
-
-    const triggeredBy: "cron" | "manual" = isCronRequest(request) ? "cron" : "manual"
+    const triggeredBy: "cron" | "manual" = fromCron ? "cron" : "manual"
 
     const payload = await withJobRun(
       "yelp.sync",
@@ -31,7 +43,7 @@ export async function POST(request: Request) {
         // Get all active stores owned by the user
         const stores = await prisma.store.findMany({
           where: {
-            accountId: session.user.accountId,
+            accountId,
             isActive: true,
             address: {
               not: null

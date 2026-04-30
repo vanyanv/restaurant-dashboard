@@ -41,7 +41,11 @@ function elapsed(): string {
 const WALK_MAX_PASSES = 30
 
 async function runDetailPasses(
-  runOrdersSync: (days: number, endDate?: Date) => Promise<{
+  runOrdersSync: (
+    days: number,
+    endDate?: Date,
+    opts?: { triggeredBy?: "cron" | "manual"; metadata?: Record<string, unknown> },
+  ) => Promise<{
     storesProcessed: number
     ordersFetched: number
     ordersCreated: number
@@ -54,6 +58,7 @@ async function runDetailPasses(
   days: number,
   endDate: Date | undefined,
   label: string,
+  extraMetadata?: Record<string, unknown>,
 ) {
   let totalOrdersCreated = 0
   let totalOrdersUpdated = 0
@@ -64,7 +69,10 @@ async function runDetailPasses(
 
   while (true) {
     console.log(`[${elapsed()}] ${label} pass #${pass}: runOrdersSync(${days}${endDate ? `, ${endDate.toISOString()}` : ""})…`)
-    const result = await runOrdersSync(days, endDate)
+    const result = await runOrdersSync(days, endDate, {
+      triggeredBy: "manual",
+      metadata: { backfill: true, chunkDays: days, detailPass: pass, ...(extraMetadata ?? {}) },
+    })
     console.log(`  storesProcessed:  ${result.storesProcessed}`)
     console.log(`  ordersFetched:    ${result.ordersFetched}`)
     console.log(`  ordersCreated:    ${result.ordersCreated}`)
@@ -122,7 +130,7 @@ async function main() {
       console.log(`\n═══ Walk pass ${walkPass}/${WALK_MAX_PASSES} — end=${endDate ? endDate.toISOString() : "now"} ═══`)
 
       const { totalOrdersCreated, totalOrdersUpdated, totalDetailsFetched, totalDetailsFailed, firstPassOrdersCreated } =
-        await runDetailPasses(runOrdersSync, chunkDays, endDate, `  walk ${walkPass}`)
+        await runDetailPasses(runOrdersSync, chunkDays, endDate, `  walk ${walkPass}`, { walkPass })
 
       grandCreated += totalOrdersCreated
       grandUpdated += totalOrdersUpdated

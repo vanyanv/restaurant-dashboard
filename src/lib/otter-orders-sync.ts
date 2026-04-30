@@ -33,12 +33,12 @@ function asNumber(v: any): number {
 export async function runOrdersSync(
   days: number,
   endDateOverride?: Date,
-  opts?: { triggeredBy?: "cron" | "manual" }
+  opts?: { triggeredBy?: "cron" | "manual"; metadata?: Record<string, unknown> }
 ): Promise<OrdersSyncResult> {
   const triggeredBy = opts?.triggeredBy ?? "manual"
   return withJobRun(
     "otter.orders.sync",
-    { triggeredBy, metadata: { windowDays: days } },
+    { triggeredBy, metadata: { windowDays: days, ...(opts?.metadata ?? {}) } },
     async ({ addRows }) => {
       const result = await runOrdersSyncInner(days, endDateOverride)
       addRows(result.ordersCreated + result.ordersUpdated)

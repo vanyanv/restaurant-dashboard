@@ -39,6 +39,7 @@ export async function runHourlySync(opts?: {
   windowDays?: number  // default 2 (today + yesterday)
   rowLimit?: number    // default 10000
   triggeredBy?: "cron" | "manual" | "github-actions"
+  metadata?: Record<string, unknown>
 }): Promise<HourlySyncResult> {
   const triggeredBy = opts?.triggeredBy ?? "manual"
   return withJobRun(
@@ -48,6 +49,7 @@ export async function runHourlySync(opts?: {
       metadata: {
         windowDays: opts?.windowDays ?? 2,
         rowLimit: opts?.rowLimit ?? 10000,
+        ...(opts?.metadata ?? {}),
       },
     },
     async ({ addRows }) => {

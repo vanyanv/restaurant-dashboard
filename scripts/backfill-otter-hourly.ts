@@ -39,7 +39,12 @@ async function main() {
 
   console.log(`\nOtter Hourly Backfill — ${days} days\n`)
 
-  const result = await runHourlySync({ windowDays: days, rowLimit: ROW_LIMIT, triggeredBy: "manual" })
+  const result = await runHourlySync({
+    windowDays: days,
+    rowLimit: ROW_LIMIT,
+    triggeredBy: "manual",
+    metadata: { backfill: true },
+  })
 
   console.log(`\nBackfill complete:`)
   console.log(`  Stores processed:       ${result.storesProcessed}`)

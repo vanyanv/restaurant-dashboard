@@ -664,12 +664,22 @@ export async function POST(request: NextRequest) {
           }
         }
         try {
-          await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ addRows }) => {
+          await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ jobRunId, addRows }) => {
             const result = await runSync(emit)
-            addRows(
-              result.synced + result.categorySynced + result.itemSynced +
-              result.modifierSynced + result.ratingsSynced + result.cogsRowsWritten
-            )
+            addRows(result.synced)
+            await prisma.jobRun.update({
+              where: { id: jobRunId },
+              data: {
+                metadata: {
+                  synced: result.synced,
+                  categorySynced: result.categorySynced,
+                  itemSynced: result.itemSynced,
+                  modifierSynced: result.modifierSynced,
+                  ratingsSynced: result.ratingsSynced,
+                  cogsRowsWritten: result.cogsRowsWritten,
+                },
+              },
+            })
             return result
           })
         } catch (error) {
@@ -698,12 +708,22 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE clients)
   try {
-    const result = await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ addRows }) => {
+    const result = await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ jobRunId, addRows }) => {
       const r = await runSync(() => {})
-      addRows(
-        r.synced + r.categorySynced + r.itemSynced +
-        r.modifierSynced + r.ratingsSynced + r.cogsRowsWritten
-      )
+      addRows(r.synced)
+      await prisma.jobRun.update({
+        where: { id: jobRunId },
+        data: {
+          metadata: {
+            synced: r.synced,
+            categorySynced: r.categorySynced,
+            itemSynced: r.itemSynced,
+            modifierSynced: r.modifierSynced,
+            ratingsSynced: r.ratingsSynced,
+            cogsRowsWritten: r.cogsRowsWritten,
+          },
+        },
+      })
       return r
     })
     return NextResponse.json(result)
