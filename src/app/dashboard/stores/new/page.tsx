@@ -5,7 +5,6 @@ import { CreateStoreForm } from "./create-store-form"
 import { Store, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 
 export default async function NewStorePage() {
@@ -22,39 +21,40 @@ export default async function NewStorePage() {
   return (
     <div className="flex flex-col h-full">
       <EditorialTopbar section="§ 05" title="New Store">
-        <Link href="/dashboard/stores">
-          <Button variant="outline" size="icon">
+        <Button asChild variant="outline" size="icon" className="toolbar-btn h-9 w-9 p-0">
+          <Link href="/dashboard/stores" aria-label="Back to stores">
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </EditorialTopbar>
 
-      <div className="flex flex-1 flex-col gap-4 p-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Create New Store</h2>
-          <p className="text-muted-foreground">
-            Add a new restaurant location to your chain
+      <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6">
+        <header className="max-w-2xl">
+          <div className="font-label">Location file</div>
+          <h1 className="font-display mt-2 text-[34px] italic leading-none text-[var(--ink)]">
+            Create new store
+          </h1>
+          <p className="mt-3 max-w-[62ch] text-sm leading-6 text-[var(--ink-muted)]">
+            Add the operating details for a new restaurant location.
           </p>
-        </div>
+        </header>
 
         <div className="max-w-2xl">
-          <div className="rounded-xl border bg-card text-card-foreground shadow">
-            <div className="flex items-center gap-2 p-6 pb-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Store className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">Store Information</h2>
-                <p className="text-sm text-muted-foreground">
-                  Enter the details for your new store location
-                </p>
+          <section className="inv-panel">
+            <div className="inv-panel__head">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-[var(--hairline-bold)] bg-[var(--accent-bg)] text-[var(--accent-dark)]">
+                  <Store className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="inv-panel__dept">§ store information</div>
+                  <h2 className="inv-panel__title">Location details</h2>
+                </div>
               </div>
             </div>
-            <Separator />
-            <div className="p-6">
-              <CreateStoreForm />
-            </div>
-          </div>
+
+            <CreateStoreForm />
+          </section>
         </div>
       </div>
     </div>

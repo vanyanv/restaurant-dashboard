@@ -2,14 +2,14 @@ import { InvoicesChartsSlot } from "../invoices-charts-slot"
 import { fetchSummary, type InvoiceFilters } from "./data"
 
 const CATEGORY_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(var(--primary) / 0.6)",
-  "hsl(var(--primary) / 0.4)",
-  "hsl(var(--primary) / 0.25)",
+  "var(--chart-ink)",
+  "var(--chart-accent)",
+  "var(--chart-muted)",
+  "var(--chart-subtract)",
+  "var(--platform-grubhub)",
+  "rgba(26, 22, 19, 0.42)",
+  "rgba(220, 38, 38, 0.42)",
+  "rgba(138, 58, 58, 0.36)",
 ]
 
 export async function InvoiceSummaryChartsSection({

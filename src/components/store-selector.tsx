@@ -77,13 +77,13 @@ export function StoreSelector({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-[300px] justify-between", className)}
+          className={cn("w-[min(300px,calc(100vw-2rem))] justify-between", className)}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <Store className="h-4 w-4" />
             <span className="truncate">{displayText}</span>
             {currentStore && (
-              <Badge variant={currentStore.isActive ? "default" : "secondary"} className="ml-auto">
+              <Badge variant={currentStore.isActive ? "default" : "secondary"} className="ml-auto shrink-0">
                 {currentStore.isActive ? "Active" : "Inactive"}
               </Badge>
             )}
@@ -91,7 +91,7 @@ export function StoreSelector({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0">
+      <PopoverContent className="w-[min(300px,calc(100vw-2rem))] p-0">
         <Command>
           <CommandInput placeholder="Search stores..." />
           <CommandList>
@@ -126,11 +126,11 @@ export function StoreSelector({
                       currentStoreId === store.id ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <div className="flex flex-1 items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
                       <Store className="h-4 w-4" />
-                      <div>
-                        <div className="font-medium">{store.name}</div>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{store.name}</div>
                         {store.address && (
                           <div className="text-xs text-muted-foreground truncate">
                             {store.address}

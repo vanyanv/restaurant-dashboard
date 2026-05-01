@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, memo } from "react"
+import { useId, useState, useTransition, memo } from "react"
 import { ChevronRight, Store } from "lucide-react"
 import {
   Card,
@@ -145,26 +145,31 @@ const CategoryRow = memo(function CategoryRow({
   isExpanded: boolean
   onToggle: () => void
 }) {
+  const regionId = useId()
   const pct = totalSales > 0 ? (category.totalSales / totalSales) * 100 : 0
 
   return (
     <div>
       <button
+        type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/50 transition-colors"
+        aria-expanded={isExpanded}
+        aria-controls={regionId}
+        className="group relative flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-[rgba(220,38,38,0.045)] focus-visible:bg-[rgba(220,38,38,0.045)] focus-visible:outline-none focus-visible:shadow-[inset_3px_0_0_var(--accent)]"
       >
+        <span className="absolute left-0 top-[18%] bottom-[18%] w-[3px] origin-center scale-y-0 bg-[var(--accent)] transition-transform duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] group-hover:scale-y-100 group-focus-visible:scale-y-100" />
         <ChevronRight
           className={cn(
-            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+            "h-3.5 w-3.5 shrink-0 text-[var(--ink-muted)] transition-transform duration-200",
             isExpanded && "rotate-90"
           )}
         />
         <span className="flex-1 text-sm font-medium truncate">{category.category}</span>
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-xs tabular-nums text-[var(--ink-muted)]">
             {formatNumber(category.totalQuantitySold)}
           </span>
-          <span className="text-xs font-medium tabular-nums w-[72px] text-right">
+          <span className="w-[72px] text-right text-xs font-medium tabular-nums group-hover:text-[var(--accent)] group-focus-visible:text-[var(--accent)]">
             {formatCurrency(category.totalSales)}
           </span>
           {/* Contribution bar */}
@@ -175,14 +180,14 @@ const CategoryRow = memo(function CategoryRow({
                 style={{ width: `${Math.min(pct, 100)}%` }}
               />
             </div>
-            <span className="text-[10px] tabular-nums text-muted-foreground w-[30px] text-right">
+            <span className="w-[30px] text-right text-[10px] tabular-nums text-[var(--ink-muted)]">
               {pct.toFixed(0)}%
             </span>
           </div>
         </div>
       </button>
       {isExpanded && category.items.length > 0 && (
-        <div className="bg-muted/20">
+        <div id={regionId} className="bg-[rgba(26,22,19,0.025)]">
           {category.items.map((item) => {
             const itemPct = totalSales > 0 ? (item.totalSales / totalSales) * 100 : 0
             return (

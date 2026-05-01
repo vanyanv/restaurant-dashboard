@@ -22,14 +22,14 @@ import {
 import { formatCurrency } from "@/lib/format"
 
 const CATEGORY_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(var(--primary) / 0.6)",
-  "hsl(var(--primary) / 0.4)",
-  "hsl(var(--primary) / 0.25)",
+  "var(--chart-ink)",
+  "var(--chart-accent)",
+  "var(--chart-muted)",
+  "var(--chart-subtract)",
+  "var(--platform-grubhub)",
+  "rgba(26, 22, 19, 0.42)",
+  "rgba(220, 38, 38, 0.42)",
+  "rgba(138, 58, 58, 0.36)",
 ]
 
 interface CategoryDatum {
@@ -54,9 +54,9 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-lg border bg-background px-3 py-2 text-sm shadow-md">
+    <div className="border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)]">
       <p className="font-medium">{payload[0].payload.name}</p>
-      <p className="text-muted-foreground">
+      <p className="text-[var(--ink-muted)]">
         {formatCurrency(payload[0].value)}
       </p>
     </div>
@@ -91,7 +91,7 @@ export function InvoicesCharts({
                     innerRadius={55}
                     outerRadius={85}
                     strokeWidth={2}
-                    stroke="hsl(var(--background))"
+                    stroke="var(--paper)"
                   >
                     {categoryData.map((entry, idx) => (
                       <Cell key={idx} fill={entry.fill} />
@@ -108,7 +108,7 @@ export function InvoicesCharts({
                     className="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: entry.fill }}
                   />
-                  <span className="text-muted-foreground truncate max-w-[90px]">
+                  <span className="max-w-[90px] truncate text-[var(--ink-muted)]">
                     {entry.name}
                   </span>
                   <span className="font-medium tabular-nums">
@@ -140,6 +140,7 @@ export function InvoicesCharts({
                   horizontal={false}
                   strokeDasharray="3 3"
                   opacity={0.3}
+                  stroke="var(--chart-grid)"
                 />
                 <XAxis
                   type="number"
@@ -151,17 +152,17 @@ export function InvoicesCharts({
                   dataKey="name"
                   width={130}
                   fontSize={12}
-                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fill: "var(--ink-muted)" }}
                 />
                 <RechartsTooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     return (
-                      <div className="rounded-lg border bg-background px-3 py-2 text-sm shadow-md">
+                      <div className="border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)]">
                         <p className="font-medium">
                           {payload[0].payload.fullName}
                         </p>
-                        <p className="text-muted-foreground">
+                        <p className="text-[var(--ink-muted)]">
                           {formatCurrency(payload[0].value as number)}
                         </p>
                       </div>
@@ -170,8 +171,8 @@ export function InvoicesCharts({
                 />
                 <Bar
                   dataKey="spend"
-                  fill="hsl(var(--chart-1))"
-                  radius={[0, 4, 4, 0]}
+                  fill="var(--chart-ink)"
+                  radius={[0, 0, 0, 0]}
                   barSize={24}
                 />
               </BarChart>

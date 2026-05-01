@@ -7394,3 +7394,121 @@
   color: var(--ink-faint);
 }
 
+/* ============================================================
+   Dashboard shadcn boundary.
+   Older dashboard surfaces still import shared ui/* primitives.
+   Inside .editorial-surface, flatten those defaults to the docket
+   vocabulary: warm paper, hairlines, square controls, no elevation.
+   ============================================================ */
+
+.editorial-surface {
+  --background: 38 64% 96%;
+  --foreground: 27 16% 9%;
+  --card: 42 100% 99%;
+  --card-foreground: 27 16% 9%;
+  --popover: 42 100% 99%;
+  --popover-foreground: 27 16% 9%;
+  --primary: 0 72% 51%;
+  --primary-foreground: 38 64% 96%;
+  --secondary: 0 75% 96%;
+  --secondary-foreground: 0 71% 29%;
+  --muted: 36 42% 91%;
+  --muted-foreground: 28 8% 39%;
+  --accent-foreground: 38 64% 96%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 38 64% 96%;
+  --border: 34 29% 81%;
+  --input: 34 29% 81%;
+  --ring: 0 72% 51%;
+  --radius: 2px;
+}
+
+.editorial-surface [data-slot="card"] {
+  gap: 0;
+  border-radius: 2px;
+  border-color: var(--hairline-bold);
+  background: rgba(255, 253, 247, 0.72);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.editorial-surface [data-slot="card-header"] {
+  border-bottom: 1px solid var(--hairline);
+  padding: 14px 18px;
+}
+
+.editorial-surface [data-slot="card-title"] {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 45;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.editorial-surface [data-slot="card-description"] {
+  color: var(--ink-muted);
+}
+
+.editorial-surface [data-slot="card-content"] {
+  padding: 16px 18px;
+}
+
+.editorial-surface [data-slot="button"],
+.editorial-surface [data-slot="select-trigger"],
+.editorial-surface [data-slot="popover-content"],
+.editorial-surface [data-slot="dropdown-menu-content"],
+.editorial-surface [data-slot="dialog-content"],
+.editorial-surface [data-slot="alert-dialog-content"] {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.editorial-surface [data-slot="button"] {
+  min-height: 36px;
+}
+
+.editorial-surface [data-slot="button"]:focus-visible,
+.editorial-surface [data-slot="select-trigger"]:focus-visible,
+.editorial-surface [data-slot="dialog-close"]:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+.editorial-surface [data-slot="select-trigger"],
+.editorial-surface [data-slot="popover-content"],
+.editorial-surface [data-slot="dropdown-menu-content"],
+.editorial-surface [data-slot="dialog-content"],
+.editorial-surface [data-slot="alert-dialog-content"] {
+  border-color: var(--hairline-bold);
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+.editorial-surface [data-slot="select-item"]:focus,
+.editorial-surface [data-slot="dropdown-menu-item"]:focus {
+  background: var(--accent-bg);
+  color: var(--accent-dark);
+}
+
+.editorial-surface [data-slot="table-row"]:hover {
+  background: rgba(220, 38, 38, 0.045);
+}
+
+.editorial-surface .shadow,
+.editorial-surface .shadow-sm,
+.editorial-surface .shadow-md,
+.editorial-surface .shadow-lg,
+.editorial-surface .shadow-xl {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editorial-surface [data-slot="select-content"],
+  .editorial-surface [data-slot="dropdown-menu-content"],
+  .editorial-surface [data-slot="dialog-content"],
+  .editorial-surface [data-slot="alert-dialog-content"] {
+    animation: none;
+    transition: none;
+  }
+}

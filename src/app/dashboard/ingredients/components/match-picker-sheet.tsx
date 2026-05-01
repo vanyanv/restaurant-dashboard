@@ -258,7 +258,7 @@ export function MatchPickerSheet({
       />
 
       <div
-        className="absolute right-0 top-0 flex h-full w-full max-w-[720px] flex-col border-l border-[var(--hairline-bold)] bg-[var(--paper)] shadow-[-12px_0_40px_-20px_rgba(26,22,19,0.35)] animate-in slide-in-from-right duration-300"
+        className="absolute right-0 top-0 flex h-full w-full max-w-[720px] flex-col border-l border-[var(--hairline-bold)] bg-[var(--paper)] animate-in slide-in-from-right duration-300"
         style={{
           backgroundImage:
             "radial-gradient(900px 600px at 100% 0%, #fff9ef 0%, transparent 55%), linear-gradient(180deg, var(--paper), var(--paper-deep))",
