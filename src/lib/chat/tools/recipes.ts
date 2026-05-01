@@ -239,7 +239,7 @@ const searchParams = z
       .string()
       .min(1)
       .describe(
-        "Natural-language description of the built recipe (e.g. 'cheese burger', 'milkshake', 'spicy slider'). Vector search — phrasing does not need to match the recipe's exact name.",
+        "Natural-language description of the built recipe (e.g. 'double patty slider', 'milkshake', 'spicy slider'). Vector search — phrasing does not need to match the recipe's exact name.",
       ),
     limit: z.number().int().min(1).max(20).optional().default(10),
   })
@@ -257,7 +257,7 @@ export type RecipeSearchRow = {
 export const searchRecipes: ChatTool<typeof searchParams, RecipeSearchRow[]> = {
   name: "searchRecipes",
   description:
-    "Vector search across the owner's built recipes. Use this when the user's phrasing doesn't exactly match a recipe name (e.g. 'cheese burger' → 'Smash Burger', 'milkshake' → 'OREO COOKIE SHAKE'). Returns the top hits with cosine similarity scores; pair with getRecipeById to load one in full.",
+    "Vector search across the owner's built kitchen recipes. Use this only for recipe, ingredient-breakdown, food-cost, or margin questions when the phrasing doesn't exactly match a recipe name. Do not use this for menu price, live menu search, or menu item performance questions; those are searchMenuItems/getMenuPrices/getMenuItemDetails. Returns top hits; pair with getRecipeById to load one in full.",
   parameters: searchParams,
   async execute(args, ctx) {
     const vec = await embed(args.query)
@@ -313,7 +313,7 @@ const byNameParams = z
 export const getRecipeByName: ChatTool<typeof byNameParams, RecipeResult | null> = {
   name: "getRecipeByName",
   description:
-    "Fetches one recipe by its exact item name (case-insensitive). When a name is ambiguous across categories, pass `category` to narrow it. Use this when the user asks 'show me the burger recipe' / 'what's in the slider'.",
+    "Fetches one recipe by its exact item name (case-insensitive). When a name is ambiguous across categories, pass `category` to narrow it. Use this first when the user asks 'show me the Double Slider recipe', 'what's in the Single Slider', or asks for a named recipe's ingredient cost breakdown. If it returns null, then use searchRecipes and getRecipeById.",
   parameters: byNameParams,
   async execute(args, ctx) {
     const matches = await ctx.prisma.recipe.findMany({
@@ -382,7 +382,7 @@ export type MenuMarginResult = {
 export const getMenuMargin: ChatTool<typeof marginParams, MenuMarginResult> = {
   name: "getMenuMargin",
   description:
-    "Computes the margin on one Recipe by joining its Otter item mappings (OtterItemMapping → OtterMenuItem aggregates). Returns recipe cost, average implied selling price, and margin in dollars + percent across the date window. Use this for 'what's the margin on the smash burger?' / 'how profitable is the chicken sandwich?'. Returns a clear note when the recipe has no Otter mapping or no sales in the window.",
+    "Computes the margin on one Recipe by joining its Otter item mappings (OtterItemMapping → OtterMenuItem aggregates). Returns recipe cost, average implied selling price, and margin in dollars + percent across the date window. Use this for 'what's the margin on the Double Slider?' / 'how profitable is Loaded Fries?'. Returns a clear note when the recipe has no Otter mapping or no sales in the window.",
   parameters: marginParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -670,7 +670,7 @@ const byCategoryParams = z
     category: z
       .string()
       .min(1)
-      .describe("Recipe category (case-insensitive). E.g. 'sandwiches', 'sides', 'shakes'."),
+      .describe("Recipe category (case-insensitive). E.g. 'A La Carte', 'Sides', 'Shakes', 'Combos'."),
     sellableOnly: z.boolean().optional().default(true),
   })
   .strict()
@@ -687,7 +687,7 @@ export type RecipeByCategoryRow = {
 export const listRecipesByCategory: ChatTool<typeof byCategoryParams, RecipeByCategoryRow[]> = {
   name: "listRecipesByCategory",
   description:
-    "Lists every recipe in a given category. Use this for 'show me my sandwiches' / 'list all sides' / 'what shakes do we have'. By default returns sellable items only; pass sellableOnly=false to include sub-recipes / components.",
+    "Lists every recipe in a given category. Use this for 'show me my slider combos' / 'list all sides' / 'what shakes do we have'. By default returns sellable items only; pass sellableOnly=false to include sub-recipes / components.",
   parameters: byCategoryParams,
   async execute(args, ctx) {
     const rows = await ctx.prisma.recipe.findMany({

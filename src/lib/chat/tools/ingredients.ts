@@ -7,10 +7,10 @@ import type { ChatTool } from "./types"
  * Canonical-ingredient tools.
  *
  *   - getIngredientPrices: ILIKE substring lookup. High recall on common
- *     ingredients (cheese, chicken). Cheaper than embedding when the user
+ *     ingredients (american cheese, ground beef). Cheaper than embedding when the user
  *     uses the canonical's own name.
  *   - searchCanonicalIngredients: vector search. Use when phrasing might
- *     not match the canonical (vendor jargon like "16/20 EZ peel", "EVOO").
+ *     not match the canonical (vendor jargon like "fine grnd 73/27").
  *   - getIngredientPrice (singular, by id): detailed view of one canonical
  *     incl. the latest 3 invoice cross-checks.
  *   - getIngredientPriceHistory: time series of unit cost from
@@ -29,7 +29,7 @@ const pricesParams = z
     query: z
       .string()
       .min(1)
-      .describe("Case-insensitive substring match on the canonical ingredient name (e.g. 'cheese', 'chicken thigh')."),
+      .describe("Case-insensitive substring match on the canonical ingredient name (e.g. 'american cheese', 'ground beef')."),
     storeIds: storeIdsSchema,
     limit: z.number().int().min(1).max(25).optional().default(10),
   })
@@ -50,7 +50,7 @@ export type IngredientPriceRow = {
 export const getIngredientPrices: ChatTool<typeof pricesParams, IngredientPriceRow[]> = {
   name: "getIngredientPrices",
   description:
-    "Lookup current cost-per-unit for owner-scoped canonical ingredients, ranked by recency of the last linked invoice. Use this for 'what's the cost of cheese?' / 'how much are we paying for chicken thighs?' style questions when the user uses the canonical name. Names short and explicit; ILIKE-based matching, no embeddings. Use searchCanonicalIngredients instead when the user uses vendor jargon.",
+    "Lookup current cost-per-unit for owner-scoped canonical ingredients, ranked by recency of the last linked invoice. Use this for 'what's the cost of american cheese?' / 'how much are we paying for potato rolls?' / 'what are we paying for ground beef?' style questions. Pair with searchCanonicalIngredients when the phrase may be jargon or when you need a canonical id. Names short and explicit; ILIKE-based matching, no embeddings.",
   parameters: pricesParams,
   async execute(args, ctx) {
     // storeIds is accepted for symmetry with the rest of the surface, but
@@ -114,7 +114,7 @@ const searchParams = z
     query: z
       .string()
       .min(1)
-      .describe("Natural-language ingredient phrase, including vendor jargon (e.g. 'shrimp', 'EVOO', '16/20 EZ peel'). Vector search folds in per-store IngredientAlias rawNames."),
+      .describe("Natural-language ingredient phrase, including vendor jargon (e.g. 'fine grnd 73/27', 'soft serve mix'). Vector search folds in per-store IngredientAlias rawNames."),
     limit: z.number().int().min(1).max(25).optional().default(10),
   })
   .strict()
@@ -130,7 +130,7 @@ export type CanonicalIngredientSearchRow = {
 export const searchCanonicalIngredients: ChatTool<typeof searchParams, CanonicalIngredientSearchRow[]> = {
   name: "searchCanonicalIngredients",
   description:
-    "Vector search across the owner's canonical ingredients (with per-store aliases folded in). Use this when the user's phrasing uses vendor jargon or doesn't match the canonical's own name (e.g. 'EVOO' → 'olive oil, extra virgin', '16/20 EZ peel' → 'shrimp'). Returns canonical ids; pair with getIngredientPrice / getIngredientPriceHistory / compareVendorPrices / listRecipesByIngredient.",
+    "Vector search across the owner's canonical ingredients (with per-store aliases folded in). Use this when the user's phrasing uses vendor jargon or doesn't match the canonical's own name, and also before vendor comparison or reverse recipe lookup when you need a canonical id. Examples: 'fine grnd 73/27' -> 'ground beef fine grnd 73/27 creekstone', 'soft serve mix' -> 'soft serve vanilla mix'. Pair with getIngredientPrices / getIngredientPrice / getIngredientPriceHistory / compareVendorPrices / listRecipesByIngredient.",
   parameters: searchParams,
   async execute(args, ctx) {
     const vec = await embed(args.query)
@@ -299,7 +299,7 @@ export type IngredientPriceHistoryResult = {
 export const getIngredientPriceHistory: ChatTool<typeof historyParams, IngredientPriceHistoryResult | null> = {
   name: "getIngredientPriceHistory",
   description:
-    "Time series of unit-price observations for one canonical ingredient, sourced from invoice line items linked to it. Use this for 'when did the price of EVOO last change?' / 'has chicken gone up?'. Returns null when the canonical isn't owned by the caller.",
+    "Time series of unit-price observations for one canonical ingredient, sourced from invoice line items linked to it. Use this for 'when did the price of ground beef last change?' / 'has american cheese gone up?'. Returns null when the canonical isn't owned by the caller.",
   parameters: historyParams,
   async execute(args, ctx) {
     const c = await ctx.prisma.canonicalIngredient.findFirst({

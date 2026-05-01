@@ -35,7 +35,7 @@ export type CogsByItemRow = {
 export const getCogsByItem: ChatTool<typeof params, CogsByItemRow[]> = {
   name: "getCogsByItem",
   description:
-    "Item-level cost-of-goods + revenue + sold quantity rolled across the date range, ordered by revenue desc. Reads the precomputed DailyCogsItem rollups, so only items with a costed recipe appear.",
+    "Item-level cost-of-goods + revenue + sold quantity rolled across the date range, ordered by revenue desc. Use this for food-cost percentage, item margin context, category-level food-cost analysis, and lowest-margin menu item checks. Reads the precomputed DailyCogsItem rollups, so only items with a costed recipe appear.",
   parameters: params,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)

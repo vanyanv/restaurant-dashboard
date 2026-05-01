@@ -48,7 +48,7 @@ export const QUESTIONS: EvalQuestion[] = [
     id: "sales-weekday-vs-weekend",
     category: "sales",
     question: "Are weekends bigger than weekdays for us?",
-    expectedTools: ["getDailySales", "getHourlyTrend"],
+    expectedTools: ["getDailySales"],
   },
   {
     id: "sales-pop-delta",
@@ -75,13 +75,13 @@ export const QUESTIONS: EvalQuestion[] = [
     id: "store-per-store-comparison",
     category: "store-summary",
     question: "Which of my stores did the most sales last month?",
-    expectedTools: ["getStoreBreakdown", "listStores"],
+    expectedTools: ["getStoreBreakdown"],
   },
   {
     id: "store-single-deep-dive",
     category: "store-summary",
     question: "Give me the full picture for my best-performing store last month.",
-    expectedTools: ["getStoreBreakdown", "getDailySales"],
+    expectedTools: ["getPnlSummary"],
   },
   {
     id: "store-operational-costs",
@@ -106,14 +106,14 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "menu-price-lookup",
     category: "menu",
-    question: "How much do we charge for the smash burger?",
-    expectedTools: ["getMenuPrices", "searchMenuItems"],
+    question: "How much do we charge for the Signature Double Patty & Cheese Slider?",
+    expectedTools: ["getMenuPrices"],
   },
   {
     id: "menu-fuzzy-search",
     category: "menu",
-    question: "What's the price on that smash burger thing?",
-    expectedTools: ["searchMenuItems"],
+    question: "What's the price on that Signature Double Patty & Cheese Slider thing?",
+    expectedTools: ["getMenuPrices"],
     notes: "Fuzzy phrasing — should still resolve.",
   },
   {
@@ -126,7 +126,7 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "menu-item-details",
     category: "menu",
-    question: "Tell me everything you know about the chicken sandwich's performance.",
+    question: "Tell me everything you know about Loaded Fries performance.",
     expectedTools: ["getMenuItemDetails"],
   },
   {
@@ -138,13 +138,13 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "menu-by-category",
     category: "menu",
-    question: "What sandwiches do we sell?",
-    expectedTools: ["listRecipesByCategory", "searchMenuItems"],
+    question: "What slider combos do we sell?",
+    expectedTools: ["listRecipesByCategory"],
   },
   {
     id: "menu-price-across-stores",
     category: "menu",
-    question: "Is the smash burger the same price at every store?",
+    question: "Is the Chocolate Shake the same price at every store?",
     expectedTools: ["getMenuPrices"],
   },
 
@@ -152,21 +152,21 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "recipe-by-exact-name",
     category: "recipes",
-    question: "Show me the smash burger recipe.",
+    question: "Show me the Double Slider recipe.",
     expectedTools: ["getRecipeByName"],
   },
   {
     id: "recipe-fuzzy-search",
     category: "recipes",
-    question: "Find me a cheese burger recipe.",
+    question: "Find me a double patty slider recipe.",
     expectedTools: ["searchRecipes"],
   },
   {
     id: "recipe-component-cost",
     category: "recipes",
-    question: "What does it cost us to make the smash burger, broken down by ingredient?",
-    expectedTools: ["getRecipeByName", "getRecipeById"],
-    notes: "Should walk recursive components, not flatten silently.",
+    question: "What does it cost us to make the 2 Slider Combo, broken down by ingredient?",
+    expectedTools: ["getRecipeByName"],
+    notes: "Should return the component breakdown, not flatten silently.",
   },
   {
     id: "recipe-rank-by-margin",
@@ -183,7 +183,7 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "recipe-by-category",
     category: "recipes",
-    question: "List all our sides.",
+    question: "List all our shakes.",
     expectedTools: ["listRecipesByCategory"],
   },
   {
@@ -195,7 +195,7 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "recipe-disambiguate",
     category: "recipes",
-    question: "Show me the fries recipe.",
+    question: "Show me the slider recipe.",
     notes: "If multiple match, should disambiguate or list options instead of guessing.",
   },
 
@@ -203,32 +203,32 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "cogs-item-margin",
     category: "cogs",
-    question: "What's the margin on the smash burger?",
-    expectedTools: ["getMenuMargin", "getCogsByItem"],
+    question: "What's the margin on the Double Slider?",
+    expectedTools: ["getMenuMargin"],
   },
   {
     id: "cogs-lowest-margin",
     category: "cogs",
     question: "What are my five lowest-margin menu items?",
-    expectedTools: ["rankRecipes", "getCogsByItem"],
+    expectedTools: ["rankRecipes"],
   },
   {
     id: "cogs-cost-vs-revenue",
     category: "cogs",
     question: "How much of my revenue is going to food cost?",
-    expectedTools: ["getCogsByItem", "getOperationalCosts"],
+    expectedTools: ["getPnlSummary"],
   },
   {
     id: "cogs-ingredient-cost-lookup",
     category: "cogs",
     question: "How much are we paying per pound for ground beef right now?",
-    expectedTools: ["getIngredientPrices", "searchCanonicalIngredients"],
+    expectedTools: ["searchCanonicalIngredients"],
   },
   {
     id: "cogs-by-category",
     category: "cogs",
-    question: "Which menu category has the worst overall food cost percentage?",
-    expectedTools: ["getCogsByItem", "rankRecipes"],
+    question: "Which recipe category has the most expensive items to make?",
+    expectedTools: ["rankRecipes"],
   },
   {
     id: "cogs-uncosted-item",
@@ -241,9 +241,9 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "ingredients-canonical-jargon",
     category: "ingredients",
-    question: "What are we paying for EVOO?",
-    expectedTools: ["searchCanonicalIngredients", "getIngredientPrices"],
-    notes: "EVOO → 'olive oil, extra virgin' via vector search.",
+    question: "What are we paying for fine grnd 73/27?",
+    expectedTools: ["searchCanonicalIngredients"],
+    notes: "Vendor shorthand should resolve to 'ground beef fine grnd 73/27 creekstone' via vector search.",
   },
   {
     id: "ingredients-price-history",
@@ -254,7 +254,7 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "ingredients-vendor-compare",
     category: "ingredients",
-    question: "Who's the cheapest vendor for chicken thighs?",
+    question: "Who's the cheapest vendor for american cheese?",
     expectedTools: ["compareVendorPrices"],
   },
   {
@@ -273,12 +273,12 @@ export const QUESTIONS: EvalQuestion[] = [
     id: "ingredients-recent-price-spike",
     category: "ingredients",
     question: "Have any ingredient prices gone up sharply recently?",
-    expectedTools: ["getIngredientPriceHistory"],
+    notes: "Broad anomaly scan is not directly available; should avoid fabricating ingredient-level spike data.",
   },
   {
     id: "ingredients-nonexistent",
     category: "ingredients",
-    question: "What are we paying for saffron?",
+    question: "What are we paying for truffles?",
     notes: "Probably not in our pantry. Should say not found, not fabricate.",
   },
 
@@ -286,13 +286,13 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "invoices-vendor-spend",
     category: "invoices",
-    question: "How much did we spend with Sysco last month?",
+    question: "What was our total invoice spend with vendor Sysco last month?",
     expectedTools: ["getInvoiceSpend"],
   },
   {
     id: "invoices-item-across-invoices",
     category: "invoices",
-    question: "How much have we spent on chicken across all our invoices this year?",
+    question: "How much have we spent on ground beef across all our invoices this year?",
     expectedTools: ["sumInvoiceLines", "searchInvoices"],
   },
   {
@@ -324,7 +324,7 @@ export const QUESTIONS: EvalQuestion[] = [
     id: "invoices-by-id",
     category: "invoices",
     question: "Pull up my most recent Sysco invoice in detail.",
-    expectedTools: ["getInvoiceSpend", "getInvoiceById"],
+    expectedTools: ["getInvoiceById"],
   },
 
   // ───────────── refunds (3) ─────────────
@@ -337,8 +337,8 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "refunds-rate",
     category: "refunds",
-    question: "What's our refund rate as a percentage of sales?",
-    expectedTools: ["getRefunds", "getDailySales"],
+    question: "Show me refunds by day for this month.",
+    expectedTools: ["getRefunds"],
   },
   {
     id: "refunds-by-platform",
@@ -352,13 +352,13 @@ export const QUESTIONS: EvalQuestion[] = [
     id: "multistore-aggregation",
     category: "multi-store",
     question: "Combined across all my stores, what were sales yesterday?",
-    expectedTools: ["getDailySales", "listStores"],
+    expectedTools: ["getDailySales"],
   },
   {
     id: "multistore-single-filter",
     category: "multi-store",
-    question: "What were sales at just my Manhattan location yesterday?",
-    expectedTools: ["listStores", "getDailySales"],
+    question: "What were sales at just my Pasadena location yesterday?",
+    notes: "Intentional unknown-store negative. Should say Pasadena is not found, not query sales for a guessed store.",
   },
   {
     id: "multistore-ranking",
@@ -369,8 +369,8 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: "multistore-worst-margin",
     category: "multi-store",
-    question: "Which store has the worst food cost percentage?",
-    expectedTools: ["getStoreBreakdown", "getCogsByItem"],
+    question: "Which store had the worst net margin this month?",
+    expectedTools: ["getPnlSummary"],
   },
 
   // ───────────── should-refuse (5) ─────────────

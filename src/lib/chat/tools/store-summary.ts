@@ -36,7 +36,7 @@ export type StoreBreakdownRow = {
 export const getStoreBreakdown: ChatTool<typeof breakdownParams, StoreBreakdownRow[]> = {
   name: "getStoreBreakdown",
   description:
-    "Per-store gross / net / order-count summary across a date range, plus each store's share of total gross and a per-platform mini-breakdown. Use this for 'how does Hollywood compare to Glendale?' / 'which store is doing best?' / 'show me a per-store view'.",
+    "Per-store gross / net / order-count summary across a date range, plus each store's share of total gross and a per-platform mini-breakdown. Use this for 'how does Hollywood compare to Glendale?', 'which store is doing best?', 'show me a per-store view', store ranking, best-performing store, and rent-vs-revenue questions.",
   parameters: breakdownParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -142,7 +142,7 @@ export type OperationalCostRow = {
 export const getOperationalCosts: ChatTool<typeof operationalParams, OperationalCostRow[]> = {
   name: "getOperationalCosts",
   description:
-    "Per-store fixed monthly inputs (labor, rent, towels, cleaning), platform commission rates (Uber, DoorDash), and the COGS target percent. Use this for 'what are our fixed costs?', 'how much is rent at Hollywood?', 'what's our COGS target?'. Reports the monthly figures as stored — does not annualize.",
+    "Per-store fixed monthly inputs (labor, rent, towels, cleaning), platform commission rates (Uber, DoorDash), and the COGS target percent. Use this for 'what are our fixed costs?', 'how much is rent at Hollywood?', 'what's our COGS target?', rent-vs-revenue, and food-cost-vs-target context. Reports the monthly figures as stored — does not annualize.",
   parameters: operationalParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)

@@ -14,7 +14,7 @@ const searchParams = z
     query: z
       .string()
       .min(1)
-      .describe("Natural-language description of what was bought (e.g. 'chicken thighs', 'olive oil', 'frozen french fries')."),
+      .describe("Natural-language description of what was bought (e.g. 'ground beef', 'american cheese', 'frozen french fries')."),
     storeIds: storeIdsSchema,
     dateRange: dateRangeSchema.optional().describe("Optional invoice-date filter."),
     limit: z.number().int().min(1).max(50).optional().default(10),
@@ -38,7 +38,7 @@ export type InvoiceSearchRow = {
 export const searchInvoices: ChatTool<typeof searchParams, InvoiceSearchRow[]> = {
   name: "searchInvoices",
   description:
-    "Vector search over the owner's invoice line items. Use this when the user asks about a vendor purchase or ingredient by description (e.g. 'what did we spend on chicken thighs in March?'). Returns the top-k matches; pair with sumInvoiceLines to total them.",
+    "Vector search over the owner's invoice line items. Use this when the user asks about a vendor purchase or ingredient by description (e.g. 'what did we spend on ground beef in March?'). Returns the top-k matches; pair with sumInvoiceLines to total them.",
   parameters: searchParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)

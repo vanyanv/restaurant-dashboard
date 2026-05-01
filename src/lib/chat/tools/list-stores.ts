@@ -10,7 +10,7 @@ export const listStores: ChatTool<
 > = {
   name: "listStores",
   description:
-    "Returns every active store owned by the authenticated user. Use this when the user names a store ('Bay Ridge', 'the downtown one') and you need its UUID for a follow-up tool call. Never expose UUIDs in the user-facing answer.",
+    "Returns every active store owned by the authenticated user. Use this when the user asks what stores they run, asks about all stores, or names a location that is not already clear from the prompt context (for example Hollywood, Glendale, or Van Nuys). Never expose UUIDs in the user-facing answer.",
   parameters,
   async execute(_args, ctx) {
     return listOwnerStores(ctx.accountId)

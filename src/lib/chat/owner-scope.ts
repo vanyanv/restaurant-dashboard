@@ -115,8 +115,8 @@ export async function assertOwnerOwnsStores(
 }
 
 /** Render the owner's store list into a compact block for the system
- * prompt. The model uses this to resolve "Bay Ridge" / "the downtown one"
- * back to UUIDs; never put a UUID in the user-facing answer. */
+ * prompt. The model uses this to resolve "Hollywood" / "Glendale" /
+ * "Van Nuys" back to UUIDs; never put a UUID in the user-facing answer. */
 export function renderStoreListForPrompt(stores: OwnerStoreRow[]): string {
   if (stores.length === 0) return "(no active stores)"
   return stores

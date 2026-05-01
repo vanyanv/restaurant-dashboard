@@ -21,7 +21,13 @@ export async function writeReport(
 ): Promise<void> {
   await mkdir(dirname(outPath), { recursive: true })
 
-  const ok = results.filter((r) => !r.fatalError && r.errors.length === 0).length
+  const ok = results.filter(
+    (r) =>
+      !r.fatalError &&
+      r.finalText.trim().length > 0 &&
+      r.errors.length === 0 &&
+      !r.toolCalls.some((t) => t.error),
+  ).length
   const errored = results.length - ok
 
   const lines: string[] = []
@@ -46,7 +52,9 @@ export async function writeReport(
     for (const r of items) {
       const status = r.fatalError
         ? "FATAL"
-        : r.errors.length > 0
+        : r.errors.length > 0 ||
+            !r.finalText.trim() ||
+            r.toolCalls.some((t) => t.error)
           ? "ERROR"
           : "ok"
       const latency = `${(r.latencyMs / 1000).toFixed(1)}s`

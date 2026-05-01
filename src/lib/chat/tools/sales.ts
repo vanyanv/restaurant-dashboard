@@ -46,7 +46,7 @@ export type DailySalesRow = {
 export const getDailySales: ChatTool<typeof dailySalesParams, DailySalesRow[]> = {
   name: "getDailySales",
   description:
-    "Aggregates Otter's daily summaries to give gross / net / fees / tax / tips / order-count for an owner-scoped slice of stores and a date range. Default groupBy is 'day'. To compare two periods, call this tool twice with different dateRanges and compute the delta in the answer.",
+    "Aggregates Otter's daily summaries to give gross / net / fees / tax / tips / order-count for an owner-scoped slice of stores and a date range. Default groupBy is 'day'. Use groupBy='paymentMethod' for cash vs card split on first-party sales. For two-period comparisons, prefer compareSales first, then add this if a daily or payment-method breakdown is needed.",
   parameters: dailySalesParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -251,7 +251,7 @@ async function totalsFor(
 export const compareSales: ChatTool<typeof compareSalesParams, CompareSalesResult> = {
   name: "compareSales",
   description:
-    "Compares two date ranges side-by-side, returning gross / net / fees / tax / tips / order-count totals for each plus the delta. Use this for 'this week vs last week', 'March vs February', 'last Saturday vs the Saturday before'. The model can also compose two getDailySales calls — compareSales is the cheaper, single-shot path.",
+    "Compares two date ranges side-by-side, returning gross / net / fees / tax / tips / order-count totals for each plus the delta. Use this only when the user asks for a comparison: 'today vs the same day last week', 'this week vs last week', 'March vs February', or 'last Saturday vs the Saturday before'. Do not use this for a single-period question like 'what were sales last week?'. Add getDailySales for the current period when the trace needs a concrete daily row.",
   parameters: compareSalesParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)

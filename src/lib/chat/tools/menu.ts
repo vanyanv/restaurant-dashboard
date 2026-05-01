@@ -37,7 +37,7 @@ export type MenuPriceRow = {
 export const getMenuPrices: ChatTool<typeof menuPricesParams, MenuPriceRow[]> = {
   name: "getMenuPrices",
   description:
-    "Current per-item menu price (derived from totalSales / quantitySold on the most recent day with orders) for owner-scoped stores. Looks back 90 days. The price reflects what customers actually paid, including upcharges; treat it as a strong proxy for the menu-card price, not the menu-card price itself.",
+    "Current per-item menu price (derived from totalSales / quantitySold on the most recent day with orders) for owner-scoped stores. Use this for 'how much do we charge for X?', menu price lookups, and price-across-store questions. Looks back 90 days. The price reflects what customers actually paid, including upcharges; treat it as a strong proxy for the menu-card price, not the menu-card price itself.",
   parameters: menuPricesParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -114,7 +114,7 @@ export const getMenuPrices: ChatTool<typeof menuPricesParams, MenuPriceRow[]> = 
 
 const searchMenuParams = z
   .object({
-    query: z.string().min(1).describe("Natural-language menu-item description, e.g. 'vanilla shake' or 'chicken sandwich'."),
+    query: z.string().min(1).describe("Natural-language menu-item description, e.g. 'Chocolate Shake' or 'Double Slider'."),
     storeIds: storeIdsSchema,
     limit: z.number().int().min(1).max(20).optional().default(5),
   })
@@ -132,7 +132,7 @@ export type MenuSearchRow = {
 export const searchMenuItems: ChatTool<typeof searchMenuParams, MenuSearchRow[]> = {
   name: "searchMenuItems",
   description:
-    "Vector search over the owner's menu-item corpus. Use this when the user's phrasing doesn't exactly match an item name (e.g. 'milkshake' → 'OREO COOKIE SHAKE'). Returns the top hits with cosine similarity scores.",
+    "Vector search over the owner's live menu-item corpus. Use this for fuzzy menu names, menu price lookup resolution, item performance lookup resolution, and category/menu questions like 'what shakes do we sell?' or 'what slider combos do we sell?'. Do not use searchRecipes for menu price or menu performance questions. Returns top hits with cosine similarity scores.",
   parameters: searchMenuParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -222,7 +222,7 @@ export type MenuItemDetailsResult = {
 export const getMenuItemDetails: ChatTool<typeof itemDetailsParams, MenuItemDetailsResult | null> = {
   name: "getMenuItemDetails",
   description:
-    "Per-day rollup for one menu item at one store across a lookback window: qty / revenue / implied unit price by day, plus a current price. Use this when the user wants to see how a single item is doing — 'show me the chocolate shake at Hollywood', 'how's the chicken sandwich performing?'. Returns null when the item has no sales in the window.",
+    "Per-day rollup for one menu item at one store across a lookback window: qty / revenue / implied unit price by day, plus a current price. Use this when the user wants to see how a single item is doing: 'show me the Chocolate Shake at Hollywood', 'how's Loaded Fries performing?', 'tell me everything about Double Slider performance'. Resolve fuzzy names with searchMenuItems first. Returns null when the item has no sales in the window.",
   parameters: itemDetailsParams,
   async execute(args, ctx) {
     const [storeId] = await resolveStoreIds(ctx, [args.storeId])
