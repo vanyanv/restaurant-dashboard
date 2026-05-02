@@ -376,7 +376,7 @@ model Invoice {
   rawExtractionJson String?
   extractionModel   String?
 
-  // PDF storage (Vercel Blob, access: 'private')
+  // PDF storage (private Cloudflare R2 object key + metadata)
   pdfBlobPathname String?
   pdfBlobUrl      String?
   pdfSize         Int?

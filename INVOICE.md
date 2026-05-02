@@ -45,6 +45,7 @@ Full-stack engineering for the Chris Neddy's restaurant dashboard — Otter API 
 | 2026-04-18 | P&L dashboard — fixed costs + commission rates + store-edit form wiring + nav links. | 4.0 |
 | 2026-04-18 | Invoice extraction hardening — sanity checks + pack-size fields. | 2.5 |
 | 2026-04-18 | Invoice PDF persistence to Vercel Blob + side-by-side viewer. | 3.5 |
+| 2026-05-01 | Invoice PDF storage adapter moved from Vercel Blob to private Cloudflare R2. | 1.0 |
 | 2026-04-18 | JWT auto-redeploy + 30d seed-window widening + architecture cheat-sheet. | 2.0 |
 | 2026-04-19 | Otter orders sync workflow + invoice sync cron every 6h. | 2.0 |
 | 2026-04-19 | Editorial topbar design rolled across loading states and store pages. | 2.0 |

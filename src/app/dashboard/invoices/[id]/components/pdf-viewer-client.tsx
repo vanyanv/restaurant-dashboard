@@ -47,7 +47,7 @@ const documentOptions = {
 
 function getPdfLoadErrorMessage(error: Error): string {
   if (error.message.includes("503")) {
-    return "PDF storage is temporarily unavailable. Check Vercel Blob usage or try again later."
+    return "PDF storage is temporarily unavailable. Check R2 access or try again later."
   }
   return error.message
 }

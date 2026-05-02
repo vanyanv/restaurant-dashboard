@@ -1,4 +1,11 @@
-import { put, get, type PutBlobResult } from "@vercel/blob"
+import { randomUUID } from "node:crypto"
+import { Readable } from "node:stream"
+import {
+  GetObjectCommand,
+  NoSuchKey,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3"
 
 export type InvoicePdfUpload = {
   pathname: string
@@ -7,24 +14,109 @@ export type InvoicePdfUpload = {
   uploadedAt: Date
 }
 
+export type InvoicePdfFetch = {
+  statusCode: number
+  stream: ReadableStream<Uint8Array>
+}
+
+let client: S3Client | null = null
+
+function getR2Client(): { client: S3Client; bucket: string; endpoint: string } {
+  const bucket = process.env.R2_BUCKET_NAME
+  if (!bucket) throw new Error("R2_BUCKET_NAME is not set")
+
+  const accountId = process.env.R2_ACCOUNT_ID
+  const endpoint =
+    process.env.R2_ENDPOINT ??
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined)
+  if (!endpoint) throw new Error("R2_ENDPOINT or R2_ACCOUNT_ID is required")
+
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are required")
+  }
+
+  if (!client) {
+    client = new S3Client({
+      region: process.env.R2_REGION ?? "auto",
+      endpoint,
+      credentials: { accessKeyId, secretAccessKey },
+    })
+  }
+
+  return { client, bucket, endpoint }
+}
+
+function toEmptyStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close()
+    },
+  })
+}
+
+function toWebStream(body: unknown): ReadableStream<Uint8Array> {
+  if (body instanceof ReadableStream) return body
+  if (body instanceof Readable) {
+    return Readable.toWeb(body) as ReadableStream<Uint8Array>
+  }
+  const webBody = body as { transformToWebStream?: unknown }
+  if (body && typeof webBody.transformToWebStream === "function") {
+    return (webBody as { transformToWebStream: () => ReadableStream<Uint8Array> })
+      .transformToWebStream()
+  }
+  throw new Error("R2 response body is not a readable stream")
+}
+
+function buildPrivateObjectUrl(endpoint: string, bucket: string, key: string): string {
+  return `${endpoint.replace(/\/$/, "")}/${bucket}/${key}`
+}
+
 export async function putInvoicePdf(
   emailMessageId: string,
   pdfBytes: Buffer,
 ): Promise<InvoicePdfUpload> {
+  const { client, bucket, endpoint } = getR2Client()
   const safeId = emailMessageId.replace(/[^A-Za-z0-9._-]/g, "_")
-  const result: PutBlobResult = await put(`invoices/${safeId}.pdf`, pdfBytes, {
-    access: "private",
-    contentType: "application/pdf",
-    addRandomSuffix: true,
-  })
+  const key = `invoices/${safeId}-${randomUUID()}.pdf`
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: pdfBytes,
+      ContentType: "application/pdf",
+    }),
+  )
+
   return {
-    pathname: result.pathname,
-    url: result.url,
+    pathname: key,
+    url: buildPrivateObjectUrl(endpoint, bucket, key),
     size: pdfBytes.byteLength,
     uploadedAt: new Date(),
   }
 }
 
-export async function getInvoicePdfStream(pathname: string) {
-  return get(pathname, { access: "private" })
+export async function getInvoicePdfStream(pathname: string): Promise<InvoicePdfFetch> {
+  const { client, bucket } = getR2Client()
+
+  try {
+    const result = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: pathname,
+      }),
+    )
+
+    return {
+      statusCode: result.$metadata.httpStatusCode ?? 200,
+      stream: toWebStream(result.Body),
+    }
+  } catch (err) {
+    if (err instanceof NoSuchKey || (err as { name?: string }).name === "NoSuchKey") {
+      return { statusCode: 404, stream: toEmptyStream() }
+    }
+    throw err
+  }
 }

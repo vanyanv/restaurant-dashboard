@@ -1,6 +1,6 @@
 // scripts/backfill-invoice-pdfs.ts
 // Re-fetch PDFs from Microsoft Graph for every Invoice row with no pdfBlobPathname
-// and upload them to Vercel Blob (access: 'private'). Idempotent — re-running only
+// and upload them to private Cloudflare R2 storage. Idempotent — re-running only
 // picks up rows still null.
 //
 // Run with:
@@ -26,6 +26,16 @@ function loadEnvLocal(): void {
 }
 
 loadEnvLocal()
+
+const REQUIRED_ENV = [
+  "MICROSOFT_TENANT_ID",
+  "MICROSOFT_CLIENT_ID",
+  "MICROSOFT_CLIENT_SECRET",
+  "MICROSOFT_MAIL_USER_ID",
+] as const
+for (const k of REQUIRED_ENV) {
+  if (!process.env[k]) throw new Error(`${k} is required`)
+}
 
 const APPLY = process.argv.includes("--apply")
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -112,8 +122,8 @@ async function main() {
     return
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error("BLOB_READ_WRITE_TOKEN is not set. Run `vercel env pull` first.")
+  if (!process.env.R2_BUCKET_NAME || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
+    console.error("R2 env is incomplete. Set R2_BUCKET_NAME, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY.")
     process.exit(1)
   }
 
