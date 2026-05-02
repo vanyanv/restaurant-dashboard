@@ -37,11 +37,19 @@ async function main() {
   console.log(`owner=${ctx.ownerId.slice(0, 10)}…  stores=${ctx.storeIds.length}`)
 
   // --- Batch 1 (already applied — idempotent re-runs are safe): cost corrections ---
-  await setCanonicalCostLocked(ctx, {
+  await upsertCanonicalCostInvoice(ctx, {
     name: "chris & eddy's house sauce",
+    defaultUnit: "CS",
     recipeUnit: "oz",
-    costPerRecipeUnit: 0.18,
-    reason: "Owner-provided: $0.18/oz",
+    costPerRecipeUnit: 0.19765625,
+    reason: "Vitco SKU 15726: $506 / (10 × 4 × 4 lb × 16 oz)",
+  })
+  await upsertCanonicalCostInvoice(ctx, {
+    name: "chris & eddy's house sauce cup 1.5 oz",
+    defaultUnit: "each",
+    recipeUnit: "each",
+    costPerRecipeUnit: 0.6049444444,
+    reason: "Vitco SKU 15725: $2177.80 / (20 × 180 cups)",
   })
   await setCanonicalCostLocked(ctx, {
     name: "packer lettuce boston hydroponic",
@@ -58,10 +66,14 @@ async function main() {
       { canonicalName: "packer lettuce boston hydroponic", quantity: 0.5, unit: "each", displayAs: "Lettuce (leaf)" },
     ],
   })
-  await setRecipeOverride(ctx, {
+  await upsertRecipe(ctx, {
     itemName: "Extra Chris N Eddy's Sauce",
-    foodCostOverride: 0.5,
-    reason: "$0.50 per premade cup (owner)",
+    category: "On The Side",
+    isSellable: true,
+    notes: "Pre-portioned 1.5 oz house sauce cup. Cost follows Vitco SKU 15725 invoices.",
+    ingredients: [
+      { canonicalName: "chris & eddy's house sauce cup 1.5 oz", quantity: 1, unit: "each", displayAs: "House Sauce Cup" },
+    ],
   })
   await mapOtterSubItemsToRecipe(ctx, {
     skuIds: ["75d439a0-02f4-4e81-a722-4f45293c4a20", "54475bc8-6b40-4e8c-969d-56fe4ef04c47"],
@@ -458,9 +470,10 @@ async function main() {
     itemName: "Extra Chris N Eddy's Sauce",
     category: "On The Side",
     isSellable: true,
-    notes: "Premade sauce cup ($0.50 from supplier). Override-only; no ingredient bindings so $0.50 sticks as the reported cost.",
-    foodCostOverride: 0.5,
-    ingredients: [],
+    notes: "Pre-portioned 1.5 oz house sauce cup. Cost follows Vitco SKU 15725 invoices.",
+    ingredients: [
+      { canonicalName: "chris & eddy's house sauce cup 1.5 oz", quantity: 1, unit: "each", displayAs: "House Sauce Cup" },
+    ],
   })
 
   // ============================================================
@@ -560,7 +573,7 @@ async function main() {
   })
   if (!doubleSliderLookup || !tripleSliderLookup) throw new Error("Slider recipes not found for combo composition")
 
-  // Every combo includes one premade Extra Chris N Eddy's Sauce cup ($0.50 supplier cost).
+  // Every combo includes one invoice-priced premade Extra Chris N Eddy's Sauce cup.
   const extraSauceLookup = await ctx.prisma.recipe.findFirst({
     where: { ownerId: ctx.ownerId, itemName: "Extra Chris N Eddy's Sauce" },
     select: { id: true, itemName: true },
@@ -993,17 +1006,18 @@ type PrismaLike = Awaited<ReturnType<typeof import("../src/lib/prisma").prisma.$
 type Ctx = {
   prisma: typeof import("../src/lib/prisma").prisma
   ownerId: string
+  accountId: string
   storeIds: string[]
 }
 
 async function buildContext(prisma: Ctx["prisma"]): Promise<Ctx> {
-  const user = await prisma.user.findFirst({ select: { id: true } })
+  const user = await prisma.user.findFirst({ select: { id: true, accountId: true } })
   if (!user) throw new Error("No user found.")
   const stores = await prisma.store.findMany({
     where: { ownerId: user.id, isActive: true },
     select: { id: true },
   })
-  return { prisma, ownerId: user.id, storeIds: stores.map((s) => s.id) }
+  return { prisma, ownerId: user.id, accountId: user.accountId, storeIds: stores.map((s) => s.id) }
 }
 
 async function setCanonicalCostLocked(
@@ -1031,6 +1045,49 @@ async function setCanonicalCostLocked(
       costPerRecipeUnit: input.costPerRecipeUnit,
       costSource: "manual",
       costLocked: true,
+      costUpdatedAt: new Date(),
+    },
+  })
+}
+
+async function upsertCanonicalCostInvoice(
+  ctx: Ctx,
+  input: {
+    name: string
+    defaultUnit: string
+    recipeUnit: string
+    costPerRecipeUnit: number
+    reason: string
+  }
+) {
+  const c = await ctx.prisma.canonicalIngredient.findFirst({
+    where: { accountId: ctx.accountId, name: input.name },
+    select: { id: true, recipeUnit: true, costPerRecipeUnit: true, costLocked: true },
+  })
+  console.log(
+    `  [canonical] ${input.name}\n` +
+      `      before:  unit=${c?.recipeUnit ?? "-"}  cost=${c?.costPerRecipeUnit ?? "-"}  locked=${c?.costLocked ?? "-"}\n` +
+      `      after:   unit=${input.recipeUnit}  cost=$${input.costPerRecipeUnit}  locked=false  [${input.reason}]`
+  )
+  if (!COMMIT) return
+  await ctx.prisma.canonicalIngredient.upsert({
+    where: { accountId_name: { accountId: ctx.accountId, name: input.name } },
+    update: {
+      recipeUnit: input.recipeUnit,
+      costPerRecipeUnit: input.costPerRecipeUnit,
+      costSource: "invoice",
+      costLocked: false,
+      costUpdatedAt: new Date(),
+    },
+    create: {
+      ownerId: ctx.ownerId,
+      accountId: ctx.accountId,
+      name: input.name,
+      defaultUnit: input.defaultUnit,
+      recipeUnit: input.recipeUnit,
+      costPerRecipeUnit: input.costPerRecipeUnit,
+      costSource: "invoice",
+      costLocked: false,
       costUpdatedAt: new Date(),
     },
   })
@@ -1134,6 +1191,7 @@ async function upsertRecipe(
     const created = await ctx.prisma.recipe.create({
       data: {
         ownerId: ctx.ownerId,
+        accountId: ctx.accountId,
         itemName: input.itemName,
         category: input.category,
         servingSize: 1,
