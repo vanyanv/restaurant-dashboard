@@ -38,6 +38,41 @@ export interface CogsKpis {
   targetCogsPct: number | null
 }
 
+export type CogsActionSeverity = "critical" | "warning" | "notice"
+export type CogsActionSource = "data-quality" | "menu-item" | "ingredient" | "target"
+
+export interface CogsActionItem {
+  severity: CogsActionSeverity
+  source: CogsActionSource
+  title: string
+  impactLabel: string
+  href: string
+  actionLabel: string
+}
+
+export interface CogsOperatorSummary {
+  kpis: CogsKpis
+  dataQuality: DataQualityCounts & {
+    warningCount: number
+    affectedRevenue: number
+  }
+  worstItems: WorstMarginRow[]
+  ingredientDrivers: IngredientCostDriver[]
+  categories: CategoryBreakdown[]
+  actions: CogsActionItem[]
+}
+
+export interface CogsStoreOverviewRow {
+  storeId: string
+  storeName: string
+  cogsPct: number
+  cogsDollars: number
+  revenueDollars: number
+  targetCogsPct: number | null
+  deltaVsTargetPp: number | null
+  warningCount: number
+}
+
 export async function getCogsKpis(
   storeId: string,
   startDate: Date,
@@ -240,6 +275,259 @@ export async function getDataQualityCounts(
     missingCost: by("MISSING_COST"),
     partialCost: partialCount,
   }
+}
+
+async function getDataQualityImpact(
+  storeId: string,
+  startDate: Date,
+  endDate: Date
+) {
+  const affected = await prisma.dailyCogsItem.aggregate({
+    where: {
+      ...dateWindow(storeId, startDate, endDate),
+      OR: [
+        { status: "UNMAPPED" },
+        { status: "MISSING_COST" },
+        { partialCost: true },
+      ],
+    },
+    _sum: { salesRevenue: true },
+  })
+
+  return affected._sum.salesRevenue ?? 0
+}
+
+function formatMoneyBrief(value: number): string {
+  const abs = Math.abs(value)
+  const formatted = abs.toLocaleString("en-US", { maximumFractionDigits: 0 })
+  return `${value < 0 ? "-" : ""}$${formatted}`
+}
+
+function formatPercentBrief(value: number): string {
+  return `${value.toFixed(1)}%`
+}
+
+function buildCogsActions(input: {
+  storeId: string
+  kpis: CogsKpis
+  dataQuality: CogsOperatorSummary["dataQuality"]
+  worstItems: WorstMarginRow[]
+  ingredientDrivers: IngredientCostDriver[]
+}): CogsActionItem[] {
+  const actions: CogsActionItem[] = []
+  const { storeId, kpis, dataQuality, worstItems, ingredientDrivers } = input
+
+  if (dataQuality.unmapped > 0) {
+    actions.push({
+      severity: "critical",
+      source: "data-quality",
+      title: `${dataQuality.unmapped} sold item${dataQuality.unmapped === 1 ? "" : "s"} missing recipes`,
+      impactLabel: `${formatMoneyBrief(dataQuality.affectedRevenue)} sales affected`,
+      href: "/dashboard/recipes",
+      actionLabel: "Build recipes",
+    })
+  }
+
+  if (dataQuality.missingCost > 0 || dataQuality.partialCost > 0) {
+    const count = dataQuality.missingCost + dataQuality.partialCost
+    actions.push({
+      severity: "critical",
+      source: "data-quality",
+      title: `${count} item${count === 1 ? "" : "s"} undercosted`,
+      impactLabel: "Ingredient cost gaps",
+      href: "/dashboard/ingredients",
+      actionLabel: "Fix ingredients",
+    })
+  }
+
+  if (kpis.targetCogsPct == null) {
+    actions.push({
+      severity: "notice",
+      source: "target",
+      title: "No food-cost target set",
+      impactLabel: "Ranking by cost impact",
+      href: `/dashboard/stores/${storeId}`,
+      actionLabel: "Set target",
+    })
+  } else if (kpis.deltaVsTargetPp != null && kpis.deltaVsTargetPp > 0) {
+    actions.push({
+      severity: kpis.deltaVsTargetPp >= 3 ? "critical" : "warning",
+      source: "target",
+      title: `${formatPercentBrief(kpis.cogsPct)} food cost is over target`,
+      impactLabel: `+${kpis.deltaVsTargetPp.toFixed(1)}pp vs target`,
+      href: "#fix-first",
+      actionLabel: "Review leak list",
+    })
+  }
+
+  const worst = worstItems.find((item) => item.foodCostPct >= 35) ?? worstItems[0]
+  if (worst) {
+    actions.push({
+      severity: worst.foodCostPct >= 45 ? "critical" : "warning",
+      source: "menu-item",
+      title: worst.itemName,
+      impactLabel: `${formatPercentBrief(worst.foodCostPct)} food cost, ${formatMoneyBrief(worst.foodCostDollars)} cost`,
+      href: worst.recipeId
+        ? `/dashboard/recipes?recipeId=${worst.recipeId}`
+        : "/dashboard/recipes",
+      actionLabel: worst.recipeId ? "Open recipe" : "Map recipe",
+    })
+  }
+
+  const risingDriver = ingredientDrivers.find(
+    (driver) =>
+      driver.latestUnitCost != null &&
+      driver.priorUnitCost != null &&
+      driver.latestUnitCost > driver.priorUnitCost
+  )
+  const driver = risingDriver ?? ingredientDrivers[0]
+  if (driver) {
+    actions.push({
+      severity: risingDriver ? "warning" : "notice",
+      source: "ingredient",
+      title: driver.name,
+      impactLabel: `${formatMoneyBrief(driver.theoreticalDollars)} theoretical cost`,
+      href: `/dashboard/ingredients/prices?ingredientId=${driver.canonicalIngredientId}`,
+      actionLabel: "Check price",
+    })
+  }
+
+  const severityRank: Record<CogsActionSeverity, number> = {
+    critical: 0,
+    warning: 1,
+    notice: 2,
+  }
+
+  return actions
+    .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
+    .slice(0, 5)
+}
+
+export async function getCogsOperatorSummary(
+  storeId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<CogsOperatorSummary> {
+  const [kpis, dataQualityCounts, affectedRevenue, worstItems, ingredientDrivers, categories] =
+    await Promise.all([
+      getCogsKpis(storeId, startDate, endDate),
+      getDataQualityCounts(storeId, startDate, endDate),
+      getDataQualityImpact(storeId, startDate, endDate),
+      getWorstMarginItems(storeId, startDate, endDate, 12),
+      getTopCostDriverIngredients(storeId, startDate, endDate, 12),
+      getCostByCategory(storeId, startDate, endDate),
+    ])
+
+  const dataQuality = {
+    ...dataQualityCounts,
+    warningCount:
+      dataQualityCounts.unmapped +
+      dataQualityCounts.missingCost +
+      dataQualityCounts.partialCost,
+    affectedRevenue,
+  }
+
+  return {
+    kpis,
+    dataQuality,
+    worstItems,
+    ingredientDrivers,
+    categories,
+    actions: buildCogsActions({
+      storeId,
+      kpis,
+      dataQuality,
+      worstItems,
+      ingredientDrivers,
+    }),
+  }
+}
+
+export async function getCogsStoreOverview(
+  accountId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<CogsStoreOverviewRow[]> {
+  const stores = await prisma.store.findMany({
+    where: { accountId, isActive: true },
+    select: { id: true, name: true, targetCogsPct: true },
+    orderBy: { name: "asc" },
+  })
+
+  if (stores.length === 0) return []
+
+  const storeIds = stores.map((store) => store.id)
+  const [rollups, statusCounts, partialCounts] = await Promise.all([
+    prisma.dailyCogsItem.groupBy({
+      by: ["storeId"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate, lt: endDate },
+      },
+      _sum: { lineCost: true, salesRevenue: true },
+    }),
+    prisma.dailyCogsItem.groupBy({
+      by: ["storeId", "status"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate, lt: endDate },
+      },
+      _count: { _all: true },
+    }),
+    prisma.dailyCogsItem.groupBy({
+      by: ["storeId"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate, lt: endDate },
+        partialCost: true,
+      },
+      _count: { _all: true },
+    }),
+  ])
+
+  const rollupByStore = new Map(rollups.map((row) => [row.storeId, row]))
+  const partialByStore = new Map(
+    partialCounts.map((row) => [row.storeId, row._count._all])
+  )
+
+  function countStatus(storeId: string, status: "UNMAPPED" | "MISSING_COST") {
+    return (
+      statusCounts.find((row) => row.storeId === storeId && row.status === status)
+        ?._count._all ?? 0
+    )
+  }
+
+  const rows = stores.map((store) => {
+    const rollup = rollupByStore.get(store.id)
+    const cogsDollars = rollup?._sum.lineCost ?? 0
+    const revenueDollars = rollup?._sum.salesRevenue ?? 0
+    const cogsPct = revenueDollars > 0 ? (cogsDollars / revenueDollars) * 100 : 0
+    const targetCogsPct = store.targetCogsPct ?? null
+    const deltaVsTargetPp =
+      targetCogsPct != null && revenueDollars > 0 ? cogsPct - targetCogsPct : null
+
+    return {
+      storeId: store.id,
+      storeName: store.name,
+      cogsPct,
+      cogsDollars,
+      revenueDollars,
+      targetCogsPct,
+      deltaVsTargetPp,
+      warningCount:
+        countStatus(store.id, "UNMAPPED") +
+        countStatus(store.id, "MISSING_COST") +
+        (partialByStore.get(store.id) ?? 0),
+    }
+  })
+
+  return rows.sort((a, b) => {
+    const aOver = a.deltaVsTargetPp != null && a.deltaVsTargetPp > 0 ? 1 : 0
+    const bOver = b.deltaVsTargetPp != null && b.deltaVsTargetPp > 0 ? 1 : 0
+    if (aOver !== bOver) return bOver - aOver
+    if (a.warningCount !== b.warningCount) return b.warningCount - a.warningCount
+    return b.cogsDollars - a.cogsDollars
+  })
 }
 
 export interface IngredientCostDriver {
