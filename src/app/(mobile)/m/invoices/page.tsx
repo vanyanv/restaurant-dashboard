@@ -2,10 +2,7 @@ import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import {
-  getInvoiceList,
-  getInvoiceSummary,
-} from "@/app/actions/invoice-actions"
+import { getMobileInvoiceSnapshot } from "@/lib/mobile/snapshots"
 import { PageHead } from "@/components/mobile/page-head"
 import {
   MastheadFigures,
@@ -82,10 +79,11 @@ export default async function MobileInvoicesPage({
   const activeFilter: FilterValue = (status as FilterValue) ?? "ALL"
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1)
 
-  const [list, summary] = await Promise.all([
-    getInvoiceList({ status, page, limit: 50 }),
-    getInvoiceSummary({ days: 30 }),
-  ])
+  const { list, summary } = await getMobileInvoiceSnapshot({
+    status,
+    page,
+    limit: 25,
+  })
 
   const cells: MastheadCell[] = [
     {
@@ -106,7 +104,7 @@ export default async function MobileInvoicesPage({
     : `${list.total.toLocaleString()} INVOICES`
 
   return (
-    <>
+    <div data-perf-ready="/m/invoices">
       <PageHead
         dept="LEDGER"
         title="Invoices"
@@ -125,6 +123,7 @@ export default async function MobileInvoicesPage({
             <Link
               key={f.value}
               href={f.href}
+              prefetch={true}
               className={`m-segmented__item${active ? " is-active" : ""}`}
               aria-current={active ? "page" : undefined}
             >
@@ -184,13 +183,13 @@ export default async function MobileInvoicesPage({
           )}
         </nav>
       ) : null}
-    </>
+    </div>
   )
 }
 
 type Invoice = Awaited<
-  ReturnType<typeof getInvoiceList>
->["invoices"][number]
+  ReturnType<typeof getMobileInvoiceSnapshot>
+>["list"]["invoices"][number]
 
 function InvoiceLedger({ invoices }: { invoices: Invoice[] }) {
   const groups: Array<{ key: string; label: string; rows: Invoice[] }> = []
@@ -232,6 +231,7 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
   return (
     <Link
       href={`/m/invoices/${inv.id}`}
+      prefetch={true}
       className="inv-row"
       style={{
         gridTemplateColumns: "[meta] 1fr [total] auto",

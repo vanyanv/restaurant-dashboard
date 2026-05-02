@@ -1,6 +1,18 @@
+import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
 import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
-import { CogsStatus } from "@/generated/prisma/client"
+import {
+  CONTAINER_GROUP_CANONICALS,
+  CONTAINER_GROUP_LABELS,
+  PACKAGING_SCENARIO,
+  addContainerCounts,
+  emptyContainerCounts,
+  isTakeawayFulfillmentMode,
+  packOrder,
+  type ContainerGroup,
+} from "@/lib/container-packaging"
+import { CogsStatus, Prisma } from "@/generated/prisma/client"
 
 /** One day's modifier usage, aggregated by parent item name. */
 type ModifierUsage = {
@@ -25,6 +37,13 @@ type ComputedRow = {
   status: CogsStatus
   partialCost: boolean
 }
+
+type ContainerGroupCost = {
+  unitCost: number | null
+  partialCost: boolean
+}
+
+const DAILY_COGS_TRANSACTION_TIMEOUT_MS = 20_000
 
 /**
  * Compute and idempotently upsert DailyCogsItem rows for one (storeId, date).
@@ -207,88 +226,188 @@ export async function recomputeDailyCogsForDay(input: {
     })
   )
 
-  const rows = computed.filter((r): r is ComputedRow => r !== null)
+  const foodRows = computed.filter((r): r is ComputedRow => r !== null)
+  const packagingRows = await computePackagingRowsForDay({
+    storeId,
+    accountId,
+    date,
+    dayEnd,
+  })
+  const rows = [...foodRows, ...packagingRows]
 
-  // Idempotent write: upsert each row by the (storeId, date, itemName, category)
-  // unique key. The companion deleteMany is scoped to this exact (storeId, date)
-  // and only drops items that are no longer in the new set — bounded to one day,
-  // can never reach across days, so historical data cannot evaporate.
-  const deletePredicate =
-    rows.length > 0
-      ? {
-          storeId,
-          date,
-          NOT: {
-            OR: rows.map((r) => ({
-              itemName: r.itemName,
-              category: r.category,
-            })),
-          },
-        }
-      : { storeId, date }
-
-  const ops = [
-    ...rows.map((r) =>
-      prisma.dailyCogsItem.upsert({
-        where: {
-          storeId_date_itemName_category: {
-            storeId: r.storeId,
-            date: r.date,
-            itemName: r.itemName,
-            category: r.category,
-          },
-        },
-        create: r,
-        update: {
-          recipeId: r.recipeId,
-          qtySold: r.qtySold,
-          salesRevenue: r.salesRevenue,
-          unitCost: r.unitCost,
-          lineCost: r.lineCost,
-          status: r.status,
-          partialCost: r.partialCost,
-          computedAt: new Date(),
-        },
-      })
-    ),
-    prisma.dailyCogsItem.deleteMany({ where: deletePredicate }),
-  ]
-
+  // Idempotent write: replace this day's materialized rows by the
+  // (storeId, date, itemName, category) unique key. The cleanup is scoped to
+  // this exact (storeId, date) and only drops items that are no longer in the
+  // new set — bounded to one day, so historical data cannot evaporate.
   // Run as a single transaction so a partial failure can't leave the day in a
   // mixed state (some new rows present, stale rows still around).
-  const results = await prisma.$transaction(ops)
-  const deleteResult = results[results.length - 1] as { count: number }
+  const deleteResult = await replaceDailyCogsRowsForDay({
+    storeId,
+    date,
+    rows,
+  })
 
   return {
     rowsUpserted: rows.length,
-    rowsDeleted: deleteResult.count,
+    rowsDeleted: deleteResult,
   }
 }
 
-/**
- * Recompute every day in [startDate, endDate] for one store. Iterates
- * sequentially per day so `recomputeDailyCogsForDay`'s in-memory cache
- * stays scoped; cross-day reuse is small (different `asOf` per day).
- */
-export async function recomputeDailyCogsForRange(input: {
+async function computePackagingRowsForDay(input: {
+  storeId: string
+  accountId: string
+  date: Date
+  dayEnd: Date
+}): Promise<ComputedRow[]> {
+  const { storeId, accountId, date, dayEnd } = input
+
+  const orders = await prisma.otterOrder.findMany({
+    where: {
+      storeId,
+      referenceTimeLocal: { gte: date, lte: dayEnd },
+    },
+    select: {
+      fulfillmentMode: true,
+      items: {
+        select: {
+          name: true,
+          quantity: true,
+          subItems: {
+            select: {
+              name: true,
+              quantity: true,
+              subHeader: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const counts = emptyContainerCounts()
+  for (const order of orders) {
+    if (!isTakeawayFulfillmentMode(order.fulfillmentMode)) continue
+    const packed = packOrder(order, PACKAGING_SCENARIO)
+    addContainerCounts(counts, packed.counts)
+  }
+
+  const costs = await getContainerGroupCosts(accountId, date)
+
+  return (Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[])
+    .filter((group) => counts[group] > 0)
+    .map((group): ComputedRow => {
+      const qty = counts[group]
+      const unitCost = costs[group].unitCost
+      const hasCost = unitCost != null
+      return {
+        storeId,
+        date,
+        itemName: `Packaging - ${CONTAINER_GROUP_LABELS[group]}`,
+        category: "Packaging",
+        recipeId: null,
+        qtySold: qty,
+        salesRevenue: 0,
+        unitCost,
+        lineCost: hasCost ? unitCost * qty : 0,
+        status: hasCost ? CogsStatus.COSTED : CogsStatus.MISSING_COST,
+        partialCost: costs[group].partialCost || !hasCost,
+      }
+    })
+}
+
+async function getContainerGroupCosts(
+  accountId: string,
+  asOf: Date
+): Promise<Record<ContainerGroup, ContainerGroupCost>> {
+  const allNames = Object.values(CONTAINER_GROUP_CANONICALS).flat()
+  const canonicals = await prisma.canonicalIngredient.findMany({
+    where: { accountId, name: { in: allNames } },
+    select: { id: true, name: true },
+  })
+  const canonicalByName = new Map(canonicals.map((c) => [c.name, c.id]))
+
+  const entries = await Promise.all(
+    (Object.keys(CONTAINER_GROUP_CANONICALS) as ContainerGroup[]).map(async (group) => {
+      const names = CONTAINER_GROUP_CANONICALS[group]
+      const costs = await Promise.all(
+        names.map(async (name) => {
+          const id = canonicalByName.get(name)
+          if (!id) return null
+          return getCanonicalIngredientCost(id, asOf)
+        })
+      )
+      const unitCosts = costs
+        .map((cost) => cost?.unitCost ?? null)
+        .filter((cost): cost is number => cost != null)
+      const unitCost =
+        unitCosts.length > 0
+          ? unitCosts.reduce((sum, cost) => sum + cost, 0) / unitCosts.length
+          : null
+
+      return [
+        group,
+        {
+          unitCost,
+          partialCost: unitCosts.length < names.length,
+        },
+      ] as const
+    })
+  )
+
+  return Object.fromEntries(entries) as Record<ContainerGroup, ContainerGroupCost>
+}
+
+export async function recomputeDailyPackagingCogsForDay(input: {
+  storeId: string
+  date: Date
+  accountId: string
+}): Promise<{ rowsUpserted: number; rowsDeleted: number; lineCost: number }> {
+  const { storeId, accountId } = input
+  const date = startOfDayUTC(input.date)
+  const dayEnd = new Date(date)
+  dayEnd.setUTCHours(23, 59, 59, 999)
+
+  const rows = await computePackagingRowsForDay({
+    storeId,
+    accountId,
+    date,
+    dayEnd,
+  })
+
+  const deleteResult = await replaceDailyCogsRowsForDay({
+    storeId,
+    date,
+    rows,
+    category: "Packaging",
+  })
+
+  return {
+    rowsUpserted: rows.length,
+    rowsDeleted: deleteResult,
+    lineCost: rows.reduce((sum, row) => sum + row.lineCost, 0),
+  }
+}
+
+export async function recomputePackagingCogsForRange(input: {
   storeId: string
   startDate: Date
   endDate: Date
   accountId: string
-}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number }> {
+}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number; lineCost: number }> {
   const start = startOfDayUTC(input.startDate)
   const end = startOfDayUTC(input.endDate)
 
   let daysProcessed = 0
   let rowsUpserted = 0
   let rowsDeleted = 0
+  let lineCost = 0
 
   for (
     let cursor = new Date(start);
     cursor.getTime() <= end.getTime();
     cursor = addDaysUTC(cursor, 1)
   ) {
-    const result = await recomputeDailyCogsForDay({
+    const result = await recomputeDailyPackagingCogsForDay({
       storeId: input.storeId,
       date: cursor,
       accountId: input.accountId,
@@ -296,9 +415,50 @@ export async function recomputeDailyCogsForRange(input: {
     daysProcessed++
     rowsUpserted += result.rowsUpserted
     rowsDeleted += result.rowsDeleted
+    lineCost += result.lineCost
   }
 
-  return { daysProcessed, rowsUpserted, rowsDeleted }
+  return { daysProcessed, rowsUpserted, rowsDeleted, lineCost }
+}
+
+/**
+ * Recompute every day in [startDate, endDate] for one store. Days are
+ * independent because writes are bounded to a single (storeId, date), so
+ * callers can opt into capped concurrency for one-shot backfills.
+ */
+export async function recomputeDailyCogsForRange(input: {
+  storeId: string
+  startDate: Date
+  endDate: Date
+  accountId: string
+  dayConcurrency?: number
+}): Promise<{ daysProcessed: number; rowsUpserted: number; rowsDeleted: number }> {
+  const start = startOfDayUTC(input.startDate)
+  const end = startOfDayUTC(input.endDate)
+  const dayConcurrency = normalizeConcurrency(input.dayConcurrency, 1)
+
+  const dates: Date[] = []
+  for (
+    let cursor = new Date(start);
+    cursor.getTime() <= end.getTime();
+    cursor = addDaysUTC(cursor, 1)
+  ) {
+    dates.push(new Date(cursor))
+  }
+
+  const results = await mapWithConcurrency(dates, dayConcurrency, (date) =>
+    recomputeDailyCogsForDay({
+      storeId: input.storeId,
+      date,
+      accountId: input.accountId,
+    })
+  )
+
+  return {
+    daysProcessed: dates.length,
+    rowsUpserted: results.reduce((sum, result) => sum + result.rowsUpserted, 0),
+    rowsDeleted: results.reduce((sum, result) => sum + result.rowsDeleted, 0),
+  }
 }
 
 function startOfDayUTC(d: Date): Date {
@@ -311,4 +471,129 @@ function addDaysUTC(d: Date, n: number): Date {
   const r = new Date(d)
   r.setUTCDate(r.getUTCDate() + n)
   return r
+}
+
+function normalizeConcurrency(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value) || value == null) return fallback
+  return Math.max(1, Math.floor(value))
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+  let firstError: unknown = null
+  const workerCount = Math.min(normalizeConcurrency(concurrency, 1), items.length)
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        if (firstError != null) return
+        const currentIndex = nextIndex
+        nextIndex++
+        if (currentIndex >= items.length) return
+        try {
+          results[currentIndex] = await worker(items[currentIndex])
+        } catch (err) {
+          firstError ??= err
+          return
+        }
+      }
+    })
+  )
+
+  if (firstError != null) throw firstError
+  return results
+}
+
+async function replaceDailyCogsRowsForDay(input: {
+  storeId: string
+  date: Date
+  rows: ComputedRow[]
+  category?: string
+}): Promise<number> {
+  const { storeId, date, rows, category } = input
+  const computedAt = new Date()
+  const categoryClause =
+    category == null
+      ? Prisma.empty
+      : Prisma.sql`AND d."category" = ${category}`
+  const staleRowsClause =
+    rows.length === 0
+      ? Prisma.empty
+      : Prisma.sql`
+          AND NOT EXISTS (
+            SELECT 1
+            FROM (VALUES ${Prisma.join(
+              rows.map((r) => Prisma.sql`(${r.itemName}, ${r.category})`)
+            )}) AS keep("itemName", "category")
+            WHERE keep."itemName" = d."itemName"
+              AND keep."category" = d."category"
+          )
+        `
+
+  return prisma.$transaction(
+    async (tx) => {
+      if (rows.length > 0) {
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "DailyCogsItem" (
+            "id",
+            "storeId",
+            "date",
+            "itemName",
+            "category",
+            "recipeId",
+            "qtySold",
+            "salesRevenue",
+            "unitCost",
+            "lineCost",
+            "status",
+            "partialCost",
+            "computedAt"
+          )
+          VALUES ${Prisma.join(rows.map((r) => dailyCogsRowSql(r, computedAt)))}
+          ON CONFLICT ("storeId", "date", "itemName", "category")
+          DO UPDATE SET
+            "recipeId" = EXCLUDED."recipeId",
+            "qtySold" = EXCLUDED."qtySold",
+            "salesRevenue" = EXCLUDED."salesRevenue",
+            "unitCost" = EXCLUDED."unitCost",
+            "lineCost" = EXCLUDED."lineCost",
+            "status" = EXCLUDED."status",
+            "partialCost" = EXCLUDED."partialCost",
+            "computedAt" = EXCLUDED."computedAt"
+        `)
+      }
+
+      return tx.$executeRaw(Prisma.sql`
+        DELETE FROM "DailyCogsItem" d
+        WHERE d."storeId" = ${storeId}
+          AND d."date" = ${date}
+          ${categoryClause}
+          ${staleRowsClause}
+      `)
+    },
+    { timeout: DAILY_COGS_TRANSACTION_TIMEOUT_MS, maxWait: 10_000 }
+  )
+}
+
+function dailyCogsRowSql(row: ComputedRow, computedAt: Date): Prisma.Sql {
+  return Prisma.sql`(
+    ${randomUUID()},
+    ${row.storeId},
+    ${row.date},
+    ${row.itemName},
+    ${row.category},
+    ${row.recipeId},
+    ${row.qtySold},
+    ${row.salesRevenue},
+    ${row.unitCost},
+    ${row.lineCost},
+    ${row.status}::"CogsStatus",
+    ${row.partialCost},
+    ${computedAt}
+  )`
 }

@@ -16,6 +16,7 @@ const ROUTES = [
   "/m/ingredients",
   "/m/orders",
   "/m/invoices",
+  "/m/chat",
   "/m/pnl",
   "/m/analytics",
   "/m/product-mix",
@@ -64,7 +65,11 @@ function parseArgs() {
   }
 
   const routes = routeFilter?.length
-    ? ROUTES.filter((route) => routeFilter!.some((filter) => route.includes(filter)))
+    ? ROUTES.filter((route) =>
+        routeFilter!.some((filter) =>
+          filter.startsWith("/") ? route === filter : route.includes(filter),
+        ),
+      )
     : [...ROUTES]
   const viewports = viewportFilter?.length
     ? VIEWPORTS.filter((vp) => viewportFilter!.includes(vp.name))

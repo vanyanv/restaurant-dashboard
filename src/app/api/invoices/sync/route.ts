@@ -552,7 +552,7 @@ async function runSync(
   // Skipping the call when `created === 0` keeps idle cron runs from
   // burning a Redis round-trip every minute.
   if (counts.created > 0) {
-    await bustTags([`account:${accountId}`])
+    await bustTags(["invoices", `account:${accountId}`])
   }
 
   return { message, ...counts }

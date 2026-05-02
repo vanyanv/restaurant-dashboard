@@ -40,6 +40,12 @@ type ConversionPatch = {
   toUnit: string
 }
 
+type CanonicalPatch = {
+  recipeUnit?: string | null
+  costLocked?: boolean
+  costSource?: string | null
+}
+
 type InvoiceLine = {
   id: string
   invoiceId: string
@@ -60,6 +66,7 @@ type InvoiceLine = {
     name: string
     recipeUnit: string | null
     costPerRecipeUnit: number | null
+    costSource: string | null
     costLocked: boolean
     _count: { recipeIngredients: number }
   } | null
@@ -96,6 +103,7 @@ type ReportAction = {
     | "known_pack_extraction"
     | "same_sku_pack_profile"
     | "zero_extended_price"
+    | "known_canonical_update"
   status: "would_apply" | "applied" | "skipped"
   lineItemId?: string
   canonicalIngredientId: string
@@ -111,7 +119,7 @@ type ReportAction = {
   beforeCost: number | null
   afterCost: number | null
   recipeUnit: string | null
-  patch?: LinePatch | ConversionPatch
+  patch?: LinePatch | ConversionPatch | CanonicalPatch
   recompute?: unknown
 }
 
@@ -163,19 +171,112 @@ const KNOWN_CONVERSIONS = [
   },
 ]
 
+const KNOWN_CANONICAL_FIXES = [
+  {
+    sku: "644",
+    name: /american cheese yellow 160/i,
+    patch: { costLocked: false, costSource: "invoice" },
+    basis: "American Cheese Yellow 160 should use invoice-derived pricing from SKU 644 with 32 slices/lb.",
+    minCost: 0.05,
+    maxCost: 0.25,
+  },
+  {
+    sku: "PBS10-CUP",
+    name: /(?:cup plastic 10 oz clear pp|plastic cup 10 oz clear pp?)/i,
+    patch: { recipeUnit: "each", costLocked: false, costSource: "invoice" },
+    basis: "Plastic Cup 10 oz Clear PP is consumed per cup; case profile is 20 sleeves * 50 cups.",
+    minCost: 0.02,
+    maxCost: 0.1,
+  },
+  {
+    sku: "14960",
+    name: /tray pulp 4-cup carrier/i,
+    patch: { recipeUnit: "each", costLocked: false, costSource: "invoice" },
+    basis: "Tray Pulp 4-Cup Carrier is consumed per carrier; case profile is 4 packs * 75 carriers.",
+    minCost: 0.05,
+    maxCost: 0.4,
+  },
+]
+
 const KNOWN_PACK_FIXES = [
+  {
+    sku: "1763432",
+    name: /(?:imported fresh tomato bulk 5x6 fresh|tomato bulk.*5x6|fresh tomato bulk 5x6)/i,
+    recipeUnit: "lb",
+    patch: { unit: "CS", packSize: 1, unitSize: 25, unitSizeUom: "LB" },
+    basis: "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+    minCost: 0.5,
+    maxCost: 8,
+    positivePurchaseOnly: true,
+  },
+  {
+    sku: "3812807",
+    name: /(?:packer onion sweet fresh|onion sweet fresh)/i,
+    recipeUnit: "lb",
+    patch: { unit: "CS", packSize: 1, unitSize: 40, unitSizeUom: "LB" },
+    basis: "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+    minCost: 0.2,
+    maxCost: 3,
+    positivePurchaseOnly: true,
+  },
   {
     sku: "7370699",
     name: /greeno cup.*20\s*oz/i,
+    recipeUnit: "each",
     patch: { unit: "CS", packSize: 1000, unitSize: 1, unitSizeUom: "CT" },
     basis: "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
     minCost: 0.04,
     maxCost: 0.2,
   },
+  {
+    sku: "PBS10-CUP",
+    name: /(?:cup plastic 10 oz clear pp|plastic cup 10 oz clear pp?)/i,
+    recipeUnit: "each",
+    patch: { unit: "CS", packSize: 20, unitSize: 50, unitSizeUom: "CT" },
+    basis: "Plastic Cup 10 oz Clear PP: $47.86/case over 20 sleeves * 50 cups.",
+    minCost: 0.02,
+    maxCost: 0.1,
+  },
+  {
+    sku: null,
+    name: /napkin dispenser 2-ply.*8\.5\s*x\s*6\.5.*white/i,
+    recipeUnit: "each",
+    patch: { unit: "CS", packSize: 24, unitSize: 250, unitSizeUom: "CT" },
+    basis: "No-SKU napkin lines match the same vendor/canonical packaging profile: 24 packs * 250 napkins.",
+    minCost: 0.001,
+    maxCost: 0.02,
+  },
+  {
+    sku: null,
+    name: /towel multifold kraft 1-ply/i,
+    recipeUnit: "each",
+    patch: { unit: "CS", packSize: 16, unitSize: 250, unitSizeUom: "CT" },
+    basis: "No-SKU towel lines match the same vendor/canonical packaging profile: 16 packs * 250 towels.",
+    minCost: 0.001,
+    maxCost: 0.02,
+  },
+  {
+    sku: "12345",
+    name: /water crystal geyser spring/i,
+    recipeUnit: "oz",
+    patch: { unit: "CS", packSize: 35, unitSize: 16.9, unitSizeUom: "OZ" },
+    basis: "Crystal Geyser 0.53 L extraction should match the established 16.9 oz bottle profile.",
+    minCost: 0.005,
+    maxCost: 0.05,
+  },
+  {
+    sku: "14960",
+    name: /tray pulp 4-cup carrier/i,
+    recipeUnit: "each",
+    patch: { unit: "CS", packSize: 4, unitSize: 75, unitSizeUom: "CT" },
+    basis: "Tray Pulp 4-Cup Carrier: $56.75/case over 4 packs * 75 carriers.",
+    minCost: 0.05,
+    maxCost: 0.4,
+  },
 ]
 
 const PACKAGING_NAME = /\b(cup|lid|tray|bag|container|portion|napkin|towel|fork|spoon|straw|wrap|box|clamshell|carrier)\b/i
-const OPERATIONAL_NAME = /\b(fuel surcharge|bleach|sanit|clean|degreaser|equipment|bath tissue|thermal paper|paper roll|can liner)\b/i
+const OPERATIONAL_NAME = /\b(fuel surcharge|bleach|sanit|clean|degreaser|equipment|bath tissue|tissue|thermal paper|paper roll|can liner)\b/i
 
 function parseArgs(): CliArgs {
   const out: CliArgs = { apply: false, selfTest: false }
@@ -239,6 +340,18 @@ function isSameLinePatch(line: InvoiceLine, patch: LinePatch): boolean {
   )
 }
 
+function canonicalPatchChanged(
+  canonical: InvoiceLine["canonicalIngredient"],
+  patch: CanonicalPatch
+): boolean {
+  if (!canonical) return false
+  return (
+    (patch.recipeUnit !== undefined && canonical.recipeUnit !== patch.recipeUnit) ||
+    (patch.costLocked !== undefined && canonical.costLocked !== patch.costLocked) ||
+    (patch.costSource !== undefined && canonical.costSource !== patch.costSource)
+  )
+}
+
 function normalizedVendor(raw: string, normalizeVendorName: (raw: string) => string): string {
   return normalizeVendorName(raw)
 }
@@ -257,35 +370,56 @@ function isRecipeScope(line: InvoiceLine): boolean {
   if (!c) return false
   if (c._count.recipeIngredients > 0) return true
   const text = `${c.name} ${line.productName}`
-  if (PACKAGING_NAME.test(text)) return true
   if (OPERATIONAL_NAME.test(text)) return false
+  if (PACKAGING_NAME.test(text)) return true
   return false
+}
+
+function isNoPurchaseLine(line: InvoiceLine): boolean {
+  return close(line.quantity, 0) && close(line.extendedPrice, 0)
+}
+
+function isPositivePurchaseLine(line: InvoiceLine): boolean {
+  return !line.invoice.isReturn && line.quantity > 0 && line.extendedPrice > 0
 }
 
 function isSaneEachCost(cost: number | null, min = 0.001, max = 5): boolean {
   return cost != null && Number.isFinite(cost) && cost >= min && cost <= max
 }
 
-function findKnownConversion(line: InvoiceLine) {
-  if (!line.sku || !line.canonicalIngredient?.recipeUnit) return null
+function findKnownConversion(line: InvoiceLine, recipeUnit = line.canonicalIngredient?.recipeUnit) {
+  if (!line.sku || !line.canonicalIngredient || !recipeUnit) return null
   return (
     KNOWN_CONVERSIONS.find(
       (k) =>
         k.sku.toLowerCase() === line.sku!.toLowerCase() &&
         k.name.test(`${line.productName} ${line.canonicalIngredient!.name}`) &&
-        line.canonicalIngredient!.recipeUnit!.toLowerCase() === k.toUnit.toLowerCase()
+        recipeUnit.toLowerCase() === k.toUnit.toLowerCase()
     ) ?? null
   )
 }
 
-function findKnownPackFix(line: InvoiceLine) {
-  if (!line.sku || !line.canonicalIngredient?.recipeUnit) return null
+function findKnownCanonicalFix(line: InvoiceLine) {
+  if (!line.sku || !line.canonicalIngredient) return null
+  return (
+    KNOWN_CANONICAL_FIXES.find(
+      (k) =>
+        k.sku.toLowerCase() === line.sku!.toLowerCase() &&
+        k.name.test(`${line.productName} ${line.canonicalIngredient!.name}`)
+    ) ?? null
+  )
+}
+
+function findKnownPackFix(line: InvoiceLine, recipeUnit = line.canonicalIngredient?.recipeUnit) {
+  if (!line.canonicalIngredient || !recipeUnit) return null
   return (
     KNOWN_PACK_FIXES.find(
       (k) =>
-        k.sku.toLowerCase() === line.sku!.toLowerCase() &&
+        (k.sku === undefined ||
+          (k.sku === null ? line.sku == null : k.sku.toLowerCase() === line.sku?.toLowerCase())) &&
         k.name.test(`${line.productName} ${line.canonicalIngredient!.name}`) &&
-        line.canonicalIngredient!.recipeUnit!.toLowerCase() === "each"
+        (!k.recipeUnit || recipeUnit.toLowerCase() === k.recipeUnit.toLowerCase()) &&
+        (!k.positivePurchaseOnly || isPositivePurchaseLine(line))
     ) ?? null
   )
 }
@@ -348,6 +482,78 @@ async function runSelfTest(): Promise<void> {
   )
   assert.equal(portionCup, 0.015)
 
+  const tomatoCase = deriveCostFromLineItem(
+    {
+      quantity: 2,
+      unit: "CS",
+      packSize: 1,
+      unitSize: 25,
+      unitSizeUom: "LB",
+      unitPrice: 107.66,
+      extendedPrice: 215.32,
+    },
+    "lb"
+  )
+  assert.equal(tomatoCase, 4.3064)
+
+  const onionCase = deriveCostFromLineItem(
+    {
+      quantity: 2,
+      unit: "CS",
+      packSize: 1,
+      unitSize: 40,
+      unitSizeUom: "LB",
+      unitPrice: 37.95,
+      extendedPrice: 75.9,
+    },
+    "lb"
+  )
+  assert.ok(onionCase != null)
+  assert.ok(Math.abs(onionCase - 0.94875) < 1e-12)
+
+  const tenOzCup = deriveCostFromLineItem(
+    {
+      quantity: 1,
+      unit: "CS",
+      packSize: 20,
+      unitSize: 50,
+      unitSizeUom: "CT",
+      unitPrice: 47.86,
+      extendedPrice: 47.86,
+    },
+    "each"
+  )
+  assert.equal(tenOzCup, 0.04786)
+
+  const waterBottle = deriveCostFromLineItem(
+    {
+      quantity: 1,
+      unit: "CS",
+      packSize: 35,
+      unitSize: 16.9,
+      unitSizeUom: "OZ",
+      unitPrice: 9.78,
+      extendedPrice: 9.78,
+    },
+    "oz"
+  )
+  assert.ok(waterBottle != null)
+  assert.ok(Math.abs(waterBottle - 0.016534234995773455) < 1e-12)
+
+  const fourCupCarrier = deriveCostFromLineItem(
+    {
+      quantity: 1,
+      unit: "CS",
+      packSize: 4,
+      unitSize: 75,
+      unitSizeUom: "CT",
+      unitPrice: 56.75,
+      extendedPrice: 56.75,
+    },
+    "each"
+  )
+  assert.equal(fourCupCarrier, 0.18916666666666668)
+
   const zeroExtendedBefore = deriveCostFromLineItem(
     {
       quantity: 2,
@@ -376,7 +582,12 @@ async function runSelfTest(): Promise<void> {
   )
   assert.equal(zeroExtendedAfter, 0.09655)
 
-  console.log("Self-test passed: known conversions, packaging profile math, and zero extended-price repair.")
+  assert.equal(isNoPurchaseLine({
+    quantity: 0,
+    extendedPrice: 0,
+  } as InvoiceLine), true)
+
+  console.log("Self-test passed: known conversions, pack fixes, packaging profile math, and zero/no-purchase handling.")
 }
 
 function renderMarkdown(report: Report): string {
@@ -512,6 +723,7 @@ async function main(): Promise<void> {
           name: true,
           recipeUnit: true,
           costPerRecipeUnit: true,
+          costSource: true,
           costLocked: true,
           _count: { select: { recipeIngredients: true } },
         },
@@ -559,6 +771,14 @@ async function main(): Promise<void> {
   const derive = (line: InvoiceLine, conv?: ConversionPatch): number | null => {
     const recipeUnit = line.canonicalIngredient?.recipeUnit
     if (!recipeUnit) return null
+    return deriveWithRecipeUnit(line, recipeUnit, conv)
+  }
+
+  const deriveWithRecipeUnit = (
+    line: InvoiceLine,
+    recipeUnit: string,
+    conv?: ConversionPatch
+  ): number | null => {
     return deriveCostFromLineItem(
       line,
       recipeUnit,
@@ -572,8 +792,11 @@ async function main(): Promise<void> {
   for (const line of lines) {
     const c = line.canonicalIngredient
     const key = groupKey(line, normalizeVendorName)
+    if (isNoPurchaseLine(line)) continue
     if (!c || !key || !c.recipeUnit || c.recipeUnit.toLowerCase() !== "each") continue
-    if (!PACKAGING_NAME.test(`${c.name} ${line.productName}`)) continue
+    const profileText = `${c.name} ${line.productName}`
+    if (OPERATIONAL_NAME.test(profileText)) continue
+    if (!PACKAGING_NAME.test(profileText)) continue
     const conv = getExistingConversion(line)
     const cost = derive(line, conv)
     if (!isSaneEachCost(cost)) continue
@@ -610,6 +833,7 @@ async function main(): Promise<void> {
   const actions: ReportAction[] = []
   const review: ReviewItem[] = []
   const conversionActions = new Map<string, ReportAction>()
+  const canonicalPatchActions = new Map<string, ReportAction[]>()
   const linePatchActions = new Map<string, ReportAction[]>()
   const touchedCanonicals = new Set<string>()
   const seenMissingUnitCanonicals = new Set<string>()
@@ -623,6 +847,14 @@ async function main(): Promise<void> {
     touchedCanonicals.add(action.canonicalIngredientId)
   }
 
+  function addCanonicalPatch(action: ReportAction): void {
+    actions.push(action)
+    const existing = canonicalPatchActions.get(action.canonicalIngredientId) ?? []
+    existing.push(action)
+    canonicalPatchActions.set(action.canonicalIngredientId, existing)
+    touchedCanonicals.add(action.canonicalIngredientId)
+  }
+
   function addReview(line: InvoiceLine, item: ReviewItem): void {
     const key = `${item.kind}::${line.id}::${item.canonicalIngredientId}`
     if (seenManualReviewLines.has(key)) return
@@ -631,6 +863,8 @@ async function main(): Promise<void> {
   }
 
   for (const line of lines) {
+    if (isNoPurchaseLine(line)) continue
+
     const c = line.canonicalIngredient
     if (!c) continue
 
@@ -664,7 +898,46 @@ async function main(): Promise<void> {
       continue
     }
 
-    if (!c.recipeUnit) {
+    const knownCanonical = findKnownCanonicalFix(line)
+    const effectiveRecipeUnit = knownCanonical?.patch.recipeUnit ?? c.recipeUnit
+    const knownPackForCanonical = effectiveRecipeUnit
+      ? findKnownPackFix(line, effectiveRecipeUnit)
+      : null
+
+    if (knownCanonical && effectiveRecipeUnit) {
+      const patchedForCost = knownPackForCanonical
+        ? lineWithPatch(line, knownPackForCanonical.patch)
+        : line
+      const knownConversionForCanonical = findKnownConversion(line, effectiveRecipeUnit)
+      const convForCost = knownConversionForCanonical
+        ? {
+            conversionFactor: knownConversionForCanonical.conversionFactor,
+            fromUnit: knownConversionForCanonical.fromUnit,
+            toUnit: knownConversionForCanonical.toUnit,
+          }
+        : conv
+      const afterCost = deriveWithRecipeUnit(patchedForCost, effectiveRecipeUnit, convForCost)
+      const sane = isSaneEachCost(afterCost, knownCanonical.minCost, knownCanonical.maxCost)
+      if (
+        canonicalPatchChanged(c, knownCanonical.patch) &&
+        sane &&
+        !canonicalPatchActions.has(c.id)
+      ) {
+        addCanonicalPatch({
+          kind: "known_canonical_update",
+          status: cli.apply ? "applied" : "would_apply",
+          ...common,
+          beforeCost: c.costPerRecipeUnit,
+          recipeUnit: c.recipeUnit,
+          reason: "Known canonical pricing metadata should be invoice-derived.",
+          basis: knownCanonical.basis,
+          afterCost,
+          patch: knownCanonical.patch,
+        })
+      }
+    }
+
+    if (!effectiveRecipeUnit) {
       if (!seenMissingUnitCanonicals.has(c.id)) {
         seenMissingUnitCanonicals.add(c.id)
         review.push({
@@ -687,7 +960,7 @@ async function main(): Promise<void> {
     ) {
       const expected = roundMoney(line.quantity * line.unitPrice)
       const patched = lineWithPatch(line, { extendedPrice: expected })
-      const afterCost = derive(patched, conv)
+      const afterCost = deriveWithRecipeUnit(patched, effectiveRecipeUnit, conv)
       addLinePatch(line, {
         kind: "zero_extended_price",
         status: cli.apply ? "applied" : "would_apply",
@@ -699,14 +972,14 @@ async function main(): Promise<void> {
       })
     }
 
-    const knownConversion = findKnownConversion(line)
+    const knownConversion = findKnownConversion(line, effectiveRecipeUnit)
     if (knownConversion && line.sku) {
       const patch = {
         conversionFactor: knownConversion.conversionFactor,
         fromUnit: knownConversion.fromUnit,
         toUnit: knownConversion.toUnit,
       }
-      const afterCost = derive(line, patch)
+      const afterCost = deriveWithRecipeUnit(line, effectiveRecipeUnit, patch)
       const sane = isSaneEachCost(afterCost, knownConversion.minCost, knownConversion.maxCost)
       const key = matchKey(line.invoice.accountId, common.vendorName, line.sku)
       if (sane && conversionChanged(existingMatchByKey.get(key), patch) && !conversionActions.has(key)) {
@@ -725,10 +998,10 @@ async function main(): Promise<void> {
       }
     }
 
-    const knownPack = findKnownPackFix(line)
+    const knownPack = knownPackForCanonical ?? findKnownPackFix(line, effectiveRecipeUnit)
     if (knownPack) {
       const patched = lineWithPatch(line, knownPack.patch)
-      const afterCost = derive(patched, conv)
+      const afterCost = deriveWithRecipeUnit(patched, effectiveRecipeUnit, conv)
       if (
         !isSameLinePatch(line, knownPack.patch) &&
         isSaneEachCost(afterCost, knownPack.minCost, knownPack.maxCost)
@@ -750,7 +1023,7 @@ async function main(): Promise<void> {
     if (
       profile &&
       beforeCost == null &&
-      c.recipeUnit.toLowerCase() === "each" &&
+      effectiveRecipeUnit.toLowerCase() === "each" &&
       PACKAGING_NAME.test(`${c.name} ${line.productName}`)
     ) {
       const patch = {
@@ -760,7 +1033,7 @@ async function main(): Promise<void> {
         unitSizeUom: profile.unitSizeUom,
       }
       const patched = lineWithPatch(line, patch)
-      const afterCost = derive(patched, conv)
+      const afterCost = deriveWithRecipeUnit(patched, effectiveRecipeUnit, conv)
       if (!isSameLinePatch(line, patch) && isSaneEachCost(afterCost)) {
         addLinePatch(line, {
           kind: "same_sku_pack_profile",
@@ -828,6 +1101,11 @@ async function main(): Promise<void> {
       })
     }
 
+    for (const [canonicalId, canonicalActions] of canonicalPatchActions) {
+      const patch = Object.assign({}, ...canonicalActions.map((a) => a.patch)) as CanonicalPatch
+      await prisma.canonicalIngredient.update({ where: { id: canonicalId }, data: patch })
+    }
+
     for (const canonicalId of touchedCanonicals) {
       const result = await recomputeCanonicalCost(canonicalId)
       for (const action of actions) {
@@ -843,11 +1121,13 @@ async function main(): Promise<void> {
 
   const counts = {
     matchedLinesScanned: lines.length,
+    noPurchaseRowsSkipped: lines.filter(isNoPurchaseLine).length,
     safeFixes: actions.length,
     actionCanonicals: actionCanonicals.size,
     reviewCanonicals: reviewCanonicals.size,
     affectedCanonicals: affectedCanonicals.size,
     knownExplicitYield: actions.filter((a) => a.kind === "known_explicit_yield").length,
+    knownCanonicalUpdate: actions.filter((a) => a.kind === "known_canonical_update").length,
     knownPackExtraction: actions.filter((a) => a.kind === "known_pack_extraction").length,
     sameSkuPackProfile: actions.filter((a) => a.kind === "same_sku_pack_profile").length,
     zeroExtendedPrice: actions.filter((a) => a.kind === "zero_extended_price").length,

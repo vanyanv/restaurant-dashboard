@@ -1,0 +1,2339 @@
+{
+  "generatedAt": "2026-05-02T06:53:16.891Z",
+  "mode": "apply",
+  "accountId": null,
+  "counts": {
+    "matchedLinesScanned": 622,
+    "noPurchaseRowsSkipped": 5,
+    "safeFixes": 73,
+    "actionCanonicals": 8,
+    "reviewCanonicals": 9,
+    "affectedCanonicals": 17,
+    "knownExplicitYield": 0,
+    "knownCanonicalUpdate": 3,
+    "knownPackExtraction": 70,
+    "sameSkuPackProfile": 0,
+    "zeroExtendedPrice": 0,
+    "missingRecipeUnit": 0,
+    "manualReviewRequired": 0,
+    "excludedNonRecipeScope": 9
+  },
+  "actions": [
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmonna7ui000704js5p8ikz5r",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmonna7tf000204js8vt0bj0l",
+      "invoiceNumber": "945863397",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": 0.8612799999999999,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 4.3064,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmonna7ui000804jshlw1psd3",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmonna7tf000204js8vt0bj0l",
+      "invoiceNumber": "945863397",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmoiasrhj000504kw0iux1s51",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmoiasrgo000004kwu9z0uvv9",
+      "invoiceNumber": "945853003",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": 0.8612799999999999,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 4.3064,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmoiasrhj000704kwm3scvtx1",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Onion Sweet Fresh",
+      "invoiceId": "cmoiasrgo000004kwu9z0uvv9",
+      "invoiceNumber": "945853003",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.94875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmoh7ipsm000404jm3hpunkj8",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato bulk 5x6 fresh",
+      "invoiceId": "cmoh7iprz000004jmd0biuzt9",
+      "invoiceNumber": "945850683",
+      "invoiceDate": "2026-04-25",
+      "beforeCost": 0.7699199999999999,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.8495999999999997,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmoh7ipsm000604jmii1tc80h",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Onion sweet fresh",
+      "invoiceId": "cmoh7iprz000004jmd0biuzt9",
+      "invoiceNumber": "945850683",
+      "invoiceDate": "2026-04-25",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmocwqyl4000804k6rcz721ez",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmocwqyk4000004k6jrgo81pr",
+      "invoiceNumber": "945841884",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.8495999999999997,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_canonical_update",
+      "status": "applied",
+      "lineItemId": "cmobu5xtf000904jlq5k5t5ol",
+      "canonicalIngredientId": "cmo6v1wwt001piku91stqwcpf",
+      "canonicalName": "cup plastic 10 oz clear pp",
+      "vendorName": "Individual FoodService",
+      "sku": "PBS10-CUP",
+      "productName": "Plastic Cup 10 oz Clear PP",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Known canonical pricing metadata should be invoice-derived.",
+      "basis": "Plastic Cup 10 oz Clear PP is consumed per cup; case profile is 20 sleeves * 50 cups.",
+      "afterCost": 0.04786,
+      "patch": {
+        "recipeUnit": "each",
+        "costLocked": false,
+        "costSource": "invoice"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": null,
+        "after": 0.04786,
+        "unit": "each"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmocwqyl5000a04k6ejrx9vu7",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Onion Sweet Fresh",
+      "invoiceId": "cmocwqyk4000004k6jrgo81pr",
+      "invoiceNumber": "945841884",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmobazs3w00083cu9gly11kzj",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmoa1wl6t000004l29buyl779",
+      "invoiceNumber": "945831303",
+      "invoiceDate": "2026-04-20",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.8495999999999997,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmobazs3w00093cu9wsraxs0j",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmoa1wl6t000004l29buyl779",
+      "invoiceNumber": "945831303",
+      "invoiceDate": "2026-04-20",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo774538000704kv599cv1ke",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato Bulk Fresh 5x6",
+      "invoiceId": "cmo77450h000004kvmhf45sen",
+      "invoiceNumber": "945828794",
+      "invoiceDate": "2026-04-18",
+      "beforeCost": 0.67816,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.3908,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo7ju8xb000k04l2ydq69ewy",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmo7ju8x7000d04l22whv9d8t",
+      "invoiceNumber": "945828794",
+      "invoiceDate": "2026-04-18",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.3908,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo774538000904kv633w2ky1",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Onion Sweet Fresh",
+      "invoiceId": "cmo77450h000004kvmhf45sen",
+      "invoiceNumber": "945828794",
+      "invoiceDate": "2026-04-18",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo7ju8xb000m04l2ianw6q4x",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Onion Sweet Fresh",
+      "invoiceId": "cmo7ju8x7000d04l22whv9d8t",
+      "invoiceNumber": "945828794",
+      "invoiceDate": "2026-04-18",
+      "beforeCost": 2.710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52i6xw007txju9cl4aehft",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo50946m0009lfu9uwispe1v",
+      "invoiceNumber": "945819855",
+      "invoiceDate": "2026-04-16",
+      "beforeCost": 0.67816,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.3908,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52hdus006wxju9hh2oiro9",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo5094sf0018lfu98fmygnux",
+      "invoiceNumber": "945809694",
+      "invoiceDate": "2026-04-13",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.3908,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52hdus006yxju98xpry0ly",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo5094sf0018lfu98fmygnux",
+      "invoiceNumber": "945809694",
+      "invoiceDate": "2026-04-13",
+      "beforeCost": 2.710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52h39r006oxju9zvcl15n6",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Impfrsh Tomato Bulk 5X6 Fresh",
+      "invoiceId": "cmo509640001jlfu9eo42k4ux",
+      "invoiceNumber": "945807489",
+      "invoiceDate": "2026-04-11",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.372,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52h39r006qxju97de9zk0e",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo509640001jlfu9eo42k4ux",
+      "invoiceNumber": "945807489",
+      "invoiceDate": "2026-04-11",
+      "beforeCost": 2.710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ufvi00009keu9p9pgyl24",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo6ufvfk0000keu9xx539jk6",
+      "invoiceNumber": "945798750",
+      "invoiceDate": "2026-04-09",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.372,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_canonical_update",
+      "status": "applied",
+      "lineItemId": "cmoar998q000o5su924ira0xm",
+      "canonicalIngredientId": "cmo6v1vyp001fiku9ho0kyfxa",
+      "canonicalName": "american cheese yellow 160",
+      "vendorName": "Premier Deli Services, Inc.",
+      "sku": "644",
+      "productName": "American Cheese Yellow 160",
+      "invoiceId": "cmo6ug6hb000ekeu99f6y3x1v",
+      "invoiceNumber": "902207",
+      "invoiceDate": "2026-04-08",
+      "beforeCost": 0.12,
+      "recipeUnit": "each",
+      "reason": "Known canonical pricing metadata should be invoice-derived.",
+      "basis": "American Cheese Yellow 160 should use invoice-derived pricing from SKU 644 with 32 slices/lb.",
+      "afterCost": 0.1203125,
+      "patch": {
+        "costLocked": false,
+        "costSource": "invoice"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.12,
+        "after": 0.1203125,
+        "unit": "each"
+      }
+    },
+    {
+      "kind": "known_canonical_update",
+      "status": "applied",
+      "lineItemId": "cmo6uhq2j0018keu9yx6hwuz4",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "14960",
+      "productName": "Tray Pulp 4-Cup Carrier 8-32oz",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": 0.18916666666666668,
+      "recipeUnit": "cs",
+      "reason": "Known canonical pricing metadata should be invoice-derived.",
+      "basis": "Tray Pulp 4-Cup Carrier is consumed per carrier; case profile is 4 packs * 75 carriers.",
+      "afterCost": 0.18916666666666668,
+      "patch": {
+        "recipeUnit": "each",
+        "costLocked": false,
+        "costSource": "invoice"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6uhq2j0018keu9yx6hwuz4",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "14960",
+      "productName": "Tray Pulp 4-Cup Carrier 8-32oz",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": "cs",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tray Pulp 4-Cup Carrier: $56.75/case over 4 packs * 75 carriers.",
+      "afterCost": 0.18916666666666668,
+      "patch": {
+        "unit": "CS",
+        "packSize": 4,
+        "unitSize": 75,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ugsda000tkeu9klzi9fbs",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo6ugsb0000jkeu9zll49j8p",
+      "invoiceNumber": "945788718",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.372,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ugsda000vkeu9m5j99hl4",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo6ugsb0000jkeu9zll49j8p",
+      "invoiceNumber": "945788718",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6uhq2j001fkeu9eio4f6zt",
+      "canonicalIngredientId": "cmo58ubg600123nu9095wokzi",
+      "canonicalName": "water crystal geyser spring",
+      "vendorName": "Individual FoodService",
+      "sku": "12345",
+      "productName": "Water Crystal Geyser Spring",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": "oz",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Crystal Geyser 0.53 L extraction should match the established 16.9 oz bottle profile.",
+      "afterCost": 0.016534234995773455,
+      "patch": {
+        "unit": "CS",
+        "packSize": 35,
+        "unitSize": 16.9,
+        "unitSizeUom": "OZ"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ui2tg001qkeu9wvj77bs5",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo6ui2r3001kkeu92s1rgiga",
+      "invoiceNumber": "945786246",
+      "invoiceDate": "2026-04-04",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.0388,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ui2tg001skeu9gl1upgzb",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo6ui2r3001kkeu92s1rgiga",
+      "invoiceNumber": "945786246",
+      "invoiceDate": "2026-04-04",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6uizrn0028keu9jegpg1sj",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo6uizpb0022keu9uhoyk0gs",
+      "invoiceNumber": "945777245",
+      "invoiceDate": "2026-04-02",
+      "beforeCost": 0.60776,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.0388,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6uizrn002akeu9pdhhx7fl",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo6uizpb0022keu9uhoyk0gs",
+      "invoiceNumber": "945777245",
+      "invoiceDate": "2026-04-02",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ujtns002jkeu9mczofocb",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo6ujtlg002bkeu9kgoudeyw",
+      "invoiceNumber": "945763808",
+      "invoiceDate": "2026-03-30",
+      "beforeCost": 0.60776,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 3.0388,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ujtns002lkeu9hizbj7rx",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo6ujtlg002bkeu9kgoudeyw",
+      "invoiceNumber": "945763808",
+      "invoiceDate": "2026-03-30",
+      "beforeCost": 0.2710714285714286,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9487500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ukzno0039keu9pp64ydjn",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "IMPFRSH Tomato Bulk 5X6 Fresh",
+      "invoiceId": "cmo6ukzlg0032keu9jw10z5te",
+      "invoiceNumber": "945761642",
+      "invoiceDate": "2026-03-28",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.3384,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ukzno003bkeu9ya9c4s3t",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo6ukzlg0032keu9jw10z5te",
+      "invoiceNumber": "945761642",
+      "invoiceDate": "2026-03-28",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52g1cj005rxju9e0b1rw1x",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "IMPFRSH Tomato Bulk 5X6 Fresh",
+      "invoiceId": "cmnc5tbop000004johq0sdjyj",
+      "invoiceNumber": "945752339",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.3384,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52g1cj005txju9p08jyb3s",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet FRSH",
+      "invoiceId": "cmnc5tbop000004johq0sdjyj",
+      "invoiceNumber": "945752339",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.03875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52fm99005fxju9qtq1lr3s",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "14960",
+      "productName": "Tray Pulp 4-cup Carrier 8-32 oz",
+      "invoiceId": "cmn80us4e001f04jx1xi974hb",
+      "invoiceNumber": "G84442-00",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": 0.18916666666666668,
+      "recipeUnit": "cs",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tray Pulp 4-Cup Carrier: $56.75/case over 4 packs * 75 carriers.",
+      "afterCost": 0.18916666666666668,
+      "patch": {
+        "unit": "CS",
+        "packSize": 4,
+        "unitSize": 75,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52g7ft005wxju9t3b0sbp0",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmnc5tbqe000d04jo1cypsfbm",
+      "invoiceNumber": "945748975",
+      "invoiceDate": "2026-03-25",
+      "beforeCost": 0.29678571428571426,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ez5c004pxju92mhixz2f",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Impfrsh Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmn80us37001404jxs7pvbfqy",
+      "invoiceNumber": "945741472",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.3384,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ez5c004rxju94vzbksxm",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Frsh",
+      "invoiceId": "cmn80us37001404jxs7pvbfqy",
+      "invoiceNumber": "945741472",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": 0.29678571428571426,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52efve0047xju9yy998ges",
+      "canonicalIngredientId": "cmo58uie3004a3nu9mo4wnzjl",
+      "canonicalName": "napkin dispenser 2-ply 8.5 x 6.5 white",
+      "vendorName": "Individual FoodService",
+      "sku": null,
+      "productName": "Napkin Dispenser 2-Ply 8.5x6.5 White",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "No-SKU napkin lines match the same vendor/canonical packaging profile: 24 packs * 250 napkins.",
+      "afterCost": 0.006645,
+      "patch": {
+        "unit": "CS",
+        "packSize": 24,
+        "unitSize": 250,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52efve0048xju9a21ha4yb",
+      "canonicalIngredientId": "cmo58uii6004c3nu99m25lsip",
+      "canonicalName": "towel multifold kraft 1-ply",
+      "vendorName": "Individual FoodService",
+      "sku": null,
+      "productName": "Towel Multifold Kraft 1-Ply",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "No-SKU towel lines match the same vendor/canonical packaging profile: 16 packs * 250 towels.",
+      "afterCost": 0.0061275,
+      "patch": {
+        "unit": "CS",
+        "packSize": 16,
+        "unitSize": 250,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52erwa004hxju9ktwnx4yi",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "ImpFrsh Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmn80us2m000u04jxdnij8en4",
+      "invoiceNumber": "945736383",
+      "invoiceDate": "2026-03-21",
+      "beforeCost": 2.0566666666666666,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.468,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52erwa004jxju9p8pcqecd",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Frsh",
+      "invoiceId": "cmn80us2m000u04jxdnij8en4",
+      "invoiceNumber": "945736383",
+      "invoiceDate": "2026-03-21",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52dz8k003uxju9980vp1al",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmn80urx0000004jxzgkxiook",
+      "invoiceNumber": "945729735",
+      "invoiceDate": "2026-03-19",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.468,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52dz8k003wxju9p7upzg8b",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmn80urx0000004jxzgkxiook",
+      "invoiceNumber": "945729735",
+      "invoiceDate": "2026-03-19",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.03875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6un4ly004gkeu91fxwo8o2",
+      "canonicalIngredientId": "cmo58ubg600123nu9095wokzi",
+      "canonicalName": "water crystal geyser spring",
+      "vendorName": "Individual FoodService",
+      "sku": "12345",
+      "productName": "Water Crystal Geyser Spring",
+      "invoiceId": "cmo6un4jp004ckeu9yr2e3mob",
+      "invoiceNumber": "G70746-00",
+      "invoiceDate": "2026-03-16",
+      "beforeCost": null,
+      "recipeUnit": "oz",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Crystal Geyser 0.53 L extraction should match the established 16.9 oz bottle profile.",
+      "afterCost": 0.016534234995773455,
+      "patch": {
+        "unit": "CS",
+        "packSize": 35,
+        "unitSize": 16.9,
+        "unitSizeUom": "OZ"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6um40c003xkeu9y8sebegc",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "IMPFRSH TOMATO BULK 5X6 FRESH",
+      "invoiceId": "cmo6um3y5003skeu9jd0d8jd0",
+      "invoiceNumber": "945719143",
+      "invoiceDate": "2026-03-16",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.468,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6um40c003zkeu9152ke4nn",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "PACKER ONION SWEET FRSH",
+      "invoiceId": "cmo6um3y5003skeu9jd0d8jd0",
+      "invoiceNumber": "945719143",
+      "invoiceDate": "2026-03-16",
+      "beforeCost": 0.2967857142857143,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.03875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6umi1z0047keu9mudw6hk7",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "IMPFRSH TOMATO BULK 5X6 FRESH",
+      "invoiceId": "cmo6umhzp0040keu9granej7o",
+      "invoiceNumber": "945717028",
+      "invoiceDate": "2026-03-14",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.8760000000000003,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6umi1z0049keu9srbuwu2u",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "PACKER ONION SWEET FRSH",
+      "invoiceId": "cmo6umhzp0040keu9granej7o",
+      "invoiceNumber": "945717028",
+      "invoiceDate": "2026-03-14",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmob97zyc000h9iu9spc5sg69",
+      "canonicalIngredientId": "cmo6v1wwt001piku91stqwcpf",
+      "canonicalName": "cup plastic 10 oz clear pp",
+      "vendorName": "Individual FoodService",
+      "sku": "PBS10-CUP",
+      "productName": "Cup plastic 10 oz clear",
+      "invoiceId": "cmo6uo135004ykeu94cul52r9",
+      "invoiceNumber": "G69364-00",
+      "invoiceDate": "2026-03-13",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Plastic Cup 10 oz Clear PP: $47.86/case over 20 sleeves * 50 cups.",
+      "afterCost": 0.04786,
+      "patch": {
+        "unit": "CS",
+        "packSize": 20,
+        "unitSize": 50,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": null,
+        "after": 0.04786,
+        "unit": "each"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6unpmr004vkeu9yupr1kwq",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Impfrsh Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmo6unpkl004pkeu94frmizbp",
+      "invoiceNumber": "945707660",
+      "invoiceDate": "2026-03-12",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.8760000000000003,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6updp2005skeu9tckxmjrl",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmo6updms005kkeu9jgzgboe3",
+      "invoiceNumber": "945696984",
+      "invoiceDate": "2026-03-09",
+      "beforeCost": 0.5752,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.8760000000000003,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6updp2005ukeu965aumwhe",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmo6updms005kkeu9jgzgboe3",
+      "invoiceNumber": "945696984",
+      "invoiceDate": "2026-03-09",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.03875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52dovt003jxju9awhg9561",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "14960",
+      "productName": "Tray Pulp 4-Cup Carrier 8-32oz",
+      "invoiceId": "cmmjjo0s700kcx5u9fmgqlivu",
+      "invoiceNumber": "G62143-00",
+      "invoiceDate": "2026-03-09",
+      "beforeCost": null,
+      "recipeUnit": "cs",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tray Pulp 4-Cup Carrier: $56.75/case over 4 packs * 75 carriers.",
+      "afterCost": 0.18916666666666668,
+      "patch": {
+        "unit": "CS",
+        "packSize": 4,
+        "unitSize": 75,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52decd0034xju9k9f90v2l",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Impfrsh Tomato Bulk 5X6 Fresh",
+      "invoiceId": "cmmjjo0hi00k1x5u95zbrdf2l",
+      "invoiceNumber": "945695053",
+      "invoiceDate": "2026-03-07",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.4588,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmoar8ghx000f5su94ftyanm6",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmmjjnzlr00jlx5u93behunss",
+      "invoiceNumber": "945683569",
+      "invoiceDate": "2026-03-05",
+      "beforeCost": 0.29678571428571426,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52cz7p002txju9f7p99cn7",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "IMPFRSH TOMATO BULK 5X6 FRESH",
+      "invoiceId": "cmmjjnzw900jpx5u98616a0q8",
+      "invoiceNumber": "945685538",
+      "invoiceDate": "2026-03-05",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.4588,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52cz7p002vxju9gjgagyqe",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "PACKER ONION SWEET FRSH",
+      "invoiceId": "cmmjjnzw900jpx5u98616a0q8",
+      "invoiceNumber": "945685538",
+      "invoiceDate": "2026-03-05",
+      "beforeCost": 2.9678571428571425,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.0387499999999998,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52cdk8002exju976gfptjx",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6",
+      "invoiceId": "cmmjjnz0300j8x5u9747hpl78",
+      "invoiceNumber": "945674659",
+      "invoiceDate": "2026-03-02",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 2.4588,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52cdk8002gxju9onm3yzjh",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmmjjnz0300j8x5u9747hpl78",
+      "invoiceNumber": "945674659",
+      "invoiceDate": "2026-03-02",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 1.03875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52boho0022xju98kpqemma",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "IMPFRSH TOMATO BULK 5X6 FRESH",
+      "invoiceId": "cmmjjnxjm00inx5u9pwfavcw4",
+      "invoiceNumber": "945668952",
+      "invoiceDate": "2026-02-28",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 1.7012,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52boho0024xju9lgevq6va",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "PACKER ONION SWEET FRSH",
+      "invoiceId": "cmmjjnxjm00inx5u9pwfavcw4",
+      "invoiceNumber": "945668952",
+      "invoiceDate": "2026-02-28",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.97375,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52bgw5001uxju9wst7uayk",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmm6tja5c01076iu928vqwd7o",
+      "invoiceNumber": "945660521",
+      "invoiceDate": "2026-02-26",
+      "beforeCost": 8.506,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 1.7012,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52a492000exju9vovihuto",
+      "canonicalIngredientId": "cmo58ubg600123nu9095wokzi",
+      "canonicalName": "water crystal geyser spring",
+      "vendorName": "Individual FoodService",
+      "sku": "12345",
+      "productName": "Water Crystal Geyser Spring",
+      "invoiceId": "cmm18zy3n00102du94pb2r2bd",
+      "invoiceNumber": "G44506-00",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": null,
+      "recipeUnit": "oz",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Crystal Geyser 0.53 L extraction should match the established 16.9 oz bottle profile.",
+      "afterCost": 0.016534234995773455,
+      "patch": {
+        "unit": "CS",
+        "packSize": 35,
+        "unitSize": 16.9,
+        "unitSizeUom": "OZ"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ars00012xju91yh2lym1",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Imported Fresh Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmm40uiw5000004juh1rz22ai",
+      "invoiceNumber": "945649371",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": 0.34024,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 1.7012,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ars00014xju9lns8swq8",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmm40uiw5000004juh1rz22ai",
+      "invoiceNumber": "945649371",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": 0.27821428571428575,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.9737500000000001,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52a492000mxju9vjzun4cw",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "14960",
+      "productName": "Tray Pulp 4-Cup Carrier 8-32oz",
+      "invoiceId": "cmm18zy3n00102du94pb2r2bd",
+      "invoiceNumber": "G44506-00",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": null,
+      "recipeUnit": "cs",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tray Pulp 4-Cup Carrier: $56.75/case over 4 packs * 75 carriers.",
+      "afterCost": 0.1852,
+      "patch": {
+        "unit": "CS",
+        "packSize": 4,
+        "unitSize": 75,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ae4g000sxju9y0o1znj3",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Impfrsh Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmm18zyer001e2du9wwj7gpmc",
+      "invoiceNumber": "945647380",
+      "invoiceDate": "2026-02-21",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Tomato Bulk 5x6 Fresh is a 25 lb case; invoice quantity is case count.",
+      "afterCost": 1.5212,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 25,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.8612799999999999,
+        "after": 4.3064,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ae4g000uxju9ivfhe366",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Frsh",
+      "invoiceId": "cmm18zyer001e2du9wwj7gpmc",
+      "invoiceNumber": "945647380",
+      "invoiceDate": "2026-02-21",
+      "beforeCost": 0.2782142857142857,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.97375,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo529s970009xju98sehg0tf",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Packer Onion Sweet Fresh",
+      "invoiceId": "cmm18zxrw000n2du9k65qtwdp",
+      "invoiceNumber": "945638319",
+      "invoiceDate": "2026-02-19",
+      "beforeCost": 0.2782142857142857,
+      "recipeUnit": "lb",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Packer Onion Sweet Fresh is a 40 lb case; invoice quantity is case count.",
+      "afterCost": 0.97375,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1,
+        "unitSize": 40,
+        "unitSizeUom": "LB"
+      },
+      "recompute": {
+        "status": "updated",
+        "before": 0.2710714285714286,
+        "after": 0.9487500000000001,
+        "unit": "lb"
+      }
+    }
+  ],
+  "review": [
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmonna7ui000904jsahhxpao4",
+      "canonicalIngredientId": "cmo58uav8000s3nu9cnnsen3o",
+      "canonicalName": "fuel surcharge",
+      "vendorName": "Sysco",
+      "sku": null,
+      "productName": "CHGS FOR FUEL SURCHARGE",
+      "invoiceId": "cmonna7tf000204js8vt0bj0l",
+      "invoiceNumber": "945863397",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmohk4p68000504l5mh6f7psa",
+      "canonicalIngredientId": "cmo58uc5k001e3nu9no4mc4np",
+      "canonicalName": "ketchup vol-pack heinz",
+      "vendorName": "Individual FoodService",
+      "sku": "G216",
+      "productName": "Ketchup Vol-Pack Heinz",
+      "invoiceId": "cmohk4p5e000004l5wwwej5t1",
+      "invoiceNumber": "H21577-00",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmobu5xtf000a04jl056x497n",
+      "canonicalIngredientId": "cmo58uhwe00423nu9mp6q2rxn",
+      "canonicalName": "can liner 40 x 46 1.5 mil black roll",
+      "vendorName": "Individual FoodService",
+      "sku": "40X46ROLL",
+      "productName": "Can Liner 40X46 1.5 mil Black Roll",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmobu5xtf000c04jlqjn7n8ma",
+      "canonicalIngredientId": "cmo58upyt00783nu9xdsh382i",
+      "canonicalName": "paper roll thermal 3-1/8 x 220 ft bpa/bps free",
+      "vendorName": "Individual FoodService",
+      "sku": "32096",
+      "productName": "Paper Roll Thermal BPA/BPS Free",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmobazs3w00053cu9erc1o3fz",
+      "canonicalIngredientId": "cmo6v1vsa001diku9vo9c3xpf",
+      "canonicalName": "hellmann mayonnaise extra heavy",
+      "vendorName": "Sysco",
+      "sku": "6004857",
+      "productName": "Hellmann Mayonnaise Extra Heavy",
+      "invoiceId": "cmoa1wl6t000004l29buyl779",
+      "invoiceNumber": "945831303",
+      "invoiceDate": "2026-04-20",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmo6uhq2j001jkeu9xqpu8c28",
+      "canonicalIngredientId": "cmo6v1vl9001biku9vaoh4w25",
+      "canonicalName": "bleach 6% epa registered",
+      "vendorName": "Individual FoodService",
+      "sku": "24541",
+      "productName": "Bleach 6% EPA Registered",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmob98emg000k9iu9baize56m",
+      "canonicalIngredientId": "cmo6v1wdw001jiku91l5vnsuk",
+      "canonicalName": "sys cls mayonnaise banquet xhv duty",
+      "vendorName": "Sysco",
+      "sku": "71355SYS",
+      "productName": "Sys Cls Mayonnaise Banquet Xhv Duty",
+      "invoiceId": "cmo6uig6d001vkeu9i1vb04fd",
+      "invoiceNumber": "945780455",
+      "invoiceDate": "2026-04-03",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmo6ujtns002gkeu9rvncv6hg",
+      "canonicalIngredientId": "cmo6v1wk9001liku92r0b9ozh",
+      "canonicalName": "sugar packet",
+      "vendorName": "Sysco",
+      "sku": "4000899",
+      "productName": "Sugar Packet",
+      "invoiceId": "cmo6ujtlg002bkeu9kgoudeyw",
+      "invoiceNumber": "945763808",
+      "invoiceDate": "2026-03-30",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmo6ukhvp002ukeu9okma0kr2",
+      "canonicalIngredientId": "cmo6v1wqm001niku9057zgfaa",
+      "canonicalName": "syrup pibb xtra",
+      "vendorName": "Individual FoodService",
+      "sku": "NFBGMRP",
+      "productName": "Syrup Pibb Xtra",
+      "invoiceId": "cmo6ukhtf002mkeu9bocbkrrx",
+      "invoiceNumber": "G88326-00",
+      "invoiceDate": "2026-03-30",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    }
+  ],
+  "reportFiles": {
+    "json": "/home/vardan/restaurant-dashboard/docs/audits/20260502T065316Z-ingredient-price-conversions.json",
+    "markdown": "/home/vardan/restaurant-dashboard/docs/audits/20260502T065316Z-ingredient-price-conversions.md"
+  }
+}

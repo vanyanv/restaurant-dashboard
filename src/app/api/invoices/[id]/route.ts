@@ -119,6 +119,6 @@ export async function PATCH(
     },
   })
 
-  await bustTags([`account:${session.user.accountId}`])
+  await bustTags(["invoices", `account:${session.user.accountId}`])
   return NextResponse.json({ id: updated.id, status: updated.status, storeId: updated.storeId })
 }

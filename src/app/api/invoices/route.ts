@@ -122,6 +122,6 @@ export async function PATCH(request: NextRequest) {
     },
   })
 
-  await bustTags([`account:${session.user.accountId}`])
+  await bustTags(["invoices", `account:${session.user.accountId}`])
   return NextResponse.json({ updated: updated.count })
 }

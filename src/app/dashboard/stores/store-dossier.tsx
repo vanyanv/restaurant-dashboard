@@ -4,7 +4,15 @@ import { useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ChevronRight, Loader2 } from "lucide-react"
+import {
+  ChevronRight,
+  Loader2,
+  PencilLine,
+  Power,
+  RotateCcw,
+  Save,
+  X,
+} from "lucide-react"
 import { updateStore, deleteStore } from "@/app/actions/store-actions"
 import { setStoreTargetCogsPct } from "@/app/actions/cogs-actions"
 import { monthlyFromWeekly, weeklyFromMonthly } from "@/lib/pnl"
@@ -248,6 +256,7 @@ export function StoreDossier({
     <div className="store-dossier">
       <header className="store-dossier__masthead">
         <div className="min-w-0">
+          <div className="store-dossier__kicker">Store file</div>
           {store.address && (
             <div className="store-dossier__addr">{store.address}</div>
           )}
@@ -277,89 +286,96 @@ export function StoreDossier({
         </div>
       </header>
 
-      <section className="store-dossier__section">
-        <div className="store-dossier__dept">
-          <span>Files</span>
-          <span>per-store reports</span>
-        </div>
-        <nav className="store-files-rail" aria-label="Per-store reports">
-          {FILES.map((file) => (
-            <Link
-              key={file.title}
-              href={file.href(store.id)}
-              className="store-files-row"
-            >
-              <span>
-                <span className="store-files-row__title">{file.title}</span>
-                <span className="store-files-row__caption">
-                  {file.caption}
+      <div className="store-dossier__body">
+        <section className="store-dossier__section store-dossier__section--files">
+          <div className="store-dossier__dept">
+            <span>Files</span>
+            <span>per-store reports</span>
+          </div>
+          <nav className="store-files-rail" aria-label="Per-store reports">
+            {FILES.map((file) => (
+              <Link
+                key={file.title}
+                href={file.href(store.id)}
+                className="store-files-row"
+              >
+                <span>
+                  <span className="store-files-row__title">{file.title}</span>
+                  <span className="store-files-row__caption">
+                    {file.caption}
+                  </span>
                 </span>
-              </span>
-              <ChevronRight className="store-files-row__chev" aria-hidden />
-            </Link>
-          ))}
-        </nav>
-      </section>
+                <ChevronRight className="store-files-row__chev" aria-hidden />
+              </Link>
+            ))}
+          </nav>
+        </section>
 
-      <section className="store-dossier__section">
-        <div className="store-dossier__dept">
-          <span>Configuration</span>
-          {isOwner ? (
-            editing ? (
-              <span className="flex items-center gap-2">
+        <section className="store-dossier__section store-dossier__section--config">
+          <div className="store-dossier__dept store-dossier__dept--actions">
+            <span>Operating inputs</span>
+            {isOwner ? (
+              editing ? (
+                <span className="store-dossier__actions">
+                  <button
+                    type="button"
+                    className="toolbar-btn"
+                    onClick={cancel}
+                    disabled={isPending}
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="toolbar-btn active"
+                    onClick={submit}
+                    disabled={isPending}
+                  >
+                    {isPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        Saving
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3.5 w-3.5" aria-hidden />
+                        Save
+                      </>
+                    )}
+                  </button>
+                </span>
+              ) : (
                 <button
                   type="button"
                   className="toolbar-btn"
-                  onClick={cancel}
-                  disabled={isPending}
+                  onClick={() => setEditing(true)}
                 >
-                  Cancel
+                  <PencilLine className="h-3.5 w-3.5" aria-hidden />
+                  Edit inputs
                 </button>
-                <button
-                  type="button"
-                  className="toolbar-btn active"
-                  onClick={submit}
-                  disabled={isPending}
-                >
-                  {isPending ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                      Saving
-                    </span>
-                  ) : (
-                    "Save changes"
-                  )}
-                </button>
-              </span>
+              )
             ) : (
-              <button
-                type="button"
-                className="toolbar-btn"
-                onClick={() => setEditing(true)}
-              >
-                Edit
-              </button>
-            )
-          ) : (
-            <span>read-only</span>
-          )}
-        </div>
+              <span>read-only</span>
+            )}
+          </div>
 
-        {editing ? (
-          <ConfigForm
-            form={form}
-            set={set}
-            towelsHint={towelsHint}
-            disabled={isPending}
-          />
-        ) : (
-          <ConfigReadout store={store} />
-        )}
-      </section>
+          {editing ? (
+            <ConfigForm
+              form={form}
+              set={set}
+              towelsHint={towelsHint}
+              disabled={isPending}
+            />
+          ) : (
+            <ConfigReadout store={store} />
+          )}
+        </section>
+      </div>
 
       {isOwner && !editing && (
-        <footer className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-dotted border-(--hairline-bold)">
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-(--ink-faint)">
+        <footer className="store-dossier__footer">
+          <span>
             Store id · {store.id.slice(-8)}
           </span>
           <AlertDialog>
@@ -369,6 +385,11 @@ export function StoreDossier({
                 className="toolbar-btn toolbar-btn--danger"
                 disabled={isPending}
               >
+                {store.isActive ? (
+                  <Power className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                )}
                 {store.isActive ? "Deactivate store" : "Reactivate store"}
               </button>
             </AlertDialogTrigger>
@@ -392,9 +413,9 @@ export function StoreDossier({
                 <AlertDialogAction
                   onClick={handleDeactivate}
                   disabled={isPending}
-                  className="bg-(--accent) text-white hover:bg-(--accent-dark)"
+                  className="bg-(--accent) text-(--paper) hover:bg-(--accent-dark)"
                 >
-                  {isPending ? "Working…" : store.isActive ? "Deactivate" : "Reactivate"}
+                  {isPending ? "Working..." : store.isActive ? "Deactivate" : "Reactivate"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -501,7 +522,7 @@ interface ConfigFormProps {
 
 function ConfigForm({ form, set, towelsHint, disabled }: ConfigFormProps) {
   return (
-    <div className="config-ledger">
+    <dl className="config-ledger config-ledger--form">
       <FormRow label="Store name">
         <input
           type="text"
@@ -608,7 +629,7 @@ function ConfigForm({ form, set, towelsHint, disabled }: ConfigFormProps) {
           step="0.1"
         />
       </FormRow>
-    </div>
+    </dl>
   )
 }
 
@@ -693,4 +714,3 @@ function PercentInput({
     </span>
   )
 }
-

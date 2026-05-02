@@ -1,0 +1,31 @@
+{
+  "storeId": "cmexd4zia0001jr04ljkdt9na",
+  "storeName": "Chris N Eddys - Hollywood",
+  "accountId": "acc_default_chrisneddys",
+  "targetCogsPct": 30,
+  "counts": {
+    "canonicals": 74,
+    "canonicalsUsedInRecipes": 33,
+    "canonicalsWithCost": 63,
+    "canonicalsLocked": 6,
+    "skuMatches": 83,
+    "lineItemsMatched": 622,
+    "recipes": 60,
+    "recipesSellable": 41,
+    "dailyCogsLast30d": 1312,
+    "dailyCogsPartial": 224
+  },
+  "flags": {
+    "stale": 0,
+    "missingCost": 0,
+    "lockedDrift": 1,
+    "crossVendorSpread": 0,
+    "conversionGap": 67,
+    "suspiciousMagnitude": 1
+  },
+  "recipes": {
+    "total": 60,
+    "partial": 3,
+    "withErrors": 0
+  }
+}
