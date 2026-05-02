@@ -52,6 +52,7 @@ dashboard-*.png
 
 # Claude Code local project config
 .claude/
+.codex/
 
 # Local outputs from invoice backfill / diagnostic scripts
 backfill-failures.json

@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${dmSans.variable} ${jetbrainsMono.variable} ${dmSans.className}`}>
-        <NextAuthSessionProvider session={null}>
+        <NextAuthSessionProvider>
           <QueryProvider>
             {children}
             <Toaster richColors position="top-right" />
