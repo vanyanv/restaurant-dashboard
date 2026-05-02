@@ -4432,6 +4432,411 @@
   margin: 0 auto;
 }
 
+.cogs-operator-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(22rem, 0.92fr);
+  gap: 18px;
+}
+
+.cogs-brief,
+.cogs-fixfirst {
+  min-width: 0;
+}
+
+.cogs-brief__stamp,
+.cogs-fixfirst__impact,
+.cogs-store-overview__scope {
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.cogs-brief__hero {
+  display: grid;
+  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+  align-items: end;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.cogs-brief__pct {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "opsz" 144, "SOFT" 30;
+  letter-spacing: -0.03em;
+  line-height: 0.85;
+  font-size: clamp(72px, 10vw, 116px);
+  color: var(--ink);
+  font-feature-settings: "tnum";
+}
+
+.cogs-brief__pct--over {
+  color: var(--accent-dark);
+}
+
+.cogs-brief__pct span {
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-style: normal;
+  font-size: 0.42em;
+  letter-spacing: 0;
+  margin-left: 0.08em;
+}
+
+.cogs-brief__note {
+  max-width: 34rem;
+  color: var(--ink-muted);
+}
+
+.cogs-brief__note p {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cogs-brief__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.cogs-brief__metrics div {
+  padding: 12px 14px 0 0;
+  border-right: 1px solid var(--hairline);
+}
+
+.cogs-brief__metrics div:last-child {
+  border-right: 0;
+}
+
+.cogs-brief__metrics dt,
+.cogs-panel-stat span {
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.cogs-brief__metrics dd {
+  margin-top: 4px;
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.cogs-panel-stat {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.cogs-panel-stat strong {
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.cogs-panel-stat em {
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  font-style: normal;
+  color: var(--ink-muted);
+}
+
+.cogs-action-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cogs-action-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.8rem minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.cogs-action-list li:first-child .cogs-action-row {
+  border-top: 0;
+}
+
+.cogs-action-row::before {
+  position: absolute;
+  left: -20px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: var(--accent);
+  content: "";
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.cogs-action-row:hover,
+.cogs-action-row:focus-visible {
+  background: rgba(220, 38, 38, 0.035);
+  outline: 0;
+}
+
+.cogs-action-row:hover::before,
+.cogs-action-row:focus-visible::before {
+  transform: scaleY(1);
+}
+
+.cogs-action-row__rank,
+.cogs-action-row__meta,
+.cogs-action-row__cta {
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cogs-action-row__rank {
+  color: var(--ink-faint);
+}
+
+.cogs-action-row__body {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.cogs-action-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.cogs-action-row__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+
+.cogs-action-row__cta {
+  color: var(--ink);
+  text-align: right;
+}
+
+.cogs-action-row--critical .cogs-action-row__rank,
+.cogs-action-row--critical .cogs-action-row__cta {
+  color: var(--accent-dark);
+}
+
+.cogs-empty-note {
+  padding: 32px 14px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+.cogs-ledger-table {
+  display: grid;
+  border-top: 1px solid var(--hairline-bold);
+}
+
+.cogs-ledger-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem 5rem;
+  align-items: baseline;
+  gap: 14px;
+  min-height: 34px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.cogs-ledger-table__row > span:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.cogs-ledger-table__row--head {
+  min-height: 28px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.cogs-ledger-table__row--total {
+  border-bottom: 0;
+  font-weight: 700;
+}
+
+.cogs-ledger-table__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+}
+
+.cogs-store-overview__head {
+  margin: 0;
+  padding: 18px 20px 14px;
+}
+
+.cogs-store-ledger {
+  display: grid;
+}
+
+.cogs-store-ledger__row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) repeat(6, minmax(5.4rem, 0.75fr));
+  align-items: baseline;
+  gap: 14px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.cogs-store-ledger__row > span:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.cogs-store-ledger__row--head {
+  min-height: 32px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.cogs-store-ledger__row--link {
+  position: relative;
+  text-decoration: none;
+  transition: background 160ms ease;
+}
+
+.cogs-store-ledger__row--link::before {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 4px;
+  background: var(--accent);
+  content: "";
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.cogs-store-ledger__row--link:hover,
+.cogs-store-ledger__row--link:focus-visible {
+  background: rgba(220, 38, 38, 0.035);
+  outline: 0;
+}
+
+.cogs-store-ledger__row--link:hover::before,
+.cogs-store-ledger__row--link:focus-visible::before,
+.cogs-store-ledger__row--over::before {
+  transform: scaleY(1);
+}
+
+.cogs-store-ledger__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-size: 17px;
+}
+
+@media (max-width: 1024px) {
+  .cogs-operator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cogs-store-ledger {
+    overflow-x: auto;
+  }
+
+  .cogs-store-ledger__row {
+    min-width: 58rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .cogs-brief__hero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .cogs-brief__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cogs-brief__metrics div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .cogs-action-row {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .cogs-action-row__cta {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .cogs-panel-stat,
+  .cogs-store-overview__scope {
+    display: none;
+  }
+
+  .cogs-ledger-table {
+    overflow-x: auto;
+  }
+
+  .cogs-ledger-table__row {
+    min-width: 28rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cogs-action-row,
+  .cogs-action-row::before,
+  .cogs-store-ledger__row--link,
+  .cogs-store-ledger__row--link::before {
+    transition: none;
+  }
+}
+
 /* Hero COGS % — the one chromatic moment on the page. */
 .cogs-hero-pct {
   font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;

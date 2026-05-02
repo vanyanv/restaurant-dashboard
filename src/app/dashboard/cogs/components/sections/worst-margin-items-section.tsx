@@ -4,6 +4,10 @@ import type { CogsFilters } from "./data"
 
 const LIMIT = 20
 
+function formatMoney(value: number): string {
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+}
+
 export async function WorstMarginItemsSection({
   storeId,
   filters,
@@ -20,21 +24,36 @@ export async function WorstMarginItemsSection({
 
   if (rows.length === 0) {
     return (
-      <section>
-        <div className="font-label mb-2">§ 04 · Worst-margin items</div>
-        <div className="font-mono text-xs italic text-(--ink-muted) py-10 text-center border-t border-(--hairline)">
+      <section className="inv-panel dock-in dock-in-5">
+        <div className="inv-panel__head">
+          <div>
+            <span className="inv-panel__dept">§ 05 Menu</span>
+            <h2 className="inv-panel__title">Worst-margin items</h2>
+          </div>
+        </div>
+        <div className="cogs-empty-note">
           No costed sales in this period.
         </div>
       </section>
     )
   }
 
-  return (
-    <section>
-      <div className="font-label mb-2">§ 04 · Worst-margin items</div>
+  const highest = rows[0]
 
-      {/* Mobile: card stack ─ keep item name + margin % prominent, push
-          unitsSold / revenue / cost into a meta strip. */}
+  return (
+    <section className="inv-panel dock-in dock-in-5">
+      <div className="inv-panel__head">
+        <div>
+          <span className="inv-panel__dept">§ 05 Menu</span>
+          <h2 className="inv-panel__title">Worst-margin items</h2>
+        </div>
+        <div className="cogs-panel-stat">
+          <span>highest</span>
+          <strong>{highest.foodCostPct.toFixed(1)}%</strong>
+          <em>{formatMoney(highest.foodCostDollars)} cost</em>
+        </div>
+      </div>
+
       <ul className="sm:hidden divide-y divide-(--hairline) border-t border-(--hairline-bold)">
         {rows.map((r) => {
           const isHigh = r.foodCostPct >= 35
@@ -77,16 +96,15 @@ export async function WorstMarginItemsSection({
               <div className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-(--ink-muted)">
                 {r.unitsSold.toFixed(0)} sold
                 <span aria-hidden> · </span>
-                ${r.revenue.toFixed(0)} rev
+                {formatMoney(r.revenue)} rev
                 <span aria-hidden> · </span>
-                ${r.foodCostDollars.toFixed(0)} cost
+                {formatMoney(r.foodCostDollars)} cost
               </div>
             </li>
           )
         })}
       </ul>
 
-      {/* Desktop: dense reconciliation table */}
       <table className="hidden sm:table w-full text-xs font-mono">
         <thead>
           <tr className="border-b border-(--hairline-bold)">
@@ -118,9 +136,9 @@ export async function WorstMarginItemsSection({
                   )}
                 </td>
                 <td className="py-1 text-right">{r.unitsSold.toFixed(0)}</td>
-                <td className="py-1 text-right">${r.revenue.toFixed(0)}</td>
+                <td className="py-1 text-right">{formatMoney(r.revenue)}</td>
                 <td className="py-1 text-right">
-                  ${r.foodCostDollars.toFixed(0)}
+                  {formatMoney(r.foodCostDollars)}
                 </td>
                 <td
                   className={`py-1 text-right ${

@@ -4,8 +4,7 @@ import { SectionErrorBoundary } from "@/components/analytics/section-error"
 import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { CogsDateControls } from "../components/cogs-date-controls"
 import { TargetChip } from "../components/target-chip"
-import { DataQualityStripSection } from "../components/sections/data-quality-strip-section"
-import { CogsKpiStripSection } from "../components/sections/cogs-kpi-strip-section"
+import { OperatorLedgerSection } from "../components/sections/operator-ledger-section"
 import { CogsTrendSection } from "../components/sections/cogs-trend-section"
 import { CostByCategorySection } from "../components/sections/cost-by-category-section"
 import { WorstMarginItemsSection } from "../components/sections/worst-margin-items-section"
@@ -49,15 +48,9 @@ export function CogsShell({
 
       <div className="flex-1 overflow-auto px-4 pb-8 pt-4 sm:px-6 sm:pt-5">
         <div className="cogs-page flex flex-col gap-6">
-          <SectionErrorBoundary label="Data-quality unavailable">
-            <Suspense fallback={null}>
-              <DataQualityStripSection storeId={storeId} filters={filters} />
-            </Suspense>
-          </SectionErrorBoundary>
-
-          <SectionErrorBoundary label="KPIs unavailable">
-            <Suspense fallback={<Skeleton className="h-40 w-full rounded-sm" />}>
-              <CogsKpiStripSection storeId={storeId} filters={filters} />
+          <SectionErrorBoundary label="Operator brief unavailable">
+            <Suspense fallback={<Skeleton className="h-72 w-full rounded-sm" />}>
+              <OperatorLedgerSection storeId={storeId} filters={filters} />
             </Suspense>
           </SectionErrorBoundary>
 
