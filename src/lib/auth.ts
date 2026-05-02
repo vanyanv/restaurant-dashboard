@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { Role } from "@/generated/prisma/client"
+import { recordLoginEvent } from "@/lib/monitoring/login-audit"
 
 declare module "next-auth" {
   interface Session {
@@ -45,7 +46,9 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
+        const email = credentials?.email ?? ""
+        const headers = req?.headers
         try {
           if (!credentials?.email || !credentials?.password) {
             return null
@@ -60,6 +63,7 @@ export const authOptions: NextAuthOptions = {
           })
 
           if (!user) {
+            await recordLoginEvent({ emailTried: email, kind: "SIGN_IN_FAILED", headers })
             return null
           }
 
@@ -69,8 +73,21 @@ export const authOptions: NextAuthOptions = {
           )
 
           if (!isPasswordValid) {
+            await recordLoginEvent({
+              userId: user.id,
+              emailTried: email,
+              kind: "SIGN_IN_FAILED",
+              headers,
+            })
             return null
           }
+
+          await recordLoginEvent({
+            userId: user.id,
+            emailTried: email,
+            kind: "SIGN_IN",
+            headers,
+          })
 
           return {
             id: user.id,
@@ -122,7 +139,15 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/login",
     signOut: "/login"
-  }
+  },
+  events: {
+    async signOut({ token }) {
+      const userId = (token?.id as string | undefined) ?? null
+      const email = (token?.email as string | undefined) ?? ""
+      if (!userId) return
+      await recordLoginEvent({ userId, emailTried: email, kind: "SIGN_OUT" })
+    },
+  },
 }
 
 /**

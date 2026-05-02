@@ -19,3 +19,16 @@
     animation: none;
   }
 }
+
+/* ─── Command-bridge quota gauge — pulse at 100% ─── */
+
+@keyframes quota-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-quota-key] [style*="quota-pulse"] {
+    animation: none !important;
+  }
+}

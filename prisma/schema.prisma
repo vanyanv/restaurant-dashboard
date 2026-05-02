@@ -1026,3 +1026,58 @@ model DbSnapshot {
 
   @@index([date(sort: Desc)])
 }
+
+/// Periodic snapshot of Vercel plan quotas, polled every ~15 min from
+/// `GET /v1/usage` with `VERCEL_TOKEN`. `metrics` carries all 10 Hobby-plan
+/// gauges (blob ops, fluid CPU, function invocations, edge requests, ISR
+/// reads, image optimization, fast origin transfer, blob storage,
+/// provisioned memory, blob simple ops) as `{ used, limit }` pairs.
+model VercelUsageSnapshot {
+  id           String   @id @default(cuid())
+  capturedAt   DateTime @default(now())
+  billingCycle String
+  metrics      Json
+
+  @@index([capturedAt(sort: Desc)])
+  @@index([billingCycle])
+}
+
+enum LoginKind {
+  SIGN_IN
+  SIGN_OUT
+  SIGN_IN_FAILED
+}
+
+/// Login audit trail. `userId` null on failed attempts (we still capture
+/// the email tried). `SIGN_OUT` is recorded best-effort from the NextAuth
+/// `events.signOut` callback. Live presence is derived from this stream:
+/// users with a recent `SIGN_IN` and no later `SIGN_OUT` within JWT TTL
+/// are considered online (we use JWT strategy, so there is no Session
+/// table to enumerate).
+model LoginEvent {
+  id         String    @id @default(cuid())
+  userId     String?
+  emailTried String
+  kind       LoginKind
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+/// Daily R2 bucket size snapshot, written by the
+/// `/api/cron/r2-snapshot` route via `ListObjectsV2` against the configured
+/// R2 bucket. `byPrefix` rolls up `{ bytes, count }` per top-level prefix
+/// (e.g. `invoices/`) so the infrastructure drilldown can show what's
+/// taking space without re-listing.
+model R2BucketSnapshot {
+  id          String   @id @default(cuid())
+  capturedAt  DateTime @default(now())
+  totalBytes  BigInt
+  objectCount Int
+  byPrefix    Json
+
+  @@index([capturedAt(sort: Desc)])
+}

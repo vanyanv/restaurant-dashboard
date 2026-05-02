@@ -40,10 +40,11 @@ export function MobileStoreSelect({
         background: "transparent",
         border: "1px solid var(--hairline-bold)",
         borderRadius: 0,
-        padding: "6px 10px",
+        minHeight: 44,
+        padding: "11px 12px",
         fontFamily:
           "var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif",
-        fontSize: 12,
+        fontSize: 13,
         color: "var(--ink)",
         fontWeight: 500,
       }}

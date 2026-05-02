@@ -13,6 +13,7 @@ type Props = {
 }
 
 export function DateSheetShell({ open, onClose, dept, children, footer }: Props) {
+  const sheetRef = useRef<HTMLDivElement | null>(null)
   const closeBtnRef = useRef<HTMLButtonElement | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -22,8 +23,36 @@ export function DateSheetShell({ open, onClose, dept, children, footer }: Props)
 
   useEffect(() => {
     if (!open) return
+    const restoreFocusTo =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
+      if (e.key === "Escape") {
+        e.preventDefault()
+        onClose()
+        return
+      }
+
+      if (e.key !== "Tab") return
+
+      const focusables = getFocusable(sheetRef.current)
+      if (focusables.length === 0) {
+        e.preventDefault()
+        closeBtnRef.current?.focus()
+        return
+      }
+
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement
+
+      if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener("keydown", onKey)
 
@@ -51,6 +80,7 @@ export function DateSheetShell({ open, onClose, dept, children, footer }: Props)
       document.body.style.top = prev.top
       document.body.style.width = prev.width
       window.scrollTo(0, scrollY)
+      restoreFocusTo?.focus()
     }
   }, [open, onClose])
 
@@ -60,6 +90,7 @@ export function DateSheetShell({ open, onClose, dept, children, footer }: Props)
     <>
       <div className="m-sheet__backdrop" onClick={onClose} aria-hidden />
       <div
+        ref={sheetRef}
         className="m-sheet"
         role="dialog"
         aria-modal="true"
@@ -87,4 +118,21 @@ export function DateSheetShell({ open, onClose, dept, children, footer }: Props)
     </>,
     document.body,
   )
+}
+
+function getFocusable(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return []
+
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      [
+        "a[href]",
+        "button:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "input:not([disabled])",
+        "[tabindex]:not([tabindex='-1'])",
+      ].join(","),
+    ),
+  ).filter((el) => !el.hasAttribute("disabled") && !el.getAttribute("aria-hidden"))
 }

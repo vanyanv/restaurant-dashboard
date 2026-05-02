@@ -13,6 +13,18 @@
   --accent-bg: #fcecec;
   --subtract: #8a3a3a;
 
+  /* Editorial inks for the monitoring command bridge — printer's plate
+     colors that sit on cream paper. Each subsystem gets one. Status
+     colors (ledger / ochre / accent) override system color when a status
+     is being communicated. --accent stays reserved for danger + masthead. */
+  --ink-stamp: oklch(38% 0.10 252);       /* DB                     */
+  --ink-sepia: oklch(45% 0.07 65);        /* Vercel                 */
+  --ink-terracotta: oklch(50% 0.11 40);   /* R2                     */
+  --ink-plum: oklch(38% 0.08 350);        /* Auth                   */
+  --ink-olive: oklch(45% 0.07 110);       /* Syncs                  */
+  --ink-ledger: oklch(45% 0.09 150);      /* Cache + status OK      */
+  --ink-ochre: oklch(60% 0.12 75);        /* status warning         */
+
   /* Per-platform stamp colors */
   --platform-doordash: #eb1700;
   --platform-ubereats: #0b0b0b;
@@ -6396,7 +6408,7 @@
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   text-decoration: none;
   background: transparent;
   border: 0;
@@ -6528,7 +6540,7 @@
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
 }
 
 .m-masthead__value {
@@ -6560,7 +6572,7 @@
   font-weight: 500;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   margin-bottom: 6px;
 }
 
@@ -6668,7 +6680,7 @@
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
 }
 
 .m-section-row__name {
@@ -6747,7 +6759,7 @@
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   line-height: 1.2;
 }
 
@@ -6800,6 +6812,7 @@
   position: relative;
   flex: 1;
   text-align: center;
+  min-height: 44px;
   padding: 14px 6px;
   font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   font-size: 10.5px;
@@ -7083,8 +7096,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--hairline);
   border-radius: 2px;
   background: transparent;
@@ -7271,7 +7286,9 @@
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
-  padding: 4px 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 12px;
 }
 .m-sheet__close:hover { color: var(--ink); }
 
@@ -7357,6 +7374,7 @@
 }
 .m-grain-toggle__item {
   flex: 1;
+  min-height: 44px;
   padding: 10px 0;
   font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   font-size: 10px;

@@ -61,9 +61,8 @@ export function MToolbar({
           searchParams={searchParams}
         />
       </div>
-      <div
+      <nav
         className="m-segmented"
-        role="tablist"
         aria-label="Period"
         style={{ margin: "0 -16px" }}
       >
@@ -81,11 +80,9 @@ export function MToolbar({
             <Link
               key={p.value}
               href={href}
-              role="tab"
-              aria-selected={active}
+              aria-current={active ? "page" : undefined}
               prefetch={false}
               className={`m-segmented__item${active ? " is-active" : ""}`}
-              style={{ padding: "10px 6px", fontSize: 9.5 }}
             >
               {p.short}
             </Link>
@@ -100,7 +97,7 @@ export function MToolbar({
           initialStart={isCustom ? range.start : null}
           initialEnd={isCustom ? range.end : null}
         />
-      </div>
+      </nav>
     </div>
   )
 }

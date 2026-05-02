@@ -23,9 +23,8 @@ export function MPnLToolbar({ pathname, searchParams, range }: Props) {
         background: "rgba(255, 253, 247, 0.55)",
       }}
     >
-      <div
+      <nav
         className="m-segmented"
-        role="tablist"
         aria-label="P&L period"
         style={{ margin: "0 -16px" }}
       >
@@ -42,11 +41,9 @@ export function MPnLToolbar({ pathname, searchParams, range }: Props) {
             <Link
               key={p.value}
               href={href}
-              role="tab"
-              aria-selected={active}
+              aria-current={active ? "page" : undefined}
               prefetch={false}
               className={`m-segmented__item${active ? " is-active" : ""}`}
-              style={{ padding: "10px 6px", fontSize: 9 }}
             >
               {p.short}
             </Link>
@@ -62,7 +59,7 @@ export function MPnLToolbar({ pathname, searchParams, range }: Props) {
           initialEnd={isCustom ? range.end : null}
           initialGrain={isCustom && !range.grainAuto ? range.grain : null}
         />
-      </div>
+      </nav>
     </div>
   )
 }

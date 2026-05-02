@@ -65,3 +65,6 @@ backfill-failures.json
 
 # Chat eval harness output (markdown reports per run, kept local)
 scripts/eval-chat/runs/
+
+# TrueCourse local artifacts (analyze lock + logs)
+.truecourse/

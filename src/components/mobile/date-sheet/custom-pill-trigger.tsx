@@ -49,10 +49,10 @@ export function CustomPillTrigger({
     <>
       <button
         type="button"
-        role="tab"
-        aria-selected={isActive}
+        aria-current={isActive ? "page" : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className={`m-segmented__item${isActive ? " is-active" : ""}`}
-        style={{ padding: "10px 6px", fontSize: 9.5 }}
         onClick={() => setOpen(true)}
       >
         {isActive && activeLabel ? activeLabel : "CUSTOM"}

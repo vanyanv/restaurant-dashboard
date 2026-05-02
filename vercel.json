@@ -11,8 +11,18 @@
     },
     "src/app/api/cron/otter/hourly/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/cron/r2-snapshot/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/vercel-usage/route.ts": {
+      "maxDuration": 30
     }
   },
+  "crons": [
+    { "path": "/api/cron/vercel-usage", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/r2-snapshot",  "schedule": "0 4 * * *" }
+  ],
   "env": {
     "NEXTAUTH_RUNTIME": "nodejs"
   },

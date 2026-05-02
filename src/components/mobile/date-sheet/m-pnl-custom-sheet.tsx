@@ -116,15 +116,14 @@ export function MPnLCustomSheet({
       />
 
       <span className="m-grain-toggle__label">GRANULARITY</span>
-      <div className="m-grain-toggle" role="tablist" aria-label="Granularity">
+      <div className="m-grain-toggle" role="group" aria-label="Granularity">
         {GRAIN_OPTIONS.map((g) => {
           const active = g.value === effectiveGrain
           return (
             <button
               key={g.value}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               className={`m-grain-toggle__item${active ? " is-active" : ""}`}
               onClick={() => {
                 // Tapping the auto-suggested grain reverts to auto; otherwise sets override.
