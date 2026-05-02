@@ -42,7 +42,7 @@ export function MPnLToolbar({ pathname, searchParams, range }: Props) {
               key={p.value}
               href={href}
               aria-current={active ? "page" : undefined}
-              prefetch={false}
+              prefetch={true}
               className={`m-segmented__item${active ? " is-active" : ""}`}
             >
               {p.short}

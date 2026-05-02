@@ -2,8 +2,8 @@ import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { getAllStoresPnL } from "@/app/actions/store-actions"
 import { parsePnLRange, pnlRangeToState } from "@/lib/mobile/pnl-period"
+import { getMobilePnLOverview } from "@/lib/mobile/snapshots"
 import { PageHead } from "@/components/mobile/page-head"
 import {
   MastheadFigures,
@@ -45,7 +45,7 @@ export default async function MobilePnLPage({
   const range = parsePnLRange(sp)
   const state = pnlRangeToState(range)
 
-  const result = await getAllStoresPnL({
+  const result = await getMobilePnLOverview({
     startDate: state.startDate,
     endDate: state.endDate,
     granularity: state.granularity,
@@ -58,13 +58,13 @@ export default async function MobilePnLPage({
 
   if ("error" in result) {
     return (
-      <>
+      <div data-perf-ready="/m/pnl">
         <PageHead dept="P&L" title="Profit & Loss" sub={subLabel} />
         <MPnLToolbar pathname="/m/pnl" searchParams={sp} range={range} />
         <div className="m-empty dock-in dock-in-2">
           <strong>Couldn&apos;t load P&amp;L.</strong> {result.error}
         </div>
-      </>
+      </div>
     )
   }
 
@@ -77,7 +77,7 @@ export default async function MobilePnLPage({
   const sorted = [...result.perStore].sort((a, b) => b.grossSales - a.grossSales)
 
   return (
-    <>
+    <div data-perf-ready="/m/pnl">
       <PageHead dept="P&L" title="Profit & Loss" sub={subLabel} />
       <MPnLToolbar pathname="/m/pnl" searchParams={sp} range={range} />
       <MastheadFigures cells={cells} />
@@ -89,6 +89,7 @@ export default async function MobilePnLPage({
               <Link
                 key={s.storeId}
                 href={`/m/pnl/${s.storeId}${qsFor(sp)}`}
+                prefetch={true}
                 className="inv-row"
                 style={{
                   gridTemplateColumns: "1fr auto auto",
@@ -136,7 +137,7 @@ export default async function MobilePnLPage({
           </div>
         </Panel>
       </div>
-    </>
+    </div>
   )
 }
 

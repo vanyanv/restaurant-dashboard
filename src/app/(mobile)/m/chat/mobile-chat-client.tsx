@@ -1,17 +1,25 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
 import type { UIMessage } from "ai"
 import {
   ChatDrawerProvider,
   useChatDrawer,
 } from "@/components/chat/chat-drawer-context"
-import { ChatThread } from "@/components/chat/chat-thread"
 import {
   hydrateConversationMessages,
   type SavedMessage,
 } from "@/lib/chat/hydrate-messages"
 import "@/components/chat/chat.css"
+
+const ChatThread = dynamic(
+  () => import("@/components/chat/chat-thread").then((m) => m.ChatThread),
+  {
+    ssr: false,
+    loading: () => <MobileChatThreadFallback />,
+  },
+)
 
 type ConversationSummary = {
   id: string
@@ -101,7 +109,7 @@ function MobileChatInner({
   }
 
   return (
-    <div className="m-chat-shell">
+    <div className="m-chat-shell" data-perf-ready="/m/chat">
       <div className="m-chat-toolbar">
         <select
           value={conversationId ?? ""}
@@ -138,5 +146,34 @@ function MobileChatInner({
         />
       </div>
     </div>
+  )
+}
+
+function MobileChatThreadFallback() {
+  return (
+    <>
+      <div className="chat-thread">
+        <div className="chat-empty">
+          <div className="chat-empty__intro">
+            <div className="m-skel-line m-skel-line--cap" />
+            <div className="m-skel-line m-skel-line--title" />
+            <div className="m-skel-line m-skel-line--body" />
+          </div>
+          <div className="chat-empty__suggestions">
+            <div className="m-skel-pill" />
+            <div className="m-skel-pill" />
+            <div className="m-skel-pill" />
+          </div>
+        </div>
+      </div>
+      <div className="chat-input-shell">
+        <div className="chat-input-row">
+          <div className="m-skel-line m-skel-line--input" />
+        </div>
+        <div className="chat-input-meta">
+          <span className="m-skel-line m-skel-line--meta" />
+        </div>
+      </div>
+    </>
   )
 }

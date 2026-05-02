@@ -1,0 +1,64 @@
+canonicalId,name,category,recipeUnit,cost,costSource,perLb,perFlOz,perEach,usedInRecipe,invoiceLines
+cmo58uduf00263nu9a73pi7d5,sysco classic gloves nitrile foodservice powder free black,Paper/Supplies,each,0.0037990000000000003,invoice,,,0.0037990000000000003,false,24
+cmonujc4l0001rxu9wh7dwatk,chris & eddy's house sauce cup 1.5 oz,,each,0.6049444444,invoice,,,0.6049444444,true,1
+cmo6v1vyp001fiku9ho0kyfxa,american cheese yellow 160,Dairy,each,0.1203125,invoice,,,0.1203125,true,1
+cmo58ubsx00183nu9x1vcq8nn,syrup lemonade,Beverages,gal,24.936,invoice,,0.1948125,,false,7
+cmo58uc1b001c3nu9sok0uwcv,syrup coca cola zero sugar,Beverages,gal,24.936,invoice,,0.1948125,,true,3
+cmo58ud85001w3nu9ouzgrvwz,lyon medium syrup chocolate free flow,Dry Goods,gal,20.59,invoice,,0.160859375,,true,2
+cmo58udgt00203nu97tiadbcs,lyon medium syrup strawberry rtu,Dry Goods,gal,21.915,invoice,,0.1712109375,,true,2
+cmo58uebv002e3nu9qynpmra7,soda orange fanta mexican glass,Beverages,ml,0.0035841666666666665,invoice,,0.10599645887359374,,true,8
+cmo58uljs005a3nu9ksul9kn5,cup portion plastic 2 oz clear,Paper/Supplies,each,0.011132,invoice,,,0.011132,true,9
+cmo58ulsm005e3nu9zgog7xnx,mustard packets 5.5gr,Dry Goods,g,0.010618181818181818,invoice,4.816326256,,,false,6
+cmo58ugcj003c3nu98lwa4t2j,ctecocrft paper wax deli,Paper/Supplies,oz,1.4074074074074074,invoice,22.51851851851852,,,false,1
+cmo58uhf6003u3nu9l1qxfq5f,tray food paper #50 1/2 lb white red check,Paper/Supplies,each,0.03438,invoice,,,0.03438,true,13
+cmo58uhs700403nu9e6qshdnn,paper patty 5.5 x 5.5 dry wax,Paper/Supplies,each,0.01056,invoice,,,0.01056,false,5
+cmo58uie3004a3nu9mo4wnzjl,napkin dispenser 2-ply 8.5 x 6.5 white,Equipment,each,0.006645,invoice,,,0.006645,true,13
+cmo58uii6004c3nu99m25lsip,towel multifold kraft 1-ply,Paper/Supplies,each,0.0061275,invoice,,,0.0061275,false,9
+cmo58uko2004w3nu9z0wfd37f,sys cls salt granulated iodized,Dry Goods,lb,0.8041666666666667,invoice,0.8041666666666667,,,false,1
+cmo58ukso004y3nu9uxzuhfdg,sys cls paper patty square 5.5,Paper/Supplies,each,0.0010616049382716048,invoice,,,0.0010616049382716048,false,1
+cmo58u9gw00043nu9k25qbxn1,lamb potato fry ss 1/4 stealth,Frozen,lb,1.4074074074074074,invoice,1.4074074074074074,,,true,31
+cmo58ub7r000y3nu9t17rhves,relish sweet,Dry Goods,oz,0,invoice,0,,,false,7
+cmo6v1w56001hiku9yznqu6k0,"pickle chips sandwich cut 1/8""",Dry Goods,each,0.036,manual,,,0.036,true,1
+cmo58u9y5000c3nu9l03pj9oz,chrsned bag plas tshirt logo ptsbchrisneddy,Paper/Supplies,each,0.005865454545454545,invoice,,,0.005865454545454545,true,7
+cmo58unti00683nu9vr74zquv,syrup sprite,Beverages,gal,24.936,invoice,,0.1948125,,true,5
+cmo58uo29006c3nu9xq8wftcu,cutlery fork full size extra heavy black pp,Paper/Supplies,each,0.01998,invoice,,,0.01998,true,5
+cmo58uore006o3nu96a66a7v9,greeno lid flat with hole 20 oz pe pet,Paper/Supplies,each,0.006495454545454546,invoice,,,0.006495454545454546,true,7
+cmo58ueg2002g3nu90wtu7q3x,soap dish liquid premium,Cleaning,gal,8.44,invoice,,0.0659375,,false,8
+cmo58uoez006i3nu95pry78wa,martins bread potato roll sandwich 3.5 inch,Bakery,each,0.3252777777777778,invoice,,,0.3252777777777778,true,32
+cmo58uq74007c3nu99nk8f9sc,tray pulp 4-cup carrier 8-32 oz,Paper/Supplies,each,0.18916666666666668,invoice,,,0.18916666666666668,false,4
+cmo58upda006y3nu9km1v92fq,sys cls spice pepper blk grnd,Dry Goods,lb,13.790000000000001,invoice,13.790000000000001,,,false,1
+cmo58uq2y007a3nu9e7ljw3u5,embossed bath tissue 2-ply recycled individually wrapped,Paper/Supplies,cs,0.0012945833333333333,invoice,,,,false,5
+cmo58uqbd007e3nu9wupqwutm,mustard packets 5.5 g,Dry Goods,g,0.006098181818181818,invoice,2.7660887435999997,,,false,1
+cmo58uphn00703nu9i90i7s3t,"lid portion plastic 1.5, 2, 2.5 oz",Paper/Supplies,each,0.015,manual,,,0.015,true,9
+cmo58unxu006a3nu93540g3zt,container foam 1-compartment bagged,Paper/Supplies,each,0.16704999999999998,invoice,,,0.16704999999999998,false,18
+cmo58ufid002y3nu9f9sbsnoz,ground beef fine grnd 73/27 creekstone,Meat,lb,4.3200057783056725,invoice,4.3200057783056725,,,true,23
+cmo58ubc000103nu9yxeujip5,soda coke mexican glass,Beverages,ml,0.0038808333333333334,invoice,,0.11476993931046875,,true,15
+cmo58ubg600123nu9095wokzi,water crystal geyser spring,Beverages,oz,0.016534234995773455,invoice,0.2645477599323753,,,true,10
+cmo58u9tw000a3nu99js828m7,greeno cup pet 20 oz c&d pet,Paper/Supplies,each,0.097,manual,,,0.097,true,8
+cmo58uo6j006e3nu9prnc2439,whole class ice cream mix soft serve vanilla 5%,Dairy,oz,0.09966145833333334,invoice,1.5945833333333335,,,true,32
+cmo58uoao006g3nu90b3ia5hm,whole frozen butter solid usda aa unsalted,Dairy,lb,3.315,invoice,3.315,,,true,17
+cmo58upum00763nu9xvzsgrdr,container foam hinged white 9x6.5x2.5,Paper/Supplies,each,0.1606,invoice,,,0.1606,false,16
+cmo58ubom00163nu96d28cmae,ketchup heinz 33% fancy,Dry Goods,lb,0.7978333333333333,invoice,0.7978333333333333,,,false,7
+cmo58uek8002i3nu9hsanw7jv,degreaser - regal brand,Cleaning,gal,5.57,invoice,,0.043515625,,false,2
+cmo58ueww002o3nu91r8ou3nb,ketchup packets foil,Dry Goods,g,0.0028744444444444447,invoice,1.3038260679888891,,,false,6
+cmo58ua28000e3nu9qwyo08i7,keyston sanitizer multi quat liq,Cleaning,gal,48.275,invoice,,0.3771484375,,false,3
+cmo58udcf001y3nu9qk4wigri,sysco reliable shortening fry liquid clear ztf,Dry Goods,lb,1.1368571428571428,invoice,1.1368571428571428,,,false,27
+cmo58ubx6001a3nu9rkduccbq,syrup hi-c fruit punch flashin,Beverages,gal,26.09,manual,,0.203828125,,true,11
+cmo58ubkh00143nu9b0c14gi1,peppers whole yellow,Produce,each,0.0814,manual,,,0.0814,true,12
+cmo58udyt00283nu9ufwdn6f5,packer lettuce boston hydroponic,Produce,each,0.15,manual,,,0.15,true,32
+cmo58ul1t00523nu999oce95f,sysco classic mayonnaise banquet xhv duty,Canned and Dry,gal,13.487499999999999,invoice,,0.10537109374999999,,false,3
+cmo58ul6500543nu9i56jxaiz,soda sprite mexican glass crv inc,Beverages,ml,0.0035841666666666665,invoice,,0.10599645887359374,,true,10
+cmo58ulan00563nu95ofk71rq,syrup orange fanta,Beverages,gal,26.089999999999996,invoice,,0.20382812499999997,,true,2
+cmo58um5o005k3nu95dn9x59n,container foam 6x6x3 medium hinged square,Paper/Supplies,each,0.08716,invoice,,,0.08716,false,2
+cmo58ungi00623nu95frgtxdz,cont foam hing lrg wht hoagie,Paper/Supplies,each,0.16945,invoice,,,0.16945,false,1
+cmo58unkn00643nu9fl9rrqck,tomato paste heinz,Dry Goods,lb,0.7901666666666666,invoice,0.7901666666666666,,,false,2
+cmo58uhjk003w3nu9cp8e4e1d,syrup coca cola classic,Beverages,gal,24.936,invoice,,0.1948125,,true,7
+cmo58uggu003e3nu90ym6arxj,erthpls lid plastic clear dome for burrito,Paper/Supplies,each,0.14527692307692308,invoice,,,0.14527692307692308,false,1
+cmo58ugl7003g3nu9x1er9bxv,erthpls bowl pulp oval,Paper/Supplies,each,0.3262947368421053,invoice,,,0.3262947368421053,false,1
+cmo58uiv2004i3nu95kozrsz2,kosher flake coarse salt,Dry Goods,lb,1.6108333333333333,invoice,1.6108333333333333,,,false,2
+cmo58uho3003y3nu945lzvpgp,syrup diet coca cola,Beverages,gal,24.922,invoice,,0.194703125,,true,2
+cmo58ui9p00483nu964sqjnvr,container foam 6x6x3 medium white bagged,Paper/Supplies,each,0.08714,invoice,,,0.08714,false,3
+cmo58ukjr004u3nu9uvuixnr2,chris & eddy's house sauce,Other,oz,0.19765625,invoice,3.1625,,,true,2
+cmo58uhax003s3nu992dz4iob,imported fresh tomato bulk 5x6 fresh,Produce,each,4.3064,manual,,,4.3064,true,31
+cmo58uar0000q3nu9rhezzbxy,packer onion sweet fresh,Produce,lb,0.9487500000000001,invoice,0.9487500000000001,,,true,34
+cmo6v1wwt001piku91stqwcpf,cup plastic 10 oz clear pp,Paper/Supplies,each,0.04786,invoice,,,0.04786,false,3

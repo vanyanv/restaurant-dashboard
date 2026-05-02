@@ -123,6 +123,7 @@ const NAV: NavSection[] = [
           { title: "Overview", url: "/dashboard/operations" },
           { title: "Product Usage", url: "/dashboard/operations/product-usage" },
           { title: "Costs", url: "/dashboard/operations/costs" },
+          { title: "Packaging", url: "/dashboard/operations/packaging" },
           { title: "Vendors", url: "/dashboard/operations/vendors" },
         ],
       },

@@ -1,0 +1,62 @@
+[
+  {
+    "route": "/m",
+    "from": "/m/more",
+    "shellMs": 51,
+    "readyMs": 56,
+    "longTaskCount": 0,
+    "longTaskMs": 0,
+    "maxLongTaskMs": 0,
+    "domNodes": 228,
+    "cls": 0,
+    "screenshot": "/home/vardan/restaurant-dashboard/tmp/perf-audit/mobile-nav-speedup/after/transition-m.png"
+  },
+  {
+    "route": "/m/invoices",
+    "from": "/m/more",
+    "shellMs": 56,
+    "readyMs": 61,
+    "longTaskCount": 0,
+    "longTaskMs": 0,
+    "maxLongTaskMs": 0,
+    "domNodes": 297,
+    "cls": 0,
+    "screenshot": "/home/vardan/restaurant-dashboard/tmp/perf-audit/mobile-nav-speedup/after/transition-m_invoices.png"
+  },
+  {
+    "route": "/m/chat",
+    "from": "/m/more",
+    "shellMs": 85,
+    "readyMs": 370,
+    "longTaskCount": 0,
+    "longTaskMs": 0,
+    "maxLongTaskMs": 0,
+    "domNodes": 91,
+    "cls": 0,
+    "screenshot": "/home/vardan/restaurant-dashboard/tmp/perf-audit/mobile-nav-speedup/after/transition-m_chat.png"
+  },
+  {
+    "route": "/m/pnl",
+    "from": "/m/more",
+    "shellMs": 38,
+    "readyMs": 43,
+    "longTaskCount": 0,
+    "longTaskMs": 0,
+    "maxLongTaskMs": 0,
+    "domNodes": 120,
+    "cls": 0,
+    "screenshot": "/home/vardan/restaurant-dashboard/tmp/perf-audit/mobile-nav-speedup/after/transition-m_pnl.png"
+  },
+  {
+    "route": "/m/more",
+    "from": "/m",
+    "shellMs": 49,
+    "readyMs": 54,
+    "longTaskCount": 0,
+    "longTaskMs": 0,
+    "maxLongTaskMs": 0,
+    "domNodes": 135,
+    "cls": 0,
+    "screenshot": "/home/vardan/restaurant-dashboard/tmp/perf-audit/mobile-nav-speedup/after/transition-m_more.png"
+  }
+]

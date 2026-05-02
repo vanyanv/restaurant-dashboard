@@ -16,7 +16,7 @@ export default async function MobileMorePage() {
   const sections = getMoreForRole(session.user.role)
 
   return (
-    <>
+    <div data-perf-ready="/m/more">
       <PageHead dept="MORE" title="All sections" />
 
       <div className="dock-in dock-in-2">
@@ -41,6 +41,6 @@ export default async function MobileMorePage() {
           <SwitchToDesktopButton />
         </Panel>
       </div>
-    </>
+    </div>
   )
 }

@@ -12,6 +12,7 @@
     "shots:auth": "tsx scripts/mobile-auth.ts",
     "shots": "tsx scripts/mobile-shots.ts",
     "perf:audit": "tsx scripts/perf-audit.ts",
+    "perf:mobile-nav": "tsx scripts/mobile-transition-perf.ts",
     "eval:chat": "tsx scripts/eval-chat/run.ts",
     "postinstall": "prisma generate"
   },

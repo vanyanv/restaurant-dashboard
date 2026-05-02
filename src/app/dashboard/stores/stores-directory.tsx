@@ -63,23 +63,54 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
     updateUrl(next)
   }
 
+  const activeCount = stores.filter((store) => store.isActive).length
+  const configuredCount = stores.filter(
+    (store) =>
+      store.fixedMonthlyLabor != null &&
+      store.fixedMonthlyRent != null &&
+      store.targetCogsPct != null
+  ).length
+
   return (
-    <section className="inv-panel inv-panel--flush">
-      <header className="inv-panel__head px-5 pt-5 pb-3 sm:px-5">
-        <span className="inv-panel__dept">All locations</span>
-        <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] text-(--ink-faint)">
-          {stores.length} on file · click to open
-        </span>
+    <section className="inv-panel inv-panel--flush stores-ledger">
+      <header className="stores-ledger__head">
+        <div>
+          <span className="inv-panel__dept">Location ledger</span>
+          <h2 className="stores-ledger__title">Store operating files</h2>
+        </div>
+        <div className="stores-ledger__folio" aria-label="Store counts">
+          <span>{activeCount} active</span>
+          <span>{configuredCount} configured</span>
+          <span>{stores.length} total</span>
+        </div>
       </header>
       <div role="list">
         {stores.map((store) => {
           const isOpen = openId === store.id
+          const fixedMonthly =
+            (store.fixedMonthlyLabor ?? 0) +
+            (store.fixedMonthlyRent ?? 0) +
+            (store.fixedMonthlyTowels ?? 0) +
+            (store.fixedMonthlyCleaning ?? 0)
+          const fixedLabel =
+            fixedMonthly > 0
+              ? fixedMonthly.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                  maximumFractionDigits: 0,
+                })
+              : "Unset"
+          const commissionLabel = [
+            `${(store.uberCommissionRate * 100).toFixed(1)}% Uber`,
+            `${(store.doordashCommissionRate * 100).toFixed(1)}% DD`,
+          ].join(" / ")
+
           return (
             <div
               key={store.id}
               id={`store-${store.id}`}
               role="listitem"
-              className="store-row"
+              className={"store-row" + (isOpen ? " store-row--open" : "")}
               aria-expanded={isOpen}
             >
               <button
@@ -102,6 +133,24 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
                         </span>
                       </>
                     ) : null}
+                  </span>
+                </span>
+                <span className="store-row__figures" aria-label="Configuration summary">
+                  <span>
+                    <span className="store-row__figure-label">Fixed</span>
+                    <span className="store-row__figure-value">{fixedLabel}</span>
+                  </span>
+                  <span>
+                    <span className="store-row__figure-label">COGS</span>
+                    <span className="store-row__figure-value">
+                      {store.targetCogsPct != null
+                        ? `${store.targetCogsPct.toFixed(1)}%`
+                        : "Unset"}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="store-row__figure-label">Fees</span>
+                    <span className="store-row__figure-value">{commissionLabel}</span>
                   </span>
                 </span>
                 <span className="store-row__trail">
