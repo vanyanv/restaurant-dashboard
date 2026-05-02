@@ -14,6 +14,20 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "ChrisnEddys Dashboard",
   description: "Restaurant management dashboard for store owners",
+  applicationName: "Chris Neddy's",
+  appleWebApp: {
+    capable: true,
+    title: "Chris Neddy's",
+    statusBarStyle: "default",
+  },
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/icons/apple-touch-icon-180.png",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 }
 
 export default function RootLayout({

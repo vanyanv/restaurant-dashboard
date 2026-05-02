@@ -1,25 +1,22 @@
-# Editorial home-screen icons
+# Home-screen icons
 
-These three PNGs are referenced from `/manifest.webmanifest` and the mobile
-`<head>` (`apple-touch-icon-180.png`). Until they are produced, "Add to
-Home Screen" on iOS will fall back to a screenshot of the page.
+These PNGs are referenced from `/manifest.webmanifest` and app metadata so
+"Add to Home Screen" on iOS and PWA install prompts use the ChrisnEddys logo
+instead of a generated page screenshot.
 
-Required files (all square, all editorial — cream paper, hairline-bold
-frame, "C N" Fraunces-italic monogram, single red proofmark dot at
-upper-right):
+Source asset:
+- `../logo.png` - full ChrisnEddys logo.
 
-- `apple-touch-icon-180.png` — 180×180, opaque, no transparency.
-- `icon-192.png` — 192×192.
-- `icon-512.png` — 512×512.
-- `icon-maskable-512.png` — 512×512 with the safe area inset to 80%
-  per the maskable spec.
+Required generated files:
+- `apple-touch-icon-180.png` - 180x180, opaque, no transparency.
+- `icon-192.png` - 192x192, opaque, no transparency.
+- `icon-512.png` - 512x512, opaque, no transparency.
+- `icon-maskable-512.png` - 512x512, with the logo contained inside the
+  adaptive-icon safe area.
 
-Source colors:
-- background: `#fbf6ee`
-- frame stroke: `#c9beaf`
-- monogram fill: `#1a1613`
-- proofmark dot: `#dc2626`
-
-Produce with whatever editorial tooling fits the workflow. When the
-files land here, the manifest + apple-touch-icon link will pick them up
-automatically.
+Rendering notes:
+- Background: `#fbf6ee`.
+- Center the full wide logo on the square canvas with enough padding to avoid
+  clipped text.
+- Keep the maskable icon slightly more inset than the standard 512 icon so
+  Android launchers can apply their masks without cutting into the logo.
