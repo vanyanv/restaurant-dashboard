@@ -68,3 +68,6 @@ scripts/eval-chat/runs/
 
 # TrueCourse local artifacts (analyze lock + logs)
 .truecourse/
+
+# graphify knowledge graph output
+/graphify-out/
