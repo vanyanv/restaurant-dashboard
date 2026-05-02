@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { AlertCircle, EyeOff, Search, Sparkles, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -41,6 +42,9 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
   const [bucket, setBucket] = useState<CategoryBucket | "All">("All")
   const [showSupplies, setShowSupplies] = useState(false)
   const [filter, setFilter] = useState<Filter>("all")
+  const [columnCount, setColumnCount] = useState(4)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const deferredQuery = useDeferredValue(query)
   // If we arrived from a deep link, the canonical may be hidden by the supplies
   // filter — so toggle that off to guarantee the sheet has an ingredient to
   // render.
@@ -49,6 +53,17 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
   const [openId, setOpenId] = useState<string | null>(
     initialMatches ? initialOpenId! : null
   )
+
+  useEffect(() => {
+    const sync = () => {
+      if (window.matchMedia("(min-width: 1024px)").matches) setColumnCount(4)
+      else if (window.matchMedia("(min-width: 768px)").matches) setColumnCount(3)
+      else setColumnCount(2)
+    }
+    sync()
+    window.addEventListener("resize", sync)
+    return () => window.removeEventListener("resize", sync)
+  }, [])
 
   const nonFoodIds = useMemo(() => {
     const set = new Set<string>()
@@ -85,7 +100,7 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
   )
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = deferredQuery.trim().toLowerCase()
     return visiblePool.filter((c) => {
       if (bucket !== "All" && bucketFor(c.category) !== bucket) return false
       if (filter === "unpriced" && c.costPerRecipeUnit != null) return false
@@ -101,7 +116,7 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
       }
       return true
     })
-  }, [visiblePool, bucket, filter, query])
+  }, [visiblePool, bucket, filter, deferredQuery])
 
   const sorted = useMemo(() => {
     if (filter === "recent") {
@@ -123,6 +138,13 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
 
   const openIngredient =
     openId != null ? canonicals.find((c) => c.id === openId) ?? null : null
+  const virtualRowCount = Math.ceil(sorted.length / columnCount)
+  const rowVirtualizer = useVirtualizer({
+    count: virtualRowCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 132,
+    overscan: 5,
+  })
 
   return (
     <>
@@ -273,7 +295,11 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
         </nav>
 
         {/* Grid */}
-        <div className="relative flex-1 overflow-y-auto px-8 py-6">
+        <div
+          ref={scrollRef}
+          data-perf-scroll
+          className="relative flex-1 overflow-y-auto px-8 py-6"
+        >
           {sorted.length === 0 ? (
             <EmptyGrid
               query={query}
@@ -294,14 +320,31 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
                   {sorted.length} ingredient{sorted.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-                {sorted.map((c) => (
-                  <IngredientTile
-                    key={c.id}
-                    ingredient={c}
-                    onClick={() => setOpenId(c.id)}
-                  />
-                ))}
+              <div
+                className="relative"
+                style={{ height: rowVirtualizer.getTotalSize() }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const start = virtualRow.index * columnCount
+                  const row = sorted.slice(start, start + columnCount)
+                  return (
+                    <div
+                      key={virtualRow.key}
+                      data-index={virtualRow.index}
+                      ref={rowVirtualizer.measureElement}
+                      className="absolute left-0 top-0 grid w-full grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4"
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                      {row.map((c) => (
+                        <IngredientTile
+                          key={c.id}
+                          ingredient={c}
+                          onClick={() => setOpenId(c.id)}
+                        />
+                      ))}
+                    </div>
+                  )
+                })}
               </div>
             </>
           )}

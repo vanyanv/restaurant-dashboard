@@ -6431,6 +6431,13 @@
   overflow: hidden;
 }
 
+.price-monitor-ledger__viewport {
+  max-height: min(74vh, 820px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: layout paint;
+}
+
 .price-monitor-masthead {
   display: grid;
   grid-template-columns:
@@ -6890,7 +6897,7 @@
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding: 18px 16px 0;
+  padding: 18px 16px calc(72px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Phone-tightened panel — slightly slimmer padding so two panels fit
@@ -7271,6 +7278,110 @@
 .m-empty strong {
   color: var(--ink);
   font-weight: 600;
+}
+
+/* Mobile catalog search lists. These pages can carry hundreds of rows, so
+   the list owns a bounded scrollport for virtualized rendering. */
+.m-catalog-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.m-catalog-list__toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 16px;
+}
+
+.m-catalog-list__search {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-catalog-list__viewport {
+  max-height: min(68dvh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: layout paint;
+}
+
+.m-catalog-list__spacer {
+  position: relative;
+}
+
+.m-catalog-list__item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  contain: layout paint;
+}
+
+.m-catalog-list__empty {
+  margin: 0 16px 12px;
+}
+
+.m-catalog-row {
+  cursor: default;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 12px 18px;
+}
+
+.m-catalog-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.m-catalog-row__title {
+  font-size: 15px;
+}
+
+.m-catalog-row__meta,
+.m-catalog-row__subvalue {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.m-catalog-row__meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-catalog-row__value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  min-width: max-content;
+}
+
+.m-catalog-row__value--muted {
+  color: var(--ink-faint);
+}
+
+.m-catalog-row__value--accent {
+  color: var(--accent-dark);
+}
+
+.m-chart-frame,
+.editorial-surface--mobile .inv-panel,
+.ingredient-tile,
+.menu-row {
+  contain: layout paint;
+}
+
+.m-chart-frame {
+  content-visibility: auto;
+  contain-intrinsic-size: 230px;
 }
 
 /* Caption — canonical small-caps label used across mobile pages

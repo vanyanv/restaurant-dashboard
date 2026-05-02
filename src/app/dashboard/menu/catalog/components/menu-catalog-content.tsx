@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -29,6 +30,7 @@ type EnrichedRow = MenuCatalogRow & {
   profit30d: number | null
   contribution: number | null
   hasMissingCost: boolean
+  searchText: string
   attention: Set<AttentionKey>
 }
 
@@ -62,6 +64,8 @@ export function MenuCatalogContent({ rows }: Props) {
     () => new Set()
   )
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>(DEFAULT_SORT)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const deferredQuery = useDeferredValue(query)
 
   // Restore sort preference after mount (avoids SSR/client mismatch).
   useEffect(() => {
@@ -86,9 +90,9 @@ export function MenuCatalogContent({ rows }: Props) {
   const enriched = useMemo(() => enrichRows(rows), [rows])
 
   const categories = useMemo(() => {
-    const seen = new Set<string>()
-    for (const r of enriched) seen.add(r.category)
-    return Array.from(seen).sort((a, b) => a.localeCompare(b))
+    const counts = new Map<string, number>()
+    for (const r of enriched) counts.set(r.category, (counts.get(r.category) ?? 0) + 1)
+    return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b))
   }, [enriched])
 
   const attentionCounts = useMemo(() => {
@@ -106,7 +110,7 @@ export function MenuCatalogContent({ rows }: Props) {
   }, [enriched])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = deferredQuery.trim().toLowerCase()
     return enriched.filter((r) => {
       if (activeCategory !== "all" && r.category !== activeCategory) return false
       if (activeAttention.size > 0) {
@@ -115,14 +119,17 @@ export function MenuCatalogContent({ rows }: Props) {
         }
       }
       if (!q) return true
-      return (
-        r.itemName.toLowerCase().includes(q) ||
-        r.category.toLowerCase().includes(q)
-      )
+      return r.searchText.includes(q)
     })
-  }, [enriched, query, activeCategory, activeAttention])
+  }, [enriched, deferredQuery, activeCategory, activeAttention])
 
   const sorted = useMemo(() => sortRows(filtered, sort), [filtered, sort])
+  const rowVirtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 78,
+    overscan: 8,
+  })
 
   const totals = useMemo(() => {
     let profit = 0
@@ -187,11 +194,11 @@ export function MenuCatalogContent({ rows }: Props) {
             active={activeCategory === "all"}
             onClick={() => setActiveCategory("all")}
           />
-          {categories.map((cat) => (
+          {categories.map(([cat, count]) => (
             <CategoryPill
               key={cat}
               label={cat}
-              count={enriched.filter((r) => r.category === cat).length}
+              count={count}
               active={activeCategory === cat}
               onClick={() => setActiveCategory(cat)}
             />
@@ -223,10 +230,15 @@ export function MenuCatalogContent({ rows }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-6 sm:px-8 sm:py-8">
+      <div
+        ref={scrollRef}
+        data-perf-scroll
+        className="flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-6 sm:px-8 sm:py-8"
+      >
         <div className="mb-6 flex items-center gap-2 border-b border-[var(--hairline-bold)] pb-3">
           <Search className="h-3.5 w-3.5 text-[var(--ink-faint)]" />
           <Input
+            type="search"
             placeholder="Search menu items…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -250,14 +262,24 @@ export function MenuCatalogContent({ rows }: Props) {
             </p>
           </div>
         ) : (
-          <ul>
-            {sorted.map((r) => (
-              <MenuRow
-                key={r.id}
-                row={r}
-                showCategory={activeCategory === "all"}
-              />
-            ))}
+          <ul
+            className="relative"
+            style={{ height: rowVirtualizer.getTotalSize() }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const r = sorted[virtualRow.index]
+              return (
+                <li
+                  key={r.id}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className="absolute left-0 top-0 w-full"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  <MenuRow row={r} showCategory={activeCategory === "all"} />
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
@@ -284,6 +306,7 @@ function enrichRows(rows: MenuCatalogRow[]): EnrichedRow[] {
       marginPct,
       profit30d,
       contribution: null,
+      searchText: `${r.itemName} ${r.category}`.toLowerCase(),
       attention: new Set<AttentionKey>(),
     }
   })
@@ -514,8 +537,7 @@ function MenuRow({
   const href = `/dashboard/menu/catalog/${row.id}`
 
   return (
-    <li>
-      <Link
+    <Link
         href={href}
         prefetch={false}
         onMouseEnter={() => router.prefetch(href)}
@@ -603,7 +625,6 @@ function MenuRow({
           {marginPct != null ? `${marginPct.toFixed(1)}%` : "—"}
         </span>
         <ChevronRight className="menu-row__chevron mt-1 h-4 w-4 text-[var(--ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ink)]" />
-      </Link>
-    </li>
+    </Link>
   )
 }

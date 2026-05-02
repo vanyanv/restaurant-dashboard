@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useDeferredValue, useMemo, useRef, useState } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { AlertTriangle, Check, ChevronRight, Lock, Search, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { prettifyIngredientName } from "@/app/dashboard/recipes/components/ingredient-picker-utils"
@@ -53,6 +54,8 @@ export function PriceMonitorShell({ data, filters }: Props) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState(filters.status ?? "all")
   const [category, setCategory] = useState(filters.category ?? "all")
+  const deferredQuery = useDeferredValue(query)
+  const ledgerRef = useRef<HTMLDivElement | null>(null)
 
   const counts = useMemo(() => {
     const map = new Map<string, number>()
@@ -70,7 +73,7 @@ export function PriceMonitorShell({ data, filters }: Props) {
   }, [data.rows])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = deferredQuery.trim().toLowerCase()
     return data.rows.filter((row) => {
       if (category !== "all" && row.category !== category) return false
       if (status === "review") {
@@ -86,7 +89,13 @@ export function PriceMonitorShell({ data, filters }: Props) {
       }
       return true
     })
-  }, [category, data.rows, query, status])
+  }, [category, data.rows, deferredQuery, status])
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => ledgerRef.current,
+    estimateSize: () => 74,
+    overscan: 8,
+  })
 
   const selected =
     filtered.find((row) => row.canonicalIngredientId === selectedId) ??
@@ -119,6 +128,7 @@ export function PriceMonitorShell({ data, filters }: Props) {
             <label className="inv-toolbar__search">
               <Search className="h-4 w-4" />
               <input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search ingredient, vendor, SKU"
@@ -167,40 +177,53 @@ export function PriceMonitorShell({ data, filters }: Props) {
             <span>Status</span>
             <span />
           </div>
-          {filtered.length === 0 ? (
-            <EmptyState hasRows={data.rows.length > 0} />
-          ) : (
-            filtered.map((row) => (
-              <button
-                key={row.canonicalIngredientId}
-                type="button"
-                className={cn(
-                  "inv-row price-monitor-row",
-                  selected?.canonicalIngredientId === row.canonicalIngredientId && "is-selected"
-                )}
-                onClick={() => setSelectedId(row.canonicalIngredientId)}
-                aria-pressed={selected?.canonicalIngredientId === row.canonicalIngredientId}
+          <div ref={ledgerRef} data-perf-scroll className="price-monitor-ledger__viewport">
+            {filtered.length === 0 ? (
+              <EmptyState hasRows={data.rows.length > 0} />
+            ) : (
+              <div
+                className="relative"
+                style={{ height: rowVirtualizer.getTotalSize() }}
               >
-                <span className="price-monitor-row__name">
-                  <strong>{prettifyIngredientName(row.name)}</strong>
-                  <em>{row.category ?? "uncategorized"} · {row.recipeUsageCount} recipes</em>
-                </span>
-                <span className="inv-row__total price-monitor-row__cost">
-                  {money(row.currentNormalizedCost)}
-                  <em>/{row.currentUnit ?? row.recipeUnit ?? "unit"}</em>
-                </span>
-                <span className="price-monitor-row__invoice">
-                  <strong>{row.latestInvoiceVendor ?? "No vendor"}</strong>
-                  <em>{row.latestInvoiceSku ?? row.latestInvoiceNumber ?? "no SKU"} · {shortDate(row.latestInvoiceDate)}</em>
-                </span>
-                <span className={cn("price-monitor-row__trend", (row.change30dPct ?? 0) > 0 && "is-up")}>
-                  {pct(row.change30dPct)}
-                </span>
-                <StatusStamp status={row.status} label={row.statusLabel} />
-                <ChevronRight className="inv-row__chev h-4 w-4" />
-              </button>
-            ))
-          )}
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = filtered[virtualRow.index]
+                  return (
+                    <button
+                      key={row.canonicalIngredientId}
+                      ref={rowVirtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      type="button"
+                      className={cn(
+                        "inv-row price-monitor-row absolute left-0 top-0",
+                        selected?.canonicalIngredientId === row.canonicalIngredientId && "is-selected"
+                      )}
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      onClick={() => setSelectedId(row.canonicalIngredientId)}
+                      aria-pressed={selected?.canonicalIngredientId === row.canonicalIngredientId}
+                    >
+                      <span className="price-monitor-row__name">
+                        <strong>{prettifyIngredientName(row.name)}</strong>
+                        <em>{row.category ?? "uncategorized"} · {row.recipeUsageCount} recipes</em>
+                      </span>
+                      <span className="inv-row__total price-monitor-row__cost">
+                        {money(row.currentNormalizedCost)}
+                        <em>/{row.currentUnit ?? row.recipeUnit ?? "unit"}</em>
+                      </span>
+                      <span className="price-monitor-row__invoice">
+                        <strong>{row.latestInvoiceVendor ?? "No vendor"}</strong>
+                        <em>{row.latestInvoiceSku ?? row.latestInvoiceNumber ?? "no SKU"} · {shortDate(row.latestInvoiceDate)}</em>
+                      </span>
+                      <span className={cn("price-monitor-row__trend", (row.change30dPct ?? 0) > 0 && "is-up")}>
+                        {pct(row.change30dPct)}
+                      </span>
+                      <StatusStamp status={row.status} label={row.statusLabel} />
+                      <ChevronRight className="inv-row__chev h-4 w-4" />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="inv-panel price-monitor-detail">

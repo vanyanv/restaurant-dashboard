@@ -14,6 +14,7 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
           <Link
             key={tab.href}
             href={tab.href}
+            prefetch={false}
             className={`m-tabbar__item${active ? " is-active" : ""}`}
             aria-current={active ? "page" : undefined}
           >

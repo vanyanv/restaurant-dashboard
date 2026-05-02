@@ -75,7 +75,7 @@ export function DailyRevenueChart({
   const tickEvery = days > 10 ? 2 : 1
 
   return (
-    <div className="dock-in dock-in-3" style={{ position: "relative" }}>
+    <div className="m-chart-frame dock-in dock-in-3" style={{ position: "relative" }}>
       <div
         style={{
           display: "flex",

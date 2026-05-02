@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useRef, type RefObject } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { Plus, CircleCheck, CircleDashed } from "lucide-react"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { MenuItemForCatalog, RecipeSummary } from "@/types/recipe"
 
@@ -31,6 +31,7 @@ export function MenuItemList({
   onSelectRecipe,
   onAddPrepRecipe,
 }: Props) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const prepRecipes = useMemo(
     () => recipes.filter((r) => !r.isSellable),
     [recipes]
@@ -99,10 +100,11 @@ export function MenuItemList({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div ref={scrollRef} data-perf-scroll className="flex-1 overflow-y-auto">
         {filter === "prep" ? (
           <RecipeList
             recipes={prepRecipes}
+            scrollRef={scrollRef}
             selectedId={selectedRecipeId}
             onSelect={onSelectRecipe}
             emptyLabel="No prep recipes yet."
@@ -110,6 +112,7 @@ export function MenuItemList({
         ) : filter === "confirmed" ? (
           <RecipeList
             recipes={confirmed}
+            scrollRef={scrollRef}
             selectedId={selectedRecipeId}
             onSelect={onSelectRecipe}
             emptyLabel="No confirmed recipes yet."
@@ -117,6 +120,7 @@ export function MenuItemList({
         ) : (
           <MenuItemRows
             items={filter === "unbuilt" ? unbuilt : menuItems}
+            scrollRef={scrollRef}
             selectedItemName={selectedMenuItemName}
             onSelect={onSelectMenuItem}
             emptyLabel={
@@ -126,22 +130,31 @@ export function MenuItemList({
             }
           />
         )}
-      </ScrollArea>
+      </div>
     </div>
   )
 }
 
 function MenuItemRows({
   items,
+  scrollRef,
   selectedItemName,
   onSelect,
   emptyLabel,
 }: {
   items: MenuItemForCatalog[]
+  scrollRef: RefObject<HTMLDivElement | null>
   selectedItemName: string | null
   onSelect: (m: MenuItemForCatalog) => void
   emptyLabel: string
 }) {
+  const rowVirtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 58,
+    overscan: 10,
+  })
+
   if (items.length === 0) {
     return (
       <div className="px-4 py-10 text-center font-mono text-[11px] italic text-[var(--ink-faint)]">
@@ -150,12 +163,19 @@ function MenuItemRows({
     )
   }
   return (
-    <ul>
-      {items.map((m) => {
+    <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
+      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+        const m = items[virtualRow.index]
         const isSelected = selectedItemName === m.otterItemName
         const hasRecipe = !!m.mappedRecipeId
         return (
-          <li key={`${m.otterItemName}::${m.category}`}>
+          <li
+            key={`${m.otterItemName}::${m.category}`}
+            ref={rowVirtualizer.measureElement}
+            data-index={virtualRow.index}
+            className="absolute left-0 top-0 w-full"
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
+          >
             <button
               type="button"
               onClick={() => onSelect(m)}
@@ -201,15 +221,24 @@ function MenuItemRows({
 
 function RecipeList({
   recipes,
+  scrollRef,
   selectedId,
   onSelect,
   emptyLabel,
 }: {
   recipes: RecipeSummary[]
+  scrollRef: RefObject<HTMLDivElement | null>
   selectedId: string | null
   onSelect: (r: RecipeSummary) => void
   emptyLabel: string
 }) {
+  const rowVirtualizer = useVirtualizer({
+    count: recipes.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 58,
+    overscan: 10,
+  })
+
   if (recipes.length === 0) {
     return (
       <div className="px-4 py-10 text-center font-mono text-[11px] italic text-[var(--ink-faint)]">
@@ -218,11 +247,18 @@ function RecipeList({
     )
   }
   return (
-    <ul>
-      {recipes.map((r) => {
+    <ul className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
+      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+        const r = recipes[virtualRow.index]
         const isSelected = selectedId === r.id
         return (
-          <li key={r.id}>
+          <li
+            key={r.id}
+            ref={rowVirtualizer.measureElement}
+            data-index={virtualRow.index}
+            className="absolute left-0 top-0 w-full"
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
+          >
             <button
               type="button"
               onClick={() => onSelect(r)}

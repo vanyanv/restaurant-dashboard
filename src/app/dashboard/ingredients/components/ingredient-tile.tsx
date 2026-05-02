@@ -32,8 +32,8 @@ export function IngredientTile({ ingredient, onClick }: Props) {
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative flex h-[120px] flex-col overflow-hidden border-2 bg-[var(--paper)] text-left transition",
-        "border-[var(--hairline-bold)] hover:border-[var(--ink)] hover:shadow-[3px_3px_0_var(--hairline-bold)]",
+        "ingredient-tile group relative flex h-[120px] flex-col overflow-hidden border-2 bg-[var(--paper)] text-left transition",
+        "border-[var(--hairline-bold)] hover:border-[var(--ink)] hover:bg-[var(--paper-deep)]/45",
         !hasCost && "border-dashed"
       )}
     >

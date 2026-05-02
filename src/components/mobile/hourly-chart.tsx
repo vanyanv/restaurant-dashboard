@@ -79,7 +79,7 @@ export function HourlyChart({
   const barW = Math.max(4, colW * 0.62)
 
   return (
-    <div className="dock-in dock-in-3" style={{ position: "relative" }}>
+    <div className="m-chart-frame dock-in dock-in-3" style={{ position: "relative" }}>
       <div
         style={{
           display: "flex",
