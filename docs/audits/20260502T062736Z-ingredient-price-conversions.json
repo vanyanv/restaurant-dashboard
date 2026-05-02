@@ -1,0 +1,1159 @@
+{
+  "generatedAt": "2026-05-02T06:27:36.086Z",
+  "mode": "apply",
+  "accountId": null,
+  "counts": {
+    "matchedLinesScanned": 622,
+    "safeFixes": 31,
+    "actionCanonicals": 13,
+    "reviewCanonicals": 17,
+    "affectedCanonicals": 28,
+    "knownExplicitYield": 2,
+    "knownPackExtraction": 8,
+    "sameSkuPackProfile": 19,
+    "zeroExtendedPrice": 2,
+    "missingRecipeUnit": 1,
+    "manualReviewRequired": 7,
+    "excludedNonRecipeScope": 9
+  },
+  "actions": [
+    {
+      "kind": "known_explicit_yield",
+      "status": "applied",
+      "lineItemId": "cmom858zb000404l4r7cqdult",
+      "canonicalIngredientId": "cmo58ubkh00143nu9b0c14gi1",
+      "canonicalName": "peppers whole yellow",
+      "vendorName": "Individual FoodService",
+      "sku": "G299",
+      "productName": "Peppers Whole Yellow",
+      "invoiceId": "cmom858xt000204l4if3jfzkr",
+      "invoiceNumber": "H26279-00",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known SKU yield bridges invoice base unit to recipe each.",
+      "basis": "Peppers Whole Yellow: authoring note says 5-gal tub = 600 chilies, so 120 chilies/gal.",
+      "afterCost": 0.08141666666666666,
+      "patch": {
+        "conversionFactor": 120,
+        "fromUnit": "GAL",
+        "toUnit": "each"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmonna7uh000504jsfk97zw6h",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 oz",
+      "invoiceId": "cmonna7tf000204js8vt0bj0l",
+      "invoiceNumber": "945863397",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmonna7uh000604jsuin48lr0",
+      "canonicalIngredientId": "cmo58u9y5000c3nu9l03pj9oz",
+      "canonicalName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "vendorName": "Sysco",
+      "sku": "7380317",
+      "productName": "CHRSNED Bag Plastic T-Shirt Logo",
+      "invoiceId": "cmonna7tf000204js8vt0bj0l",
+      "invoiceNumber": "945863397",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmo52i6xw007rxju9q63o6czn; 2 matching working line(s).",
+      "afterCost": 0.005865454545454545,
+      "patch": {
+        "unit": "CS",
+        "packSize": 11,
+        "unitSize": 1000,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmom858zb000804l4sxvrm9ud",
+      "canonicalIngredientId": "cmo58uljs005a3nu9ksul9kn5",
+      "canonicalName": "cup portion plastic 2 oz clear",
+      "vendorName": "Individual FoodService",
+      "sku": "61250",
+      "productName": "Cup Portion Plast 2 Oz Clear",
+      "invoiceId": "cmom858xt000204l4if3jfzkr",
+      "invoiceNumber": "H26279-00",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmob9a9h1001a9iu91vs6hyuq; 7 matching working line(s).",
+      "afterCost": 0.011132,
+      "patch": {
+        "unit": "CS",
+        "packSize": 20,
+        "unitSize": 125,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmom858zb000904l43hxcdwsr",
+      "canonicalIngredientId": "cmo58uphn00703nu9i90i7s3t",
+      "canonicalName": "lid portion plastic 1.5, 2, 2.5 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "61254",
+      "productName": "Lid Portion Plast 1.5,2,2.5Oz",
+      "invoiceId": "cmom858xt000204l4if3jfzkr",
+      "invoiceNumber": "H26279-00",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmob99etc000y9iu948fue3bv; 7 matching working line(s).",
+      "afterCost": 0.010464,
+      "patch": {
+        "unit": "CS",
+        "packSize": 20,
+        "unitSize": 125,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmohk4p67000304l5floev5kv",
+      "canonicalIngredientId": "cmo58uhf6003u3nu9l1qxfq5f",
+      "canonicalName": "tray food paper #50 1/2 lb white red check",
+      "vendorName": "Individual FoodService",
+      "sku": "SQP2650",
+      "productName": "Tray Food Paper",
+      "invoiceId": "cmohk4p5e000004l5wwwej5t1",
+      "invoiceNumber": "H21577-00",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000b04l4fvyk6c7i; 11 matching working line(s).",
+      "afterCost": 0.03438,
+      "patch": {
+        "unit": "CS",
+        "packSize": 4,
+        "unitSize": 250,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmoiasrhj000304kwc9mlwh9k",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 oz",
+      "invoiceId": "cmoiasrgo000004kwu9z0uvv9",
+      "invoiceNumber": "945853003",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmoiasrhj000404kwzt3o9r52",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat with hole 20 oz pe pet",
+      "vendorName": "Sysco",
+      "sku": "7190716",
+      "productName": "Greeno Lid Flat with Hole 20oz",
+      "invoiceId": "cmoiasrgo000004kwu9z0uvv9",
+      "invoiceNumber": "945853003",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmo52i6xw007sxju9came5ztb; 1 matching working line(s).",
+      "afterCost": 0.006495454545454546,
+      "patch": {
+        "unit": "CS",
+        "packSize": 11,
+        "unitSize": 1000,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmohk4p68000604l5cdm2rz58",
+      "canonicalIngredientId": "cmo58uljs005a3nu9ksul9kn5",
+      "canonicalName": "cup portion plastic 2 oz clear",
+      "vendorName": "Individual FoodService",
+      "sku": "61250",
+      "productName": "Cup Portion Plastic Clear",
+      "invoiceId": "cmohk4p5e000004l5wwwej5t1",
+      "invoiceNumber": "H21577-00",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmob9a9h1001a9iu91vs6hyuq; 7 matching working line(s).",
+      "afterCost": 0.011132,
+      "patch": {
+        "unit": "CS",
+        "packSize": 20,
+        "unitSize": 125,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmohk4p68000704l510wyjto5",
+      "canonicalIngredientId": "cmo58uphn00703nu9i90i7s3t",
+      "canonicalName": "lid portion plastic 1.5, 2, 2.5 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "61254",
+      "productName": "Lid Portion Plastic",
+      "invoiceId": "cmohk4p5e000004l5wwwej5t1",
+      "invoiceNumber": "H21577-00",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmob99etc000y9iu948fue3bv; 7 matching working line(s).",
+      "afterCost": 0.010464,
+      "patch": {
+        "unit": "CS",
+        "packSize": 20,
+        "unitSize": 125,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "zero_extended_price",
+      "status": "applied",
+      "lineItemId": "cmobu5xtf000204jl2mcfaag6",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "container foam hinged white 9x6.5x2.5",
+      "vendorName": "Individual FoodService",
+      "sku": "965-REY",
+      "productName": "Cont Foam Hinged White",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Non-return invoice line has extendedPrice=0 and quantity * unitPrice is unambiguous.",
+      "basis": "6 * 32.12 = 192.72",
+      "afterCost": 0.1606,
+      "patch": {
+        "extendedPrice": 192.72
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52i6xw007qxju9s408zh4q",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 oz",
+      "invoiceId": "cmo50946m0009lfu9uwispe1v",
+      "invoiceNumber": "945819855",
+      "invoiceDate": "2026-04-16",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "zero_extended_price",
+      "status": "applied",
+      "lineItemId": "cmoar9z8b000w5su9rlw05qvy",
+      "canonicalIngredientId": "cmo58ubx6001a3nu9rkduccbq",
+      "canonicalName": "syrup hi-c fruit punch flashin",
+      "vendorName": "Individual FoodService",
+      "sku": "NFBGFP",
+      "productName": "Syrup Hi-C Fruit Punch Flashin",
+      "invoiceId": "cmo5096qc001wlfu9t9r2us61",
+      "invoiceNumber": "H04728-00",
+      "invoiceDate": "2026-04-13",
+      "beforeCost": null,
+      "recipeUnit": "gal",
+      "reason": "Non-return invoice line has extendedPrice=0 and quantity * unitPrice is unambiguous.",
+      "basis": "1 * 124.68 = 124.68",
+      "afterCost": 24.936,
+      "patch": {
+        "extendedPrice": 124.68
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "known_explicit_yield",
+      "status": "applied",
+      "lineItemId": "cmoar998q000o5su924ira0xm",
+      "canonicalIngredientId": "cmo6v1vyp001fiku9ho0kyfxa",
+      "canonicalName": "american cheese yellow 160",
+      "vendorName": "Premier Deli Services, Inc.",
+      "sku": "644",
+      "productName": "American Cheese Yellow 160",
+      "invoiceId": "cmo6ug6hb000ekeu99f6y3x1v",
+      "invoiceNumber": "902207",
+      "invoiceDate": "2026-04-08",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known SKU yield bridges invoice base unit to recipe each.",
+      "basis": "American Cheese Yellow 160: authoring note says 160 slices per 5 lb, so 32 slices/lb.",
+      "afterCost": 0.1203125,
+      "patch": {
+        "conversionFactor": 32,
+        "fromUnit": "LB",
+        "toUnit": "each"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6ugsda000rkeu9uk2bsdgb",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 oz",
+      "invoiceId": "cmo6ugsb0000jkeu9zll49j8p",
+      "invoiceNumber": "945788718",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52g1cj005nxju9vcnp9cpv",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 OZ C&D PET",
+      "invoiceId": "cmnc5tbop000004johq0sdjyj",
+      "invoiceNumber": "945752339",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52g1cj005qxju9uuo60ya9",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat with hole 20 oz pe pet",
+      "vendorName": "Sysco",
+      "sku": "7190716",
+      "productName": "Greeno Lid Flat W/Hole 20OZ PE PET",
+      "invoiceId": "cmnc5tbop000004johq0sdjyj",
+      "invoiceNumber": "945752339",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmo52i6xw007sxju9came5ztb; 1 matching working line(s).",
+      "afterCost": 0.006495454545454546,
+      "patch": {
+        "unit": "CS",
+        "packSize": 11,
+        "unitSize": 1000,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52fm990058xju9urshw2v5",
+      "canonicalIngredientId": "cmo58unxu006a3nu93540g3zt",
+      "canonicalName": "container foam 1-compartment bagged",
+      "vendorName": "Individual FoodService",
+      "sku": "HT91-BAG",
+      "productName": "Container Foam 9x9 1-Comp Bagged",
+      "invoiceId": "cmn80us4e001f04jx1xi974hb",
+      "invoiceNumber": "G84442-00",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000a04l455fu5t1z; 12 matching working line(s).",
+      "afterCost": 0.15475,
+      "patch": {
+        "unit": "CS",
+        "packSize": 2,
+        "unitSize": 100,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52fm990059xju9ywyk9ym7",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "container foam hinged white 9x6.5x2.5",
+      "vendorName": "Individual FoodService",
+      "sku": "965-REY",
+      "productName": "Container Foam Hinged White 9x6.5x2.5",
+      "invoiceId": "cmn80us4e001f04jx1xi974hb",
+      "invoiceNumber": "G84442-00",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000c04l4q0r6chmz; 10 matching working line(s).",
+      "afterCost": 0.14875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 2,
+        "unitSize": 100,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52fm99005bxju98vh8wvtn",
+      "canonicalIngredientId": "cmo58uii6004c3nu99m25lsip",
+      "canonicalName": "towel multifold kraft 1-ply",
+      "vendorName": "Individual FoodService",
+      "sku": "18369",
+      "productName": "Towel Multifold Kraft 1-ply",
+      "invoiceId": "cmn80us4e001f04jx1xi974hb",
+      "invoiceNumber": "G84442-00",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmobu5xtf000b04jljq8quime; 7 matching working line(s).",
+      "afterCost": 0.0061275,
+      "patch": {
+        "unit": "CS",
+        "packSize": 16,
+        "unitSize": 250,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52fm99005cxju9x1gx8672",
+      "canonicalIngredientId": "cmo58uie3004a3nu9mo4wnzjl",
+      "canonicalName": "napkin dispenser 2-ply 8.5 x 6.5 white",
+      "vendorName": "Individual FoodService",
+      "sku": "18418",
+      "productName": "Napkin Dispenser 2-ply 8.5x6.5 White",
+      "invoiceId": "cmn80us4e001f04jx1xi974hb",
+      "invoiceNumber": "G84442-00",
+      "invoiceDate": "2026-03-26",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmohk4p68000b04l5nz1mf5yl; 11 matching working line(s).",
+      "afterCost": 0.006645,
+      "patch": {
+        "unit": "CS",
+        "packSize": 24,
+        "unitSize": 250,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52efve0040xju9vi22uc0r",
+      "canonicalIngredientId": "cmo58uhf6003u3nu9l1qxfq5f",
+      "canonicalName": "tray food paper #50 1/2 lb white red check",
+      "vendorName": "Individual FoodService",
+      "sku": "SQP2650",
+      "productName": "Tray Food Paper #50 White/Red Check",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000b04l4fvyk6c7i; 11 matching working line(s).",
+      "afterCost": 0.03608,
+      "patch": {
+        "unit": "CS",
+        "packSize": 4,
+        "unitSize": 250,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52efve0049xju94usd6st7",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "container foam hinged white 9x6.5x2.5",
+      "vendorName": "Individual FoodService",
+      "sku": "965-REY",
+      "productName": "Cont Foam Hinged White 9x6.5x2.5",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000c04l4q0r6chmz; 10 matching working line(s).",
+      "afterCost": 0.14875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 2,
+        "unitSize": 100,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52efve004axju9axmxc49b",
+      "canonicalIngredientId": "cmo58unxu006a3nu93540g3zt",
+      "canonicalName": "container foam 1-compartment bagged",
+      "vendorName": "Individual FoodService",
+      "sku": "HT91-BAG",
+      "productName": "Cont Foam 9x9 1-Comp Bagged",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000a04l455fu5t1z; 12 matching working line(s).",
+      "afterCost": 0.15475,
+      "patch": {
+        "unit": "CS",
+        "packSize": 2,
+        "unitSize": 100,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52dz8k003rxju948e1roqn",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 oz",
+      "invoiceId": "cmn80urx0000004jxzgkxiook",
+      "invoiceNumber": "945729735",
+      "invoiceDate": "2026-03-19",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52dz8k003txju9ecjk4gsp",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat with hole 20 oz pe pet",
+      "vendorName": "Sysco",
+      "sku": "7190716",
+      "productName": "Greeno Lid Flat with Hole 20 oz PE PET",
+      "invoiceId": "cmn80urx0000004jxzgkxiook",
+      "invoiceNumber": "945729735",
+      "invoiceDate": "2026-03-19",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmo52i6xw007sxju9came5ztb; 1 matching working line(s).",
+      "afterCost": 0.006495454545454546,
+      "patch": {
+        "unit": "CS",
+        "packSize": 11,
+        "unitSize": 1000,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmob97zyc000f9iu9ul1okhix",
+      "canonicalIngredientId": "cmo58upum00763nu9xvzsgrdr",
+      "canonicalName": "container foam hinged white 9x6.5x2.5",
+      "vendorName": "Individual FoodService",
+      "sku": "965-REY",
+      "productName": "Container foam hinged white",
+      "invoiceId": "cmo6uo135004ykeu94cul52r9",
+      "invoiceNumber": "G69364-00",
+      "invoiceDate": "2026-03-13",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000c04l4q0r6chmz; 10 matching working line(s).",
+      "afterCost": 0.14875,
+      "patch": {
+        "unit": "CS",
+        "packSize": 2,
+        "unitSize": 100,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmob97zyc000g9iu912swd5zb",
+      "canonicalIngredientId": "cmo58unxu006a3nu93540g3zt",
+      "canonicalName": "container foam 1-compartment bagged",
+      "vendorName": "Individual FoodService",
+      "sku": "HT91-BAG",
+      "productName": "Container foam 1 compartment bagged",
+      "invoiceId": "cmo6uo135004ykeu94cul52r9",
+      "invoiceNumber": "G69364-00",
+      "invoiceDate": "2026-03-13",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmom858zb000a04l455fu5t1z; 12 matching working line(s).",
+      "afterCost": 0.15475,
+      "patch": {
+        "unit": "CS",
+        "packSize": 2,
+        "unitSize": 100,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo6updp2005pkeu9dw6zficz",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup PET 20 oz",
+      "invoiceId": "cmo6updms005kkeu9jgzgboe3",
+      "invoiceNumber": "945696984",
+      "invoiceDate": "2026-03-09",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "known_pack_extraction",
+      "status": "applied",
+      "lineItemId": "cmo52ars0000zxju9z23i1r2z",
+      "canonicalIngredientId": "cmo58u9tw000a3nu99js828m7",
+      "canonicalName": "greeno cup pet 20 oz c&d pet",
+      "vendorName": "Sysco",
+      "sku": "7370699",
+      "productName": "Greeno Cup 20 oz Pet",
+      "invoiceId": "cmm40uiw5000004juh1rz22ai",
+      "invoiceNumber": "945649371",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Known case count fixes pack extraction from package volume to per-each count.",
+      "basis": "Greeno 20 oz cup: current locked cost and authoring note imply $96.55/case / 1000 cups.",
+      "afterCost": 0.09655,
+      "patch": {
+        "unit": "CS",
+        "packSize": 1000,
+        "unitSize": 1,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "locked"
+      }
+    },
+    {
+      "kind": "same_sku_pack_profile",
+      "status": "applied",
+      "lineItemId": "cmo52ars00011xju9ivu3dsva",
+      "canonicalIngredientId": "cmo58uore006o3nu96a66a7v9",
+      "canonicalName": "greeno lid flat with hole 20 oz pe pet",
+      "vendorName": "Sysco",
+      "sku": "7190716",
+      "productName": "Greeno Lid Flat with Hole 20oz PE Pet",
+      "invoiceId": "cmm40uiw5000004juh1rz22ai",
+      "invoiceNumber": "945649371",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Same vendor/SKU has a prior working per-each packaging profile.",
+      "basis": "Profile from line cmo52i6xw007sxju9came5ztb; 1 matching working line(s).",
+      "afterCost": 0.006495454545454546,
+      "patch": {
+        "unit": "CS",
+        "packSize": 11,
+        "unitSize": 1000,
+        "unitSizeUom": "CT"
+      },
+      "recompute": {
+        "status": "unchanged",
+        "reason": "same-value"
+      }
+    }
+  ],
+  "review": [
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmonna7ui000904jsahhxpao4",
+      "canonicalIngredientId": "cmo58uav8000s3nu9cnnsen3o",
+      "canonicalName": "fuel surcharge",
+      "vendorName": "Sysco",
+      "sku": null,
+      "productName": "CHGS FOR FUEL SURCHARGE",
+      "invoiceId": "cmonna7tf000204js8vt0bj0l",
+      "invoiceNumber": "945863397",
+      "invoiceDate": "2026-04-30",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmohk4p68000504l5mh6f7psa",
+      "canonicalIngredientId": "cmo58uc5k001e3nu9no4mc4np",
+      "canonicalName": "ketchup vol-pack heinz",
+      "vendorName": "Individual FoodService",
+      "sku": "G216",
+      "productName": "Ketchup Vol-Pack Heinz",
+      "invoiceId": "cmohk4p5e000004l5wwwej5t1",
+      "invoiceNumber": "H21577-00",
+      "invoiceDate": "2026-04-27",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmocwqyl4000804k6rcz721ez",
+      "canonicalIngredientId": "cmo58uhax003s3nu992dz4iob",
+      "canonicalName": "imported fresh tomato bulk 5x6 fresh",
+      "vendorName": "Sysco",
+      "sku": "1763432",
+      "productName": "Tomato Bulk 5x6 Fresh",
+      "invoiceId": "cmocwqyk4000004k6jrgo81pr",
+      "invoiceNumber": "945841884",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 1
+    },
+    {
+      "kind": "missing_recipe_unit",
+      "lineItemId": "cmobu5xtf000904jlq5k5t5ol",
+      "canonicalIngredientId": "cmo6v1wwt001piku91stqwcpf",
+      "canonicalName": "cup plastic 10 oz clear pp",
+      "vendorName": "Individual FoodService",
+      "sku": "PBS10-CUP",
+      "productName": "Plastic Cup 10 oz Clear PP",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Canonical is recipe-scope but has no recipeUnit; no automatic unit can be inferred safely.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmobu5xtf000a04jl056x497n",
+      "canonicalIngredientId": "cmo58uhwe00423nu9mp6q2rxn",
+      "canonicalName": "can liner 40 x 46 1.5 mil black roll",
+      "vendorName": "Individual FoodService",
+      "sku": "40X46ROLL",
+      "productName": "Can Liner 40X46 1.5 mil Black Roll",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmocwqyl5000a04k6ejrx9vu7",
+      "canonicalIngredientId": "cmo58uar0000q3nu9rhezzbxy",
+      "canonicalName": "packer onion sweet fresh",
+      "vendorName": "Sysco",
+      "sku": "3812807",
+      "productName": "Onion Sweet Fresh",
+      "invoiceId": "cmocwqyk4000004k6jrgo81pr",
+      "invoiceNumber": "945841884",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": "lb",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 2
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmobu5xtf000c04jlqjn7n8ma",
+      "canonicalIngredientId": "cmo58upyt00783nu9xdsh382i",
+      "canonicalName": "paper roll thermal 3-1/8 x 220 ft bpa/bps free",
+      "vendorName": "Individual FoodService",
+      "sku": "32096",
+      "productName": "Paper Roll Thermal BPA/BPS Free",
+      "invoiceId": "cmobu5xs6000004jly2qyr4kv",
+      "invoiceNumber": "H18097-00",
+      "invoiceDate": "2026-04-23",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmobazs3w00053cu9erc1o3fz",
+      "canonicalIngredientId": "cmo6v1vsa001diku9vo9c3xpf",
+      "canonicalName": "hellmann mayonnaise extra heavy",
+      "vendorName": "Sysco",
+      "sku": "6004857",
+      "productName": "Hellmann Mayonnaise Extra Heavy",
+      "invoiceId": "cmoa1wl6t000004l29buyl779",
+      "invoiceNumber": "945831303",
+      "invoiceDate": "2026-04-20",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmo6uhq2j0018keu9yx6hwuz4",
+      "canonicalIngredientId": "cmo58uq74007c3nu99nk8f9sc",
+      "canonicalName": "tray pulp 4-cup carrier 8-32 oz",
+      "vendorName": "Individual FoodService",
+      "sku": "14960",
+      "productName": "Tray Pulp 4-Cup Carrier 8-32oz",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": "cs",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmo6uhq2j001fkeu9eio4f6zt",
+      "canonicalIngredientId": "cmo58ubg600123nu9095wokzi",
+      "canonicalName": "water crystal geyser spring",
+      "vendorName": "Individual FoodService",
+      "sku": "12345",
+      "productName": "Water Crystal Geyser Spring",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": "oz",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 1
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmo6uhq2j001jkeu9xqpu8c28",
+      "canonicalIngredientId": "cmo6v1vl9001biku9vaoh4w25",
+      "canonicalName": "bleach 6% epa registered",
+      "vendorName": "Individual FoodService",
+      "sku": "24541",
+      "productName": "Bleach 6% EPA Registered",
+      "invoiceId": "cmo6uhq05000ykeu9hus14h53",
+      "invoiceNumber": "G95788-00",
+      "invoiceDate": "2026-04-06",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmob98emg000k9iu9baize56m",
+      "canonicalIngredientId": "cmo6v1wdw001jiku91l5vnsuk",
+      "canonicalName": "sys cls mayonnaise banquet xhv duty",
+      "vendorName": "Sysco",
+      "sku": "71355SYS",
+      "productName": "Sys Cls Mayonnaise Banquet Xhv Duty",
+      "invoiceId": "cmo6uig6d001vkeu9i1vb04fd",
+      "invoiceNumber": "945780455",
+      "invoiceDate": "2026-04-03",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmo6ujtns002gkeu9rvncv6hg",
+      "canonicalIngredientId": "cmo6v1wk9001liku92r0b9ozh",
+      "canonicalName": "sugar packet",
+      "vendorName": "Sysco",
+      "sku": "4000899",
+      "productName": "Sugar Packet",
+      "invoiceId": "cmo6ujtlg002bkeu9kgoudeyw",
+      "invoiceNumber": "945763808",
+      "invoiceDate": "2026-03-30",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "excluded_non_recipe_scope",
+      "lineItemId": "cmo6ukhvp002ukeu9okma0kr2",
+      "canonicalIngredientId": "cmo6v1wqm001niku9057zgfaa",
+      "canonicalName": "syrup pibb xtra",
+      "vendorName": "Individual FoodService",
+      "sku": "NFBGMRP",
+      "productName": "Syrup Pibb Xtra",
+      "invoiceId": "cmo6ukhtf002mkeu9bocbkrrx",
+      "invoiceNumber": "G88326-00",
+      "invoiceDate": "2026-03-30",
+      "beforeCost": null,
+      "recipeUnit": null,
+      "reason": "Matched line is outside recipe/per-order packaging scope.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmo52efve0047xju9yy998ges",
+      "canonicalIngredientId": "cmo58uie3004a3nu9mo4wnzjl",
+      "canonicalName": "napkin dispenser 2-ply 8.5 x 6.5 white",
+      "vendorName": "Individual FoodService",
+      "sku": null,
+      "productName": "Napkin Dispenser 2-Ply 8.5x6.5 White",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 6
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmo52efve0048xju9a21ha4yb",
+      "canonicalIngredientId": "cmo58uii6004c3nu99m25lsip",
+      "canonicalName": "towel multifold kraft 1-ply",
+      "vendorName": "Individual FoodService",
+      "sku": null,
+      "productName": "Towel Multifold Kraft 1-Ply",
+      "invoiceId": "cmn80us0h000g04jx59bxu356",
+      "invoiceNumber": "G79241-00",
+      "invoiceDate": "2026-03-23",
+      "beforeCost": null,
+      "recipeUnit": "each",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 0
+    },
+    {
+      "kind": "manual_review_required",
+      "lineItemId": "cmo52a492000nxju90mzuphmn",
+      "canonicalIngredientId": "cmo58uq2y007a3nu9e7ljw3u5",
+      "canonicalName": "embossed bath tissue 2-ply recycled individually wrapped",
+      "vendorName": "Individual FoodService",
+      "sku": "30394",
+      "productName": "Emboss Bath Tissue 2ply Recycled Industrial Wrap",
+      "invoiceId": "cmm18zy3n00102du94pb2r2bd",
+      "invoiceNumber": "G44506-00",
+      "invoiceDate": "2026-02-23",
+      "beforeCost": null,
+      "recipeUnit": "cs",
+      "reason": "Recipe-scope matched line still cannot derive a normalized price after safe fix checks.",
+      "recipeUses": 0
+    }
+  ],
+  "reportFiles": {
+    "json": "/home/vardan/restaurant-dashboard/docs/audits/20260502T062736Z-ingredient-price-conversions.json",
+    "markdown": "/home/vardan/restaurant-dashboard/docs/audits/20260502T062736Z-ingredient-price-conversions.md"
+  }
+}

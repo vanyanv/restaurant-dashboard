@@ -119,12 +119,16 @@ export interface ProductAnalytics {
 export interface IngredientPricePoint {
   /** ISO date (YYYY-MM-DD) of the invoice. */
   date: string
+  /** $/recipe unit after pack-size + unit conversion. Null when the line cannot be normalized. */
+  normalizedUnitPrice: number | null
+  /** Recipe unit used for the normalized price. */
+  normalizedUnit: string | null
   /** $/unit as captured on the invoice line. */
-  unitPrice: number
+  rawUnitPrice: number
+  /** Unit string on the invoice line (e.g. "CASE", "LB"). */
+  rawUnit: string | null
   /** Quantity on the line. */
   quantity: number
-  /** Unit string on the line (e.g. "CASE", "LB"). */
-  unit: string | null
   vendor: string
   sku: string | null
   invoiceId: string

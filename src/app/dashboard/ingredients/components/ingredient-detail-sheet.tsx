@@ -579,8 +579,18 @@ function PriceHistoryChart({
   const padT = 10
   const padB = 22
 
-  const times = points.map((p) => new Date(p.date).getTime())
-  const prices = points.map((p) => p.unitPrice)
+  const normalizedPoints = points.filter((p) => p.normalizedUnitPrice != null)
+  const times = normalizedPoints.map((p) => new Date(p.date).getTime())
+  const prices = normalizedPoints.map((p) => p.normalizedUnitPrice!)
+  if (normalizedPoints.length === 0) {
+    return (
+      <div className="price-chart">
+        <div className="price-chart__empty">
+          no normalized invoice lines in window
+        </div>
+      </div>
+    )
+  }
   const tMin = Math.min(...times)
   const tMax = Math.max(...times)
   const pMin = Math.min(...prices)
@@ -604,7 +614,7 @@ function PriceHistoryChart({
 
   // Group points by vendor so each supplier is its own series.
   const byVendor = new Map<string, IngredientPricePoint[]>()
-  for (const pt of points) {
+  for (const pt of normalizedPoints) {
     const arr = byVendor.get(pt.vendor) ?? []
     arr.push(pt)
     byVendor.set(pt.vendor, arr)
@@ -668,7 +678,7 @@ function PriceHistoryChart({
           const d = pts
             .map((pt, i) => {
               const xx = x(new Date(pt.date).getTime())
-              const yy = y(pt.unitPrice)
+              const yy = y(pt.normalizedUnitPrice!)
               return `${i === 0 ? "M" : "L"}${xx.toFixed(1)} ${yy.toFixed(1)}`
             })
             .join(" ")
@@ -685,14 +695,14 @@ function PriceHistoryChart({
                 <circle
                   key={i}
                   cx={x(new Date(pt.date).getTime())}
-                  cy={y(pt.unitPrice)}
+                  cy={y(pt.normalizedUnitPrice!)}
                   r={2.75}
                   className={cn(
                     "price-chart__dot",
                     isAlt && "price-chart__dot--alt"
                   )}
                 >
-                  <title>{`${pt.vendor} · ${pt.date} · $${pt.unitPrice.toFixed(2)}${pt.unit ? `/${pt.unit}` : ""}`}</title>
+                  <title>{`${pt.vendor} · ${pt.date} · $${pt.normalizedUnitPrice!.toFixed(4)}${pt.normalizedUnit ? `/${pt.normalizedUnit}` : ""} · raw $${pt.rawUnitPrice.toFixed(2)}${pt.rawUnit ? `/${pt.rawUnit}` : ""}`}</title>
                 </circle>
               ))}
             </g>
@@ -737,9 +747,13 @@ function PriceHistoryReceipts({
       const prior = priorByVendor.get(p.vendor)
       ;(p as IngredientPricePoint & { _delta?: number | null })._delta =
         prior != null && prior > 0
-          ? ((p.unitPrice - prior) / prior) * 100
+          ? p.normalizedUnitPrice != null
+            ? ((p.normalizedUnitPrice - prior) / prior) * 100
+            : null
           : null
-      priorByVendor.set(p.vendor, p.unitPrice)
+      if (p.normalizedUnitPrice != null) {
+        priorByVendor.set(p.vendor, p.normalizedUnitPrice)
+      }
     }
     return sorted.slice(0, 8) as (IngredientPricePoint & {
       _delta?: number | null
@@ -765,7 +779,7 @@ function PriceHistoryReceipts({
                   ? "ph-row__delta--up"
                   : "ph-row__delta--down"
           return (
-            <div key={p.invoiceId + p.date + p.unitPrice} className="ph-row">
+            <div key={p.invoiceId + p.date + p.rawUnitPrice} className="ph-row">
               <span className="ph-row__date">
                 {new Date(p.date).toLocaleDateString("en-US", {
                   month: "short",
@@ -781,12 +795,18 @@ function PriceHistoryReceipts({
                 ) : null}
               </span>
               <span className="ph-row__price">
-                ${p.unitPrice.toFixed(2)}
-                {p.unit ? (
+                {p.normalizedUnitPrice != null
+                  ? `$${p.normalizedUnitPrice.toFixed(p.normalizedUnitPrice < 1 ? 4 : 2)}`
+                  : "review"}
+                {p.normalizedUnit ? (
                   <span className="ml-0.5 text-[var(--ink-faint)]">
-                    /{p.unit.toLowerCase()}
+                    /{p.normalizedUnit.toLowerCase()}
                   </span>
                 ) : null}
+                <span className="ml-1 text-[var(--ink-faint)]">
+                  raw ${p.rawUnitPrice.toFixed(2)}
+                  {p.rawUnit ? `/${p.rawUnit.toLowerCase()}` : ""}
+                </span>
               </span>
               <span className={cn("ph-row__delta", deltaClass)}>
                 {d == null

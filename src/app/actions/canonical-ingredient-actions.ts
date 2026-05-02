@@ -9,6 +9,7 @@ import {
   type SeedResult,
 } from "@/lib/canonical-ingredients"
 import { batchCanonicalCosts } from "@/lib/canonical-cost-batch"
+import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import type {
   CanonicalIngredientSummary,
@@ -178,7 +179,19 @@ export async function getIngredientPriceHistory(
 
   const canonical = await prisma.canonicalIngredient.findFirst({
     where: { id: canonicalIngredientId, accountId },
-    select: { id: true },
+    select: {
+      id: true,
+      recipeUnit: true,
+      skuMatches: {
+        select: {
+          vendorName: true,
+          sku: true,
+          conversionFactor: true,
+          fromUnit: true,
+          toUnit: true,
+        },
+      },
+    },
   })
   if (!canonical) return { points: [] }
 
@@ -200,7 +213,11 @@ export async function getIngredientPriceHistory(
       id: true,
       sku: true,
       unit: true,
+      packSize: true,
+      unitSize: true,
+      unitSizeUom: true,
       unitPrice: true,
+      extendedPrice: true,
       quantity: true,
       invoice: {
         select: {
@@ -217,12 +234,42 @@ export async function getIngredientPriceHistory(
   const points: IngredientPricePoint[] = []
   for (const li of lines) {
     if (!li.invoice.invoiceDate) continue
+    const vendor = normalizeVendorName(li.invoice.vendorName)
+    const match = li.sku
+      ? canonical.skuMatches.find(
+          (m) => m.sku === li.sku && m.vendorName === vendor
+        ) ?? canonical.skuMatches.find((m) => m.sku === li.sku)
+      : undefined
+    const normalized =
+      canonical.recipeUnit != null
+        ? deriveCostFromLineItem(
+            {
+              quantity: li.quantity,
+              unit: li.unit,
+              packSize: li.packSize,
+              unitSize: li.unitSize,
+              unitSizeUom: li.unitSizeUom,
+              unitPrice: li.unitPrice,
+              extendedPrice: li.extendedPrice,
+            },
+            canonical.recipeUnit,
+            match
+              ? {
+                  conversionFactor: match.conversionFactor,
+                  fromUnit: match.fromUnit,
+                  toUnit: match.toUnit,
+                }
+              : undefined
+          )
+        : null
     points.push({
       date: li.invoice.invoiceDate.toISOString().slice(0, 10),
-      unitPrice: li.unitPrice,
+      normalizedUnitPrice: normalized,
+      normalizedUnit: normalized == null ? null : canonical.recipeUnit,
+      rawUnitPrice: li.unitPrice,
+      rawUnit: li.unit,
       quantity: li.quantity,
-      unit: li.unit,
-      vendor: normalizeVendorName(li.invoice.vendorName),
+      vendor,
       sku: li.sku,
       invoiceId: li.invoice.id,
       invoiceNumber: li.invoice.invoiceNumber,
