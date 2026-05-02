@@ -90,7 +90,7 @@
   width: 100%;
   appearance: none;
   border: 1px solid var(--hairline-bold);
-  background: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--paper-soft) 70%, transparent);
   color: var(--ink);
   font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;

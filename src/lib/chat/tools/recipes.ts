@@ -8,6 +8,7 @@ import {
   ymd,
 } from "./_shared"
 import type { ChatTool, ChatToolContext } from "./types"
+import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
 
 /**
  * Recipe tools. Recipes are owner-level (not store-level) — `Recipe.ownerId`
@@ -15,15 +16,10 @@ import type { ChatTool, ChatToolContext } from "./types"
  * means a name lookup must qualify by category to be deterministic; when
  * the user gives only a name we return all matches and let the LLM pick.
  *
- * Cost computation: each `RecipeIngredient` carries either a
- * `canonicalIngredientId` (cost = quantity * canonical.costPerRecipeUnit)
- * or a `componentRecipeId` (cost = quantity * recursive total). Component
- * recipes are walked depth-first with a depth cap to prevent cycles. When
- * any leaf canonical lacks a `costPerRecipeUnit`, the line cost becomes
- * null and `fullyCosted` flips to false on the way up.
+ * Cost computation is delegated to `computeRecipeCost`, the same shared engine
+ * used by recipe pages, menu catalog, and Daily COGS. That keeps chat answers
+ * aligned with the app's unit conversion rules (oz → lb, fl oz → gal, etc.).
  */
-
-const COMPONENT_DEPTH_CAP = 5
 
 interface RecipeIngredientPayload {
   id: string
@@ -66,6 +62,8 @@ export type RecipeIngredientRow = {
   unit: string
   /** Cost per recipe unit when known, in dollars. */
   unitCost: number | null
+  /** Unit the unit cost is priced in. May differ from `unit` after conversion. */
+  costUnit: string | null
   /** quantity * unitCost when both are available. */
   lineCost: number | null
   notes: string | null
@@ -129,80 +127,40 @@ async function loadRecipeById(
   })
 }
 
-/** Recursive cost walker. Returns `null` when any leaf canonical lacks a
- *  `costPerRecipeUnit`. Cycles are broken by `seen` + a depth cap. */
-async function computeRecipeCostDeep(
-  ctx: ChatToolContext,
-  recipeId: string,
-  seen: Set<string> = new Set(),
-  depth = 0,
-): Promise<number | null> {
-  if (depth > COMPONENT_DEPTH_CAP || seen.has(recipeId)) return null
-  const r = await loadRecipeById(ctx, recipeId)
-  if (!r) return null
-  if (r.foodCostOverride !== null && r.foodCostOverride !== undefined) {
-    return r.foodCostOverride
-  }
-  if (r.ingredients.length === 0) return null
-  const nextSeen = new Set(seen)
-  nextSeen.add(recipeId)
-  let total = 0
-  for (const ri of r.ingredients) {
-    let line: number | null = null
-    if (ri.canonicalIngredient) {
-      const unit = ri.canonicalIngredient.costPerRecipeUnit
-      line = unit !== null && unit !== undefined ? unit * ri.quantity : null
-    } else if (ri.componentRecipe) {
-      const sub = await computeRecipeCostDeep(
-        ctx,
-        ri.componentRecipe.id,
-        nextSeen,
-        depth + 1,
-      )
-      line = sub !== null ? sub * ri.quantity : null
-    }
-    if (line === null) return null
-    total += line
-  }
-  return total
+function resultCost(result: RecipeCostResult | null): number | null {
+  if (!result || result.partial) return null
+  return result.totalCost
 }
 
 async function shapeRecipe(
   ctx: ChatToolContext,
   r: RecipePayload,
 ): Promise<RecipeResult> {
-  const componentCosts = new Map<string, number | null>()
-  for (const ri of r.ingredients) {
-    if (ri.componentRecipe && !componentCosts.has(ri.componentRecipe.id)) {
-      const cost = await computeRecipeCostDeep(
-        ctx,
-        ri.componentRecipe.id,
-        new Set([r.id]),
-        1,
-      )
-      componentCosts.set(ri.componentRecipe.id, cost)
-    }
-  }
-
+  const cost = await computeRecipeCost(r.id).catch(() => null)
   let total = 0
   let allKnown = true
-  const rows: RecipeIngredientRow[] = r.ingredients.map((ri) => {
+  const rows: RecipeIngredientRow[] = r.ingredients.map((ri, idx) => {
+    const costLine = cost?.lines[idx]
+
     let name: string
     let source: RecipeIngredientRow["source"]
     let unitCost: number | null = null
+    let costUnit: string | null = null
     if (ri.canonicalIngredient) {
       name = ri.canonicalIngredient.name
       source = "canonical"
-      unitCost = ri.canonicalIngredient.costPerRecipeUnit ?? null
+      unitCost = costLine?.unitCost ?? null
+      costUnit = costLine?.costUnit ?? ri.canonicalIngredient.recipeUnit ?? null
     } else if (ri.componentRecipe) {
       name = ri.componentRecipe.itemName
       source = "component"
-      unitCost = componentCosts.get(ri.componentRecipe.id) ?? null
+      unitCost = costLine?.unitCost ?? null
+      costUnit = costLine?.costUnit ?? ri.unit
     } else {
       name = ri.ingredientName ?? "(unnamed)"
       source = "free-text"
     }
-    const lineCost = unitCost !== null ? unitCost * ri.quantity : null
+    const lineCost = costLine && !costLine.missingCost ? costLine.lineCost : null
     if (lineCost === null) {
       allKnown = false
     } else {
@@ -215,6 +173,7 @@ async function shapeRecipe(
       quantity: ri.quantity,
       unit: ri.unit,
       unitCost,
+      costUnit,
       lineCost,
       notes: ri.notes,
     }
@@ -227,8 +186,8 @@ async function shapeRecipe(
     notes: r.notes,
     isSellable: r.isSellable,
     foodCostOverride: r.foodCostOverride,
-    computedTotalCost: rows.length > 0 && allKnown ? total : null,
-    fullyCosted: rows.length > 0 && allKnown,
+    computedTotalCost: cost && rows.length > 0 && allKnown ? total : null,
+    fullyCosted: !!cost && rows.length > 0 && allKnown,
     ingredients: rows,
   }
 }
@@ -415,7 +374,7 @@ export const getMenuMargin: ChatTool<typeof marginParams, MenuMarginResult> = {
       }
     }
 
-    const recipeCost = await computeRecipeCostDeep(ctx, recipe.id)
+    const recipeCost = resultCost(await computeRecipeCost(recipe.id).catch(() => null))
 
     const mappings = await ctx.prisma.otterItemMapping.findMany({
       where: { recipeId: recipe.id, storeId: { in: storeIds } },
@@ -551,7 +510,7 @@ export const rankRecipes: ChatTool<typeof rankParams, RankRecipesRow[]> = {
 
     const costs = new Map<string, number | null>()
     for (const r of recipes) {
-      costs.set(r.id, await computeRecipeCostDeep(ctx, r.id))
+      costs.set(r.id, resultCost(await computeRecipeCost(r.id).catch(() => null)))
     }
 
     if (args.by === "cost") {

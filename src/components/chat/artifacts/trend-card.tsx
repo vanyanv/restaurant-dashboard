@@ -83,11 +83,14 @@ export function TrendCard({
       subline={subline}
       footerHref={footerHref}
       rightSlot={
-        <span className="chat-artifact__view-toggle" role="tablist">
+        <span
+          className="chat-artifact__view-toggle"
+          role="group"
+          aria-label="Trend view"
+        >
           <button
             type="button"
-            role="tab"
-            aria-selected={trendView === "table"}
+            aria-pressed={trendView === "table"}
             className={
               "chat-artifact__view-toggle-btn" +
               (trendView === "table" ? " is-active" : "")
@@ -101,8 +104,7 @@ export function TrendCard({
           </span>
           <button
             type="button"
-            role="tab"
-            aria-selected={trendView === "chart"}
+            aria-pressed={trendView === "chart"}
             className={
               "chat-artifact__view-toggle-btn" +
               (trendView === "chart" ? " is-active" : "")
@@ -178,7 +180,7 @@ export function TrendCard({
         </div>
       ) : (
         <div className="chat-artifact__table-wrap">
-          <table className="chat-artifact__table">
+          <table className="chat-artifact__table chat-artifact__table--trend">
             <thead>
               <tr>
                 <th>Label</th>

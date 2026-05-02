@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import {
   createConversation,
+  deleteAllConversations,
   listConversations,
 } from "@/lib/chat/conversation"
 
@@ -23,6 +24,23 @@ export async function POST() {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  const c = await createConversation(chatPrisma, session.user.id, session.user.accountId)
+  const c = await createConversation(
+    chatPrisma,
+    session.user.id,
+    session.user.accountId,
+  )
   return NextResponse.json({ id: c.id })
+}
+
+/** Deletes every conversation for the authenticated account. */
+export async function DELETE() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  const deletedCount = await deleteAllConversations(
+    chatPrisma,
+    session.user.accountId,
+  )
+  return NextResponse.json({ ok: true, deletedCount })
 }

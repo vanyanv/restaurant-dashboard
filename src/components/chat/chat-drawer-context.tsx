@@ -15,6 +15,9 @@ interface ChatDrawerState {
    * /api/chat route sets `x-conversation-id` on its streamed response so
    * the client can pin it. */
   conversationId: string | null
+  /** Monotonic key for intentionally blank threads. Incrementing it
+   * forces useChat to remount even when there is no active conversation id. */
+  threadResetKey: number
   /** Owner's preferred view for trend artifacts (`<TrendCard>`). Per
    *  drawer-session only — not server-persisted. Defaults to "table". */
   trendView: "table" | "chart"
@@ -37,6 +40,7 @@ export function ChatDrawerProvider({ children }: { children: React.ReactNode }) 
   const [state, setState] = useState<ChatDrawerState>({
     open: false,
     conversationId: null,
+    threadResetKey: 0,
     trendView: "table",
   })
 
@@ -82,7 +86,18 @@ export function ChatDrawerProvider({ children }: { children: React.ReactNode }) 
     [],
   )
   const resetConversation = useCallback(
-    () => setState((s) => ({ ...s, conversationId: null })),
+    () => {
+      try {
+        window.localStorage.removeItem(DRAWER_CONV_LS_KEY)
+      } catch {
+        /* ignore */
+      }
+      setState((s) => ({
+        ...s,
+        conversationId: null,
+        threadResetKey: s.threadResetKey + 1,
+      }))
+    },
     [],
   )
   const setTrendView = useCallback(

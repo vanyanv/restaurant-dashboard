@@ -111,8 +111,8 @@
   z-index: 70;
   /* Reuse the parent surface's grain so the drawer reads as the same paper. */
   background-image:
-    radial-gradient(at 15% 8%, var(--paper-soft, #fff9ef) 0%, transparent 55%),
-    radial-gradient(at 88% 0%, var(--paper-warm, #fcf1dd) 0%, transparent 55%),
+    radial-gradient(at 15% 8%, var(--paper-soft) 0%, transparent 55%),
+    radial-gradient(at 88% 0%, var(--paper-warm) 0%, transparent 55%),
     linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
 }
 
@@ -177,6 +177,8 @@
 
 .chat-drawer__header-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -433,14 +435,14 @@
 /* Card-level highlight: red proofmark left bar + faint tint, marking the
    entity the assistant is calling out (e.g. the biggest invoice). */
 .chat-artifact.is-highlighted {
-  box-shadow: inset 4px 0 0 var(--accent, #dc2626);
+  box-shadow: inset 4px 0 0 var(--accent);
   background: rgba(220, 38, 38, 0.045);
 }
 
 /* Row-level highlight inside TableCard / TrendCard table view. */
 .chat-artifact__table tbody tr.is-highlighted > td {
   background: rgba(220, 38, 38, 0.045);
-  box-shadow: inset 4px 0 0 var(--accent, #dc2626);
+  box-shadow: inset 4px 0 0 var(--accent);
 }
 .chat-artifact__table tbody tr.is-highlighted > td:not(:first-child) {
   box-shadow: none;
@@ -449,27 +451,39 @@
 .chat-artifact__head {
   width: 100%;
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 10px;
-  padding: 8px 12px 7px;
+  padding: 0;
   font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   color: var(--ink);
 }
 
 .chat-artifact__head-btn {
-  display: contents;
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
   appearance: none;
   border: 0;
   background: transparent;
+  padding: 8px 12px 7px;
   cursor: pointer;
   text-align: left;
   font: inherit;
   color: inherit;
+  outline: 0;
 }
 
 .chat-artifact__head:has(.chat-artifact__head-btn:hover) {
   background: rgba(220, 38, 38, 0.025);
+}
+
+.chat-artifact__head:has(.chat-artifact__head-btn:focus-visible) {
+  background: rgba(220, 38, 38, 0.035);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .chat-artifact__dept {
@@ -498,12 +512,14 @@
 }
 
 .chat-artifact__right {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: end;
+  align-self: center;
+  padding: 8px 12px 7px 0;
 }
 
 .chat-artifact__chevron {
-  grid-column: 4;
+  grid-column: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -574,6 +590,9 @@
 
 .chat-artifact__table-wrap {
   padding: 8px 0 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .chat-artifact__table-wrap--scroll {
@@ -588,6 +607,19 @@
   font-size: 12px;
   color: var(--ink);
   font-variant-numeric: tabular-nums lining-nums;
+}
+
+.chat-artifact__table--invoice {
+  min-width: 620px;
+}
+
+.chat-artifact__table--recipe {
+  min-width: 560px;
+}
+
+.chat-artifact__table--menu,
+.chat-artifact__table--trend {
+  min-width: 460px;
 }
 
 .chat-artifact__table thead th {
@@ -729,10 +761,16 @@
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
+  outline: 0;
 }
 
 .chat-artifact__view-toggle-btn.is-active {
   color: var(--accent);
+}
+
+.chat-artifact__view-toggle-btn:focus-visible {
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--accent);
 }
 
 .chat-artifact__view-toggle-sep {
@@ -828,7 +866,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--hairline-bold);
-  background: rgba(255, 255, 255, 0.55);
+  background: color-mix(in srgb, var(--paper-soft) 55%, transparent);
   padding: 6px 10px;
   transition: border-color 120ms ease;
 }

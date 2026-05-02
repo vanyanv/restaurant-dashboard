@@ -97,6 +97,7 @@ const NAV: NavSection[] = [
         icon: Package,
         items: [
           { title: "Canonical catalog", url: "/dashboard/ingredients" },
+          { title: "Price monitor", url: "/dashboard/ingredients/prices" },
           { title: "Needs review", url: "/dashboard/ingredients?tab=review" },
         ],
       },

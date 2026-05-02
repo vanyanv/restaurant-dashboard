@@ -44,7 +44,7 @@ export function MenuItemCard({ details, collapsedDefault }: Props) {
         />
       </div>
       <div className="chat-artifact__table-wrap">
-        <table className="chat-artifact__table">
+        <table className="chat-artifact__table chat-artifact__table--menu">
           <thead>
             <tr>
               <th>Date</th>

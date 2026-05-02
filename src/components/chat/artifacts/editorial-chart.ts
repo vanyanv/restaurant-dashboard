@@ -10,12 +10,12 @@ export const editorialChart = {
   inkStroke: "var(--ink)",
   inkFill: "var(--ink)",
   /** Reference grid + axis lines. */
-  hairline: "var(--hairline-bold, rgba(26,22,19,0.18))",
-  axisTick: "var(--ink-faint, rgba(26,22,19,0.45))",
+  hairline: "var(--hairline-bold)",
+  axisTick: "var(--ink-faint)",
   /** Hover / focus colour (the proofmark red, used sparingly). */
-  accent: "var(--accent, #dc2626)",
+  accent: "var(--accent)",
   /** Tooltip ground. */
-  paper: "var(--paper, #fdf8ef)",
+  paper: "var(--paper)",
 } as const
 
 export const tooltipContentStyle: React.CSSProperties = {

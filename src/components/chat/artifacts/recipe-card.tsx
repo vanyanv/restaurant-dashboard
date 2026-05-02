@@ -31,7 +31,7 @@ export function RecipeCard({ recipe, collapsedDefault }: Props) {
       defaultOpen={!collapsedDefault}
     >
       <div className="chat-artifact__table-wrap">
-        <table className="chat-artifact__table">
+        <table className="chat-artifact__table chat-artifact__table--recipe">
           <thead>
             <tr>
               <th>Ingredient</th>
@@ -60,7 +60,9 @@ export function RecipeCard({ recipe, collapsedDefault }: Props) {
                 <td>{ri.unit}</td>
                 <td className="num">
                   <Num>
-                    {ri.unitCost !== null ? fmtMoney(ri.unitCost) : "—"}
+                    {ri.unitCost !== null
+                      ? `${fmtMoney(ri.unitCost)}${ri.costUnit ? `/${ri.costUnit}` : ""}`
+                      : "—"}
                   </Num>
                 </td>
                 <td className="num">

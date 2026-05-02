@@ -27,18 +27,60 @@ interface Props {
  * right. The thread reads its conversation id from the drawer context, so
  * picking a conversation in the rail repoints the thread to that id. */
 export function ChatPageClient({ initialConversations }: Props) {
-  const { conversationId, setConversationId, resetConversation } =
-    useChatDrawer()
+  const {
+    conversationId,
+    setConversationId,
+    resetConversation,
+    threadResetKey,
+  } = useChatDrawer()
   const [conversations, setConversations] = useState(initialConversations)
   const [hydrated, setHydrated] = useState<{
     id: string | null
     messages: UIMessage[]
   }>({ id: null, messages: [] })
+  const [pendingClearAll, setPendingClearAll] = useState(false)
   // Marker set when the active <ChatThread> bubbles up its server-assigned
   // conversation id mid-stream. The hydration effect below skips when the
   // context's conversationId matches this — re-fetching would change the
   // thread's remount key and drop the live "Thinking" state.
   const capturedIdRef = useRef<string | null>(null)
+  const clearAllTimerRef = useRef<number | null>(null)
+
+  async function clearAllConversations() {
+    if (!pendingClearAll) {
+      setPendingClearAll(true)
+      clearAllTimerRef.current = window.setTimeout(() => {
+        setPendingClearAll(false)
+        clearAllTimerRef.current = null
+      }, 2500)
+      return
+    }
+
+    if (clearAllTimerRef.current) {
+      window.clearTimeout(clearAllTimerRef.current)
+      clearAllTimerRef.current = null
+    }
+    setPendingClearAll(false)
+
+    try {
+      const res = await fetch("/api/chat/conversations", { method: "DELETE" })
+      if (!res.ok) return
+      capturedIdRef.current = null
+      setConversations([])
+      resetConversation()
+      setHydrated({ id: null, messages: [] })
+    } catch {
+      /* leave current UI intact */
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (clearAllTimerRef.current) {
+        window.clearTimeout(clearAllTimerRef.current)
+      }
+    }
+  }, [])
 
   // Whenever the active conversation id changes, fetch its prior messages
   // so the thread can hydrate. The thread is keyed by conversation id —
@@ -88,7 +130,7 @@ export function ChatPageClient({ initialConversations }: Props) {
   // is wired through `<ChatThread onTurnFinish>` below.
   useEffect(() => {
     function onFocus() {
-      refresh()
+      void refresh()
     }
     window.addEventListener("focus", onFocus)
     return () => window.removeEventListener("focus", onFocus)
@@ -110,6 +152,7 @@ export function ChatPageClient({ initialConversations }: Props) {
   async function newConversation() {
     capturedIdRef.current = null
     resetConversation()
+    setHydrated({ id: null, messages: [] })
     await refresh()
   }
 
@@ -154,13 +197,27 @@ export function ChatPageClient({ initialConversations }: Props) {
       <aside className="chat-page__rail">
         <div className="chat-page__rail-head">
           <div className="chat-drawer__dept">Conversations</div>
-          <button
-            type="button"
-            className="chat-drawer__close"
-            onClick={newConversation}
-          >
-            New
-          </button>
+          <div className="chat-drawer__header-actions">
+            <button
+              type="button"
+              className="chat-drawer__close"
+              onClick={newConversation}
+            >
+              New
+            </button>
+            <button
+              type="button"
+              className="chat-drawer__close"
+              onClick={clearAllConversations}
+              aria-label={
+                pendingClearAll
+                  ? "Confirm clear all conversations"
+                  : "Clear all conversations"
+              }
+            >
+              {pendingClearAll ? "Confirm clear" : "Clear all"}
+            </button>
+          </div>
         </div>
         <div className="chat-page__list">
           {conversations.length === 0 ? (
@@ -189,7 +246,7 @@ export function ChatPageClient({ initialConversations }: Props) {
         <ChatThread
           // Remount the thread whenever the active conversation changes so
           // useChat picks up the new initialMessages.
-          key={hydrated.id ?? "new"}
+          key={hydrated.id ?? `new-${threadResetKey}`}
           initialMessages={hydrated.messages}
           onTurnFinish={refresh}
           onConversationCaptured={(id) => {

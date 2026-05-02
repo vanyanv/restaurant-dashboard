@@ -27,7 +27,7 @@ export function InvoiceCard({ invoice, collapsedDefault }: Props) {
       defaultOpen={!collapsedDefault}
     >
       <div className="chat-artifact__table-wrap">
-        <table className="chat-artifact__table">
+        <table className="chat-artifact__table chat-artifact__table--invoice">
           <thead>
             <tr>
               <th>#</th>

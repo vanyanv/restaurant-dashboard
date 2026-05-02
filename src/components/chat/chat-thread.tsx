@@ -103,7 +103,7 @@ export function ChatThread({
   })
 
   const send = (text: string) => {
-    sendMessage({ text })
+    void sendMessage({ text })
   }
 
   // Auto-scroll to bottom on new content.

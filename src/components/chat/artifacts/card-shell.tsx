@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useId, useState, type ReactNode } from "react"
 
 interface CardShellProps {
   /** Department-tag mono label, e.g. "INVOICE", "RECIPE", "TOP INVOICES". */
@@ -46,6 +46,8 @@ export function CardShell({
   children,
 }: CardShellProps) {
   const [open, setOpen] = useState(defaultOpen)
+  const bodyId = useId()
+
   return (
     <div
       className={
@@ -59,6 +61,7 @@ export function CardShell({
           type="button"
           className="chat-artifact__head-btn"
           aria-expanded={open}
+          aria-controls={bodyId}
           onClick={() => setOpen((o) => !o)}
         >
           <span className="chat-artifact__dept">{dept}</span>
@@ -83,7 +86,12 @@ export function CardShell({
         ) : null}
       </div>
       {subline ? <div className="chat-artifact__subline">{subline}</div> : null}
-      <div className="chat-artifact__body" aria-hidden={!open}>
+      <div
+        id={bodyId}
+        className="chat-artifact__body"
+        aria-hidden={!open}
+        inert={!open ? true : undefined}
+      >
         <div className="chat-artifact__body-inner">
           {children}
           {footerHref ? (

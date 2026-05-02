@@ -22,6 +22,7 @@ export function ChatDrawer() {
     resetConversation,
     conversationId,
     setConversationId,
+    threadResetKey,
   } = useChatDrawer()
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false)
   const [hydrated, setHydrated] = useState<{
@@ -31,11 +32,48 @@ export function ChatDrawer() {
   const [hydrating, setHydrating] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const clearAllTimerRef = useRef<number | null>(null)
   // Marker set when the active <ChatThread> bubbles up its server-assigned
   // conversation id mid-stream. The hydration effect below skips when the
   // context's conversationId matches this — re-fetching would change the
   // thread's remount key and drop the live "Thinking" state.
   const capturedIdRef = useRef<string | null>(null)
+  const [pendingClearAll, setPendingClearAll] = useState(false)
+
+  async function clearAllConversations() {
+    if (!pendingClearAll) {
+      setPendingClearAll(true)
+      clearAllTimerRef.current = window.setTimeout(() => {
+        setPendingClearAll(false)
+        clearAllTimerRef.current = null
+      }, 2500)
+      return
+    }
+
+    if (clearAllTimerRef.current) {
+      window.clearTimeout(clearAllTimerRef.current)
+      clearAllTimerRef.current = null
+    }
+    setPendingClearAll(false)
+
+    try {
+      const res = await fetch("/api/chat/conversations", { method: "DELETE" })
+      if (!res.ok) return
+      capturedIdRef.current = null
+      resetConversation()
+      setHydrated({ id: null, messages: [] })
+    } catch {
+      /* leave current UI intact */
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (clearAllTimerRef.current) {
+        window.clearTimeout(clearAllTimerRef.current)
+      }
+    }
+  }, [])
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {
@@ -170,6 +208,7 @@ export function ChatDrawer() {
         aria-modal="true"
         aria-label="Owner analytics chat"
         aria-hidden={!open}
+        inert={!open ? true : undefined}
       >
         <header className="chat-drawer__header">
           <div>
@@ -192,6 +231,18 @@ export function ChatDrawer() {
             <button
               type="button"
               className="chat-drawer__close"
+              onClick={clearAllConversations}
+              aria-label={
+                pendingClearAll
+                  ? "Confirm clear all conversations"
+                  : "Clear all conversations"
+              }
+            >
+              {pendingClearAll ? "Confirm clear" : "Clear all"}
+            </button>
+            <button
+              type="button"
+              className="chat-drawer__close"
               onClick={closeDrawer}
               aria-label="Close chat"
             >
@@ -205,7 +256,7 @@ export function ChatDrawer() {
             placeholder while the prior conversation's messages load. */}
         {hasOpenedOnce && !hydrating && (
           <ChatThread
-            key={hydrated.id ?? "new"}
+            key={hydrated.id ?? `new-${threadResetKey}`}
             initialMessages={hydrated.messages}
             onConversationCaptured={(id) => {
               capturedIdRef.current = id

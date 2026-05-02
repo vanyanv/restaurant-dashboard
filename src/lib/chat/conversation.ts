@@ -213,3 +213,15 @@ export async function deleteConversation(
   await getConversation(prisma, accountId, conversationId)
   await prisma.conversation.delete({ where: { id: conversationId } })
 }
+
+/** Deletes every conversation on the caller's account. Cascades to messages
+ * and tool calls through the Conversation -> Message -> ToolCall relations. */
+export async function deleteAllConversations(
+  prisma: PrismaClient,
+  accountId: string,
+): Promise<number> {
+  const result = await prisma.conversation.deleteMany({
+    where: { accountId },
+  })
+  return result.count
+}
