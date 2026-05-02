@@ -167,8 +167,9 @@ export function IngredientPickerSheet({
     return visiblePool.filter((c) => {
       if (q) {
         const pretty = prettifyIngredientName(c.name).toLowerCase()
-        if (!c.name.toLowerCase().includes(q) && !pretty.includes(q))
+        if (!c.name.toLowerCase().includes(q) && !pretty.includes(q)) {
           return false
+        }
       }
       if (bucket !== "All" && bucketFor(c.category) !== bucket) return false
       return true

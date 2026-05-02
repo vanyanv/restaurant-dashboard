@@ -19,7 +19,7 @@ export async function performLogout(): Promise<void> {
     }
     
     // Sign out with NextAuth (but don't wait for redirect)
-    signOut({ 
+    void signOut({
       callbackUrl: "/login",
       redirect: false  // We handle redirect ourselves above
     })

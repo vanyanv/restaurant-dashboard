@@ -33,7 +33,7 @@ export function SignupForm({ token }: { token: string }) {
   }
 
   function shake() {
-    shakeControls.start({
+    void shakeControls.start({
       x: [0, -8, 8, -6, 6, -3, 3, 0],
       transition: { duration: 0.4, ease: "easeOut" },
     })

@@ -219,8 +219,9 @@ export function DateRangePicker({
         (tgt.tagName === "INPUT" ||
           tgt.tagName === "TEXTAREA" ||
           tgt.isContentEditable)
-      )
+      ) {
         return
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === "[") {
         e.preventDefault()

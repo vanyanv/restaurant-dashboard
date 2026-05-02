@@ -72,7 +72,7 @@ export function useCreateStore() {
       )
 
       // Refetch to ensure data consistency
-      queryClient.invalidateQueries({ queryKey: storesQueryKey })
+      void queryClient.invalidateQueries({ queryKey: storesQueryKey })
 
       toast.success('Store created successfully!', {
         description: `${newStore.name} has been added to your locations.`,

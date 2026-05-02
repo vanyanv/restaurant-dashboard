@@ -38,27 +38,30 @@ async function checkInvite(token: string): Promise<InviteCheck> {
   const tokenShort = shortToken(token)
 
   if (!invite) return { ok: false, reason: "missing", tokenShort }
-  if (invite.revokedAt)
+  if (invite.revokedAt) {
     return {
       ok: false,
       reason: "revoked",
       inviterEmail: invite.createdBy.email,
       tokenShort,
     }
-  if (invite.usedAt)
+  }
+  if (invite.usedAt) {
     return {
       ok: false,
       reason: "used",
       inviterEmail: invite.createdBy.email,
       tokenShort,
     }
-  if (invite.expiresAt.getTime() < Date.now())
+  }
+  if (invite.expiresAt.getTime() < Date.now()) {
     return {
       ok: false,
       reason: "expired",
       inviterEmail: invite.createdBy.email,
       tokenShort,
     }
+  }
 
   return {
     ok: true,

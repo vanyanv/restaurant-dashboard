@@ -67,7 +67,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
         `Recomputed COGS: ${result.daysProcessed} day(s), ` +
           `${result.rowsUpserted} upserted, ${result.rowsDeleted} cleaned`
       )
-      queryClient.invalidateQueries({ queryKey: ["pnl", storeId] })
+      void queryClient.invalidateQueries({ queryKey: ["pnl", storeId] })
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Failed to recompute COGS")

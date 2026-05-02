@@ -102,7 +102,7 @@ export function HourlyOrdersDashboardCard({
   useEffect(() => {
     for (const p of ALL_PERIODS) {
       if (p === period) continue
-      queryClient.prefetchQuery({
+      void queryClient.prefetchQuery({
         queryKey: ["hourly-orders", selectedStore, p],
         queryFn: () => getHourlyOrderPatterns(storeIdArg, p),
         staleTime: 5 * 60_000,

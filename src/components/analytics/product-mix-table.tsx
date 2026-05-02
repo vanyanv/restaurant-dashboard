@@ -154,8 +154,9 @@ export function ProductMixTable({
   }
 
   const SortIcon = ({ column }: { column: SortKey }) => {
-    if (sortKey !== column)
+    if (sortKey !== column) {
       return <ArrowUpDown className="h-3 w-3 opacity-40" />
+    }
     return sortDir === "asc" ? (
       <ArrowUp className="h-3 w-3" />
     ) : (

@@ -50,7 +50,7 @@ export function LoginForm() {
       if (result?.error) {
         setFormState("error")
         setErrorMessage("Invalid email or password")
-        shakeControls.start({
+        void shakeControls.start({
           x: [0, -8, 8, -6, 6, -3, 3, 0],
           transition: { duration: 0.4, ease: "easeOut" },
         })
@@ -71,7 +71,7 @@ export function LoginForm() {
     } catch {
       setFormState("error")
       setErrorMessage("An error occurred. Please try again.")
-      shakeControls.start({
+      void shakeControls.start({
         x: [0, -8, 8, -6, 6, -3, 3, 0],
         transition: { duration: 0.4, ease: "easeOut" },
       })

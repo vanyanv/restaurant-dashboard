@@ -19,16 +19,19 @@ export async function DataQualityStripSection({
     return null
 
   const parts: string[] = []
-  if (dq.unmapped > 0)
+  if (dq.unmapped > 0) {
     parts.push(`${dq.unmapped} item${dq.unmapped === 1 ? "" : "s"} unmapped`)
-  if (dq.missingCost > 0)
+  }
+  if (dq.missingCost > 0) {
     parts.push(
       `${dq.missingCost} item${dq.missingCost === 1 ? "" : "s"} missing cost`
     )
-  if (dq.partialCost > 0)
+  }
+  if (dq.partialCost > 0) {
     parts.push(
       `${dq.partialCost} item${dq.partialCost === 1 ? "" : "s"} partial cost`
     )
+  }
 
   return (
     <aside className="cogs-corrigenda" role="status">

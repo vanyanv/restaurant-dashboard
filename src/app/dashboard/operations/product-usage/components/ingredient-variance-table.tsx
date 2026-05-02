@@ -356,9 +356,10 @@ export function IngredientVarianceTable({
                       transition: "background 160ms ease",
                     }}
                     onMouseEnter={(e) => {
-                      if (interactive)
+                      if (interactive) {
                         e.currentTarget.style.background =
                           "rgba(220, 38, 38, 0.045)"
+                      }
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = "transparent"

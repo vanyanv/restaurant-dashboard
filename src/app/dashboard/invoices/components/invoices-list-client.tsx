@@ -40,8 +40,9 @@ export function InvoicesListClient({
           connection?: { saveData?: boolean; effectiveType?: string }
         }).connection
         if (conn?.saveData) return
-        if (conn?.effectiveType === "slow-2g" || conn?.effectiveType === "2g")
+        if (conn?.effectiveType === "slow-2g" || conn?.effectiveType === "2g") {
           return
+        }
       }
       prefetchedRef.current.add(id)
       router.prefetch(`/dashboard/invoices/${id}`)

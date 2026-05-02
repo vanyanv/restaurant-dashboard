@@ -470,7 +470,7 @@ function SubRecipe({
     if (detail) return
     let cancelled = false
     setLoading(true)
-    ;(async () => {
+    void (async () => {
       const res = await getRecipeDetail(componentRecipeId)
       if (cancelled || !res) return
       subRecipeCache.set(componentRecipeId, res)
