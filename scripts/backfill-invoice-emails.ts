@@ -143,6 +143,7 @@ async function main() {
       const created = await prisma.invoice.create({
         data: {
           ownerId: owner.id,
+          accountId: owner.accountId,
           storeId: match?.storeId ?? null,
           emailMessageId: msg.id,
           emailSubject: msg.subject,
@@ -198,7 +199,7 @@ async function main() {
 
   if (createdIds.length > 0) {
     try {
-      const res = await matchNewLineItems(owner.id, createdIds)
+      const res = await matchNewLineItems(owner.accountId, createdIds)
       console.log(
         `\nIngredient match: sku=${res.matchedBySku} alias=${res.matchedByAlias} ` +
         `unmatched=${res.unmatched} costsUpdated=${res.costsUpdated}`

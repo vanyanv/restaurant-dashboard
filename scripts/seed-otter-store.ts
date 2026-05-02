@@ -2,7 +2,7 @@
 // Run with: npx tsx scripts/seed-otter-store.ts
 // Detects which Otter UUID belongs to the Hollywood store and upserts OtterStore in the DB.
 
-import { execSync } from "child_process"
+import { execFileSync } from "child_process"
 import fs from "fs"
 import path from "path"
 
@@ -220,7 +220,7 @@ function findActiveUUID(data: OtterResponse): string | null {
 async function upsertOtterStore(detectedUUID: string): Promise<void> {
   // Regenerate Prisma client WITH the local engine (overrides --no-engine from postinstall)
   console.log("\nRegenerating Prisma client with local engine...")
-  execSync("npx prisma generate", { stdio: "inherit" })
+  execFileSync("npx", ["prisma", "generate"], { stdio: "inherit" })
 
   // Dynamic import after DATABASE_URL is set
   const { PrismaClient } = await import("../src/generated/prisma/client")

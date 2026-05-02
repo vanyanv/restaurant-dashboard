@@ -27,6 +27,16 @@ function loadEnvLocal(): void {
 
 loadEnvLocal()
 
+const REQUIRED_ENV = [
+  "MICROSOFT_TENANT_ID",
+  "MICROSOFT_CLIENT_ID",
+  "MICROSOFT_CLIENT_SECRET",
+  "MICROSOFT_MAIL_USER_ID",
+] as const
+for (const k of REQUIRED_ENV) {
+  if (!process.env[k]) throw new Error(`${k} is required`)
+}
+
 const APPLY = process.argv.includes("--apply")
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 

@@ -391,8 +391,9 @@ function renderReport(
     const dDash = r.dash - r.sheet
     const auto: string[] = []
     if (r.note) auto.push(r.note)
-    if (!r.note && r.sheet !== 0 && Math.abs(dAlign) / Math.max(1, Math.abs(r.sheet)) > 0.05)
+    if (!r.note && r.sheet !== 0 && Math.abs(dAlign) / Math.max(1, Math.abs(r.sheet)) > 0.05) {
       auto.push(">5% drift vs aligned")
+    }
     push(`| ${r.code} | ${r.label.padEnd(24)} | ${money(r.sheet)} | ${money(r.aligned)}  | ${money(r.dash)}  | ${money(dAlign)} | ${money(dDash)} | ${auto.join("; ")} |`)
   }
   const sheetTot = sheet.totalSales

@@ -12,7 +12,7 @@
 //
 // UUID mapping confirmed from Otter admin network captures (Apr 30, 2026).
 
-import { execSync } from "child_process"
+import { execFileSync } from "child_process"
 import fs from "fs"
 import path from "path"
 
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
 
   // Regenerate Prisma client with local engine (postinstall uses --no-engine)
   console.log("\nRegenerating Prisma client with local engine...")
-  execSync("npx prisma generate", { stdio: "inherit" })
+  execFileSync("npx", ["prisma", "generate"], { stdio: "inherit" })
 
   const { PrismaClient } = await import("../src/generated/prisma/client")
   const { PrismaPg } = await import("@prisma/adapter-pg")
