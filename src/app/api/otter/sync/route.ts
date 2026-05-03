@@ -102,12 +102,14 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
   const activeOtterStores = otterStores.filter((os) => os.store.isActive)
   const otterStoreIds = activeOtterStores.map((os) => os.otterStoreId)
 
-  // 3-day lookback to catch late-arriving platform adjustments
+  // 3-day lookback to catch late-arriving platform adjustments. Use UTC day
+  // boundaries because OtterDailySummary.date is stored at UTC midnight and
+  // the downstream API expects UTC ISO bounds.
   const endDate = new Date()
-  endDate.setHours(23, 59, 59, 999)
+  endDate.setUTCHours(23, 59, 59, 999)
   const startDate = new Date()
-  startDate.setDate(startDate.getDate() - 3)
-  startDate.setHours(0, 0, 0, 0)
+  startDate.setUTCDate(startDate.getUTCDate() - 3)
+  startDate.setUTCHours(0, 0, 0, 0)
 
   const otterToInternal = new Map<string, string>(
     activeOtterStores.map((os) => [os.otterStoreId, os.storeId])
@@ -257,7 +259,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
 
   const categoryRecords = categoryResults.flatMap(({ day, rows: categoryRows }) => {
     const date = new Date(day)
-    date.setHours(0, 0, 0, 0)
+    date.setUTCHours(0, 0, 0, 0)
 
     return categoryRows
       .filter((row: OtterRow) => {
@@ -346,7 +348,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
 
   const itemRecords = itemResults.flatMap(({ day, storeId, rows: itemRows }) => {
     const date = new Date(day)
-    date.setHours(0, 0, 0, 0)
+    date.setUTCHours(0, 0, 0, 0)
 
     return itemRows.map((row: OtterRow) => {
       const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
@@ -424,7 +426,7 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
 
   const modifierRecords = modifierResults.flatMap(({ day, storeId, rows: modRows }) => {
     const date = new Date(day)
-    date.setHours(0, 0, 0, 0)
+    date.setUTCHours(0, 0, 0, 0)
 
     return modRows.map((row: OtterRow) => {
       const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
@@ -477,12 +479,13 @@ async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
     detail: "Fetching customer ratings...", counts,
   })
 
-  // Ratings use a wider lookback since reviews trickle in slowly
+  // Ratings use a wider lookback since reviews trickle in slowly. UTC day
+  // boundaries to match the rest of the sync.
   const ratingsEnd = new Date()
-  ratingsEnd.setHours(23, 59, 59, 999)
+  ratingsEnd.setUTCHours(23, 59, 59, 999)
   const ratingsStart = new Date()
-  ratingsStart.setDate(ratingsStart.getDate() - 21)
-  ratingsStart.setHours(0, 0, 0, 0)
+  ratingsStart.setUTCDate(ratingsStart.getUTCDate() - 21)
+  ratingsStart.setUTCHours(0, 0, 0, 0)
 
   let ratingsSynced = 0
   let ratingsFailed = 0

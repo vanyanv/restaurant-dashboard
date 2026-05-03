@@ -151,11 +151,34 @@ export async function getConversation(
   }
 }
 
+/** Lightweight ownership check for hot paths that only need to confirm the
+ * conversation exists on the caller's account. Loading messages here adds
+ * avoidable latency before /api/chat can start streaming. */
+export async function assertConversationAccess(
+  prisma: PrismaClient,
+  accountId: string,
+  conversationId: string,
+): Promise<void> {
+  const c = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { accountId: true },
+  })
+  if (!c) {
+    throw new ConversationAccessError("NOT_FOUND", "conversation not found")
+  }
+  if (c.accountId !== accountId) {
+    throw new ConversationAccessError(
+      "NOT_OWNED",
+      "conversation not on this account",
+    )
+  }
+}
+
 /** Append one message to a conversation. Caller must have already verified
- * ownership via `getConversation` (the route handler does this on every
- * POST). Does not bump conversation.updatedAt — Prisma's `@updatedAt` does
- * that automatically when we touch the row, so we re-save the title (or a
- * sentinel) to trigger it. */
+ * ownership via `getConversation` or `assertConversationAccess`. Does not
+ * bump conversation.updatedAt — Prisma's `@updatedAt` does that automatically
+ * when we touch the row, so we re-save the title (or a sentinel) to trigger
+ * it. */
 export async function appendMessage(
   prisma: PrismaClient,
   input: AppendMessageInput,

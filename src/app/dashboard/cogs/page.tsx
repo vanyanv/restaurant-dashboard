@@ -47,7 +47,7 @@ export default async function CogsLandingPage() {
             <div className="inv-panel__head cogs-store-overview__head">
               <div>
                 <span className="inv-panel__dept">Last 30 days</span>
-                <h1 className="inv-panel__title">Store food-cost watchlist</h1>
+                <h1 className="inv-panel__title">Store COGS watchlist</h1>
               </div>
               <span className="cogs-store-overview__scope">
                 ranked by target miss, data risk, then dollars
@@ -66,6 +66,7 @@ export default async function CogsLandingPage() {
                   <span role="columnheader">Target</span>
                   <span role="columnheader">Delta</span>
                   <span role="columnheader">COGS</span>
+                  <span role="columnheader">Food</span>
                   <span role="columnheader">Revenue</span>
                   <span role="columnheader">Risk</span>
                 </div>
@@ -90,6 +91,7 @@ export default async function CogsLandingPage() {
                       <span role="cell">{formatPct(store.targetCogsPct)}</span>
                       <span role="cell">{formatDelta(store.deltaVsTargetPp)}</span>
                       <span role="cell">{formatMoney(store.cogsDollars)}</span>
+                      <span role="cell">{formatMoney(store.foodCogsDollars)}</span>
                       <span role="cell">{formatMoney(store.revenueDollars)}</span>
                       <span role="cell">
                         {store.warningCount === 0 ? "clean" : store.warningCount}

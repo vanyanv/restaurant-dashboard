@@ -49,8 +49,16 @@ export async function batchRecipeCosts(
     const memoed = memo.get(recipeId)
     if (memoed) return memoed
 
-    // Cycle — bail out as partial rather than throwing; this is a listing path.
+    // Cycle — bail out as partial rather than throwing; this is a listing path
+    // and we don't want to crash the whole listing. But cycles shouldn't exist
+    // (DB-side checks should prevent them), so log loudly: the single-recipe
+    // path throws RecipeCycleError, which is the canonical signal.
     if (stack.has(recipeId)) {
+      console.warn(
+        "[recipe-cost-batch] cycle detected at recipeId=%s (stack=%s) — returning partial",
+        recipeId,
+        Array.from(stack).join(" -> ")
+      )
       const cycleResult: BatchRecipeCostResult = { totalCost: 0, partial: true }
       memo.set(recipeId, cycleResult)
       return cycleResult

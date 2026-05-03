@@ -231,8 +231,10 @@ export type CanonicalIngredientCost = {
  */
 export async function getCanonicalIngredientCost(
   canonicalIngredientId: string,
-  asOf?: Date
+  asOf?: Date,
+  options?: { storeId?: string }
 ): Promise<CanonicalIngredientCost | null> {
+  const storeId = options?.storeId
   // Load canonical metadata once — we need `recipeUnit` for both branches
   // to normalize invoice costs into cost-per-recipe-unit.
   const canonical = await prisma.canonicalIngredient.findUnique({
@@ -245,19 +247,14 @@ export async function getCanonicalIngredientCost(
     },
   })
 
-  // Builder mode (no asOf) — trust the canonical's precomputed value.
-  //
-  // Also use the canonical value for `asOf` queries when the cost was set
-  // manually. Manual prices are authoritative per-unit ($/each, $/oz, …) and
-  // we don't store their history; falling back to raw invoice data in the
-  // dated path would silently apply the wrong unit (e.g. $36/EA-case for
-  // pickle jars where the user meant $0.036/each-pickle). If a user later
-  // overrides a manual price, old P&Ls will reflect the new value — a
-  // deliberate trade-off vs. surfacing garbage invoice units.
+  // Manual prices are authoritative per-recipe-unit ($/each, $/oz, …) and
+  // intentionally override both dated and store-scoped invoice lookup. We do
+  // not store manual price history, but falling through to raw invoice data can
+  // be far worse: a $36/EA case can otherwise masquerade as $36 per pickle.
   const useCanonical =
     canonical?.costPerRecipeUnit != null &&
     canonical.recipeUnit &&
-    (asOf === undefined || canonical.costSource === "manual")
+    (canonical.costSource === "manual" || (!storeId && asOf === undefined))
   if (useCanonical) {
     // The canonical's costPerRecipeUnit is authoritative for the price, but its
     // `costUpdatedAt` lags behind invoice arrivals (locked canonicals, same-value
@@ -294,28 +291,67 @@ export async function getCanonicalIngredientCost(
   }
 
   // Period-matched mode: find the most recent invoice line on-or-before asOf.
-  const direct = await prisma.invoiceLineItem.findFirst({
-    where: {
-      canonicalIngredientId,
-      invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
-      quantity: { not: 0 },
-    },
-    orderBy: { invoice: { invoiceDate: "desc" } },
-    select: {
-      id: true,
-      invoiceId: true,
-      sku: true,
-      productName: true,
-      quantity: true,
-      unit: true,
-      packSize: true,
-      unitSize: true,
-      unitSizeUom: true,
-      unitPrice: true,
-      extendedPrice: true,
-      invoice: { select: { invoiceDate: true, vendorName: true } },
-    },
-  })
+  // When `storeId` is set, prefer this store's own purchase first so per-store
+  // COGS reflects this store's actual vendor pricing. If no store-scoped match
+  // exists, fall back to the cross-store latest (so a brand-new store still
+  // gets a usable price).
+  const buildInvoiceWhere = (forStoreId?: string) => {
+    if (!asOf && !forStoreId) return undefined
+    const w: { invoiceDate?: { lte: Date }; storeId?: string } = {}
+    if (asOf) w.invoiceDate = { lte: asOf }
+    if (forStoreId) w.storeId = forStoreId
+    return w
+  }
+
+  let direct = storeId
+    ? await prisma.invoiceLineItem.findFirst({
+        where: {
+          canonicalIngredientId,
+          invoice: buildInvoiceWhere(storeId),
+          quantity: { not: 0 },
+        },
+        orderBy: { invoice: { invoiceDate: "desc" } },
+        select: {
+          id: true,
+          invoiceId: true,
+          sku: true,
+          productName: true,
+          quantity: true,
+          unit: true,
+          packSize: true,
+          unitSize: true,
+          unitSizeUom: true,
+          unitPrice: true,
+          extendedPrice: true,
+          invoice: { select: { invoiceDate: true, vendorName: true } },
+        },
+      })
+    : null
+
+  if (!direct) {
+    direct = await prisma.invoiceLineItem.findFirst({
+      where: {
+        canonicalIngredientId,
+        invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
+        quantity: { not: 0 },
+      },
+      orderBy: { invoice: { invoiceDate: "desc" } },
+      select: {
+        id: true,
+        invoiceId: true,
+        sku: true,
+        productName: true,
+        quantity: true,
+        unit: true,
+        packSize: true,
+        unitSize: true,
+        unitSizeUom: true,
+        unitPrice: true,
+        extendedPrice: true,
+        invoice: { select: { invoiceDate: true, vendorName: true } },
+      },
+    })
+  }
 
   if (direct && direct.invoice.invoiceDate) {
     // Prefer the hydration path: derive $/recipeUnit using packSize/unitSize,

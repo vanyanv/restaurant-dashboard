@@ -1,4 +1,4 @@
-import { CHAT_ROUTING_MODEL, getChatOpenAIClient } from "./openai-client"
+import { CHAT_TITLE_MODEL, getChatOpenAIClient } from "./openai-client"
 
 /**
  * Generates a 3-6 word title from the first user/assistant turn of a
@@ -18,7 +18,7 @@ export async function generateConversationTitle(
   try {
     const client = getChatOpenAIClient()
     const completion = await client.chat.completions.create({
-      model: CHAT_ROUTING_MODEL,
+      model: CHAT_TITLE_MODEL,
       temperature: 0.2,
       max_tokens: 24,
       messages: [

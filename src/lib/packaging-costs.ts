@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/prisma"
 import {
   CONTAINER_GROUP_LABELS,
+  PACKAGING_COST_AWARE_SCENARIO,
   PACKAGING_SCENARIO,
   containerGroupForCanonical,
   emptyContainerCounts,
   invoiceEachUnits,
   isTakeawayFulfillmentMode,
   normalizeFulfillmentMode,
-  packOrder,
+  packOrderCostAware,
+  type BasketClassification,
   type ContainerCounts,
   type ContainerGroup,
   type FulfillmentBucket,
@@ -46,17 +48,20 @@ function resolveDateRange(options: PackagingCostOptions): {
     }
   }
 
+  // UTC day boundaries: DailyCogsItem.date is stored at UTC midnight, so a
+  // local-TZ window on a non-UTC server (e.g. PDT dev) misses or duplicates
+  // boundary rows. Mirrors the e96e828 pnl.ts fix.
   const days = options.days ?? 30
   const end = new Date()
-  end.setHours(23, 59, 59, 999)
+  end.setUTCHours(23, 59, 59, 999)
   const start = new Date()
-  start.setHours(0, 0, 0, 0)
+  start.setUTCHours(0, 0, 0, 0)
   if (days === -1) {
-    start.setDate(start.getDate() - 1)
+    start.setUTCDate(start.getUTCDate() - 1)
     end.setTime(start.getTime())
-    end.setHours(23, 59, 59, 999)
+    end.setUTCHours(23, 59, 59, 999)
   } else if (days !== 1) {
-    start.setDate(start.getDate() - days)
+    start.setUTCDate(start.getUTCDate() - days)
   }
 
   return {
@@ -124,9 +129,7 @@ function sortFulfillment(a: PackagingFulfillmentRow, b: PackagingFulfillmentRow)
   return order[a.bucket] - order[b.bucket]
 }
 
-function exampleWarnings(
-  order: ReturnType<typeof packOrder>["classification"]
-): string[] {
+function exampleWarnings(order: BasketClassification): string[] {
   return [
     ...order.unclassifiedItems.map((item) => `${item.name}: ${item.reason}`),
     ...order.ambiguousNotes,
@@ -181,11 +184,14 @@ export async function getPackagingCostData(
       where: dailyWhere,
       _sum: { lineCost: true },
     }),
-    prisma.dailyCogsItem.groupBy({
-      by: ["itemName"],
+    prisma.dailyCogsItem.findMany({
       where: { ...dailyWhere, category: "Packaging" },
-      _sum: { qtySold: true, lineCost: true },
-      _max: { partialCost: true },
+      select: {
+        itemName: true,
+        qtySold: true,
+        lineCost: true,
+        partialCost: true,
+      },
     }),
     prisma.otterOrder.groupBy({
       by: ["fulfillmentMode"],
@@ -320,9 +326,9 @@ export async function getPackagingCostData(
   for (const row of packagingRows) {
     const group = packagingGroupFromItemName(row.itemName)
     if (!group) continue
-    unitsByGroup[group] += row._sum.qtySold ?? 0
-    lineCostByGroup[group] += row._sum.lineCost ?? 0
-    partialByGroup[group] = partialByGroup[group] || Boolean(row._max.partialCost)
+    unitsByGroup[group] += row.qtySold
+    lineCostByGroup[group] += row.lineCost
+    partialByGroup[group] = partialByGroup[group] || row.partialCost
   }
 
   const totalPackagingCost = GROUPS.reduce((sum, group) => sum + lineCostByGroup[group], 0)
@@ -376,8 +382,9 @@ export async function getPackagingCostData(
 
   let avoidedDineInCost = 0
   for (const order of excludedOrdersForAvoidedCost) {
-    const packed = packOrder(
+    const packed = packOrderCostAware(
       { fulfillmentMode: order.fulfillmentMode, items: order.items },
+      unitCosts,
       PACKAGING_SCENARIO,
     )
     avoidedDineInCost += costForCounts(packed.counts, unitCosts)
@@ -415,7 +422,7 @@ export async function getPackagingCostData(
 
   const examples: PackagingOrderExample[] = recentOrders.map((order) => {
     const isCharged = isTakeawayFulfillmentMode(order.fulfillmentMode)
-    const packed = packOrder(order, PACKAGING_SCENARIO)
+    const packed = packOrderCostAware(order, unitCosts, PACKAGING_SCENARIO)
     return {
       orderId: order.id,
       displayId: order.externalDisplayId,
@@ -438,7 +445,7 @@ export async function getPackagingCostData(
   return {
     dateRange: { startDate: range.startDate, endDate: range.endDate },
     storeLabel,
-    scenario: PACKAGING_SCENARIO,
+    scenario: PACKAGING_COST_AWARE_SCENARIO,
     totals: {
       packagingCogs: totalPackagingCost,
       totalCogs,

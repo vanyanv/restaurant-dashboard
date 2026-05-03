@@ -13,6 +13,24 @@ export type PackingUnits = {
 
 export type ContainerCounts = Record<ContainerGroup, number>
 
+export type CostAwarePackingAlternative = {
+  label: string
+  counts: ContainerCounts
+  cost: number | null
+  missingCostGroups: ContainerGroup[]
+}
+
+export type CostAwarePackingResult = {
+  counts: ContainerCounts
+  cost: number | null
+  chosenAlternative: string
+  fallback: boolean
+  fallbackScenario: PackingScenario
+  fallbackReason: string | null
+  missingCostGroups: ContainerGroup[]
+  consideredAlternatives: CostAwarePackingAlternative[]
+}
+
 export type OrderPackInput = {
   fulfillmentMode: string | null
   items: Array<{
@@ -36,6 +54,7 @@ export type BasketClassification = {
 }
 
 export const PACKAGING_SCENARIO: PackingScenario = "smallest-fit"
+export const PACKAGING_COST_AWARE_SCENARIO = "cost-aware"
 
 export const PACKING_SCENARIOS: PackingScenario[] = [
   "smallest-fit",
@@ -112,6 +131,23 @@ export function costForCounts(counts: ContainerCounts, groupCosts: Record<Contai
     total += counts[group] * (unitCost ?? 0)
   }
   return total
+}
+
+function cloneContainerCounts(counts: ContainerCounts): ContainerCounts {
+  return { ...counts }
+}
+
+function missingCostGroupsForCounts(
+  counts: ContainerCounts,
+  groupCosts: Record<ContainerGroup, number | null>
+): ContainerGroup[] {
+  return (Object.keys(counts) as ContainerGroup[]).filter(
+    (group) => counts[group] > 0 && groupCosts[group] == null
+  )
+}
+
+function containerCountsKey(counts: ContainerCounts): string {
+  return (Object.keys(EMPTY_COUNTS) as ContainerGroup[]).map((group) => `${group}:${counts[group]}`).join("|")
 }
 
 export function containerGroupForCanonical(name: string): ContainerGroup | null {
@@ -372,6 +408,200 @@ export function packBasket(units: PackingUnits, scenario: PackingScenario): Cont
   return counts
 }
 
+function addAlternative(
+  alternatives: Array<{ label: string; counts: ContainerCounts }>,
+  seen: Set<string>,
+  label: string,
+  counts: ContainerCounts
+): void {
+  const key = containerCountsKey(counts)
+  if (seen.has(key)) return
+  seen.add(key)
+  alternatives.push({ label, counts })
+}
+
+function makeRuleCounts(input: {
+  loadedSliderPairs: number
+  loadedSliderContainer: "large_9x6" | "medium_plus_one"
+  sliderFryPairs: number
+  sliderFryContainer: "large_plus_one" | "two_one_compartment"
+  remainder: PackingUnits
+  remainderScenario: PackingScenario
+}): ContainerCounts {
+  const counts = emptyContainerCounts()
+
+  if (input.loadedSliderContainer === "large_9x6") {
+    counts.large_9x6 += input.loadedSliderPairs
+  } else {
+    counts.medium_6x6 += input.loadedSliderPairs
+    counts.one_compartment += input.loadedSliderPairs
+  }
+
+  if (input.sliderFryContainer === "large_plus_one") {
+    counts.large_9x6 += input.sliderFryPairs
+    counts.one_compartment += input.sliderFryPairs
+  } else {
+    counts.one_compartment += input.sliderFryPairs * 2
+  }
+
+  addContainerCounts(counts, packBasket(input.remainder, input.remainderScenario))
+  return counts
+}
+
+function costAwareAlternatives(units: PackingUnits): Array<{ label: string; counts: ContainerCounts }> {
+  const alternatives: Array<{ label: string; counts: ContainerCounts }> = []
+  const seen = new Set<string>()
+  const isExactLoadedSliderRule =
+    units.loadedFries > 0 &&
+    units.burgers === units.loadedFries * 2 &&
+    units.fries === 0 &&
+    units.grilledCheese === 0
+  const isExactSliderFryRule =
+    units.burgers > 0 &&
+    units.burgers % 2 === 0 &&
+    units.fries === units.burgers &&
+    units.loadedFries === 0 &&
+    units.grilledCheese === 0
+  const isOwnerConfirmedSingleBurger =
+    units.burgers === 1 &&
+    units.fries === 0 &&
+    units.loadedFries === 0 &&
+    units.grilledCheese === 0
+
+  if (isOwnerConfirmedSingleBurger) {
+    addAlternative(alternatives, seen, "owner-confirmed single burger as 1-compartment", packBasket(units, "smallest-fit"))
+  } else if (!isExactLoadedSliderRule && !isExactSliderFryRule) {
+    for (const scenario of PACKING_SCENARIOS) {
+      addAlternative(alternatives, seen, scenario, packBasket(units, scenario))
+    }
+  }
+
+  const maxLoadedSliderPairs = Math.min(Math.floor(units.burgers / 2), units.loadedFries)
+  const loadedSliderPairOptions = isExactLoadedSliderRule
+    ? [units.loadedFries]
+    : Array.from({ length: maxLoadedSliderPairs + 1 }, (_, i) => i)
+  for (const loadedSliderPairs of loadedSliderPairOptions) {
+    const afterLoaded = {
+      burgers: units.burgers - loadedSliderPairs * 2,
+      fries: units.fries,
+      loadedFries: units.loadedFries - loadedSliderPairs,
+      grilledCheese: units.grilledCheese,
+    }
+    const maxSliderFryPairs = Math.min(Math.floor(afterLoaded.burgers / 2), Math.floor(afterLoaded.fries / 2))
+    const sliderFryPairOptions = isExactSliderFryRule
+      ? [units.burgers / 2]
+      : Array.from({ length: maxSliderFryPairs + 1 }, (_, i) => i)
+
+    for (const sliderFryPairs of sliderFryPairOptions) {
+      const remainder = {
+        burgers: afterLoaded.burgers - sliderFryPairs * 2,
+        fries: afterLoaded.fries - sliderFryPairs * 2,
+        loadedFries: afterLoaded.loadedFries,
+        grilledCheese: afterLoaded.grilledCheese,
+      }
+
+      for (const loadedSliderContainer of ["large_9x6", "medium_plus_one"] as const) {
+        for (const sliderFryContainer of ["large_plus_one", "two_one_compartment"] as const) {
+          for (const remainderScenario of PACKING_SCENARIOS) {
+            const labels: string[] = []
+            if (loadedSliderPairs > 0) {
+              labels.push(
+                `${loadedSliderPairs}x(2 sliders + loaded fries) ${
+                  loadedSliderContainer === "large_9x6" ? "as 9x6" : "as medium 6x6 + 1-compartment"
+                }`
+              )
+            }
+            if (sliderFryPairs > 0) {
+              labels.push(
+                `${sliderFryPairs}x(2 sliders + 2 fries) ${
+                  sliderFryContainer === "large_plus_one"
+                    ? "as 9x6 + 1-compartment"
+                    : "as 2 x 1-compartment"
+                }`
+              )
+            }
+            if (labels.length === 0) continue
+
+            addAlternative(
+              alternatives,
+              seen,
+              `${labels.join("; ")}; remainder ${remainderScenario}`,
+              makeRuleCounts({
+                loadedSliderPairs,
+                loadedSliderContainer,
+                sliderFryPairs,
+                sliderFryContainer,
+                remainder,
+                remainderScenario,
+              })
+            )
+          }
+        }
+      }
+    }
+  }
+
+  return alternatives
+}
+
+export function packBasketCostAware(
+  units: PackingUnits,
+  groupCosts: Record<ContainerGroup, number | null>,
+  fallbackScenario: PackingScenario = PACKAGING_SCENARIO
+): CostAwarePackingResult {
+  const fallbackCounts = packBasket(units, fallbackScenario)
+  const alternatives = costAwareAlternatives(units)
+  const consideredAlternatives = alternatives.map((alternative) => ({
+    ...alternative,
+    counts: cloneContainerCounts(alternative.counts),
+    cost: costForCounts(alternative.counts, groupCosts),
+    missingCostGroups: missingCostGroupsForCounts(alternative.counts, groupCosts),
+  }))
+  const requiredMissingCostGroups = [
+    ...new Set(consideredAlternatives.flatMap((alternative) => alternative.missingCostGroups)),
+  ] as ContainerGroup[]
+  const fallbackCost = costForCounts(fallbackCounts, groupCosts)
+
+  if (requiredMissingCostGroups.length > 0) {
+    return {
+      counts: fallbackCounts,
+      cost: fallbackCost,
+      chosenAlternative: fallbackScenario,
+      fallback: true,
+      fallbackScenario,
+      fallbackReason: "missing container group cost",
+      missingCostGroups: requiredMissingCostGroups,
+      consideredAlternatives,
+    }
+  }
+
+  let best = consideredAlternatives.find((alternative) => alternative.label === fallbackScenario) ?? consideredAlternatives[0]
+  if (!best) {
+    best = {
+      label: fallbackScenario,
+      counts: fallbackCounts,
+      cost: fallbackCost,
+      missingCostGroups: [],
+    }
+  }
+
+  for (const alternative of consideredAlternatives) {
+    if (alternative.cost == null || best.cost == null) continue
+    if (alternative.cost < best.cost - 0.000001) best = alternative
+  }
+
+  return {
+    counts: cloneContainerCounts(best.counts),
+    cost: best.cost,
+    chosenAlternative: best.label,
+    fallback: false,
+    fallbackScenario,
+    fallbackReason: null,
+    missingCostGroups: [],
+    consideredAlternatives,
+  }
+}
+
 export function packOrder(order: OrderPackInput, scenario: PackingScenario = PACKAGING_SCENARIO): {
   classification: BasketClassification
   counts: ContainerCounts
@@ -380,5 +610,23 @@ export function packOrder(order: OrderPackInput, scenario: PackingScenario = PAC
   return {
     classification,
     counts: packBasket(classification.units, scenario),
+  }
+}
+
+export function packOrderCostAware(
+  order: OrderPackInput,
+  groupCosts: Record<ContainerGroup, number | null>,
+  fallbackScenario: PackingScenario = PACKAGING_SCENARIO
+): {
+  classification: BasketClassification
+  packing: CostAwarePackingResult
+  counts: ContainerCounts
+} {
+  const classification = classifyBasket(order)
+  const packing = packBasketCostAware(classification.units, groupCosts, fallbackScenario)
+  return {
+    classification,
+    packing,
+    counts: packing.counts,
   }
 }

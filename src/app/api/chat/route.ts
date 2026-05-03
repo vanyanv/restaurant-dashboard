@@ -17,8 +17,8 @@ import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { chatTools } from "@/lib/chat/tools"
 import {
   appendMessage,
+  assertConversationAccess,
   createConversation,
-  getConversation,
   setConversationTitle,
 } from "@/lib/chat/conversation"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   let conversationId = body.conversationId
   if (conversationId) {
     try {
-      await getConversation(chatPrisma, accountId, conversationId)
+      await assertConversationAccess(chatPrisma, accountId, conversationId)
     } catch (err) {
       const code = (err as { code?: string }).code
       const status = code === "NOT_OWNED" ? 403 : 404
@@ -90,13 +90,17 @@ export async function POST(req: Request) {
     lastMessage.role === "user" ? extractText(lastMessage) : ""
   // ChatTurn truncates to 4KB on each side.
   const userMessageStored = userMessageText.slice(0, 4000)
-  if (lastMessage.role === "user" && userMessageText) {
-    await appendMessage(chatPrisma, {
-      conversationId,
-      role: "user",
-      content: userMessageText,
-    })
-  }
+  const userPersistPromise =
+    lastMessage.role === "user" && userMessageText
+      ? appendMessage(chatPrisma, {
+          conversationId,
+          role: "user",
+          content: userMessageText,
+        }).catch((err) => {
+          console.error("[chat] failed to persist user message", err)
+          return null
+        })
+      : Promise.resolve(null)
 
   const ctx = { ownerId, accountId, prisma: chatPrisma }
 
@@ -243,6 +247,7 @@ export async function POST(req: Request) {
       }
 
       try {
+        await userPersistPromise
         await appendMessage(chatPrisma, {
           conversationId: conversationId!,
           role: "assistant",

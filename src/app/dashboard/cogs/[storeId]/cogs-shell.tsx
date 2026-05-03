@@ -8,7 +8,6 @@ import { OperatorLedgerSection } from "../components/sections/operator-ledger-se
 import { CogsTrendSection } from "../components/sections/cogs-trend-section"
 import { CostByCategorySection } from "../components/sections/cost-by-category-section"
 import { WorstMarginItemsSection } from "../components/sections/worst-margin-items-section"
-import { TopCostDriverIngredientsSection } from "../components/sections/top-cost-driver-ingredients-section"
 import type { CogsFilters } from "../components/sections/data"
 
 interface CogsShellProps {
@@ -76,15 +75,6 @@ export function CogsShell({
               </Suspense>
             </SectionErrorBoundary>
           </div>
-
-          <SectionErrorBoundary label="Top cost-driver ingredients unavailable">
-            <Suspense fallback={<Skeleton className="h-80 w-full rounded-sm" />}>
-              <TopCostDriverIngredientsSection
-                storeId={storeId}
-                filters={filters}
-              />
-            </Suspense>
-          </SectionErrorBoundary>
         </div>
       </div>
     </div>

@@ -49,7 +49,7 @@ export async function OperatorLedgerSection({
         <div className="inv-panel__head">
           <div>
             <span className="inv-panel__dept">§ 01 Brief</span>
-            <h2 className="inv-panel__title">Food cost position</h2>
+            <h2 className="inv-panel__title">COGS position</h2>
           </div>
           <span className="cogs-brief__stamp">
             {overTarget ? "over target" : kpis.targetCogsPct == null ? "no target" : "inside line"}
@@ -64,7 +64,7 @@ export async function OperatorLedgerSection({
                 <span>%</span>
               </span>
               <div className="cogs-brief__note">
-                <span className="font-label">Current food cost</span>
+                <span className="font-label">Current COGS</span>
                 <p>
                   {kpis.targetCogsPct == null
                     ? "No target set. Leak ranking uses cost impact and item food-cost percent."
@@ -74,11 +74,19 @@ export async function OperatorLedgerSection({
             </div>
             <dl className="cogs-brief__metrics">
               <div>
-                <dt>COGS</dt>
+                <dt>Total COGS</dt>
                 <dd>{formatMoney(kpis.cogsDollars)}</dd>
               </div>
               <div>
-                <dt>Revenue</dt>
+                <dt>Food</dt>
+                <dd>{formatMoney(kpis.foodCogsDollars)}</dd>
+              </div>
+              <div>
+                <dt>Packaging</dt>
+                <dd>{formatMoney(kpis.packagingCogsDollars)}</dd>
+              </div>
+              <div>
+                <dt>Sales</dt>
                 <dd>{formatMoney(kpis.revenueDollars)}</dd>
               </div>
               <div>

@@ -4714,7 +4714,7 @@
 
 .cogs-store-ledger__row {
   display: grid;
-  grid-template-columns: minmax(12rem, 1.4fr) repeat(6, minmax(5.4rem, 0.75fr));
+  grid-template-columns: minmax(12rem, 1.4fr) repeat(7, minmax(5.4rem, 0.75fr));
   align-items: baseline;
   gap: 14px;
   padding: 13px 20px;

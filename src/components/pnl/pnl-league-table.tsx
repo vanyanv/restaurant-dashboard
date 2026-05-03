@@ -119,7 +119,7 @@ export function PnLLeagueTable({
                 <BulletMeter
                   value={r.cogsPct}
                   target={targets.cogs}
-                  ariaLabel={`Food cost ${formatPct(r.cogsPct)} vs target ${formatPct(targets.cogs)}`}
+                  ariaLabel={`COGS ${formatPct(r.cogsPct)} vs target ${formatPct(targets.cogs)}`}
                 />
                 <span className="pnl-league__pct font-mono">{formatPct(r.cogsPct)}</span>
               </div>

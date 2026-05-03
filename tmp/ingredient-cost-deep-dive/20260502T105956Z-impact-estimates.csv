@@ -1,0 +1,4 @@
+canonicalName,recipeName,category,store,firstDate,lastDate,rows,qtySold,revenue,lineCost,deltaPerSold,estimatedImpactDollars
+packer lettuce boston hydroponic,Mod: Add Lettuce,Modifier,Chris N Eddys - Hollywood,2026-01-11,2026-05-02,13122,23700,0,0,0.045044642857142866,1067.558035714286
+packer lettuce boston hydroponic,Mod: Add Lettuce,Modifier,Chris N Eddys - Hollywood,2026-01-11,2026-05-02,3303,3464,0,0,0.045044642857142866,156.0346428571429
+chris & eddy's house sauce,Loaded Fries,A La Carte,Chris N Eddys - Hollywood,2026-02-01,2026-04-22,120,9766,80235.14000000004,109580.63223607407,9.829687499999999,95996.72812499998

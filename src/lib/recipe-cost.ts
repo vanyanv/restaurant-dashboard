@@ -102,17 +102,19 @@ export function computeIngredientLineCost(args: {
  */
 export async function computeRecipeCost(
   recipeId: string,
-  asOf?: Date
+  asOf?: Date,
+  options?: { storeId?: string }
 ): Promise<RecipeCostResult> {
   const memo = new Map<string, RecipeCostResult>()
-  return walk(recipeId, asOf, [], memo)
+  return walk(recipeId, asOf, [], memo, options?.storeId)
 }
 
 async function walk(
   recipeId: string,
   asOf: Date | undefined,
   stack: string[],
-  memo: Map<string, RecipeCostResult>
+  memo: Map<string, RecipeCostResult>,
+  storeId?: string
 ): Promise<RecipeCostResult> {
   if (stack.includes(recipeId)) {
     throw new RecipeCycleError([...stack, recipeId])
@@ -156,7 +158,8 @@ async function walk(
         ing.componentRecipeId,
         asOf,
         [...stack, recipeId],
-        memo
+        memo,
+        storeId
       )
       const unitCost = sub.totalCost
       const lineCost = unitCost * ing.quantity
@@ -178,7 +181,8 @@ async function walk(
     if (ing.canonicalIngredientId) {
       const cost = await getCanonicalIngredientCost(
         ing.canonicalIngredientId,
-        asOf
+        asOf,
+        storeId ? { storeId } : undefined
       )
       if (!cost) {
         partial = true

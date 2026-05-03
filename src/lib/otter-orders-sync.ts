@@ -74,11 +74,15 @@ async function runOrdersSyncInner(
     activeOtterStores.map((os) => [os.otterStoreId, os.storeId])
   )
 
+  // Use UTC day boundaries: the downstream API expects UTC ISO bounds, and
+  // OtterOrder rows store dates at UTC midnight. Local-TZ setHours would shift
+  // the window by 7+ hours on a non-UTC server (e.g. PDT dev) and skip
+  // boundary days.
   const endDate = endDateOverride ? new Date(endDateOverride) : new Date()
-  if (!endDateOverride) endDate.setHours(23, 59, 59, 999)
+  if (!endDateOverride) endDate.setUTCHours(23, 59, 59, 999)
   const startDate = new Date(endDate)
-  startDate.setDate(startDate.getDate() - (days - 1))
-  startDate.setHours(0, 0, 0, 0)
+  startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
+  startDate.setUTCHours(0, 0, 0, 0)
 
   // ─── Phase 1: Fetch customer_orders headers ───
   const body = buildCustomerOrdersBody(otterStoreIds, startDate, endDate)
