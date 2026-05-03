@@ -9,13 +9,13 @@ import {
   addContainerCounts,
   emptyContainerCounts,
   isTakeawayFulfillmentMode,
-  packOrder,
+  packOrderCostAware,
   type ContainerGroup,
 } from "@/lib/container-packaging"
 import { CogsStatus, Prisma } from "@/generated/prisma/client"
 
 /** One day's modifier usage, aggregated by parent item name. */
-type ModifierUsage = {
+export type ModifierUsage = {
   /** Extra dollars of COGS on this day attributable to modifiers on this item. */
   extraLineCost: number
   /** Did every modifier SKU have a mapped + costed recipe? If not, mark MISSING_COST. */
@@ -24,7 +24,7 @@ type ModifierUsage = {
   breakdown: Array<{ skuId: string; name: string; uses: number; unitCost: number | null }>
 }
 
-type ComputedRow = {
+export type ComputedRow = {
   storeId: string
   date: Date
   itemName: string
@@ -36,6 +36,44 @@ type ComputedRow = {
   lineCost: number
   status: CogsStatus
   partialCost: boolean
+  /** "invoice" | "manual" | "mixed" | "override" | null. See schema. */
+  costSource: string | null
+}
+
+/**
+ * Reduce the per-line costSource markers on a RecipeCostResult down to one
+ * provenance label for the materialized row. Returns null when no usable
+ * cost was produced (UNMAPPED or fully-missing).
+ */
+function summarizeCostSource(
+  result: RecipeCostResult | null | undefined,
+  hasBase: boolean
+): string | null {
+  if (!result || !hasBase) return null
+  let sawInvoice = false
+  let sawManual = false
+  let sawAnyLineCost = false
+  for (const line of result.lines) {
+    if (line.lineCost > 0 || line.unitCost != null) sawAnyLineCost = true
+    if (line.costSource === "invoice") sawInvoice = true
+    if (line.costSource === "manual") sawManual = true
+  }
+  if (!sawAnyLineCost) {
+    // total > 0 with no per-line costs means foodCostOverride was applied.
+    return "override"
+  }
+  if (sawInvoice && sawManual) return "mixed"
+  if (sawManual) return "manual"
+  return "invoice"
+}
+
+type FoodMenuRow = {
+  itemName: string
+  category: string
+  fpQuantitySold: number | null
+  tpQuantitySold: number | null
+  fpTotalSales: number | null
+  tpTotalSales: number | null
 }
 
 type ContainerGroupCost = {
@@ -45,18 +83,29 @@ type ContainerGroupCost = {
 
 const DAILY_COGS_TRANSACTION_TIMEOUT_MS = 20_000
 
+function containerUnitCostMap(
+  costs: Record<ContainerGroup, ContainerGroupCost>
+): Record<ContainerGroup, number | null> {
+  return Object.fromEntries(
+    (Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[]).map((group) => [group, costs[group].unitCost])
+  ) as Record<ContainerGroup, number | null>
+}
+
 /**
  * Compute and idempotently upsert DailyCogsItem rows for one (storeId, date).
  *
- * Two cross-cutting rules:
+ * Three cross-cutting rules:
  *
- *  1. **Cost-knowable cutoff** — an item only gets a row when we can actually
- *     cost it as-of `date`. Items with no recipe mapping (UNMAPPED) and items
- *     whose recipe resolves to no cost on or before `date` (no matched invoice
- *     yet, no manual cost, no override) are skipped entirely. This stops the
- *     dashboard from showing $0 placeholder rows for the pre-invoice era.
+ *  1. **Diagnostics are materialized** — sold items with no recipe mapping get
+ *     UNMAPPED rows, and mapped items with no base cost get MISSING_COST rows.
+ *     Both carry sales/qty so COGS coverage can be measured against all sales.
  *
- *  2. **No history wipes** — writes are upserts keyed on
+ *  2. **Modifier cost is applied once** — Otter can report the same item under
+ *     multiple categories on one day. Modifier COGS is bucketed by parent item,
+ *     then allocated across same-item rows by sold quantity so it is not
+ *     duplicated for each category row.
+ *
+ *  3. **No history wipes** — writes are upserts keyed on
  *     (storeId, date, itemName, category). The only delete is bounded to this
  *     exact (storeId, date) and only drops items that are no longer in the
  *     newly-computed set (Otter no longer reports them, or they fell out of
@@ -108,7 +157,10 @@ export async function recomputeDailyCogsForDay(input: {
   function costFor(recipeId: string): Promise<RecipeCostResult | null> {
     const existing = recipeCostCache.get(recipeId)
     if (existing) return existing
-    const p = computeRecipeCost(recipeId, date).catch(() => null)
+    // Scope ingredient lookups to this store first so per-store COGS reflects
+    // this store's actual vendor purchases. Falls back to cross-store latest
+    // when this store hasn't bought the ingredient itself.
+    const p = computeRecipeCost(recipeId, date, { storeId }).catch(() => null)
     recipeCostCache.set(recipeId, p)
     return p
   }
@@ -170,6 +222,15 @@ export async function recomputeDailyCogsForDay(input: {
     }
     const result = await costFor(modRecipeId)
     const modCost = result?.totalCost ?? 0
+    // A mapped modifier whose recipe walks to $0 (no costed ingredients,
+    // no foodCostOverride) leaves real dollars unaccounted for. Flag it
+    // alongside unmapped SKUs so the parent item is marked partialCost
+    // and the operator can see the gap. `result?.partial` covers the case
+    // where the recipe has a positive total but some ingredients were
+    // missing cost — propagate that too.
+    if (!result || modCost <= 0 || result.partial) {
+      bucket.missingMappings = true
+    }
     if (modCost > 0) bucket.extraLineCost += modCost * uses
     bucket.breakdown.push({
       skuId: s.skuId ?? "(no sku)",
@@ -179,54 +240,15 @@ export async function recomputeDailyCogsForDay(input: {
     })
   }
 
-  const computed = await Promise.all(
-    menuRows.map(async (row): Promise<ComputedRow | null> => {
-      const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
-      const revenue = (row.fpTotalSales ?? 0) + (row.tpTotalSales ?? 0)
-
-      const recipeId =
-        mappingByName.get(row.itemName) ??
-        recipeByName.get(row.itemName.toLowerCase()) ??
-        null
-
-      const mod = modifierUsageByItem.get(row.itemName)
-      const modLineCost = mod?.extraLineCost ?? 0
-
-      // Cutoff: no recipe mapping → no row. UNMAPPED items live in OtterMenuItem;
-      // we don't pollute DailyCogsItem with placeholder $0 rows.
-      if (!recipeId) return null
-
-      const result = await costFor(recipeId)
-      const baseUnitCost = result?.totalCost ?? null
-      const hasBase = baseUnitCost != null && baseUnitCost > 0
-
-      // Cutoff: recipe knowable but no cost as-of this date (no matched invoice,
-      // no manual cost, no foodCostOverride) AND no modifier cost either → skip.
-      if (!hasBase && modLineCost === 0) return null
-
-      const baseLineCost = hasBase ? baseUnitCost! * qty : 0
-      const totalLineCost = baseLineCost + modLineCost
-      const blendedUnitCost = qty > 0 ? totalLineCost / qty : baseUnitCost
-      const status = hasBase ? CogsStatus.COSTED : CogsStatus.MISSING_COST
-      const partialCost = (result?.partial ?? false) || (mod?.missingMappings ?? false)
-
-      return {
-        storeId,
-        date,
-        itemName: row.itemName,
-        category: row.category,
-        recipeId,
-        qtySold: qty,
-        salesRevenue: revenue,
-        unitCost: hasBase ? blendedUnitCost : null,
-        lineCost: totalLineCost,
-        status,
-        partialCost,
-      }
-    })
-  )
-
-  const foodRows = computed.filter((r): r is ComputedRow => r !== null)
+  const foodRows = await computeFoodCogsRows({
+    storeId,
+    date,
+    menuRows,
+    mappingByName,
+    recipeByName,
+    modifierUsageByItem,
+    costFor,
+  })
   const packagingRows = await computePackagingRowsForDay({
     storeId,
     accountId,
@@ -251,6 +273,101 @@ export async function recomputeDailyCogsForDay(input: {
     rowsUpserted: rows.length,
     rowsDeleted: deleteResult,
   }
+}
+
+export async function computeFoodCogsRows(input: {
+  storeId: string
+  date: Date
+  menuRows: FoodMenuRow[]
+  mappingByName: Map<string, string>
+  recipeByName: Map<string, string>
+  modifierUsageByItem: Map<string, ModifierUsage>
+  costFor: (recipeId: string) => Promise<RecipeCostResult | null>
+}): Promise<ComputedRow[]> {
+  const {
+    storeId,
+    date,
+    menuRows,
+    mappingByName,
+    recipeByName,
+    modifierUsageByItem,
+    costFor,
+  } = input
+
+  const itemTotals = new Map<string, { qty: number; rows: number }>()
+  for (const row of menuRows) {
+    const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
+    const total = itemTotals.get(row.itemName) ?? { qty: 0, rows: 0 }
+    total.qty += qty
+    total.rows++
+    itemTotals.set(row.itemName, total)
+  }
+
+  return Promise.all(
+    menuRows.map(async (row): Promise<ComputedRow> => {
+      const qty = (row.fpQuantitySold ?? 0) + (row.tpQuantitySold ?? 0)
+      const revenue = (row.fpTotalSales ?? 0) + (row.tpTotalSales ?? 0)
+
+      const recipeId =
+        mappingByName.get(row.itemName) ??
+        recipeByName.get(row.itemName.toLowerCase()) ??
+        null
+
+      const mod = modifierUsageByItem.get(row.itemName)
+      const totals = itemTotals.get(row.itemName)
+      const modifierShare =
+        totals && totals.qty > 0
+          ? qty / totals.qty
+          : totals && totals.rows > 0
+            ? 1 / totals.rows
+            : 0
+      const modLineCost = (mod?.extraLineCost ?? 0) * modifierShare
+
+      if (!recipeId) {
+        return {
+          storeId,
+          date,
+          itemName: row.itemName,
+          category: row.category,
+          recipeId: null,
+          qtySold: qty,
+          salesRevenue: revenue,
+          unitCost: null,
+          lineCost: 0,
+          status: CogsStatus.UNMAPPED,
+          partialCost: false,
+          costSource: null,
+        }
+      }
+
+      const result = await costFor(recipeId)
+      const baseUnitCost = result?.totalCost ?? null
+      const hasBase = baseUnitCost != null && baseUnitCost > 0
+      const baseLineCost = hasBase ? baseUnitCost * qty : 0
+      const totalLineCost = baseLineCost + modLineCost
+      const blendedUnitCost =
+        qty > 0 ? totalLineCost / qty : hasBase ? baseUnitCost : null
+      const status = hasBase ? CogsStatus.COSTED : CogsStatus.MISSING_COST
+      const partialCost =
+        !hasBase || (result?.partial ?? false) || (mod?.missingMappings ?? false)
+      const costSource = summarizeCostSource(result, hasBase)
+
+      return {
+        storeId,
+        date,
+        itemName: row.itemName,
+        category: row.category,
+        recipeId,
+        qtySold: qty,
+        salesRevenue: revenue,
+        unitCost: blendedUnitCost,
+        lineCost: totalLineCost,
+        status,
+        partialCost,
+        costSource,
+      }
+    })
+  )
 }
 
 async function computePackagingRowsForDay(input: {
@@ -284,14 +401,14 @@ async function computePackagingRowsForDay(input: {
     },
   })
 
+  const costs = await getContainerGroupCosts(accountId, date)
+  const unitCosts = containerUnitCostMap(costs)
   const counts = emptyContainerCounts()
   for (const order of orders) {
     if (!isTakeawayFulfillmentMode(order.fulfillmentMode)) continue
-    const packed = packOrder(order, PACKAGING_SCENARIO)
+    const packed = packOrderCostAware(order, unitCosts, PACKAGING_SCENARIO)
     addContainerCounts(counts, packed.counts)
   }
-
-  const costs = await getContainerGroupCosts(accountId, date)
 
   return (Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[])
     .filter((group) => counts[group] > 0)
@@ -311,9 +428,12 @@ async function computePackagingRowsForDay(input: {
         lineCost: hasCost ? unitCost * qty : 0,
         status: hasCost ? CogsStatus.COSTED : CogsStatus.MISSING_COST,
         partialCost: costs[group].partialCost || !hasCost,
+        costSource: hasCost ? "invoice" : null,
       }
     })
 }
+
+const CONTAINER_BLEND_WINDOW_DAYS = 90
 
 async function getContainerGroupCosts(
   accountId: string,
@@ -326,29 +446,82 @@ async function getContainerGroupCosts(
   })
   const canonicalByName = new Map(canonicals.map((c) => [c.name, c.id]))
 
+  // Cost-weighted blend across canonicals in a group. Containers in the same
+  // group (e.g. medium_6x6 = "hinged" + "bagged") are interchangeable
+  // packaging SKUs but can carry materially different unit prices. An
+  // unweighted average of per-canonical $/each silently overweights low-volume
+  // SKUs. We instead aggregate ($, units) from invoice lines over a trailing
+  // window and divide, so the blended cost reflects what was actually bought.
+  const windowStart = new Date(asOf)
+  windowStart.setUTCDate(windowStart.getUTCDate() - CONTAINER_BLEND_WINDOW_DAYS)
+
+  const allCanonicalIds = canonicals.map((c) => c.id)
+  const blendLines =
+    allCanonicalIds.length > 0
+      ? await prisma.invoiceLineItem.findMany({
+          where: {
+            canonicalIngredientId: { in: allCanonicalIds },
+            quantity: { not: 0 },
+            invoice: { invoiceDate: { gte: windowStart, lte: asOf } },
+          },
+          select: {
+            canonicalIngredientId: true,
+            quantity: true,
+            packSize: true,
+            unitSize: true,
+            extendedPrice: true,
+          },
+        })
+      : []
+
+  const blendByCanonical = new Map<string, { dollars: number; units: number }>()
+  for (const line of blendLines) {
+    if (!line.canonicalIngredientId) continue
+    const packSize = line.packSize && line.packSize > 0 ? line.packSize : 1
+    const unitSize = line.unitSize && line.unitSize > 0 ? line.unitSize : 1
+    const baseQty = line.quantity * packSize * unitSize
+    if (!isFinite(baseQty) || baseQty === 0) continue
+    if (Math.sign(line.extendedPrice) !== Math.sign(baseQty)) continue
+    const agg = blendByCanonical.get(line.canonicalIngredientId) ?? { dollars: 0, units: 0 }
+    agg.dollars += Math.abs(line.extendedPrice)
+    agg.units += Math.abs(baseQty)
+    blendByCanonical.set(line.canonicalIngredientId, agg)
+  }
+
   const entries = await Promise.all(
     (Object.keys(CONTAINER_GROUP_CANONICALS) as ContainerGroup[]).map(async (group) => {
       const names = CONTAINER_GROUP_CANONICALS[group]
-      const costs = await Promise.all(
-        names.map(async (name) => {
-          const id = canonicalByName.get(name)
-          if (!id) return null
-          return getCanonicalIngredientCost(id, asOf)
-        })
-      )
-      const unitCosts = costs
-        .map((cost) => cost?.unitCost ?? null)
-        .filter((cost): cost is number => cost != null)
-      const unitCost =
-        unitCosts.length > 0
-          ? unitCosts.reduce((sum, cost) => sum + cost, 0) / unitCosts.length
-          : null
-
+      let dollars = 0
+      let units = 0
+      let foundFromBlend = 0
+      let foundFromCanonical = 0
+      for (const name of names) {
+        const id = canonicalByName.get(name)
+        if (!id) continue
+        const blend = blendByCanonical.get(id)
+        if (blend && blend.units > 0) {
+          dollars += blend.dollars
+          units += blend.units
+          foundFromBlend++
+          continue
+        }
+        // Fallback: no purchases inside the trailing window for this canonical.
+        // Use the canonical's stored $/recipeUnit (set by recomputeCanonicalCost
+        // from the most recent matched line) but weight it as a single unit so
+        // it contributes without dominating the blend.
+        const fallback = await getCanonicalIngredientCost(id, asOf)
+        if (fallback?.unitCost != null) {
+          dollars += fallback.unitCost
+          units += 1
+          foundFromCanonical++
+        }
+      }
+      const totalFound = foundFromBlend + foundFromCanonical
       return [
         group,
         {
-          unitCost,
-          partialCost: unitCosts.length < names.length,
+          unitCost: units > 0 ? dollars / units : null,
+          partialCost: totalFound < names.length,
         },
       ] as const
     })
@@ -552,6 +725,7 @@ async function replaceDailyCogsRowsForDay(input: {
             "lineCost",
             "status",
             "partialCost",
+            "costSource",
             "computedAt"
           )
           VALUES ${Prisma.join(rows.map((r) => dailyCogsRowSql(r, computedAt)))}
@@ -564,6 +738,7 @@ async function replaceDailyCogsRowsForDay(input: {
             "lineCost" = EXCLUDED."lineCost",
             "status" = EXCLUDED."status",
             "partialCost" = EXCLUDED."partialCost",
+            "costSource" = EXCLUDED."costSource",
             "computedAt" = EXCLUDED."computedAt"
         `)
       }
@@ -594,6 +769,7 @@ function dailyCogsRowSql(row: ComputedRow, computedAt: Date): Prisma.Sql {
     ${row.lineCost},
     ${row.status}::"CogsStatus",
     ${row.partialCost},
+    ${row.costSource},
     ${computedAt}
   )`
 }

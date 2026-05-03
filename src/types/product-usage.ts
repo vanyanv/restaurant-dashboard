@@ -48,7 +48,11 @@ export interface IngredientUsageRow {
   theoreticalUsage: number
   varianceQuantity: number
   variancePct: number
+  /** Estimated $ value of over-ordering surplus (only when purchased > theoretical). */
   wasteEstimatedCost: number
+  /** Estimated $ value of under-ordering shortage (only when theoretical > purchased).
+   *  Distinct from waste so the two directions can be reported separately. */
+  shortageEstimatedCost: number
   status: "over_ordered" | "under_ordered" | "balanced" | "no_recipe"
 }
 

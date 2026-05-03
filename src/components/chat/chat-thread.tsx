@@ -108,11 +108,32 @@ export function ChatThread({
 
   // Auto-scroll to bottom on new content.
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const scrollFrameRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current)
+    }
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      const el = scrollerRef.current
+      if (!el) return
+      el.scrollTop = el.scrollHeight
+    })
+  }, [messages])
+
+  useEffect(() => {
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+      }
+    }
+  }, [])
+
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [messages])
+  }, [])
 
   // Fire `onTurnFinish` once per turn — when status transitions from an
   // active state (`submitted` / `streaming`) back to `ready`. The chat

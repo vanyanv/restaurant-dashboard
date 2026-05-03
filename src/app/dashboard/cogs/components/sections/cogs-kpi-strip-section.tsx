@@ -40,15 +40,23 @@ export async function CogsKpiStripSection({
       aria-label="COGS headline KPIs"
     >
       <div className="flex flex-col justify-end pb-2 dock-in dock-in-1">
-        <div className="font-label">§ 01 · Food cost</div>
+        <div className="font-label">§ 01 · COGS</div>
         <CogsHeroPct value={k.cogsPct} isOver={isOverTarget} />
       </div>
       <dl className="grid grid-cols-1 divide-y divide-(--hairline) text-sm">
         <div className="flex items-baseline justify-between py-2 dock-in dock-in-2">
-          <dt className="font-label">COGS $</dt>
+          <dt className="font-label">Total COGS</dt>
           <dd className="font-mono">{formatMoneyLarge(k.cogsDollars)}</dd>
         </div>
         <div className="flex items-baseline justify-between py-2 dock-in dock-in-3">
+          <dt className="font-label">Food COGS</dt>
+          <dd className="font-mono">{formatMoneyLarge(k.foodCogsDollars)}</dd>
+        </div>
+        <div className="flex items-baseline justify-between py-2 dock-in dock-in-4">
+          <dt className="font-label">Packaging COGS</dt>
+          <dd className="font-mono">{formatMoneyLarge(k.packagingCogsDollars)}</dd>
+        </div>
+        <div className="flex items-baseline justify-between py-2 dock-in dock-in-4">
           <dt className="font-label">Δ vs prior period</dt>
           <dd className="font-mono text-(--ink-muted)">{priorPp.text}</dd>
         </div>

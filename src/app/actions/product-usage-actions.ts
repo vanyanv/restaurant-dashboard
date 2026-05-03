@@ -263,8 +263,13 @@ export async function getProductUsageData(options?: {
     const varianceQuantity = purchasedQty - theoretical
     const variancePct =
       theoretical > 0 ? ((purchasedQty - theoretical) / theoretical) * 100 : 0
+    // Track over-ordering (waste) and under-ordering (shortage) separately so
+    // neither direction is silently dropped. Prior code returned 0 for the
+    // under-ordered case, hiding stockout / measurement-gap costs.
     const wasteEstimatedCost =
       varianceQuantity > 0 ? varianceQuantity * avgUnitCost : 0
+    const shortageEstimatedCost =
+      varianceQuantity < 0 ? Math.abs(varianceQuantity) * avgUnitCost : 0
 
     let status: IngredientUsageRow["status"]
     if (theoretical === 0) {
@@ -290,6 +295,7 @@ export async function getProductUsageData(options?: {
       varianceQuantity,
       variancePct,
       wasteEstimatedCost,
+      shortageEstimatedCost,
       status,
     })
   }

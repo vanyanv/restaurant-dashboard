@@ -40,6 +40,10 @@ const storeCache = new Map<
   string,
   { stores: OwnerStoreRow[]; expiresAt: number }
 >()
+const ownedStoreIdsCache = new Map<
+  string,
+  { ids: string[]; expiresAt: number }
+>()
 
 /** Returns every active store on `accountId`. Used to inject the store
  * list into the system prompt and to resolve "all my stores" tool calls. */
@@ -68,6 +72,7 @@ export async function listOwnerStores(
  * cache lookup, but to be safe pass either consistently. */
 export function invalidateOwnerStoreCache(key: string): void {
   storeCache.delete(key)
+  ownedStoreIdsCache.delete(key)
 }
 
 /**
@@ -88,11 +93,8 @@ export async function assertOwnerOwnsStores(
   }
 
   const requested = Array.from(new Set(requestedStoreIds ?? []))
-  const owned = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
-  const ownedSet = new Set(owned.map((s) => s.id))
+  const owned = await listOwnedStoreIds(accountId)
+  const ownedSet = new Set(owned)
 
   if (requested.length === 0) {
     if (ownedSet.size === 0) {
@@ -112,6 +114,22 @@ export async function assertOwnerOwnsStores(
     )
   }
   return requested
+}
+
+async function listOwnedStoreIds(accountId: string): Promise<string[]> {
+  const cached = ownedStoreIdsCache.get(accountId)
+  if (cached && cached.expiresAt > Date.now()) return cached.ids
+
+  const owned = await prisma.store.findMany({
+    where: { accountId },
+    select: { id: true },
+  })
+  const ids = owned.map((s) => s.id)
+  ownedStoreIdsCache.set(accountId, {
+    ids,
+    expiresAt: Date.now() + STORE_CACHE_TTL_MS,
+  })
+  return ids
 }
 
 /** Render the owner's store list into a compact block for the system

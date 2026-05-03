@@ -25,13 +25,15 @@ type ProvenanceRow = {
 
 /**
  * Batched equivalent of `getCanonicalIngredientCost` for every canonical on
- * `accountId`. Runs in two queries: one `findMany` for the canonical rows and
- * one `DISTINCT ON` raw query for the latest matched invoice line per canonical.
+ * `accountId`. Runs in three batched queries:
+ *   1. canonical rows
+ *   2. DISTINCT ON for the latest matched invoice line per canonical (FK path)
+ *   3. alias fallback for canonicals that have no direct FK match yet
  *
- * Mirrors the "useCanonical" / derive / raw-invoice branches of the single-row
- * path; the legacy alias-based fallback is intentionally omitted — this loader
- * is for the listing surface where it is fine to render a canonical with null
- * latest-invoice fields when no FK match exists.
+ * Step 3 was previously omitted "for performance," but that caused listing
+ * surfaces to show null cost for canonicals that the single-row path
+ * (`getCanonicalIngredientCost`) successfully costs via the alias fallback.
+ * Now mirrored so detail and list views agree.
  */
 export async function batchCanonicalCosts(
   accountId: string
@@ -146,6 +148,79 @@ export async function batchCanonicalCosts(
         sourceSku: prov.sku,
         sourceProductName: prov.productName,
       })
+    }
+  }
+
+  // Alias fallback for canonicals that still have no cost. Mirrors the
+  // tail of `getCanonicalIngredientCost` so listing matches detail.
+  const stillMissing = canonicals.filter((c) => !out.has(c.id))
+  if (stillMissing.length > 0) {
+    const aliases = await prisma.ingredientAlias.findMany({
+      where: { canonicalIngredientId: { in: stillMissing.map((c) => c.id) } },
+      select: {
+        canonicalIngredientId: true,
+        storeId: true,
+        rawName: true,
+        conversionFactor: true,
+        toUnit: true,
+      },
+    })
+    if (aliases.length > 0) {
+      const aliasByCanonical = new Map<string, typeof aliases>()
+      for (const a of aliases) {
+        if (!a.canonicalIngredientId) continue
+        const list = aliasByCanonical.get(a.canonicalIngredientId) ?? []
+        list.push(a)
+        aliasByCanonical.set(a.canonicalIngredientId, list)
+      }
+
+      const candidates = await prisma.invoiceLineItem.findMany({
+        where: {
+          canonicalIngredientId: null,
+          invoice: { storeId: { in: aliases.map((a) => a.storeId) } },
+          productName: { in: aliases.map((a) => a.rawName) },
+        },
+        orderBy: { invoice: { invoiceDate: "desc" } },
+        take: 50 * stillMissing.length,
+        select: {
+          id: true,
+          invoiceId: true,
+          sku: true,
+          productName: true,
+          quantity: true,
+          extendedPrice: true,
+          invoice: { select: { invoiceDate: true, storeId: true, vendorName: true } },
+        },
+      })
+
+      for (const c of stillMissing) {
+        const aliasList = aliasByCanonical.get(c.id)
+        if (!aliasList) continue
+        const aliasLookup = new Map(
+          aliasList.map((a) => [`${a.storeId}::${a.rawName.toLowerCase()}`, a])
+        )
+        for (const li of candidates) {
+          if (!li.invoice.invoiceDate || !li.invoice.storeId) continue
+          const alias = aliasLookup.get(
+            `${li.invoice.storeId}::${li.productName.toLowerCase()}`
+          )
+          if (!alias) continue
+          const normalizedQty = li.quantity * alias.conversionFactor
+          if (normalizedQty <= 0) continue
+          out.set(c.id, {
+            unitCost: li.extendedPrice / normalizedQty,
+            unit: alias.toUnit,
+            source: "invoice",
+            asOfDate: li.invoice.invoiceDate,
+            sourceInvoiceId: li.invoiceId,
+            sourceLineItemId: li.id,
+            sourceVendor: li.invoice.vendorName,
+            sourceSku: li.sku,
+            sourceProductName: li.productName,
+          })
+          break
+        }
+      }
     }
   }
 

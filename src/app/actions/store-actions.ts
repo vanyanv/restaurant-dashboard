@@ -16,7 +16,7 @@ import {
   type Period,
   type PnLRow,
 } from "@/lib/pnl"
-import type { UnmappedMenuItem } from "@/lib/pnl-cogs"
+import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
@@ -542,15 +542,34 @@ export async function getDashboardAnalytics(
       const paidIn = s((r) => r.tillPaidIn ?? 0)
       const paidOut = s((r) => r.tillPaidOut ?? 0)
 
-      // Theoretical Deposit = Net Sales + Tax Collected - Tax Remitted + Tips + Service Charges - Commission & Fees
+      // Sign convention from Otter (verified 2026-05 against 200 recent rows):
+      //   taxRemitted   <= 0   (remittance leaving the till)
+      //   commissionFees <= 0  (fees deducted)
+      //   paidOut       <= 0   (cash leaving the drawer)
+      // Math.abs(...) was silently coercing whichever way Otter flipped — that
+      // is exactly the smell that produced the 5cda080 $13k/wk discount bug.
+      // Use the signed values directly and warn loudly if the convention drifts.
+      if (taxRemitted > 0 || commissionFees > 0 || paidOut > 0) {
+        console.warn(
+          "[store-actions] Otter sign-convention drift detected for store=%s: " +
+            "taxRemitted=%s commissionFees=%s paidOut=%s — deposit formula assumes <= 0",
+          storeId,
+          taxRemitted,
+          commissionFees,
+          paidOut
+        )
+      }
+
+      // Theoretical Deposit = Net Sales + Tax Collected + Tax Remitted (signed)
+      //                       + Tips + Service Charges + Commission & Fees (signed)
       const theoreticalDeposit =
-        netSales + taxCollected - Math.abs(taxRemitted) + tips + serviceCharges - Math.abs(commissionFees)
+        netSales + taxCollected + taxRemitted + tips + serviceCharges + commissionFees
 
       // Cash Drawer Recon — not available from Otter (drawer_reconciliation always null)
       const cashDrawerRecon = null
 
-      // Expected Deposit = Theoretical Deposit + Paid In - Paid Out
-      const expectedDeposit = theoreticalDeposit + paidIn - Math.abs(paidOut)
+      // Expected Deposit = Theoretical Deposit + Paid In + Paid Out (signed)
+      const expectedDeposit = theoreticalDeposit + paidIn + paidOut
 
       return {
         storeId,
@@ -2182,12 +2201,11 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
       continue
     }
 
+    cogsValues[idx] += row.lineCost
+
     if (row.status === CogsStatus.MISSING_COST) {
       aggInto(missingCostAgg, row)
-      continue
     }
-
-    cogsValues[idx] += row.lineCost
   }
 
   const unmappedItems = Array.from(unmappedAgg.values()).sort(

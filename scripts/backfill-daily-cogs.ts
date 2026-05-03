@@ -41,6 +41,7 @@ type StoreJobResult =
   | {
       ok: true
       ownerEmail: string
+      accountId: string
       storeName: string
       daysProcessed: number
       rowsUpserted: number
@@ -115,6 +116,7 @@ async function main() {
         return {
           ok: true,
           ownerEmail: job.ownerEmail,
+          accountId: job.accountId,
           storeName: job.store.name,
           durationMs: ms,
           ...result,
@@ -142,6 +144,13 @@ async function main() {
   const totalDays = successes.reduce((sum, result) => sum + result.daysProcessed, 0)
   const totalUpserted = successes.reduce((sum, result) => sum + result.rowsUpserted, 0)
   const totalDeleted = successes.reduce((sum, result) => sum + result.rowsDeleted, 0)
+  const affectedAccountIds = Array.from(new Set(successes.map((r) => r.accountId)))
+  if (affectedAccountIds.length > 0) {
+    const { bustTags } = await import("../src/lib/cache/cached")
+    const tags = ["pnl", ...affectedAccountIds.map((id) => `account:${id}`)]
+    await bustTags(tags)
+    console.log(`Busted P&L cache tags: ${tags.join(", ")}`)
+  }
 
   console.log(
     `Done: ${totalDays} day(s), ${totalUpserted} upserted, ${totalDeleted} cleaned` +

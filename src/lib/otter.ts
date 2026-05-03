@@ -336,15 +336,19 @@ export async function queryRatings(body: object): Promise<OtterRow[]> {
 }
 
 export function getDateRange(startDate: Date, endDate: Date): Date[] {
+  // UTC day stepping so per-day iteration is independent of server TZ.
+  // Using local setHours/setDate on a non-UTC server can shift the iteration
+  // window by a day at boundaries (the e96e828 pnl.ts fix was for the same
+  // class of bug elsewhere).
   const dates: Date[] = []
   const current = new Date(startDate)
-  current.setHours(0, 0, 0, 0)
+  current.setUTCHours(0, 0, 0, 0)
   const end = new Date(endDate)
-  end.setHours(0, 0, 0, 0)
+  end.setUTCHours(0, 0, 0, 0)
 
   while (current <= end) {
     dates.push(new Date(current))
-    current.setDate(current.getDate() + 1)
+    current.setUTCDate(current.getUTCDate() + 1)
   }
   return dates
 }
@@ -724,21 +728,21 @@ export function splitDateRange(
 ): Array<{ start: Date; end: Date }> {
   const ranges: Array<{ start: Date; end: Date }> = []
   const current = new Date(start)
-  current.setHours(0, 0, 0, 0)
+  current.setUTCHours(0, 0, 0, 0)
   const endNorm = new Date(end)
-  endNorm.setHours(23, 59, 59, 999)
+  endNorm.setUTCHours(23, 59, 59, 999)
 
   while (current <= endNorm) {
     const chunkEnd = new Date(current)
-    chunkEnd.setDate(chunkEnd.getDate() + maxDays - 1)
-    chunkEnd.setHours(23, 59, 59, 999)
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + maxDays - 1)
+    chunkEnd.setUTCHours(23, 59, 59, 999)
 
     ranges.push({
       start: new Date(current),
       end: chunkEnd > endNorm ? new Date(endNorm) : chunkEnd,
     })
 
-    current.setDate(current.getDate() + maxDays)
+    current.setUTCDate(current.getUTCDate() + maxDays)
   }
 
   return ranges

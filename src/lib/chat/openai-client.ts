@@ -10,6 +10,9 @@ export function getChatOpenAIClient(): OpenAI {
   return cachedClient
 }
 
-export const CHAT_ROUTING_MODEL = "gpt-4.1-mini"
+export const CHAT_ROUTING_MODEL =
+  process.env.CHAT_ROUTING_MODEL ?? "gpt-4.1-mini"
+export const CHAT_TITLE_MODEL =
+  process.env.CHAT_TITLE_MODEL ?? "gpt-4.1-nano"
 export const CHAT_EMBEDDING_MODEL = "text-embedding-3-small"
 export const CHAT_EMBEDDING_DIMS = 1536

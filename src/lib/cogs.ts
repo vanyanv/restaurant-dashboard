@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
-import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
+import { salesRowValues, type OtterSummaryRow } from "@/lib/pnl"
 
 /** Internal: end-exclusive Prisma where for a date window. */
 function dateWindow(storeId: string, startDate: Date, endDate: Date) {
@@ -15,22 +14,74 @@ function priorWindow(startDate: Date, endDate: Date) {
   return { priorStart, priorEnd }
 }
 
-/** Internal: collapses a list of DailyCogsItem to ($cogs, $revenue, %). */
-async function rollup(where: { storeId: string; date: { gte: Date; lt: Date } }) {
-  const agg = await prisma.dailyCogsItem.aggregate({
-    where,
-    _sum: { lineCost: true, salesRevenue: true },
+function sum(xs: number[]): number {
+  return xs.reduce((a, b) => a + b, 0)
+}
+
+async function salesRollup(
+  storeId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<number> {
+  const rows = await prisma.otterDailySummary.findMany({
+    where: dateWindow(storeId, startDate, endDate),
+    select: {
+      platform: true,
+      paymentMethod: true,
+      fpGrossSales: true,
+      tpGrossSales: true,
+      fpTaxCollected: true,
+      tpTaxCollected: true,
+      fpDiscounts: true,
+      tpDiscounts: true,
+      fpServiceCharges: true,
+      tpServiceCharges: true,
+    },
   })
+  return sum(salesRowValues(rows))
+}
+
+/** Internal: collapses DailyCogsItem plus OtterDailySummary to COGS metrics. */
+async function rollup(storeId: string, startDate: Date, endDate: Date) {
+  const where = dateWindow(storeId, startDate, endDate)
+  const [agg, foodAgg, packagingAgg, revenueDollars] = await Promise.all([
+    prisma.dailyCogsItem.aggregate({
+      where,
+      _sum: { lineCost: true, salesRevenue: true },
+    }),
+    prisma.dailyCogsItem.aggregate({
+      where: { ...where, category: { not: "Packaging" } },
+      _sum: { lineCost: true },
+    }),
+    prisma.dailyCogsItem.aggregate({
+      where: { ...where, category: "Packaging" },
+      _sum: { lineCost: true },
+    }),
+    salesRollup(storeId, startDate, endDate),
+  ])
   const cogsDollars = agg._sum.lineCost ?? 0
-  const revenueDollars = agg._sum.salesRevenue ?? 0
+  const costedRevenueDollars = agg._sum.salesRevenue ?? 0
+  const foodCogsDollars = foodAgg._sum.lineCost ?? 0
+  const packagingCogsDollars = packagingAgg._sum.lineCost ?? 0
   const cogsPct = revenueDollars > 0 ? (cogsDollars / revenueDollars) * 100 : 0
-  return { cogsDollars, revenueDollars, cogsPct }
+  return {
+    cogsDollars,
+    foodCogsDollars,
+    packagingCogsDollars,
+    revenueDollars,
+    costedRevenueDollars,
+    cogsPct,
+  }
 }
 
 export interface CogsKpis {
   cogsPct: number
   cogsDollars: number
+  foodCogsDollars: number
+  packagingCogsDollars: number
   revenueDollars: number
+  /** Revenue attached to materialized COGS rows; diagnostic coverage only. */
+  costedRevenueDollars: number
   /** Percentage-points difference vs the prior-equivalent period. Null if prior had no revenue. */
   deltaVsPriorPp: number | null
   /** Percentage-points difference vs Store.targetCogsPct. Null if no target set. */
@@ -57,8 +108,6 @@ export interface CogsOperatorSummary {
     affectedRevenue: number
   }
   worstItems: WorstMarginRow[]
-  ingredientDrivers: IngredientCostDriver[]
-  categories: CategoryBreakdown[]
   actions: CogsActionItem[]
 }
 
@@ -67,7 +116,10 @@ export interface CogsStoreOverviewRow {
   storeName: string
   cogsPct: number
   cogsDollars: number
+  foodCogsDollars: number
+  packagingCogsDollars: number
   revenueDollars: number
+  costedRevenueDollars: number
   targetCogsPct: number | null
   deltaVsTargetPp: number | null
   warningCount: number
@@ -80,12 +132,12 @@ export async function getCogsKpis(
 ): Promise<CogsKpis> {
   const { priorStart, priorEnd } = priorWindow(startDate, endDate)
   const [current, store, prior] = await Promise.all([
-    rollup(dateWindow(storeId, startDate, endDate)),
+    rollup(storeId, startDate, endDate),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
     }),
-    rollup(dateWindow(storeId, priorStart, priorEnd)),
+    rollup(storeId, priorStart, priorEnd),
   ])
 
   const deltaVsPriorPp =
@@ -97,7 +149,10 @@ export async function getCogsKpis(
   return {
     cogsPct: current.cogsPct,
     cogsDollars: current.cogsDollars,
+    foodCogsDollars: current.foodCogsDollars,
+    packagingCogsDollars: current.packagingCogsDollars,
     revenueDollars: current.revenueDollars,
+    costedRevenueDollars: current.costedRevenueDollars,
     deltaVsPriorPp,
     deltaVsTargetPp,
     targetCogsPct,
@@ -110,7 +165,10 @@ export interface CogsTrendBucket {
   /** ISO date string at the start of the bucket (local midnight, store TZ irrelevant for v1). */
   bucket: string
   cogsDollars: number
+  foodCogsDollars: number
+  packagingCogsDollars: number
   revenueDollars: number
+  costedRevenueDollars: number
   cogsPct: number
 }
 
@@ -124,12 +182,6 @@ export async function getCogsTrend(
   endDate: Date,
   granularity: Granularity
 ): Promise<CogsTrendBucket[]> {
-  const rows = await prisma.dailyCogsItem.findMany({
-    where: dateWindow(storeId, startDate, endDate),
-    select: { date: true, lineCost: true, salesRevenue: true },
-    orderBy: { date: "asc" },
-  })
-
   // Bucket key = ISO date string at the start of the bucket.
   const bucketKeyOf = (d: Date) => {
     const dt = new Date(d)
@@ -147,13 +199,53 @@ export async function getCogsTrend(
     return dt.toISOString().slice(0, 10)
   }
 
-  const map = new Map<string, { cogs: number; rev: number }>()
+  const [rows, summaries] = await Promise.all([
+    prisma.dailyCogsItem.findMany({
+      where: dateWindow(storeId, startDate, endDate),
+      select: { date: true, category: true, lineCost: true, salesRevenue: true },
+      orderBy: { date: "asc" },
+    }),
+    prisma.otterDailySummary.findMany({
+      where: dateWindow(storeId, startDate, endDate),
+      select: {
+        date: true,
+        platform: true,
+        paymentMethod: true,
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpTaxCollected: true,
+        tpTaxCollected: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+      },
+      orderBy: { date: "asc" },
+    }),
+  ])
+
+  const map = new Map<
+    string,
+    {
+      cogs: number
+      foodCogs: number
+      packagingCogs: number
+      costedRev: number
+      summaries: OtterSummaryRow[]
+    }
+  >()
 
   // Pre-fill every bucket in range so the chart has continuous x-values.
   const cursor = new Date(startDate)
   cursor.setHours(0, 0, 0, 0)
   while (cursor < endDate) {
-    map.set(bucketKeyOf(cursor), { cogs: 0, rev: 0 })
+    map.set(bucketKeyOf(cursor), {
+      cogs: 0,
+      foodCogs: 0,
+      packagingCogs: 0,
+      costedRev: 0,
+      summaries: [],
+    })
     if (granularity === "daily") cursor.setDate(cursor.getDate() + 1)
     else if (granularity === "weekly") cursor.setDate(cursor.getDate() + 7)
     else cursor.setFullYear(cursor.getFullYear(), cursor.getMonth() + 1, 1)
@@ -161,20 +253,47 @@ export async function getCogsTrend(
 
   for (const r of rows) {
     const k = bucketKeyOf(r.date)
-    const cur = map.get(k) ?? { cogs: 0, rev: 0 }
+    const cur = map.get(k) ?? {
+      cogs: 0,
+      foodCogs: 0,
+      packagingCogs: 0,
+      costedRev: 0,
+      summaries: [],
+    }
     cur.cogs += r.lineCost
-    cur.rev += r.salesRevenue
+    if (r.category === "Packaging") cur.packagingCogs += r.lineCost
+    else cur.foodCogs += r.lineCost
+    cur.costedRev += r.salesRevenue
+    map.set(k, cur)
+  }
+
+  for (const summary of summaries) {
+    const k = bucketKeyOf(summary.date)
+    const cur = map.get(k) ?? {
+      cogs: 0,
+      foodCogs: 0,
+      packagingCogs: 0,
+      costedRev: 0,
+      summaries: [],
+    }
+    cur.summaries.push(summary)
     map.set(k, cur)
   }
 
   return Array.from(map.entries())
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([bucket, v]) => ({
-      bucket,
-      cogsDollars: v.cogs,
-      revenueDollars: v.rev,
-      cogsPct: v.rev > 0 ? (v.cogs / v.rev) * 100 : 0,
-    }))
+    .map(([bucket, v]) => {
+      const revenueDollars = sum(salesRowValues(v.summaries))
+      return {
+        bucket,
+        cogsDollars: v.cogs,
+        foodCogsDollars: v.foodCogs,
+        packagingCogsDollars: v.packagingCogs,
+        revenueDollars,
+        costedRevenueDollars: v.costedRev,
+        cogsPct: revenueDollars > 0 ? (v.cogs / revenueDollars) * 100 : 0,
+      }
+    })
 }
 
 export interface CategoryBreakdown {
@@ -221,7 +340,7 @@ export async function getWorstMarginItems(
 ): Promise<WorstMarginRow[]> {
   const rows = await prisma.dailyCogsItem.groupBy({
     by: ["itemName", "recipeId"],
-    where: dateWindow(storeId, startDate, endDate),
+    where: { ...dateWindow(storeId, startDate, endDate), category: { not: "Packaging" } },
     _sum: { qtySold: true, salesRevenue: true, lineCost: true },
   })
   return rows
@@ -246,6 +365,8 @@ export interface DataQualityCounts {
   costed: number
   unmapped: number
   missingCost: number
+  /** Same store/date/item appears under multiple Otter categories. Informational source-data warning. */
+  duplicateCategoryItems: number
   /** Count of rows where the recipe cost walk flagged at least one ingredient
    *  line uncostable. Can overlap with COSTED — a mostly-costed recipe that
    *  failed on one line still lands as COSTED + partialCost=true. */
@@ -257,7 +378,7 @@ export async function getDataQualityCounts(
   startDate: Date,
   endDate: Date
 ): Promise<DataQualityCounts> {
-  const [byStatus, partialCount] = await Promise.all([
+  const [byStatus, partialCount, duplicateCategoryRows] = await Promise.all([
     prisma.dailyCogsItem.groupBy({
       by: ["status"],
       where: dateWindow(storeId, startDate, endDate),
@@ -266,6 +387,19 @@ export async function getDataQualityCounts(
     prisma.dailyCogsItem.count({
       where: { ...dateWindow(storeId, startDate, endDate), partialCost: true },
     }),
+    prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT COUNT(*)::bigint AS n
+      FROM (
+        SELECT "date", "itemName"
+        FROM "DailyCogsItem"
+        WHERE "storeId" = ${storeId}
+          AND "date" >= ${startDate}
+          AND "date" < ${endDate}
+          AND "category" <> 'Packaging'
+        GROUP BY "date", "itemName"
+        HAVING COUNT(DISTINCT "category") > 1
+      ) duplicate_categories
+    `,
   ])
   const by = (s: "COSTED" | "UNMAPPED" | "MISSING_COST") =>
     byStatus.find((r) => r.status === s)?._count?._all ?? 0
@@ -273,6 +407,7 @@ export async function getDataQualityCounts(
     costed: by("COSTED"),
     unmapped: by("UNMAPPED"),
     missingCost: by("MISSING_COST"),
+    duplicateCategoryItems: Number(duplicateCategoryRows[0]?.n ?? 0),
     partialCost: partialCount,
   }
 }
@@ -312,10 +447,9 @@ function buildCogsActions(input: {
   kpis: CogsKpis
   dataQuality: CogsOperatorSummary["dataQuality"]
   worstItems: WorstMarginRow[]
-  ingredientDrivers: IngredientCostDriver[]
 }): CogsActionItem[] {
   const actions: CogsActionItem[] = []
-  const { storeId, kpis, dataQuality, worstItems, ingredientDrivers } = input
+  const { storeId, kpis, dataQuality, worstItems } = input
 
   if (dataQuality.unmapped > 0) {
     actions.push({
@@ -340,11 +474,22 @@ function buildCogsActions(input: {
     })
   }
 
+  if (dataQuality.duplicateCategoryItems > 0) {
+    actions.push({
+      severity: "notice",
+      source: "data-quality",
+      title: `${dataQuality.duplicateCategoryItems} item-day${dataQuality.duplicateCategoryItems === 1 ? "" : "s"} split across categories`,
+      impactLabel: "Source category overlap",
+      href: "/dashboard/cogs",
+      actionLabel: "Audit categories",
+    })
+  }
+
   if (kpis.targetCogsPct == null) {
     actions.push({
       severity: "notice",
       source: "target",
-      title: "No food-cost target set",
+      title: "No COGS target set",
       impactLabel: "Ranking by cost impact",
       href: `/dashboard/stores/${storeId}`,
       actionLabel: "Set target",
@@ -353,7 +498,7 @@ function buildCogsActions(input: {
     actions.push({
       severity: kpis.deltaVsTargetPp >= 3 ? "critical" : "warning",
       source: "target",
-      title: `${formatPercentBrief(kpis.cogsPct)} food cost is over target`,
+      title: `${formatPercentBrief(kpis.cogsPct)} COGS is over target`,
       impactLabel: `+${kpis.deltaVsTargetPp.toFixed(1)}pp vs target`,
       href: "#fix-first",
       actionLabel: "Review leak list",
@@ -374,24 +519,6 @@ function buildCogsActions(input: {
     })
   }
 
-  const risingDriver = ingredientDrivers.find(
-    (driver) =>
-      driver.latestUnitCost != null &&
-      driver.priorUnitCost != null &&
-      driver.latestUnitCost > driver.priorUnitCost
-  )
-  const driver = risingDriver ?? ingredientDrivers[0]
-  if (driver) {
-    actions.push({
-      severity: risingDriver ? "warning" : "notice",
-      source: "ingredient",
-      title: driver.name,
-      impactLabel: `${formatMoneyBrief(driver.theoreticalDollars)} theoretical cost`,
-      href: `/dashboard/ingredients/prices?ingredientId=${driver.canonicalIngredientId}`,
-      actionLabel: "Check price",
-    })
-  }
-
   const severityRank: Record<CogsActionSeverity, number> = {
     critical: 0,
     warning: 1,
@@ -408,14 +535,12 @@ export async function getCogsOperatorSummary(
   startDate: Date,
   endDate: Date
 ): Promise<CogsOperatorSummary> {
-  const [kpis, dataQualityCounts, affectedRevenue, worstItems, ingredientDrivers, categories] =
+  const [kpis, dataQualityCounts, affectedRevenue, worstItems] =
     await Promise.all([
       getCogsKpis(storeId, startDate, endDate),
       getDataQualityCounts(storeId, startDate, endDate),
       getDataQualityImpact(storeId, startDate, endDate),
       getWorstMarginItems(storeId, startDate, endDate, 12),
-      getTopCostDriverIngredients(storeId, startDate, endDate, 12),
-      getCostByCategory(storeId, startDate, endDate),
     ])
 
   const dataQuality = {
@@ -423,7 +548,8 @@ export async function getCogsOperatorSummary(
     warningCount:
       dataQualityCounts.unmapped +
       dataQualityCounts.missingCost +
-      dataQualityCounts.partialCost,
+      dataQualityCounts.partialCost +
+      dataQualityCounts.duplicateCategoryItems,
     affectedRevenue,
   }
 
@@ -431,14 +557,11 @@ export async function getCogsOperatorSummary(
     kpis,
     dataQuality,
     worstItems,
-    ingredientDrivers,
-    categories,
     actions: buildCogsActions({
       storeId,
       kpis,
       dataQuality,
       worstItems,
-      ingredientDrivers,
     }),
   }
 }
@@ -457,7 +580,15 @@ export async function getCogsStoreOverview(
   if (stores.length === 0) return []
 
   const storeIds = stores.map((store) => store.id)
-  const [rollups, statusCounts, partialCounts] = await Promise.all([
+  const [
+    rollups,
+    foodRollups,
+    packagingRollups,
+    statusCounts,
+    partialCounts,
+    duplicateCategoryCounts,
+    summaries,
+  ] = await Promise.all([
     prisma.dailyCogsItem.groupBy({
       by: ["storeId"],
       where: {
@@ -465,6 +596,24 @@ export async function getCogsStoreOverview(
         date: { gte: startDate, lt: endDate },
       },
       _sum: { lineCost: true, salesRevenue: true },
+    }),
+    prisma.dailyCogsItem.groupBy({
+      by: ["storeId"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate, lt: endDate },
+        category: { not: "Packaging" },
+      },
+      _sum: { lineCost: true },
+    }),
+    prisma.dailyCogsItem.groupBy({
+      by: ["storeId"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate, lt: endDate },
+        category: "Packaging",
+      },
+      _sum: { lineCost: true },
     }),
     prisma.dailyCogsItem.groupBy({
       by: ["storeId", "status"],
@@ -483,12 +632,56 @@ export async function getCogsStoreOverview(
       },
       _count: { _all: true },
     }),
+    prisma.$queryRaw<Array<{ storeId: string; n: bigint }>>`
+      SELECT "storeId", COUNT(*)::bigint AS n
+      FROM (
+        SELECT "storeId", "date", "itemName"
+        FROM "DailyCogsItem"
+        WHERE "storeId" = ANY(${storeIds}::text[])
+          AND "date" >= ${startDate}
+          AND "date" < ${endDate}
+          AND "category" <> 'Packaging'
+        GROUP BY "storeId", "date", "itemName"
+        HAVING COUNT(DISTINCT "category") > 1
+      ) duplicate_categories
+      GROUP BY "storeId"
+    `,
+    prisma.otterDailySummary.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: startDate, lt: endDate },
+      },
+      select: {
+        storeId: true,
+        platform: true,
+        paymentMethod: true,
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpTaxCollected: true,
+        tpTaxCollected: true,
+        fpDiscounts: true,
+        tpDiscounts: true,
+        fpServiceCharges: true,
+        tpServiceCharges: true,
+      },
+    }),
   ])
 
   const rollupByStore = new Map(rollups.map((row) => [row.storeId, row]))
+  const foodByStore = new Map(foodRollups.map((row) => [row.storeId, row]))
+  const packagingByStore = new Map(packagingRollups.map((row) => [row.storeId, row]))
   const partialByStore = new Map(
     partialCounts.map((row) => [row.storeId, row._count._all])
   )
+  const duplicateCategoryByStore = new Map(
+    duplicateCategoryCounts.map((row) => [row.storeId, Number(row.n)])
+  )
+  const summariesByStore = new Map<string, OtterSummaryRow[]>()
+  for (const summary of summaries) {
+    const bucket = summariesByStore.get(summary.storeId) ?? []
+    bucket.push(summary)
+    summariesByStore.set(summary.storeId, bucket)
+  }
 
   function countStatus(storeId: string, status: "UNMAPPED" | "MISSING_COST") {
     return (
@@ -500,7 +693,10 @@ export async function getCogsStoreOverview(
   const rows = stores.map((store) => {
     const rollup = rollupByStore.get(store.id)
     const cogsDollars = rollup?._sum.lineCost ?? 0
-    const revenueDollars = rollup?._sum.salesRevenue ?? 0
+    const foodCogsDollars = foodByStore.get(store.id)?._sum.lineCost ?? 0
+    const packagingCogsDollars = packagingByStore.get(store.id)?._sum.lineCost ?? 0
+    const costedRevenueDollars = rollup?._sum.salesRevenue ?? 0
+    const revenueDollars = sum(salesRowValues(summariesByStore.get(store.id) ?? []))
     const cogsPct = revenueDollars > 0 ? (cogsDollars / revenueDollars) * 100 : 0
     const targetCogsPct = store.targetCogsPct ?? null
     const deltaVsTargetPp =
@@ -511,13 +707,17 @@ export async function getCogsStoreOverview(
       storeName: store.name,
       cogsPct,
       cogsDollars,
+      foodCogsDollars,
+      packagingCogsDollars,
       revenueDollars,
+      costedRevenueDollars,
       targetCogsPct,
       deltaVsTargetPp,
       warningCount:
         countStatus(store.id, "UNMAPPED") +
         countStatus(store.id, "MISSING_COST") +
-        (partialByStore.get(store.id) ?? 0),
+        (partialByStore.get(store.id) ?? 0) +
+        (duplicateCategoryByStore.get(store.id) ?? 0),
     }
   })
 
@@ -528,200 +728,4 @@ export async function getCogsStoreOverview(
     if (a.warningCount !== b.warningCount) return b.warningCount - a.warningCount
     return b.cogsDollars - a.cogsDollars
   })
-}
-
-export interface IngredientCostDriver {
-  canonicalIngredientId: string
-  name: string
-  /** Total theoretical $ across the period for this ingredient. */
-  theoreticalDollars: number
-  /** % of total period COGS represented by this ingredient. */
-  pctOfCogs: number
-  /** Latest known unit cost (asOf endDate). */
-  latestUnitCost: number | null
-  /** Unit cost as-of (startDate - 1ms) for the ▲▼ trend glyph. */
-  priorUnitCost: number | null
-  costUnit: string | null
-}
-
-/**
- * Decompose period sales into ingredient-level theoretical usage and dollars.
- *
- * Approach (on-the-fly, no new materialization):
- *   1. Group DailyCogsItem rows by recipeId (only COSTED + recipeId set).
- *   2. For each recipe, walk RecipeIngredient → CanonicalIngredient (via the
- *      same recipe-cost.ts machinery) and produce ingredient-level qty.
- *   3. Multiply qty × ingredient.unitCost (asOf endDate) → theoretical $.
- *   4. Aggregate by canonicalIngredientId.
- *
- * Sub-recipes are flattened: when a recipe has a componentRecipe, we recurse
- * via the same cost helpers so the canonical ingredients deep inside roll up.
- *
- * NOTE: returns `[]` if the period has no costed sales.
- */
-export async function getTopCostDriverIngredients(
-  storeId: string,
-  startDate: Date,
-  endDate: Date,
-  limit: number
-): Promise<IngredientCostDriver[]> {
-  // 1. Pull COSTED rows with a recipe in the period; group by recipeId
-  //    summing units sold (across all dates in the period).
-  const grouped = await prisma.dailyCogsItem.groupBy({
-    by: ["recipeId"],
-    where: {
-      ...dateWindow(storeId, startDate, endDate),
-      status: "COSTED",
-      recipeId: { not: null },
-    },
-    _sum: { qtySold: true, lineCost: true },
-  })
-
-  if (grouped.length === 0) return []
-
-  // Denominator = total COGS dollars in the period (across all statuses).
-  // Using only COSTED-with-recipe rows would inflate ingredient %s when some
-  // dishes are unmapped or override-costed.
-  const totalAgg = await prisma.dailyCogsItem.aggregate({
-    where: dateWindow(storeId, startDate, endDate),
-    _sum: { lineCost: true },
-  })
-  const totalCogs = totalAgg._sum.lineCost ?? 0
-  if (totalCogs <= 0) return []
-
-  // asOf for ingredient costs = the last second of the period so we use
-  // prices in effect across the period (matches recipe-cost.ts P&L convention).
-  const asOf = new Date(endDate.getTime() - 1)
-  const priorAsOf = new Date(startDate.getTime() - 1)
-
-  // 2. For each recipe, compute its cost breakdown once (memoized inside
-  //    computeRecipeCost). We rebuild the per-ingredient theoretical qty
-  //    by scaling the cost-line's quantity by the period's qtySold.
-  type Acc = {
-    name: string
-    theoreticalDollars: number
-    costUnit: string | null
-  }
-  const byIng = new Map<string, Acc>()
-
-  for (const g of grouped) {
-    if (!g.recipeId || !g._sum.qtySold) continue
-    const qtySold = g._sum.qtySold
-
-    const leaves = await flattenRecipeToCanonicals(g.recipeId, asOf)
-    for (const leaf of leaves) {
-      const lineUnitCost = leaf.unitCost ?? 0
-      const dollars = qtySold * leaf.qtyPerServing * lineUnitCost
-      if (dollars <= 0) continue
-      const prev = byIng.get(leaf.canonicalIngredientId) ?? {
-        name: leaf.name,
-        theoreticalDollars: 0,
-        costUnit: leaf.costUnit,
-      }
-      prev.theoreticalDollars += dollars
-      byIng.set(leaf.canonicalIngredientId, prev)
-    }
-  }
-
-  // 3. Resolve latest+prior unit cost per canonical (for the ▲▼ glyph).
-  const ids = Array.from(byIng.keys())
-  const [latestCosts, priorCosts] = await Promise.all([
-    Promise.all(ids.map((id) => getCanonicalIngredientCost(id, asOf))),
-    Promise.all(ids.map((id) => getCanonicalIngredientCost(id, priorAsOf))),
-  ])
-
-  const out: IngredientCostDriver[] = ids.map((id, i) => {
-    const acc = byIng.get(id)!
-    return {
-      canonicalIngredientId: id,
-      name: acc.name,
-      theoreticalDollars: acc.theoreticalDollars,
-      pctOfCogs:
-        totalCogs > 0 ? (acc.theoreticalDollars / totalCogs) * 100 : 0,
-      latestUnitCost: latestCosts[i]?.unitCost ?? null,
-      priorUnitCost: priorCosts[i]?.unitCost ?? null,
-      costUnit: acc.costUnit,
-    }
-  })
-
-  return out
-    .sort((a, b) => b.theoreticalDollars - a.theoreticalDollars)
-    .slice(0, limit)
-}
-
-/** Internal: flatten a recipe (with sub-recipes) into leaf canonical contributions. */
-interface CanonicalLeaf {
-  canonicalIngredientId: string
-  name: string
-  /** Quantity contributed *per serving* of the top-level recipe, expressed
-   *  in the canonical ingredient's costUnit (already converted). */
-  qtyPerServing: number
-  unitCost: number | null
-  costUnit: string | null
-}
-
-async function flattenRecipeToCanonicals(
-  recipeId: string,
-  asOf: Date | undefined,
-  multiplier = 1,
-  visited: Set<string> = new Set()
-): Promise<CanonicalLeaf[]> {
-  if (visited.has(recipeId)) return [] // cycle guard (should be impossible in DB)
-  visited.add(recipeId)
-
-  const recipe = await prisma.recipe.findUnique({
-    where: { id: recipeId },
-    select: {
-      ingredients: {
-        select: {
-          quantity: true,
-          unit: true,
-          canonicalIngredientId: true,
-          componentRecipeId: true,
-          canonicalIngredient: { select: { id: true, name: true } },
-        },
-      },
-    },
-  })
-  if (!recipe) return []
-
-  const leaves: CanonicalLeaf[] = []
-  for (const ing of recipe.ingredients) {
-    if (ing.componentRecipeId) {
-      const sub = await flattenRecipeToCanonicals(
-        ing.componentRecipeId,
-        asOf,
-        multiplier * ing.quantity,
-        new Set(visited)
-      )
-      leaves.push(...sub)
-      continue
-    }
-    if (!ing.canonicalIngredientId || !ing.canonicalIngredient) continue
-
-    // Convert this line's quantity to the canonical's costUnit, mirroring
-    // the math in recipe-cost.ts.
-    const cost = await getCanonicalIngredientCost(ing.canonicalIngredientId, asOf)
-    let qtyInCostUnit: number | null = ing.quantity
-    if (cost) {
-      const recipeUnit = canonicalizeUnit(ing.unit)
-      const costUnit = canonicalizeUnit(cost.unit)
-      if (recipeUnit && costUnit && recipeUnit !== costUnit) {
-        qtyInCostUnit = convert(ing.quantity, ing.unit, cost.unit)
-      } else if (!recipeUnit || !costUnit) {
-        const same =
-          ing.unit.trim().toLowerCase() === cost.unit.trim().toLowerCase()
-        if (!same) qtyInCostUnit = null
-      }
-    }
-
-    leaves.push({
-      canonicalIngredientId: ing.canonicalIngredientId,
-      name: ing.canonicalIngredient.name,
-      qtyPerServing: (qtyInCostUnit ?? 0) * multiplier,
-      unitCost: cost?.unitCost ?? null,
-      costUnit: cost?.unit ?? null,
-    })
-  }
-  return leaves
 }

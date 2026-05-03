@@ -14,6 +14,7 @@ import {
   CONTAINER_CANDIDATE_NAMES,
   CONTAINER_GROUP_CANONICALS,
   CONTAINER_GROUP_LABELS,
+  PACKAGING_SCENARIO,
   PACKING_SCENARIOS,
   addContainerCounts,
   classifyBasket,
@@ -25,6 +26,7 @@ import {
   invoiceEachUnits,
   normalizeFulfillmentMode,
   packBasket,
+  packBasketCostAware,
   type ContainerCounts,
   type ContainerGroup,
   type FulfillmentBucket,
@@ -68,6 +70,22 @@ type CandidateGroup =
   | "slider-only candidates"
   | "sides/secret menu candidates"
   | "other/review"
+
+type ChangedBasketSummary = {
+  signature: string
+  rawSignature: string
+  orders: number
+  currentContainers: ContainerCounts
+  costAwareContainers: ContainerCounts
+  unitDeltas: ContainerCounts
+  currentCost: number | null
+  costAwareCost: number | null
+  dollarDifference: number | null
+  chosenAlternatives: Record<string, number>
+  fallbackOrders: number
+  missingCostGroups: ContainerGroup[]
+  examples: Array<{ orderId: string; displayId: string | null; fulfillment: FulfillmentBucket; date: string }>
+}
 
 const WINDOW_DAYS = [30, 60, 90]
 
@@ -139,6 +157,53 @@ function addCountMoney(target: CountMoney, subtotal: number, total: number): voi
 
 function emptyCountMoney(): CountMoney {
   return { orders: 0, subtotal: 0, total: 0 }
+}
+
+function subtractCounts(left: ContainerCounts, right: ContainerCounts): ContainerCounts {
+  return Object.fromEntries(
+    (Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[]).map((group) => [group, left[group] - right[group]])
+  ) as ContainerCounts
+}
+
+function countsDiffer(left: ContainerCounts, right: ContainerCounts): boolean {
+  return (Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[]).some((group) => left[group] !== right[group])
+}
+
+function totalDollarDeltaForCounts(
+  deltas: ContainerCounts,
+  groupCosts: Record<ContainerGroup, number | null>
+): number | null {
+  let total = 0
+  for (const group of Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[]) {
+    if (deltas[group] === 0) continue
+    const unitCost = groupCosts[group]
+    if (unitCost == null) return null
+    total += deltas[group] * unitCost
+  }
+  return total
+}
+
+function dollarDeltasByGroup(
+  unitDeltas: ContainerCounts,
+  groupCosts: Record<ContainerGroup, number | null>
+): Record<ContainerGroup, number | null> {
+  return Object.fromEntries(
+    (Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[]).map((group) => [
+      group,
+      groupCosts[group] == null && unitDeltas[group] !== 0 ? null : unitDeltas[group] * (groupCosts[group] ?? 0),
+    ])
+  ) as Record<ContainerGroup, number | null>
+}
+
+function changedBasketSort(a: ChangedBasketSummary, b: ChangedBasketSummary): number {
+  const aAbs = a.dollarDifference == null ? -1 : Math.abs(a.dollarDifference)
+  const bAbs = b.dollarDifference == null ? -1 : Math.abs(b.dollarDifference)
+  if (bAbs !== aAbs) return bAbs - aAbs
+  return b.orders - a.orders
+}
+
+function groupList(groups: ContainerGroup[]): string {
+  return groups.map((group) => CONTAINER_GROUP_LABELS[group]).join(", ")
 }
 
 async function main(): Promise<void> {
@@ -475,11 +540,13 @@ async function main(): Promise<void> {
     const scenarioCounts = Object.fromEntries(
       PACKING_SCENARIOS.map((scenario) => [scenario, packBasket(classification.units, scenario)])
     ) as Record<PackingScenario, ContainerCounts>
+    const costAware = packBasketCostAware(classification.units, packingGroupCosts, PACKAGING_SCENARIO)
     return {
       order,
       bucket: normalizeFulfillmentMode(order.fulfillmentMode),
       classification,
       scenarioCounts,
+      costAware,
     }
   })
 
@@ -680,6 +747,228 @@ async function main(): Promise<void> {
     .sort((a, b) => b.takeawayOrders - a.takeawayOrders)
     .slice(0, 20)
 
+  const costAwareDemandByWindow = WINDOW_DAYS.map((days) => {
+    const start = startMinusDays(asOf, days)
+    const current = {
+      DELIVERY: emptyContainerCounts(),
+      PICKUP: emptyContainerCounts(),
+      total: emptyContainerCounts(),
+    }
+    const costAware = {
+      DELIVERY: emptyContainerCounts(),
+      PICKUP: emptyContainerCounts(),
+      total: emptyContainerCounts(),
+    }
+    let takeawayOrders = 0
+    let changedOrders = 0
+    let fallbackOrders = 0
+    let missingCostFallbackOrders = 0
+    const missingCostGroups = new Set<ContainerGroup>()
+
+    for (const row of classifiedOrders) {
+      if (row.order.referenceTimeLocal < start) continue
+      if (row.bucket !== "DELIVERY" && row.bucket !== "PICKUP") continue
+
+      takeawayOrders += 1
+      const currentCounts = row.scenarioCounts[PACKAGING_SCENARIO]
+      const costAwareCounts = row.costAware.counts
+      addContainerCounts(current[row.bucket], currentCounts)
+      addContainerCounts(current.total, currentCounts)
+      addContainerCounts(costAware[row.bucket], costAwareCounts)
+      addContainerCounts(costAware.total, costAwareCounts)
+      if (countsDiffer(currentCounts, costAwareCounts)) changedOrders += 1
+      if (row.costAware.fallback) fallbackOrders += 1
+      if (row.costAware.fallback && row.costAware.missingCostGroups.length > 0) {
+        missingCostFallbackOrders += 1
+        for (const group of row.costAware.missingCostGroups) missingCostGroups.add(group)
+      }
+    }
+
+    const unitDeltas = subtractCounts(costAware.total, current.total)
+    const dollarDeltas = dollarDeltasByGroup(unitDeltas, packingGroupCosts)
+
+    return {
+      days,
+      currentScenario: PACKAGING_SCENARIO,
+      takeawayOrders,
+      changedOrders,
+      fallbackOrders,
+      missingCostFallbackOrders,
+      missingCostGroups: [...missingCostGroups],
+      current,
+      costAware,
+      unitDeltas,
+      dollarDeltas,
+      currentProjectedCost: costForCounts(current.total, packingGroupCosts),
+      costAwareProjectedCost: costForCounts(costAware.total, packingGroupCosts),
+      projectedCogsDelta: totalDollarDeltaForCounts(unitDeltas, packingGroupCosts),
+    }
+  })
+
+  const changedBasketMap = new Map<
+    string,
+    Omit<ChangedBasketSummary, "unitDeltas" | "currentCost" | "costAwareCost" | "dollarDifference">
+  >()
+  const missingCostFallbackBasketMap = new Map<
+    string,
+    {
+      signature: string
+      rawSignature: string
+      orders: number
+      missingCostGroups: Set<ContainerGroup>
+      examples: Array<{ orderId: string; displayId: string | null; fulfillment: FulfillmentBucket; date: string }>
+    }
+  >()
+  const dryRunStart90 = startMinusDays(asOf, 90)
+
+  for (const row of classifiedOrders) {
+    if (row.order.referenceTimeLocal < dryRunStart90) continue
+    if (row.bucket !== "DELIVERY" && row.bucket !== "PICKUP") continue
+
+    if (row.costAware.fallback && row.costAware.missingCostGroups.length > 0) {
+      const key = row.classification.normalizedSignature
+      const existing = missingCostFallbackBasketMap.get(key) ?? {
+        signature: row.classification.normalizedSignature,
+        rawSignature: row.classification.rawSignature,
+        orders: 0,
+        missingCostGroups: new Set<ContainerGroup>(),
+        examples: [],
+      }
+      existing.orders += 1
+      for (const group of row.costAware.missingCostGroups) existing.missingCostGroups.add(group)
+      if (existing.examples.length < 4) {
+        existing.examples.push({
+          orderId: row.order.otterOrderId,
+          displayId: row.order.externalDisplayId,
+          fulfillment: row.bucket,
+          date: dateKey(row.order.referenceTimeLocal),
+        })
+      }
+      missingCostFallbackBasketMap.set(key, existing)
+    }
+
+    const currentCounts = row.scenarioCounts[PACKAGING_SCENARIO]
+    const costAwareCounts = row.costAware.counts
+    if (!countsDiffer(currentCounts, costAwareCounts)) continue
+
+    const key = row.classification.normalizedSignature
+    const existing = changedBasketMap.get(key) ?? {
+      signature: row.classification.normalizedSignature,
+      rawSignature: row.classification.rawSignature,
+      orders: 0,
+      currentContainers: emptyContainerCounts(),
+      costAwareContainers: emptyContainerCounts(),
+      chosenAlternatives: {},
+      fallbackOrders: 0,
+      missingCostGroups: [],
+      examples: [],
+    }
+    existing.orders += 1
+    addContainerCounts(existing.currentContainers, currentCounts)
+    addContainerCounts(existing.costAwareContainers, costAwareCounts)
+    existing.chosenAlternatives[row.costAware.chosenAlternative] =
+      (existing.chosenAlternatives[row.costAware.chosenAlternative] ?? 0) + 1
+    if (row.costAware.fallback) existing.fallbackOrders += 1
+    existing.missingCostGroups = [
+      ...new Set([...existing.missingCostGroups, ...row.costAware.missingCostGroups]),
+    ] as ContainerGroup[]
+    if (existing.examples.length < 4) {
+      existing.examples.push({
+        orderId: row.order.otterOrderId,
+        displayId: row.order.externalDisplayId,
+        fulfillment: row.bucket,
+        date: dateKey(row.order.referenceTimeLocal),
+      })
+    }
+    changedBasketMap.set(key, existing)
+  }
+
+  const changedBasketSignatures: ChangedBasketSummary[] = [...changedBasketMap.values()]
+    .map((row) => {
+      const unitDeltas = subtractCounts(row.costAwareContainers, row.currentContainers)
+      const currentCost = costForCounts(row.currentContainers, packingGroupCosts)
+      const costAwareCost = costForCounts(row.costAwareContainers, packingGroupCosts)
+      return {
+        ...row,
+        unitDeltas,
+        currentCost,
+        costAwareCost,
+        dollarDifference:
+          currentCost == null || costAwareCost == null ? null : costAwareCost - currentCost,
+      }
+    })
+    .sort(changedBasketSort)
+
+  const missingCostFallbackBaskets = [...missingCostFallbackBasketMap.values()]
+    .map((row) => ({
+      ...row,
+      missingCostGroups: [...row.missingCostGroups],
+    }))
+    .sort((a, b) => b.orders - a.orders)
+    .slice(0, 20)
+
+  const ownerRuleChecks = [
+    {
+      name: "1 loaded fries + 2 sliders",
+      units: { burgers: 2, fries: 0, loadedFries: 1, grilledCheese: 0 },
+    },
+    {
+      name: "2 sliders + 2 straight-cut fries",
+      units: { burgers: 2, fries: 2, loadedFries: 0, grilledCheese: 0 },
+    },
+    {
+      name: "2 loaded fries + 4 sliders repeated pairs",
+      units: { burgers: 4, fries: 0, loadedFries: 2, grilledCheese: 0 },
+    },
+    {
+      name: "4 sliders + 2 straight-cut fries",
+      units: { burgers: 4, fries: 2, loadedFries: 0, grilledCheese: 0 },
+    },
+    {
+      name: "1 slider + 1 straight-cut fries",
+      units: { burgers: 1, fries: 1, loadedFries: 0, grilledCheese: 0 },
+    },
+    {
+      name: "1 slider",
+      units: { burgers: 1, fries: 0, loadedFries: 0, grilledCheese: 0 },
+    },
+  ].map((check) => {
+    const currentCounts = packBasket(check.units, PACKAGING_SCENARIO)
+    const costAware = packBasketCostAware(check.units, packingGroupCosts, PACKAGING_SCENARIO)
+    return {
+      name: check.name,
+      units: check.units,
+      currentContainers: currentCounts,
+      costAwareContainers: costAware.counts,
+      currentCost: costForCounts(currentCounts, packingGroupCosts),
+      costAwareCost: costAware.cost,
+      chosenAlternative: costAware.chosenAlternative,
+      fallback: costAware.fallback,
+      missingCostGroups: costAware.missingCostGroups,
+      consideredAlternatives: costAware.consideredAlternatives,
+    }
+  })
+
+  const costAwareDryRun = {
+    note:
+      "Read-only dry run. Legacy baseline demand uses the original packaging scenario; cost-aware demand chooses the cheapest valid alternative only when all required container group costs are present.",
+    currentScenario: PACKAGING_SCENARIO,
+    containerGroupCosts: packingGroupCosts,
+    ownerRuleChecks,
+    demandByWindow: costAwareDemandByWindow,
+    topChangedBasketSignatures: changedBasketSignatures.slice(0, 25),
+    outliers: {
+      highDollarChanges: changedBasketSignatures
+        .filter((row) => row.dollarDifference != null)
+        .slice(0, 10),
+      highFrequencyChangedBaskets: [...changedBasketSignatures]
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 10),
+      unclassifiedBaskets: ambiguousBaskets,
+      missingCostFallbackBaskets,
+    },
+  }
+
   const combo3Cost = combo3 ? await computeRecipeCost(combo3.id).catch(() => null) : null
   const combo3Lines = combo3?.ingredients.map((line) => ({
     name:
@@ -786,6 +1075,7 @@ async function main(): Promise<void> {
       predictedContainerUnitsByWindow: scenarioDemandByWindow,
       invoicePurchasedUnitsByWindow: invoicePurchasesByWindow,
       scenarioFitByWindow,
+      costAwareDryRun,
       unclassifiedItems,
       ambiguousBaskets,
     },
@@ -940,6 +1230,113 @@ async function main(): Promise<void> {
             }, dollar gap ${money(row.dollarGap)}`
         )
       }
+    }
+  }
+
+  printSection("Cost-Aware Dry Run")
+  console.log(`Legacy baseline scenario: ${PACKAGING_SCENARIO}`)
+  console.log("Owner rule checks:")
+  for (const check of costAwareDryRun.ownerRuleChecks) {
+    const dollarDelta =
+      check.currentCost == null || check.costAwareCost == null ? null : check.costAwareCost - check.currentCost
+    console.log(
+      `- ${check.name}: current ${formatContainerCounts(check.currentContainers)} ` +
+        `(${money(check.currentCost)}) -> cost-aware ${formatContainerCounts(check.costAwareContainers)} ` +
+        `(${money(check.costAwareCost)}), delta ${money(dollarDelta)}`
+    )
+    console.log(
+      `  chosen: ${check.chosenAlternative}` +
+        `${check.fallback ? `; fallback missing ${groupList(check.missingCostGroups)}` : ""}`
+    )
+  }
+
+  console.log("Demand and projected COGS impact:")
+  for (const windowDemand of costAwareDryRun.demandByWindow) {
+    console.log(
+      `${windowDemand.days} days: takeaway ${windowDemand.takeawayOrders.toLocaleString()}, ` +
+        `changed ${windowDemand.changedOrders.toLocaleString()}, ` +
+        `fallback ${windowDemand.fallbackOrders.toLocaleString()}, ` +
+        `missing-cost fallback ${windowDemand.missingCostFallbackOrders.toLocaleString()}`
+    )
+    console.log(
+      `- current ${formatContainerCounts(windowDemand.current.total)} ` +
+        `(${money(windowDemand.currentProjectedCost)})`
+    )
+    console.log(
+      `- cost-aware ${formatContainerCounts(windowDemand.costAware.total)} ` +
+        `(${money(windowDemand.costAwareProjectedCost)})`
+    )
+    console.log(
+      `- unit delta ${formatContainerCounts(windowDemand.unitDeltas)}; ` +
+        `projected COGS delta ${money(windowDemand.projectedCogsDelta)}`
+    )
+    for (const group of Object.keys(CONTAINER_GROUP_LABELS) as ContainerGroup[]) {
+      console.log(
+        `  ${CONTAINER_GROUP_LABELS[group]}: units ${formatQty(windowDemand.unitDeltas[group])}, ` +
+          `dollars ${money(windowDemand.dollarDeltas[group])}`
+      )
+    }
+    if (windowDemand.missingCostGroups.length > 0) {
+      console.log(`  missing costs forced fallback for: ${groupList(windowDemand.missingCostGroups)}`)
+    }
+  }
+
+  printSection("Top Cost-Aware Basket Changes - 90 Days")
+  if (costAwareDryRun.topChangedBasketSignatures.length === 0) {
+    console.log("No takeaway basket signatures changed under the cost-aware dry run.")
+  } else {
+    for (const row of costAwareDryRun.topChangedBasketSignatures.slice(0, 12)) {
+      const examples = row.examples
+        .map((example) => example.displayId ?? example.orderId)
+        .filter(Boolean)
+        .join(", ")
+      const choices = Object.entries(row.chosenAlternatives)
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, orders]) => `${label} (${orders})`)
+        .join("; ")
+      console.log(
+        `- ${row.signature}: orders ${row.orders.toLocaleString()}, delta ${money(row.dollarDifference)}`
+      )
+      console.log(`  current: ${formatContainerCounts(row.currentContainers)}`)
+      console.log(`  cost-aware: ${formatContainerCounts(row.costAwareContainers)}`)
+      console.log(`  unit delta: ${formatContainerCounts(row.unitDeltas)}`)
+      console.log(`  choices: ${choices}`)
+      console.log(`  examples: ${examples}`)
+    }
+  }
+
+  printSection("Cost-Aware Outliers")
+  const highDollar = costAwareDryRun.outliers.highDollarChanges
+  const highFrequency = costAwareDryRun.outliers.highFrequencyChangedBaskets
+  console.log("High-dollar changes:")
+  if (highDollar.length === 0) {
+    console.log("- none")
+  } else {
+    for (const row of highDollar.slice(0, 6)) {
+      console.log(
+        `- ${row.signature}: orders ${row.orders.toLocaleString()}, delta ${money(row.dollarDifference)}, ` +
+          `current ${formatContainerCounts(row.currentContainers)}, cost-aware ${formatContainerCounts(
+            row.costAwareContainers
+          )}`
+      )
+    }
+  }
+  console.log("High-frequency changed baskets:")
+  if (highFrequency.length === 0) {
+    console.log("- none")
+  } else {
+    for (const row of highFrequency.slice(0, 6)) {
+      console.log(`- ${row.signature}: orders ${row.orders.toLocaleString()}, delta ${money(row.dollarDifference)}`)
+    }
+  }
+  console.log("Missing-cost fallback baskets:")
+  if (costAwareDryRun.outliers.missingCostFallbackBaskets.length === 0) {
+    console.log("- none")
+  } else {
+    for (const row of costAwareDryRun.outliers.missingCostFallbackBaskets.slice(0, 6)) {
+      console.log(
+        `- ${row.signature}: orders ${row.orders.toLocaleString()}, missing ${groupList(row.missingCostGroups)}`
+      )
     }
   }
 

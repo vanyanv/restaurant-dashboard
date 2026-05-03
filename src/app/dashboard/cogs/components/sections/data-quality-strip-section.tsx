@@ -15,7 +15,12 @@ export async function DataQualityStripSection({
     filters.endDate
   )
 
-  if (dq.unmapped === 0 && dq.missingCost === 0 && dq.partialCost === 0)
+  if (
+    dq.unmapped === 0 &&
+    dq.missingCost === 0 &&
+    dq.partialCost === 0 &&
+    dq.duplicateCategoryItems === 0
+  )
     return null
 
   const parts: string[] = []
@@ -32,12 +37,17 @@ export async function DataQualityStripSection({
       `${dq.partialCost} item${dq.partialCost === 1 ? "" : "s"} partial cost`
     )
   }
+  if (dq.duplicateCategoryItems > 0) {
+    parts.push(
+      `${dq.duplicateCategoryItems} item-day${dq.duplicateCategoryItems === 1 ? "" : "s"} split across categories`
+    )
+  }
 
   return (
     <aside className="cogs-corrigenda" role="status">
       <span>
         <em>Corrigenda.</em> {parts.join(" · ")} — figures below understate true
-        food cost until resolved.
+        COGS until resolved.
       </span>
       <Link href="/dashboard/recipes" className="font-mono text-[11px]">
         Resolve →

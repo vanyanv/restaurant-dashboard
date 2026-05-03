@@ -60,7 +60,7 @@ function ChatMessageImpl({ role, parts, isStreaming, msgIdx = 0 }: Props) {
           (isAssistant ? " chat-message__body--assistant" : "")
         }
       >
-        {renderWithTabularNumbers(body)}
+        {isStreaming ? body : renderWithTabularNumbers(body)}
         {isStreaming && <span className="chat-message__streaming-caret" aria-hidden />}
       </div>
 

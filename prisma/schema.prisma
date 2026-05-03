@@ -453,6 +453,8 @@ model Recipe {
   accountId        String
   itemName         String
   category         String
+  /// Portions yielded per recipe. Must be > 0 (DB CHECK constraint
+  /// `recipe_serving_size_positive` in the manual migration).
   servingSize      Float    @default(1)
   notes            String?
   foodCostOverride Float?
@@ -648,6 +650,17 @@ model DailyCogsItem {
    * an understatement.
    */
   partialCost  Boolean    @default(false)
+  /**
+   * Provenance of `unitCost`. One of:
+   *   "invoice" — every contributing ingredient was priced from invoice data.
+   *   "manual"  — every contributing ingredient was priced from a manual cost.
+   *   "mixed"   — both invoice and manual prices contributed.
+   *   "override" — the recipe-level `foodCostOverride` was applied (no
+   *               ingredient walk produced a number).
+   * Null for UNMAPPED rows and packaging rows pre-dating this column.
+   * Lets dashboards distinguish "this is real $" from "this is a guess."
+   */
+  costSource   String?
   computedAt   DateTime   @default(now())
 
   store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
