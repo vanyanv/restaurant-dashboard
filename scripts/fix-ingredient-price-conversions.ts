@@ -164,10 +164,30 @@ const KNOWN_CONVERSIONS = [
     name: /peppers? whole yellow|yellow (pepper|chili)/i,
     fromUnit: "GAL",
     toUnit: "each",
-    conversionFactor: 120,
-    basis: "Peppers Whole Yellow: authoring note says 5-gal tub = 600 chilies, so 120 chilies/gal.",
+    conversionFactor: 160,
+    basis: "Peppers Whole Yellow: 5-gal tub ≈ 800 chillies (owner-revised), so 160 chillies/gal.",
     minCost: 0.03,
     maxCost: 0.2,
+  },
+  {
+    sku: "2717106",
+    name: /packer lettuce boston hydroponic/i,
+    fromUnit: "each",
+    toUnit: "leaf",
+    conversionFactor: 15,
+    basis: "Sysco 12-count case = 12 heads; ~15 usable leaves per head.",
+    minCost: 0.10,
+    maxCost: 0.25,
+  },
+  {
+    sku: "813",
+    name: /pickle chips sandwich cut/i,
+    fromUnit: "each",
+    toUnit: "chip",
+    conversionFactor: 2000,
+    basis: "Premier Deli 5-gal sandwich-cut pickle pail ≈ 2000 chips per container.",
+    minCost: 0.010,
+    maxCost: 0.040,
   },
 ]
 
@@ -463,10 +483,10 @@ async function runSelfTest(): Promise<void> {
       extendedPrice: 48.85,
     },
     "each",
-    { fromUnit: "GAL", toUnit: "each", conversionFactor: 120 }
+    { fromUnit: "GAL", toUnit: "each", conversionFactor: 160 }
   )
   assert.ok(yellowPeppers != null)
-  assert.ok(Math.abs(yellowPeppers - 0.08141666666666667) < 1e-9)
+  assert.ok(Math.abs(yellowPeppers - 0.0610625) < 1e-9)
 
   const portionCup = deriveCostFromLineItem(
     {

@@ -7,7 +7,7 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies } from "@/lib/invoice-sanity"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
@@ -395,8 +395,16 @@ async function runSync(
       )
     }
 
+    const packAnomalies = findPackShapeAnomalies(inv.extraction.lineItems)
+    for (const a of packAnomalies) {
+      console.warn(
+        `[invoice-sync] pack-shape anomaly on ${contextLabel} line ${a.lineNumber} ` +
+        `"${a.productName}" (${a.unit ?? "?"} pack=${a.packSize ?? "-"} × size=${a.unitSize ?? "-"} ${a.unitSizeUom ?? "-"}): ${a.reasons.join("; ")}`
+      )
+    }
+
     let status: "MATCHED" | "REVIEW" | "PENDING"
-    if (dateSuspect || mathMismatches.length > 0) {
+    if (dateSuspect || mathMismatches.length > 0 || packAnomalies.length > 0) {
       status = "REVIEW"
     } else if (match) {
       status = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"

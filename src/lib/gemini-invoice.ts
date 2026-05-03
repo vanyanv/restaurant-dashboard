@@ -12,6 +12,109 @@ export interface InvoiceExtractionResult {
   model: string
 }
 
+interface KnownSkuPackProfile {
+  /** Regex matched against the LLM-returned vendorName (e.g. "Sysco" matches "Sysco Los Angeles, Inc."). */
+  vendorMatch: RegExp
+  sku: string
+  unit: string
+  packSize: number
+  unitSize: number
+  unitSizeUom: string
+  /** Short label for logs. */
+  label: string
+}
+
+/**
+ * Known-good pack metadata for SKUs that the LLM repeatedly mis-splits or
+ * that arrive with null pack metadata. Applied as a post-extraction override:
+ * we match `(vendor regex, sku)` and stamp unit/packSize/unitSize/unitSizeUom
+ * so downstream cost derivation (`deriveCostFromLineItem`) lands on the right
+ * $/recipeUnit.
+ *
+ * Vendor matching is a regex against the raw `vendorName` from extraction —
+ * vendors print under several variants ("Sysco" vs "Sysco Los Angeles, Inc.")
+ * so we anchor on the brand stem.
+ *
+ * Add SKUs here only after confirming the canonical pack shape with the
+ * vendor or by physical inspection of the product.
+ */
+const KNOWN_SKU_PACK_PROFILES: KnownSkuPackProfile[] = [
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "2717106",
+    unit: "CS",
+    packSize: 1,
+    unitSize: 12,
+    unitSizeUom: "CT",
+    label: "Sysco Boston/Bibb hydroponic lettuce, 12-count case",
+  },
+  {
+    vendorMatch: /\bpremier deli\b/i,
+    sku: "813",
+    unit: "EA",
+    packSize: 1,
+    unitSize: 1,
+    unitSizeUom: "PAIL",
+    label: "Premier Deli sandwich-cut pickle, 5-gal pail",
+  },
+  {
+    vendorMatch: /\bindividual foodservice\b/i,
+    sku: "G299",
+    unit: "TUB",
+    packSize: 1,
+    unitSize: 5,
+    unitSizeUom: "GAL",
+    label: "IFS peppers whole yellow, 5-gal tub",
+  },
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "3812807",
+    unit: "CS",
+    packSize: 1,
+    unitSize: 40,
+    unitSizeUom: "LB",
+    label: "Sysco Packer Onion Sweet Fresh, 40-lb bag",
+  },
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "1763432",
+    unit: "CS",
+    packSize: 1,
+    unitSize: 25,
+    unitSizeUom: "LB",
+    label: "Sysco Imported Tomato Bulk 5x6, 25-lb box",
+  },
+]
+
+/**
+ * Mutates the extraction in place to apply known-SKU pack profiles. Returns
+ * the same object for convenience. No-op when the vendor is unrecognized or
+ * no line items match a known SKU.
+ */
+function applyKnownSkuPackProfiles(extraction: InvoiceExtraction): InvoiceExtraction {
+  const vendor = extraction.vendorName ?? ""
+  if (!vendor) return extraction
+  let applied = 0
+  for (const line of extraction.lineItems) {
+    if (!line.sku) continue
+    const profile = KNOWN_SKU_PACK_PROFILES.find(
+      (p) => p.sku === line.sku && p.vendorMatch.test(vendor)
+    )
+    if (!profile) continue
+    line.unit = profile.unit
+    line.packSize = profile.packSize
+    line.unitSize = profile.unitSize
+    line.unitSizeUom = profile.unitSizeUom
+    applied++
+  }
+  if (applied > 0) {
+    console.log(
+      `[invoice-ocr] applied ${applied} KNOWN_SKU_PACK_PROFILES override(s) for vendor "${vendor}"`
+    )
+  }
+  return extraction
+}
+
 export function buildExtractionPrompt(): string {
   const today = new Date().toISOString().slice(0, 10)
   return `You are an invoice data extraction specialist for restaurant food & beverage suppliers.
@@ -52,11 +155,68 @@ Worked examples — what appears on the PDF → correct split:
     "64.5 LB"  → packSize=6,  unitSize=4.5, unitSizeUom="LB"    (6 × 4.5-lb fry bags)
     "98 CT"    → packSize=9,  unitSize=8,   unitSizeUom="CT"    (9 × 8-count rolls)
     "135 LB"   → packSize=1,  unitSize=35,  unitSizeUom="LB"    (1 × 35-lb shortening tub)
+    "140 LB"   → packSize=1,  unitSize=40,  unitSizeUom="LB"    (1 × 40-lb sweet onion bag)
+    "125 LB"   → packSize=1,  unitSize=25,  unitSizeUom="LB"    (1 × 25-lb bulk tomato box)
+    "150 LB"   → packSize=1,  unitSize=50,  unitSizeUom="LB"    (1 × 50-lb flour sack)
     "6/64 OZ"  → packSize=6,  unitSize=64,  unitSizeUom="OZ"    (some vendors print slash)
     "4/1 GAL"  → packSize=4,  unitSize=1,   unitSizeUom="GAL"
 
+COUNT-PACKED PRODUCE — for category="Produce" on a CS line where the size column is "<N> CT"
+(lettuce, tomatoes, peppers, onions, citrus, etc.), the pack is almost always 1 — the case
+IS the count of items. Do NOT split a low CT number for produce. Worked examples:
+    "112 CT" (produce, e.g. boston/butterhead lettuce)
+              → packSize=1,  unitSize=12,  unitSizeUom="CT"    (1 case × 12 heads)
+    "124 CT" (produce, e.g. romaine, propack butter lettuce)
+              → packSize=1,  unitSize=24,  unitSizeUom="CT"    (1 case × 24 heads)
+    "1/12 CT" or "12 CT" by itself with category=Produce
+              → packSize=1,  unitSize=12,  unitSizeUom="CT"
+    "248 CT" (rare, produce)
+              → packSize=2,  unitSize=48,  unitSizeUom="CT"    (2 packs × 48-count, leaf greens)
+The rule of thumb: if category is Produce AND unit is CS AND the CT digits read as a typical
+count (12, 18, 24, 30, 36, 48), the pack is 1.
+
+NON-PRODUCE COUNT-PACKED ITEMS — for paper goods, gloves, cups, plates, bags, foam
+containers, patty paper, etc. (categories: Paper/Supplies, Cleaning, Equipment) the
+fused PACK/SIZE column often shows a 4–5 digit number that's actually two columns
+smushed together. Common patterns:
+    "10100 CT" (gloves, 10 boxes × 100 gloves)
+              → packSize=10,  unitSize=100,  unitSizeUom="CT"
+    "81000 CT" (patty paper, 8 boxes × 1000 sheets)
+              → packSize=8,   unitSize=1000, unitSizeUom="CT"
+    "11000 CT" (t-shirt bags, 1 case × 1000 bags)
+              → packSize=1,   unitSize=1000, unitSizeUom="CT"
+    "1000 CT"  (single item, e.g. PET cup case of 1000)
+              → packSize=1,   unitSize=1000, unitSizeUom="CT"
+    "540 CT"   (5 sleeves × 40 bags, OR 1 case × 540)
+              → packSize=5,   unitSize=40,   unitSizeUom="CT"  (prefer when 5×40 plausible)
+    "500 CT"   (1 case × 500)
+              → packSize=1,   unitSize=500,  unitSizeUom="CT"
+
+HARD GUARDRAIL — packSize MUST NOT exceed 100. If your initial split would produce
+packSize > 100 (e.g. you were about to write packSize=10100 or packSize=540), STOP
+and re-split: take the leading 1–2 digits as packSize and the remaining digits as
+unitSize. Examples of forbidden outputs and their corrections:
+    ❌ packSize=10100, unitSize=1   →   ✅ packSize=10, unitSize=100
+    ❌ packSize=11000, unitSize=1   →   ✅ packSize=1,  unitSize=1000
+    ❌ packSize=81000, unitSize=1   →   ✅ packSize=8,  unitSize=1000
+    ❌ packSize=540,   unitSize=1   →   ✅ packSize=5,  unitSize=40
+    ❌ packSize=124,   unitSize=1   →   ✅ packSize=1,  unitSize=24
+
+HARD GUARDRAIL FOR LB — for unitSizeUom="LB", unitSize > 50 is essentially always a
+fused PACK/SIZE mis-split. Common produce/case-goods LB sizes are 5, 10, 25, 30, 35,
+40, 50. If you would write unitSize > 50 LB, STOP and re-split — the leading digit is
+packSize, the rest is unitSize:
+    ❌ packSize=1, unitSize=140 LB  →  ✅ packSize=1, unitSize=40  (40-lb onion bag)
+    ❌ packSize=1, unitSize=125 LB  →  ✅ packSize=1, unitSize=25  (25-lb tomato box)
+    ❌ packSize=1, unitSize=150 LB  →  ✅ packSize=1, unitSize=50  (50-lb flour sack)
+    ❌ packSize=1, unitSize=170 LB  →  ✅ packSize=1, unitSize=70  (only if 70-lb is plausible)
+
 Plausible size ranges to sanity-check the split (NOT hard limits — for guidance only):
-    OZ: 4–256   FL OZ: 4–128   LB: 0.25–50   GAL: 0.25–10   CT: 4–500
+    OZ: 4–256   FL OZ: 4–128   LB: 0.25–50   GAL: 0.25–10   CT: 4–2000
+For unit="CS" (case goods), packSize is typically 1–30; values above 50 are very unusual
+and almost always indicate a fused-column mis-split. Re-check the split if you produce
+packSize>30. For Produce + CT, packSize > 2 is essentially never real — flag it by
+re-splitting.
 
 Rules:
 - If the product is meat sold by weight (Premier Meats, Ben E. Keith, similar deli meats)
@@ -95,6 +255,18 @@ extract each of these as its own line item, with:
 If the invoice shows a standalone dollar amount between the last product line
 and the totals section without a clear label, extract it as "Miscellaneous
 Charge" rather than dropping it — the line-sum must reconcile against subtotal.
+
+DO NOT EXTRACT SUB-TOTAL SUMMARY ROWS. Sysco and several other vendors print
+category sub-total rows between sections (e.g. "**** DAIRY ****" header, then
+product lines, then a "GROUP TOTAL**** 229.62" row). These rows summarize the
+preceding lines — they are NOT separate line items. Skip them entirely. Common
+labels to skip:
+  - "GROUP TOTAL", "GROUP TOTAL****", "DEPT TOTAL", "DEPARTMENT TOTAL"
+  - "CATEGORY TOTAL", "SECTION TOTAL", "SUBTOTAL" (when not the invoice subtotal)
+  - "**** DAIRY ****", "**** MEATS ****" (these are section headers, not lines)
+  - "ORDER SUMMARY", "MISC CHARGES" (when followed by a label like "CHGS FOR FUEL")
+The actual subtotal/tax/total go in the dedicated subtotal/taxAmount/totalAmount
+fields, not as line items.
 
 RETURNS / CREDIT MEMOS — if the document is a return, credit memo, RMA, refund,
 or correction (look for headers like "CREDIT MEMO", "RETURN", "CREDIT INVOICE",
@@ -262,6 +434,7 @@ export async function extractInvoiceData(
 ): Promise<InvoiceExtractionResult> {
   try {
     const extraction = await extractViaOpenAI(pdfBase64, fileName)
+    applyKnownSkuPackProfiles(extraction)
     return { extraction, model: PRIMARY_MODEL }
   } catch (err) {
     if (!shouldFallBackToGemini(err)) throw err
@@ -270,6 +443,7 @@ export async function extractInvoiceData(
       `falling back to Gemini ${FALLBACK_MODEL}`
     )
     const extraction = await extractViaGemini(pdfBase64)
+    applyKnownSkuPackProfiles(extraction)
     return { extraction, model: FALLBACK_MODEL }
   }
 }

@@ -100,7 +100,7 @@ async function main() {
 
   const { prisma } = await import("../src/lib/prisma")
   const { extractInvoiceData } = await import("../src/lib/gemini-invoice")
-  const { sanitizeInvoiceDate, findLineMathMismatches } = await import("../src/lib/invoice-sanity")
+  const { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies } = await import("../src/lib/invoice-sanity")
   const { matchInvoiceToStore } = await import("../src/lib/address-matcher")
 
   // ── Select candidates ──
@@ -190,9 +190,10 @@ async function main() {
     const match = fresh.deliveryAddress ? matchInvoiceToStore(fresh.deliveryAddress, ownerStores) : null
 
     const mathMismatches = findLineMathMismatches(fresh.lineItems)
+    const packAnomalies = findPackShapeAnomalies(fresh.lineItems)
 
     let nextStatus: "MATCHED" | "REVIEW" | "PENDING"
-    if (dateSuspect || mathMismatches.length > 0) nextStatus = "REVIEW"
+    if (dateSuspect || mathMismatches.length > 0 || packAnomalies.length > 0) nextStatus = "REVIEW"
     else if (match) nextStatus = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
     else nextStatus = "PENDING"
 
@@ -207,6 +208,12 @@ async function main() {
         `  ⚠ math mismatch line ${m.lineNumber} "${m.productName.slice(0, 45)}": ` +
         `${m.quantity} ${m.unit ?? ""} × $${m.unitPrice} = $${m.computed.toFixed(2)} vs ext $${m.extendedPrice.toFixed(2)} ` +
         `(implied qty ≈ ${m.impliedQuantity?.toFixed(2) ?? "n/a"})`
+      )
+    }
+    for (const a of packAnomalies) {
+      console.log(
+        `  ⚠ pack-shape line ${a.lineNumber} "${a.productName.slice(0, 45)}" ` +
+        `(${a.unit ?? "?"} ${a.packSize ?? "-"}×${a.unitSize ?? "-"} ${a.unitSizeUom ?? "-"}): ${a.reasons.join("; ")}`
       )
     }
 

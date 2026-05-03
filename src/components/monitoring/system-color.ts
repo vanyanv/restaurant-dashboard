@@ -1,6 +1,6 @@
 /** Subsystems shown on the command bridge. The order here is the order
  * they render in the system-health strip. */
-export const SYSTEMS = ["db", "vercel", "r2", "cache", "auth", "syncs"] as const
+export const SYSTEMS = ["db", "r2", "cache", "auth", "syncs"] as const
 export type System = (typeof SYSTEMS)[number]
 
 /** Per-system identity color. References the editorial ink tokens added
@@ -9,7 +9,6 @@ export type System = (typeof SYSTEMS)[number]
  * --ink-ledger / --ink-ochre / --accent regardless of system. */
 export const SYSTEM_INK: Record<System, string> = {
   db:     "var(--ink-stamp)",
-  vercel: "var(--ink-sepia)",
   r2:     "var(--ink-terracotta)",
   cache:  "var(--ink-ledger)",
   auth:   "var(--ink-plum)",
@@ -18,7 +17,6 @@ export const SYSTEM_INK: Record<System, string> = {
 
 export const SYSTEM_LABEL: Record<System, string> = {
   db:     "DB",
-  vercel: "VERCEL",
   r2:     "R2",
   cache:  "CACHE",
   auth:   "AUTH",
@@ -28,7 +26,6 @@ export const SYSTEM_LABEL: Record<System, string> = {
 /** Where each pill links on click. */
 export const SYSTEM_HREF: Record<System, string> = {
   db:     "/dashboard/monitoring/infrastructure#db",
-  vercel: "/dashboard/monitoring/infrastructure#vercel",
   r2:     "/dashboard/monitoring/infrastructure#r2",
   cache:  "/dashboard/monitoring/cache",
   auth:   "/dashboard/monitoring/people",

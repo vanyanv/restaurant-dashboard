@@ -53,17 +53,17 @@ async function main() {
   })
   await setCanonicalCostLocked(ctx, {
     name: "packer lettuce boston hydroponic",
-    recipeUnit: "each",
-    costPerRecipeUnit: 0.15,
-    reason: "Re-interpret as per-leaf (~15 leaves/head). Owner approved.",
+    recipeUnit: "leaf",
+    costPerRecipeUnit: 0.149,
+    reason: "Sysco 12-count case @ $26.89 = $2.24/head; 15 usable leaves/head → $0.149/leaf.",
   })
   const addLettuce = await upsertRecipe(ctx, {
     itemName: "Mod: Add Lettuce",
     category: "Modifier",
     isSellable: false,
-    notes: "Otter 'Add Lettuce' modifier. 0.5 leaf per use.",
+    notes: "Otter 'Add Lettuce' modifier. 1 leaf per use (Boston/Bibb hydroponic).",
     ingredients: [
-      { canonicalName: "packer lettuce boston hydroponic", quantity: 0.5, unit: "each", displayAs: "Lettuce (leaf)" },
+      { canonicalName: "packer lettuce boston hydroponic", quantity: 1, unit: "leaf", displayAs: "Lettuce (leaf)" },
     ],
   })
   await upsertRecipe(ctx, {
@@ -216,7 +216,7 @@ async function main() {
   // Run the seed so canonicals exist for these new SKUs + line items are FK-linked.
   {
     const { seedCanonicalIngredientsFromInvoices } = await import("../src/lib/canonical-ingredients")
-    const seedResult = await seedCanonicalIngredientsFromInvoices(ctx.ownerId)
+    const seedResult = await seedCanonicalIngredientsFromInvoices(ctx.ownerId, ctx.accountId)
     console.log(
       `\n  [seed] created ${seedResult.canonicalsCreated} canonicals, ${seedResult.skuMatchesCreated} sku matches, ${seedResult.aliasesCreated} aliases (${seedResult.skipped} skipped)`
     )
@@ -231,9 +231,9 @@ async function main() {
 
   await setCanonicalCostLocked(ctx, {
     name: "pickle chips sandwich cut 1/8\"",
-    recipeUnit: "each",
-    costPerRecipeUnit: 0.036,
-    reason: "Owner: 4 cases × ~1000 chips, $144 total → $0.036/chip.",
+    recipeUnit: "chip",
+    costPerRecipeUnit: 0.018,
+    reason: "Premier Deli 5-gal pail @ $36 / 2000 sandwich-cut chips = $0.018/chip.",
   })
 
   const addCheeseSlider = await upsertRecipe(ctx, {
@@ -271,7 +271,7 @@ async function main() {
     isSellable: false,
     notes: "Otter 'Add Pickle' modifier. 3 pickle chips per use (owner).",
     ingredients: [
-      { canonicalName: "pickle chips sandwich cut 1/8\"", quantity: 3, unit: "each", displayAs: "Pickle chips" },
+      { canonicalName: "pickle chips sandwich cut 1/8\"", quantity: 3, unit: "chip", displayAs: "Pickle chips" },
     ],
   })
 
@@ -281,7 +281,7 @@ async function main() {
     isSellable: false,
     notes: "Otter 'Extra Pickles' modifier. 1 extra pickle chip (owner).",
     ingredients: [
-      { canonicalName: "pickle chips sandwich cut 1/8\"", quantity: 1, unit: "each", displayAs: "Pickle chip (extra)" },
+      { canonicalName: "pickle chips sandwich cut 1/8\"", quantity: 1, unit: "chip", displayAs: "Pickle chip (extra)" },
     ],
   })
 
@@ -797,8 +797,8 @@ async function main() {
   await setCanonicalCostLocked(ctx, {
     name: "peppers whole yellow",
     recipeUnit: "each",
-    costPerRecipeUnit: 0.0814,
-    reason: "5-gal bucket = 600 chilies @ $48.85 → $0.0814/chili.",
+    costPerRecipeUnit: 0.0611,
+    reason: "5-gal bucket ≈ 800 chilies (owner-revised) @ $48.85 → $0.0611/chili.",
   })
 
   // Fix lid portion canonical: invoice extraction gave nonsense unit=oz. Use
@@ -871,7 +871,7 @@ async function main() {
     isSellable: false,
     notes: "Redefined: ~2.5 pickle chips in a 2.5 oz portion cup + lid. Same structure as Side of Yellow Chilies.",
     ingredients: [
-      { canonicalName: "pickle chips sandwich cut 1/8\"", quantity: 2.5, unit: "each", displayAs: "Pickle Chips" },
+      { canonicalName: "pickle chips sandwich cut 1/8\"", quantity: 2.5, unit: "chip", displayAs: "Pickle Chips" },
       { canonicalName: "cup portion plastic 2 oz clear", quantity: 1, unit: "each", displayAs: "2.5 oz Portion Cup" },
       { canonicalName: "lid portion plastic 1.5, 2, 2.5 oz", quantity: 1, unit: "each", displayAs: "2.5 oz Lid" },
     ],
@@ -1122,7 +1122,7 @@ async function upsertRecipe(
   }
 ): Promise<{ id: string; itemName: string }> {
   const existing = await ctx.prisma.recipe.findFirst({
-    where: { ownerId: ctx.ownerId, itemName: input.itemName, category: input.category },
+    where: { accountId: ctx.accountId, itemName: input.itemName, category: input.category },
     select: { id: true },
   })
 

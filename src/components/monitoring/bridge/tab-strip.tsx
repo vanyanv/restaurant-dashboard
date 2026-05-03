@@ -9,6 +9,7 @@ const TABS = [
   { href: "/dashboard/monitoring/infrastructure", label: "Infra",    match: (p: string) => p.startsWith("/dashboard/monitoring/infrastructure") },
   { href: "/dashboard/monitoring/people",         label: "People",   match: (p: string) => p.startsWith("/dashboard/monitoring/people") },
   { href: "/dashboard/monitoring/costs",          label: "Costs",    match: (p: string) => p.startsWith("/dashboard/monitoring/costs") },
+  { href: "/dashboard/monitoring/ingredient-audit", label: "Ingredients", match: (p: string) => p.startsWith("/dashboard/monitoring/ingredient-audit") },
   { href: "/dashboard/monitoring/activity",       label: "Activity", match: (p: string) => p.startsWith("/dashboard/monitoring/activity") },
   { href: "/dashboard/monitoring/cache",          label: "Cache",    match: (p: string) => p.startsWith("/dashboard/monitoring/cache") },
 ] as const

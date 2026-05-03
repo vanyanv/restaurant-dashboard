@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getDbSize } from "./db-stats"
 import { getCacheHitRateByDay } from "./queries"
-import { getLatestVercelSnapshot, type VercelUsageMetrics } from "./vercel-usage"
 import { getLatestR2Snapshot } from "./r2-stats"
 import { getLivePresence } from "./login-audit"
 import type { System } from "@/components/monitoring/system-color"
@@ -29,28 +28,6 @@ async function dbStatus(): Promise<SystemStatus> {
     headline: `${Math.round(size.pct)}%`,
     caption: `${fmtBytes(size.totalBytes)} / ${fmtBytes(size.capBytes)}`,
   }
-}
-
-async function vercelStatus(): Promise<SystemStatus> {
-  const snap = await getLatestVercelSnapshot()
-  if (!snap) {
-    return { system: "vercel", tone: "ok", headline: "—", caption: "no data yet" }
-  }
-  const metrics = snap.metrics as unknown as VercelUsageMetrics
-  let total = 0
-  let healthy = 0
-  let capped = 0
-  for (const q of Object.values(metrics)) {
-    if (q.used == null || q.limit == null || q.limit === 0) continue
-    total += 1
-    const pct = (q.used / q.limit) * 100
-    if (pct >= 100) capped += 1
-    if (pct < 70) healthy += 1
-  }
-  const tone = capped > 0 ? "danger" : healthy < total ? "warn" : "ok"
-  const headline =
-    total === 0 ? "—" : capped > 0 ? `${capped} CAP` : `${healthy}/${total} OK`
-  return { system: "vercel", tone, headline, caption: total === 0 ? "no data" : "current cycle" }
 }
 
 async function r2Status(): Promise<SystemStatus> {
@@ -114,7 +91,6 @@ async function syncsStatus(): Promise<SystemStatus> {
 export async function getAllSystemStatus(): Promise<SystemStatus[]> {
   return Promise.all([
     safe("db", dbStatus),
-    safe("vercel", vercelStatus),
     safe("r2", r2Status),
     safe("cache", cacheStatus),
     safe("auth", authStatus),

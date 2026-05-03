@@ -4,7 +4,6 @@ import { SYSTEM_INK } from "../system-color"
 
 const SYSTEM_COLOR_FOR_PILL: Record<BridgeEventRow["system"], string> = {
   db:     SYSTEM_INK.db,
-  vercel: SYSTEM_INK.vercel,
   r2:     SYSTEM_INK.r2,
   cache:  SYSTEM_INK.cache,
   auth:   SYSTEM_INK.auth,
