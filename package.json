@@ -14,6 +14,7 @@
     "perf:audit": "tsx scripts/perf-audit.ts",
     "perf:mobile-nav": "tsx scripts/mobile-transition-perf.ts",
     "eval:chat": "tsx scripts/eval-chat/run.ts",
+    "test": "vitest run",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -90,13 +91,15 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/expect": "^4.1.5",
     "babel-plugin-react-compiler": "^1.0.0",
     "libsodium-wrappers": "^0.8.2",
     "playwright": "^1.58.2",
     "shadcn": "^3.0.0",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   },
   "overrides": {
     "@hono/node-server": "1.19.14",

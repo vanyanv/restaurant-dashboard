@@ -18,6 +18,16 @@ export type OrdersSyncResult = {
   windowDays: number
 }
 
+export type DetailsDrainResult = {
+  storeId: string
+  pendingBefore: number
+  detailsFetched: number
+  detailsFailed: number
+  pendingAfter: number
+  olderThanDays: number
+  limit: number
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asString(v: any): string | null {
   if (v == null) return null
@@ -28,6 +38,61 @@ function asNumber(v: any): number {
   if (v == null) return 0
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Fetch GraphQL order details for one OtterOrder and atomically replace its
+ * line items + sub-items. Sets detailsFetchedAt on success. Returns true if
+ * the row was enriched, false if the API returned no payload.
+ *
+ * Used by both Phase 2 of runOrdersSync (windowed) and runDetailsDrain
+ * (historical backlog). The transaction is idempotent: deleteMany +
+ * createMany inside a single $transaction means a concurrent caller hitting
+ * the same orderId would just rewrite the same rows.
+ */
+async function fetchAndPersistDetails(
+  internalId: string,
+  otterOrderId: string,
+): Promise<boolean> {
+  const details = await fetchOrderDetails(otterOrderId)
+  if (!details) return false
+
+  await prisma.$transaction(async (tx) => {
+    await tx.otterOrderItem.deleteMany({ where: { orderId: internalId } })
+    for (const item of details.items) {
+      const created = await tx.otterOrderItem.create({
+        data: {
+          orderId: internalId,
+          skuId: item.skuId,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        },
+      })
+      if (item.subItems.length > 0) {
+        await tx.otterOrderSubItem.createMany({
+          data: item.subItems.map((si) => ({
+            orderItemId: created.id,
+            skuId: si.skuId,
+            name: si.name,
+            quantity: si.quantity,
+            price: si.price,
+            subHeader: si.subHeader,
+          })),
+        })
+      }
+    }
+    await tx.otterOrder.update({
+      where: { id: internalId },
+      data: {
+        detailsFetchedAt: new Date(),
+        customerName: details.details.customerName,
+        fulfillmentMode: details.details.fulfillmentMode ?? undefined,
+      },
+    })
+  })
+
+  return true
 }
 
 export async function runOrdersSync(
@@ -161,47 +226,9 @@ async function runOrdersSyncInner(
 
   const tasks = pending.map((o) => async () => {
     try {
-      const details = await fetchOrderDetails(o.otterOrderId)
-      if (!details) {
-        detailsFailed++
-        return
-      }
-      await prisma.$transaction(async (tx) => {
-        await tx.otterOrderItem.deleteMany({ where: { orderId: o.id } })
-        for (const item of details.items) {
-          const created = await tx.otterOrderItem.create({
-            data: {
-              orderId: o.id,
-              skuId: item.skuId,
-              name: item.name,
-              quantity: item.quantity,
-              price: item.price,
-            },
-          })
-          if (item.subItems.length > 0) {
-            await tx.otterOrderSubItem.createMany({
-              data: item.subItems.map((si) => ({
-                orderItemId: created.id,
-                skuId: si.skuId,
-                name: si.name,
-                quantity: si.quantity,
-                price: si.price,
-                subHeader: si.subHeader,
-              })),
-            })
-          }
-        }
-        await tx.otterOrder.update({
-          where: { id: o.id },
-          data: {
-            detailsFetchedAt: new Date(),
-            customerName: details.details.customerName,
-            fulfillmentMode:
-              details.details.fulfillmentMode ?? undefined,
-          },
-        })
-      })
-      detailsFetched++
+      const ok = await fetchAndPersistDetails(o.id, o.otterOrderId)
+      if (ok) detailsFetched++
+      else detailsFailed++
     } catch (err) {
       console.error(`OrderDetails failed for ${o.otterOrderId}:`, err)
       detailsFailed++
@@ -224,4 +251,100 @@ async function runOrdersSyncInner(
     pendingDetails: stillPending,
     windowDays: days,
   }
+}
+
+/**
+ * Drain historical OtterOrder rows whose `detailsFetchedAt` is null and that
+ * fall OUTSIDE the windowed Phase-2 sync's lookback (default >3 days old).
+ * Targets the long tail of orders that were headered but never enriched —
+ * mostly Jan/Apr 2026 in the current dataset.
+ *
+ * Scoped to one store so matrix workflows can drain stores in parallel.
+ * The "older than 3 days" cutoff avoids fighting the windowed Phase 2 over
+ * the same row.
+ */
+export async function runDetailsDrain(
+  storeId: string,
+  opts?: {
+    limit?: number
+    olderThanDays?: number
+    concurrency?: number
+    triggeredBy?: "cron" | "manual" | "github-actions" | "internal"
+    metadata?: Record<string, unknown>
+  },
+): Promise<DetailsDrainResult> {
+  const limit = opts?.limit ?? 1500
+  const olderThanDays = opts?.olderThanDays ?? 3
+  const concurrency = opts?.concurrency ?? 5
+  const triggeredBy = opts?.triggeredBy ?? "manual"
+
+  return withJobRun(
+    "otter.orders.drain",
+    {
+      storeId,
+      triggeredBy,
+      metadata: {
+        limit,
+        olderThanDays,
+        concurrency,
+        ...(opts?.metadata ?? {}),
+      },
+    },
+    async ({ addRows }) => {
+      const cutoff = new Date()
+      cutoff.setUTCHours(0, 0, 0, 0)
+      cutoff.setUTCDate(cutoff.getUTCDate() - olderThanDays)
+
+      const pendingBefore = await prisma.otterOrder.count({
+        where: { storeId, detailsFetchedAt: null, referenceTimeLocal: { lt: cutoff } },
+      })
+
+      // Process oldest first so the long tail of Jan/Apr orders gets drained
+      // before more recent ones that the windowed sync will pick up anyway.
+      const pending = await prisma.otterOrder.findMany({
+        where: {
+          storeId,
+          detailsFetchedAt: null,
+          referenceTimeLocal: { lt: cutoff },
+        },
+        select: { id: true, otterOrderId: true },
+        orderBy: { referenceTimeLocal: "asc" },
+        take: limit,
+      })
+
+      let detailsFetched = 0
+      let detailsFailed = 0
+
+      const tasks = pending.map((o) => async () => {
+        try {
+          const ok = await fetchAndPersistDetails(o.id, o.otterOrderId)
+          if (ok) detailsFetched++
+          else detailsFailed++
+        } catch (err) {
+          console.error(
+            `[orders.drain ${storeId}] OrderDetails failed for ${o.otterOrderId}:`,
+            err,
+          )
+          detailsFailed++
+        }
+      })
+
+      await withConcurrency(tasks, concurrency)
+      addRows(detailsFetched)
+
+      const pendingAfter = await prisma.otterOrder.count({
+        where: { storeId, detailsFetchedAt: null, referenceTimeLocal: { lt: cutoff } },
+      })
+
+      return {
+        storeId,
+        pendingBefore,
+        detailsFetched,
+        detailsFailed,
+        pendingAfter,
+        olderThanDays,
+        limit,
+      }
+    },
+  )
 }

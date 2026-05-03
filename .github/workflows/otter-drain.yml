@@ -1,0 +1,73 @@
+name: Otter Order-Details Drain (daily, per-store)
+on:
+  schedule:
+    # Off-hours daily at 09:15 UTC (~02:15 LA). Drains the historical backlog
+    # of OtterOrder rows whose detailsFetchedAt is null and that fall outside
+    # the regular orders-sync window. Capped at 1500 rows per store per run;
+    # large backlogs (e.g. the 5,616 Jan/Apr 2026 rows) take ~4 days to clear
+    # at this cadence — manual workflow_dispatch with a higher limit can
+    # accelerate the initial drain.
+    - cron: '15 9 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Max rows per store per run (default 1500)'
+        default: '1500'
+      olderThanDays:
+        description: 'Only drain orders older than N days (default 3)'
+        default: '3'
+
+concurrency:
+  group: otter-drain
+  cancel-in-progress: false
+
+jobs:
+  list-stores:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.fetch.outputs.ids }}
+    steps:
+      - name: GET /api/cron/otter/stores
+        id: fetch
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          payload=$(curl -fsSL "$APP_URL/api/cron/otter/stores" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 30)
+          ids=$(echo "$payload" | jq -c '[.stores[].storeId]')
+          echo "Found stores: $ids"
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+
+  drain:
+    needs: list-stores
+    if: needs.list-stores.outputs.ids != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      # max-parallel: 1 — fetchOrderDetails hits Otter's GraphQL endpoint
+      # which rate-limits per-token. A single store's drain runs ~5 concurrent
+      # requests internally; running multiple stores in parallel risks 429s.
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Drain order details for store ${{ matrix.storeId }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OTTER_JWT: ${{ secrets.OTTER_JWT }}
+          STORE_ID: ${{ matrix.storeId }}
+          LIMIT: ${{ github.event.inputs.limit || '1500' }}
+          OLDER_THAN_DAYS: ${{ github.event.inputs.olderThanDays || '3' }}
+        run: |
+          npx tsx scripts/drain-otter-order-details.ts \
+            --store-id="$STORE_ID" \
+            --limit="$LIMIT" \
+            --older-than-days="$OLDER_THAN_DAYS"

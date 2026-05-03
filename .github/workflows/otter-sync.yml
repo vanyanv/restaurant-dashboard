@@ -1,4 +1,4 @@
-name: Otter Daily Sync
+name: Otter Daily Sync (per-store matrix)
 on:
   schedule:
     # Every 2 hours. Bumped from every 6h to keep daily/menu totals fresh
@@ -6,14 +6,47 @@ on:
     # prevents pile-up if a run drags.
     - cron: '0 */2 * * *'
   workflow_dispatch:
+    inputs:
+      lookbackDays:
+        description: 'Days to backfill (default 3)'
+        default: '3'
 
 concurrency:
   group: otter-sync
   cancel-in-progress: false
 
 jobs:
-  sync:
+  list-stores:
     runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.fetch.outputs.ids }}
+    steps:
+      - name: GET /api/cron/otter/stores
+        id: fetch
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          payload=$(curl -fsSL "$APP_URL/api/cron/otter/stores" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 30)
+          ids=$(echo "$payload" | jq -c '[.stores[].storeId]')
+          echo "Found stores: $ids"
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: list-stores
+    if: needs.list-stores.outputs.ids != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      # max-parallel: 2 keeps Otter rate-limit pressure low (a fresh shard
+      # may hit getOtterJwt() if OTTER_JWT secret is stale). fail-fast: false
+      # so one bad store can't block the others — that's the whole reason
+      # we matrixed this.
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,7 +54,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx tsx scripts/backfill-otter.ts 3
+      - name: Backfill ${{ github.event.inputs.lookbackDays || '3' }}d for store ${{ matrix.storeId }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OTTER_JWT: ${{ secrets.OTTER_JWT }}
+          STORE_ID: ${{ matrix.storeId }}
+          LOOKBACK: ${{ github.event.inputs.lookbackDays || '3' }}
+        run: |
+          npx tsx scripts/backfill-otter.ts "$LOOKBACK" --store-id="$STORE_ID"

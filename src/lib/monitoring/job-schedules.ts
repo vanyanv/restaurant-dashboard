@@ -10,7 +10,9 @@ export type JobSchedule = {
 export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   "otter.metrics.sync":     { cadenceMinutes: 60 * 6,  description: "every 6h" },
   "otter.orders.sync":      { cadenceMinutes: 60 * 6,  description: "every 6h" },
+  "otter.orders.drain":     { cadenceMinutes: 60 * 24, description: "daily" },
   "otter.hourly.sync":      { cadenceMinutes: 60,      description: "hourly" },
+  "otter.stores":           { cadenceMinutes: 60 * 24, description: "daily" },
   "invoices.email.sync":    { cadenceMinutes: 60 * 6,  description: "every 6h" },
   "yelp.sync":              { cadenceMinutes: 60 * 24, description: "daily" },
   "cogs.sweep":             { cadenceMinutes: 60 * 24, description: "daily" },
