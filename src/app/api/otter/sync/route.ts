@@ -3,65 +3,16 @@ import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import {
-  queryMetrics,
-  queryRatings,
-  buildDailySyncBody,
-  buildMenuCategoryBatchBody,
-  buildMenuItemSyncBody,
-  buildModifierSyncBody,
-  buildRatingsBody,
-  getDateRange,
-  withConcurrency,
-} from "@/lib/otter"
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { bustTags } from "@/lib/cache/cached"
-import { withJobRun } from "@/lib/monitoring/job-run"
+import {
+  runMetricsSyncForStore,
+  type MetricsSyncResult,
+  type ProgressEmitter,
+} from "@/lib/otter-metrics-sync"
 
 export const maxDuration = 60
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type OtterRow = Record<string, any>
-
-type ProgressEmitter = (event: SyncProgressEvent) => void
-
-const PHASE_WEIGHTS = { daily: 0.20, categories: 0.15, items: 0.28, modifiers: 0.18, ratings: 0.14, cogs: 0.05 } as const
-
-function computeTotalProgress(dailyPct: number, categoryPct: number, itemPct: number, modifierPct: number = 0, ratingsPct: number = 0, cogsPct: number = 0): number {
-  return Math.round(
-    dailyPct * PHASE_WEIGHTS.daily +
-    categoryPct * PHASE_WEIGHTS.categories +
-    itemPct * PHASE_WEIGHTS.items +
-    modifierPct * PHASE_WEIGHTS.modifiers +
-    ratingsPct * PHASE_WEIGHTS.ratings +
-    cogsPct * PHASE_WEIGHTS.cogs
-  )
-}
-
-type DailyFields = Record<string, number | null>
-type DailyRecord = { storeId: string; date: Date; platform: string; paymentMethod: string; fields: DailyFields }
-
-/** Merge duplicate (storeId, date, platform, paymentMethod) records so collisions
- *  on the unique index don't lose fields. For each numeric field, sum non-null
- *  values across the group; keep null only when every duplicate is null. */
-function mergeDailyRecords(records: DailyRecord[]): DailyRecord[] {
-  const byKey = new Map<string, DailyRecord>()
-  for (const rec of records) {
-    const key = `${rec.storeId}|${rec.date.toISOString()}|${rec.platform}|${rec.paymentMethod}`
-    const existing = byKey.get(key)
-    if (!existing) {
-      byKey.set(key, { ...rec, fields: { ...rec.fields } })
-      continue
-    }
-    for (const [k, v] of Object.entries(rec.fields)) {
-      const cur = existing.fields[k]
-      if (v == null) continue
-      existing.fields[k] = cur == null ? v : cur + v
-    }
-  }
-  return [...byKey.values()]
-}
 
 interface SyncResult {
   message: string
@@ -80,559 +31,193 @@ interface SyncResult {
   storesProcessed: number
 }
 
-async function runSync(emit: ProgressEmitter): Promise<SyncResult> {
-  // Fetch all configured Otter stores
+const EMPTY_COUNTS = {
+  daily: 0,
+  categories: 0,
+  items: 0,
+  modifiers: 0,
+  ratings: 0,
+  cogs: 0,
+}
+
+async function runSyncAllStores(
+  emit: ProgressEmitter,
+  triggeredBy: "cron" | "manual",
+): Promise<SyncResult> {
   const otterStores = await prisma.otterStore.findMany({
-    include: { store: { select: { id: true, name: true, isActive: true, accountId: true } } },
+    include: { store: { select: { id: true, name: true, isActive: true } } },
   })
 
   if (otterStores.length === 0) {
+    emit({
+      phase: "complete",
+      status: "done",
+      totalProgress: 100,
+      detail: "No Otter stores configured",
+      counts: { ...EMPTY_COUNTS },
+    })
     return {
       message: "No Otter stores configured",
-      synced: 0, failed: 0,
-      categorySynced: 0, categoryFailed: 0,
-      itemSynced: 0, itemFailed: 0,
-      modifierSynced: 0, modifierFailed: 0,
-      ratingsSynced: 0, ratingsFailed: 0,
-      cogsDaysProcessed: 0, cogsRowsWritten: 0,
+      synced: 0,
+      failed: 0,
+      categorySynced: 0,
+      categoryFailed: 0,
+      itemSynced: 0,
+      itemFailed: 0,
+      modifierSynced: 0,
+      modifierFailed: 0,
+      ratingsSynced: 0,
+      ratingsFailed: 0,
+      cogsDaysProcessed: 0,
+      cogsRowsWritten: 0,
       storesProcessed: 0,
     }
   }
 
   const activeOtterStores = otterStores.filter((os) => os.store.isActive)
-  const otterStoreIds = activeOtterStores.map((os) => os.otterStoreId)
 
-  // 3-day lookback to catch late-arriving platform adjustments. Use UTC day
-  // boundaries because OtterDailySummary.date is stored at UTC midnight and
-  // the downstream API expects UTC ISO bounds.
-  const endDate = new Date()
-  endDate.setUTCHours(23, 59, 59, 999)
-  const startDate = new Date()
-  startDate.setUTCDate(startDate.getUTCDate() - 3)
-  startDate.setUTCHours(0, 0, 0, 0)
-
-  const otterToInternal = new Map<string, string>(
-    activeOtterStores.map((os) => [os.otterStoreId, os.storeId])
-  )
-
-  // Group Otter UUIDs by internal storeId (multiple UUIDs may map to one store)
+  // Group Otter UUIDs by internal storeId (multiple UUIDs may map to one store).
   const storeGroups = new Map<string, string[]>()
   for (const os of activeOtterStores) {
     const uuids = storeGroups.get(os.storeId) ?? []
     uuids.push(os.otterStoreId)
     storeGroups.set(os.storeId, uuids)
   }
+  const storeIds = [...storeGroups.keys()]
+  const numStores = storeIds.length
 
-  const days = getDateRange(startDate, endDate)
-  const counts = { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0, cogs: 0 }
+  // 3-day rolling window, UTC day boundaries to match downstream API +
+  // OtterDailySummary.date (stored at UTC midnight).
+  const windowEnd = new Date()
+  windowEnd.setUTCHours(23, 59, 59, 999)
+  const windowStart = new Date()
+  windowStart.setUTCDate(windowStart.getUTCDate() - 3)
+  windowStart.setUTCHours(0, 0, 0, 0)
 
-  // ─── Phase 1: Daily summary sync (1 API call) ───
-  emit({
-    phase: "daily", status: "fetching", totalProgress: 0,
-    detail: "Fetching daily summaries...", counts,
-  })
+  const aggregateCounts = { ...EMPTY_COUNTS }
+  const totals = {
+    synced: 0,
+    failed: 0,
+    categorySynced: 0,
+    categoryFailed: 0,
+    itemSynced: 0,
+    itemFailed: 0,
+    modifierSynced: 0,
+    modifierFailed: 0,
+    ratingsSynced: 0,
+    ratingsFailed: 0,
+  }
 
-  const body = buildDailySyncBody(otterStoreIds, startDate, endDate)
-  const rows = await queryMetrics(body)
+  for (let storeIdx = 0; storeIdx < storeIds.length; storeIdx++) {
+    const sid = storeIds[storeIdx]
+    const uuids = storeGroups.get(sid) ?? []
 
-  let synced = 0
-  let failed = 0
-
-  const rawRecords = rows
-    .filter((row: OtterRow) => {
-      const otterStoreId = row["store"] as string | null
-      return otterStoreId && otterToInternal.has(otterStoreId) && row["eod_date_with_timezone"]
-    })
-    .map((row: OtterRow) => {
-      const storeId = otterToInternal.get(row["store"] as string)!
-      const date = new Date(row["eod_date_with_timezone"] as string)
-      const platform = (row["pos_summary_ofo"] as string | null) ?? "unknown"
-      const paymentMethod = (row["multi_value_pos_payment_method"] as string | null) ?? "N/A"
-      const isFP = platform === "css-pos" || platform === "bnm-web"
-      const orderCount = (row["order_count"] as number | null) ?? null
-
-      const fields = {
-        fpGrossSales: row["fp_sales_financials_gross_sales"] as number | null,
-        fpNetSales: row["fp_sales_financials_net_sales"] as number | null,
-        fpDiscounts: row["fp_sales_financials_discounts"] as number | null,
-        fpFees: row["fp_sales_financials_fees"] as number | null,
-        fpLostRevenue: row["fp_sales_financials_lost_revenue"] as number | null,
-        fpTaxCollected: row["fp_sales_financials_tax_collected"] as number | null,
-        fpTaxRemitted: row["fp_sales_financials_tax_remitted"] as number | null,
-        fpTips: row["fp_sales_financials_tips"] as number | null,
-        fpServiceCharges: row["fp_sales_financials_service_charges"] as number | null,
-        fpLoyalty: row["fp_sales_financials_loyalty"] as number | null,
-        tpGrossSales: row["third_party_gross_sales"] as number | null,
-        tpNetSales: row["third_party_net_sales"] as number | null,
-        tpFees: row["third_party_fees"] as number | null,
-        tpTaxCollected: row["third_party_tax_collected"] as number | null,
-        tpTaxRemitted: row["third_party_tax_remitted"] as number | null,
-        tpDiscounts: row["third_party_discounts"] as number | null,
-        tpRefundsAdjustments: row["third_party_refunds_adjustments"] as number | null,
-        tpServiceCharges: row["third_party_service_charges"] as number | null,
-        tpTipForRestaurant: row["third_party_tip_for_restaurant"] as number | null,
-        tpLoyaltyDiscount: row["third_party_loyalty_discount"] as number | null,
-        tillPaidIn: row["enriched_till_report_paid_in"] as number | null,
-        tillPaidOut: row["enriched_till_report_paid_out"] as number | null,
-        fpOrderCount: isFP ? orderCount : null,
-        tpOrderCount: isFP ? null : orderCount,
+    const wrapEmit: ProgressEmitter = (event) => {
+      const globalProgress =
+        numStores > 0
+          ? Math.round((storeIdx * 100 + event.totalProgress) / numStores)
+          : 100
+      // Show per-store counts on top of running aggregate so the UI sees
+      // numbers tick up as stores complete (instead of resetting per store).
+      const liveCounts = {
+        daily: aggregateCounts.daily + event.counts.daily,
+        categories: aggregateCounts.categories + event.counts.categories,
+        items: aggregateCounts.items + event.counts.items,
+        modifiers: aggregateCounts.modifiers + event.counts.modifiers,
+        ratings: aggregateCounts.ratings + event.counts.ratings,
+        cogs: aggregateCounts.cogs,
       }
-
-      return { storeId, date, platform, paymentMethod, fields }
-    })
-
-  // Otter sometimes returns multiple rows per (store, date, platform, paymentMethod)
-  // — e.g. css-pos CASH has one "sales" row and one "till session" row that
-  // share the unique key. Upserting them sequentially loses data to the last-write.
-  // Merge by key: sum numeric fields across duplicates (nulls treated as 0, but only
-  // kept null when every duplicate's value is null).
-  const dailyRecords = mergeDailyRecords(rawRecords)
-
-  emit({
-    phase: "daily", status: "writing", totalProgress: computeTotalProgress(10, 0, 0),
-    detail: `Writing ${dailyRecords.length} daily records...`, counts,
-  })
-
-  for (let i = 0; i < dailyRecords.length; i += 50) {
-    const batch = dailyRecords.slice(i, i + 50)
-    try {
-      await prisma.$transaction(
-        batch.map(({ storeId, date, platform, paymentMethod, fields }) =>
-          prisma.otterDailySummary.upsert({
-            where: {
-              storeId_date_platform_paymentMethod: { storeId, date, platform, paymentMethod },
-            },
-            create: { storeId, date, platform, paymentMethod, ...fields },
-            update: fields,
-          })
-        )
-      )
-      synced += batch.length
-      counts.daily = synced
-    } catch (err) {
-      console.error(`Failed batch of ${batch.length} daily upserts at offset ${i}:`, err)
-      failed += batch.length
+      emit({
+        phase: event.phase,
+        status: event.status,
+        totalProgress: globalProgress,
+        detail: event.detail,
+        counts: liveCounts,
+        error: event.error,
+      })
     }
-    const phasePct = dailyRecords.length > 0
-      ? 10 + ((i + batch.length) / dailyRecords.length) * 90
-      : 100
-    emit({
-      phase: "daily", status: "writing",
-      totalProgress: computeTotalProgress(phasePct, 0, 0),
-      detail: `Writing daily records (${Math.min(i + 50, dailyRecords.length)}/${dailyRecords.length})...`,
-      counts,
-    })
+
+    let result: MetricsSyncResult
+    try {
+      result = await runMetricsSyncForStore(sid, uuids, windowStart, windowEnd, {
+        triggeredBy,
+        includeRatings: true,
+        onProgress: wrapEmit,
+      })
+    } catch (err) {
+      console.error(`[otter.metrics.sync] store ${sid} failed:`, err)
+      // Don't abort the loop on a single store's failure — continue with the
+      // others so one bad store can't lock out the dashboard. Per-store
+      // JobRun row already captured the FAILURE inside the runner.
+      continue
+    }
+
+    totals.synced += result.daily.synced
+    totals.failed += result.daily.failed
+    totals.categorySynced += result.categories.synced
+    totals.categoryFailed += result.categories.failed
+    totals.itemSynced += result.items.synced
+    totals.itemFailed += result.items.failed
+    totals.modifierSynced += result.modifiers.synced
+    totals.modifierFailed += result.modifiers.failed
+    totals.ratingsSynced += result.ratings.synced
+    totals.ratingsFailed += result.ratings.failed
+
+    aggregateCounts.daily += result.daily.synced
+    aggregateCounts.categories += result.categories.synced
+    aggregateCounts.items += result.items.synced
+    aggregateCounts.modifiers += result.modifiers.synced
+    aggregateCounts.ratings += result.ratings.synced
   }
 
+  // COGS materialization runs on its own cron schedule — keep the phase
+  // event so SSE consumers see the same shape they always have.
   emit({
-    phase: "daily", status: "done", totalProgress: computeTotalProgress(100, 0, 0),
-    detail: `${synced} daily records synced`, counts,
-  })
-
-  // ─── Phase 2: Menu categories (1 API call per day, all stores via store groupBy) ───
-  emit({
-    phase: "categories", status: "fetching",
-    totalProgress: computeTotalProgress(100, 0, 0),
-    detail: "Fetching menu categories...", counts,
-  })
-
-  let categorySynced = 0
-  let categoryFailed = 0
-
-  const categoryTasks = days.map((day) => () =>
-    queryMetrics(buildMenuCategoryBatchBody(otterStoreIds, day))
-      .then((categoryRows: OtterRow[]) => ({ day, rows: categoryRows }))
-      .catch((err: unknown) => {
-        console.error(`Menu category sync error for ${day.toISOString().slice(0, 10)}:`, err)
-        return { day, rows: [] as OtterRow[] }
-      })
-  )
-
-  const categoryResults = await withConcurrency(categoryTasks, 5, (completed, total) => {
-    const fetchPct = (completed / total) * 40
-    emit({
-      phase: "categories", status: "fetching",
-      totalProgress: computeTotalProgress(100, fetchPct, 0),
-      detail: `Fetching categories (${completed}/${total} days)...`, counts,
-    })
-  })
-
-  const categoryRecords = categoryResults.flatMap(({ day, rows: categoryRows }) => {
-    const date = new Date(day)
-    date.setUTCHours(0, 0, 0, 0)
-
-    return categoryRows
-      .filter((row: OtterRow) => {
-        const otterStoreId = row["store"] as string | null
-        return otterStoreId && otterToInternal.has(otterStoreId)
-      })
-      .map((row: OtterRow) => {
-        const storeId = otterToInternal.get(row["store"] as string)!
-        const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-        const data = {
-          fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-          fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-          fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-          tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-          tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-          tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-        }
-        return { storeId, date, category, data }
-      })
-  })
-
-  for (let i = 0; i < categoryRecords.length; i += 50) {
-    const batch = categoryRecords.slice(i, i + 50)
-    try {
-      await prisma.$transaction(
-        batch.map(({ storeId, date, category, data }) =>
-          prisma.otterMenuCategory.upsert({
-            where: { storeId_date_category: { storeId, date, category } },
-            create: { storeId, date, category, ...data },
-            update: data,
-          })
-        )
-      )
-      categorySynced += batch.length
-      counts.categories = categorySynced
-    } catch (err) {
-      console.error(`Failed batch of ${batch.length} category upserts:`, err)
-      categoryFailed += batch.length
-    }
-    const phasePct = categoryRecords.length > 0
-      ? 40 + ((i + batch.length) / categoryRecords.length) * 60
-      : 100
-    emit({
-      phase: "categories", status: "writing",
-      totalProgress: computeTotalProgress(100, phasePct, 0),
-      detail: `Writing categories (${Math.min(i + 50, categoryRecords.length)}/${categoryRecords.length})...`,
-      counts,
-    })
-  }
-
-  emit({
-    phase: "categories", status: "done",
-    totalProgress: computeTotalProgress(100, 100, 0),
-    detail: `${categorySynced} categories synced`, counts,
-  })
-
-  // ─── Phase 3: Menu items (per-store per-day, store groupBy not supported) ───
-  emit({
-    phase: "items", status: "fetching",
-    totalProgress: computeTotalProgress(100, 100, 0),
-    detail: "Fetching menu items...", counts,
-  })
-
-  const itemTasks = days.flatMap((day) =>
-    [...storeGroups.entries()].map(([storeId, uuids]) => () =>
-      queryMetrics(buildMenuItemSyncBody(uuids, day))
-        .then((itemRows: OtterRow[]) => ({ day, storeId, rows: itemRows }))
-        .catch((err: unknown) => {
-          console.error(`Menu item sync error for ${day.toISOString().slice(0, 10)} store ${storeId}:`, err)
-          return { day, storeId, rows: [] as OtterRow[] }
-        })
-    )
-  )
-
-  const itemResults = await withConcurrency(itemTasks, 5, (completed, total) => {
-    const fetchPct = (completed / total) * 40
-    emit({
-      phase: "items", status: "fetching",
-      totalProgress: computeTotalProgress(100, 100, fetchPct),
-      detail: `Fetching items (${completed}/${total} store-days)...`, counts,
-    })
-  })
-
-  let itemSynced = 0
-  let itemFailed = 0
-
-  const itemRecords = itemResults.flatMap(({ day, storeId, rows: itemRows }) => {
-    const date = new Date(day)
-    date.setUTCHours(0, 0, 0, 0)
-
-    return itemRows.map((row: OtterRow) => {
-      const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-      const itemName = (row["item"] as string | null) ?? "Unknown"
-      const data = {
-        fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-        fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-        fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-        tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-        tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-        tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-      }
-      return { storeId, date, category, itemName, data }
-    })
-  })
-
-  for (let i = 0; i < itemRecords.length; i += 50) {
-    const batch = itemRecords.slice(i, i + 50)
-    try {
-      await prisma.$transaction(
-        batch.map(({ storeId, date, category, itemName, data }) =>
-          prisma.otterMenuItem.upsert({
-            where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier: false } },
-            create: { storeId, date, category, itemName, isModifier: false, ...data },
-            update: data,
-          })
-        )
-      )
-      itemSynced += batch.length
-      counts.items = itemSynced
-    } catch (err) {
-      console.error(`Failed batch of ${batch.length} item upserts:`, err)
-      itemFailed += batch.length
-    }
-    const phasePct = itemRecords.length > 0
-      ? 40 + ((i + batch.length) / itemRecords.length) * 60
-      : 100
-    emit({
-      phase: "items", status: "writing",
-      totalProgress: computeTotalProgress(100, 100, phasePct),
-      detail: `Writing items (${Math.min(i + 50, itemRecords.length)}/${itemRecords.length})...`,
-      counts,
-    })
-  }
-
-  // ─── Phase 4: Modifiers (per-store per-day, store groupBy not supported) ───
-  emit({
-    phase: "modifiers", status: "fetching",
-    totalProgress: computeTotalProgress(100, 100, 100, 0),
-    detail: "Fetching modifiers...", counts,
-  })
-
-  const modifierTasks = days.flatMap((day) =>
-    [...storeGroups.entries()].map(([storeId, uuids]) => () =>
-      queryMetrics(buildModifierSyncBody(uuids, day))
-        .then((modRows: OtterRow[]) => ({ day, storeId, rows: modRows }))
-        .catch((err: unknown) => {
-          console.error(`Modifier sync error for ${day.toISOString().slice(0, 10)} store ${storeId}:`, err)
-          return { day, storeId, rows: [] as OtterRow[] }
-        })
-    )
-  )
-
-  const modifierResults = await withConcurrency(modifierTasks, 5, (completed, total) => {
-    const fetchPct = (completed / total) * 40
-    emit({
-      phase: "modifiers", status: "fetching",
-      totalProgress: computeTotalProgress(100, 100, 100, fetchPct),
-      detail: `Fetching modifiers (${completed}/${total} store-days)...`, counts,
-    })
-  })
-
-  let modifierSynced = 0
-  let modifierFailed = 0
-
-  const modifierRecords = modifierResults.flatMap(({ day, storeId, rows: modRows }) => {
-    const date = new Date(day)
-    date.setUTCHours(0, 0, 0, 0)
-
-    return modRows.map((row: OtterRow) => {
-      const category = (row["menu_parent_entity_name"] as string | null) ?? "Uncategorized"
-      const itemName = (row["item"] as string | null) ?? "Unknown"
-      const data = {
-        fpQuantitySold: (row["fp_order_items_quantity_sold"] as number) ?? 0,
-        fpTotalInclModifiers: (row["fp_order_items_total_include_modifiers"] as number) ?? 0,
-        fpTotalSales: (row["fp_order_items_total_sales"] as number) ?? 0,
-        tpQuantitySold: (row["third_party_item_quantity_sold"] as number) ?? 0,
-        tpTotalInclModifiers: (row["third_party_item_total_include_modifiers"] as number) ?? 0,
-        tpTotalSales: (row["third_party_item_total_sales"] as number) ?? 0,
-      }
-      return { storeId, date, category, itemName, data }
-    })
-  })
-
-  for (let i = 0; i < modifierRecords.length; i += 50) {
-    const batch = modifierRecords.slice(i, i + 50)
-    try {
-      await prisma.$transaction(
-        batch.map(({ storeId, date, category, itemName, data }) =>
-          prisma.otterMenuItem.upsert({
-            where: { storeId_date_category_itemName_isModifier: { storeId, date, category, itemName, isModifier: true } },
-            create: { storeId, date, category, itemName, isModifier: true, ...data },
-            update: data,
-          })
-        )
-      )
-      modifierSynced += batch.length
-      counts.modifiers = modifierSynced
-    } catch (err) {
-      console.error(`Failed batch of ${batch.length} modifier upserts:`, err)
-      modifierFailed += batch.length
-    }
-    const phasePct = modifierRecords.length > 0
-      ? 40 + ((i + batch.length) / modifierRecords.length) * 60
-      : 100
-    emit({
-      phase: "modifiers", status: "writing",
-      totalProgress: computeTotalProgress(100, 100, 100, phasePct),
-      detail: `Writing modifiers (${Math.min(i + 50, modifierRecords.length)}/${modifierRecords.length})...`,
-      counts,
-    })
-  }
-
-  // ─── Phase 5: Ratings (per-store, 21-day lookback) ───
-  emit({
-    phase: "ratings", status: "fetching",
-    totalProgress: computeTotalProgress(100, 100, 100, 100, 0),
-    detail: "Fetching customer ratings...", counts,
-  })
-
-  // Ratings use a wider lookback since reviews trickle in slowly. UTC day
-  // boundaries to match the rest of the sync.
-  const ratingsEnd = new Date()
-  ratingsEnd.setUTCHours(23, 59, 59, 999)
-  const ratingsStart = new Date()
-  ratingsStart.setUTCDate(ratingsStart.getUTCDate() - 21)
-  ratingsStart.setUTCHours(0, 0, 0, 0)
-
-  let ratingsSynced = 0
-  let ratingsFailed = 0
-
-  const ratingsTasks = [...storeGroups.entries()].map(([storeId, uuids]) => () =>
-    queryRatings(buildRatingsBody(uuids, ratingsStart, ratingsEnd))
-      .then((ratingRows: OtterRow[]) => ({ storeId, rows: ratingRows }))
-      .catch((err: unknown) => {
-        console.error(`Ratings sync error for store ${storeId}:`, err)
-        return { storeId, rows: [] as OtterRow[] }
-      })
-  )
-
-  const ratingsResults = await withConcurrency(ratingsTasks, 3, (completed, total) => {
-    const fetchPct = (completed / total) * 40
-    emit({
-      phase: "ratings", status: "fetching",
-      totalProgress: computeTotalProgress(100, 100, 100, 100, fetchPct),
-      detail: `Fetching ratings (${completed}/${total} stores)...`, counts,
-    })
-  })
-
-  const ratingRecords = ratingsResults.flatMap(({ storeId, rows: ratingRows }) =>
-    ratingRows
-      .filter((row: OtterRow) => row["external_review_id"] && row["order_rating"] != null)
-      .map((row: OtterRow) => {
-        const reviewedAtRaw = row["order_reviewed_at"]
-        const reviewedAt = typeof reviewedAtRaw === "number"
-          ? new Date(reviewedAtRaw)
-          : new Date(String(reviewedAtRaw))
-
-        return {
-          storeId,
-          externalReviewId: String(row["external_review_id"]),
-          data: {
-            brandName: (row["brand_name"] as string) ?? "",
-            facilityName: (row["facility_name"] as string) ?? "",
-            storeName: (row["store_name"] as string) ?? "",
-            reviewedAt,
-            platform: (row["ofo_slug"] as string) ?? "unknown",
-            reviewText: (row["order_review_full_text"] as string) || null,
-            rating: Number(row["order_rating"]),
-            externalOrderId: row["external_order_id"] ? String(row["external_order_id"]) : null,
-            orderItemNames: (row["order_items_names"] as string) || null,
-          },
-        }
-      })
-  )
-
-  emit({
-    phase: "ratings", status: "writing",
-    totalProgress: computeTotalProgress(100, 100, 100, 100, 40),
-    detail: `Writing ${ratingRecords.length} ratings...`, counts,
-  })
-
-  for (let i = 0; i < ratingRecords.length; i += 50) {
-    const batch = ratingRecords.slice(i, i + 50)
-    try {
-      await prisma.$transaction(
-        batch.map(({ storeId: sid, externalReviewId, data: rData }) =>
-          prisma.otterRating.upsert({
-            where: {
-              storeId_externalReviewId: { storeId: sid, externalReviewId },
-            },
-            create: { storeId: sid, externalReviewId, ...rData },
-            update: rData,
-          })
-        )
-      )
-      ratingsSynced += batch.length
-      counts.ratings = ratingsSynced
-    } catch (err) {
-      console.error(`Failed batch of ${batch.length} rating upserts:`, err)
-      ratingsFailed += batch.length
-    }
-    const phasePct = ratingRecords.length > 0
-      ? 40 + ((i + batch.length) / ratingRecords.length) * 60
-      : 100
-    emit({
-      phase: "ratings", status: "writing",
-      totalProgress: computeTotalProgress(100, 100, 100, 100, phasePct),
-      detail: `Writing ratings (${Math.min(i + 50, ratingRecords.length)}/${ratingRecords.length})...`,
-      counts,
-    })
-  }
-
-  emit({
-    phase: "ratings", status: "done",
-    totalProgress: computeTotalProgress(100, 100, 100, 100, 100),
-    detail: `${ratingsSynced} ratings synced`, counts,
-  })
-
-  // COGS materialization is no longer triggered from the sync path. The
-  // standalone /api/cron/cogs/sweep cron (hourly, last 7 days) and
-  // /api/cron/cogs/refresh cron (daily, last 30 days) handle it independently
-  // so a sync issue can't wipe historical COGS rows. The "cogs" phase event
-  // is kept (just done with zero work) so SSE consumers see the same shape.
-  const cogsDaysProcessed = 0
-  const cogsRowsWritten = 0
-  emit({
-    phase: "cogs", status: "done",
-    totalProgress: computeTotalProgress(100, 100, 100, 100, 100, 100),
+    phase: "cogs",
+    status: "done",
+    totalProgress: 100,
     detail: "COGS materialization runs on its own cron schedule",
-    counts,
+    counts: { ...aggregateCounts },
   })
 
-  // Update lastSyncAt for all processed stores
-  await prisma.otterStore.updateMany({
-    where: { otterStoreId: { in: otterStoreIds } },
-    data: { lastSyncAt: new Date() },
-  })
-
-  // Fresh Otter data means stale dashboard reads — revalidate the pages that
-  // read from DailyCogsItem / OtterDailySummary.
+  // Fresh Otter data means stale dashboard reads — revalidate the pages
+  // that read from DailyCogsItem / OtterDailySummary.
   revalidatePath("/dashboard/menu/catalog")
   revalidatePath("/dashboard/cogs", "layout")
   revalidatePath("/dashboard/pnl", "layout")
 
-  const message = `Otter sync completed: ${synced} daily rows, ${categorySynced} categories, ${itemSynced} items, ${modifierSynced} modifiers, ${ratingsSynced} ratings, ${cogsDaysProcessed} COGS days`
-  counts.daily = synced
-  counts.categories = categorySynced
-  counts.items = itemSynced
-  counts.modifiers = modifierSynced
-  counts.ratings = ratingsSynced
-  counts.cogs = cogsDaysProcessed
+  const message = `Otter sync completed: ${totals.synced} daily rows, ${totals.categorySynced} categories, ${totals.itemSynced} items, ${totals.modifierSynced} modifiers, ${totals.ratingsSynced} ratings (${numStores} stores)`
 
   emit({
-    phase: "complete", status: "done", totalProgress: 100,
-    detail: message, counts,
+    phase: "complete",
+    status: "done",
+    totalProgress: 100,
+    detail: message,
+    counts: { ...aggregateCounts },
   })
 
   // Otter sync runs globally for all owners' active stores. If anything
-  // wrote, bust the otter/dash/pnl tags so dashboards reflect the new data
-  // on the next page load. Skips when nothing changed to save Redis ops.
-  if (synced > 0 || itemSynced > 0 || cogsRowsWritten > 0) {
+  // wrote, bust the otter/dash/pnl tags so dashboards reflect the new
+  // data on the next page load. Skips when nothing changed.
+  if (totals.synced > 0 || totals.itemSynced > 0) {
     await bustTags(["otter", "dash", "pnl"])
   }
 
   return {
     message,
-    synced, failed,
-    categorySynced, categoryFailed,
-    itemSynced, itemFailed,
-    modifierSynced, modifierFailed,
-    ratingsSynced, ratingsFailed,
-    cogsDaysProcessed, cogsRowsWritten,
-    storesProcessed: activeOtterStores.length,
+    synced: totals.synced,
+    failed: totals.failed,
+    categorySynced: totals.categorySynced,
+    categoryFailed: totals.categoryFailed,
+    itemSynced: totals.itemSynced,
+    itemFailed: totals.itemFailed,
+    modifierSynced: totals.modifierSynced,
+    modifierFailed: totals.modifierFailed,
+    ratingsSynced: totals.ratingsSynced,
+    ratingsFailed: totals.ratingsFailed,
+    cogsDaysProcessed: 0,
+    cogsRowsWritten: 0,
+    storesProcessed: numStores,
   }
 }
 
@@ -667,30 +252,15 @@ export async function POST(request: NextRequest) {
           }
         }
         try {
-          await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ jobRunId, addRows }) => {
-            const result = await runSync(emit)
-            addRows(result.synced)
-            await prisma.jobRun.update({
-              where: { id: jobRunId },
-              data: {
-                metadata: {
-                  synced: result.synced,
-                  categorySynced: result.categorySynced,
-                  itemSynced: result.itemSynced,
-                  modifierSynced: result.modifierSynced,
-                  ratingsSynced: result.ratingsSynced,
-                  cogsRowsWritten: result.cogsRowsWritten,
-                },
-              },
-            })
-            return result
-          })
+          await runSyncAllStores(emit, triggeredBy)
         } catch (error) {
           console.error("Otter sync error:", error)
           emit({
-            phase: "error", status: "error", totalProgress: 0,
+            phase: "error",
+            status: "error",
+            totalProgress: 0,
             detail: error instanceof Error ? error.message : "Internal server error",
-            counts: { daily: 0, categories: 0, items: 0, modifiers: 0, ratings: 0, cogs: 0 },
+            counts: { ...EMPTY_COUNTS },
             error: error instanceof Error ? error.message : "Internal server error",
           })
         } finally {
@@ -703,7 +273,7 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
         "X-Accel-Buffering": "no",
       },
     })
@@ -711,30 +281,13 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE clients)
   try {
-    const result = await withJobRun("otter.metrics.sync", { triggeredBy }, async ({ jobRunId, addRows }) => {
-      const r = await runSync(() => {})
-      addRows(r.synced)
-      await prisma.jobRun.update({
-        where: { id: jobRunId },
-        data: {
-          metadata: {
-            synced: r.synced,
-            categorySynced: r.categorySynced,
-            itemSynced: r.itemSynced,
-            modifierSynced: r.modifierSynced,
-            ratingsSynced: r.ratingsSynced,
-            cogsRowsWritten: r.cogsRowsWritten,
-          },
-        },
-      })
-      return r
-    })
+    const result = await runSyncAllStores(() => {}, triggeredBy)
     return NextResponse.json(result)
   } catch (error) {
     console.error("Otter sync error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

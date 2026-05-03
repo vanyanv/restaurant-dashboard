@@ -696,7 +696,11 @@ model OtterOrder {
   items OtterOrderItem[]
 
   @@index([storeId, referenceTimeLocal])
-  @@index([detailsFetchedAt])
+  // The drain + monitoring queries filter `detailsFetchedAt IS NULL` against
+  // a small subset of the table; that's served by a partial index (Prisma
+  // can't express partial). See:
+  //   prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
+  // — index name `OtterOrder_pending_details_idx`.
   @@index([platform])
 }
 
@@ -955,6 +959,8 @@ model JobRun {
   store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@index([jobName, startedAt(sort: Desc)])
+  // Compound — supports getSyncsByStore (`findFirst where { jobName, storeId } orderBy startedAt DESC`).
+  @@index([jobName, storeId, startedAt(sort: Desc)])
   @@index([status, startedAt(sort: Desc)])
 }
 
