@@ -85,7 +85,12 @@ function parseCustomRange(
 
 /**
  * Resolve a mobile period into a concrete date range in LA local time.
- * Weeks are Sunday-anchored (matches the dashboard's existing convention).
+ * Weeks are Sunday-anchored to match Otter's Sun→Sat reporting boundary.
+ *
+ * Intentionally not shared with `@/lib/date-presets`: that helper is
+ * browser-local (correct for the desktop pills), while this one is LA-tz
+ * pinned via `startOfDayLA` / `endOfDayLA`. Collapsing the two would
+ * regress mobile callers to browser-local time.
  */
 export function periodToDateRange(p: MobileNamedPeriod): {
   startDate: Date

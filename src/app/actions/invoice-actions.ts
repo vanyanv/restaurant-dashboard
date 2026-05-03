@@ -448,12 +448,10 @@ export interface SpendTimelineResult {
   peakBucket: SpendTimelineBucket | null
 }
 
-function startOfWeekMonday(d: Date): Date {
+function startOfWeekSunday(d: Date): Date {
   const copy = new Date(d)
   copy.setHours(0, 0, 0, 0)
-  const day = copy.getDay() // 0 = Sun
-  const diff = (day + 6) % 7
-  copy.setDate(copy.getDate() - diff)
+  copy.setDate(copy.getDate() - copy.getDay()) // 0 = Sun, matches Otter's Sun→Sat boundary
   return copy
 }
 
@@ -521,7 +519,7 @@ export async function getInvoiceSpendTimeline(options: {
       cursor.setDate(cursor.getDate() + 1)
     }
   } else if (granularity === "week") {
-    const cursor = startOfWeekMonday(start)
+    const cursor = startOfWeekSunday(start)
     while (cursor <= end) {
       const bucketEnd = new Date(cursor)
       bucketEnd.setDate(bucketEnd.getDate() + 6)

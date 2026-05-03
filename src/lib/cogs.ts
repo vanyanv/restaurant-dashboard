@@ -188,8 +188,8 @@ export async function getCogsTrend(
     if (granularity === "daily") {
       // Already a day.
     } else if (granularity === "weekly") {
-      // Snap to Monday (ISO week start).
-      const dow = (dt.getDay() + 6) % 7 // 0 = Mon
+      // Snap to Sunday to match Otter's Sun→Sat reporting boundary.
+      const dow = dt.getDay() // 0 = Sun
       dt.setDate(dt.getDate() - dow)
     } else {
       // monthly

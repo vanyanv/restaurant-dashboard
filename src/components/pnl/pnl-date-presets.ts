@@ -1,3 +1,9 @@
+import {
+  lastMonthRange,
+  lastWeekRange,
+  thisMonthRange,
+  thisWeekRange,
+} from "@/lib/date-presets"
 import type { Granularity } from "@/lib/pnl"
 
 export interface PnLRangeState {
@@ -12,16 +18,6 @@ function startOfDay(d: Date): Date {
   const n = new Date(d)
   n.setHours(0, 0, 0, 0)
   return n
-}
-
-function thisWeekRange(): { start: Date; end: Date } {
-  const today = startOfDay(new Date())
-  const day = today.getDay()
-  const start = new Date(today)
-  start.setDate(today.getDate() - day)
-  const end = new Date(start)
-  end.setDate(start.getDate() + 6)
-  return { start, end }
 }
 
 export const PNL_PRESETS: { key: string; label: string; compute: () => PnLRangeState }[] = [
@@ -54,9 +50,7 @@ export const PNL_PRESETS: { key: string; label: string; compute: () => PnLRangeS
     key: "lastWeek",
     label: "Last Week",
     compute: () => {
-      const { start, end } = thisWeekRange()
-      start.setDate(start.getDate() - 7)
-      end.setDate(end.getDate() - 7)
+      const { start, end } = lastWeekRange()
       return { startDate: start, endDate: end, granularity: "weekly", preset: "lastWeek" }
     },
   },
@@ -64,9 +58,7 @@ export const PNL_PRESETS: { key: string; label: string; compute: () => PnLRangeS
     key: "thisMonth",
     label: "This Month",
     compute: () => {
-      const now = new Date()
-      const start = new Date(now.getFullYear(), now.getMonth(), 1)
-      const end = startOfDay(new Date())
+      const { start, end } = thisMonthRange()
       return { startDate: start, endDate: end, granularity: "monthly", preset: "thisMonth" }
     },
   },
@@ -74,9 +66,7 @@ export const PNL_PRESETS: { key: string; label: string; compute: () => PnLRangeS
     key: "lastMonth",
     label: "Last Month",
     compute: () => {
-      const now = new Date()
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      const end = new Date(now.getFullYear(), now.getMonth(), 0)
+      const { start, end } = lastMonthRange()
       return { startDate: start, endDate: end, granularity: "monthly", preset: "lastMonth" }
     },
   },

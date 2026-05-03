@@ -5,12 +5,11 @@ import {
   addDays,
   differenceInCalendarDays,
   format,
-  startOfMonth,
   startOfQuarter,
-  startOfWeek,
   startOfYear,
   subDays,
 } from "date-fns"
+import { lastWeekRange, thisMonthRange, thisWeekRange } from "@/lib/date-presets"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { type DateRange } from "react-day-picker"
 import { Calendar } from "@/components/ui/calendar"
@@ -55,15 +54,17 @@ const DRAWER_PRESETS: Array<{
   {
     group: "Quick views",
     label: "This week",
-    compute: (t) => [startOfWeek(t, { weekStartsOn: 1 }), t],
+    compute: (t) => {
+      const { start, end } = thisWeekRange(t)
+      return [start, end]
+    },
   },
   {
     group: "Quick views",
     label: "Last week",
     compute: (t) => {
-      const thisMon = startOfWeek(t, { weekStartsOn: 1 })
-      const lastMon = subDays(thisMon, 7)
-      return [lastMon, addDays(lastMon, 6)]
+      const { start, end } = lastWeekRange(t)
+      return [start, end]
     },
   },
   { group: "Periods", label: "Last 7", compute: (t) => [subDays(t, 6), t] },
@@ -74,7 +75,10 @@ const DRAWER_PRESETS: Array<{
   {
     group: "To date",
     label: "Month-to-date",
-    compute: (t) => [startOfMonth(t), t],
+    compute: (t) => {
+      const { start, end } = thisMonthRange(t)
+      return [start, end]
+    },
   },
   {
     group: "To date",
