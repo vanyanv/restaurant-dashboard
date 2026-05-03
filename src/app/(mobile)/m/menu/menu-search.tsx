@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import {
   MobileCatalogList,
-  type MobileCatalogRow,
+  type MobileCatalogRow
 } from "@/components/mobile/mobile-catalog-list"
 
 type Row = {
@@ -20,15 +20,19 @@ export function MenuSearch({ rows }: { rows: Row[] }) {
   const catalogRows = useMemo<MobileCatalogRow[]>(() => {
     return rows
       .filter((row) => !unmappedOnly || !row.mappedRecipeName)
-      .map((row) => ({
-        id: `${row.name}::${row.category}`,
-        title: row.name,
-        meta: `${row.category} · ${row.storeCount} store${row.storeCount === 1 ? "" : "s"} · ${
-          row.mappedRecipeName ?? "UNMAPPED"
-        }`,
-        value: row.totalQty.toLocaleString(),
-        searchText: `${row.name} ${row.category}`.toLowerCase(),
-      }))
+      .map((row) => {
+        const mapped = Boolean(row.mappedRecipeName)
+        return {
+          id: `${row.name}::${row.category}`,
+          title: row.name,
+          meta: `${row.category} · ${row.storeCount} store${row.storeCount === 1 ? "" : "s"}`,
+          value: mapped ? "Mapped" : "Open",
+          subValue: `${row.totalQty.toLocaleString()} sold`,
+          searchText:
+            `${row.name} ${row.category} ${row.mappedRecipeName ?? ""}`.toLowerCase(),
+          valueTone: mapped ? "muted" : "accent"
+        }
+      })
   }, [rows, unmappedOnly])
 
   return (
@@ -43,7 +47,7 @@ export function MenuSearch({ rows }: { rows: Row[] }) {
           className={`toolbar-btn${unmappedOnly ? " active" : ""}`}
           style={{ fontSize: 11 }}
         >
-          Unmapped
+          Open
         </button>
       }
     />

@@ -1,7 +1,7 @@
 import { listRecipes } from "@/app/actions/recipe-actions"
 import {
   getMenuItemSellPrices,
-  getMenuItemsForCatalog,
+  getMenuItemsForCatalog
 } from "@/app/actions/menu-item-actions"
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
 import { MenuCatalogContent } from "../menu-catalog-content"
@@ -12,7 +12,7 @@ import { MenuCatalogContent } from "../menu-catalog-content"
  * `getMenuItemsForCatalog()` returns Otter → recipe mappings which are
  * consumed only by `resolveSellPriceForRecipe` when a recipe's name does
  * not directly match a sold item. The mappings are not rendered as a
- * visible "unmapped items" panel — they feed sell-price resolution for
+ * visible "unmapped items" panel; they feed sell-price resolution for
  * the rows below. For that reason both the row data and the mappings are
  * awaited here in parallel rather than split into separate Suspense
  * boundaries.
@@ -21,7 +21,7 @@ export async function CatalogRowsSection() {
   const [recipes, sellPrices, otterMappings] = await Promise.all([
     listRecipes(),
     getMenuItemSellPrices(30),
-    getMenuItemsForCatalog(),
+    getMenuItemsForCatalog()
   ])
 
   // Surface recipes the owner can actually sell; modifiers are plumbing.
@@ -47,7 +47,7 @@ export async function CatalogRowsSection() {
       updatedAt: r.updatedAt,
       sellPrice: price?.avgPrice ?? null,
       qtySold: price?.qtySold ?? 0,
-      sellSourceName: price?.sourceOtterName ?? null,
+      sellSourceName: price?.sourceOtterName ?? null
     }
   })
 

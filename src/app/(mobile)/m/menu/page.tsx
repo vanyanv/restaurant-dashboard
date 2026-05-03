@@ -26,7 +26,7 @@ export default async function MobileMenuPage() {
 
       <div className="dock-in dock-in-2" style={{ marginBottom: 14 }}>
         <div className="m-readonly-note">
-          Read-only on mobile · map menu items to recipes on desktop
+          Read-only mobile ledger · recipe mapping stays on desktop
         </div>
       </div>
 
@@ -38,7 +38,7 @@ export default async function MobileMenuPage() {
               category: i.category,
               totalQty: i.totalQtySoldAllTime,
               mappedRecipeName: i.mappedRecipeName,
-              storeCount: i.storeIds.length,
+              storeCount: i.storeIds.length
             }))}
           />
         </Panel>

@@ -4,8 +4,13 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  Search
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { marginBandClass } from "@/lib/menu-margin"
 
@@ -23,7 +28,12 @@ export type MenuCatalogRow = {
   sellSourceName: string | null
 }
 
-type AttentionKey = "missing" | "partial" | "lowMargin" | "topProfit" | "noSales"
+type AttentionKey =
+  | "missing"
+  | "partial"
+  | "lowMargin"
+  | "topProfit"
+  | "noSales"
 
 type EnrichedRow = MenuCatalogRow & {
   marginPct: number | null
@@ -39,18 +49,21 @@ type SortDir = "asc" | "desc"
 
 const SORT_STORAGE_KEY = "menu-catalog-sort-v1"
 
-const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: "profit", dir: "desc" }
+const DEFAULT_SORT: { key: SortKey; dir: SortDir } = {
+  key: "profit",
+  dir: "desc"
+}
 
 const ATTENTION_CONFIG: Array<{
   key: AttentionKey
   label: string
-  tone: "red" | "amber" | "ink"
+  tone: "alert" | "warn" | "ink"
 }> = [
-  { key: "missing", label: "Missing cost", tone: "red" },
-  { key: "partial", label: "Partial recipe", tone: "amber" },
-  { key: "lowMargin", label: "< 50% margin", tone: "amber" },
+  { key: "missing", label: "Missing cost", tone: "alert" },
+  { key: "partial", label: "Partial recipe", tone: "warn" },
+  { key: "lowMargin", label: "< 50% margin", tone: "warn" },
   { key: "topProfit", label: "Top 10 profit", tone: "ink" },
-  { key: "noSales", label: "No sales (30d)", tone: "ink" },
+  { key: "noSales", label: "No sales (30d)", tone: "ink" }
 ]
 
 type Props = {
@@ -91,7 +104,8 @@ export function MenuCatalogContent({ rows }: Props) {
 
   const categories = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const r of enriched) counts.set(r.category, (counts.get(r.category) ?? 0) + 1)
+    for (const r of enriched)
+      counts.set(r.category, (counts.get(r.category) ?? 0) + 1)
     return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b))
   }, [enriched])
 
@@ -101,7 +115,7 @@ export function MenuCatalogContent({ rows }: Props) {
       partial: 0,
       lowMargin: 0,
       topProfit: 0,
-      noSales: 0,
+      noSales: 0
     }
     for (const r of enriched) {
       for (const k of r.attention) counts[k] += 1
@@ -112,7 +126,8 @@ export function MenuCatalogContent({ rows }: Props) {
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase()
     return enriched.filter((r) => {
-      if (activeCategory !== "all" && r.category !== activeCategory) return false
+      if (activeCategory !== "all" && r.category !== activeCategory)
+        return false
       if (activeAttention.size > 0) {
         for (const a of activeAttention) {
           if (!r.attention.has(a)) return false
@@ -128,7 +143,7 @@ export function MenuCatalogContent({ rows }: Props) {
     count: sorted.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 78,
-    overscan: 8,
+    overscan: 8
   })
 
   const totals = useMemo(() => {
@@ -140,7 +155,8 @@ export function MenuCatalogContent({ rows }: Props) {
       if (r.sellPrice != null) revenue += r.sellPrice * r.qtySold
       if (r.computedCost != null) cost += r.computedCost * r.qtySold
     }
-    const blendedMargin = revenue > 0 ? ((revenue - cost) / revenue) * 100 : null
+    const blendedMargin =
+      revenue > 0 ? ((revenue - cost) / revenue) * 100 : null
     return { profit, revenue, blendedMargin }
   }, [enriched])
 
@@ -165,105 +181,122 @@ export function MenuCatalogContent({ rows }: Props) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="border-b border-[var(--hairline)] bg-[var(--paper)] px-4 py-3 sm:px-8">
-        <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-          <span className="tabular-nums text-[var(--ink-muted)]">
-            {enriched.length} items
-          </span>
+      <div className="menu-catalog-controls dock-in dock-in-1">
+        <div
+          className="menu-catalog-controls__summary"
+          aria-label="Menu catalog summary"
+        >
+          <MetricStamp label="Items" value={enriched.length.toLocaleString()} />
           {totals.blendedMargin != null && (
-            <>
-              <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
-              <span className="tabular-nums">
-                {totals.blendedMargin.toFixed(1)}% blended margin
-              </span>
-            </>
+            <MetricStamp
+              label="Blended margin"
+              value={`${totals.blendedMargin.toFixed(1)}%`}
+            />
           )}
           {totals.profit > 0 && (
-            <>
-              <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
-              <span className="tabular-nums">
-                ${Math.round(totals.profit).toLocaleString()} profit 30d
-              </span>
-            </>
+            <MetricStamp
+              label="Profit 30d"
+              value={`$${Math.round(totals.profit).toLocaleString()}`}
+            />
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CategoryPill
-            label="All"
-            count={enriched.length}
-            active={activeCategory === "all"}
-            onClick={() => setActiveCategory("all")}
-          />
-          {categories.map(([cat, count]) => (
+        <div className="menu-catalog-controls__section">
+          <span className="menu-catalog-controls__label">Category</span>
+          <div
+            className="menu-catalog-controls__scroll"
+            role="list"
+            aria-label="Category filters"
+          >
             <CategoryPill
-              key={cat}
-              label={cat}
-              count={count}
-              active={activeCategory === cat}
-              onClick={() => setActiveCategory(cat)}
+              label="All"
+              count={enriched.length}
+              active={activeCategory === "all"}
+              onClick={() => setActiveCategory("all")}
             />
-          ))}
+            {categories.map(([cat, count]) => (
+              <CategoryPill
+                key={cat}
+                label={cat}
+                count={count}
+                active={activeCategory === cat}
+                onClick={() => setActiveCategory(cat)}
+              />
+            ))}
+          </div>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-            Attention
-          </span>
-          {ATTENTION_CONFIG.map((cfg) => (
-            <AttentionPill
-              key={cfg.key}
-              label={cfg.label}
-              count={attentionCounts[cfg.key]}
-              tone={cfg.tone}
-              active={activeAttention.has(cfg.key)}
-              onClick={() => toggleAttention(cfg.key)}
-            />
-          ))}
-          {activeAttention.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setActiveAttention(new Set())}
-              className="ml-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--ink-faint)] underline-offset-2 hover:underline"
-            >
-              clear
-            </button>
-          )}
+        <div className="menu-catalog-controls__section menu-catalog-controls__section--attention">
+          <span className="menu-catalog-controls__label">Attention</span>
+          <div
+            className="menu-catalog-controls__scroll"
+            role="list"
+            aria-label="Attention filters"
+          >
+            {ATTENTION_CONFIG.map((cfg) => (
+              <AttentionPill
+                key={cfg.key}
+                label={cfg.label}
+                count={attentionCounts[cfg.key]}
+                tone={cfg.tone}
+                active={activeAttention.has(cfg.key)}
+                onClick={() => toggleAttention(cfg.key)}
+              />
+            ))}
+            {activeAttention.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveAttention(new Set())}
+                className="toolbar-btn menu-filter-clear"
+              >
+                Clear attention
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       <div
         ref={scrollRef}
         data-perf-scroll
-        className="flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-6 sm:px-8 sm:py-8"
+        className="flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-5 sm:px-8 sm:py-7"
       >
-        <div className="mb-6 flex items-center gap-2 border-b border-[var(--hairline-bold)] pb-3">
-          <Search className="h-3.5 w-3.5 text-[var(--ink-faint)]" />
-          <Input
-            type="search"
-            placeholder="Search menu items…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="h-8 max-w-sm border-0 bg-transparent px-0 text-sm focus-visible:ring-0"
-          />
-          <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-faint)]">
-            {sorted.length} shown
-          </span>
+        <div className="menu-catalog-workbench dock-in dock-in-2">
+          <label className="search-shell menu-catalog-search">
+            <Search
+              className="h-3.5 w-3.5 text-[var(--ink-muted)]"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              placeholder="Search menu items"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <span className="kbd-chip tabular-nums">{sorted.length} shown</span>
+          </label>
+          {query.trim() && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="toolbar-btn menu-filter-clear"
+            >
+              Clear search
+            </button>
+          )}
         </div>
 
         <HeaderRow sort={sort} onSort={handleSort} />
 
         {sorted.length === 0 ? (
-          <div className="mt-6 border border-dashed border-[var(--hairline-bold)] px-8 py-16 text-center">
-            <div className="editorial-section-label">§ empty</div>
-            <h2 className="mt-2 font-display text-[26px] italic text-[var(--ink)]">
-              No menu items match.
-            </h2>
-            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-muted)]">
-              Try a different search, category, or attention filter.
+          <div className="inv-empty menu-catalog-empty">
+            <div className="inv-empty__mark">§</div>
+            <h2 className="inv-empty__title">No menu items match.</h2>
+            <p className="inv-empty__body">
+              Clear the search or loosen the category and attention filters.
             </p>
           </div>
         ) : (
           <ul
-            className="relative"
+            className="menu-catalog-list relative"
             style={{ height: rowVirtualizer.getTotalSize() }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -287,6 +320,15 @@ export function MenuCatalogContent({ rows }: Props) {
   )
 }
 
+function MetricStamp({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="menu-metric-stamp">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </span>
+  )
+}
+
 // ---- helpers ------------------------------------------------------------
 
 function enrichRows(rows: MenuCatalogRow[]): EnrichedRow[] {
@@ -307,11 +349,14 @@ function enrichRows(rows: MenuCatalogRow[]): EnrichedRow[] {
       profit30d,
       contribution: null,
       searchText: `${r.itemName} ${r.category}`.toLowerCase(),
-      attention: new Set<AttentionKey>(),
+      attention: new Set<AttentionKey>()
     }
   })
 
-  const totalProfit = derived.reduce((acc, r) => acc + Math.max(0, r.profit30d ?? 0), 0)
+  const totalProfit = derived.reduce(
+    (acc, r) => acc + Math.max(0, r.profit30d ?? 0),
+    0
+  )
 
   const topProfitIds = new Set(
     [...derived]
@@ -387,7 +432,7 @@ function CategoryPill({
   label,
   count,
   active,
-  onClick,
+  onClick
 }: {
   label: string
   count: number
@@ -397,23 +442,13 @@ function CategoryPill({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-2 border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition",
-        active
-          ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]"
-          : "border-[var(--hairline-bold)] text-[var(--ink-muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
-      )}
+      className="toolbar-btn menu-filter-pill"
+      data-active={active ? "true" : undefined}
     >
       {label}
-      <span
-        className={cn(
-          "tabular-nums",
-          active ? "text-[var(--paper)]/70" : "text-[var(--ink-faint)]"
-        )}
-      >
-        {count}
-      </span>
+      <span className="menu-filter-pill__count">{count}</span>
     </button>
   )
 }
@@ -423,72 +458,82 @@ function AttentionPill({
   count,
   tone,
   active,
-  onClick,
+  onClick
 }: {
   label: string
   count: number
-  tone: "red" | "amber" | "ink"
+  tone: "alert" | "warn" | "ink"
   active: boolean
   onClick: () => void
 }) {
   const disabled = count === 0 && !active
-  const base =
-    "inline-flex items-center gap-2 border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition disabled:cursor-not-allowed disabled:opacity-40"
-  const activeCls =
-    tone === "red"
-      ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--paper)]"
-      : tone === "amber"
-        ? "border-amber-700 bg-amber-700 text-[var(--paper)]"
-        : "border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]"
-  const inactiveCls =
-    tone === "red"
-      ? "border-[var(--accent)] text-[var(--accent-dark)] hover:bg-[var(--accent-bg)]"
-      : tone === "amber"
-        ? "border-amber-700/60 text-amber-800 hover:bg-amber-50"
-        : "border-[var(--hairline-bold)] text-[var(--ink-muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
   return (
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={active}
       onClick={onClick}
-      className={cn(base, active ? activeCls : inactiveCls)}
+      className="toolbar-btn menu-filter-pill"
+      data-active={active ? "true" : undefined}
+      data-tone={tone}
     >
       {label}
-      <span
-        className={cn(
-          "tabular-nums",
-          active ? "text-[var(--paper)]/75" : "text-[var(--ink-faint)]"
-        )}
-      >
-        {count}
-      </span>
+      <span className="menu-filter-pill__count">{count}</span>
     </button>
   )
 }
 
-const GRID_COLS =
-  "grid-cols-[minmax(0,1fr)_88px_88px_112px_80px_88px_20px]"
-
 function HeaderRow({
   sort,
-  onSort,
+  onSort
 }: {
   sort: { key: SortKey; dir: SortDir }
   onSort: (key: SortKey) => void
 }) {
   return (
-    <div
-      className={cn(
-        "hidden gap-4 border-b border-[var(--hairline)] pb-2 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--ink-faint)] sm:grid",
-        GRID_COLS
-      )}
-    >
-      <SortHeader label="Item" align="left" sortKey="name" sort={sort} onSort={onSort} />
-      <SortHeader label="Sell" align="right" sortKey="sell" sort={sort} onSort={onSort} />
-      <SortHeader label="Cost" align="right" sortKey="cost" sort={sort} onSort={onSort} />
-      <SortHeader label="Profit 30d" align="right" sortKey="profit" sort={sort} onSort={onSort} />
-      <SortHeader label="% P&L" align="right" sortKey="contribution" sort={sort} onSort={onSort} />
-      <SortHeader label="Margin" align="right" sortKey="margin" sort={sort} onSort={onSort} />
+    <div className="menu-ledger-head">
+      <SortHeader
+        label="Item"
+        align="left"
+        sortKey="name"
+        sort={sort}
+        onSort={onSort}
+      />
+      <SortHeader
+        label="Sell"
+        align="right"
+        sortKey="sell"
+        sort={sort}
+        onSort={onSort}
+      />
+      <SortHeader
+        label="Cost"
+        align="right"
+        sortKey="cost"
+        sort={sort}
+        onSort={onSort}
+      />
+      <SortHeader
+        label="Profit 30d"
+        align="right"
+        sortKey="profit"
+        sort={sort}
+        onSort={onSort}
+      />
+      <SortHeader
+        label="% P&L"
+        align="right"
+        sortKey="contribution"
+        sort={sort}
+        onSort={onSort}
+      />
+      <SortHeader
+        label="Margin"
+        align="right"
+        sortKey="margin"
+        sort={sort}
+        onSort={onSort}
+      />
       <span />
     </div>
   )
@@ -499,7 +544,7 @@ function SortHeader({
   align,
   sortKey,
   sort,
-  onSort,
+  onSort
 }: {
   label: string
   align: "left" | "right"
@@ -514,7 +559,7 @@ function SortHeader({
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "inline-flex items-center gap-1 transition hover:text-[var(--ink)]",
+        "inline-flex items-center gap-1 transition hover:text-[var(--ink)] focus-visible:text-[var(--ink)] focus-visible:outline-none",
         align === "right" ? "justify-end" : "justify-start",
         active && "text-[var(--ink)]"
       )}
@@ -527,104 +572,120 @@ function SortHeader({
 
 function MenuRow({
   row,
-  showCategory,
+  showCategory
 }: {
   row: EnrichedRow
   showCategory: boolean
 }) {
-  const { computedCost: cost, sellPrice: sell, marginPct, profit30d, contribution } = row
+  const {
+    computedCost: cost,
+    sellPrice: sell,
+    marginPct,
+    profit30d,
+    contribution
+  } = row
   const router = useRouter()
   const href = `/dashboard/menu/catalog/${row.id}`
 
   return (
     <Link
-        href={href}
-        prefetch={false}
-        onMouseEnter={() => router.prefetch(href)}
-        onFocus={() => router.prefetch(href)}
+      href={href}
+      prefetch={false}
+      onMouseEnter={() => router.prefetch(href)}
+      onFocus={() => router.prefetch(href)}
+      className="inv-row menu-row group"
+    >
+      <div className="menu-row__item min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-display text-[16px] italic leading-snug text-[var(--ink)] break-words">
+            {row.itemName}
+          </span>
+          {row.hasMissingCost ? (
+            <span
+              title="No cost is set for this recipe"
+              className="menu-status"
+              data-tone="alert"
+            >
+              <AlertTriangle className="h-2.5 w-2.5" />
+              missing
+            </span>
+          ) : row.partialCost ? (
+            <span
+              title="Some ingredients have no cost; recipe is partial"
+              className="menu-status"
+              data-tone="warn"
+            >
+              <AlertTriangle className="h-2.5 w-2.5" />
+              partial
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+          {showCategory && (
+            <>
+              <span className="text-[var(--ink-muted)]">{row.category}</span>
+              <span>·</span>
+            </>
+          )}
+          <span>
+            {row.ingredientCount} ingredient
+            {row.ingredientCount === 1 ? "" : "s"}
+          </span>
+          {row.qtySold > 0 && (
+            <>
+              <span>·</span>
+              <span>{row.qtySold} sold (30d)</span>
+            </>
+          )}
+          {row.sellSourceName && row.sellSourceName !== row.itemName && (
+            <>
+              <span>·</span>
+              <span
+                title={`Sell price derived from Otter item: ${row.sellSourceName}`}
+              >
+                via &ldquo;{row.sellSourceName}&rdquo;
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+      <span className="menu-row__sell menu-row__figure text-right text-[13px] tabular-nums text-[var(--ink)]">
+        {sell != null ? (
+          `$${sell.toFixed(2)}`
+        ) : (
+          <span className="text-[var(--ink-faint)]">-</span>
+        )}
+      </span>
+      <span className="menu-row__cost menu-row__figure text-right text-[13px] tabular-nums text-[var(--ink)]">
+        {cost != null ? (
+          `$${cost.toFixed(2)}`
+        ) : (
+          <span className="text-[var(--ink-faint)]">-</span>
+        )}
+      </span>
+      <span className="inv-row__total menu-row__profit menu-row__figure text-right text-[13px] tabular-nums text-[var(--ink)]">
+        {profit30d != null ? (
+          `$${Math.round(profit30d).toLocaleString()}`
+        ) : (
+          <span className="text-[var(--ink-faint)]">-</span>
+        )}
+      </span>
+      <span className="menu-row__contribution menu-row__figure text-right text-[12px] tabular-nums text-[var(--ink-muted)]">
+        {contribution != null ? (
+          `${contribution.toFixed(1)}%`
+        ) : (
+          <span className="text-[var(--ink-faint)]">-</span>
+        )}
+      </span>
+      <span
         className={cn(
-          "menu-row group grid w-full items-start gap-4 border-b border-[var(--hairline)] py-3 text-left transition hover:bg-[var(--paper-deep)]",
-          GRID_COLS
+          "menu-row__margin text-right text-[13px] tabular-nums",
+          marginBandClass(marginPct)
         )}
       >
-        <div className="menu-row__item min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="font-display text-[16px] italic leading-snug text-[var(--ink)] break-words">
-              {row.itemName}
-            </span>
-            {row.hasMissingCost ? (
-              <span
-                title="No cost is set for this recipe"
-                className="inline-flex items-center gap-1 border border-[var(--accent)] bg-[var(--accent)] px-1 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-[var(--paper)] whitespace-nowrap"
-              >
-                <AlertTriangle className="h-2.5 w-2.5" />
-                missing
-              </span>
-            ) : row.partialCost ? (
-              <span
-                title="Some ingredients have no cost — recipe is partial"
-                className="inline-flex items-center gap-1 border border-[var(--accent)] bg-[var(--accent-bg)] px-1 py-0.5 font-mono text-[9px] uppercase text-[var(--accent-dark)] whitespace-nowrap"
-              >
-                <AlertTriangle className="h-2.5 w-2.5" />
-                partial
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--ink-faint)]">
-            {showCategory && (
-              <>
-                <span className="text-[var(--ink-muted)]">{row.category}</span>
-                <span>·</span>
-              </>
-            )}
-            <span>
-              {row.ingredientCount} ingredient{row.ingredientCount === 1 ? "" : "s"}
-            </span>
-            {row.qtySold > 0 && (
-              <>
-                <span>·</span>
-                <span>{row.qtySold} sold (30d)</span>
-              </>
-            )}
-            {row.sellSourceName && row.sellSourceName !== row.itemName && (
-              <>
-                <span>·</span>
-                <span title={`Sell price derived from Otter item: ${row.sellSourceName}`}>
-                  via &ldquo;{row.sellSourceName}&rdquo;
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-        <span className="menu-row__sell text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
-          {sell != null ? `$${sell.toFixed(2)}` : <span className="text-[var(--ink-faint)]">—</span>}
-        </span>
-        <span className="menu-row__cost text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
-          {cost != null ? `$${cost.toFixed(2)}` : <span className="text-[var(--ink-faint)]">—</span>}
-        </span>
-        <span className="menu-row__profit text-right font-mono text-[13px] tabular-nums text-[var(--ink)]">
-          {profit30d != null ? (
-            `$${Math.round(profit30d).toLocaleString()}`
-          ) : (
-            <span className="text-[var(--ink-faint)]">—</span>
-          )}
-        </span>
-        <span className="menu-row__contribution text-right font-mono text-[12px] tabular-nums text-[var(--ink-muted)]">
-          {contribution != null ? (
-            `${contribution.toFixed(1)}%`
-          ) : (
-            <span className="text-[var(--ink-faint)]">—</span>
-          )}
-        </span>
-        <span
-          className={cn(
-            "menu-row__margin text-right font-mono text-[13px] tabular-nums",
-            marginBandClass(marginPct)
-          )}
-        >
-          {marginPct != null ? `${marginPct.toFixed(1)}%` : "—"}
-        </span>
-        <ChevronRight className="menu-row__chevron mt-1 h-4 w-4 text-[var(--ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ink)]" />
+        {marginPct != null ? `${marginPct.toFixed(1)}%` : "-"}
+      </span>
+      <ChevronRight className="inv-row__chev menu-row__chevron h-4 w-4" />
     </Link>
   )
 }

@@ -325,8 +325,8 @@ export async function getLoginsByHour(hours = 24) {
 export type BridgeEventRow = {
   id: string
   occurredAt: Date
-  kind: "sync" | "error" | "login" | "quota"
-  system: "syncs" | "auth" | "vercel" | "db" | "r2" | "cache" | "other"
+  kind: "sync" | "error" | "login"
+  system: "syncs" | "auth" | "db" | "r2" | "cache" | "other"
   sourceLabel: string
   description: string
   isFailure: boolean

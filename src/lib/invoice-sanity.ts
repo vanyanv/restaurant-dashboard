@@ -89,3 +89,88 @@ export function findLineMathMismatches(
   }
   return mismatches
 }
+
+export interface PackShapeAnomaly {
+  lineNumber: number
+  productName: string
+  unit: string | null
+  packSize: number | null
+  unitSize: number | null
+  unitSizeUom: string | null
+  reasons: string[]
+}
+
+/**
+ * Rules below target known fused-column OCR bug signatures (e.g. Sysco lettuce
+ * "112 CT" parsed as packSize=112 instead of packSize=1, unitSize=12). They are
+ * intentionally narrow to avoid false-flagging legitimate cases like
+ * "30 × 1-LB butter solids" or "9 × 8-count rolls".
+ *
+ * When any rule fires the line is reported as an anomaly; the sync route uses
+ * the presence of anomalies to route the invoice to REVIEW status instead of
+ * auto-MATCHED.
+ */
+export function findPackShapeAnomalies(
+  lineItems: InvoiceExtraction["lineItems"]
+): PackShapeAnomaly[] {
+  const anomalies: PackShapeAnomaly[] = []
+  for (const li of lineItems) {
+    const reasons: string[] = []
+
+    // Rule 1 — implausibly high packSize on case-goods. Real-world case-goods
+    // almost never exceed 50/pack; values >50 are essentially always a fused-
+    // column mis-split (e.g. "112 CT" → packSize=112).
+    if (li.unit === "CS" && li.packSize != null && li.packSize > 50) {
+      reasons.push(
+        `packSize=${li.packSize} for unit=CS is implausibly high — likely a fused PACK/SIZE split`
+      )
+    }
+
+    // Rule 2 — CT-packed goods with the lettuce-bug shape (high pack, low size).
+    // Produce/case-goods CT almost always has packSize=1 with unitSize=count.
+    // The fusion bug flips this: "1 CS × 12 CT" misreads as packSize≥10, unitSize≤2.
+    if (
+      li.unitSizeUom === "CT" &&
+      li.unitSize != null &&
+      li.packSize != null &&
+      li.unitSize <= 2 &&
+      li.packSize > 6
+    ) {
+      reasons.push(
+        `CT pack-shape ${li.packSize}×${li.unitSize} looks fused — produce/case-goods ` +
+          `CT typically has packSize=1 with unitSize=count`
+      )
+    }
+
+    // Rule 3 — implausibly large unitSize on weight/volume goods. unitSize values
+    // beyond reasonable container size for the UoM indicate a mis-split where the
+    // model dragged extra digits into unitSize.
+    if (li.unitSize != null && li.unitSizeUom != null) {
+      const limits: Record<string, number> = {
+        OZ: 256,
+        "FL OZ": 128,
+        LB: 50,
+        GAL: 10,
+      }
+      const limit = limits[li.unitSizeUom.toUpperCase()]
+      if (limit != null && li.unitSize > limit * 4) {
+        reasons.push(
+          `unitSize=${li.unitSize} ${li.unitSizeUom} exceeds plausible container size (≤${limit} typical)`
+        )
+      }
+    }
+
+    if (reasons.length > 0) {
+      anomalies.push({
+        lineNumber: li.lineNumber,
+        productName: li.productName,
+        unit: li.unit,
+        packSize: li.packSize,
+        unitSize: li.unitSize,
+        unitSizeUom: li.unitSizeUom,
+        reasons,
+      })
+    }
+  }
+  return anomalies
+}

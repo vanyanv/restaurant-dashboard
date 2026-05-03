@@ -38,6 +38,7 @@ const SCALE_STEP = 0.25
 
 interface PdfViewerClientProps {
   invoiceId: string
+  initialScale?: number
 }
 
 const documentOptions = {
@@ -52,7 +53,10 @@ function getPdfLoadErrorMessage(error: Error): string {
   return error.message
 }
 
-export default function PdfViewerClient({ invoiceId }: PdfViewerClientProps) {
+export default function PdfViewerClient({
+  invoiceId,
+  initialScale = 1,
+}: PdfViewerClientProps) {
   const fileUrl = useMemo(() => `/api/invoices/${invoiceId}/pdf`, [invoiceId])
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -60,7 +64,7 @@ export default function PdfViewerClient({ invoiceId }: PdfViewerClientProps) {
   const [containerWidth, setContainerWidth] = useState(0)
   const [numPages, setNumPages] = useState(0)
   const [pageNumber, setPageNumber] = useState(1)
-  const [scale, setScale] = useState(1)
+  const [scale, setScale] = useState(initialScale)
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -103,7 +107,11 @@ export default function PdfViewerClient({ invoiceId }: PdfViewerClientProps) {
     () => setScale((s) => Math.max(MIN_SCALE, s - SCALE_STEP)),
     [],
   )
-  const resetZoom = useCallback(() => setScale(1), [])
+  const resetZoom = useCallback(() => setScale(initialScale), [initialScale])
+
+  useEffect(() => {
+    setScale(initialScale)
+  }, [initialScale, invoiceId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
