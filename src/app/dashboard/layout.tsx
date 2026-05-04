@@ -4,8 +4,8 @@ import { AppSidebarClient } from "@/components/app-sidebar-client"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ChatDrawerProvider } from "@/components/chat/chat-drawer-context"
 import { ChatDrawer } from "@/components/chat/chat-drawer"
-import "@/styles/editorial.css"
-import "@/components/chat/chat.css"
+import "@/styles/editorial-tokens.css"
+import "@/styles/editorial-dashboard.css"
 
 const fraunces = Fraunces({
   subsets: ["latin"],

@@ -4,7 +4,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { MobileTabBar } from "@/components/mobile/mobile-tab-bar"
 import { getTabsForRole } from "@/lib/mobile/tabs"
-import "@/styles/editorial.css"
+import "@/styles/editorial-tokens.css"
+import "@/styles/editorial-mobile.css"
 
 const fraunces = Fraunces({
   subsets: ["latin"],
