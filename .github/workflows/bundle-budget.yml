@@ -1,0 +1,55 @@
+name: Bundle budget
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.ts'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'scripts/check-bundle-size.ts'
+      - '.github/workflows/bundle-budget.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: bundle-budget-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        env:
+          # The build only needs envs that the static analysis touches.
+          # Server actions & runtime config are not exercised here.
+          DATABASE_URL: postgres://placeholder:placeholder@localhost:5432/placeholder
+          NEXTAUTH_SECRET: ci-placeholder
+          NEXTAUTH_URL: http://localhost:3000
+        run: npm run build
+
+      - name: Check per-route bundle budgets
+        id: budget
+        run: |
+          report=$(npm run bundle:check 2>&1)
+          echo "$report"
+          {
+            echo "## Bundle budget check"
+            echo ""
+            echo '```'
+            echo "$report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
