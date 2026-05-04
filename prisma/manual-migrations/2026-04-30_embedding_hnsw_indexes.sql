@@ -1,5 +1,6 @@
 -- Ensure every chat embedding corpus has an HNSW cosine index.
--- Target: $DATABASE_URL2 (chat / vector branch).
+-- Target: $DATABASE_URL (primary DB — embedding tables consolidated here
+-- 2026-05-03; previously lived on the dedicated chat/vector Neon branch).
 --
 -- Run one statement at a time or outside a transaction if using
 -- CONCURRENTLY. These are idempotent and safe to re-run.

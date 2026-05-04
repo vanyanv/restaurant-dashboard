@@ -9,10 +9,9 @@
 -- a partial-on-NULL index stays tiny — successfully-drained rows leave the
 -- index entirely.
 --
--- Apply to BOTH databases per docs/two-database-sync.md:
+-- Apply:
 --
---   psql "$DATABASE_URL"  -f prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
---   psql "$DATABASE_URL2" -f prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
+--   psql "$DATABASE_URL" -f prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql
 --
 -- The drop is conditional so the migration is idempotent. CREATE INDEX
 -- IF NOT EXISTS guards the new index. CONCURRENTLY would block running
