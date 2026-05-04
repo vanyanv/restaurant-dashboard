@@ -1,0 +1,1299 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Mobile shell — phone-shaped editorial surface.
+   The /m/* tree wraps in .editorial-surface.editorial-surface--mobile so
+   it inherits every token but tightens the typographic display scale and
+   reserves space for the 56pt bottom tab bar.
+   ───────────────────────────────────────────────────────────────────── */
+
+.editorial-surface--mobile {
+  --display-size: clamp(24px, 7vw, 32px);
+  --headline-size: 22px;
+}
+
+.editorial-surface--mobile main {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+.m-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.m-shell__main {
+  flex: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 18px 16px calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Phone-tightened panel — slightly slimmer padding so two panels fit
+   visually in a 390pt viewport without feeling cramped. */
+.editorial-surface--mobile .inv-panel {
+  padding: 14px 16px;
+}
+.editorial-surface--mobile .inv-panel--flush {
+  padding: 0;
+}
+
+.editorial-surface--mobile .inv-panel + .inv-panel {
+  margin-top: 14px;
+}
+
+/* Bottom tab bar */
+.m-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--paper);
+  border-top: 1px solid var(--hairline-bold);
+  backdrop-filter: saturate(120%);
+}
+
+.m-tabbar__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.m-tabbar__item:hover {
+  color: var(--ink-muted);
+}
+
+.m-tabbar__item::before {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 0;
+  height: 3px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.m-tabbar__item.is-active {
+  color: var(--accent-dark);
+}
+
+.m-tabbar__item.is-active::before {
+  transform: scaleY(1);
+}
+
+/* Press-down feedback — touch surfaces have no :hover, so the user gets no
+   acknowledgment until the route lands. A brief scale + color flash makes the
+   tap register before navigation finishes. */
+.m-tabbar__item {
+  transition: color 140ms ease, transform 80ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.m-tabbar__item:active {
+  color: var(--accent);
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-tabbar__item,
+  .m-tabbar__item::before {
+    transition: none;
+  }
+  .m-tabbar__item:active {
+    transform: none;
+  }
+}
+
+/* Mobile chat shell — anchored between the viewport top and the top edge
+   of the bottom tab bar so the composer never moves while the thread
+   scrolls. Bypasses .m-shell__main padding entirely; the main element
+   underneath stays empty + 100dvh-clamped, so the body itself never
+   scrolls. */
+.m-chat-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  z-index: 30;
+}
+
+.m-chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline-bold);
+  background: rgba(255, 253, 247, 0.55);
+  flex: 0 0 auto;
+}
+
+.m-chat-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Composer here sits just above the fixed tab bar — the safe-area inset
+   is already absorbed by the m-chat-shell `bottom`, so the default
+   chat-input-shell `max(16px, env(safe-area-inset-bottom))` would double
+   up. Pin it to a flat 12px instead. */
+.m-chat-shell .chat-input-shell {
+  padding-bottom: 12px;
+}
+
+/* Mobile masthead — Pattern C "totals tray" used by analytics, P&L, COGS,
+   product-mix and the Home page. Hairline-ruled tray with two or three
+   tabular figures lined up. */
+.m-masthead {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.72);
+  padding: 14px 16px;
+}
+
+.m-masthead--two { grid-template-columns: 1fr 1fr; }
+.m-masthead--three { grid-template-columns: 1fr 1fr 1fr; }
+
+.m-masthead__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--hairline);
+}
+
+.m-masthead__cell:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.m-masthead__label {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.m-masthead__value {
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum", "lnum";
+  line-height: 1.1;
+}
+
+.m-masthead__sub {
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Mobile page header — masthead-italic title row. */
+.m-page-head {
+  padding: 4px 4px 14px;
+}
+
+.m-page-head__dept {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 6px;
+}
+
+.m-page-head__title {
+  font-family: var(--font-fraunces, Fraunces), Iowan Old Style, Georgia, serif;
+  font-style: italic;
+  font-weight: 450;
+  font-size: 30px;
+  line-height: 0.98;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  font-variation-settings: "opsz" 96, "SOFT" 50, "WONK" 0;
+}
+
+.m-page-head__sub {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.m-page-head__rule {
+  margin-top: 12px;
+  height: 1px;
+  background: var(--hairline-bold);
+}
+
+/* Read-only banner used by recipes / ingredients / menu detail screens. */
+.m-readonly-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.6);
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.m-readonly-note::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background: var(--ink-faint);
+  transform: rotate(45deg);
+}
+
+/* Mobile section list ("More" sheet) — vertical run of department-grouped
+   .inv-row links to the off-tab routes. */
+.m-section-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: [dept] 100px [name] 1fr [chev] 16px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 12px 16px 16px;
+  border-top: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.m-section-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 3px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.m-section-row:hover,
+.m-section-row:focus-visible,
+.m-section-row:active {
+  background: rgba(220, 38, 38, 0.045);
+  outline: none;
+}
+.m-section-row:hover::before,
+.m-section-row:focus-visible::before,
+.m-section-row:active::before {
+  transform: scaleY(1);
+}
+.m-section-row:active {
+  transform: scale(0.992);
+  transition: background-color 120ms ease, transform 80ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.m-section-row__dept {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.m-section-row__name {
+  font-family: var(--font-fraunces, Fraunces), Iowan Old Style, Georgia, serif;
+  font-style: italic;
+  font-weight: 450;
+  font-size: 19px;
+  letter-spacing: -0.014em;
+  color: var(--ink);
+  font-variation-settings: "opsz" 96, "SOFT" 50;
+}
+
+.m-section-row:hover .m-section-row__name,
+.m-section-row:focus-visible .m-section-row__name,
+.m-section-row:active .m-section-row__name {
+  color: var(--accent-dark);
+}
+
+.m-section-row__chev {
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-size: 16px;
+  color: var(--ink-faint);
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.m-section-row:hover .m-section-row__chev,
+.m-section-row:focus-visible .m-section-row__chev,
+.m-section-row:active .m-section-row__chev {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+.m-section-row + .m-section-row {
+  /* second row inherits its own border-top */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-section-row::before,
+  .m-section-row__chev {
+    transition: none;
+  }
+}
+
+/* Empty / "coming soon" docket used by stub pages. */
+.m-empty {
+  padding: 18px 16px;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.72);
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Flush variant: when the empty sits inside an .inv-panel--flush, the
+   panel already supplies the outer hairline frame; dropping the border
+   prevents a double-rule artifact. Replaces the ad-hoc style={{border:0}}
+   override that had crept across the (mobile) tree. */
+.m-empty--flush {
+  border: 0;
+  background: transparent;
+}
+
+.m-empty strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Mobile catalog search lists. These pages can carry hundreds of rows, so
+   the list owns a bounded scrollport for virtualized rendering. */
+.m-catalog-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.m-catalog-list__toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.m-catalog-list__search {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-catalog-list__viewport {
+  max-height: min(68dvh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: layout paint;
+}
+
+.m-catalog-list__spacer {
+  position: relative;
+}
+
+.m-catalog-list__item {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  contain: layout paint;
+}
+
+.m-catalog-list__empty {
+  margin: 0 16px 12px;
+}
+
+.m-catalog-row {
+  cursor: default;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+.m-catalog-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.m-catalog-row__title {
+  font-size: 15.5px;
+}
+
+.m-catalog-row__meta,
+.m-catalog-row__subvalue {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.m-catalog-row__meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-catalog-row__value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  min-width: max-content;
+  gap: 2px;
+}
+
+.m-catalog-row__value--muted {
+  color: var(--ink-muted);
+}
+
+.m-catalog-row__value--accent {
+  color: var(--accent-dark);
+}
+
+.m-chart-frame,
+.editorial-surface--mobile .inv-panel,
+.ingredient-tile,
+.menu-row {
+  contain: layout paint;
+}
+
+.m-chart-frame {
+  content-visibility: auto;
+  contain-intrinsic-size: 230px;
+}
+
+.m-skel-line,
+.m-skel-pill,
+.m-skel-button,
+.m-loading-chart__plot {
+  display: block;
+  border-radius: 2px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(201, 190, 175, 0.22),
+      rgba(255, 253, 247, 0.76),
+      rgba(201, 190, 175, 0.22)
+    );
+  background-size: 220% 100%;
+  animation: mSkeletonWash 1.15s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes mSkeletonWash {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+.m-skel-line--cap {
+  width: 86px;
+  height: 10px;
+}
+
+.m-skel-line--title {
+  width: min(240px, 72vw);
+  height: 30px;
+}
+
+.m-skel-line--body {
+  width: min(280px, 76vw);
+  height: 14px;
+}
+
+.m-skel-line--sub {
+  width: 176px;
+  height: 12px;
+  margin-top: 8px;
+}
+
+.m-skel-line--value {
+  width: 78px;
+  height: 24px;
+}
+
+.m-skel-line--meta {
+  width: 112px;
+  height: 10px;
+}
+
+.m-skel-line--select {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+}
+
+.m-skel-line--segment {
+  width: 42px;
+  height: 10px;
+  margin: 0 auto;
+}
+
+.m-skel-line--row-title {
+  width: min(180px, 48vw);
+  height: 15px;
+}
+
+.m-skel-line--amount {
+  width: 72px;
+  height: 16px;
+}
+
+.m-skel-line--input {
+  width: 100%;
+  height: 22px;
+}
+
+.m-skel-pill {
+  width: min(260px, 76vw);
+  height: 36px;
+}
+
+.m-skel-button {
+  width: 66px;
+  height: 44px;
+}
+
+.m-loading-store {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.m-loading-chart {
+  margin-top: 14px;
+  padding: 10px 4px 0;
+}
+
+.m-loading-chart__plot {
+  height: 200px;
+  margin-top: 8px;
+  border: 1px solid var(--hairline-bold);
+  background-color: rgba(255, 253, 247, 0.72);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-skel-line,
+  .m-skel-pill,
+  .m-skel-button,
+  .m-loading-chart__plot {
+    animation: none;
+  }
+}
+
+/* Caption — canonical small-caps label used across mobile pages
+   (back link, status header, store header, etc.). Replaces the
+   inline JetBrains Mono / 10px / 0.18em / uppercase / ink-faint
+   recipe that was duplicated five places. */
+.m-cap {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  line-height: 1.2;
+}
+
+.m-cap--ink { color: var(--ink-muted); }
+
+/* Mobile back link — left-arrow caption with adequate touch target.
+   min-height: 44px keeps the tap area WCAG-compliant even when the
+   caption text is short. Children style themselves via .m-cap. */
+.m-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 12px 4px;
+  text-decoration: none;
+  color: var(--ink-muted);
+  transition: color 140ms ease;
+}
+
+.m-back-link:hover,
+.m-back-link:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+.m-back-link:active {
+  color: var(--accent);
+  transform: translateX(-2px);
+  transition: color 100ms ease, transform 90ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-back-link,
+  .m-back-link:active {
+    transform: none;
+  }
+}
+
+/* Segmented control — full-width row of pressable filter pills.
+   Touch-target compliant (≥44px) and uses the system underline-on-active
+   accent treatment. Replaces ad-hoc filter pill bars. */
+.m-segmented {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--hairline-bold);
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.m-segmented__item {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  min-height: 44px;
+  padding: 14px 6px;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.m-segmented__item:last-child {
+  border-right: 0;
+}
+
+.m-segmented__item:hover {
+  color: var(--ink);
+}
+
+.m-segmented__item:focus-visible {
+  outline: none;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+.m-segmented__item:active {
+  color: var(--accent);
+  background: rgba(220, 38, 38, 0.06);
+  transform: scale(0.97);
+  transition: color 100ms ease, background-color 100ms ease, transform 80ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.m-segmented__item.is-active {
+  color: var(--accent-dark);
+  background: var(--accent-bg);
+}
+
+/* Underline grows in from center when a segment becomes active. The previous
+   active segment's ::after detaches with the DOM, so there's no exit motion to
+   tune — only the new entrance reads as a transition. */
+.m-segmented__item.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: center;
+  animation: mSegmentedUnderline 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+
+@keyframes mSegmentedUnderline {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-segmented__item,
+  .m-segmented__item:active {
+    transform: none;
+    transition: none;
+  }
+  .m-segmented__item.is-active::after {
+    animation: none;
+  }
+}
+
+/* Touch-tuned toolbar button — used on mobile for pagination and
+   any prominent action that needs a 44px hit target. */
+.m-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 0;
+  color: var(--ink);
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease;
+}
+
+.m-toolbar-btn:hover {
+  border-color: var(--ink);
+}
+
+.m-toolbar-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.m-toolbar-btn:active {
+  transform: scale(0.97);
+  border-color: var(--accent);
+  color: var(--accent);
+  transition: border-color 120ms ease, color 120ms ease, transform 80ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-toolbar-btn:active {
+    transform: none;
+  }
+}
+
+/* Native select shaped to the editorial system — hairline frame,
+   warm-paper ground, JetBrains Mono chevron drawn via background-image. */
+.m-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 36px 11px 12px;
+  background-color: rgba(255, 253, 247, 0.6);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236b625a' stroke-width='1.2' stroke-linecap='square'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 0;
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.m-select:focus,
+.m-select:focus-visible {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+.m-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Non-interactive ledger line — shares grid + hairline divider with
+   .inv-row but omits the press-affordance chrome (red bar, hover wash,
+   total color shift). For read-only line-item lists like invoice detail. */
+.inv-line {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 18px;
+  border-top: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.inv-line:first-child {
+  border-top: 0;
+}
+
+.inv-line__name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+
+.inv-line__meta {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.inv-line__total {
+  font-family: var(--font-dm-sans, "DM Sans"), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.014em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum", "lnum";
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Mobile perforation — dashed rule used to separate ledger groups
+   (e.g. invoice list grouped by week). Sits between rows inside an
+   .inv-panel--flush. */
+.m-perforation {
+  display: block;
+  padding: 6px 18px;
+  border-top: 1px dashed var(--hairline-bold);
+  background: rgba(244, 236, 223, 0.4);
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.m-perforation:first-child {
+  border-top: 0;
+}
+
+/* Chart bars on /m/* SVG charts grow up from their baseline on first paint.
+   Each bar carries a per-index --i so the entrance reads as a subtle wipe
+   left→right rather than a synchronized pop. transform-box: fill-box anchors
+   the origin to the bar's own bbox, which SVG would otherwise resolve to the
+   SVG root — that would scale the bar from the top-left of the chart. */
+.m-chart-bar {
+  transform-origin: bottom;
+  transform-box: fill-box;
+  animation: mChartBarGrow 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 8ms + 80ms);
+}
+
+@keyframes mChartBarGrow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-chart-bar {
+    animation: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Editorial date-range calendar (mobile sheet) — paired with
+   <EditorialCalendar />. Two stacked month grids; range fill uses
+   the same red wash as .inv-row hover so the system reads as one. */
+
+.ed-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ed-cal__month {
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--paper);
+  padding: 14px 12px 12px;
+}
+
+.ed-cal__month-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ed-cal__month-title {
+  font-family: var(--font-fraunces, "Fraunces"), Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+  letter-spacing: 0.005em;
+}
+
+.ed-cal__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.ed-cal__nav:hover { color: var(--ink); background: rgba(0,0,0,0.02); }
+.ed-cal__nav:disabled { color: var(--ink-faint); cursor: not-allowed; }
+
+.ed-cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  margin-bottom: 4px;
+}
+
+.ed-cal__weekday {
+  text-align: center;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 6px 0;
+}
+
+.ed-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+}
+
+.ed-cal__day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease;
+}
+
+.ed-cal__day--blank { cursor: default; pointer-events: none; }
+
+.ed-cal__day--disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.ed-cal__day--in-range {
+  background: rgba(220, 38, 38, 0.045);
+}
+
+.ed-cal__day--start,
+.ed-cal__day--end {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+
+.ed-cal__day--start::after,
+.ed-cal__day--end::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 6px;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: center;
+  animation: edCalUnderline 220ms cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+
+.ed-cal__day--today::before {
+  content: "TODAY";
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 7px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+
+.ed-cal__day:not(.ed-cal__day--blank):not(.ed-cal__day--disabled):hover {
+  color: var(--accent);
+}
+
+.ed-cal__day:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+@keyframes edCalUnderline {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ed-cal__day--start::after,
+  .ed-cal__day--end::after { animation: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile bottom sheet — paired with <DateSheetShell />.
+   Editorial register: hairline-bold border on top, paper bg, no shadow. */
+
+.m-sheet__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 14, 0.32);
+  z-index: 80;
+  animation: mSheetFade 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.m-sheet {
+  /* Sheet is portaled to <body> so it sits outside .editorial-surface
+     and the toolbar's transformed stacking context. Re-declare the
+     editorial vars locally — same trick .drp-popover uses. */
+  --ink: #1a1613;
+  --ink-muted: #6b625a;
+  --ink-faint: #a69d92;
+  --paper: #fbf6ee;
+  --hairline: #e8dfd3;
+  --hairline-bold: #c9beaf;
+  --accent: #dc2626;
+  --accent-dark: #7c1515;
+
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 81;
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom: 1px solid var(--hairline-bold);
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+  max-height: 92vh;
+  max-height: 92dvh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  animation: mSheetDown 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.m-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.m-sheet__head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.m-sheet__proofmark {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 1px;
+  display: inline-block;
+}
+
+.m-sheet__close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+.m-sheet__close:hover { color: var(--ink); }
+
+.m-sheet__body {
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.m-sheet__readout {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.m-sheet__readout--placeholder { color: var(--ink-faint); font-weight: 400; }
+
+.m-sheet__foot {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.m-sheet__btn {
+  flex: 1;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 14px 0;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.m-sheet__btn--ghost {
+  background: transparent;
+  color: var(--ink-muted);
+  border: 1px solid var(--hairline-bold);
+}
+.m-sheet__btn--ghost:hover { color: var(--ink); }
+
+.m-sheet__btn--primary {
+  background: var(--accent);
+  color: var(--paper);
+  border: 1px solid var(--accent);
+}
+.m-sheet__btn--primary:disabled {
+  background: var(--hairline);
+  border-color: var(--hairline);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+@keyframes mSheetDown {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes mSheetFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-sheet, .m-sheet__backdrop { animation: none; }
+}
+
+/* Granularity toggle inside the P&L date sheet. Three pills, JetBrains
+   Mono caps, accent fill on the active state — same accent visual register
+   as the segmented toolbar but smaller. */
+.m-grain-toggle {
+  display: flex;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  margin-top: 16px;
+  overflow: hidden;
+}
+.m-grain-toggle__item {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 0;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.m-grain-toggle__item:last-child { border-right: 0; }
+.m-grain-toggle__item:hover { color: var(--ink); }
+.m-grain-toggle__item.is-active {
+  color: var(--accent-dark);
+  background: var(--accent-bg);
+}
+.m-grain-toggle__label {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 4px;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.m-grain-toggle__hint {
+  margin-top: 6px;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
