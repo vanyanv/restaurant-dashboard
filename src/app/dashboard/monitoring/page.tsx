@@ -9,7 +9,7 @@ import {
   getLoginsByHour,
 } from "@/lib/monitoring/queries"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 30
 
 export default async function MonitoringBridgePage() {
   const [statuses, errorsByHour, aiByHour, loginsByHour, events] =

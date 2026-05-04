@@ -1,9 +1,36 @@
 "use server"
 
 import { getServerSession } from "next-auth"
+import { unstable_cache } from "next/cache"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/generated/prisma/client"
+
+/** Distinct platforms across an account's orders, cached for an hour.
+ * The previous shape was a `distinct: ["platform"]` findMany inside every
+ * getOrdersList call — at 41k+ rows that was a full-table scan on every
+ * filter change. Tag is invalidated on order ingest (revalidateTag in the
+ * sync routes once we wire that up); until then the TTL falls back. */
+const getPlatformsForAccount = unstable_cache(
+  async (accountId: string): Promise<string[]> => {
+    const stores = await prisma.store.findMany({
+      where: { accountId },
+      select: { id: true },
+    })
+    const storeIds = stores.map((s) => s.id)
+    if (storeIds.length === 0) return []
+
+    const rows = await prisma.otterOrder.findMany({
+      where: { storeId: { in: storeIds } },
+      distinct: ["platform"],
+      select: { platform: true },
+      orderBy: { platform: "asc" },
+    })
+    return rows.map((r) => r.platform)
+  },
+  ["order-platforms-by-account"],
+  { revalidate: 3600, tags: ["order-platforms"] }
+)
 
 export type OrderListFilters = {
   storeId?: string | null
@@ -118,12 +145,7 @@ export async function getOrdersList(
       },
     }),
     prisma.otterOrder.count({ where }),
-    prisma.otterOrder.findMany({
-      where: { storeId: { in: storeIds } },
-      distinct: ["platform"],
-      select: { platform: true },
-      orderBy: { platform: "asc" },
-    }),
+    getPlatformsForAccount(session.user.accountId),
   ])
 
   const hasMore = rows.length > limit
@@ -150,7 +172,7 @@ export async function getOrdersList(
       detailsFetched: r.detailsFetchedAt != null,
     })),
     nextCursor: hasMore ? trimmed[trimmed.length - 1].id : null,
-    platforms: platforms.map((p) => p.platform),
+    platforms,
     totalCount,
   }
 }
