@@ -476,6 +476,23 @@ function costAwareAlternatives(units: PackingUnits): Array<{ label: string; coun
     }
   }
 
+  // Triple Pack (3 burgers + 1 fries) overflows the 9x6 capacity. The default
+  // packer pairs 2B+1F into a 9x6 and leaves a stray burger, but two mediums
+  // (one holds 2 burgers, the other holds 1 burger + 1 fries) is also valid
+  // and often cheaper. Add it so cost-aware selection can pick it.
+  const isTriplePackBasket =
+    units.burgers === 3 &&
+    units.fries === 1 &&
+    units.loadedFries === 0 &&
+    units.grilledCheese === 0
+  if (isTriplePackBasket) {
+    addAlternative(alternatives, seen, "triple pack as 2 medium 6x6", {
+      medium_6x6: 2,
+      large_9x6: 0,
+      one_compartment: 0,
+    })
+  }
+
   const maxLoadedSliderPairs = Math.min(Math.floor(units.burgers / 2), units.loadedFries)
   const loadedSliderPairOptions = isExactLoadedSliderRule
     ? [units.loadedFries]

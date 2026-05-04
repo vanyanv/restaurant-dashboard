@@ -401,7 +401,7 @@ async function computePackagingRowsForDay(input: {
     },
   })
 
-  const costs = await getContainerGroupCosts(accountId, date)
+  const costs = await getContainerGroupCosts(accountId, storeId, date)
   const unitCosts = containerUnitCostMap(costs)
   const counts = emptyContainerCounts()
   for (const order of orders) {
@@ -433,10 +433,9 @@ async function computePackagingRowsForDay(input: {
     })
 }
 
-const CONTAINER_BLEND_WINDOW_DAYS = 90
-
 async function getContainerGroupCosts(
   accountId: string,
+  storeId: string,
   asOf: Date
 ): Promise<Record<ContainerGroup, ContainerGroupCost>> {
   const allNames = Object.values(CONTAINER_GROUP_CANONICALS).flat()
@@ -446,82 +445,29 @@ async function getContainerGroupCosts(
   })
   const canonicalByName = new Map(canonicals.map((c) => [c.name, c.id]))
 
-  // Cost-weighted blend across canonicals in a group. Containers in the same
-  // group (e.g. medium_6x6 = "hinged" + "bagged") are interchangeable
-  // packaging SKUs but can carry materially different unit prices. An
-  // unweighted average of per-canonical $/each silently overweights low-volume
-  // SKUs. We instead aggregate ($, units) from invoice lines over a trailing
-  // window and divide, so the blended cost reflects what was actually bought.
-  const windowStart = new Date(asOf)
-  windowStart.setUTCDate(windowStart.getUTCDate() - CONTAINER_BLEND_WINDOW_DAYS)
-
-  const allCanonicalIds = canonicals.map((c) => c.id)
-  const blendLines =
-    allCanonicalIds.length > 0
-      ? await prisma.invoiceLineItem.findMany({
-          where: {
-            canonicalIngredientId: { in: allCanonicalIds },
-            quantity: { not: 0 },
-            invoice: { invoiceDate: { gte: windowStart, lte: asOf } },
-          },
-          select: {
-            canonicalIngredientId: true,
-            quantity: true,
-            packSize: true,
-            unitSize: true,
-            extendedPrice: true,
-          },
-        })
-      : []
-
-  const blendByCanonical = new Map<string, { dollars: number; units: number }>()
-  for (const line of blendLines) {
-    if (!line.canonicalIngredientId) continue
-    const packSize = line.packSize && line.packSize > 0 ? line.packSize : 1
-    const unitSize = line.unitSize && line.unitSize > 0 ? line.unitSize : 1
-    const baseQty = line.quantity * packSize * unitSize
-    if (!isFinite(baseQty) || baseQty === 0) continue
-    if (Math.sign(line.extendedPrice) !== Math.sign(baseQty)) continue
-    const agg = blendByCanonical.get(line.canonicalIngredientId) ?? { dollars: 0, units: 0 }
-    agg.dollars += Math.abs(line.extendedPrice)
-    agg.units += Math.abs(baseQty)
-    blendByCanonical.set(line.canonicalIngredientId, agg)
-  }
-
+  // Within a group, canonicals (e.g. medium_6x6 = "hinged" + "bagged") are
+  // interchangeable SKUs. Average their per-canonical latest costs unweighted —
+  // we don't know which SKU was used per order, and weighting by trailing
+  // purchase volume would re-introduce the lag this code path exists to remove.
   const entries = await Promise.all(
     (Object.keys(CONTAINER_GROUP_CANONICALS) as ContainerGroup[]).map(async (group) => {
       const names = CONTAINER_GROUP_CANONICALS[group]
-      let dollars = 0
-      let units = 0
-      let foundFromBlend = 0
-      let foundFromCanonical = 0
+      let totalCost = 0
+      let foundCount = 0
       for (const name of names) {
         const id = canonicalByName.get(name)
         if (!id) continue
-        const blend = blendByCanonical.get(id)
-        if (blend && blend.units > 0) {
-          dollars += blend.dollars
-          units += blend.units
-          foundFromBlend++
-          continue
-        }
-        // Fallback: no purchases inside the trailing window for this canonical.
-        // Use the canonical's stored $/recipeUnit (set by recomputeCanonicalCost
-        // from the most recent matched line) but weight it as a single unit so
-        // it contributes without dominating the blend.
-        const fallback = await getCanonicalIngredientCost(id, asOf)
-        if (fallback?.unitCost != null) {
-          dollars += fallback.unitCost
-          units += 1
-          foundFromCanonical++
+        const cost = await getCanonicalIngredientCost(id, asOf, { storeId })
+        if (cost?.unitCost != null) {
+          totalCost += cost.unitCost
+          foundCount++
         }
       }
-      const totalFound = foundFromBlend + foundFromCanonical
       return [
         group,
         {
-          unitCost: units > 0 ? dollars / units : null,
-          partialCost: totalFound < names.length,
+          unitCost: foundCount > 0 ? totalCost / foundCount : null,
+          partialCost: foundCount < names.length,
         },
       ] as const
     })
