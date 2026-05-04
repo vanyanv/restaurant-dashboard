@@ -25,13 +25,6 @@
 import { createHash } from "node:crypto"
 import { Client } from "pg"
 
-// Point Prisma at the chat-layer Neon branch (DATABASE_URL2) before the
-// prisma client module is loaded. The main DATABASE_URL is the shared app
-// DB; the vector tables + embeddings live on URL2.
-if (process.env.DATABASE_URL2) {
-  process.env.DATABASE_URL = process.env.DATABASE_URL2
-}
-
 import { prisma } from "../src/lib/prisma"
 import {
   embedBatch,
@@ -89,8 +82,8 @@ function parseArgs(): Args {
 }
 
 function rawClient(): Client {
-  const url = process.env.DATABASE_URL2 ?? process.env.DATABASE_URL
-  if (!url) throw new Error("DATABASE_URL2 (or DATABASE_URL) not set")
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error("DATABASE_URL not set")
   return new Client({ connectionString: url })
 }
 
@@ -601,8 +594,7 @@ function buildPnlText(input: {
 
 async function backfillPnlNarratives(c: Client) {
   // Find every account that has at least one OtterDailySummary row, with the
-  // earliest date so we know how far back to walk. The primary table lives on
-  // DATABASE_URL2 in the chat-layer Neon branch — same prisma client.
+  // earliest date so we know how far back to walk.
   const accounts = await prisma.account.findMany({
     select: {
       id: true,

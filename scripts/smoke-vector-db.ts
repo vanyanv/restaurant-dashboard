@@ -13,7 +13,6 @@ import { embed, toVectorLiteral } from "../src/lib/chat/embeddings"
 
 const REQUIRED_ENV = [
   "DATABASE_URL",
-  "DATABASE_URL2",
   "OPENAI_API_KEY",
   "NEXTAUTH_SECRET",
 ] as const
@@ -182,9 +181,8 @@ async function main() {
 
   console.log("Vector DB smoke: starting")
   checkPrismaDrift("DATABASE_URL", process.env.DATABASE_URL!)
-  checkPrismaDrift("DATABASE_URL2", process.env.DATABASE_URL2!)
 
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL2! })
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL! })
   await client.connect()
   try {
     await checkVectorExtension(client)
@@ -230,7 +228,7 @@ function assertRequiredEnv() {
   }
 }
 
-function checkPrismaDrift(label: "DATABASE_URL" | "DATABASE_URL2", url: string) {
+function checkPrismaDrift(label: "DATABASE_URL", url: string) {
   const env = { ...process.env, DATABASE_URL: url }
   const res = spawnSync(
     "./node_modules/.bin/prisma",
@@ -274,6 +272,7 @@ function isAllowedManualDiff(output: string): boolean {
   const allowed = new Set([
     "- plpgsql",
     "[+] Added index on columns (embedding)",
+    "[*] Renamed index `OtterOrder_storeId_referenceTimeLocal_idx` to `OtterOrder_pending_details_idx`",
   ])
   return meaningful.length > 0 && meaningful.every((line) => allowed.has(line))
 }
@@ -285,7 +284,7 @@ async function checkVectorExtension(client: pg.Client) {
      ) AS installed`,
   )
   if (!res.rows[0]?.installed) {
-    throw new Error("DATABASE_URL2 is missing pgvector extension")
+    throw new Error("DATABASE_URL is missing pgvector extension")
   }
   console.log("OK pgvector extension installed")
 }
