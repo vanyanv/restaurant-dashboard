@@ -1,14 +1,18 @@
-name: COGS Sweep (hourly, 7 days)
+name: COGS Sweep (4-hour, 3 days)
 on:
   schedule:
-    # Hourly at :30 — staggered so the :00 Otter orders sync has settled before
-    # we recompute COGS off it. Window is the last 7 days; idempotent upserts.
-    - cron: '30 * * * *'
+    # Every 4 hours at :30 — staggered so the :00 Otter orders sync has
+    # settled before we recompute COGS off it. Window is the last 3 days;
+    # daily 30-day refresh still catches slower corrections overnight.
+    - cron: '30 */4 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:
-        description: 'Days to recompute (default 7)'
-        default: '7'
+        description: 'Days to recompute (default 3)'
+        default: '3'
+      force:
+        description: 'Include empty stores and bypass source-change skip'
+        default: 'false'
 
 concurrency:
   group: cogs-sweep
@@ -25,8 +29,9 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
-          payload=$(curl -fsSL "$APP_URL/api/cron/cogs/stores" \
+          payload=$(curl -fsSL "$APP_URL/api/cron/cogs/stores?force=$FORCE" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 30)
           ids=$(echo "$payload" | jq -c '[.stores[].id]')
@@ -43,15 +48,16 @@ jobs:
       matrix:
         storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
     steps:
-      - name: POST /api/cron/cogs/sweep (last 7 days)
+      - name: POST /api/cron/cogs/sweep (last 3 days)
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           STORE_ID: ${{ matrix.storeId }}
-          LOOKBACK: ${{ github.event.inputs.lookbackDays || '7' }}
+          LOOKBACK: ${{ github.event.inputs.lookbackDays || '3' }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
           response=$(curl -fsSL -X POST \
-            "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK" \
+            "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK&force=$FORCE" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 295)
           echo "$response" | jq .

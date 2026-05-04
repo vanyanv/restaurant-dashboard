@@ -11,6 +11,9 @@ on:
       lookbackDays:
         description: 'Days to recompute (default 30)'
         default: '30'
+      force:
+        description: 'Include empty stores and bypass source-change skip'
+        default: 'false'
 
 concurrency:
   group: cogs-refresh
@@ -27,8 +30,9 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
-          payload=$(curl -fsSL "$APP_URL/api/cron/cogs/stores" \
+          payload=$(curl -fsSL "$APP_URL/api/cron/cogs/stores?force=$FORCE" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 30)
           ids=$(echo "$payload" | jq -c '[.stores[].id]')
@@ -51,9 +55,10 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           STORE_ID: ${{ matrix.storeId }}
           LOOKBACK: ${{ github.event.inputs.lookbackDays || '30' }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
           response=$(curl -fsSL -X POST \
-            "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK" \
+            "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK&force=$FORCE" \
             -H "Authorization: Bearer $CRON_SECRET" \
             --max-time 295)
           echo "$response" | jq .

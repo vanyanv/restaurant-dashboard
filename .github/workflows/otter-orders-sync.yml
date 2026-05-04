@@ -1,10 +1,9 @@
 name: Otter Orders Sync
 on:
   schedule:
-    # Hourly on the hour. Bumped from every 3h now that GitHub Actions minutes
-    # are unconstrained — drives live order-level KPIs. The cogs-sweep workflow
-    # runs at :30 so it sees fresh order data each cycle.
-    - cron: '0 * * * *'
+    # Every 4 hours on the hour. Preserves useful same-day order KPIs while
+    # cutting repeated 3-day window updates versus the old hourly cadence.
+    - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
       days:

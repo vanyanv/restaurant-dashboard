@@ -14,19 +14,46 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const stores = await withJobRun(
+  const url = new URL(request.url)
+  const force = url.searchParams.get("force") === "true"
+
+  const result = await withJobRun(
     "cogs.stores",
-    { triggeredBy: "github-actions" },
+    { triggeredBy: "github-actions", metadata: { force } },
     async ({ addRows }) => {
-      const rows = await prisma.store.findMany({
+      const activeStores = await prisma.store.findMany({
         where: { isActive: true },
-        select: { id: true, name: true, accountId: true },
+        select: {
+          id: true,
+          name: true,
+          accountId: true,
+          _count: {
+            select: {
+              otterMenuItems: true,
+              otterOrders: true,
+            },
+          },
+        },
         orderBy: { name: "asc" },
       })
+
+      const rows = (force
+        ? activeStores
+        : activeStores.filter(
+            (store) =>
+              store._count.otterMenuItems > 0 || store._count.otterOrders > 0,
+          )
+      ).map(({ _count, ...store }) => store)
+
       addRows(rows.length)
-      return rows
+      return {
+        stores: rows,
+        activeStoreCount: activeStores.length,
+        skippedEmptyStoreCount: activeStores.length - rows.length,
+        force,
+      }
     }
   )
 
-  return NextResponse.json({ stores })
+  return NextResponse.json(result)
 }

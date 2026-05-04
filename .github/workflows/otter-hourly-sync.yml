@@ -1,9 +1,9 @@
 name: Otter Hourly Sync
 on:
   schedule:
-    # Hourly precompute for the dashboard "Service by the hour" card.
+    # Every 4 hours for the dashboard "Service by the hour" card.
     # 2-day rolling window covers late-arriving orders + retroactive Otter edits.
-    - cron: '0 * * * *'
+    - cron: '0 */4 * * *'
   workflow_dispatch:
 
 concurrency:

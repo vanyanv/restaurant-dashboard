@@ -1,13 +1,9 @@
-name: Otter Order-Details Drain (daily, per-store)
+name: Otter Order-Details Drain (weekly, per-store)
 on:
   schedule:
-    # Off-hours daily at 09:15 UTC (~02:15 LA). Drains the historical backlog
-    # of OtterOrder rows whose detailsFetchedAt is null and that fall outside
-    # the regular orders-sync window. Capped at 1500 rows per store per run;
-    # large backlogs (e.g. the 5,616 Jan/Apr 2026 rows) take ~4 days to clear
-    # at this cadence — manual workflow_dispatch with a higher limit can
-    # accelerate the initial drain.
-    - cron: '15 9 * * *'
+    # Weekly off-hours at 09:15 UTC on Monday. The historical backlog is now
+    # small; manual workflow_dispatch remains available for new-store backfills.
+    - cron: '15 9 * * 1'
   workflow_dispatch:
     inputs:
       limit:

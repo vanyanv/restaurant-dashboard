@@ -1,10 +1,9 @@
 name: Otter Daily Sync (per-store matrix)
 on:
   schedule:
-    # Every 2 hours. Bumped from every 6h to keep daily/menu totals fresh
-    # through the day as Otter's EOD aggregations land. Concurrency lock
-    # prevents pile-up if a run drags.
-    - cron: '0 */2 * * *'
+    # Every 4 hours. Keeps same-day daily/menu totals fresh enough for
+    # operations while cutting repeated sync compute versus the old 2h cadence.
+    - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:
