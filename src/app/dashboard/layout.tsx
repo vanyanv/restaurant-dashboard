@@ -3,7 +3,7 @@ import { Fraunces } from "next/font/google"
 import { AppSidebarClient } from "@/components/app-sidebar-client"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ChatDrawerProvider } from "@/components/chat/chat-drawer-context"
-import { ChatDrawer } from "@/components/chat/chat-drawer"
+import { ChatDrawerClient } from "@/components/chat/chat-drawer-client"
 import "@/styles/editorial-tokens.css"
 import "@/styles/editorial-dashboard.css"
 
@@ -29,7 +29,7 @@ export default async function DashboardLayout({
           <AppSidebarClient />
           <SidebarInset>{children}</SidebarInset>
         </SidebarProvider>
-        <ChatDrawer />
+        <ChatDrawerClient />
       </ChatDrawerProvider>
     </div>
   )

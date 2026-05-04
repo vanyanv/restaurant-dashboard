@@ -1,10 +1,16 @@
 import { HeroKpi, formatMoneyLarge, formatUsd } from "../hero-kpi"
 import { getRangeStamp, type DashboardRange } from "@/lib/dashboard-utils"
-import { fetchInvoiceSpend30d, fetchOtter } from "./data"
+import { fetchInvoiceSpend30d, type OtterPromise } from "./data"
 
-export async function HeroKpisSection({ range }: { range: DashboardRange }) {
+export async function HeroKpisSection({
+  range,
+  otterPromise,
+}: {
+  range: DashboardRange
+  otterPromise: OtterPromise
+}) {
   const [otter, invoiceSpend30d] = await Promise.all([
-    fetchOtter(range),
+    otterPromise,
     fetchInvoiceSpend30d(),
   ])
 

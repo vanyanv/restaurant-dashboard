@@ -1,25 +1,33 @@
 import { OtterSyncButton } from "@/components/otter-sync-button"
-import {
-  formatDateRange,
-  getLastSyncText,
-  type DashboardRange,
-} from "@/lib/dashboard-utils"
+import { formatDateRange, getLastSyncText } from "@/lib/dashboard-utils"
 import { MobileStoreSwitcher } from "../topbar-slots"
-import { fetchDashboard } from "./data"
+import type { DashboardPromise } from "./data"
 
-export async function TopbarRangeStamp({ range }: { range: DashboardRange }) {
-  const data = await fetchDashboard(range)
+export async function TopbarRangeStamp({
+  dashboardPromise,
+}: {
+  dashboardPromise: DashboardPromise
+}) {
+  const data = await dashboardPromise
   if (!data?.dateRange) return null
   return <>{formatDateRange(data.dateRange.startDate, data.dateRange.endDate)}</>
 }
 
-export async function TopbarLastSync({ range }: { range: DashboardRange }) {
-  const data = await fetchDashboard(range)
+export async function TopbarLastSync({
+  dashboardPromise,
+}: {
+  dashboardPromise: DashboardPromise
+}) {
+  const data = await dashboardPromise
   return <span suppressHydrationWarning>{getLastSyncText(data?.lastSyncAt)}</span>
 }
 
-export async function TopbarSyncButton({ range }: { range: DashboardRange }) {
-  const data = await fetchDashboard(range)
+export async function TopbarSyncButton({
+  dashboardPromise,
+}: {
+  dashboardPromise: DashboardPromise
+}) {
+  const data = await dashboardPromise
   return (
     <OtterSyncButton
       lastSyncAt={data?.lastSyncAt}
@@ -30,11 +38,11 @@ export async function TopbarSyncButton({ range }: { range: DashboardRange }) {
 }
 
 export async function TopbarMobileStoreSwitcher({
-  range,
+  dashboardPromise,
 }: {
-  range: DashboardRange
+  dashboardPromise: DashboardPromise
 }) {
-  const data = await fetchDashboard(range)
+  const data = await dashboardPromise
   const stores =
     data?.rows
       .filter((r) => r.storeId !== "total")

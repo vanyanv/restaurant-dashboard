@@ -1,14 +1,13 @@
 import { DayHighlights } from "@/components/analytics/day-highlights"
-import type { DashboardRange } from "@/lib/dashboard-utils"
 import { SectionHead } from "../section-head"
-import { fetchOtter } from "./data"
+import type { OtterPromise } from "./data"
 
 export async function DayHighlightsSection({
-  range,
+  otterPromise,
 }: {
-  range: DashboardRange
+  otterPromise: OtterPromise
 }) {
-  const otter = await fetchOtter(range)
+  const otter = await otterPromise
   if (!otter || otter.dailyTrends.length <= 1) return null
 
   return (
