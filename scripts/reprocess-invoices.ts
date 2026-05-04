@@ -102,6 +102,7 @@ async function main() {
   const { extractInvoiceData } = await import("../src/lib/gemini-invoice")
   const { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies } = await import("../src/lib/invoice-sanity")
   const { matchInvoiceToStore } = await import("../src/lib/address-matcher")
+  const { matchNewLineItems } = await import("../src/lib/ingredient-matching")
 
   // ── Select candidates ──
   let whereClause: Record<string, unknown> = {}
@@ -119,7 +120,7 @@ async function main() {
     where: whereClause,
     orderBy: { emailReceivedAt: "asc" },
     select: {
-      id: true, ownerId: true, vendorName: true, invoiceNumber: true,
+      id: true, ownerId: true, accountId: true, vendorName: true, invoiceNumber: true,
       invoiceDate: true, deliveryAddress: true, storeId: true, status: true,
       emailMessageId: true, emailReceivedAt: true,
       rawExtractionJson: true,
@@ -233,6 +234,16 @@ async function main() {
       continue
     }
 
+    // Defensive: schema requires productName. If the LLM returned a null name
+    // for any line, label it so the write doesn't crash; the operator can fix
+    // it via REVIEW.
+    const safeLineItems = fresh.lineItems
+      .filter((li) => li.lineNumber != null)
+      .map((li) => ({
+        ...li,
+        productName: li.productName ?? `(unnamed line ${li.lineNumber})`,
+      }))
+
     await prisma.invoiceLineItem.deleteMany({ where: { invoiceId: inv.id } })
     await prisma.invoice.update({
       where: { id: inv.id },
@@ -251,7 +262,7 @@ async function main() {
         rawExtractionJson: JSON.stringify(fresh),
         extractionModel,
         lineItems: {
-          create: fresh.lineItems.map((li) => ({
+          create: safeLineItems.map((li) => ({
             lineNumber: li.lineNumber,
             sku: li.sku,
             productName: li.productName,
@@ -268,6 +279,15 @@ async function main() {
         },
       },
     })
+    // Re-link new line items to canonicals (deleteMany above wiped the old
+    // canonicalIngredientId references). Mirrors the sync flow.
+    try {
+      const m = await matchNewLineItems(inv.accountId, [inv.id])
+      console.log(`  ↳ matched: sku=${m.matchedBySku} alias=${m.matchedByAlias} unmatched=${m.unmatched} costsUpdated=${m.costsUpdated}`)
+    } catch (e) {
+      console.warn(`  ⚠ matchNewLineItems failed: ${e instanceof Error ? e.message : e}`)
+    }
+
     console.log("  ✓ UPDATED\n")
     updated++
   }
