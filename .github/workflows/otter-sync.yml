@@ -48,10 +48,10 @@ jobs:
       matrix:
         storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
       - name: Backfill ${{ github.event.inputs.lookbackDays || '3' }}d for store ${{ matrix.storeId }}
