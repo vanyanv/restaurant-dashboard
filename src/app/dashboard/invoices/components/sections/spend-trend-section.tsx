@@ -1,4 +1,4 @@
-import { SpendTrendClient } from "../spend-trend-client"
+import { SpendTrendClient } from "../spend-trend-client-slot"
 import { fetchSpendTimeline, type InvoiceFilters, resolvePeriod } from "./data"
 
 export async function SpendTrendSection({

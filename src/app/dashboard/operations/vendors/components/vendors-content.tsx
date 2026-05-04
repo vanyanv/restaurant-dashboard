@@ -17,7 +17,7 @@ import { ChartSkeleton, DataTableSkeleton } from "@/components/skeletons"
 import { formatDateRange, localDateStr } from "@/lib/dashboard-utils"
 import { PriceChangesTable } from "./price-changes-table"
 import type { ProductUsageData } from "@/types/product-usage"
-import { VendorPriceChart } from "./vendor-price-chart"
+import { VendorPriceChart } from "./vendor-price-chart-slot"
 
 interface VendorsContentProps {
   initialData: ProductUsageData | null
