@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "analyze": "next experimental-analyze",
+    "bundle:check": "tsx scripts/check-bundle-size.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "shots:auth": "tsx scripts/mobile-auth.ts",
