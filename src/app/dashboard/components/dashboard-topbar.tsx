@@ -8,21 +8,27 @@ import {
   TopbarRangeStamp,
   TopbarSyncButton,
 } from "./sections/topbar-bits"
+import type { DashboardPromise } from "./sections/data"
 
 interface DashboardTopbarProps {
   userRole: string
   range: DashboardRange
+  dashboardPromise: DashboardPromise
 }
 
-export function DashboardTopbar({ userRole: _userRole, range }: DashboardTopbarProps) {
+export function DashboardTopbar({
+  userRole: _userRole,
+  range,
+  dashboardPromise,
+}: DashboardTopbarProps) {
   const stamps = (
     <>
       <Suspense fallback={<span className="opacity-40">loading…</span>}>
-        <TopbarRangeStamp range={range} />
+        <TopbarRangeStamp dashboardPromise={dashboardPromise} />
       </Suspense>
       <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
       <Suspense fallback={<span className="opacity-40">syncing…</span>}>
-        <TopbarLastSync range={range} />
+        <TopbarLastSync dashboardPromise={dashboardPromise} />
       </Suspense>
     </>
   )
@@ -30,10 +36,10 @@ export function DashboardTopbar({ userRole: _userRole, range }: DashboardTopbarP
   return (
     <EditorialTopbar section="§ 01" title="Overview" stamps={stamps}>
       <Suspense fallback={null}>
-        <TopbarMobileStoreSwitcher range={range} />
+        <TopbarMobileStoreSwitcher dashboardPromise={dashboardPromise} />
       </Suspense>
       <Suspense fallback={null}>
-        <TopbarSyncButton range={range} />
+        <TopbarSyncButton dashboardPromise={dashboardPromise} />
       </Suspense>
       <DashboardTopbarControls range={range} />
     </EditorialTopbar>

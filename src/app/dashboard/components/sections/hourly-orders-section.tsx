@@ -1,13 +1,12 @@
 import { HourlyOrdersDashboardCard } from "@/components/analytics/hourly-orders-dashboard-card"
-import type { DashboardRange } from "@/lib/dashboard-utils"
-import { fetchDashboard } from "./data"
+import type { DashboardPromise } from "./data"
 
 export async function HourlyOrdersSection({
-  range,
+  dashboardPromise,
 }: {
-  range: DashboardRange
+  dashboardPromise: DashboardPromise
 }) {
-  const data = await fetchDashboard(range)
+  const data = await dashboardPromise
   const stores =
     data?.rows
       .filter((r) => r.storeId !== "total")

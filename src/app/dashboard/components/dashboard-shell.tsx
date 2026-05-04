@@ -13,6 +13,7 @@ import { DayHighlightsSection } from "./sections/day-highlights-section"
 import { HourlyOrdersSection } from "./sections/hourly-orders-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
 import { InvoiceSnapshotSection } from "./sections/invoice-snapshot-section"
+import { buildDashboardData } from "./sections/data"
 
 interface DashboardShellProps {
   range: DashboardRange
@@ -20,9 +21,16 @@ interface DashboardShellProps {
 }
 
 export function DashboardShell({ range, userRole }: DashboardShellProps) {
+  const { dashboard: dashboardPromise, otter: otterPromise } =
+    buildDashboardData(range)
+
   return (
     <div className="flex flex-col min-h-screen">
-      <DashboardTopbar userRole={userRole} range={range} />
+      <DashboardTopbar
+        userRole={userRole}
+        range={range}
+        dashboardPromise={dashboardPromise}
+      />
 
       <section className="editorial-masthead-slim dock-in dock-in-1">
         <div className="flex items-baseline justify-between gap-4 mb-5">
@@ -31,13 +39,13 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
           </div>
         </div>
         <Suspense fallback={<HeroKpiSkeleton />}>
-          <HeroKpisSection range={range} />
+          <HeroKpisSection range={range} otterPromise={otterPromise} />
         </Suspense>
       </section>
 
       <div className="px-6 py-8 space-y-8">
         <Suspense fallback={<DayHighlightsSkeleton />}>
-          <DayHighlightsSection range={range} />
+          <DayHighlightsSection otterPromise={otterPromise} />
         </Suspense>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-5 dock-in dock-in-4">
@@ -52,13 +60,13 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
                 <ChartSkeleton height="h-[280px] md:h-[340px] lg:h-[380px]" />
               }
             >
-              <HourlyOrdersSection range={range} />
+              <HourlyOrdersSection dashboardPromise={dashboardPromise} />
             </Suspense>
           </div>
         </div>
 
         <Suspense fallback={<FinancialSummaryTableSkeleton />}>
-          <FinancialSummarySection range={range} />
+          <FinancialSummarySection dashboardPromise={dashboardPromise} />
         </Suspense>
 
         <Suspense fallback={<InvoiceSnapshotSkeleton />}>

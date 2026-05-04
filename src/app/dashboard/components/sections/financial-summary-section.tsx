@@ -1,14 +1,13 @@
 import { FinancialSummaryTable } from "../financial-summary-table"
 import { SectionHead } from "../section-head"
-import type { DashboardRange } from "@/lib/dashboard-utils"
-import { fetchDashboard } from "./data"
+import type { DashboardPromise } from "./data"
 
 export async function FinancialSummarySection({
-  range,
+  dashboardPromise,
 }: {
-  range: DashboardRange
+  dashboardPromise: DashboardPromise
 }) {
-  const data = await fetchDashboard(range)
+  const data = await dashboardPromise
   const hasData = data && data.rows.length > 0
 
   return (

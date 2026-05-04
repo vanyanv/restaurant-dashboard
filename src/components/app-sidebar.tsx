@@ -322,6 +322,7 @@ function EditorialNav({ items }: { items: NavItem[] }) {
             <Link
               key={item.title}
               href={item.url}
+              prefetch={false}
               onClick={() => recordNavClick(item.url)}
               className={`editorial-nav-item ${active ? "is-active" : ""}`}
             >
@@ -363,6 +364,7 @@ function EditorialNav({ items }: { items: NavItem[] }) {
                     <Link
                       key={sub.title}
                       href={sub.url}
+                      prefetch={false}
                       onClick={() => recordNavClick(sub.url)}
                       className={`editorial-nav-subitem ${subActive ? "is-active" : ""}`}
                     >
@@ -401,10 +403,14 @@ function EditorialUserCard() {
         className="w-56"
       >
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/settings/account">Account</Link>
+          <Link href="/dashboard/settings/account" prefetch={false}>
+            Account
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/dashboard/settings/notifications">Notifications</Link>
+          <Link href="/dashboard/settings/notifications" prefetch={false}>
+            Notifications
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
