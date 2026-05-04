@@ -1,42 +1,18 @@
--- Migration: bring DATABASE_URL2 (chat / vector branch) up to current schema
+-- Migration: bring the chat-layer Neon branch up to current schema
 -- Date: 2026-04-30
--- Target: $DATABASE_URL2 only. The primary DB (DATABASE_URL) is already up-to-date.
 --
--- Background:
---   The multi-tenant refactor (Account model + accountId scope columns,
---   Invite, monitoring tables) was applied to the primary DB via
---   `prisma db push` but never reached the chat-layer Neon branch. The chat
---   page hits the chat branch via `chatPrisma`, so any query that
---   references `Conversation.accountId` (and most chat queries do) errors
---   with: column "(not available)" does not exist.
+-- HISTORICAL — kept for archival only. The chat-layer Neon branch (formerly
+-- $DATABASE_URL2) was consolidated into the primary DB; embedding rows and
+-- chat history now live alongside operational data on a single Postgres.
+-- This migration ran once against the chat branch and is no longer applicable.
 --
---   This file is the verbatim output of `prisma migrate diff
---   --from-config-datasource --to-schema prisma/schema.prisma --script`
---   run with DATABASE_URL pointed at $DATABASE_URL2, with one critical
---   adjustment: every `ADD COLUMN ... NOT NULL` is rewritten as `ADD COLUMN
---   ... NOT NULL DEFAULT 'acc_default_chrisneddys'` followed by `DROP
---   DEFAULT`, because the chat branch has real rows in every affected
---   table (User=1, Store=3, Invoice=82, Recipe=60, CanonicalIngredient=73,
---   IngredientSkuMatch=83, Conversation=1, embeddings=1010 total). A bare
---   `ADD COLUMN NOT NULL` would error on populated tables.
---
---   The default `acc_default_chrisneddys` matches the single Account row
---   in the primary DB. After this migration runs, every existing row on
---   the chat branch is owned by that account, mirroring the primary DB.
---
--- Apply order:
---   1. (optional) sanity-check current state: `npx prisma migrate diff
---      --from-config-datasource --to-schema prisma/schema.prisma` with
---      DATABASE_URL=$DATABASE_URL2 — should print this same delta.
---   2. Apply this file:
---        DATABASE_URL=$DATABASE_URL2 npx prisma db execute \
---          --file prisma/manual-migrations/2026-04-30_chat_db_multi_tenant_sync.sql \
---          --schema prisma/schema.prisma
---   3. Verify clean diff:
---        DATABASE_URL=$DATABASE_URL2 npx prisma migrate diff \
---          --from-config-datasource --to-schema prisma/schema.prisma
---      should report "No difference detected."
---   4. /dashboard/chat should now load.
+-- Original purpose: the multi-tenant refactor (Account model + accountId
+-- scope columns, Invite, monitoring tables) was applied to the primary DB
+-- via `prisma db push` but never reached the chat-layer Neon branch. This
+-- file was the verbatim output of `prisma migrate diff` run against the
+-- chat branch, with `ADD COLUMN ... NOT NULL` rewritten to use a default
+-- of 'acc_default_chrisneddys' (matching the single Account on primary)
+-- so populated tables would not reject the migration.
 
 -- ---------------------------------------------------------------------------
 -- 1. New enum value (must come before tables that might reference DEVELOPER,
