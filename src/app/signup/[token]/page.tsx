@@ -121,7 +121,7 @@ export default async function SignupTokenPage(props: {
             src={logo}
             alt="ChrisnEddys"
             width={200}
-            height={116}
+            height={113}
             className="object-contain"
             priority
           />
