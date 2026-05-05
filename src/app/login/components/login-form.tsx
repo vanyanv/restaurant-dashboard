@@ -10,7 +10,11 @@ import logo from "../../../../public/logo.png"
 
 type FormState = "idle" | "loading" | "success" | "error"
 
-export function LoginForm() {
+export function LoginForm({
+  initialFirstName,
+}: {
+  initialFirstName?: string | null
+}) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [formState, setFormState] = useState<FormState>("idle")
@@ -115,7 +119,8 @@ export function LoginForm() {
       </div>
 
       <h1 className="dock-in dock-in-4 login-headline mt-5">
-        Welcome <em>back</em>.
+        Welcome <em>back</em>
+        {initialFirstName ? <>, <em>{initialFirstName}</em></> : null}.
       </h1>
 
       <p className="dock-in dock-in-5 login-subtitle mt-3">

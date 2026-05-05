@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { Role } from "@/generated/prisma/client"
 import { recordLoginEvent } from "@/lib/monitoring/login-audit"
+import { extractFirstName, markSignIn, markSignOut } from "@/lib/welcome"
 
 declare module "next-auth" {
   interface Session {
@@ -11,6 +12,7 @@ declare module "next-auth" {
       id: string
       email: string
       name: string
+      firstName: string | null
       role: Role
       accountId: string
     }
@@ -131,6 +133,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string
         session.user.role = token.role as Role
         session.user.accountId = token.accountId as string
+        session.user.firstName = extractFirstName(session.user.name)
       }
       return session
     },
@@ -141,11 +144,18 @@ export const authOptions: NextAuthOptions = {
     signOut: "/login"
   },
   events: {
+    async signIn({ user }) {
+      if (!user?.id) return
+      await markSignIn({ userId: user.id, name: user.name })
+    },
     async signOut({ token }) {
       const userId = (token?.id as string | undefined) ?? null
       const email = (token?.email as string | undefined) ?? ""
       if (!userId) return
-      await recordLoginEvent({ userId, emailTried: email, kind: "SIGN_OUT" })
+      await Promise.all([
+        recordLoginEvent({ userId, emailTried: email, kind: "SIGN_OUT" }),
+        markSignOut(userId),
+      ])
     },
   },
 }

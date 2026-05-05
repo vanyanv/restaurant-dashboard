@@ -1,0 +1,100 @@
+/* ─── Welcome marquee (Stamped Docket) ─── */
+
+.welcome-marquee {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 32px 0;
+  background: var(--paper);
+  font-family: var(--font-fraunces, "Fraunces"), serif;
+  will-change: transform, opacity;
+  contain: layout paint style;
+}
+
+.welcome-rule {
+  height: 1px;
+  background: var(--hairline-bold);
+}
+
+.welcome-line {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4ch;
+  font-size: clamp(28px, 4.6vw, 56px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.welcome-greeting {
+  color: var(--ink-muted);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.welcome-greeting em {
+  font-style: italic;
+  color: var(--ink);
+}
+
+.welcome-name {
+  position: relative;
+  color: var(--ink);
+  font-weight: 500;
+  padding-right: 44px;
+}
+
+.welcome-name em {
+  font-style: italic;
+}
+
+.welcome-stamp {
+  position: absolute;
+  top: -6px;
+  right: -38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.welcome-stamp-puff {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+.welcome-marquee--reduced {
+  align-items: flex-start;
+  justify-content: center;
+  padding: 32px;
+}
+
+.welcome-marquee--reduced .welcome-text {
+  font-size: clamp(24px, 4vw, 44px);
+  color: var(--ink);
+  font-family: var(--font-fraunces, "Fraunces"), serif;
+}
+
+.welcome-marquee--reduced .welcome-text em {
+  font-style: italic;
+}
+
+@media (max-width: 480px) {
+  .welcome-marquee {
+    padding: 16px 18px 0;
+    gap: 14px;
+  }
+  .welcome-name {
+    padding-right: 36px;
+  }
+  .welcome-stamp {
+    right: -28px;
+  }
+}
