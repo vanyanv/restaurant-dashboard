@@ -11,6 +11,7 @@ import { queryMetrics, buildCustomerOrdersBody } from "@/lib/otter"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { computeOrderNetSales } from "@/lib/hourly-sync-helpers"
 
 export interface HourlySyncResult {
   storesProcessed: number
@@ -137,14 +138,15 @@ async function runHourlySyncInner(opts?: {
     if (!datesCovered.includes(date)) continue
 
     const key = `${storeId}|${date}|${hour}`
+    const orderNet = computeOrderNetSales(row)
     const existing = buckets.get(key)
     if (existing) {
       existing.orderCount += 1
-      existing.netSales += (row.net_sales as number) ?? 0
+      existing.netSales += orderNet
     } else {
       buckets.set(key, {
         orderCount: 1,
-        netSales: (row.net_sales as number) ?? 0,
+        netSales: orderNet,
       })
     }
   }
