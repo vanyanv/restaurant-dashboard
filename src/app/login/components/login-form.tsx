@@ -112,7 +112,7 @@ export function LoginForm({
           src={logo}
           alt="ChrisNEddys"
           width={200}
-          height={116}
+          height={113}
           className="object-contain"
           priority
         />

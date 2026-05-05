@@ -51,7 +51,7 @@ export function TeamSwitcher({
                   src={logo}
                   alt="Logo" 
                   width={120} 
-                  height={70} 
+                  height={68} 
                   className="object-contain"
                   priority
                 />
@@ -81,7 +81,7 @@ export function TeamSwitcher({
                     src={logo}
                     alt="Logo" 
                     width={40} 
-                    height={24} 
+                    height={23} 
                     className="object-contain"
                   />
                 ) : (
