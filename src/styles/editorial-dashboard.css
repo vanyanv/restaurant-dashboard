@@ -3503,52 +3503,8 @@
  * § 02  INVOICES — Editorial docket
  * ══════════════════════════════════════════════════════════════════ */
 
-/* Paper panel: hairline frame, warm cream fill, minimal rounding */
-.inv-panel {
-  position: relative;
-  background: rgba(255, 253, 247, 0.72);
-  border: 1px solid var(--hairline-bold);
-  border-radius: 2px;
-  padding: 18px 20px;
-}
-
-.inv-panel--flush {
-  padding: 0;
-}
-
-.inv-panel__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 14px;
-}
-
-.inv-panel__head--no-rule {
-  border-bottom: 0;
-  margin-bottom: 0;
-}
-
-.inv-panel__dept {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.inv-panel__title {
-  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  font-variation-settings: "opsz" 144, "SOFT" 40;
-  font-weight: 500;
-  font-style: italic;
-  font-size: 22px;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
+/* Paper panel + panel head primitives moved to editorial-tokens.css so /m/*
+   can render them too. Dashboard-only descendants stay in this file. */
 
 /* ─── Hero spend strip (ledger-style) ─── */
 
@@ -4024,57 +3980,9 @@
   }
 }
 
-.inv-row {
-  position: relative;
-  display: grid;
-  grid-template-columns:
-    [rule] 28px
-    [vendor] minmax(0, 2.2fr)
-    [date] minmax(120px, 1fr)
-    [store] minmax(120px, 1.1fr)
-    [total] minmax(130px, 0.9fr)
-    [status] 140px
-    [chev] 28px;
-  gap: 18px;
-  align-items: center;
-  padding: 18px 20px;
-  border-top: 1px solid var(--hairline);
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-  width: 100%;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background-color 160ms ease;
-}
-
-.inv-row:first-child {
-  border-top: 0;
-}
-
-.inv-row:hover,
-.inv-row:focus-visible {
-  background: rgba(220, 38, 38, 0.045);
-  outline: none;
-}
-
-.inv-row::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 8%;
-  bottom: 8%;
-  width: 4px;
-  background: var(--accent);
-  transform: scaleY(0);
-  transform-origin: center;
-  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-.inv-row:hover::before,
-.inv-row:focus-visible::before {
-  transform: scaleY(1);
-}
+/* .inv-row base / :first-child / :hover / :focus-visible / ::before are in
+   editorial-tokens.css (shared with /m/*). Dashboard-only descendant cells
+   below — these aren't rendered on mobile so they stay route-scoped. */
 
 .inv-row__folio {
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -4092,19 +4000,7 @@
   gap: 3px;
 }
 
-.inv-row__vendor-name {
-  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  font-variation-settings: "opsz" 96, "SOFT" 40;
-  font-style: italic;
-  font-weight: 500;
-  font-size: 17px;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* .inv-row__vendor-name is in editorial-tokens.css (shared). */
 
 .inv-row__vendor-meta {
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -4155,26 +4051,8 @@
   font-size: 13px;
 }
 
-.inv-row__total {
-  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
-  font-weight: 600;
-  font-size: 15.5px;
-  letter-spacing: -0.014em;
-  color: var(--ink);
-  font-feature-settings: "tnum", "lnum";
-  font-variant-numeric: tabular-nums lining-nums;
-  text-align: right;
-  transition: color 180ms ease, transform 180ms ease;
-}
-
-.inv-row:hover .inv-row__total {
-  color: var(--accent);
-}
-
-/* Returns / credit memos — totals stored with their natural negative sign. */
-.inv-row__total[data-negative="true"] {
-  color: var(--accent);
-}
+/* .inv-row__total + :hover variant + [data-negative="true"] are in
+   editorial-tokens.css (shared with /m/*). */
 
 .inv-row__return-mark {
   display: inline-block;
@@ -4207,54 +4085,7 @@
   color: var(--accent);
 }
 
-.inv-stamp {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 8px 3px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 9.5px;
-  font-weight: 700;
-  line-height: 1.1;
-  transform: rotate(-0.5deg);
-  background: rgba(255, 255, 255, 0.55);
-  white-space: nowrap;
-}
-
-.inv-stamp[data-status="REVIEW"] {
-  color: var(--accent);
-  transform: rotate(-1.5deg);
-}
-
-.inv-stamp[data-status="APPROVED"] {
-  color: var(--accent-dark);
-}
-
-.inv-stamp[data-status="MATCHED"] {
-  color: var(--ink-muted);
-}
-
-.inv-stamp[data-status="PENDING"] {
-  color: var(--ink-faint);
-}
-
-.inv-stamp[data-status="REJECTED"] {
-  color: var(--subtract);
-  text-decoration: line-through;
-  text-decoration-color: currentColor;
-  text-decoration-thickness: 1px;
-}
-
-/* Severity tones — paired with text labels (color-plus-label rule). */
-.inv-stamp[data-tone="alert"] { color: var(--accent); }
-.inv-stamp[data-tone="watch"] { color: var(--subtract); }
-.inv-stamp[data-tone="info"] { color: var(--ink-muted); }
-.inv-stamp[data-tone="ok"] { color: var(--ink); opacity: 0.7; }
-.inv-stamp[data-tone="muted"] { color: var(--ink-faint); }
+/* .inv-stamp + status/tone variants are in editorial-tokens.css (shared). */
 
 /* Editorial sub-panel — for hairline-bordered nested sections inside a sheet
    or panel. Replaces ad-hoc `rounded-lg border bg-card` blocks. */
@@ -4710,15 +4541,7 @@
   font-feature-settings: "tnum", "lnum";
 }
 
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .inv-row,
-  .inv-row::before,
-  .inv-row__total,
-  .inv-row__chev {
-    transition: none;
-  }
-}
+/* Reduced-motion rule for .inv-row family is in editorial-tokens.css. */
 
 /* ══════════════════════════════════════════════════════════════════
  * § 03  PRICE TRACKING — Movers row, trend chip, sparklines
@@ -5025,11 +4848,7 @@
 }
 
 @media (max-width: 640px) {
-  /* Panels — tighten padding and sit flusher to viewport edge */
-  .inv-panel {
-    padding: 12px;
-    border-radius: 2px;
-  }
+  /* .inv-panel narrow-window override is in editorial-tokens.css. */
 
   /* Order-row card transform: time · customer · total only.
      Hide id/platform-count/fetch-status — secondary info. */
