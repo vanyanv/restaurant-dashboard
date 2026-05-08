@@ -22,8 +22,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+vi.mock("@/lib/inventory/running-on-hand", () => ({
+  computeRunningOnHand: vi.fn(),
+}))
+
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
+import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
 import {
   startOrResumeStockCount,
   getCountEntryData,
@@ -35,6 +40,8 @@ const session = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Default: no estimate signal. Tests that care override per-call.
+  vi.mocked(computeRunningOnHand).mockResolvedValue(null)
 })
 
 describe("startOrResumeStockCount", () => {
@@ -156,6 +163,60 @@ describe("getCountEntryData", () => {
 
     const buns = result.ingredients.find((i) => i.id === "ing-3")
     expect(buns?.category).toBe("Uncategorized")
+
+    // estimatedOnHand defaults to null when the running-on-hand helper had nothing to anchor on.
+    expect(moz?.estimatedOnHand).toBeNull()
+  })
+
+  it("freezes the model's estimated on-hand on each ingredient at the count's countedAt", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(session() as never)
+    vi.mocked(prisma.stockCount.findUnique).mockResolvedValue({
+      id: "c1",
+      storeId: "s1",
+      status: "IN_PROGRESS",
+      countedAt: new Date("2026-05-07"),
+      store: { accountId: "acct-A", name: "Lakewood" },
+    } as never)
+    vi.mocked(prisma.canonicalIngredient.findMany).mockResolvedValue([
+      { id: "ing-1", name: "Mozzarella", category: "Dairy", recipeUnit: "lb" },
+      { id: "ing-2", name: "Romaine", category: "Produce", recipeUnit: "head" },
+    ] as never)
+    vi.mocked(prisma.stockCountLine.findMany).mockResolvedValue([] as never)
+    vi.mocked(computeRunningOnHand).mockImplementation(async ({ ingredientId }) => {
+      if (ingredientId === "ing-1") {
+        return {
+          asOf: new Date("2026-05-07"),
+          storeId: "s1",
+          ingredientId,
+          ingredientName: "Mozzarella",
+          recipeUnit: "lb",
+          baseQty: 0,
+          baseAt: null,
+          deliveriesQty: 12,
+          depletionQty: 4,
+          adjustmentsQty: 0,
+          onHand: 8,
+          partial: false,
+        }
+      }
+      return null
+    })
+
+    const result = await getCountEntryData({ stockCountId: "c1" })
+    if (!result?.ok) throw new Error("expected ok")
+
+    const moz = result.ingredients.find((i) => i.id === "ing-1")
+    expect(moz?.estimatedOnHand).toBe(8)
+
+    const romaine = result.ingredients.find((i) => i.id === "ing-2")
+    expect(romaine?.estimatedOnHand).toBeNull()
+
+    // Estimate is frozen at the count's countedAt, not "now" — so two opens
+    // of the same count produce identical training labels.
+    const callForMoz = vi
+      .mocked(computeRunningOnHand)
+      .mock.calls.find((c) => c[0].ingredientId === "ing-1")
+    expect(callForMoz?.[0].asOf).toEqual(new Date("2026-05-07"))
   })
 
   it("scopes ingredient list to the caller's account", async () => {

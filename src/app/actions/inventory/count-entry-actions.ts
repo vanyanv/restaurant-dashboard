@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
 
 interface SessionUser {
   id: string
@@ -73,6 +74,13 @@ export interface CountEntryIngredient {
   name: string
   category: string
   recipeUnit: string | null
+  /**
+   * The model's estimated on-hand at the moment this count was opened, in
+   * recipeUnit. Frozen for the count session — saved alongside the count line
+   * as the Phase 4 training target. Null when no signal (e.g. ingredient
+   * never invoiced or no recipe coverage).
+   */
+  estimatedOnHand: number | null
   existingLine: {
     nativeQty: number
     nativeUnit: string
@@ -137,6 +145,23 @@ export async function getCountEntryData(input: {
     lines.map((l) => [l.canonicalIngredientId, l])
   )
 
+  // Freeze the model's estimate at session-open time so every save in this
+  // count carries the same prediction — Phase 4 trains on (estimate, actual)
+  // pairs and racy mid-count recomputes would smear the signal.
+  const estimateAsOf = count.countedAt
+  const estimates = await Promise.all(
+    ingredients.map((i) =>
+      computeRunningOnHand({
+        storeId: count.storeId,
+        ingredientId: i.id,
+        asOf: estimateAsOf,
+      })
+    )
+  )
+  const estimateById = new Map(
+    estimates.map((e, idx) => [ingredients[idx].id, e?.onHand ?? null])
+  )
+
   const merged: CountEntryIngredient[] = ingredients.map((i) => {
     const line = linesByIngredient.get(i.id)
     return {
@@ -144,6 +169,7 @@ export async function getCountEntryData(input: {
       name: i.name,
       category: i.category ?? "Uncategorized",
       recipeUnit: i.recipeUnit,
+      estimatedOnHand: estimateById.get(i.id) ?? null,
       existingLine: line
         ? {
             nativeQty: line.nativeQty ?? 0,
