@@ -10,6 +10,7 @@ import {
   type ReorderStatus,
 } from "@/lib/inventory/reorder-recommendation"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
+import type { ConfidenceLevel } from "@/lib/inventory/calibration"
 
 interface SessionUser {
   id: string
@@ -40,6 +41,12 @@ export interface InventoryDashboardRow {
   leadSampleSize: number
   /** True if compute had to skip an unconvertible invoice unit. */
   partial: boolean
+  /** Per-(store, ingredient) calibration confidence; LOW when no model state yet. */
+  confidenceLevel: ConfidenceLevel
+  /** Number of completed counts that have updated the model state. */
+  confidenceSampleSize: number
+  /** True once the ingredient has graduated out of mandatory weekly counts. */
+  isGraduated: boolean
 }
 
 export interface InventoryDashboardData {
@@ -71,7 +78,7 @@ export async function getInventoryDashboardData(input: {
 
   const asOf = input.asOf ?? new Date()
 
-  const [ingredients, leadTimeRows, recentLines] = await Promise.all([
+  const [ingredients, leadTimeRows, recentLines, modelStates] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId: user.accountId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -92,7 +99,20 @@ export async function getInventoryDashboardData(input: {
         invoice: { select: { vendorName: true } },
       },
     }),
+    prisma.ingredientModelState.findMany({
+      where: { storeId: input.storeId },
+      select: {
+        canonicalIngredientId: true,
+        confidenceLevel: true,
+        sampleSize: true,
+        isGraduated: true,
+      },
+    }),
   ])
+
+  const modelStateByIngredient = new Map(
+    modelStates.map((m) => [m.canonicalIngredientId, m]),
+  )
 
   const leadTimeMap = new Map(
     leadTimeRows.map((r) => [
@@ -136,6 +156,8 @@ export async function getInventoryDashboardData(input: {
         asOf,
       })
 
+      const modelState = modelStateByIngredient.get(ing.id)
+
       return {
         ingredientId: ing.id,
         ingredientName: ing.name,
@@ -154,6 +176,9 @@ export async function getInventoryDashboardData(input: {
         leadDays: lead.leadDays,
         leadSampleSize: lead.sampleSize,
         partial: onHandResult?.partial ?? false,
+        confidenceLevel: (modelState?.confidenceLevel ?? "LOW") as ConfidenceLevel,
+        confidenceSampleSize: modelState?.sampleSize ?? 0,
+        isGraduated: modelState?.isGraduated ?? false,
       }
     })
   )

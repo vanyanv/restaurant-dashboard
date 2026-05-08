@@ -6,6 +6,7 @@ import type {
   InventoryDashboardRow,
 } from "@/app/actions/inventory/dashboard-actions"
 import type { ReorderStatus } from "@/lib/inventory/reorder-recommendation"
+import type { ConfidenceLevel } from "@/lib/inventory/calibration"
 
 interface Props {
   data: InventoryDashboardData
@@ -33,6 +34,20 @@ const STATUS_RANK: Record<ReorderStatus, number> = {
   reorder_soon: 2,
   ok: 3,
   no_signal: 4,
+}
+
+const CONFIDENCE_LABEL: Record<ConfidenceLevel, string> = {
+  LOW: "LOW",
+  MEDIUM: "MED",
+  HIGH: "HIGH",
+  VERIFIED: "VERIFIED",
+}
+
+const CONFIDENCE_CLASS: Record<ConfidenceLevel, string> = {
+  LOW: "text-[var(--ink-faint)]",
+  MEDIUM: "text-[var(--ink-muted)]",
+  HIGH: "text-[var(--ink)]",
+  VERIFIED: "text-[var(--ink)] font-semibold",
 }
 
 type SortKey = "status" | "name" | "cover" | "rate" | "lastCount"
@@ -187,18 +202,19 @@ export function InventoryDashboardClient({ data }: Props) {
           </div>
         </header>
         <div>
-          <div className="grid grid-cols-[1.2fr_100px_100px_120px_100px_140px] gap-4 px-5 py-2 border-t border-[var(--hairline)] font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
+          <div className="grid grid-cols-[1.2fr_100px_100px_120px_100px_110px_140px] gap-4 px-5 py-2 border-t border-[var(--hairline)] font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
             <span>Ingredient</span>
             <span className="text-right">On hand</span>
             <span className="text-right">Cover (d)</span>
             <span className="text-right">Rate / day</span>
             <span className="text-right">Last count</span>
+            <span className="text-right">Confidence</span>
             <span className="text-right">Status</span>
           </div>
           {tableRows.map((r) => (
             <div
               key={r.ingredientId}
-              className="grid grid-cols-[1.2fr_100px_100px_120px_100px_140px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+              className="grid grid-cols-[1.2fr_100px_100px_120px_100px_110px_140px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
             >
               <div>
                 <div className="text-[14px] text-[var(--ink)]">{r.ingredientName}</div>
@@ -226,6 +242,15 @@ export function InventoryDashboardClient({ data }: Props) {
               </div>
               <div className="text-right font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-muted)]">
                 {fmtDate(r.baseAt)}
+              </div>
+              <div
+                className={`text-right font-mono text-[10px] uppercase tracking-[0.18em] ${CONFIDENCE_CLASS[r.confidenceLevel]}`}
+                title={`${r.confidenceSampleSize} count${r.confidenceSampleSize === 1 ? "" : "s"}${r.isGraduated ? " · graduated" : ""}`}
+              >
+                {CONFIDENCE_LABEL[r.confidenceLevel]}
+                <span className="ml-1 text-[var(--ink-faint)] normal-case">
+                  · {r.confidenceSampleSize}
+                </span>
               </div>
               <div
                 className={`text-right font-mono text-[10px] uppercase tracking-[0.18em] ${STATUS_CLASS[r.status]}`}
