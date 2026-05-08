@@ -77,6 +77,7 @@ export function CountEntryForm({ count, ingredients, resumed, storePicker }: Pro
       canonicalIngredientId: ingredient.id,
       nativeQty: qty,
       nativeUnit: row.nativeUnit,
+      estimatedQtyAtCount: ingredient.estimatedOnHand,
     })
     if (!result) {
       updateRow(ingredient.id, { saving: false, error: "Not authenticated" })
@@ -173,12 +174,25 @@ interface CountRowProps {
 
 function CountRow({ ingredient, row, onChange, onCommit }: CountRowProps) {
   const recipeUnit = ingredient.recipeUnit ?? "—"
+  const estimate = ingredient.estimatedOnHand
   return (
     <div className="grid grid-cols-[1fr_120px_100px_120px_120px] gap-4 items-center px-5 py-3 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors">
       <div>
         <div className="text-[14px] text-[var(--ink)]">{ingredient.name}</div>
         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
           recipe unit · {recipeUnit}
+          {estimate != null ? (
+            <>
+              <span className="mx-2">·</span>
+              est{" "}
+              <span
+                className="tabular-nums"
+                style={{ fontVariantNumeric: "tabular-nums lining-nums" }}
+              >
+                {estimate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+            </>
+          ) : null}
         </div>
       </div>
       <input
