@@ -3,9 +3,11 @@ import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
+import { getMenuItemForecast } from "@/app/actions/forecasts/menu-item-forecast-actions"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
 import { RevenueForecastCard } from "./components/revenue-forecast-card"
+import { MenuItemForecastTable } from "./components/menu-item-forecast-table"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -34,8 +36,11 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
   if (!storeId) redirect("/dashboard")
   if (!stores.some((s) => s.id === storeId)) redirect("/dashboard/forecasts")
 
-  const result = await getRevenueForecast({ storeId })
-  if (!result || !result.ok) {
+  const [revenueResult, menuItemResult] = await Promise.all([
+    getRevenueForecast({ storeId }),
+    getMenuItemForecast({ storeId }),
+  ])
+  if (!revenueResult || !revenueResult.ok) {
     return (
       <div className="px-6 py-10">
         <div className="inv-panel">
@@ -45,7 +50,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     )
   }
 
-  const data = result.data
+  const data = revenueResult.data
 
   return (
     <div className="flex flex-col h-full">
@@ -69,6 +74,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
 
       <div className="px-6 py-6 space-y-6">
         <RevenueForecastCard data={data} />
+        {menuItemResult?.ok && <MenuItemForecastTable data={menuItemResult.data} />}
       </div>
     </div>
   )
