@@ -22,12 +22,17 @@ import sys
 import traceback
 
 from ml.db import connect, cuid_like
+from ml.features.menu_item import load_top_items
 from ml.features.revenue import list_active_store_ids
+from ml.models.menu_item import forecast as forecast_menu_item
+from ml.models.menu_item import train as train_menu_item
 from ml.models.revenue import forecast as forecast_revenue
 from ml.models.revenue import train as train_revenue
 
 
-HORIZON_DAYS = 14
+REVENUE_HORIZON_DAYS = 14
+MENU_ITEM_HORIZON_DAYS = 7
+TOP_N_ITEMS_PER_STORE = 30
 MODEL_TYPE = "xgboost"
 
 
@@ -110,7 +115,7 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             )
             return {"store_id": store_id, "ok": False, "reason": "insufficient_history"}
 
-        rows = forecast_revenue(store_id, result, horizon_days=HORIZON_DAYS)
+        rows = forecast_revenue(store_id, result, horizon_days=REVENUE_HORIZON_DAYS)
         written = _write_revenue_forecasts(store_id, model_version, rows)
 
         _close_run(
@@ -140,6 +145,111 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
         return {"store_id": store_id, "ok": False, "reason": str(exc)}
 
 
+def _write_menu_item_forecasts(
+    store_id: str, item_name: str, model_version: str, rows: list
+) -> int:
+    if not rows:
+        return 0
+    sql = """
+        INSERT INTO "ForecastMenuItem"
+            (id, "storeId", "otterItemSkuId", "forecastDate",
+             "predictedQty", p10, p90, "modelVersion")
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    written = 0
+    with connect() as conn:
+        with conn.cursor() as cur:
+            for r in rows:
+                cur.execute(
+                    sql,
+                    (
+                        cuid_like(),
+                        store_id,
+                        item_name,
+                        r.forecast_date,
+                        r.predicted_qty,
+                        r.p10,
+                        r.p90,
+                        model_version,
+                    ),
+                )
+                written += 1
+    return written
+
+
+def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
+    """Train + forecast top-N menu items at one store under a single
+    MlTrainingRun row keyed on target=MENU_ITEM."""
+    run_id = _open_run("MENU_ITEM", store_id, model_version)
+    items = load_top_items(store_id, top_n=TOP_N_ITEMS_PER_STORE)
+    if not items:
+        _close_run(
+            run_id,
+            mape=None,
+            mae=None,
+            sample_size=None,
+            status="FAILED",
+            error="no_items_in_lookback",
+        )
+        return {"store_id": store_id, "ok": False, "reason": "no_items_in_lookback"}
+
+    mapes: list[float] = []
+    sample_sizes: list[int] = []
+    written_total = 0
+    failed_items: list[str] = []
+    for item_name in items:
+        try:
+            result = train_menu_item(store_id, item_name)
+            if result is None:
+                failed_items.append(item_name)
+                continue
+            rows = forecast_menu_item(
+                store_id, item_name, result, horizon_days=MENU_ITEM_HORIZON_DAYS
+            )
+            written_total += _write_menu_item_forecasts(
+                store_id, item_name, model_version, rows
+            )
+            mapes.append(result.mape)
+            sample_sizes.append(result.sample_size)
+        except Exception as exc:  # pylint: disable=broad-except
+            failed_items.append(item_name)
+            print(f"menu_item {store_id}/{item_name} failed: {exc}")
+
+    if not mapes:
+        _close_run(
+            run_id,
+            mape=None,
+            mae=None,
+            sample_size=None,
+            status="FAILED",
+            error=f"all_items_failed ({len(failed_items)})",
+        )
+        return {
+            "store_id": store_id,
+            "ok": False,
+            "reason": "all_items_failed",
+            "failed_count": len(failed_items),
+        }
+
+    avg_mape = sum(mapes) / len(mapes)
+    total_samples = sum(sample_sizes)
+    _close_run(
+        run_id,
+        mape=avg_mape,
+        mae=None,
+        sample_size=total_samples,
+        status="SUCCEEDED",
+    )
+    return {
+        "store_id": store_id,
+        "ok": True,
+        "items_trained": len(mapes),
+        "items_failed": len(failed_items),
+        "rows_written": written_total,
+        "avg_mape": avg_mape,
+    }
+
+
 def main() -> int:
     model_version = _model_version()
     store_ids = list_active_store_ids()
@@ -149,9 +259,14 @@ def main() -> int:
 
     failures = 0
     for store_id in store_ids:
-        result = run_revenue_for_store(store_id, model_version)
-        print(result)
-        if not result.get("ok"):
+        revenue_result = run_revenue_for_store(store_id, model_version)
+        print({"target": "REVENUE", **revenue_result})
+        if not revenue_result.get("ok"):
+            failures += 1
+
+        menu_result = run_menu_items_for_store(store_id, model_version)
+        print({"target": "MENU_ITEM", **menu_result})
+        if not menu_result.get("ok"):
             failures += 1
     return 0 if failures == 0 else 1
 
