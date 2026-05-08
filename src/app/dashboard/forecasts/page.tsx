@@ -7,6 +7,7 @@ import { getMenuItemForecast } from "@/app/actions/forecasts/menu-item-forecast-
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
 import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
+import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
@@ -15,6 +16,7 @@ import { MenuItemForecastTable } from "./components/menu-item-forecast-table"
 import { AnomalyFeed } from "./components/anomaly-feed"
 import { FoodCostForecastCard } from "./components/food-cost-forecast-card"
 import { ElasticityTable } from "./components/elasticity-table"
+import { LaborStaffingCard } from "./components/labor-staffing-card"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -49,6 +51,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     anomalyResult,
     foodCostResult,
     elasticityResult,
+    laborResult,
     storeMeta,
   ] = await Promise.all([
     getRevenueForecast({ storeId }),
@@ -56,6 +59,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     getOpenAnomalies({ storeId }),
     getFoodCostForecast({ storeId }),
     getMenuItemElasticity({ storeId }),
+    getLaborStaffingForecast({ storeId }),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
@@ -103,6 +107,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
           <FoodCostForecastCard data={foodCostResult.data} targetPct={targetPct} />
         )}
         {anomalyResult?.ok && <AnomalyFeed data={anomalyResult.data} />}
+        {laborResult?.ok && <LaborStaffingCard data={laborResult.data} />}
         {menuItemResult?.ok && <MenuItemForecastTable data={menuItemResult.data} />}
         {elasticityResult?.ok && <ElasticityTable data={elasticityResult.data} />}
       </div>
