@@ -122,6 +122,7 @@ const NAV: NavSection[] = [
         icon: Activity,
         items: [
           { title: "Overview", url: "/dashboard/operations" },
+          { title: "Inventory", url: "/dashboard/operations/inventory" },
           { title: "Product Usage", url: "/dashboard/operations/product-usage" },
           { title: "Costs", url: "/dashboard/operations/costs" },
           { title: "Packaging", url: "/dashboard/operations/packaging" },
