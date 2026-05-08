@@ -11,6 +11,13 @@ vi.mock("@/lib/chat/owner-scope", () => ({
   renderStoreListForPrompt: vi.fn(),
 }))
 
+// food-cost chat tool imports the server action; mock its prisma + auth
+// transitive deps so the test doesn't try to hit a real DATABASE_URL.
+vi.mock("@/lib/prisma", () => ({ prisma: {} }))
+vi.mock("next-auth", () => ({ getServerSession: vi.fn() }))
+vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+vi.mock("@/lib/recipe-cost", () => ({ computeRecipeCost: vi.fn() }))
+
 import { assertOwnerOwnsStores } from "@/lib/chat/owner-scope"
 import {
   getMenuItemForecast,

@@ -10,6 +10,7 @@
 import { z } from "zod"
 import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
+import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -248,6 +249,81 @@ export type AnomalyChatRow = {
   zScore: number | null
   method: string
   detectedAt: string
+}
+
+// ---------------------------------------------------------------------------
+// getFoodCostForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const foodCostParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .describe(
+        "Store id to project food cost % for. Resolve from listStores first; this tool is per-store, not multi-store.",
+      ),
+    horizonDays: z.number().int().min(1).max(14).optional().default(7),
+  })
+  .strict()
+
+export type FoodCostForecastChatRow = {
+  date: string
+  predictedRevenue: number | null
+  predictedFoodCost: number
+  foodCostPct: number | null
+  pctP10: number | null
+  pctP90: number | null
+  unmappedItemCount: number
+}
+
+export type FoodCostForecastChatResult = {
+  storeId: string
+  generatedAt: string | null
+  blendedFoodCostPct: number | null
+  totalPredictedRevenue: number
+  totalPredictedFoodCost: number
+  days: FoodCostForecastChatRow[]
+}
+
+export const getFoodCostForecastTool: ChatTool<
+  typeof foodCostParams,
+  FoodCostForecastChatResult | { ok: false; error: string }
+> = {
+  name: "getFoodCostForecast",
+  description:
+    "Joins the daily revenue forecast and per-item demand forecast against recipe costs to project food cost % over the next 7-14 days for ONE store. blendedFoodCostPct is the horizon-wide weighted percent. unmappedItemCount > 0 flags items in the demand forecast with no OtterItemMapping (those are excluded from the food cost number — surface as a caveat in the prose).",
+  parameters: foodCostParams,
+  async execute(args, ctx) {
+    // Reuse the auth-checked server action so cross-account access stays
+    // impossible. Caller still holds the session via getServerSession; the
+    // chat route has already verified hasOwnerAccess.
+    const result = await getFoodCostForecast({
+      storeId: args.storeId,
+      horizonDays: args.horizonDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    const d = result.data
+    return {
+      storeId: d.storeId,
+      generatedAt: d.generatedAt ? d.generatedAt.toISOString() : null,
+      blendedFoodCostPct: d.blendedFoodCostPct,
+      totalPredictedRevenue: d.totalPredictedRevenue,
+      totalPredictedFoodCost: d.totalPredictedFoodCost,
+      days: d.days.map((row) => ({
+        date: ymd(row.date),
+        predictedRevenue: row.predictedRevenue,
+        predictedFoodCost: row.predictedFoodCost,
+        foodCostPct: row.foodCostPct,
+        pctP10: row.pctP10,
+        pctP90: row.pctP90,
+        unmappedItemCount: row.unmappedItemCount,
+      })),
+    }
+    // Note: ctx is unused — getFoodCostForecast does its own session lookup.
+    void ctx
+  },
 }
 
 export const getOpenAnomalies: ChatTool<typeof anomaliesParams, AnomalyChatRow[]> = {
