@@ -14,6 +14,7 @@ import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-
 import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
+import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -541,6 +542,75 @@ export const getMenuEngineeringTool: ChatTool<
         totalContribution: r.totalContribution,
         marginPct: r.marginPct,
         quadrant: r.quadrant,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getLostSales (chat tool)
+// ---------------------------------------------------------------------------
+
+const lostSalesParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(60),
+    minBaselineQty: z.number().min(1).optional().default(3),
+    minGapDays: z.number().int().min(1).optional().default(2),
+  })
+  .strict()
+
+export type LostSalesChatRow = {
+  storeId: string
+  itemName: string
+  category: string
+  gapStart: string
+  gapEnd: string
+  gapDays: number
+  baselineDailyQty: number
+  meanUnitPrice: number
+  estimatedLostRevenue: number
+}
+
+export type LostSalesChatResult = {
+  windowStart: string
+  windowEnd: string
+  events: LostSalesChatRow[]
+  totalEstimatedLost: number
+}
+
+export const getLostSalesTool: ChatTool<
+  typeof lostSalesParams,
+  LostSalesChatResult | { ok: false; error: string }
+> = {
+  name: "getLostSales",
+  description:
+    "Detects 86'd-item windows: items that sold consistently then dropped to zero for ≥ minGapDays consecutive days, with a strong pre-gap baseline. Estimates lost revenue per event as baseline_qty × gap_days × mean_unit_price. The detector caps gap_days at 14 so a permanent menu removal doesn't book unbounded losses.",
+  parameters: lostSalesParams,
+  async execute(args, ctx) {
+    const result = await getLostSales({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+      minBaselineQty: args.minBaselineQty,
+      minGapDays: args.minGapDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return {
+      windowStart: result.data.windowStart.toISOString().slice(0, 10),
+      windowEnd: result.data.windowEnd.toISOString().slice(0, 10),
+      totalEstimatedLost: result.data.totalEstimatedLost,
+      events: result.data.events.map((e) => ({
+        storeId: e.storeId,
+        itemName: e.itemName,
+        category: e.category,
+        gapStart: e.gapStart.toISOString().slice(0, 10),
+        gapEnd: e.gapEnd.toISOString().slice(0, 10),
+        gapDays: e.gapDays,
+        baselineDailyQty: e.baselineDailyQty,
+        meanUnitPrice: e.meanUnitPrice,
+        estimatedLostRevenue: e.estimatedLostRevenue,
       })),
     }
   },

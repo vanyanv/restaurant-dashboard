@@ -39,6 +39,7 @@ import { searchPnlHistory } from "./pnl-history"
 import {
   getFoodCostForecastTool,
   getLaborStaffingForecastTool,
+  getLostSalesTool,
   getMenuEngineeringTool,
   getMenuItemElasticityTool,
   getMenuItemForecast,
@@ -105,6 +106,7 @@ export const chatTools = {
   getMenuItemElasticity: getMenuItemElasticityTool,
   getLaborStaffingForecast: getLaborStaffingForecastTool,
   getMenuEngineering: getMenuEngineeringTool,
+  getLostSales: getLostSalesTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools
