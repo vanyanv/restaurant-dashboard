@@ -13,6 +13,7 @@ import type { ChatTool } from "./types"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
 import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
+import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -458,6 +459,88 @@ export const getLaborStaffingForecastTool: ChatTool<
             staff: h.recommendedStaff,
             predictedOrders: h.predictedOrders,
           })),
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getMenuEngineering (chat tool)
+// ---------------------------------------------------------------------------
+
+const menuEngineeringParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every owned store."),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(30),
+    quadrant: z
+      .enum(["STAR", "PLOWHORSE", "PUZZLE", "DOG"])
+      .optional()
+      .describe("Restrict to one quadrant. Omit for the full classifier output."),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  })
+  .strict()
+
+export type MenuEngineeringChatRow = {
+  itemName: string
+  category: string
+  soldQty: number
+  revenue: number
+  unitMargin: number
+  totalContribution: number
+  marginPct: number | null
+  quadrant: "STAR" | "PLOWHORSE" | "PUZZLE" | "DOG"
+}
+
+export type MenuEngineeringChatResult = {
+  windowStart: string
+  windowEnd: string
+  medianVelocity: number
+  medianUnitMargin: number
+  counts: { STAR: number; PLOWHORSE: number; PUZZLE: number; DOG: number }
+  totalContribution: number
+  rows: MenuEngineeringChatRow[]
+}
+
+export const getMenuEngineeringTool: ChatTool<
+  typeof menuEngineeringParams,
+  MenuEngineeringChatResult | { ok: false; error: string }
+> = {
+  name: "getMenuEngineering",
+  description:
+    "Classifies costed menu items into Stars / Plowhorses / Puzzles / Dogs by a median split on (sold quantity, unit margin) over the last N days. STAR = high margin × high volume; PLOWHORSE = low margin × high volume; PUZZLE = high margin × low volume; DOG = low margin × low volume. Reads precomputed DailyCogsItem rollups, so only items with a costed recipe are classified.",
+  parameters: menuEngineeringParams,
+  async execute(args, ctx) {
+    const result = await getMenuEngineering({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    const filtered = args.quadrant
+      ? d.rows.filter((r) => r.quadrant === args.quadrant)
+      : d.rows
+    return {
+      windowStart: d.windowStart.toISOString().slice(0, 10),
+      windowEnd: d.windowEnd.toISOString().slice(0, 10),
+      medianVelocity: d.medianVelocity,
+      medianUnitMargin: d.medianUnitMargin,
+      counts: d.counts,
+      totalContribution: d.totalContribution,
+      rows: filtered.slice(0, args.limit ?? 20).map((r) => ({
+        itemName: r.itemName,
+        category: r.category,
+        soldQty: r.soldQty,
+        revenue: r.revenue,
+        unitMargin: r.unitMargin,
+        totalContribution: r.totalContribution,
+        marginPct: r.marginPct,
+        quadrant: r.quadrant,
       })),
     }
   },
