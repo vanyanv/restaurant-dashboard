@@ -9,6 +9,7 @@ import { EditorialTopbar } from "../../components/editorial-topbar"
 import { InventoryStorePicker } from "./components/inventory-store-picker"
 import { InventoryDashboardClient } from "./components/inventory-dashboard-client"
 import { CoverageHealthCard } from "./components/coverage-health-card"
+import { AdjustmentDialog } from "./components/adjustment-dialog"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -70,6 +71,15 @@ export default async function InventoryDashboardPage({ searchParams }: PageProps
         <InventoryStorePicker
           stores={stores.map((s) => ({ id: s.id, name: s.name }))}
           selectedStoreId={storeId}
+        />
+        <AdjustmentDialog
+          storeId={storeId}
+          ingredients={data.rows.map((r) => ({
+            ingredientId: r.ingredientId,
+            ingredientName: r.ingredientName,
+            category: r.category,
+            recipeUnit: r.recipeUnit,
+          }))}
         />
         <Link
           href="/dashboard/operations/inventory/count/new"
