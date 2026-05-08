@@ -21,6 +21,11 @@ import os
 import sys
 import traceback
 
+from ml.anomaly.zscore import (
+    detect_menu_item_anomalies,
+    detect_revenue_anomalies,
+    write_anomalies,
+)
 from ml.db import connect, cuid_like
 from ml.features.menu_item import load_top_items
 from ml.features.revenue import list_active_store_ids
@@ -250,6 +255,32 @@ def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
     }
 
 
+def run_anomaly_detection_for_store(store_id: str) -> dict:
+    """Score yesterday's revenue + top-N item quantities against the
+    trailing 28-day distribution. Flag |z| >= 3 with method ZSCORE.
+
+    Anomaly detection has no MlTrainingRun row — it's a thresholding
+    pass over the data, not a training job. Failures bubble up and
+    stop the per-store loop iteration.
+    """
+    try:
+        revenue_anomalies = detect_revenue_anomalies(store_id)
+        item_anomalies = detect_menu_item_anomalies(
+            store_id, load_top_items(store_id, top_n=TOP_N_ITEMS_PER_STORE)
+        )
+        all_anomalies = revenue_anomalies + item_anomalies
+        written = write_anomalies(store_id, all_anomalies)
+        return {
+            "store_id": store_id,
+            "ok": True,
+            "revenue_count": len(revenue_anomalies),
+            "menu_item_count": len(item_anomalies),
+            "rows_written": written,
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        return {"store_id": store_id, "ok": False, "reason": str(exc)}
+
+
 def main() -> int:
     model_version = _model_version()
     store_ids = list_active_store_ids()
@@ -267,6 +298,11 @@ def main() -> int:
         menu_result = run_menu_items_for_store(store_id, model_version)
         print({"target": "MENU_ITEM", **menu_result})
         if not menu_result.get("ok"):
+            failures += 1
+
+        anomaly_result = run_anomaly_detection_for_store(store_id)
+        print({"phase": "ANOMALY", **anomaly_result})
+        if not anomaly_result.get("ok"):
             failures += 1
     return 0 if failures == 0 else 1
 
