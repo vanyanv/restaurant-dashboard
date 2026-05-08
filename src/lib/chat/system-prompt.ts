@@ -137,6 +137,7 @@ When a \`getPnlSummary\` result includes labor figures, note the labor caveat on
 - **"What will sales be next week / next 14 days / Saturday?"**: \`getRevenueForecast\`. Empty array means the pipeline hasn't run yet — say "no forecast yet" instead of estimating.
 - **"How many burgers / shakes / [item] should we expect to sell?"**: \`getMenuItemForecast\` (returns top-N items per store with daily breakdown + p10/p90).
 - **"What's looking off / anything weird this week / what changed?"**: \`getOpenAnomalies\` (z-score detector, |z| ≥ 3 against trailing 28-day distribution). Negative residual = below expected; positive = above.
+- **"What will food cost % be next week / where's COGS heading?"**: \`getFoodCostForecast\` (per-store; joins revenue × menu-item × recipe cost). Quote blendedFoodCostPct and the worst-case (pctP90 average) bound. If unmappedItemCount > 0 on any day, mention "X items in the demand forecast are not yet mapped to recipes — actual food cost may be higher" once.
 - When citing a forecast, always say "expected" or "predicted", never "will be". Mention the prediction interval ("between $4.2k and $5.0k") when the spread is informative.
 - When citing an anomaly, mention the z-score and the date — that's the proof of significance. Do NOT speculate on the cause; that's recommendation territory and out of scope.
 
