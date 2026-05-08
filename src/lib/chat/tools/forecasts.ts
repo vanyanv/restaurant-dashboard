@@ -12,6 +12,7 @@ import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
 import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
+import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -386,6 +387,79 @@ export const getMenuItemElasticityTool: ChatTool<
       confidence: r.confidence,
       pctVolumeChangeAt10PctHike: r.pctVolumeChangeAt10PctHike,
     }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getLaborStaffingForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const laborParams = z
+  .object({
+    storeId: z.string().min(1),
+    horizonDays: z.number().int().min(1).max(14).optional().default(7),
+  })
+  .strict()
+
+export type LaborStaffingChatDay = {
+  date: string
+  weekday: number
+  predictedRevenue: number | null
+  predictedOrders: number
+  totalLaborHours: number
+  /** Compact "openHour-closeHour:staff" segments collapsed for prose. */
+  hourlyStaff: { hour: number; staff: number; predictedOrders: number }[]
+}
+
+export type LaborStaffingChatResult = {
+  storeId: string
+  meanAvgTicket: number
+  coversPerStaffHour: number
+  minStaff: number
+  totalLaborHours: number
+  days: LaborStaffingChatDay[]
+}
+
+export const getLaborStaffingForecastTool: ChatTool<
+  typeof laborParams,
+  LaborStaffingChatResult | { ok: false; error: string }
+> = {
+  name: "getLaborStaffingForecast",
+  description:
+    "Recommended staff per hour for the next 7-14 days at ONE store. Computed deterministically from the daily revenue forecast × historical hour-of-day order share × a constant covers-per-staff-per-hour budget. Returns total labor-hours per day + the per-hour staffing matrix. Closed hours (no historical orders) get staff=0; open hours respect a minStaff floor. Note in prose: 'these are budgeted staff-hours, not actual hours' — this product does not see time-clock data.",
+  parameters: laborParams,
+  async execute(args, ctx) {
+    const result = await getLaborStaffingForecast({
+      storeId: args.storeId,
+      horizonDays: args.horizonDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    return {
+      storeId: d.storeId,
+      meanAvgTicket: d.meanAvgTicket,
+      coversPerStaffHour: d.coversPerStaffHour,
+      minStaff: d.minStaff,
+      totalLaborHours: d.totalForecastLaborHours,
+      days: d.days.map((day) => ({
+        date: day.date.toISOString().slice(0, 10),
+        weekday: day.weekday,
+        predictedRevenue: day.predictedRevenue,
+        predictedOrders: day.predictedOrders,
+        totalLaborHours: day.totalLaborHours,
+        // Drop closed hours from the chat payload — saves tokens, makes the
+        // model less likely to recite a 24-row hour table verbatim.
+        hourlyStaff: day.hours
+          .filter((h) => h.recommendedStaff > 0)
+          .map((h) => ({
+            hour: h.hour,
+            staff: h.recommendedStaff,
+            predictedOrders: h.predictedOrders,
+          })),
+      })),
+    }
   },
 }
 
