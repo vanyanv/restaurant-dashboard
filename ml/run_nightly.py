@@ -26,6 +26,7 @@ from ml.anomaly.zscore import (
     detect_revenue_anomalies,
     write_anomalies,
 )
+from ml.elasticity.menu_item import run_for_store as run_elasticity_for_store
 from ml.db import connect, cuid_like
 from ml.features.menu_item import load_top_items
 from ml.features.revenue import list_active_store_ids
@@ -303,6 +304,11 @@ def main() -> int:
         anomaly_result = run_anomaly_detection_for_store(store_id)
         print({"phase": "ANOMALY", **anomaly_result})
         if not anomaly_result.get("ok"):
+            failures += 1
+
+        elasticity_result = run_elasticity_for_store(store_id)
+        print({"phase": "ELASTICITY", **elasticity_result})
+        if not elasticity_result.get("ok"):
             failures += 1
     return 0 if failures == 0 else 1
 

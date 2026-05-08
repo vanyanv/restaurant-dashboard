@@ -6,6 +6,7 @@ import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-act
 import { getMenuItemForecast } from "@/app/actions/forecasts/menu-item-forecast-actions"
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
+import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
@@ -13,6 +14,7 @@ import { RevenueForecastCard } from "./components/revenue-forecast-card"
 import { MenuItemForecastTable } from "./components/menu-item-forecast-table"
 import { AnomalyFeed } from "./components/anomaly-feed"
 import { FoodCostForecastCard } from "./components/food-cost-forecast-card"
+import { ElasticityTable } from "./components/elasticity-table"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -41,17 +43,24 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
   if (!storeId) redirect("/dashboard")
   if (!stores.some((s) => s.id === storeId)) redirect("/dashboard/forecasts")
 
-  const [revenueResult, menuItemResult, anomalyResult, foodCostResult, storeMeta] =
-    await Promise.all([
-      getRevenueForecast({ storeId }),
-      getMenuItemForecast({ storeId }),
-      getOpenAnomalies({ storeId }),
-      getFoodCostForecast({ storeId }),
-      prisma.store.findUnique({
-        where: { id: storeId },
-        select: { targetCogsPct: true },
-      }),
-    ])
+  const [
+    revenueResult,
+    menuItemResult,
+    anomalyResult,
+    foodCostResult,
+    elasticityResult,
+    storeMeta,
+  ] = await Promise.all([
+    getRevenueForecast({ storeId }),
+    getMenuItemForecast({ storeId }),
+    getOpenAnomalies({ storeId }),
+    getFoodCostForecast({ storeId }),
+    getMenuItemElasticity({ storeId }),
+    prisma.store.findUnique({
+      where: { id: storeId },
+      select: { targetCogsPct: true },
+    }),
+  ])
   // Store.targetCogsPct is stored as a percent (e.g. 28.5), the forecast
   // returns decimals (0.285) — normalize for the UI comparison.
   const targetPct =
@@ -95,6 +104,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
         )}
         {anomalyResult?.ok && <AnomalyFeed data={anomalyResult.data} />}
         {menuItemResult?.ok && <MenuItemForecastTable data={menuItemResult.data} />}
+        {elasticityResult?.ok && <ElasticityTable data={elasticityResult.data} />}
       </div>
     </div>
   )

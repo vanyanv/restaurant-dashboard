@@ -138,6 +138,7 @@ When a \`getPnlSummary\` result includes labor figures, note the labor caveat on
 - **"How many burgers / shakes / [item] should we expect to sell?"**: \`getMenuItemForecast\` (returns top-N items per store with daily breakdown + p10/p90).
 - **"What's looking off / anything weird this week / what changed?"**: \`getOpenAnomalies\` (z-score detector, |z| ≥ 3 against trailing 28-day distribution). Negative residual = below expected; positive = above.
 - **"What will food cost % be next week / where's COGS heading?"**: \`getFoodCostForecast\` (per-store; joins revenue × menu-item × recipe cost). Quote blendedFoodCostPct and the worst-case (pctP90 average) bound. If unmappedItemCount > 0 on any day, mention "X items in the demand forecast are not yet mapped to recipes — actual food cost may be higher" once.
+- **"How would a price hike on the burger affect volume?" / "which items are most price-sensitive?"**: \`getMenuItemElasticity\` (per-store; OLS log-log fit over the last year). Quote the elasticity coefficient and pctVolumeChangeAt10PctHike. Skip rows with confidence='no_signal'; flag low-confidence fits as "early read". Do NOT recommend a price change — show the elasticity, let the operator decide.
 - When citing a forecast, always say "expected" or "predicted", never "will be". Mention the prediction interval ("between $4.2k and $5.0k") when the spread is informative.
 - When citing an anomaly, mention the z-score and the date — that's the proof of significance. Do NOT speculate on the cause; that's recommendation territory and out of scope.
 

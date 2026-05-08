@@ -182,6 +182,7 @@ model Store {
   forecastDailyRevenue ForecastDailyRevenue[]
   forecastMenuItems    ForecastMenuItem[]
   anomalyEvents        AnomalyEvent[]
+  menuItemElasticities MenuItemElasticity[]
 
   @@index([ownerId])
   @@index([accountId])
@@ -1398,4 +1399,34 @@ model AnomalyEvent {
 
   @@index([storeId, occurredOn(sort: Desc)])
   @@index([status, detectedAt(sort: Desc)])
+}
+
+/// Per (store, otterItemSkuId) price elasticity — extracted nightly by an
+/// OLS log(qty) ~ log(price) regression with weekday controls. `elasticity`
+/// is the price coefficient: -1.0 = unit elastic; more negative = customers
+/// drop off faster on price hikes; near 0 = inelastic (price changes don't
+/// move volume). Positive values are noise; surface them as 'no_signal'
+/// upstream.
+model MenuItemElasticity {
+  id              String   @id @default(cuid())
+  storeId         String
+  otterItemSkuId  String
+  elasticity      Float
+  intercept       Float
+  /// R² goodness-of-fit on the training window. Below ~0.10 should be
+  /// treated as low-confidence.
+  fitR2           Float
+  /// Number of daily observations used in the fit.
+  sampleSize      Int
+  /// Number of distinct price points observed. < 2 means no price variance
+  /// — the row should be flagged as no_signal.
+  pricePointCount Int
+  meanPrice       Float
+  meanQty         Float
+  computedAt      DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, otterItemSkuId])
+  @@index([storeId, computedAt(sort: Desc)])
 }
