@@ -36,6 +36,11 @@ import { getOperationalCosts, getStoreBreakdown } from "./store-summary"
 import { getRefunds } from "./refunds"
 import { getPnlSummary } from "./pnl"
 import { searchPnlHistory } from "./pnl-history"
+import {
+  getMenuItemForecast,
+  getOpenAnomalies,
+  getRevenueForecast,
+} from "./forecasts"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -88,6 +93,10 @@ export const chatTools = {
   // P&L
   getPnlSummary,
   searchPnlHistory,
+  // ML forecasts + anomalies
+  getRevenueForecast,
+  getMenuItemForecast,
+  getOpenAnomalies,
 } as const
 
 export type ChatToolName = keyof typeof chatTools
