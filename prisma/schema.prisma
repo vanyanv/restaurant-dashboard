@@ -159,8 +159,8 @@ model Store {
   targetCogsPct Float?
 
   // Relations
-  owner                User                  @relation("StoreOwner", fields: [ownerId], references: [id])
-  account              Account               @relation(fields: [accountId], references: [id])
+  owner                User                   @relation("StoreOwner", fields: [ownerId], references: [id])
+  account              Account                @relation(fields: [accountId], references: [id])
   prepTasks            PrepTask[]
   otterStores          OtterStore[]
   otterSummaries       OtterDailySummary[]
@@ -178,6 +178,7 @@ model Store {
   jobRuns              JobRun[]
   stockCounts          StockCount[]
   inventoryAdjustments InventoryAdjustment[]
+  modelStates          IngredientModelState[]
 
   @@index([ownerId])
   @@index([accountId])
@@ -528,14 +529,15 @@ model CanonicalIngredient {
   costLocked        Boolean   @default(false)
   costUpdatedAt     DateTime?
 
-  owner                User                  @relation(fields: [ownerId], references: [id])
-  account              Account               @relation(fields: [accountId], references: [id])
+  owner                User                   @relation(fields: [ownerId], references: [id])
+  account              Account                @relation(fields: [accountId], references: [id])
   aliases              IngredientAlias[]
   recipeIngredients    RecipeIngredient[]
   invoiceLineItems     InvoiceLineItem[]
   skuMatches           IngredientSkuMatch[]
   stockCountLines      StockCountLine[]
   inventoryAdjustments InventoryAdjustment[]
+  modelStates          IngredientModelState[]
 
   @@unique([ownerId, name])
   @@unique([accountId, name])
@@ -1218,4 +1220,42 @@ model VendorLeadTime {
 
   @@unique([accountId, vendorNameNormalized])
   @@index([accountId])
+}
+
+enum IngredientConfidenceLevel {
+  LOW
+  MEDIUM
+  HIGH
+  VERIFIED
+}
+
+/// Per (storeId, canonicalIngredientId) Bayesian calibration state. Each
+/// completed StockCount updates `calibrationFactor` (multiplier on theoretical
+/// recipe-walk depletion) via an EWMA Bayesian update, and rolls residual
+/// statistics (`recountDeltaMean` / `recountDeltaStd`) used for graduation +
+/// anomaly scoring. `isGraduated=true` exempts the ingredient from the
+/// mandatory weekly count list; the operator only re-counts on spot-checks
+/// or when an upstream change (recipe edit, new vendor SKU, menu add) forces
+/// re-validation.
+model IngredientModelState {
+  id                      String                    @id @default(cuid())
+  storeId                 String
+  canonicalIngredientId   String
+  calibrationFactor       Float                     @default(1.0)
+  recountDeltaMean        Float                     @default(0)
+  recountDeltaM2          Float                     @default(0) // Welford running sum-of-squares
+  sampleSize              Int                       @default(0)
+  consecutiveTightWeeks   Int                       @default(0)
+  isGraduated             Boolean                   @default(false)
+  graduatedAt             DateTime?
+  lastSpotCheckAt         DateTime?
+  confidenceLevel         IngredientConfidenceLevel @default(LOW)
+  typicalWeeklyThroughput Float?
+  lastUpdatedAt           DateTime                  @default(now())
+
+  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, canonicalIngredientId])
+  @@index([storeId, isGraduated])
 }
