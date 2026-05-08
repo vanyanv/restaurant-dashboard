@@ -11,6 +11,7 @@ import { z } from "zod"
 import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
+import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -323,6 +324,68 @@ export const getFoodCostForecastTool: ChatTool<
     }
     // Note: ctx is unused — getFoodCostForecast does its own session lookup.
     void ctx
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getMenuItemElasticity (chat tool)
+// ---------------------------------------------------------------------------
+
+const elasticityParams = z
+  .object({
+    storeId: z.string().min(1),
+    minConfidence: z
+      .enum(["low", "medium", "high"])
+      .optional()
+      .default("low")
+      .describe("Filter out fits below this confidence band."),
+    limit: z.number().int().min(1).max(50).optional().default(20),
+  })
+  .strict()
+
+export type ElasticityChatRow = {
+  itemSkuId: string
+  elasticity: number
+  meanPrice: number
+  meanQty: number
+  fitR2: number
+  pricePointCount: number
+  sampleSize: number
+  confidence: "low" | "medium" | "high" | "no_signal"
+  pctVolumeChangeAt10PctHike: number
+}
+
+const CONFIDENCE_RANK = { low: 1, medium: 2, high: 3 } as const
+
+export const getMenuItemElasticityTool: ChatTool<
+  typeof elasticityParams,
+  ElasticityChatRow[] | { ok: false; error: string }
+> = {
+  name: "getMenuItemElasticity",
+  description:
+    "Returns per-item price elasticity for ONE store, fitted nightly via OLS log(qty) ~ log(price) + weekday dummies. Negative coefficients are the norm; -1.0 is unit elastic. pctVolumeChangeAt10PctHike applies the elasticity to a hypothetical 10% price hike. Skip rows with confidence='no_signal' (constant price or positive coefficient).",
+  parameters: elasticityParams,
+  async execute(args, ctx) {
+    const result = await getMenuItemElasticity({ storeId: args.storeId })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    const minRank = CONFIDENCE_RANK[args.minConfidence ?? "low"]
+    const filtered = result.data.rows.filter((r) => {
+      if (r.confidence === "no_signal") return false
+      return CONFIDENCE_RANK[r.confidence] >= minRank
+    })
+    void ctx
+    return filtered.slice(0, args.limit ?? 20).map((r) => ({
+      itemSkuId: r.otterItemSkuId,
+      elasticity: r.elasticity,
+      meanPrice: r.meanPrice,
+      meanQty: r.meanQty,
+      fitR2: r.fitR2,
+      pricePointCount: r.pricePointCount,
+      sampleSize: r.sampleSize,
+      confidence: r.confidence,
+      pctVolumeChangeAt10PctHike: r.pctVolumeChangeAt10PctHike,
+    }))
   },
 }
 
