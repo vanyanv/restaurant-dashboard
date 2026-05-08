@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
+import type { ConfidenceLevel } from "@/lib/inventory/calibration"
 
 interface SessionUser {
   id: string
@@ -81,6 +82,12 @@ export interface CountEntryIngredient {
    * never invoiced or no recipe coverage).
    */
   estimatedOnHand: number | null
+  /** Per-(store, ingredient) calibration confidence; LOW for new ingredients. */
+  confidenceLevel: ConfidenceLevel
+  /** Number of completed counts that have updated the model state. */
+  confidenceSampleSize: number
+  /** True once the ingredient has graduated out of mandatory weekly counts. */
+  isGraduated: boolean
   existingLine: {
     nativeQty: number
     nativeUnit: string
@@ -123,7 +130,7 @@ export async function getCountEntryData(input: {
     return { ok: false, error: "count_not_in_account" }
   }
 
-  const [ingredients, lines] = await Promise.all([
+  const [ingredients, lines, modelStates] = await Promise.all([
     prisma.canonicalIngredient.findMany({
       where: { accountId: user.accountId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
@@ -139,7 +146,18 @@ export async function getCountEntryData(input: {
         note: true,
       },
     }),
+    prisma.ingredientModelState.findMany({
+      where: { storeId: count.storeId },
+      select: {
+        canonicalIngredientId: true,
+        confidenceLevel: true,
+        sampleSize: true,
+        isGraduated: true,
+      },
+    }),
   ])
+
+  const modelStateById = new Map(modelStates.map((m) => [m.canonicalIngredientId, m]))
 
   const linesByIngredient = new Map(
     lines.map((l) => [l.canonicalIngredientId, l])
@@ -164,12 +182,16 @@ export async function getCountEntryData(input: {
 
   const merged: CountEntryIngredient[] = ingredients.map((i) => {
     const line = linesByIngredient.get(i.id)
+    const modelState = modelStateById.get(i.id)
     return {
       id: i.id,
       name: i.name,
       category: i.category ?? "Uncategorized",
       recipeUnit: i.recipeUnit,
       estimatedOnHand: estimateById.get(i.id) ?? null,
+      confidenceLevel: (modelState?.confidenceLevel ?? "LOW") as ConfidenceLevel,
+      confidenceSampleSize: modelState?.sampleSize ?? 0,
+      isGraduated: modelState?.isGraduated ?? false,
       existingLine: line
         ? {
             nativeQty: line.nativeQty ?? 0,

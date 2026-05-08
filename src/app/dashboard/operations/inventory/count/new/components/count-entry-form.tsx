@@ -175,10 +175,28 @@ interface CountRowProps {
 function CountRow({ ingredient, row, onChange, onCommit }: CountRowProps) {
   const recipeUnit = ingredient.recipeUnit ?? "—"
   const estimate = ingredient.estimatedOnHand
+  const confidenceClass =
+    ingredient.confidenceLevel === "VERIFIED"
+      ? "text-[var(--ink)] font-semibold"
+      : ingredient.confidenceLevel === "HIGH"
+      ? "text-[var(--ink)]"
+      : ingredient.confidenceLevel === "MEDIUM"
+      ? "text-[var(--ink-muted)]"
+      : "text-[var(--ink-faint)]"
+  const confidenceLabel =
+    ingredient.confidenceLevel === "MEDIUM" ? "MED" : ingredient.confidenceLevel
   return (
     <div className="grid grid-cols-[1fr_120px_100px_120px_120px] gap-4 items-center px-5 py-3 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors">
       <div>
-        <div className="text-[14px] text-[var(--ink)]">{ingredient.name}</div>
+        <div className="text-[14px] text-[var(--ink)] flex items-center gap-2">
+          <span>{ingredient.name}</span>
+          <span
+            className={`font-mono text-[9px] uppercase tracking-[0.18em] ${confidenceClass}`}
+            title={`${ingredient.confidenceSampleSize} count${ingredient.confidenceSampleSize === 1 ? "" : "s"}${ingredient.isGraduated ? " · graduated" : ""}`}
+          >
+            {confidenceLabel} · {ingredient.confidenceSampleSize}
+          </span>
+        </div>
         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
           recipe unit · {recipeUnit}
           {estimate != null ? (

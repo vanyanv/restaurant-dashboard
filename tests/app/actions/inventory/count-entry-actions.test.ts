@@ -19,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
     stockCountLine: { findMany: vi.fn() },
     canonicalIngredient: { findMany: vi.fn() },
     ingredientSkuMatch: { findMany: vi.fn() },
+    ingredientModelState: { findMany: vi.fn() },
   },
 }))
 
@@ -42,6 +43,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   // Default: no estimate signal. Tests that care override per-call.
   vi.mocked(computeRunningOnHand).mockResolvedValue(null)
+  vi.mocked(prisma.ingredientModelState.findMany).mockResolvedValue([] as never)
 })
 
 describe("startOrResumeStockCount", () => {
