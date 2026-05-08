@@ -179,6 +179,9 @@ model Store {
   stockCounts          StockCount[]
   inventoryAdjustments InventoryAdjustment[]
   modelStates          IngredientModelState[]
+  forecastDailyRevenue ForecastDailyRevenue[]
+  forecastMenuItems    ForecastMenuItem[]
+  anomalyEvents        AnomalyEvent[]
 
   @@index([ownerId])
   @@index([accountId])
@@ -1258,4 +1261,141 @@ model IngredientModelState {
 
   @@unique([storeId, canonicalIngredientId])
   @@index([storeId, isGraduated])
+}
+
+// ---------------------------------------------------------------------------
+// ML forecasting layer (Phase 5)
+//
+// Forecasts are produced by a nightly Python pipeline (ml/run_nightly.py)
+// running on GitHub Actions. The pipeline writes precomputed predictions
+// here; the Next.js dashboard ONLY reads. Never train inside Vercel.
+// ---------------------------------------------------------------------------
+
+enum MlTrainingStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum MlTarget {
+  REVENUE
+  MENU_ITEM
+  INVENTORY
+}
+
+enum AnomalyMethod {
+  ZSCORE
+  ISOLATION_FOREST
+}
+
+enum AnomalyTarget {
+  REVENUE
+  MENU_ITEM
+  INGREDIENT
+  LABOR
+  REFUNDS
+}
+
+enum AnomalyStatus {
+  OPEN
+  ACKNOWLEDGED
+  EXPLAINED
+}
+
+/// One row per nightly pipeline invocation per (target, modelType). Captures
+/// MAPE / MAE on a held-out period so the dashboard can tell the operator
+/// "revenue forecast accurate within 8% over the last 30 days".
+model MlTrainingRun {
+  id           String           @id @default(cuid())
+  startedAt    DateTime         @default(now())
+  completedAt  DateTime?
+  modelType    String // "xgboost" | "lightgbm" | "prophet"
+  target       MlTarget
+  scope        String? // optional store id or "global"
+  mape         Float?
+  mae          Float?
+  sampleSize   Int?
+  modelVersion String? // e.g. git sha + timestamp
+  artifactPath String? // bucket key when we move artifacts off the runner
+  status       MlTrainingStatus @default(RUNNING)
+  errorMessage String?
+
+  @@index([target, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+}
+
+/// Daily revenue forecast per store. The Python pipeline writes one row per
+/// (storeId, forecastDate) per generation. Newer rows supersede older ones —
+/// the dashboard reads the latest by `generatedAt`.
+model ForecastDailyRevenue {
+  id               String    @id @default(cuid())
+  storeId          String
+  forecastDate     DateTime  @db.Date
+  /// 0 means whole-day; 1-23 means a specific hour bucket (when we add it).
+  hourBucket       Int       @default(0)
+  predictedRevenue Float
+  /// 10th / 90th percentile of the predictive interval.
+  p10              Float?
+  p90              Float?
+  modelVersion     String
+  generatedAt      DateTime  @default(now())
+  /// Backfilled by reconciliation when the day closes.
+  actualRevenue    Float?
+  errorPct         Float?
+  reconciledAt     DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, forecastDate, hourBucket, generatedAt])
+  @@index([storeId, forecastDate])
+  @@index([generatedAt(sort: Desc)])
+}
+
+/// Daily menu-item demand forecast per store. Joined by `otterItemSkuId`,
+/// which matches `OtterOrderItem.skuId` (the stable identifier used by sales
+/// history).
+model ForecastMenuItem {
+  id             String    @id @default(cuid())
+  storeId        String
+  otterItemSkuId String
+  forecastDate   DateTime  @db.Date
+  predictedQty   Float
+  p10            Float?
+  p90            Float?
+  modelVersion   String
+  generatedAt    DateTime  @default(now())
+  actualQty      Float?
+  errorPct       Float?
+  reconciledAt   DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, otterItemSkuId, forecastDate, generatedAt])
+  @@index([storeId, forecastDate])
+  @@index([generatedAt(sort: Desc)])
+}
+
+/// Anomaly events flagged by the nightly pipeline. Operators triage these
+/// in a dedicated feed; an anomaly can be linked to an InventoryAdjustment
+/// row when explained (e.g. "spike was a supplier return").
+model AnomalyEvent {
+  id             String        @id @default(cuid())
+  storeId        String
+  target         AnomalyTarget
+  /// Free-form id within target — menu-item sku, ingredient id, etc. Null
+  /// for store-wide signals like REVENUE.
+  targetId       String?
+  occurredOn     DateTime      @db.Date
+  residual       Float
+  zScore         Float?
+  method         AnomalyMethod
+  status         AnomalyStatus @default(OPEN)
+  explanation    String?
+  detectedAt     DateTime      @default(now())
+  acknowledgedAt DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, occurredOn(sort: Desc)])
+  @@index([status, detectedAt(sort: Desc)])
 }
