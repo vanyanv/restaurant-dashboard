@@ -15,6 +15,7 @@ import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-action
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
+import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -611,6 +612,83 @@ export const getLostSalesTool: ChatTool<
         baselineDailyQty: e.baselineDailyQty,
         meanUnitPrice: e.meanUnitPrice,
         estimatedLostRevenue: e.estimatedLostRevenue,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getCashPositionForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const cashPositionParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every owned store."),
+    horizonDays: z.number().int().min(1).max(28).optional().default(14),
+  })
+  .strict()
+
+export type CashPositionChatDay = {
+  date: string
+  predictedRevenue: number | null
+  estimatedNetInflow: number
+  scheduledPayables: number
+  proRatedFixedCosts: number
+  netCashFlow: number
+  cumulativeNet: number
+}
+
+export type CashPositionChatResult = {
+  horizonDays: number
+  blendedCommissionRate: number
+  proRatedFixedDaily: number
+  totalScheduledPayables: number
+  totalEstimatedInflow: number
+  endingCumulativeNet: number
+  goesNegativeOn: string | null
+  days: CashPositionChatDay[]
+}
+
+export const getCashPositionForecastTool: ChatTool<
+  typeof cashPositionParams,
+  CashPositionChatResult | { ok: false; error: string }
+> = {
+  name: "getCashPositionForecast",
+  description:
+    "Projects daily cash flow for the next 14 days. Inflow = predicted revenue × (1 − blended commission); outflow = invoice dueDate matches + pro-rated monthly fixed costs (rent/labor/cleaning/towels). Returns DELTA cumulative cash, not absolute balance — say so once. goesNegativeOn is the first date where cumulativeNet drops below 0; null when never.",
+  parameters: cashPositionParams,
+  async execute(args, ctx) {
+    const result = await getCashPositionForecast({
+      storeId: args.storeId,
+      horizonDays: args.horizonDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    const goesNegative = d.days.find((day) => day.cumulativeNet < 0)
+    return {
+      horizonDays: d.horizonDays,
+      blendedCommissionRate: d.blendedCommissionRate,
+      proRatedFixedDaily: d.proRatedFixedDaily,
+      totalScheduledPayables: d.totalScheduledPayables,
+      totalEstimatedInflow: d.totalEstimatedInflow,
+      endingCumulativeNet: d.endingCumulativeNet,
+      goesNegativeOn: goesNegative
+        ? goesNegative.date.toISOString().slice(0, 10)
+        : null,
+      days: d.days.map((day) => ({
+        date: day.date.toISOString().slice(0, 10),
+        predictedRevenue: day.predictedRevenue,
+        estimatedNetInflow: day.estimatedNetInflow,
+        scheduledPayables: day.scheduledPayables,
+        proRatedFixedCosts: day.proRatedFixedCosts,
+        netCashFlow: day.netCashFlow,
+        cumulativeNet: day.cumulativeNet,
       })),
     }
   },

@@ -37,6 +37,7 @@ import { getRefunds } from "./refunds"
 import { getPnlSummary } from "./pnl"
 import { searchPnlHistory } from "./pnl-history"
 import {
+  getCashPositionForecastTool,
   getFoodCostForecastTool,
   getLaborStaffingForecastTool,
   getLostSalesTool,
@@ -107,6 +108,7 @@ export const chatTools = {
   getLaborStaffingForecast: getLaborStaffingForecastTool,
   getMenuEngineering: getMenuEngineeringTool,
   getLostSales: getLostSalesTool,
+  getCashPositionForecast: getCashPositionForecastTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools
