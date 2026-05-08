@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { convertNativeToRecipeQty } from "@/lib/inventory/unit-conversion"
+import { applyCalibrationUpdatesForCount } from "@/lib/inventory/calibration-update"
 
 interface SessionUser {
   id: string
@@ -200,6 +201,11 @@ export async function completeStockCount(input: {
   if (!count) return { ok: false, error: "count_not_found" }
   if (count.store.accountId !== user.accountId) return { ok: false, error: "count_not_in_account" }
   if (count.status !== "IN_PROGRESS") return { ok: false, error: "count_not_in_progress" }
+
+  // Run calibration update BEFORE marking complete, so the running-on-hand
+  // anchor query (which filters status=COMPLETED) still picks the previous
+  // count rather than this one.
+  await applyCalibrationUpdatesForCount(input.stockCountId)
 
   await prisma.stockCount.update({
     where: { id: input.stockCountId },

@@ -28,6 +28,9 @@ vi.mock("@/lib/prisma", () => ({
     ingredientSkuMatch: { findMany: vi.fn() },
   },
 }))
+vi.mock("@/lib/inventory/calibration-update", () => ({
+  applyCalibrationUpdatesForCount: vi.fn().mockResolvedValue(undefined),
+}))
 
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
@@ -314,6 +317,23 @@ describe("completeStockCount", () => {
       where: { id: "c1" },
       data: { status: "COMPLETED", completedAt: expect.any(Date) },
     })
+  })
+
+  it("runs calibration update before marking the count complete", async () => {
+    const calibrationModule = await import("@/lib/inventory/calibration-update")
+    const calls: string[] = []
+    vi.mocked(calibrationModule.applyCalibrationUpdatesForCount).mockImplementation(
+      (async () => {
+        calls.push("calibration")
+      }) as never,
+    )
+    vi.mocked(prisma.stockCount.update).mockImplementation((async () => {
+      calls.push("update")
+      return { id: "c1", status: "COMPLETED" }
+    }) as never)
+    await completeStockCount({ stockCountId: "c1" })
+    expect(calls).toEqual(["calibration", "update"])
+    expect(calibrationModule.applyCalibrationUpdatesForCount).toHaveBeenCalledWith("c1")
   })
 })
 
