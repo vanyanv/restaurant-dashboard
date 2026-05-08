@@ -4,9 +4,11 @@ import Link from "next/link"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
 import { getInventoryDashboardData } from "@/app/actions/inventory/dashboard-actions"
+import { getInventoryCoverageHealth } from "@/app/actions/inventory/coverage-health-actions"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { InventoryStorePicker } from "./components/inventory-store-picker"
 import { InventoryDashboardClient } from "./components/inventory-dashboard-client"
+import { CoverageHealthCard } from "./components/coverage-health-card"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -35,7 +37,10 @@ export default async function InventoryDashboardPage({ searchParams }: PageProps
   if (!storeId) redirect("/dashboard")
   if (!stores.some((s) => s.id === storeId)) redirect("/dashboard/operations/inventory")
 
-  const result = await getInventoryDashboardData({ storeId })
+  const [result, coverageResult] = await Promise.all([
+    getInventoryDashboardData({ storeId }),
+    getInventoryCoverageHealth({ storeId }),
+  ])
   if (!result || !result.ok) {
     return (
       <div className="px-6 py-10">
@@ -75,6 +80,7 @@ export default async function InventoryDashboardPage({ searchParams }: PageProps
       </EditorialTopbar>
 
       <div className="px-6 py-6 space-y-6">
+        {coverageResult?.ok && <CoverageHealthCard data={coverageResult.data} />}
         <InventoryDashboardClient data={data} />
       </div>
     </div>
