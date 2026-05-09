@@ -40,6 +40,7 @@ import {
   getCashPositionForecastTool,
   getFoodCostForecastTool,
   getLaborStaffingForecastTool,
+  getLaunchTrajectoryTool,
   getLostSalesTool,
   getMenuEngineeringTool,
   getMenuItemElasticityTool,
@@ -113,6 +114,7 @@ export const chatTools = {
   getCashPositionForecast: getCashPositionForecastTool,
   getVendorReliability: getVendorReliabilityTool,
   getPromoRoi: getPromoRoiTool,
+  getLaunchTrajectory: getLaunchTrajectoryTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools
