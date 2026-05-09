@@ -17,6 +17,7 @@ import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-act
 import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
 import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
+import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -797,5 +798,84 @@ export const getOpenAnomalies: ChatTool<typeof anomaliesParams, AnomalyChatRow[]
       method: r.method,
       detectedAt: r.detectedAt.toISOString(),
     }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getPromoRoi (F17 chat tool)
+// ---------------------------------------------------------------------------
+
+const promoRoiParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every store in the account."),
+    lookbackDays: z.number().int().min(14).max(365).optional().default(90),
+    limit: z.number().int().min(1).max(50).optional().default(10),
+  })
+  .strict()
+
+export type PromoRoiChatEvent = {
+  date: string
+  weekday: number
+  netSales: number
+  baselineNetSales: number
+  baselineSampleSize: number
+  discount: number
+  discountPct: number
+  lift: number
+  liftCI80Low: number
+  liftCI80High: number
+  roi: number | null
+}
+
+export type PromoRoiChatResult = {
+  windowStart: string
+  windowEnd: string
+  totalLift: number
+  totalDiscount: number
+  blendedRoi: number | null
+  events: PromoRoiChatEvent[]
+}
+
+export const getPromoRoiTool: ChatTool<
+  typeof promoRoiParams,
+  PromoRoiChatResult | { ok: false; error: string }
+> = {
+  name: "getPromoRoi",
+  description:
+    "Returns historical promotion ROI events. We don't have an explicit Promotion entity, so this infers promo days from elevated daily discount-to-gross-sales share in OtterDailySummary, then compares actual net sales against same-weekday non-promo baseline. roi is lift_dollars / discount_dollars (e.g. 2.5× = $2.50 of lift per $1 of discount). Cannibalization is NOT computed (order-level signal only). State this is inferred, not from a campaigns table.",
+  parameters: promoRoiParams,
+  async execute(args, ctx) {
+    const result = await getPromoRoi({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    return {
+      windowStart: d.windowStart.toISOString().slice(0, 10),
+      windowEnd: d.windowEnd.toISOString().slice(0, 10),
+      totalLift: d.totalLift,
+      totalDiscount: d.totalDiscount,
+      blendedRoi: d.blendedRoi,
+      events: d.events.slice(0, args.limit ?? 10).map((e) => ({
+        date: e.date.toISOString().slice(0, 10),
+        weekday: e.weekday,
+        netSales: e.netSales,
+        baselineNetSales: e.baselineNetSales,
+        baselineSampleSize: e.baselineSampleSize,
+        discount: e.discount,
+        discountPct: e.discountPct,
+        lift: e.lift,
+        liftCI80Low: e.liftCI80Low,
+        liftCI80High: e.liftCI80High,
+        roi: e.roi,
+      })),
+    }
   },
 }

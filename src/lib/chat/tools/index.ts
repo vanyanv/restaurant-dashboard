@@ -45,6 +45,7 @@ import {
   getMenuItemElasticityTool,
   getMenuItemForecast,
   getOpenAnomalies,
+  getPromoRoiTool,
   getRevenueForecast,
   getVendorReliabilityTool,
 } from "./forecasts"
@@ -111,6 +112,7 @@ export const chatTools = {
   getLostSales: getLostSalesTool,
   getCashPositionForecast: getCashPositionForecastTool,
   getVendorReliability: getVendorReliabilityTool,
+  getPromoRoi: getPromoRoiTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools
