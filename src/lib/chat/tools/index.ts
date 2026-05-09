@@ -49,6 +49,7 @@ import {
   getMenuItemForecast,
   getOpenAnomalies,
   getPromoRoiTool,
+  getRecipeSuggestionsTool,
   getRevenueForecast,
   getVendorReliabilityTool,
 } from "./forecasts"
@@ -119,6 +120,7 @@ export const chatTools = {
   getLaunchTrajectory: getLaunchTrajectoryTool,
   getChannelMix: getChannelMixTool,
   getCateringDetection: getCateringDetectionTool,
+  getRecipeSuggestions: getRecipeSuggestionsTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools

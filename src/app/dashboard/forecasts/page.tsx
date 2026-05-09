@@ -16,6 +16,7 @@ import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
 import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
 import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
 import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
+import { getRecipeSuggestions } from "@/app/actions/forecasts/recipe-suggestion-actions"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
@@ -33,6 +34,7 @@ import { PromoRoiCard } from "./components/promo-roi-card"
 import { LaunchTrajectoryCard } from "./components/launch-trajectory-card"
 import { ChannelMixCard } from "./components/channel-mix-card"
 import { CateringDetectionCard } from "./components/catering-detection-card"
+import { RecipeSuggestionCard } from "./components/recipe-suggestion-card"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -76,6 +78,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     launchTrajectoryResult,
     channelMixResult,
     cateringResult,
+    recipeSuggestionResult,
     storeMeta,
   ] = await Promise.all([
     getRevenueForecast({ storeId }),
@@ -92,6 +95,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     getLaunchTrajectory({ storeId }),
     getChannelMix({ storeId }),
     getCateringDetection({ storeId }),
+    getRecipeSuggestions({ storeId }),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
@@ -148,6 +152,9 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
         )}
         {channelMixResult?.ok && <ChannelMixCard data={channelMixResult.data} />}
         {cateringResult?.ok && <CateringDetectionCard data={cateringResult.data} />}
+        {recipeSuggestionResult?.ok && (
+          <RecipeSuggestionCard data={recipeSuggestionResult.data} />
+        )}
         {anomalyResult?.ok && <AnomalyFeed data={anomalyResult.data} />}
         {lostSalesResult?.ok && <LostSalesCard data={lostSalesResult.data} />}
         {laborResult?.ok && <LaborStaffingCard data={laborResult.data} />}

@@ -21,6 +21,7 @@ import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
 import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
 import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
 import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
+import { getRecipeSuggestions } from "@/app/actions/forecasts/recipe-suggestion-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -1110,6 +1111,64 @@ export const getCateringDetectionTool: ChatTool<
       subtotalMultiplier: o.subtotalMultiplier,
       leadHours: o.leadHours,
       triggers: o.triggers,
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getRecipeSuggestions (F28 chat tool)
+// ---------------------------------------------------------------------------
+
+const recipeSuggestionParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(30),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  })
+  .strict()
+
+export type RecipeSuggestionChatRow = {
+  storeId: string
+  itemName: string
+  category: string
+  qty30d: number
+  candidates: {
+    recipeId: string
+    recipeName: string
+    similarity: number
+    confidence: "high" | "medium" | "low"
+    ingredientCount: number
+  }[]
+}
+
+export const getRecipeSuggestionsTool: ChatTool<
+  typeof recipeSuggestionParams,
+  RecipeSuggestionChatRow[] | { ok: false; error: string }
+> = {
+  name: "getRecipeSuggestions",
+  description:
+    "For every menu item the operator hasn't yet linked to a Recipe, returns up to 3 candidate recipes ranked by token-Jaccard name similarity (lowercased, punctuation-stripped, English stopwords removed). confidence is high (≥0.75), medium (≥0.5) or low (≥0.25). Items with no candidate above 0.25 still appear, with empty candidates — that's a 'no match found' signal so the operator knows the gap exists. Sorted by 30-day quantity desc. Suggestions only — never claim the mapping has been written.",
+  parameters: recipeSuggestionParams,
+  async execute(args, ctx) {
+    const result = await getRecipeSuggestions({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return result.data.items.slice(0, args.limit ?? 20).map((it) => ({
+      storeId: it.storeId,
+      itemName: it.itemName,
+      category: it.category,
+      qty30d: it.qty30d,
+      candidates: it.candidates.map((c) => ({
+        recipeId: c.recipeId,
+        recipeName: c.recipeName,
+        similarity: c.similarity,
+        confidence: c.confidence,
+        ingredientCount: c.ingredientCount,
+      })),
     }))
   },
 }
