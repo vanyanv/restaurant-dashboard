@@ -18,6 +18,7 @@ import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
 import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
 import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
+import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -877,5 +878,76 @@ export const getPromoRoiTool: ChatTool<
         roi: e.roi,
       })),
     }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getLaunchTrajectory (F23 chat tool)
+// ---------------------------------------------------------------------------
+
+const launchTrajectoryParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every store in the account."),
+    recentDays: z
+      .number()
+      .int()
+      .min(7)
+      .max(180)
+      .optional()
+      .default(60)
+      .describe("How recent the first sale must be to count as a launch."),
+    limit: z.number().int().min(1).max(50).optional().default(10),
+  })
+  .strict()
+
+export type LaunchTrajectoryChatRow = {
+  storeId: string
+  category: string
+  itemName: string
+  firstSaleDate: string
+  daysSinceLaunch: number
+  totalQty: number
+  totalRevenue: number
+  meanUnitPrice: number
+  meanDailyQtyTrailing7: number | null
+  projectedQty90d: number | null
+  projectedQtyCI80Low: number | null
+  projectedQtyCI80High: number | null
+}
+
+export const getLaunchTrajectoryTool: ChatTool<
+  typeof launchTrajectoryParams,
+  LaunchTrajectoryChatRow[] | { ok: false; error: string }
+> = {
+  name: "getLaunchTrajectory",
+  description:
+    "Detects newly-launched menu items (first sale in the last `recentDays` days, no prior sales in the 90 days before) and returns the daily-qty trajectory plus a 90-day projection. Projection extends the trailing 7-day mean qty forward — assumes no growth or decay. Items launched < 7 days ago return null projection. Sorted by total revenue desc. Don't claim the projection accounts for ramp-up; it doesn't.",
+  parameters: launchTrajectoryParams,
+  async execute(args, ctx) {
+    const result = await getLaunchTrajectory({
+      storeId: args.storeId,
+      recentDays: args.recentDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return result.data.launches.slice(0, args.limit ?? 10).map((l) => ({
+      storeId: l.storeId,
+      category: l.category,
+      itemName: l.itemName,
+      firstSaleDate: l.firstSaleDate.toISOString().slice(0, 10),
+      daysSinceLaunch: l.daysSinceLaunch,
+      totalQty: l.totalQty,
+      totalRevenue: l.totalRevenue,
+      meanUnitPrice: l.meanUnitPrice,
+      meanDailyQtyTrailing7: l.projection?.meanDailyQtyTrailing7 ?? null,
+      projectedQty90d: l.projection?.projectedQty90d ?? null,
+      projectedQtyCI80Low: l.projection?.projectedQtyCI80Low ?? null,
+      projectedQtyCI80High: l.projection?.projectedQtyCI80High ?? null,
+    }))
   },
 }

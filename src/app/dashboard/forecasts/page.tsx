@@ -13,6 +13,7 @@ import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
 import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
 import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
+import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
@@ -27,6 +28,7 @@ import { LostSalesCard } from "./components/lost-sales-card"
 import { CashPositionCard } from "./components/cash-position-card"
 import { VendorReliabilityCard } from "./components/vendor-reliability-card"
 import { PromoRoiCard } from "./components/promo-roi-card"
+import { LaunchTrajectoryCard } from "./components/launch-trajectory-card"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -67,6 +69,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     cashPositionResult,
     vendorReliabilityResult,
     promoRoiResult,
+    launchTrajectoryResult,
     storeMeta,
   ] = await Promise.all([
     getRevenueForecast({ storeId }),
@@ -80,6 +83,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     getCashPositionForecast({ storeId }),
     getVendorReliability({}),
     getPromoRoi({ storeId }),
+    getLaunchTrajectory({ storeId }),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
@@ -131,6 +135,9 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
           <VendorReliabilityCard data={vendorReliabilityResult.data} />
         )}
         {promoRoiResult?.ok && <PromoRoiCard data={promoRoiResult.data} />}
+        {launchTrajectoryResult?.ok && (
+          <LaunchTrajectoryCard data={launchTrajectoryResult.data} />
+        )}
         {anomalyResult?.ok && <AnomalyFeed data={anomalyResult.data} />}
         {lostSalesResult?.ok && <LostSalesCard data={lostSalesResult.data} />}
         {laborResult?.ok && <LaborStaffingCard data={laborResult.data} />}
