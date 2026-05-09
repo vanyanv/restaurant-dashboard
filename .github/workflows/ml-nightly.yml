@@ -1,0 +1,70 @@
+name: ML Nightly (revenue forecast)
+
+# Phase 5 ML pipeline. Trains XGBoost revenue models per store, generates
+# 14-day forecasts, writes predictions + run metadata to Postgres. The
+# Next.js dashboard ONLY reads those tables — never train inside Vercel.
+#
+# Schedule: 06:00 UTC = 02:00 America/New_York. Runs after the otter-sync
+# workflow which lands the previous day's revenue around 01:00 ET.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      lookbackDays:
+        description: 'History window the trainer pulls'
+        default: '540'
+
+concurrency:
+  group: ml-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: ml/requirements.txt
+
+      - name: Install ML deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ml/requirements.txt
+
+      - name: Run nightly pipeline
+        id: pipeline
+        run: |
+          mkdir -p logs
+          python -m ml.run_nightly 2>&1 | tee logs/ml-nightly.log
+
+      - name: Upload pipeline log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-nightly-log-${{ github.run_id }}
+          path: logs/ml-nightly.log
+          retention-days: 14
+
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: ML Nightly
+          ISSUE_TITLE: "[Auto] ML Nightly failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/ml-nightly.log
+          FAILED_EXIT_CODE: ${{ steps.pipeline.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

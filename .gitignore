@@ -71,3 +71,9 @@ scripts/eval-chat/runs/
 
 # graphify knowledge graph output
 /graphify-out/
+
+# Python ML pipeline (ml/) local artifacts
+__pycache__/
+*.pyc
+.venv-ml/
+ml/.venv/

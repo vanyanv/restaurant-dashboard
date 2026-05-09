@@ -58,6 +58,7 @@ model Account {
   canonicalIngredientEmbeddings CanonicalIngredientEmbedding[]
   pnlNarrativeEmbeddings        PnlNarrativeEmbedding[]
   invites                       Invite[]
+  vendorLeadTimes               VendorLeadTime[]
 }
 
 /// Single-use, time-limited signup token. An OWNER on an account creates
@@ -115,6 +116,8 @@ model User {
   conversations        Conversation[]
   invitesCreated       Invite[]              @relation("InvitesCreated")
   invitesUsed          Invite[]              @relation("InvitesUsed")
+  stockCountsCreated   StockCount[]          @relation("StockCountsCreated")
+  inventoryAdjustments InventoryAdjustment[] @relation("InventoryAdjustmentsCreated")
 
   @@index([email])
   @@index([accountId])
@@ -156,8 +159,8 @@ model Store {
   targetCogsPct Float?
 
   // Relations
-  owner                User                  @relation("StoreOwner", fields: [ownerId], references: [id])
-  account              Account               @relation(fields: [accountId], references: [id])
+  owner                User                   @relation("StoreOwner", fields: [ownerId], references: [id])
+  account              Account                @relation(fields: [accountId], references: [id])
   prepTasks            PrepTask[]
   otterStores          OtterStore[]
   otterSummaries       OtterDailySummary[]
@@ -173,6 +176,13 @@ model Store {
   dailyCogsItems       DailyCogsItem[]
   aiForecastRuns       AiForecastRun[]
   jobRuns              JobRun[]
+  stockCounts          StockCount[]
+  inventoryAdjustments InventoryAdjustment[]
+  modelStates          IngredientModelState[]
+  forecastDailyRevenue ForecastDailyRevenue[]
+  forecastMenuItems    ForecastMenuItem[]
+  anomalyEvents        AnomalyEvent[]
+  menuItemElasticities MenuItemElasticity[]
 
   @@index([ownerId])
   @@index([accountId])
@@ -523,12 +533,15 @@ model CanonicalIngredient {
   costLocked        Boolean   @default(false)
   costUpdatedAt     DateTime?
 
-  owner             User                 @relation(fields: [ownerId], references: [id])
-  account           Account              @relation(fields: [accountId], references: [id])
-  aliases           IngredientAlias[]
-  recipeIngredients RecipeIngredient[]
-  invoiceLineItems  InvoiceLineItem[]
-  skuMatches        IngredientSkuMatch[]
+  owner                User                   @relation(fields: [ownerId], references: [id])
+  account              Account                @relation(fields: [accountId], references: [id])
+  aliases              IngredientAlias[]
+  recipeIngredients    RecipeIngredient[]
+  invoiceLineItems     InvoiceLineItem[]
+  skuMatches           IngredientSkuMatch[]
+  stockCountLines      StockCountLine[]
+  inventoryAdjustments InventoryAdjustment[]
+  modelStates          IngredientModelState[]
 
   @@unique([ownerId, name])
   @@unique([accountId, name])
@@ -652,11 +665,11 @@ model DailyCogsItem {
   partialCost  Boolean    @default(false)
   /**
    * Provenance of `unitCost`. One of:
-   *   "invoice" — every contributing ingredient was priced from invoice data.
-   *   "manual"  — every contributing ingredient was priced from a manual cost.
-   *   "mixed"   — both invoice and manual prices contributed.
-   *   "override" — the recipe-level `foodCostOverride` was applied (no
-   *               ingredient walk produced a number).
+   * "invoice" — every contributing ingredient was priced from invoice data.
+   * "manual"  — every contributing ingredient was priced from a manual cost.
+   * "mixed"   — both invoice and manual prices contributed.
+   * "override" — the recipe-level `foodCostOverride` was applied (no
+   * ingredient walk produced a number).
    * Null for UNMAPPED rows and packaging rows pre-dating this column.
    * Lets dashboards distinguish "this is real $" from "this is a guess."
    */
@@ -1099,4 +1112,321 @@ model R2BucketSnapshot {
   byPrefix    Json
 
   @@index([capturedAt(sort: Desc)])
+}
+
+// =============================================================================
+// Inventory: stock counts, adjustments, vendor lead-time cache
+// (Phase 1 of the inventory + reorder + waste roadmap — see docs/backlog-mapping.md)
+// =============================================================================
+
+enum StockCountStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+/// Header row for one physical inventory count at one store. Operators do an
+/// opening count, then weekly recounts. `completedAt` is set when the count
+/// is finalized; that's when waste-delta and calibration jobs run against it.
+model StockCount {
+  id              String           @id @default(cuid())
+  storeId         String
+  countedByUserId String
+  status          StockCountStatus @default(IN_PROGRESS)
+  startedAt       DateTime         @default(now())
+  countedAt       DateTime
+  completedAt     DateTime?
+  note            String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  store         Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  countedByUser User             @relation("StockCountsCreated", fields: [countedByUserId], references: [id])
+  lines         StockCountLine[]
+
+  @@index([storeId, countedAt(sort: Desc)])
+  @@index([storeId, status])
+  @@index([countedByUserId])
+}
+
+/// One ingredient line within a count. `qtyInRecipeUnit` is the canonical
+/// value used by every downstream calc (running on-hand, waste delta,
+/// calibration). `nativeQty`/`nativeUnit` capture how the operator counted
+/// (e.g. "2 cases") for UX + audit, with the conversion applied via
+/// IngredientSkuMatch.conversionFactor at save time.
+///
+/// `estimatedQtyAtCount` and `calibrationFactorAtCount` freeze the model's
+/// prediction at the moment of counting — Phase 4 replays these to learn
+/// systematic bias without leaking future-knowledge into the training set.
+model StockCountLine {
+  id                       String   @id @default(cuid())
+  stockCountId             String
+  canonicalIngredientId    String
+  qtyInRecipeUnit          Float
+  nativeQty                Float?
+  nativeUnit               String?
+  note                     String?
+  estimatedQtyAtCount      Float?
+  calibrationFactorAtCount Float?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  stockCount          StockCount          @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Restrict)
+
+  @@unique([stockCountId, canonicalIngredientId])
+  @@index([canonicalIngredientId])
+}
+
+enum InventoryAdjustmentReason {
+  THEFT
+  EXPIRY
+  SUPPLIER_RETURN
+  DAMAGE
+  OTHER
+}
+
+/// Manual adjustment to running on-hand. Logged for major events only —
+/// theft, expiry, supplier returns, damage. Daily spills/comps are absorbed
+/// into the weekly recount delta.
+model InventoryAdjustment {
+  id                    String                    @id @default(cuid())
+  storeId               String
+  canonicalIngredientId String
+  occurredAt            DateTime
+  qty                   Float // positive = removed from stock; we always subtract
+  reason                InventoryAdjustmentReason
+  note                  String?
+  createdByUserId       String
+  createdAt             DateTime                  @default(now())
+
+  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Restrict)
+  createdByUser       User                @relation("InventoryAdjustmentsCreated", fields: [createdByUserId], references: [id])
+
+  @@index([storeId, canonicalIngredientId, occurredAt(sort: Desc)])
+  @@index([storeId, occurredAt(sort: Desc)])
+  @@index([createdByUserId])
+}
+
+/// Cache of auto-derived vendor lead times. Recomputed nightly from
+/// Invoice.invoiceDate gaps per (accountId, vendorNameNormalized).
+/// `medianLeadDays` falls back to a per-account default when sampleSize < 3.
+model VendorLeadTime {
+  id                   String   @id @default(cuid())
+  accountId            String
+  vendorNameNormalized String
+  medianLeadDays       Float
+  sampleSize           Int
+  lastComputedAt       DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, vendorNameNormalized])
+  @@index([accountId])
+}
+
+enum IngredientConfidenceLevel {
+  LOW
+  MEDIUM
+  HIGH
+  VERIFIED
+}
+
+/// Per (storeId, canonicalIngredientId) Bayesian calibration state. Each
+/// completed StockCount updates `calibrationFactor` (multiplier on theoretical
+/// recipe-walk depletion) via an EWMA Bayesian update, and rolls residual
+/// statistics (`recountDeltaMean` / `recountDeltaStd`) used for graduation +
+/// anomaly scoring. `isGraduated=true` exempts the ingredient from the
+/// mandatory weekly count list; the operator only re-counts on spot-checks
+/// or when an upstream change (recipe edit, new vendor SKU, menu add) forces
+/// re-validation.
+model IngredientModelState {
+  id                      String                    @id @default(cuid())
+  storeId                 String
+  canonicalIngredientId   String
+  calibrationFactor       Float                     @default(1.0)
+  recountDeltaMean        Float                     @default(0)
+  recountDeltaM2          Float                     @default(0) // Welford running sum-of-squares
+  sampleSize              Int                       @default(0)
+  consecutiveTightWeeks   Int                       @default(0)
+  isGraduated             Boolean                   @default(false)
+  graduatedAt             DateTime?
+  lastSpotCheckAt         DateTime?
+  confidenceLevel         IngredientConfidenceLevel @default(LOW)
+  typicalWeeklyThroughput Float?
+  lastUpdatedAt           DateTime                  @default(now())
+
+  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, canonicalIngredientId])
+  @@index([storeId, isGraduated])
+}
+
+// ---------------------------------------------------------------------------
+// ML forecasting layer (Phase 5)
+//
+// Forecasts are produced by a nightly Python pipeline (ml/run_nightly.py)
+// running on GitHub Actions. The pipeline writes precomputed predictions
+// here; the Next.js dashboard ONLY reads. Never train inside Vercel.
+// ---------------------------------------------------------------------------
+
+enum MlTrainingStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum MlTarget {
+  REVENUE
+  MENU_ITEM
+  INVENTORY
+}
+
+enum AnomalyMethod {
+  ZSCORE
+  ISOLATION_FOREST
+}
+
+enum AnomalyTarget {
+  REVENUE
+  MENU_ITEM
+  INGREDIENT
+  LABOR
+  REFUNDS
+}
+
+enum AnomalyStatus {
+  OPEN
+  ACKNOWLEDGED
+  EXPLAINED
+}
+
+/// One row per nightly pipeline invocation per (target, modelType). Captures
+/// MAPE / MAE on a held-out period so the dashboard can tell the operator
+/// "revenue forecast accurate within 8% over the last 30 days".
+model MlTrainingRun {
+  id           String           @id @default(cuid())
+  startedAt    DateTime         @default(now())
+  completedAt  DateTime?
+  modelType    String // "xgboost" | "lightgbm" | "prophet"
+  target       MlTarget
+  scope        String? // optional store id or "global"
+  mape         Float?
+  mae          Float?
+  sampleSize   Int?
+  modelVersion String? // e.g. git sha + timestamp
+  artifactPath String? // bucket key when we move artifacts off the runner
+  status       MlTrainingStatus @default(RUNNING)
+  errorMessage String?
+
+  @@index([target, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
+}
+
+/// Daily revenue forecast per store. The Python pipeline writes one row per
+/// (storeId, forecastDate) per generation. Newer rows supersede older ones —
+/// the dashboard reads the latest by `generatedAt`.
+model ForecastDailyRevenue {
+  id               String    @id @default(cuid())
+  storeId          String
+  forecastDate     DateTime  @db.Date
+  /// 0 means whole-day; 1-23 means a specific hour bucket (when we add it).
+  hourBucket       Int       @default(0)
+  predictedRevenue Float
+  /// 10th / 90th percentile of the predictive interval.
+  p10              Float?
+  p90              Float?
+  modelVersion     String
+  generatedAt      DateTime  @default(now())
+  /// Backfilled by reconciliation when the day closes.
+  actualRevenue    Float?
+  errorPct         Float?
+  reconciledAt     DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, forecastDate, hourBucket, generatedAt])
+  @@index([storeId, forecastDate])
+  @@index([generatedAt(sort: Desc)])
+}
+
+/// Daily menu-item demand forecast per store. Joined by `otterItemSkuId`,
+/// which matches `OtterOrderItem.skuId` (the stable identifier used by sales
+/// history).
+model ForecastMenuItem {
+  id             String    @id @default(cuid())
+  storeId        String
+  otterItemSkuId String
+  forecastDate   DateTime  @db.Date
+  predictedQty   Float
+  p10            Float?
+  p90            Float?
+  modelVersion   String
+  generatedAt    DateTime  @default(now())
+  actualQty      Float?
+  errorPct       Float?
+  reconciledAt   DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, otterItemSkuId, forecastDate, generatedAt])
+  @@index([storeId, forecastDate])
+  @@index([generatedAt(sort: Desc)])
+}
+
+/// Anomaly events flagged by the nightly pipeline. Operators triage these
+/// in a dedicated feed; an anomaly can be linked to an InventoryAdjustment
+/// row when explained (e.g. "spike was a supplier return").
+model AnomalyEvent {
+  id             String        @id @default(cuid())
+  storeId        String
+  target         AnomalyTarget
+  /// Free-form id within target — menu-item sku, ingredient id, etc. Null
+  /// for store-wide signals like REVENUE.
+  targetId       String?
+  occurredOn     DateTime      @db.Date
+  residual       Float
+  zScore         Float?
+  method         AnomalyMethod
+  status         AnomalyStatus @default(OPEN)
+  explanation    String?
+  detectedAt     DateTime      @default(now())
+  acknowledgedAt DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, occurredOn(sort: Desc)])
+  @@index([status, detectedAt(sort: Desc)])
+}
+
+/// Per (store, otterItemSkuId) price elasticity — extracted nightly by an
+/// OLS log(qty) ~ log(price) regression with weekday controls. `elasticity`
+/// is the price coefficient: -1.0 = unit elastic; more negative = customers
+/// drop off faster on price hikes; near 0 = inelastic (price changes don't
+/// move volume). Positive values are noise; surface them as 'no_signal'
+/// upstream.
+model MenuItemElasticity {
+  id              String   @id @default(cuid())
+  storeId         String
+  otterItemSkuId  String
+  elasticity      Float
+  intercept       Float
+  /// R² goodness-of-fit on the training window. Below ~0.10 should be
+  /// treated as low-confidence.
+  fitR2           Float
+  /// Number of daily observations used in the fit.
+  sampleSize      Int
+  /// Number of distinct price points observed. < 2 means no price variance
+  /// — the row should be flagged as no_signal.
+  pricePointCount Int
+  meanPrice       Float
+  meanQty         Float
+  computedAt      DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, otterItemSkuId])
+  @@index([storeId, computedAt(sort: Desc)])
 }

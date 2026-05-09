@@ -1,0 +1,1256 @@
+// Phase 5 / F14 — expose the ML forecast + anomaly read path to the chat
+// model so Claude can ground answers in concrete predictions instead of
+// just summarising history.
+//
+// Each tool:
+//   - resolves store ids through assertOwnerOwnsStores (no model-trust)
+//   - keeps the latest generation per (storeId, target, date)
+//   - returns plain rows the model can rewrite into prose
+
+import { z } from "zod"
+import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
+import type { ChatTool } from "./types"
+import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
+import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
+import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
+import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
+import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
+import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
+import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
+import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
+import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
+import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
+import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
+import { getRecipeSuggestions } from "@/app/actions/forecasts/recipe-suggestion-actions"
+import { getWasteRootCauses } from "@/app/actions/forecasts/waste-cluster-actions"
+
+// ---------------------------------------------------------------------------
+// getRevenueForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const revenueParams = z
+  .object({
+    storeIds: storeIdsSchema,
+    horizonDays: z
+      .number()
+      .int()
+      .min(1)
+      .max(28)
+      .optional()
+      .default(14)
+      .describe("Days ahead to return. The pipeline currently writes 14d horizons."),
+  })
+  .strict()
+
+export type RevenueForecastChatRow = {
+  storeId: string
+  date: string
+  predictedRevenue: number
+  p10: number | null
+  p90: number | null
+  modelVersion: string
+  generatedAt: string
+}
+
+export const getRevenueForecast: ChatTool<typeof revenueParams, RevenueForecastChatRow[]> = {
+  name: "getRevenueForecast",
+  description:
+    "Returns the latest daily revenue forecast for an owner-scoped slice of stores. Source: ForecastDailyRevenue, written by the nightly ML pipeline (XGBoost). p10/p90 are the 80% prediction-interval bounds. Empty when the pipeline has not run yet.",
+  parameters: revenueParams,
+  async execute(args, ctx) {
+    const storeIds = await resolveStoreIds(ctx, args.storeIds)
+    const horizon = args.horizonDays ?? 14
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const horizonEnd = new Date(today)
+    horizonEnd.setDate(horizonEnd.getDate() + horizon)
+
+    const rows = await ctx.prisma.forecastDailyRevenue.findMany({
+      where: {
+        storeId: { in: storeIds },
+        hourBucket: 0,
+        forecastDate: { gte: today, lt: horizonEnd },
+      },
+      orderBy: [
+        { storeId: "asc" },
+        { forecastDate: "asc" },
+        { generatedAt: "desc" },
+      ],
+      select: {
+        storeId: true,
+        forecastDate: true,
+        predictedRevenue: true,
+        p10: true,
+        p90: true,
+        modelVersion: true,
+        generatedAt: true,
+      },
+    })
+
+    // Latest generation per (storeId, forecastDate)
+    const latest = new Map<string, (typeof rows)[number]>()
+    for (const r of rows) {
+      const key = `${r.storeId}|${ymd(r.forecastDate as Date)}`
+      const existing = latest.get(key)
+      if (!existing || r.generatedAt > existing.generatedAt) latest.set(key, r)
+    }
+
+    return Array.from(latest.values())
+      .sort((a, b) => {
+        if (a.storeId !== b.storeId) return a.storeId.localeCompare(b.storeId)
+        return (a.forecastDate as Date).getTime() - (b.forecastDate as Date).getTime()
+      })
+      .map((r) => ({
+        storeId: r.storeId,
+        date: ymd(r.forecastDate as Date),
+        predictedRevenue: r.predictedRevenue,
+        p10: r.p10,
+        p90: r.p90,
+        modelVersion: r.modelVersion,
+        generatedAt: r.generatedAt.toISOString(),
+      }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getMenuItemForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const menuItemParams = z
+  .object({
+    storeIds: storeIdsSchema,
+    horizonDays: z.number().int().min(1).max(14).optional().default(7),
+    topN: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .default(15)
+      .describe("Cap on items returned per store, sorted by total predicted demand."),
+  })
+  .strict()
+
+export type MenuItemForecastChatRow = {
+  storeId: string
+  itemSkuId: string
+  totalPredicted: number
+  dailyAverage: number
+  days: { date: string; predictedQty: number; p10: number | null; p90: number | null }[]
+}
+
+export const getMenuItemForecast: ChatTool<typeof menuItemParams, MenuItemForecastChatRow[]> = {
+  name: "getMenuItemForecast",
+  description:
+    "Returns the latest per-item demand forecast for an owner-scoped slice of stores. otterItemSkuId is the stable per-store identifier (currently the Otter item name). Returns the top-N items per store by total predicted demand.",
+  parameters: menuItemParams,
+  async execute(args, ctx) {
+    const storeIds = await resolveStoreIds(ctx, args.storeIds)
+    const horizon = args.horizonDays ?? 7
+    const topN = args.topN ?? 15
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const horizonEnd = new Date(today)
+    horizonEnd.setDate(horizonEnd.getDate() + horizon)
+
+    const rows = await ctx.prisma.forecastMenuItem.findMany({
+      where: {
+        storeId: { in: storeIds },
+        forecastDate: { gte: today, lt: horizonEnd },
+      },
+      orderBy: [
+        { storeId: "asc" },
+        { otterItemSkuId: "asc" },
+        { forecastDate: "asc" },
+        { generatedAt: "desc" },
+      ],
+      select: {
+        storeId: true,
+        otterItemSkuId: true,
+        forecastDate: true,
+        predictedQty: true,
+        p10: true,
+        p90: true,
+        generatedAt: true,
+      },
+    })
+
+    // Latest generation per (storeId, sku, date)
+    const latest = new Map<string, (typeof rows)[number]>()
+    for (const r of rows) {
+      const key = `${r.storeId}|${r.otterItemSkuId}|${ymd(r.forecastDate as Date)}`
+      const existing = latest.get(key)
+      if (!existing || r.generatedAt > existing.generatedAt) latest.set(key, r)
+    }
+
+    // Bucket by (storeId, sku)
+    type Bucket = MenuItemForecastChatRow
+    const buckets = new Map<string, Bucket>()
+    for (const r of latest.values()) {
+      const key = `${r.storeId}|${r.otterItemSkuId}`
+      let bucket = buckets.get(key)
+      if (!bucket) {
+        bucket = {
+          storeId: r.storeId,
+          itemSkuId: r.otterItemSkuId,
+          totalPredicted: 0,
+          dailyAverage: 0,
+          days: [],
+        }
+        buckets.set(key, bucket)
+      }
+      bucket.days.push({
+        date: ymd(r.forecastDate as Date),
+        predictedQty: r.predictedQty,
+        p10: r.p10,
+        p90: r.p90,
+      })
+      bucket.totalPredicted += r.predictedQty
+    }
+
+    for (const b of buckets.values()) {
+      b.days.sort((a, b2) => a.date.localeCompare(b2.date))
+      b.dailyAverage = b.totalPredicted / Math.max(1, b.days.length)
+    }
+
+    // Top-N per store by total predicted
+    const byStore = new Map<string, Bucket[]>()
+    for (const b of buckets.values()) {
+      const list = byStore.get(b.storeId) ?? []
+      list.push(b)
+      byStore.set(b.storeId, list)
+    }
+
+    const out: MenuItemForecastChatRow[] = []
+    for (const list of byStore.values()) {
+      list.sort((a, b) => b.totalPredicted - a.totalPredicted)
+      out.push(...list.slice(0, topN))
+    }
+    return out.sort((a, b) => {
+      if (a.storeId !== b.storeId) return a.storeId.localeCompare(b.storeId)
+      return b.totalPredicted - a.totalPredicted
+    })
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getOpenAnomalies (chat tool)
+// ---------------------------------------------------------------------------
+
+const anomaliesParams = z
+  .object({
+    storeIds: storeIdsSchema,
+    limit: z.number().int().min(1).max(100).optional().default(25),
+    sinceDays: z
+      .number()
+      .int()
+      .min(1)
+      .max(60)
+      .optional()
+      .default(14)
+      .describe("How far back to look. Anomalies older than this are usually stale."),
+  })
+  .strict()
+
+export type AnomalyChatRow = {
+  storeId: string
+  target: string
+  targetId: string | null
+  occurredOn: string
+  residual: number
+  zScore: number | null
+  method: string
+  detectedAt: string
+}
+
+// ---------------------------------------------------------------------------
+// getFoodCostForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const foodCostParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .describe(
+        "Store id to project food cost % for. Resolve from listStores first; this tool is per-store, not multi-store.",
+      ),
+    horizonDays: z.number().int().min(1).max(14).optional().default(7),
+  })
+  .strict()
+
+export type FoodCostForecastChatRow = {
+  date: string
+  predictedRevenue: number | null
+  predictedFoodCost: number
+  foodCostPct: number | null
+  pctP10: number | null
+  pctP90: number | null
+  unmappedItemCount: number
+}
+
+export type FoodCostForecastChatResult = {
+  storeId: string
+  generatedAt: string | null
+  blendedFoodCostPct: number | null
+  totalPredictedRevenue: number
+  totalPredictedFoodCost: number
+  days: FoodCostForecastChatRow[]
+}
+
+export const getFoodCostForecastTool: ChatTool<
+  typeof foodCostParams,
+  FoodCostForecastChatResult | { ok: false; error: string }
+> = {
+  name: "getFoodCostForecast",
+  description:
+    "Joins the daily revenue forecast and per-item demand forecast against recipe costs to project food cost % over the next 7-14 days for ONE store. blendedFoodCostPct is the horizon-wide weighted percent. unmappedItemCount > 0 flags items in the demand forecast with no OtterItemMapping (those are excluded from the food cost number — surface as a caveat in the prose).",
+  parameters: foodCostParams,
+  async execute(args, ctx) {
+    // Reuse the auth-checked server action so cross-account access stays
+    // impossible. Caller still holds the session via getServerSession; the
+    // chat route has already verified hasOwnerAccess.
+    const result = await getFoodCostForecast({
+      storeId: args.storeId,
+      horizonDays: args.horizonDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    const d = result.data
+    return {
+      storeId: d.storeId,
+      generatedAt: d.generatedAt ? d.generatedAt.toISOString() : null,
+      blendedFoodCostPct: d.blendedFoodCostPct,
+      totalPredictedRevenue: d.totalPredictedRevenue,
+      totalPredictedFoodCost: d.totalPredictedFoodCost,
+      days: d.days.map((row) => ({
+        date: ymd(row.date),
+        predictedRevenue: row.predictedRevenue,
+        predictedFoodCost: row.predictedFoodCost,
+        foodCostPct: row.foodCostPct,
+        pctP10: row.pctP10,
+        pctP90: row.pctP90,
+        unmappedItemCount: row.unmappedItemCount,
+      })),
+    }
+    // Note: ctx is unused — getFoodCostForecast does its own session lookup.
+    void ctx
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getMenuItemElasticity (chat tool)
+// ---------------------------------------------------------------------------
+
+const elasticityParams = z
+  .object({
+    storeId: z.string().min(1),
+    minConfidence: z
+      .enum(["low", "medium", "high"])
+      .optional()
+      .default("low")
+      .describe("Filter out fits below this confidence band."),
+    limit: z.number().int().min(1).max(50).optional().default(20),
+  })
+  .strict()
+
+export type ElasticityChatRow = {
+  itemSkuId: string
+  elasticity: number
+  meanPrice: number
+  meanQty: number
+  fitR2: number
+  pricePointCount: number
+  sampleSize: number
+  confidence: "low" | "medium" | "high" | "no_signal"
+  pctVolumeChangeAt10PctHike: number
+}
+
+const CONFIDENCE_RANK = { low: 1, medium: 2, high: 3 } as const
+
+export const getMenuItemElasticityTool: ChatTool<
+  typeof elasticityParams,
+  ElasticityChatRow[] | { ok: false; error: string }
+> = {
+  name: "getMenuItemElasticity",
+  description:
+    "Returns per-item price elasticity for ONE store, fitted nightly via OLS log(qty) ~ log(price) + weekday dummies. Negative coefficients are the norm; -1.0 is unit elastic. pctVolumeChangeAt10PctHike applies the elasticity to a hypothetical 10% price hike. Skip rows with confidence='no_signal' (constant price or positive coefficient).",
+  parameters: elasticityParams,
+  async execute(args, ctx) {
+    const result = await getMenuItemElasticity({ storeId: args.storeId })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    const minRank = CONFIDENCE_RANK[args.minConfidence ?? "low"]
+    const filtered = result.data.rows.filter((r) => {
+      if (r.confidence === "no_signal") return false
+      return CONFIDENCE_RANK[r.confidence] >= minRank
+    })
+    void ctx
+    return filtered.slice(0, args.limit ?? 20).map((r) => ({
+      itemSkuId: r.otterItemSkuId,
+      elasticity: r.elasticity,
+      meanPrice: r.meanPrice,
+      meanQty: r.meanQty,
+      fitR2: r.fitR2,
+      pricePointCount: r.pricePointCount,
+      sampleSize: r.sampleSize,
+      confidence: r.confidence,
+      pctVolumeChangeAt10PctHike: r.pctVolumeChangeAt10PctHike,
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getLaborStaffingForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const laborParams = z
+  .object({
+    storeId: z.string().min(1),
+    horizonDays: z.number().int().min(1).max(14).optional().default(7),
+  })
+  .strict()
+
+export type LaborStaffingChatDay = {
+  date: string
+  weekday: number
+  predictedRevenue: number | null
+  predictedOrders: number
+  totalLaborHours: number
+  /** Compact "openHour-closeHour:staff" segments collapsed for prose. */
+  hourlyStaff: { hour: number; staff: number; predictedOrders: number }[]
+}
+
+export type LaborStaffingChatResult = {
+  storeId: string
+  meanAvgTicket: number
+  coversPerStaffHour: number
+  minStaff: number
+  totalLaborHours: number
+  days: LaborStaffingChatDay[]
+}
+
+export const getLaborStaffingForecastTool: ChatTool<
+  typeof laborParams,
+  LaborStaffingChatResult | { ok: false; error: string }
+> = {
+  name: "getLaborStaffingForecast",
+  description:
+    "Recommended staff per hour for the next 7-14 days at ONE store. Computed deterministically from the daily revenue forecast × historical hour-of-day order share × a constant covers-per-staff-per-hour budget. Returns total labor-hours per day + the per-hour staffing matrix. Closed hours (no historical orders) get staff=0; open hours respect a minStaff floor. Note in prose: 'these are budgeted staff-hours, not actual hours' — this product does not see time-clock data.",
+  parameters: laborParams,
+  async execute(args, ctx) {
+    const result = await getLaborStaffingForecast({
+      storeId: args.storeId,
+      horizonDays: args.horizonDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    return {
+      storeId: d.storeId,
+      meanAvgTicket: d.meanAvgTicket,
+      coversPerStaffHour: d.coversPerStaffHour,
+      minStaff: d.minStaff,
+      totalLaborHours: d.totalForecastLaborHours,
+      days: d.days.map((day) => ({
+        date: day.date.toISOString().slice(0, 10),
+        weekday: day.weekday,
+        predictedRevenue: day.predictedRevenue,
+        predictedOrders: day.predictedOrders,
+        totalLaborHours: day.totalLaborHours,
+        // Drop closed hours from the chat payload — saves tokens, makes the
+        // model less likely to recite a 24-row hour table verbatim.
+        hourlyStaff: day.hours
+          .filter((h) => h.recommendedStaff > 0)
+          .map((h) => ({
+            hour: h.hour,
+            staff: h.recommendedStaff,
+            predictedOrders: h.predictedOrders,
+          })),
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getMenuEngineering (chat tool)
+// ---------------------------------------------------------------------------
+
+const menuEngineeringParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every owned store."),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(30),
+    quadrant: z
+      .enum(["STAR", "PLOWHORSE", "PUZZLE", "DOG"])
+      .optional()
+      .describe("Restrict to one quadrant. Omit for the full classifier output."),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  })
+  .strict()
+
+export type MenuEngineeringChatRow = {
+  itemName: string
+  category: string
+  soldQty: number
+  revenue: number
+  unitMargin: number
+  totalContribution: number
+  marginPct: number | null
+  quadrant: "STAR" | "PLOWHORSE" | "PUZZLE" | "DOG"
+}
+
+export type MenuEngineeringChatResult = {
+  windowStart: string
+  windowEnd: string
+  medianVelocity: number
+  medianUnitMargin: number
+  counts: { STAR: number; PLOWHORSE: number; PUZZLE: number; DOG: number }
+  totalContribution: number
+  rows: MenuEngineeringChatRow[]
+}
+
+export const getMenuEngineeringTool: ChatTool<
+  typeof menuEngineeringParams,
+  MenuEngineeringChatResult | { ok: false; error: string }
+> = {
+  name: "getMenuEngineering",
+  description:
+    "Classifies costed menu items into Stars / Plowhorses / Puzzles / Dogs by a median split on (sold quantity, unit margin) over the last N days. STAR = high margin × high volume; PLOWHORSE = low margin × high volume; PUZZLE = high margin × low volume; DOG = low margin × low volume. Reads precomputed DailyCogsItem rollups, so only items with a costed recipe are classified.",
+  parameters: menuEngineeringParams,
+  async execute(args, ctx) {
+    const result = await getMenuEngineering({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    const filtered = args.quadrant
+      ? d.rows.filter((r) => r.quadrant === args.quadrant)
+      : d.rows
+    return {
+      windowStart: d.windowStart.toISOString().slice(0, 10),
+      windowEnd: d.windowEnd.toISOString().slice(0, 10),
+      medianVelocity: d.medianVelocity,
+      medianUnitMargin: d.medianUnitMargin,
+      counts: d.counts,
+      totalContribution: d.totalContribution,
+      rows: filtered.slice(0, args.limit ?? 20).map((r) => ({
+        itemName: r.itemName,
+        category: r.category,
+        soldQty: r.soldQty,
+        revenue: r.revenue,
+        unitMargin: r.unitMargin,
+        totalContribution: r.totalContribution,
+        marginPct: r.marginPct,
+        quadrant: r.quadrant,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getLostSales (chat tool)
+// ---------------------------------------------------------------------------
+
+const lostSalesParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(60),
+    minBaselineQty: z.number().min(1).optional().default(3),
+    minGapDays: z.number().int().min(1).optional().default(2),
+  })
+  .strict()
+
+export type LostSalesChatRow = {
+  storeId: string
+  itemName: string
+  category: string
+  gapStart: string
+  gapEnd: string
+  gapDays: number
+  baselineDailyQty: number
+  meanUnitPrice: number
+  estimatedLostRevenue: number
+}
+
+export type LostSalesChatResult = {
+  windowStart: string
+  windowEnd: string
+  events: LostSalesChatRow[]
+  totalEstimatedLost: number
+}
+
+export const getLostSalesTool: ChatTool<
+  typeof lostSalesParams,
+  LostSalesChatResult | { ok: false; error: string }
+> = {
+  name: "getLostSales",
+  description:
+    "Detects 86'd-item windows: items that sold consistently then dropped to zero for ≥ minGapDays consecutive days, with a strong pre-gap baseline. Estimates lost revenue per event as baseline_qty × gap_days × mean_unit_price. The detector caps gap_days at 14 so a permanent menu removal doesn't book unbounded losses.",
+  parameters: lostSalesParams,
+  async execute(args, ctx) {
+    const result = await getLostSales({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+      minBaselineQty: args.minBaselineQty,
+      minGapDays: args.minGapDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return {
+      windowStart: result.data.windowStart.toISOString().slice(0, 10),
+      windowEnd: result.data.windowEnd.toISOString().slice(0, 10),
+      totalEstimatedLost: result.data.totalEstimatedLost,
+      events: result.data.events.map((e) => ({
+        storeId: e.storeId,
+        itemName: e.itemName,
+        category: e.category,
+        gapStart: e.gapStart.toISOString().slice(0, 10),
+        gapEnd: e.gapEnd.toISOString().slice(0, 10),
+        gapDays: e.gapDays,
+        baselineDailyQty: e.baselineDailyQty,
+        meanUnitPrice: e.meanUnitPrice,
+        estimatedLostRevenue: e.estimatedLostRevenue,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getCashPositionForecast (chat tool)
+// ---------------------------------------------------------------------------
+
+const cashPositionParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every owned store."),
+    horizonDays: z.number().int().min(1).max(28).optional().default(14),
+  })
+  .strict()
+
+export type CashPositionChatDay = {
+  date: string
+  predictedRevenue: number | null
+  estimatedNetInflow: number
+  scheduledPayables: number
+  proRatedFixedCosts: number
+  netCashFlow: number
+  cumulativeNet: number
+}
+
+export type CashPositionChatResult = {
+  horizonDays: number
+  blendedCommissionRate: number
+  proRatedFixedDaily: number
+  totalScheduledPayables: number
+  totalEstimatedInflow: number
+  endingCumulativeNet: number
+  goesNegativeOn: string | null
+  days: CashPositionChatDay[]
+}
+
+export const getCashPositionForecastTool: ChatTool<
+  typeof cashPositionParams,
+  CashPositionChatResult | { ok: false; error: string }
+> = {
+  name: "getCashPositionForecast",
+  description:
+    "Projects daily cash flow for the next 14 days. Inflow = predicted revenue × (1 − blended commission); outflow = invoice dueDate matches + pro-rated monthly fixed costs (rent/labor/cleaning/towels). Returns DELTA cumulative cash, not absolute balance — say so once. goesNegativeOn is the first date where cumulativeNet drops below 0; null when never.",
+  parameters: cashPositionParams,
+  async execute(args, ctx) {
+    const result = await getCashPositionForecast({
+      storeId: args.storeId,
+      horizonDays: args.horizonDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    const goesNegative = d.days.find((day) => day.cumulativeNet < 0)
+    return {
+      horizonDays: d.horizonDays,
+      blendedCommissionRate: d.blendedCommissionRate,
+      proRatedFixedDaily: d.proRatedFixedDaily,
+      totalScheduledPayables: d.totalScheduledPayables,
+      totalEstimatedInflow: d.totalEstimatedInflow,
+      endingCumulativeNet: d.endingCumulativeNet,
+      goesNegativeOn: goesNegative
+        ? goesNegative.date.toISOString().slice(0, 10)
+        : null,
+      days: d.days.map((day) => ({
+        date: day.date.toISOString().slice(0, 10),
+        predictedRevenue: day.predictedRevenue,
+        estimatedNetInflow: day.estimatedNetInflow,
+        scheduledPayables: day.scheduledPayables,
+        proRatedFixedCosts: day.proRatedFixedCosts,
+        netCashFlow: day.netCashFlow,
+        cumulativeNet: day.cumulativeNet,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getVendorReliability (chat tool)
+// ---------------------------------------------------------------------------
+
+const vendorReliabilityParams = z
+  .object({
+    lookbackDays: z.number().int().min(30).max(365).optional().default(180),
+    band: z
+      .enum(["high", "medium", "low", "insufficient_data"])
+      .optional()
+      .describe("Filter to one band. Omit for all rows."),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  })
+  .strict()
+
+export type VendorReliabilityChatRow = {
+  vendorName: string
+  invoiceCount: number
+  spend6mo: number
+  meanLeadDays: number | null
+  leadCV: number | null
+  monthlyTotalCV: number | null
+  priceVolatility: number | null
+  reliabilityScore: number
+  band: "high" | "medium" | "low" | "insufficient_data"
+}
+
+export const getVendorReliabilityTool: ChatTool<
+  typeof vendorReliabilityParams,
+  VendorReliabilityChatRow[] | { ok: false; error: string }
+> = {
+  name: "getVendorReliability",
+  description:
+    "Per-vendor reliability over the last N days (default 180). Three metrics: lead-time CV (std/mean of inter-invoice gaps), price volatility (avg per-ingredient std of month-over-month price moves), monthly-total CV. Composite reliabilityScore is 0-100 (higher = more reliable). Bands: high (≥75), medium (≥50), low (<50), insufficient_data (<4 invoices in window). Sorted by 180-day spend desc.",
+  parameters: vendorReliabilityParams,
+  async execute(args, ctx) {
+    const result = await getVendorReliability({
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const rows = args.band
+      ? result.data.rows.filter((r) => r.band === args.band)
+      : result.data.rows
+    return rows.slice(0, args.limit ?? 20).map((r) => ({
+      vendorName: r.vendorName,
+      invoiceCount: r.invoiceCount,
+      spend6mo: r.spend6mo,
+      meanLeadDays: r.meanLeadDays,
+      leadCV: r.leadCV,
+      monthlyTotalCV: r.monthlyTotalCV,
+      priceVolatility: r.priceVolatility,
+      reliabilityScore: r.reliabilityScore,
+      band: r.band,
+    }))
+  },
+}
+
+export const getOpenAnomalies: ChatTool<typeof anomaliesParams, AnomalyChatRow[]> = {
+  name: "getOpenAnomalies",
+  description:
+    "Returns OPEN anomaly events flagged by the nightly z-score detector for an owner-scoped slice of stores. Use to triage 'what changed' questions. Negative residual = volume below expected; positive = above.",
+  parameters: anomaliesParams,
+  async execute(args, ctx) {
+    const storeIds = await resolveStoreIds(ctx, args.storeIds)
+    const limit = args.limit ?? 25
+    const sinceDays = args.sinceDays ?? 14
+    const since = new Date()
+    since.setDate(since.getDate() - sinceDays)
+    since.setHours(0, 0, 0, 0)
+
+    const rows = await ctx.prisma.anomalyEvent.findMany({
+      where: {
+        storeId: { in: storeIds },
+        status: "OPEN",
+        occurredOn: { gte: since },
+      },
+      orderBy: [{ occurredOn: "desc" }, { detectedAt: "desc" }],
+      take: limit,
+      select: {
+        storeId: true,
+        target: true,
+        targetId: true,
+        occurredOn: true,
+        residual: true,
+        zScore: true,
+        method: true,
+        detectedAt: true,
+      },
+    })
+
+    return rows.map((r) => ({
+      storeId: r.storeId,
+      target: r.target,
+      targetId: r.targetId,
+      occurredOn: ymd(r.occurredOn as Date),
+      residual: r.residual,
+      zScore: r.zScore,
+      method: r.method,
+      detectedAt: r.detectedAt.toISOString(),
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getPromoRoi (F17 chat tool)
+// ---------------------------------------------------------------------------
+
+const promoRoiParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every store in the account."),
+    lookbackDays: z.number().int().min(14).max(365).optional().default(90),
+    limit: z.number().int().min(1).max(50).optional().default(10),
+  })
+  .strict()
+
+export type PromoRoiChatEvent = {
+  date: string
+  weekday: number
+  netSales: number
+  baselineNetSales: number
+  baselineSampleSize: number
+  discount: number
+  discountPct: number
+  lift: number
+  liftCI80Low: number
+  liftCI80High: number
+  roi: number | null
+}
+
+export type PromoRoiChatResult = {
+  windowStart: string
+  windowEnd: string
+  totalLift: number
+  totalDiscount: number
+  blendedRoi: number | null
+  events: PromoRoiChatEvent[]
+}
+
+export const getPromoRoiTool: ChatTool<
+  typeof promoRoiParams,
+  PromoRoiChatResult | { ok: false; error: string }
+> = {
+  name: "getPromoRoi",
+  description:
+    "Returns historical promotion ROI events. We don't have an explicit Promotion entity, so this infers promo days from elevated daily discount-to-gross-sales share in OtterDailySummary, then compares actual net sales against same-weekday non-promo baseline. roi is lift_dollars / discount_dollars (e.g. 2.5× = $2.50 of lift per $1 of discount). Cannibalization is NOT computed (order-level signal only). State this is inferred, not from a campaigns table.",
+  parameters: promoRoiParams,
+  async execute(args, ctx) {
+    const result = await getPromoRoi({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    return {
+      windowStart: d.windowStart.toISOString().slice(0, 10),
+      windowEnd: d.windowEnd.toISOString().slice(0, 10),
+      totalLift: d.totalLift,
+      totalDiscount: d.totalDiscount,
+      blendedRoi: d.blendedRoi,
+      events: d.events.slice(0, args.limit ?? 10).map((e) => ({
+        date: e.date.toISOString().slice(0, 10),
+        weekday: e.weekday,
+        netSales: e.netSales,
+        baselineNetSales: e.baselineNetSales,
+        baselineSampleSize: e.baselineSampleSize,
+        discount: e.discount,
+        discountPct: e.discountPct,
+        lift: e.lift,
+        liftCI80Low: e.liftCI80Low,
+        liftCI80High: e.liftCI80High,
+        roi: e.roi,
+      })),
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getLaunchTrajectory (F23 chat tool)
+// ---------------------------------------------------------------------------
+
+const launchTrajectoryParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every store in the account."),
+    recentDays: z
+      .number()
+      .int()
+      .min(7)
+      .max(180)
+      .optional()
+      .default(60)
+      .describe("How recent the first sale must be to count as a launch."),
+    limit: z.number().int().min(1).max(50).optional().default(10),
+  })
+  .strict()
+
+export type LaunchTrajectoryChatRow = {
+  storeId: string
+  category: string
+  itemName: string
+  firstSaleDate: string
+  daysSinceLaunch: number
+  totalQty: number
+  totalRevenue: number
+  meanUnitPrice: number
+  meanDailyQtyTrailing7: number | null
+  projectedQty90d: number | null
+  projectedQtyCI80Low: number | null
+  projectedQtyCI80High: number | null
+}
+
+export const getLaunchTrajectoryTool: ChatTool<
+  typeof launchTrajectoryParams,
+  LaunchTrajectoryChatRow[] | { ok: false; error: string }
+> = {
+  name: "getLaunchTrajectory",
+  description:
+    "Detects newly-launched menu items (first sale in the last `recentDays` days, no prior sales in the 90 days before) and returns the daily-qty trajectory plus a 90-day projection. Projection extends the trailing 7-day mean qty forward — assumes no growth or decay. Items launched < 7 days ago return null projection. Sorted by total revenue desc. Don't claim the projection accounts for ramp-up; it doesn't.",
+  parameters: launchTrajectoryParams,
+  async execute(args, ctx) {
+    const result = await getLaunchTrajectory({
+      storeId: args.storeId,
+      recentDays: args.recentDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return result.data.launches.slice(0, args.limit ?? 10).map((l) => ({
+      storeId: l.storeId,
+      category: l.category,
+      itemName: l.itemName,
+      firstSaleDate: l.firstSaleDate.toISOString().slice(0, 10),
+      daysSinceLaunch: l.daysSinceLaunch,
+      totalQty: l.totalQty,
+      totalRevenue: l.totalRevenue,
+      meanUnitPrice: l.meanUnitPrice,
+      meanDailyQtyTrailing7: l.projection?.meanDailyQtyTrailing7 ?? null,
+      projectedQty90d: l.projection?.projectedQty90d ?? null,
+      projectedQtyCI80Low: l.projection?.projectedQtyCI80Low ?? null,
+      projectedQtyCI80High: l.projection?.projectedQtyCI80High ?? null,
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getChannelMix (F24 chat tool)
+// ---------------------------------------------------------------------------
+
+const channelMixParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every store in the account."),
+    lookbackDays: z.number().int().min(7).max(365).optional().default(90),
+    shiftPct: z
+      .number()
+      .min(0)
+      .max(0.5)
+      .optional()
+      .default(0.1)
+      .describe(
+        "Fraction of worst-net-rate channel's gross hypothetically migrated to the best-net-rate channel for the simulation. 0.1 = 10%.",
+      ),
+  })
+  .strict()
+
+export type ChannelMixChatRow = {
+  platform: string
+  isFirstParty: boolean
+  grossSales: number
+  fees: number
+  netToOperator: number
+  takeRatePct: number | null
+  netRatePct: number | null
+  orderCount: number
+  meanTicket: number | null
+  shareOfGross: number
+}
+
+export type ChannelMixChatResult = {
+  windowStart: string
+  windowEnd: string
+  totalGross: number
+  totalFees: number
+  totalNet: number
+  blendedNetRatePct: number | null
+  rows: ChannelMixChatRow[]
+  simulation: {
+    shiftPct: number
+    fromPlatform: string
+    toPlatform: string
+    shiftedGross: number
+    incrementalNet: number
+    newBlendedNetRatePct: number
+    oldBlendedNetRatePct: number
+  } | null
+}
+
+export const getChannelMixTool: ChatTool<
+  typeof channelMixParams,
+  ChannelMixChatResult | { ok: false; error: string }
+> = {
+  name: "getChannelMix",
+  description:
+    "Returns per-platform gross / fees / net rate over the lookback window plus a directional shift simulation. Net rate = (gross - fees) / gross — what the operator keeps before COGS. Simulation answers 'what if X% of the worst-rate channel's gross sat on the best-rate channel instead' as a directional read on dollars left on the table at the current mix. NOT a recommendation to drop or push channels — operator interprets demand reality.",
+  parameters: channelMixParams,
+  async execute(args, ctx) {
+    const result = await getChannelMix({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+      shiftPct: args.shiftPct,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    return {
+      windowStart: d.windowStart.toISOString().slice(0, 10),
+      windowEnd: d.windowEnd.toISOString().slice(0, 10),
+      totalGross: d.totalGross,
+      totalFees: d.totalFees,
+      totalNet: d.totalNet,
+      blendedNetRatePct: d.blendedNetRatePct,
+      rows: d.rows.map((r) => ({
+        platform: r.platform,
+        isFirstParty: r.isFirstParty,
+        grossSales: r.grossSales,
+        fees: r.fees,
+        netToOperator: r.netToOperator,
+        takeRatePct: r.takeRatePct,
+        netRatePct: r.netRatePct,
+        orderCount: r.orderCount,
+        meanTicket: r.meanTicket,
+        shareOfGross: r.shareOfGross,
+      })),
+      simulation: d.simulation,
+    }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getCateringDetection (F26 chat tool)
+// ---------------------------------------------------------------------------
+
+const cateringParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(60),
+    limit: z.number().int().min(1).max(100).optional().default(25),
+  })
+  .strict()
+
+export type CateringChatRow = {
+  orderId: string
+  externalDisplayId: string | null
+  storeId: string
+  platform: string
+  referenceTimeLocal: string
+  customerName: string | null
+  subtotal: number
+  total: number
+  itemQuantity: number
+  storePlatformMedianSubtotal: number
+  subtotalMultiplier: number
+  leadHours: number | null
+  triggers: string[]
+}
+
+export const getCateringDetectionTool: ChatTool<
+  typeof cateringParams,
+  CateringChatRow[] | { ok: false; error: string }
+> = {
+  name: "getCateringDetection",
+  description:
+    "Returns orders flagged as catering-like outliers vs the per-(store, platform) median: subtotal ≥ 3× median, OR ≥ $200 absolute, OR ≥ 12 items. leadHours is referenceTimeLocal − syncedAt; null when not actionable (post-fact data). Use to triage prep ahead of pickup. NOT a definitive catering classifier — a normal weekend rush can trigger; operator confirms.",
+  parameters: cateringParams,
+  async execute(args, ctx) {
+    const result = await getCateringDetection({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return result.data.orders.slice(0, args.limit ?? 25).map((o) => ({
+      orderId: o.orderId,
+      externalDisplayId: o.externalDisplayId,
+      storeId: o.storeId,
+      platform: o.platform,
+      referenceTimeLocal: o.referenceTimeLocal.toISOString(),
+      customerName: o.customerName,
+      subtotal: o.subtotal,
+      total: o.total,
+      itemQuantity: o.itemQuantity,
+      storePlatformMedianSubtotal: o.storePlatformMedianSubtotal,
+      subtotalMultiplier: o.subtotalMultiplier,
+      leadHours: o.leadHours,
+      triggers: o.triggers,
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getRecipeSuggestions (F28 chat tool)
+// ---------------------------------------------------------------------------
+
+const recipeSuggestionParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(30),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  })
+  .strict()
+
+export type RecipeSuggestionChatRow = {
+  storeId: string
+  itemName: string
+  category: string
+  qty30d: number
+  candidates: {
+    recipeId: string
+    recipeName: string
+    similarity: number
+    confidence: "high" | "medium" | "low"
+    ingredientCount: number
+  }[]
+}
+
+export const getRecipeSuggestionsTool: ChatTool<
+  typeof recipeSuggestionParams,
+  RecipeSuggestionChatRow[] | { ok: false; error: string }
+> = {
+  name: "getRecipeSuggestions",
+  description:
+    "For every menu item the operator hasn't yet linked to a Recipe, returns up to 3 candidate recipes ranked by token-Jaccard name similarity (lowercased, punctuation-stripped, English stopwords removed). confidence is high (≥0.75), medium (≥0.5) or low (≥0.25). Items with no candidate above 0.25 still appear, with empty candidates — that's a 'no match found' signal so the operator knows the gap exists. Sorted by 30-day quantity desc. Suggestions only — never claim the mapping has been written.",
+  parameters: recipeSuggestionParams,
+  async execute(args, ctx) {
+    const result = await getRecipeSuggestions({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return result.data.items.slice(0, args.limit ?? 20).map((it) => ({
+      storeId: it.storeId,
+      itemName: it.itemName,
+      category: it.category,
+      qty30d: it.qty30d,
+      candidates: it.candidates.map((c) => ({
+        recipeId: c.recipeId,
+        recipeName: c.recipeName,
+        similarity: c.similarity,
+        confidence: c.confidence,
+        ingredientCount: c.ingredientCount,
+      })),
+    }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getWasteRootCauses (F29 chat tool)
+// ---------------------------------------------------------------------------
+
+const wasteClusterParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackWeeks: z.number().int().min(2).max(52).optional().default(12),
+    limit: z.number().int().min(1).max(100).optional().default(25),
+    label: z
+      .enum([
+        "insufficient_data",
+        "stable_within_noise",
+        "systematic_overuse",
+        "systematic_underuse",
+        "expiry_driven",
+        "theft_or_unrecorded",
+        "improving",
+      ])
+      .optional()
+      .describe("Filter to one cluster label."),
+  })
+  .strict()
+
+export type WasteClusterChatRow = {
+  storeId: string
+  ingredientName: string
+  defaultUnit: string
+  weeklyThroughput: number
+  sampleSize: number
+  label: string
+  meanResidual: number
+  meanResidualPctOfThroughput: number | null
+  expiryAdjustments: number
+  theftAdjustments: number
+  annualizedDollarExposure: number | null
+  rationale: string
+}
+
+export const getWasteRootCausesTool: ChatTool<
+  typeof wasteClusterParams,
+  | { rows: WasteClusterChatRow[]; summary: Record<string, number> }
+  | { ok: false; error: string }
+> = {
+  name: "getWasteRootCauses",
+  description:
+    "Per-(store, ingredient) waste-residual cluster classification across the lookback window of completed counts. Labels: theft_or_unrecorded (high mean overuse with no logged expiry/theft), systematic_overuse (overuse with at least one logged adjustment), systematic_underuse, expiry_driven (high variance + ≥1 expiry adjustment), improving (residual magnitude shrinking), stable_within_noise, insufficient_data. Sorted by annualized dollar exposure desc. NEVER call out an individual person — 'theft_or_unrecorded' is a pattern label, not an accusation.",
+  parameters: wasteClusterParams,
+  async execute(args, ctx) {
+    const result = await getWasteRootCauses({
+      storeId: args.storeId,
+      lookbackWeeks: args.lookbackWeeks,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    let rows = result.data.rows
+    if (args.label) {
+      rows = rows.filter((r) => r.classification.label === args.label)
+    }
+    return {
+      summary: result.data.summary,
+      rows: rows.slice(0, args.limit ?? 25).map((r) => ({
+        storeId: r.storeId,
+        ingredientName: r.ingredientName,
+        defaultUnit: r.defaultUnit,
+        weeklyThroughput: r.weeklyThroughput,
+        sampleSize: r.sampleSize,
+        label: r.classification.label,
+        meanResidual: r.classification.meanResidual,
+        meanResidualPctOfThroughput:
+          r.classification.meanResidualPctOfThroughput,
+        expiryAdjustments: r.classification.expiryAdjustments,
+        theftAdjustments: r.classification.theftAdjustments,
+        annualizedDollarExposure: r.annualizedDollarExposure,
+        rationale: r.classification.rationale,
+      })),
+    }
+  },
+}
