@@ -36,6 +36,24 @@ import { getOperationalCosts, getStoreBreakdown } from "./store-summary"
 import { getRefunds } from "./refunds"
 import { getPnlSummary } from "./pnl"
 import { searchPnlHistory } from "./pnl-history"
+import {
+  getCashPositionForecastTool,
+  getCateringDetectionTool,
+  getChannelMixTool,
+  getFoodCostForecastTool,
+  getLaborStaffingForecastTool,
+  getLaunchTrajectoryTool,
+  getLostSalesTool,
+  getMenuEngineeringTool,
+  getMenuItemElasticityTool,
+  getMenuItemForecast,
+  getOpenAnomalies,
+  getPromoRoiTool,
+  getRecipeSuggestionsTool,
+  getRevenueForecast,
+  getVendorReliabilityTool,
+  getWasteRootCausesTool,
+} from "./forecasts"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -88,6 +106,23 @@ export const chatTools = {
   // P&L
   getPnlSummary,
   searchPnlHistory,
+  // ML forecasts + anomalies
+  getRevenueForecast,
+  getMenuItemForecast,
+  getOpenAnomalies,
+  getFoodCostForecast: getFoodCostForecastTool,
+  getMenuItemElasticity: getMenuItemElasticityTool,
+  getLaborStaffingForecast: getLaborStaffingForecastTool,
+  getMenuEngineering: getMenuEngineeringTool,
+  getLostSales: getLostSalesTool,
+  getCashPositionForecast: getCashPositionForecastTool,
+  getVendorReliability: getVendorReliabilityTool,
+  getPromoRoi: getPromoRoiTool,
+  getLaunchTrajectory: getLaunchTrajectoryTool,
+  getChannelMix: getChannelMixTool,
+  getCateringDetection: getCateringDetectionTool,
+  getRecipeSuggestions: getRecipeSuggestionsTool,
+  getWasteRootCauses: getWasteRootCausesTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools

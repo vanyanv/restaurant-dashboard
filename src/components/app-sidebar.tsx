@@ -18,6 +18,7 @@ import {
   Package,
   UtensilsCrossed,
   MessageSquare,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
@@ -78,6 +79,11 @@ const NAV: NavSection[] = [
         icon: MessageSquare,
       },
       {
+        title: "Forecasts",
+        url: "/dashboard/forecasts",
+        icon: TrendingUp,
+      },
+      {
         title: "Orders",
         url: "/dashboard/orders",
         icon: Receipt,
@@ -122,6 +128,8 @@ const NAV: NavSection[] = [
         icon: Activity,
         items: [
           { title: "Overview", url: "/dashboard/operations" },
+          { title: "Inventory", url: "/dashboard/operations/inventory" },
+          { title: "Stock Counts", url: "/dashboard/operations/inventory/counts" },
           { title: "Product Usage", url: "/dashboard/operations/product-usage" },
           { title: "Costs", url: "/dashboard/operations/costs" },
           { title: "Packaging", url: "/dashboard/operations/packaging" },
