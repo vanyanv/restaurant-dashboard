@@ -38,6 +38,7 @@ import { getPnlSummary } from "./pnl"
 import { searchPnlHistory } from "./pnl-history"
 import {
   getCashPositionForecastTool,
+  getChannelMixTool,
   getFoodCostForecastTool,
   getLaborStaffingForecastTool,
   getLaunchTrajectoryTool,
@@ -115,6 +116,7 @@ export const chatTools = {
   getVendorReliability: getVendorReliabilityTool,
   getPromoRoi: getPromoRoiTool,
   getLaunchTrajectory: getLaunchTrajectoryTool,
+  getChannelMix: getChannelMixTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools

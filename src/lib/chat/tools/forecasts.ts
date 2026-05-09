@@ -19,6 +19,7 @@ import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-a
 import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
 import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
 import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
+import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -949,5 +950,103 @@ export const getLaunchTrajectoryTool: ChatTool<
       projectedQtyCI80Low: l.projection?.projectedQtyCI80Low ?? null,
       projectedQtyCI80High: l.projection?.projectedQtyCI80High ?? null,
     }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getChannelMix (F24 chat tool)
+// ---------------------------------------------------------------------------
+
+const channelMixParams = z
+  .object({
+    storeId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Omit to roll across every store in the account."),
+    lookbackDays: z.number().int().min(7).max(365).optional().default(90),
+    shiftPct: z
+      .number()
+      .min(0)
+      .max(0.5)
+      .optional()
+      .default(0.1)
+      .describe(
+        "Fraction of worst-net-rate channel's gross hypothetically migrated to the best-net-rate channel for the simulation. 0.1 = 10%.",
+      ),
+  })
+  .strict()
+
+export type ChannelMixChatRow = {
+  platform: string
+  isFirstParty: boolean
+  grossSales: number
+  fees: number
+  netToOperator: number
+  takeRatePct: number | null
+  netRatePct: number | null
+  orderCount: number
+  meanTicket: number | null
+  shareOfGross: number
+}
+
+export type ChannelMixChatResult = {
+  windowStart: string
+  windowEnd: string
+  totalGross: number
+  totalFees: number
+  totalNet: number
+  blendedNetRatePct: number | null
+  rows: ChannelMixChatRow[]
+  simulation: {
+    shiftPct: number
+    fromPlatform: string
+    toPlatform: string
+    shiftedGross: number
+    incrementalNet: number
+    newBlendedNetRatePct: number
+    oldBlendedNetRatePct: number
+  } | null
+}
+
+export const getChannelMixTool: ChatTool<
+  typeof channelMixParams,
+  ChannelMixChatResult | { ok: false; error: string }
+> = {
+  name: "getChannelMix",
+  description:
+    "Returns per-platform gross / fees / net rate over the lookback window plus a directional shift simulation. Net rate = (gross - fees) / gross — what the operator keeps before COGS. Simulation answers 'what if X% of the worst-rate channel's gross sat on the best-rate channel instead' as a directional read on dollars left on the table at the current mix. NOT a recommendation to drop or push channels — operator interprets demand reality.",
+  parameters: channelMixParams,
+  async execute(args, ctx) {
+    const result = await getChannelMix({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+      shiftPct: args.shiftPct,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const d = result.data
+    return {
+      windowStart: d.windowStart.toISOString().slice(0, 10),
+      windowEnd: d.windowEnd.toISOString().slice(0, 10),
+      totalGross: d.totalGross,
+      totalFees: d.totalFees,
+      totalNet: d.totalNet,
+      blendedNetRatePct: d.blendedNetRatePct,
+      rows: d.rows.map((r) => ({
+        platform: r.platform,
+        isFirstParty: r.isFirstParty,
+        grossSales: r.grossSales,
+        fees: r.fees,
+        netToOperator: r.netToOperator,
+        takeRatePct: r.takeRatePct,
+        netRatePct: r.netRatePct,
+        orderCount: r.orderCount,
+        meanTicket: r.meanTicket,
+        shareOfGross: r.shareOfGross,
+      })),
+      simulation: d.simulation,
+    }
   },
 }
