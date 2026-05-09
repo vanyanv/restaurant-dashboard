@@ -22,6 +22,7 @@ import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-a
 import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
 import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
 import { getRecipeSuggestions } from "@/app/actions/forecasts/recipe-suggestion-actions"
+import { getWasteRootCauses } from "@/app/actions/forecasts/waste-cluster-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -1170,5 +1171,86 @@ export const getRecipeSuggestionsTool: ChatTool<
         ingredientCount: c.ingredientCount,
       })),
     }))
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getWasteRootCauses (F29 chat tool)
+// ---------------------------------------------------------------------------
+
+const wasteClusterParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackWeeks: z.number().int().min(2).max(52).optional().default(12),
+    limit: z.number().int().min(1).max(100).optional().default(25),
+    label: z
+      .enum([
+        "insufficient_data",
+        "stable_within_noise",
+        "systematic_overuse",
+        "systematic_underuse",
+        "expiry_driven",
+        "theft_or_unrecorded",
+        "improving",
+      ])
+      .optional()
+      .describe("Filter to one cluster label."),
+  })
+  .strict()
+
+export type WasteClusterChatRow = {
+  storeId: string
+  ingredientName: string
+  defaultUnit: string
+  weeklyThroughput: number
+  sampleSize: number
+  label: string
+  meanResidual: number
+  meanResidualPctOfThroughput: number | null
+  expiryAdjustments: number
+  theftAdjustments: number
+  annualizedDollarExposure: number | null
+  rationale: string
+}
+
+export const getWasteRootCausesTool: ChatTool<
+  typeof wasteClusterParams,
+  | { rows: WasteClusterChatRow[]; summary: Record<string, number> }
+  | { ok: false; error: string }
+> = {
+  name: "getWasteRootCauses",
+  description:
+    "Per-(store, ingredient) waste-residual cluster classification across the lookback window of completed counts. Labels: theft_or_unrecorded (high mean overuse with no logged expiry/theft), systematic_overuse (overuse with at least one logged adjustment), systematic_underuse, expiry_driven (high variance + ≥1 expiry adjustment), improving (residual magnitude shrinking), stable_within_noise, insufficient_data. Sorted by annualized dollar exposure desc. NEVER call out an individual person — 'theft_or_unrecorded' is a pattern label, not an accusation.",
+  parameters: wasteClusterParams,
+  async execute(args, ctx) {
+    const result = await getWasteRootCauses({
+      storeId: args.storeId,
+      lookbackWeeks: args.lookbackWeeks,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    let rows = result.data.rows
+    if (args.label) {
+      rows = rows.filter((r) => r.classification.label === args.label)
+    }
+    return {
+      summary: result.data.summary,
+      rows: rows.slice(0, args.limit ?? 25).map((r) => ({
+        storeId: r.storeId,
+        ingredientName: r.ingredientName,
+        defaultUnit: r.defaultUnit,
+        weeklyThroughput: r.weeklyThroughput,
+        sampleSize: r.sampleSize,
+        label: r.classification.label,
+        meanResidual: r.classification.meanResidual,
+        meanResidualPctOfThroughput:
+          r.classification.meanResidualPctOfThroughput,
+        expiryAdjustments: r.classification.expiryAdjustments,
+        theftAdjustments: r.classification.theftAdjustments,
+        annualizedDollarExposure: r.annualizedDollarExposure,
+        rationale: r.classification.rationale,
+      })),
+    }
   },
 }

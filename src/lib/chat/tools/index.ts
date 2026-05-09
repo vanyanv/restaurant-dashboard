@@ -52,6 +52,7 @@ import {
   getRecipeSuggestionsTool,
   getRevenueForecast,
   getVendorReliabilityTool,
+  getWasteRootCausesTool,
 } from "./forecasts"
 
 export type { ChatTool, ChatToolContext } from "./types"
@@ -121,6 +122,7 @@ export const chatTools = {
   getChannelMix: getChannelMixTool,
   getCateringDetection: getCateringDetectionTool,
   getRecipeSuggestions: getRecipeSuggestionsTool,
+  getWasteRootCauses: getWasteRootCausesTool,
 } as const
 
 export type ChatToolName = keyof typeof chatTools
