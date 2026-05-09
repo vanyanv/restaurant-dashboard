@@ -17,6 +17,7 @@ import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-a
 import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
 import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
 import { getRecipeSuggestions } from "@/app/actions/forecasts/recipe-suggestion-actions"
+import { getWasteRootCauses } from "@/app/actions/forecasts/waste-cluster-actions"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
@@ -35,6 +36,7 @@ import { LaunchTrajectoryCard } from "./components/launch-trajectory-card"
 import { ChannelMixCard } from "./components/channel-mix-card"
 import { CateringDetectionCard } from "./components/catering-detection-card"
 import { RecipeSuggestionCard } from "./components/recipe-suggestion-card"
+import { WasteClusterCard } from "./components/waste-cluster-card"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -79,6 +81,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     channelMixResult,
     cateringResult,
     recipeSuggestionResult,
+    wasteClusterResult,
     storeMeta,
   ] = await Promise.all([
     getRevenueForecast({ storeId }),
@@ -96,6 +99,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     getChannelMix({ storeId }),
     getCateringDetection({ storeId }),
     getRecipeSuggestions({ storeId }),
+    getWasteRootCauses({ storeId }),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
@@ -154,6 +158,9 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
         {cateringResult?.ok && <CateringDetectionCard data={cateringResult.data} />}
         {recipeSuggestionResult?.ok && (
           <RecipeSuggestionCard data={recipeSuggestionResult.data} />
+        )}
+        {wasteClusterResult?.ok && (
+          <WasteClusterCard data={wasteClusterResult.data} />
         )}
         {anomalyResult?.ok && <AnomalyFeed data={anomalyResult.data} />}
         {lostSalesResult?.ok && <LostSalesCard data={lostSalesResult.data} />}
