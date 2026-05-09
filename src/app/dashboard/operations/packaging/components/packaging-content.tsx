@@ -265,7 +265,7 @@ function KpiCell({
         <span>{label}</span>
         <span className="text-[var(--ink-faint)]">{icon}</span>
       </div>
-      <div className="mt-3 font-display text-[28px] leading-none text-[var(--ink)] [font-variant-numeric:tabular-nums_lining-nums]">
+      <div className="mt-3 text-[28px] font-semibold leading-none text-(--ink) [font-variant-numeric:tabular-nums_lining-nums]">
         {value}
       </div>
       <div className="mt-2 text-[12px] text-[var(--ink-muted)]">{sub}</div>

@@ -258,7 +258,8 @@ export function SortableIngredientRow({
                   value={row.quantity}
                   onChange={(e) => onChange({ quantity: e.target.value })}
                   onFocus={(e) => e.target.select()}
-                  className="h-9 w-16 border-x border-[var(--hairline-bold)] bg-transparent text-center font-display text-[18px] tabular-nums text-[var(--ink)] focus:bg-[var(--paper-deep)] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  aria-label="Ingredient quantity"
+                  className="h-9 w-16 border-x border-[var(--hairline-bold)] bg-transparent text-center font-display text-[18px] tabular-nums text-[var(--ink)] focus:bg-[var(--paper-deep)] focus:outline-hidden [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <button
                   type="button"
@@ -295,7 +296,7 @@ export function SortableIngredientRow({
                     <div className="mb-1.5 px-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
                       Common units
                     </div>
-                    <div className="grid grid-cols-4 gap-1">
+                    <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
                       {COMMON_UNITS.map((u) => {
                         const active = row.unit === u
                         return (
@@ -324,7 +325,8 @@ export function SortableIngredientRow({
                         value={row.unit}
                         onChange={(e) => onChange({ unit: e.target.value })}
                         placeholder="…or type a custom unit"
-                        className="h-8 w-full border border-[var(--hairline-bold)] bg-transparent px-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--ink)] placeholder:normal-case placeholder:tracking-normal placeholder:text-[var(--ink-faint)] focus:border-[var(--ink)] focus:outline-none"
+                        aria-label="Custom unit"
+                        className="h-8 w-full border border-[var(--hairline-bold)] bg-transparent px-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--ink)] placeholder:normal-case placeholder:tracking-normal placeholder:text-[var(--ink-faint)] focus:border-[var(--ink)] focus:outline-hidden"
                       />
                     </div>
                   </div>

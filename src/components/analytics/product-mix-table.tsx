@@ -1,13 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { useEffect, useMemo, useState } from "react"
 import {
   Table,
   TableBody,
@@ -65,12 +58,16 @@ export function ProductMixTable({
   className,
 }: ProductMixTableProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    () => new Set(categories.map((c) => c.category))
+    () => new Set()
   )
   const [search, setSearch] = useState("")
   const [sortKey, setSortKey] = useState<SortKey>("revenue")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [categoryFilter, setCategoryFilter] = useState("all")
+
+  useEffect(() => {
+    setExpandedCategories(new Set())
+  }, [categories])
 
   const categoryNames = useMemo(() => {
     return categories.map((c) => c.category).sort()
@@ -178,7 +175,7 @@ export function ProductMixTable({
     }
     if (change > 0) {
       return (
-        <span className="flex items-center justify-end gap-1 text-green-600">
+        <span className="flex items-center justify-end gap-1 text-(--ink) tabular-nums">
           <TrendingUp className="h-3.5 w-3.5" />
           +{change.toFixed(1)}%
         </span>
@@ -186,7 +183,7 @@ export function ProductMixTable({
     }
     if (change < 0) {
       return (
-        <span className="flex items-center justify-end gap-1 text-red-600">
+        <span className="flex items-center justify-end gap-1 text-(--subtract) tabular-nums">
           <TrendingDown className="h-3.5 w-3.5" />
           {change.toFixed(1)}%
         </span>
@@ -199,20 +196,38 @@ export function ProductMixTable({
     (sum, cat) => sum + cat.items.length,
     0
   )
+  const allVisibleCategoriesExpanded =
+    sortedCategories.length > 0 &&
+    sortedCategories.every((cat) => expandedCategories.has(cat.category))
+  const hasSearch = search.trim().length > 0
+
+  const setAllVisibleCategories = (expanded: boolean) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev)
+      for (const cat of sortedCategories) {
+        if (expanded) {
+          next.add(cat.category)
+        } else {
+          next.delete(cat.category)
+        }
+      }
+      return next
+    })
+  }
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">Product Mix Breakdown</CardTitle>
-            <CardDescription>
-              {sortedCategories.length} categories, {totalItemCount} items
-            </CardDescription>
+    <section className={cn("inv-panel inv-panel--flush", className)}>
+      <header className="inv-panel__head px-6 pt-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+          <div className="flex flex-col gap-1">
+            <span className="inv-panel__dept">Product Mix Breakdown</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint) tabular-nums">
+              {sortedCategories.length} categories · {totalItemCount} items
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-(--ink-muted)" />
               <Input
                 placeholder="Search items..."
                 value={search}
@@ -233,13 +248,20 @@ export function ProductMixTable({
                 ))}
               </SelectContent>
             </Select>
+            <button
+              type="button"
+              onClick={() => setAllVisibleCategories(!allVisibleCategoriesExpanded)}
+              className="h-8 whitespace-nowrap border border-(--hairline-bold) px-3 font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-muted) transition-colors hover:bg-(--paper-warm) hover:text-(--ink)"
+            >
+              {allVisibleCategoriesExpanded ? "Collapse all" : "Expand all"}
+            </button>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
+      </header>
+      <div>
         <div className="max-h-[600px] overflow-auto">
           <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
+            <TableHeader className="sticky top-0 bg-(--paper) z-10">
               <TableRow>
                 <TableHead
                   className="pl-6 cursor-pointer select-none"
@@ -275,12 +297,14 @@ export function ProductMixTable({
             </TableHeader>
             <TableBody>
               {sortedCategories.map((cat) => {
-                const isExpanded = expandedCategories.has(cat.category)
+                const isExpanded =
+                  hasSearch || expandedCategories.has(cat.category)
                 return (
                   <CategoryBlock
                     key={cat.category}
                     category={cat}
                     isExpanded={isExpanded}
+                    canToggle={!hasSearch}
                     onToggle={() => toggleCategory(cat.category)}
                     formatFpTpSplit={formatFpTpSplit}
                     renderChange={renderChange}
@@ -288,15 +312,17 @@ export function ProductMixTable({
                 )
               })}
               {/* Grand total row */}
-              <TableRow className="font-medium border-t-2">
-                <TableCell className="pl-6">Grand Total</TableCell>
-                <TableCell className="text-right font-mono-numbers">
+              <TableRow className="border-t-2 border-(--hairline-bold) bg-(--paper-warm)">
+                <TableCell className="pl-6 font-mono text-[10px] uppercase tracking-[0.22em] font-bold text-(--ink)">
+                  Grand Total
+                </TableCell>
+                <TableCell className="text-right tabular-nums font-semibold">
                   {formatNumber(totals.quantitySold)}
                 </TableCell>
-                <TableCell className="text-right font-mono-numbers">
+                <TableCell className="text-right tabular-nums font-semibold">
                   {formatCurrency(totals.revenue)}
                 </TableCell>
-                <TableCell className="text-right font-mono-numbers">
+                <TableCell className="text-right tabular-nums font-semibold">
                   {formatCurrency(totals.modifierRevenue)}
                 </TableCell>
                 <TableCell />
@@ -308,20 +334,22 @@ export function ProductMixTable({
             </TableBody>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
 function CategoryBlock({
   category,
   isExpanded,
+  canToggle,
   onToggle,
   formatFpTpSplit,
   renderChange,
 }: {
   category: ProductMixTableCategory
   isExpanded: boolean
+  canToggle: boolean
   onToggle: () => void
   formatFpTpSplit: (fp: number, tp: number) => string
   renderChange: (change: number | null) => React.ReactNode
@@ -330,15 +358,16 @@ function CategoryBlock({
     <>
       {/* Category row */}
       <TableRow
-        className="bg-muted/30 cursor-pointer select-none"
-        onClick={onToggle}
+        className={cn("bg-muted/30 select-none", canToggle && "cursor-pointer")}
+        onClick={canToggle ? onToggle : undefined}
       >
         <TableCell className="pl-4 font-bold">
           <div className="flex items-center gap-1.5">
             <ChevronRight
               className={cn(
                 "h-4 w-4 shrink-0 transition-transform duration-200",
-                isExpanded && "rotate-90"
+                isExpanded && "rotate-90",
+                !canToggle && "opacity-35"
               )}
             />
             {category.category}

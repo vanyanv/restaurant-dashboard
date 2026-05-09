@@ -71,7 +71,8 @@ export function TargetChip({
             setEditing(false)
           }
         }}
-        className="w-12 bg-transparent border-b border-(--hairline-bold) font-mono text-[11px] text-(--ink) focus:outline-none"
+        aria-label="COGS target percent"
+        className="w-12 bg-transparent border-b border-(--hairline-bold) font-mono text-[11px] text-(--ink) focus:outline-hidden focus-visible:border-(--accent)"
       />
       <span className="font-mono">%</span>
     </span>

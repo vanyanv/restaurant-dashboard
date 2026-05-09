@@ -18,6 +18,7 @@
 //     them from this signal alone. Operator interpretation required.
 
 import { getServerSession } from "next-auth"
+import { Prisma } from "@/generated/prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -81,6 +82,7 @@ export async function getPromoRoi(input: {
 
   let storeId: string | null = null
   let storeName: string | null = null
+  let storeIds: string[]
   if (input.storeId) {
     const store = await prisma.store.findFirst({
       where: { id: input.storeId, accountId: user.accountId },
@@ -89,23 +91,43 @@ export async function getPromoRoi(input: {
     if (!store) return { ok: false, error: "store_not_in_account" }
     storeId = store.id
     storeName = store.name
+    storeIds = [store.id]
+  } else {
+    storeName = "All stores"
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true },
+    })
+    storeIds = stores.map((store) => store.id)
   }
 
-  const dailyRows = await prisma.otterDailySummary.findMany({
-    where: {
-      ...(storeId ? { storeId } : { store: { accountId: user.accountId } }),
-      date: { gte: windowStart, lte: windowEnd },
-    },
-    select: {
-      date: true,
-      fpDiscounts: true,
-      tpDiscounts: true,
-      fpNetSales: true,
-      tpNetSales: true,
-      fpGrossSales: true,
-      tpGrossSales: true,
-    },
-  })
+  if (storeIds.length === 0) return { ok: false, error: "no_data" }
+
+  const dailyRows = await prisma.$queryRaw<
+    Array<{
+      date: Date
+      fpDiscounts: number | null
+      tpDiscounts: number | null
+      fpNetSales: number | null
+      tpNetSales: number | null
+      fpGrossSales: number | null
+      tpGrossSales: number | null
+    }>
+  >(Prisma.sql`
+    SELECT
+      "date",
+      SUM(COALESCE("fpDiscounts", 0))::double precision AS "fpDiscounts",
+      SUM(COALESCE("tpDiscounts", 0))::double precision AS "tpDiscounts",
+      SUM(COALESCE("fpNetSales", 0))::double precision AS "fpNetSales",
+      SUM(COALESCE("tpNetSales", 0))::double precision AS "tpNetSales",
+      SUM(COALESCE("fpGrossSales", 0))::double precision AS "fpGrossSales",
+      SUM(COALESCE("tpGrossSales", 0))::double precision AS "tpGrossSales"
+    FROM "OtterDailySummary"
+    WHERE "storeId" IN (${Prisma.join(storeIds)})
+      AND "date" >= ${windowStart}
+      AND "date" <= ${windowEnd}
+    GROUP BY "date"
+  `)
 
   if (dailyRows.length === 0) return { ok: false, error: "no_data" }
 

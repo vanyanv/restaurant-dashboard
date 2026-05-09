@@ -56,6 +56,8 @@ export interface LaunchProjection {
 
 export interface LaunchTrajectory {
   storeId: string
+  /** Populated in aggregate mode (multiple stores in scope). */
+  storeName?: string
   category: string
   itemName: string
   firstSaleDate: Date
@@ -102,6 +104,7 @@ export async function getLaunchTrajectory(input: {
 
   let storeId: string | null = null
   let storeName: string | null = null
+  const storeNameById = new Map<string, string>()
   if (input.storeId) {
     const store = await prisma.store.findFirst({
       where: { id: input.storeId, accountId: user.accountId },
@@ -110,6 +113,14 @@ export async function getLaunchTrajectory(input: {
     if (!store) return { ok: false, error: "store_not_in_account" }
     storeId = store.id
     storeName = store.name
+    storeNameById.set(store.id, store.name)
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true, name: true },
+    })
+    for (const s of stores) storeNameById.set(s.id, s.name)
+    storeName = "All stores"
   }
 
   // Pull all rows in [baselineStart, windowEnd] so we can verify a clean
@@ -204,6 +215,9 @@ export async function getLaunchTrajectory(input: {
 
     launches.push({
       storeId: bucket.storeId,
+      ...(storeId == null && storeNameById.has(bucket.storeId)
+        ? { storeName: storeNameById.get(bucket.storeId)! }
+        : {}),
       category: bucket.category,
       itemName: bucket.itemName,
       firstSaleDate: firstSale,

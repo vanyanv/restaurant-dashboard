@@ -23,6 +23,7 @@ import {
 } from "@/lib/chat/conversation"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
 import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { logger } from "@/lib/logger"
 import { generateConversationTitle } from "@/lib/chat/auto-title"
 
 export const maxDuration = 60
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
           role: "user",
           content: userMessageText,
         }).catch((err) => {
-          console.error("[chat] failed to persist user message", err)
+          logger.error("[chat] failed to persist user message", err)
           return null
         })
       : Promise.resolve(null)
@@ -148,7 +149,7 @@ export async function POST(req: Request) {
     system,
     messages: modelMessages,
     tools: toolSet,
-    stopWhen: stepCountIs(8),
+    stopWhen: stepCountIs(15),
     onChunk: ({ chunk }) => {
       if (firstTokenMs === null && chunk.type === "text-delta") {
         firstTokenMs = Math.round(performance.now() - streamStartMs)
@@ -198,7 +199,7 @@ export async function POST(req: Request) {
         ?.inputTokens
       const completionTokens = (usage as { outputTokens?: number } | undefined)
         ?.outputTokens
-      console.log(
+      logger.info(
         `[chat] ownerId=${ownerId} convId=${conversationId} ` +
           `systemPromptMs=${systemPromptMs} firstTokenMs=${firstTokenMs ?? "n/a"} ` +
           `totalMs=${totalMs} tools=${capturedToolCalls.length} ` +
@@ -243,7 +244,7 @@ export async function POST(req: Request) {
           },
         })
       } catch (err) {
-        console.error("[chat] failed to write ChatTurn (non-fatal)", err)
+        logger.error("[chat] failed to write ChatTurn (non-fatal)", err)
       }
 
       try {
@@ -255,7 +256,7 @@ export async function POST(req: Request) {
           toolCalls: capturedToolCalls,
         })
       } catch (err) {
-        console.error("[chat] failed to persist assistant message", err)
+        logger.error("[chat] failed to persist assistant message", err)
       }
 
       // Auto-title on the first assistant turn. Non-fatal: a failure here
@@ -274,7 +275,7 @@ export async function POST(req: Request) {
           }
         }
       } catch (err) {
-        console.error("[chat] auto-title path failed (non-fatal)", err)
+        logger.error("[chat] auto-title path failed (non-fatal)", err)
       }
     },
   })
@@ -294,7 +295,7 @@ export async function POST(req: Request) {
         },
       })
     } catch (writeErr) {
-      console.error("[chat] failed to write error ChatTurn", writeErr)
+      logger.error("[chat] failed to write error ChatTurn", writeErr)
     }
     throw err
   }

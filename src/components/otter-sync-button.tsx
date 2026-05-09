@@ -97,7 +97,7 @@ export function OtterSyncButton({
             <motion.div
               className={`absolute inset-y-0 left-0 ${
                 isComplete
-                  ? "bg-emerald-500/20"
+                  ? "bg-(--accent-bg)"
                   : isError
                     ? "bg-destructive/15"
                     : "bg-primary/12"
@@ -125,7 +125,7 @@ export function OtterSyncButton({
             <div className="relative flex items-center justify-between px-2.5 h-full text-xs select-none">
               {isComplete ? (
                 <motion.div
-                  className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium"
+                  className="flex items-center gap-1.5 text-(--accent) font-medium"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}

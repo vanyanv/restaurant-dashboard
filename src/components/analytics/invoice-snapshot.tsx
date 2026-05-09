@@ -199,7 +199,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
                             "text-sm tabular-nums whitespace-nowrap",
                             col.highlight &&
                               val > 0 &&
-                              "text-rose-600 dark:text-rose-400 font-medium"
+                              "text-(--subtract) font-medium"
                           )}
                         >
                           {col.format(val)}
@@ -239,7 +239,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
                         "text-sm tabular-nums font-semibold whitespace-nowrap",
                         col.highlight &&
                           val > 0 &&
-                          "text-rose-600 dark:text-rose-400"
+                          "text-(--subtract)"
                       )}
                     >
                       {col.format(val)}

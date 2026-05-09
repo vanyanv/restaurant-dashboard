@@ -157,6 +157,18 @@
   min-height: 0;
 }
 
+.chat-page__thread-loading {
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  color: var(--ink-muted);
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 .chat-page__main-head {
   padding: 18px 24px 14px;
   border-bottom: 1px solid var(--hairline);

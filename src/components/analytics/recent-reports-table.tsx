@@ -1,13 +1,6 @@
 "use client"
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Table,
   TableBody,
   TableCell,
@@ -84,21 +77,21 @@ export function RecentReportsTable({
   const getShiftBadge = (shift: string) => {
     switch (shift) {
       case 'MORNING':
-        return <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">🌅 Morning</Badge>
+        return <Badge variant="outline" className="rounded-xs border-(--hairline-bold) bg-(--paper) text-(--ink-muted)">Morning</Badge>
       case 'EVENING':
-        return <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50">🌆 Evening</Badge>
+        return <Badge variant="outline" className="rounded-xs border-(--hairline-bold) bg-(--paper-warm) text-(--ink)">Evening</Badge>
       case 'BOTH':
-        return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">🌅🌆 Both</Badge>
+        return <Badge variant="outline" className="rounded-xs border-(--hairline-bold) bg-(--accent-bg) text-(--accent-dark)">Both</Badge>
       default:
-        return <Badge variant="outline">{shift}</Badge>
+        return <Badge variant="outline" className="rounded-xs border-(--hairline-bold) text-(--ink-muted)">{shift}</Badge>
     }
   }
 
   const getPrepCompletionBadge = (morning: number, evening: number) => {
     const avg = (morning + evening) / 2
-    if (avg >= 90) return <Badge className="bg-green-100 text-green-700 border-green-200">{Math.round(avg)}%</Badge>
-    if (avg >= 70) return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">{Math.round(avg)}%</Badge>
-    return <Badge className="bg-red-100 text-red-700 border-red-200">{Math.round(avg)}%</Badge>
+    if (avg >= 90) return <Badge className="rounded-xs border border-(--hairline-bold) bg-(--accent-bg) text-(--accent-dark) tabular-nums">{Math.round(avg)}%</Badge>
+    if (avg >= 70) return <Badge className="rounded-xs border border-(--hairline-bold) bg-(--paper-warm) text-(--ink-muted) tabular-nums">{Math.round(avg)}%</Badge>
+    return <Badge className="rounded-xs border border-(--hairline-bold) bg-(--accent-bg) text-(--accent) tabular-nums">{Math.round(avg)}%</Badge>
   }
 
   const getTimeAgo = (date: Date | string) => {
@@ -114,17 +107,21 @@ export function RecentReportsTable({
   }
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
-          {title}
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept flex items-center gap-2">
+            <Calendar className="h-3 w-3 text-(--ink-faint)" />
+            {title}
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <div>
         {data.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="text-center py-8 text-(--ink-muted)">
             <Calendar className="h-8 w-8 mx-auto mb-2" />
             <p>No recent reports found</p>
           </div>
@@ -158,28 +155,28 @@ export function RecentReportsTable({
                         href={`/dashboard/store/${report.storeId}`}
                         className="flex items-center gap-2 hover:underline"
                       >
-                        <Store className="h-4 w-4 text-muted-foreground" />
+                        <Store className="h-4 w-4 text-(--ink-muted)" />
                         {report.store.name}
                       </Link>
                     </TableCell>
                   )}
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
+                      <User className="h-4 w-4 text-(--ink-muted)" />
                       <div>
                         <div className="font-medium">{report.manager.name}</div>
-                        <div className="text-xs text-muted-foreground">{report.manager.email}</div>
+                        <div className="text-xs text-(--ink-muted)">{report.manager.email}</div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      <TrendingUp className="h-4 w-4 text-(--ink-muted)" />
                       <span className={cn(
                         "font-medium",
-                        (report.endingAmount - report.startingAmount) > 0 
-                          ? "text-green-600" 
-                          : "text-red-600"
+                        (report.endingAmount - report.startingAmount) > 0
+                          ? "text-(--ink) tabular-nums"
+                          : "text-(--subtract) tabular-nums"
                       )}>
                         {formatCurrency(report.endingAmount - report.startingAmount)}
                       </span>
@@ -187,18 +184,18 @@ export function RecentReportsTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <DollarSign className="h-4 w-4 text-(--ink-muted)" />
                       {report.totalSales ? formatCurrency(report.totalSales) : '—'}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <ChefHat className="h-4 w-4 text-muted-foreground" />
+                      <ChefHat className="h-4 w-4 text-(--ink-muted)" />
                       {getPrepCompletionBadge(report.morningPrepCompleted, report.eveningPrepCompleted)}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-(--ink-muted)">
                       {getTimeAgo(report.createdAt)}
                     </div>
                   </TableCell>
@@ -215,7 +212,7 @@ export function RecentReportsTable({
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

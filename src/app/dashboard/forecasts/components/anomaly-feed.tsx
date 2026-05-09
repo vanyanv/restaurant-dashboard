@@ -73,6 +73,11 @@ export function AnomalyFeed({ data }: Props) {
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] mr-2">
                   {TARGET_LABEL[e.target] ?? e.target}
                 </span>
+                {e.storeName ? (
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] mr-2">
+                    · {e.storeName}
+                  </span>
+                ) : null}
                 {e.targetId ?? "—"}
               </div>
               <div

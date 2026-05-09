@@ -17,6 +17,7 @@
 //     hinge on D+1 vs D+7 alignment.
 
 import { getServerSession } from "next-auth"
+import { Prisma } from "@/generated/prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -112,6 +113,7 @@ export async function getCashPositionForecast(input: {
       },
     })
     storeIds = stores.map((s) => s.id)
+    storeName = "All stores"
     if (stores.length > 0) {
       const avg = (xs: (number | null | undefined)[]) =>
         xs.reduce<number>((s, x) => s + (x ?? 0), 0) / xs.length
@@ -138,40 +140,39 @@ export async function getCashPositionForecast(input: {
   const horizonEnd = new Date(today)
   horizonEnd.setUTCDate(horizonEnd.getUTCDate() + horizonDays)
 
-  const [revenueRows, payableInvoices] = await Promise.all([
-    prisma.forecastDailyRevenue.findMany({
-      where: {
-        storeId: { in: storeIds },
-        hourBucket: 0,
-        forecastDate: { gte: today, lt: horizonEnd },
-      },
-      orderBy: [{ forecastDate: "asc" }, { generatedAt: "desc" }],
-      select: { forecastDate: true, predictedRevenue: true, generatedAt: true },
-    }),
-    prisma.invoice.findMany({
+  const [revenueRows, payableInvoiceGroups] = await Promise.all([
+    prisma.$queryRaw<Array<{ forecastDate: Date; predictedRevenue: number | null }>>(
+      Prisma.sql`
+        SELECT
+          latest."forecastDate",
+          SUM(latest."predictedRevenue")::double precision AS "predictedRevenue"
+        FROM (
+          SELECT DISTINCT ON ("storeId", "forecastDate")
+            "storeId",
+            "forecastDate",
+            "predictedRevenue"
+          FROM "ForecastDailyRevenue"
+          WHERE "storeId" IN (${Prisma.join(storeIds)})
+            AND "hourBucket" = 0
+            AND "forecastDate" >= ${today}
+            AND "forecastDate" < ${horizonEnd}
+          ORDER BY "storeId", "forecastDate", "generatedAt" DESC
+        ) latest
+        GROUP BY latest."forecastDate"
+      `,
+    ),
+    prisma.invoice.groupBy({
+      by: ["dueDate"],
       where: {
         accountId: user.accountId,
         ...(input.storeId ? { storeId: input.storeId } : {}),
         dueDate: { gte: today, lt: horizonEnd },
         isReturn: false,
       },
-      select: { dueDate: true, totalAmount: true },
+      _sum: { totalAmount: true },
     }),
   ])
 
-  // Latest-generation per (date) for revenue
-  type RevRow = (typeof revenueRows)[number]
-  const latestRevenue = new Map<string, RevRow>()
-  for (const r of revenueRows) {
-    // When multi-store rolled, sum predicted revenues across stores per date.
-    // To keep this generic, sum all predictedRevenue across rows for the same
-    // date (latest gen each).
-    const key = ymd(r.forecastDate as Date)
-    const existing = latestRevenue.get(key)
-    if (!existing || r.generatedAt > existing.generatedAt) latestRevenue.set(key, r)
-  }
-  // Build a per-day revenue map. For multi-store, sum across stores' latest
-  // generations on the same date.
   const revenueByDate = new Map<string, number>()
   for (const r of revenueRows) {
     const key = ymd(r.forecastDate as Date)
@@ -183,10 +184,13 @@ export async function getCashPositionForecast(input: {
 
   // Bucket invoice payables by due date
   const payablesByDate = new Map<string, number>()
-  for (const inv of payableInvoices) {
+  for (const inv of payableInvoiceGroups) {
     if (!inv.dueDate) continue
     const key = ymd(inv.dueDate as Date)
-    payablesByDate.set(key, (payablesByDate.get(key) ?? 0) + inv.totalAmount)
+    payablesByDate.set(
+      key,
+      (payablesByDate.get(key) ?? 0) + (inv._sum.totalAmount ?? 0),
+    )
   }
 
   const days: CashPositionDay[] = []

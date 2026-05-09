@@ -18,6 +18,9 @@ export type AnomalyStatus = "OPEN" | "ACKNOWLEDGED" | "EXPLAINED"
 
 export interface AnomalyEvent {
   id: string
+  storeId: string
+  /** Populated in aggregate mode (multiple stores in scope). */
+  storeName?: string
   target: AnomalyTarget
   targetId: string | null
   occurredOn: Date
@@ -29,7 +32,8 @@ export interface AnomalyEvent {
 }
 
 export interface OpenAnomaliesData {
-  storeId: string
+  /** Null when aggregating across all stores. */
+  storeId: string | null
   storeName: string
   events: AnomalyEvent[]
 }
@@ -39,28 +43,48 @@ export type GetOpenAnomaliesResult =
   | { ok: false; error: "store_not_in_account" }
 
 export async function getOpenAnomalies(input: {
-  storeId: string
+  storeId?: string
   limit?: number
 }): Promise<GetOpenAnomaliesResult | null> {
   const session = (await getServerSession(authOptions)) as SessionLike | null
   const user = session?.user ?? null
   if (!user) return null
 
-  const store = await prisma.store.findUnique({
-    where: { id: input.storeId },
-    select: { id: true, name: true, accountId: true },
-  })
-  if (!store || store.accountId !== user.accountId) {
-    return { ok: false, error: "store_not_in_account" }
+  let storeIds: string[]
+  let storeName: string
+  let storeIdOut: string | null
+  const storeNameById = new Map<string, string>()
+  if (input.storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: input.storeId },
+      select: { id: true, name: true, accountId: true },
+    })
+    if (!store || store.accountId !== user.accountId) {
+      return { ok: false, error: "store_not_in_account" }
+    }
+    storeIds = [store.id]
+    storeName = store.name
+    storeIdOut = store.id
+    storeNameById.set(store.id, store.name)
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true, name: true },
+    })
+    storeIds = stores.map((s) => s.id)
+    for (const s of stores) storeNameById.set(s.id, s.name)
+    storeName = "All stores"
+    storeIdOut = null
   }
 
   const limit = input.limit ?? 20
   const events = await prisma.anomalyEvent.findMany({
-    where: { storeId: input.storeId, status: "OPEN" },
+    where: { storeId: { in: storeIds }, status: "OPEN" },
     orderBy: [{ occurredOn: "desc" }, { detectedAt: "desc" }],
     take: limit,
     select: {
       id: true,
+      storeId: true,
       target: true,
       targetId: true,
       occurredOn: true,
@@ -72,13 +96,18 @@ export async function getOpenAnomalies(input: {
     },
   })
 
+  const isAggregate = storeIds.length > 1
   return {
     ok: true,
     data: {
-      storeId: store.id,
-      storeName: store.name,
+      storeId: storeIdOut,
+      storeName,
       events: events.map((e) => ({
         id: e.id,
+        storeId: e.storeId,
+        ...(isAggregate && storeNameById.has(e.storeId)
+          ? { storeName: storeNameById.get(e.storeId)! }
+          : {}),
         target: e.target as AnomalyTarget,
         targetId: e.targetId,
         occurredOn: e.occurredOn,

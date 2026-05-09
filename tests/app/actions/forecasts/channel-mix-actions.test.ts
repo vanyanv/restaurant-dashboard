@@ -7,8 +7,8 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    store: { findFirst: vi.fn() },
-    otterDailySummary: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
+    store: { findFirst: vi.fn(), findMany: vi.fn() },
   },
 }))
 
@@ -22,6 +22,7 @@ const sessionWith = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
 })
 
 interface Row {
@@ -63,7 +64,7 @@ describe("getChannelMix", () => {
 
   it("returns no_data when there are no daily summaries", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue([] as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
     expect(await getChannelMix({})).toEqual({ ok: false, error: "no_data" })
   })
 
@@ -72,7 +73,7 @@ describe("getChannelMix", () => {
     // FP css-pos: $10k gross, $0 fees → 100% net rate
     // doordash: $5k gross, $1.5k fees → 70% net rate
     // ubereats: $3k gross, $1.2k fees → 60% net rate (worst)
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue([
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
       row({ platform: "css-pos", fpGross: 10000, fpFees: 0, fpOrders: 200 }),
       row({ platform: "doordash", tpGross: 5000, tpFees: 1500, tpOrders: 100 }),
       row({ platform: "ubereats", tpGross: 3000, tpFees: 1200, tpOrders: 60 }),
@@ -111,7 +112,7 @@ describe("getChannelMix", () => {
 
   it("skips simulation when only one channel is present", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue([
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
       row({ platform: "css-pos", fpGross: 5000, fpFees: 0, fpOrders: 100 }),
     ] as never)
     const result = await getChannelMix({})
@@ -122,9 +123,8 @@ describe("getChannelMix", () => {
 
   it("aggregates the same platform across multiple days", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue([
-      row({ platform: "doordash", tpGross: 1000, tpFees: 300, tpOrders: 20 }),
-      row({ platform: "doordash", tpGross: 2000, tpFees: 600, tpOrders: 40 }),
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      row({ platform: "doordash", tpGross: 3000, tpFees: 900, tpOrders: 60 }),
       row({ platform: "css-pos", fpGross: 500, fpFees: 0, fpOrders: 10 }),
     ] as never)
     const result = await getChannelMix({})

@@ -1,6 +1,5 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatCurrency, formatPct } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { MoverItem } from "@/types/analytics"
@@ -33,7 +32,7 @@ function MoverList({
 
   if (items.length === 0) {
     return (
-      <p className="py-6 text-center text-sm text-muted-foreground">
+      <p className="py-6 text-center text-sm text-(--ink-muted)">
         No {isRiser ? "rising" : "declining"} items for this period
       </p>
     )
@@ -48,26 +47,22 @@ function MoverList({
           initial="hidden"
           animate="visible"
           variants={listItemVariants}
-          className={cn(
-            "flex items-center justify-between gap-3 border-b py-3 last:border-0"
-          )}
+          className="flex items-center justify-between gap-3 border-b border-(--hairline) py-3 last:border-0"
         >
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{item.itemName}</div>
-            <div className="text-xs text-muted-foreground">{item.category}</div>
+            <div className="text-xs text-(--ink-muted)">{item.category}</div>
           </div>
           <div className="flex flex-col items-end gap-1">
             <span
               className={cn(
-                "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                isRiser
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-                  : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                "inline-flex items-center rounded-xs border border-(--hairline-bold) bg-(--accent-bg) px-2 py-0.5 text-xs font-medium tabular-nums",
+                isRiser ? "text-(--accent-dark)" : "text-(--accent)"
               )}
             >
               {formatPct(item.quantityChangePercent)}
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-(--ink-muted) tabular-nums">
               {formatCurrency(item.previousRevenue)} &rarr;{" "}
               {formatCurrency(item.currentRevenue)}
             </span>
@@ -81,29 +76,25 @@ function MoverList({
 export function TopMovers({ risers, decliners, className }: TopMoversProps) {
   return (
     <div className={cn("grid gap-4 md:grid-cols-2", className)}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+      <section className="inv-panel">
+        <header className="inv-panel__head">
+          <span className="inv-panel__dept flex items-center gap-2">
+            <TrendingUp className="h-3 w-3 text-(--ink)" />
             Rising Items
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MoverList items={risers} type="riser" />
-        </CardContent>
-      </Card>
+          </span>
+        </header>
+        <MoverList items={risers} type="riser" />
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
+      <section className="inv-panel">
+        <header className="inv-panel__head">
+          <span className="inv-panel__dept flex items-center gap-2">
+            <TrendingDown className="h-3 w-3 text-(--subtract)" />
             Declining Items
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MoverList items={decliners} type="decliner" />
-        </CardContent>
-      </Card>
+          </span>
+        </header>
+        <MoverList items={decliners} type="decliner" />
+      </section>
     </div>
   )
 }

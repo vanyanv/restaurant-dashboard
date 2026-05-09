@@ -3,13 +3,6 @@
 import { useState, memo } from "react"
 import { ChevronRight } from "lucide-react"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Table,
   TableBody,
   TableCell,
@@ -41,17 +34,19 @@ export function MenuCategoryTable({ data }: MenuCategoryTableProps) {
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Menu Category Sales</CardTitle>
-        <CardDescription>
-          Quantity sold and sales by category and item
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
+    <section className="inv-panel inv-panel--flush">
+      <header className="inv-panel__head px-6 pt-4">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">Menu Category Sales</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            Quantity and sales by category and item
+          </span>
+        </div>
+      </header>
+      <div>
         <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
           <Table className="min-w-[600px]">
-            <TableHeader className="sticky top-0 bg-background z-10">
+            <TableHeader className="sticky top-0 bg-(--paper) z-10">
               <TableRow>
                 <TableHead className="pl-6">Category / Item</TableHead>
                 <TableHead className="text-right">FP Qty</TableHead>
@@ -100,8 +95,8 @@ export function MenuCategoryTable({ data }: MenuCategoryTableProps) {
             </TableFooter>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -117,13 +112,13 @@ const CategoryRows = memo(function CategoryRows({
   return (
     <>
       <TableRow
-        className="cursor-pointer hover:bg-muted/50"
+        className="cursor-pointer hover:bg-[rgba(220,38,38,0.045)] transition-colors"
         onClick={onToggle}
       >
         <TableCell className="pl-6 font-medium">
           <div className="flex items-center gap-1.5">
             <ChevronRight
-              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+              className={`h-4 w-4 shrink-0 text-(--ink-muted) transition-transform duration-200 ${
                 isExpanded ? "rotate-90" : ""
               }`}
             />
@@ -151,26 +146,26 @@ const CategoryRows = memo(function CategoryRows({
       </TableRow>
       {isExpanded &&
         category.items.map((item) => (
-          <TableRow key={item.itemName} className="bg-muted/30">
-            <TableCell className="pl-10 text-muted-foreground">
+          <TableRow key={item.itemName} className="bg-(--paper-warm)">
+            <TableCell className="pl-10 text-(--ink-muted)">
               {item.itemName}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
+            <TableCell className="text-right tabular-nums text-(--ink-muted)">
               {formatNumber(item.fpQuantitySold)}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
+            <TableCell className="text-right tabular-nums text-(--ink-muted)">
               {formatCurrency(item.fpTotalSales)}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
+            <TableCell className="text-right tabular-nums text-(--ink-muted)">
               {formatNumber(item.tpQuantitySold)}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
+            <TableCell className="text-right tabular-nums text-(--ink-muted)">
               {formatCurrency(item.tpTotalSales)}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
+            <TableCell className="text-right tabular-nums text-(--ink-muted)">
               {formatNumber(item.totalQuantitySold)}
             </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
+            <TableCell className="text-right tabular-nums text-(--ink-muted)">
               {formatCurrency(item.totalSales)}
             </TableCell>
           </TableRow>

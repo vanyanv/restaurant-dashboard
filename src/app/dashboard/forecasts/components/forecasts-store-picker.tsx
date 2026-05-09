@@ -11,23 +11,31 @@ import {
 
 interface Props {
   stores: { id: string; name: string }[]
-  selectedStoreId: string
+  /** Undefined = portfolio "All stores" view. */
+  selectedStoreId: string | undefined
 }
+
+const ALL_STORES = "__all__"
 
 export function ForecastsStorePicker({ stores, selectedStoreId }: Props) {
   const router = useRouter()
   if (stores.length <= 1) return null
   return (
     <Select
-      value={selectedStoreId}
+      value={selectedStoreId ?? ALL_STORES}
       onValueChange={(value) => {
-        router.push(`/dashboard/forecasts?storeId=${value}`)
+        if (value === ALL_STORES) {
+          router.push("/dashboard/forecasts")
+        } else {
+          router.push(`/dashboard/forecasts?storeId=${value}`)
+        }
       }}
     >
       <SelectTrigger className="h-8 w-[160px] text-sm">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value={ALL_STORES}>All stores</SelectItem>
         {stores.map((s) => (
           <SelectItem key={s.id} value={s.id}>
             {s.name}

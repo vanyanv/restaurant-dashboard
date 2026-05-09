@@ -302,7 +302,10 @@ export function IngredientDetailSheet({
 
             <div className="mt-5 grid grid-cols-[1fr_auto] gap-4">
               <div>
-                <label className="block font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
+                <label
+                  htmlFor="ingredient-cost"
+                  className="block font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--ink-faint)]"
+                >
                   Cost per recipe unit
                 </label>
                 <div className="mt-2 flex items-stretch border-2 border-[var(--ink)] bg-[var(--paper)]">
@@ -310,6 +313,7 @@ export function IngredientDetailSheet({
                     $
                   </span>
                   <input
+                    id="ingredient-cost"
                     type="number"
                     step="0.0001"
                     min="0"
@@ -322,7 +326,7 @@ export function IngredientDetailSheet({
                     }}
                     placeholder="0.00"
                     disabled={saving}
-                    className="h-11 min-w-0 flex-1 bg-transparent font-display text-[22px] tabular-nums text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+                    className="h-11 min-w-0 flex-1 bg-transparent font-display text-[22px] tabular-nums text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-hidden"
                   />
                   <span className="flex items-center px-2 font-mono text-[14px] text-[var(--ink-faint)]">
                     /
@@ -345,7 +349,8 @@ export function IngredientDetailSheet({
                       })
                     }}
                     disabled={saving}
-                    className="h-11 border-l border-[var(--hairline)] bg-transparent px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-none"
+                    aria-label="Recipe unit"
+                    className="h-11 border-l border-[var(--hairline)] bg-transparent px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-hidden"
                   >
                     <option value="">pick unit</option>
                     {RECIPE_UNIT_OPTIONS.map((u) => (
@@ -473,7 +478,8 @@ export function IngredientDetailSheet({
                     onChange={(e) => setMergeQuery(e.target.value)}
                     placeholder="Absorb this ingredient into…"
                     autoFocus
-                    className="flex-1 bg-transparent font-display text-[15px] italic text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+                    aria-label="Search ingredient to merge into"
+                    className="flex-1 bg-transparent font-display text-[15px] italic text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-hidden"
                   />
                   <button
                     type="button"

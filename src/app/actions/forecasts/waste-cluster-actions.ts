@@ -35,6 +35,8 @@ const DEFAULT_LOOKBACK_WEEKS = 12
 
 export interface IngredientCluster {
   storeId: string
+  /** Populated in aggregate mode (multiple stores in scope). */
+  storeName?: string
   canonicalIngredientId: string
   ingredientName: string
   defaultUnit: string
@@ -76,6 +78,7 @@ export async function getWasteRootCauses(input: {
 
   let storeId: string | null = null
   let storeName: string | null = null
+  const storeNameById = new Map<string, string>()
   if (input.storeId) {
     const store = await prisma.store.findFirst({
       where: { id: input.storeId, accountId: user.accountId },
@@ -84,6 +87,14 @@ export async function getWasteRootCauses(input: {
     if (!store) return { ok: false, error: "store_not_in_account" }
     storeId = store.id
     storeName = store.name
+    storeNameById.set(store.id, store.name)
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true, name: true },
+    })
+    for (const s of stores) storeNameById.set(s.id, s.name)
+    storeName = "All stores"
   }
 
   // Lines from completed counts in the window with a frozen estimate.
@@ -230,6 +241,9 @@ export async function getWasteRootCauses(input: {
 
     rows.push({
       storeId: bucket.storeId,
+      ...(storeId == null && storeNameById.has(bucket.storeId)
+        ? { storeName: storeNameById.get(bucket.storeId)! }
+        : {}),
       canonicalIngredientId: bucket.canonicalIngredientId,
       ingredientName: ingredient?.name ?? bucket.canonicalIngredientId,
       defaultUnit: ingredient?.defaultUnit ?? "",

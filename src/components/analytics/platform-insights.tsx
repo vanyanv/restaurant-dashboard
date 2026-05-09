@@ -1,7 +1,6 @@
 "use client"
 
 import { useMemo } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/format"
 import type { PlatformBreakdown } from "@/types/analytics"
 import {
@@ -24,24 +23,23 @@ const PLATFORM_LABELS: Record<string, string> = {
   caviar: "Caviar",
 }
 
-const CHANNEL_COLORS: Record<string, string> = {
-  "css-pos__CARD": "hsl(20, 91%, 48%)",
-  "css-pos__CASH": "hsl(35, 85%, 45%)",
-  "bnm-web__CARD": "hsl(262, 83%, 58%)",
-  "bnm-web__CASH": "hsl(280, 70%, 50%)",
-  doordash: "hsl(0, 72%, 51%)",
-  ubereats: "hsl(142, 71%, 45%)",
-  grubhub: "hsl(25, 95%, 53%)",
-  grubhub_marketplace: "hsl(25, 95%, 53%)",
-  caviar: "hsl(210, 70%, 50%)",
-}
-
-function getChannelColor(platform: string, paymentMethod: string | null): string {
-  const isFP = platform === "css-pos" || platform === "bnm-web"
-  if (isFP && paymentMethod) {
-    return CHANNEL_COLORS[`${platform}__${paymentMethod}`] ?? "hsl(221, 83%, 53%)"
+function getChannelTone(platform: string): string {
+  switch (platform) {
+    case "doordash":
+      return "var(--platform-doordash)"
+    case "ubereats":
+      return "var(--platform-ubereats)"
+    case "grubhub":
+    case "grubhub_marketplace":
+      return "var(--platform-grubhub)"
+    case "caviar":
+      return "var(--platform-chownow)"
+    case "css-pos":
+    case "bnm-web":
+      return "var(--ink)"
+    default:
+      return "var(--ink-muted)"
   }
-  return CHANNEL_COLORS[platform] ?? "hsl(221, 83%, 53%)"
 }
 
 function getChannelIcon(platform: string, paymentMethod: string | null) {
@@ -81,7 +79,6 @@ interface PlatformInsightsProps {
 
 export function PlatformInsights({ data }: PlatformInsightsProps) {
   const channels = useMemo(() => {
-    // Use each PlatformBreakdown entry directly (already split by channel + paymentMethod)
     const result = data
       .filter((row) => row.grossSales > 0 || row.orderCount > 0)
       .map((row) => ({
@@ -89,7 +86,7 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
         platform: row.platform,
         paymentMethod: row.paymentMethod,
         label: getChannelLabel(row.platform, row.paymentMethod),
-        color: getChannelColor(row.platform, row.paymentMethod),
+        tone: getChannelTone(row.platform),
         grossSales: row.grossSales,
         netSales: row.netSales,
         fees: row.fees,
@@ -98,7 +95,6 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
         feeRate: row.grossSales > 0 ? (row.fees / row.grossSales) * 100 : 0,
       }))
 
-    // Sort: FP first, then by gross sales desc
     const isFP = (p: string) => p === "css-pos" || p === "bnm-web"
     result.sort((a, b) => {
       const aFP = isFP(a.platform) ? 0 : 1
@@ -114,49 +110,52 @@ export function PlatformInsights({ data }: PlatformInsightsProps) {
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold text-foreground">Platform Insights</h3>
-        <span className="text-[11px] text-muted-foreground">Performance by sales channel</span>
+      <div className="flex items-baseline gap-2">
+        <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink)">
+          Platform Insights
+        </h3>
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+          performance by sales channel
+        </span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {channels.map((ch) => (
-          <Card
+          <section
             key={ch.key}
-            className="relative overflow-hidden border-l-[3px]"
-            style={{ borderLeftColor: ch.color }}
+            className="inv-panel inv-panel--flush relative overflow-hidden"
           >
-            <CardContent className="p-2.5 sm:p-3">
+            <div className="p-2.5 sm:p-3">
               <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground" style={{ color: ch.color }}>
+                <span style={{ color: ch.tone }}>
                   {getChannelIcon(ch.platform, ch.paymentMethod)}
                 </span>
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground truncate">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint) truncate">
                   {ch.label}
                 </span>
               </div>
               <div className="mt-1 space-y-1">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[11px] text-muted-foreground">AOV</span>
+                  <span className="text-[11px] text-(--ink-muted)">AOV</span>
                   <span className="text-sm font-semibold tabular-nums">{formatCurrency(ch.aov)}</span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[11px] text-muted-foreground">Fees</span>
+                  <span className="text-[11px] text-(--ink-muted)">Fees</span>
                   <span
                     className="text-sm tabular-nums font-medium"
-                    style={{ color: ch.feeRate > 15 ? "hsl(0, 72%, 51%)" : "inherit" }}
+                    style={ch.feeRate > 15 ? { color: "var(--subtract)" } : undefined}
                   >
                     {ch.feeRate.toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[11px] text-muted-foreground">Net</span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                  <span className="text-[11px] text-(--ink-muted)">Net</span>
+                  <span className="text-[11px] tabular-nums text-(--ink-muted)">
                     {formatCurrency(ch.netSales)}
                   </span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         ))}
       </div>
     </div>

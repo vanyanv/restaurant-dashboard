@@ -1,13 +1,6 @@
 "use client"
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Table,
   TableBody,
   TableCell,
@@ -86,12 +79,16 @@ export function FinancialTable({ data }: FinancialTableProps) {
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Financial Breakdown</CardTitle>
-        <CardDescription>All channels and metrics</CardDescription>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
+    <section className="inv-panel inv-panel--flush">
+      <header className="inv-panel__head px-6 pt-4">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">Financial Breakdown</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            All channels and metrics
+          </span>
+        </div>
+      </header>
+      <div>
         <div className="overflow-x-auto">
           <Table className="min-w-[1100px]">
             <TableHeader>
@@ -227,7 +224,7 @@ export function FinancialTable({ data }: FinancialTableProps) {
             </TableFooter>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

@@ -10,6 +10,10 @@ concurrency:
   group: otter-hourly-sync
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -21,7 +25,31 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
-      - run: npx tsx scripts/sync-otter-hourly.ts
+      - name: Sync Otter hourly
+        id: cron
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/sync-otter-hourly.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OTTER_JWT: ${{ secrets.OTTER_JWT }}
+          OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
+          OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
+          LOG_FILE: logs/otter-hourly-sync.log
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otter-hourly-sync-log-${{ github.run_id }}
+          path: logs/otter-hourly-sync.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Hourly Sync
+          ISSUE_TITLE: "[Auto] Otter Hourly Sync failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/otter-hourly-sync.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

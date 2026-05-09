@@ -220,16 +220,7 @@ function decodeJwtExp(jwt: string): number {
   }
 }
 
-async function getOtterJwt(): Promise<string> {
-  // 1. Static env var takes priority (backward-compatible for scripts / CI)
-  const envJwt = process.env.OTTER_JWT ?? process.env.Bearer
-  if (envJwt) return envJwt
-
-  // 2. Return cached JWT if still valid (1-hour buffer)
-  const now = Math.floor(Date.now() / 1000)
-  if (cachedJwt && cachedJwtExp - now > 3600) return cachedJwt
-
-  // 3. Login with email/password
+async function signInForOtterJwt(): Promise<string> {
   const email = process.env.OTTER_EMAIL
   const password = process.env.OTTER_PASSWORD
   if (!email || !password) {
@@ -266,11 +257,41 @@ async function getOtterJwt(): Promise<string> {
   return jwt
 }
 
+async function refreshOtterJwtAfterAuthFailure(status: number): Promise<string> {
+  try {
+    console.warn(`Otter auth returned ${status}; refreshing JWT via OTTER_EMAIL/OTTER_PASSWORD`)
+    return await signInForOtterJwt()
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    throw new Error(`Otter auth token was rejected (${status}) and refresh failed: ${reason}`)
+  }
+}
+
+async function getOtterJwt(): Promise<string> {
+  // 1. Static env var takes priority (backward-compatible for scripts / CI).
+  // If it is already expired, prefer the login path instead of burning a call
+  // that will reliably 401.
+  const envJwt = process.env.OTTER_JWT ?? process.env.Bearer
+  const now = Math.floor(Date.now() / 1000)
+  if (envJwt) {
+    const exp = decodeJwtExp(envJwt)
+    if (exp === 0 || exp - now > 300) return envJwt
+    if (cachedJwt && cachedJwtExp - now > 300) return cachedJwt
+    console.warn("OTTER_JWT is expired or near expiry; refreshing via OTTER_EMAIL/OTTER_PASSWORD")
+  }
+
+  // 2. Return cached JWT if still valid (5-minute buffer)
+  if (cachedJwt && cachedJwtExp - now > 300) return cachedJwt
+
+  // 3. Login with email/password
+  return signInForOtterJwt()
+}
+
 const MAX_RETRIES = 3
 const RETRY_BASE_MS = 2000
 
 async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]> {
-  const jwt = await getOtterJwt()
+  let jwt = await getOtterJwt()
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController()
@@ -295,6 +316,11 @@ async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]
       throw err
     }
     clearTimeout(timeout)
+
+    if (response.status === 401 && attempt < MAX_RETRIES) {
+      jwt = await refreshOtterJwtAfterAuthFailure(response.status)
+      continue
+    }
 
     if (response.status === 403 && attempt < MAX_RETRIES) {
       const backoff = RETRY_BASE_MS * attempt
@@ -507,7 +533,7 @@ async function queryOtterGraphQL<T>(
   query: string,
   variables: Record<string, unknown>
 ): Promise<T> {
-  const jwt = await getOtterJwt()
+  let jwt = await getOtterJwt()
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController()
@@ -532,6 +558,11 @@ async function queryOtterGraphQL<T>(
       throw err
     }
     clearTimeout(timeout)
+
+    if (response.status === 401 && attempt < MAX_RETRIES) {
+      jwt = await refreshOtterJwtAfterAuthFailure(response.status)
+      continue
+    }
 
     if (response.status === 403 && attempt < MAX_RETRIES) {
       await new Promise((r) => setTimeout(r, RETRY_BASE_MS * attempt))

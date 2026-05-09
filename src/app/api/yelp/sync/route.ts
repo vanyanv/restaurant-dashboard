@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { getYelpService } from "@/lib/yelp"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { logger } from "@/lib/logger"
 
 // Sync all stores owned by the user
 export async function POST(request: Request) {
@@ -145,7 +146,7 @@ export async function POST(request: Request) {
               reviewCount: null,
               error: error instanceof Error ? error.message : 'Unknown error'
             })
-            console.error(`Failed to sync Yelp data for store ${store.name}:`, error)
+            logger.error(`Failed to sync Yelp data for store ${store.name}:`, error)
           }
         }
 
@@ -160,7 +161,7 @@ export async function POST(request: Request) {
     return NextResponse.json(payload)
 
   } catch (error) {
-    console.error("Yelp sync error:", error)
+    logger.error("Yelp sync error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

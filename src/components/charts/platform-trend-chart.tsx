@@ -4,13 +4,6 @@ import { useMemo } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Line, LineChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
@@ -18,6 +11,7 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 import { formatCurrency, formatDate } from "@/lib/format"
 import type { PlatformTrendPoint } from "@/types/analytics"
 
@@ -31,11 +25,12 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
-  "css-pos": "hsl(var(--chart-1))",
-  "bnm-web": "hsl(var(--chart-2))",
-  doordash: "hsl(var(--chart-3))",
-  ubereats: "hsl(var(--chart-4))",
-  grubhub: "hsl(var(--chart-5))",
+  "css-pos": "var(--ink)",
+  "bnm-web": "var(--ink-muted)",
+  doordash: "var(--platform-doordash)",
+  ubereats: "var(--platform-ubereats)",
+  grubhub: "var(--platform-grubhub)",
+  caviar: "var(--platform-chownow)",
 }
 
 interface PlatformTrendChartProps {
@@ -73,7 +68,7 @@ export function PlatformTrendChart({
     for (const p of platforms) {
       chartConfig[p] = {
         label: PLATFORM_LABELS[p] || p,
-        color: PLATFORM_COLORS[p] || "hsl(var(--primary))",
+        color: PLATFORM_COLORS[p] || "var(--accent)",
       }
     }
 
@@ -85,13 +80,16 @@ export function PlatformTrendChart({
   if (data.length === 0) return null
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="h-[240px] md:h-[280px] lg:h-[300px] w-full">
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">{title}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <ChartContainer config={chartConfig} className="h-[240px] md:h-[280px] lg:h-[300px] w-full">
           <LineChart
             accessibilityLayer
             data={chartData}
@@ -138,7 +136,6 @@ export function PlatformTrendChart({
             ))}
           </LineChart>
         </ChartContainer>
-      </CardContent>
-    </Card>
+    </section>
   )
 }

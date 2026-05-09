@@ -154,7 +154,10 @@ export function AdjustmentDialog({ storeId, ingredients }: Props) {
           </div>
 
           <div>
-            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] block mb-1">
+            <label
+              htmlFor="adjustment-qty"
+              className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] block mb-1"
+            >
               Quantity to remove
               {selectedIngredient && selectedIngredient.recipeUnit ? (
                 <span className="ml-2 normal-case tracking-normal">
@@ -163,6 +166,7 @@ export function AdjustmentDialog({ storeId, ingredients }: Props) {
               ) : null}
             </label>
             <input
+              id="adjustment-qty"
               type="number"
               inputMode="decimal"
               step="any"
@@ -170,20 +174,24 @@ export function AdjustmentDialog({ storeId, ingredients }: Props) {
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               placeholder="0"
-              className="h-9 w-full px-3 border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-none focus:border-[var(--accent)] tabular-nums"
+              className="h-9 w-full px-3 border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-hidden focus-visible:border-(--accent) focus-visible:ring-1 focus-visible:ring-(--accent) tabular-nums"
               style={{ fontVariantNumeric: "tabular-nums lining-nums" }}
             />
           </div>
 
           <div>
-            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] block mb-1">
+            <label
+              htmlFor="adjustment-note"
+              className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] block mb-1"
+            >
               Note (optional)
             </label>
             <textarea
+              id="adjustment-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-none focus:border-[var(--accent)]"
+              className="w-full px-3 py-2 border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-hidden focus-visible:border-(--accent) focus-visible:ring-1 focus-visible:ring-(--accent)"
               placeholder="optional context"
             />
           </div>

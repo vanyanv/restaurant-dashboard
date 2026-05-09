@@ -1,6 +1,14 @@
 "use client"
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -41,7 +49,7 @@ type EnrichedRow = MenuCatalogRow & {
   contribution: number | null
   hasMissingCost: boolean
   searchText: string
-  attention: Set<AttentionKey>
+  attentionMask: number
 }
 
 type SortKey = "name" | "sell" | "cost" | "profit" | "contribution" | "margin"
@@ -52,6 +60,14 @@ const SORT_STORAGE_KEY = "menu-catalog-sort-v1"
 const DEFAULT_SORT: { key: SortKey; dir: SortDir } = {
   key: "profit",
   dir: "desc"
+}
+
+const ATTENTION_BITS: Record<AttentionKey, number> = {
+  missing: 1 << 0,
+  partial: 1 << 1,
+  lowMargin: 1 << 2,
+  topProfit: 1 << 3,
+  noSales: 1 << 4
 }
 
 const ATTENTION_CONFIG: Array<{
@@ -73,12 +89,11 @@ type Props = {
 export function MenuCatalogContent({ rows }: Props) {
   const [query, setQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState<string | "all">("all")
-  const [activeAttention, setActiveAttention] = useState<Set<AttentionKey>>(
-    () => new Set()
-  )
+  const [activeAttention, setActiveAttention] = useState(0)
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>(DEFAULT_SORT)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const deferredQuery = useDeferredValue(query)
+  const router = useRouter()
 
   // Restore sort preference after mount (avoids SSR/client mismatch).
   useEffect(() => {
@@ -118,7 +133,9 @@ export function MenuCatalogContent({ rows }: Props) {
       noSales: 0
     }
     for (const r of enriched) {
-      for (const k of r.attention) counts[k] += 1
+      for (const cfg of ATTENTION_CONFIG) {
+        if (r.attentionMask & ATTENTION_BITS[cfg.key]) counts[cfg.key] += 1
+      }
     }
     return counts
   }, [enriched])
@@ -128,10 +145,8 @@ export function MenuCatalogContent({ rows }: Props) {
     return enriched.filter((r) => {
       if (activeCategory !== "all" && r.category !== activeCategory)
         return false
-      if (activeAttention.size > 0) {
-        for (const a of activeAttention) {
-          if (!r.attention.has(a)) return false
-        }
+      if (activeAttention !== 0) {
+        if ((r.attentionMask & activeAttention) !== activeAttention) return false
       }
       if (!q) return true
       return r.searchText.includes(q)
@@ -142,6 +157,7 @@ export function MenuCatalogContent({ rows }: Props) {
   const rowVirtualizer = useVirtualizer({
     count: sorted.length,
     getScrollElement: () => scrollRef.current,
+    getItemKey: (index) => sorted[index]?.id ?? index,
     estimateSize: () => 78,
     overscan: 8
   })
@@ -161,12 +177,8 @@ export function MenuCatalogContent({ rows }: Props) {
   }, [enriched])
 
   const toggleAttention = (key: AttentionKey) => {
-    setActiveAttention((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+    const bit = ATTENTION_BITS[key]
+    setActiveAttention((prev) => prev ^ bit)
   }
 
   const handleSort = (key: SortKey) => {
@@ -178,6 +190,11 @@ export function MenuCatalogContent({ rows }: Props) {
       return { key, dir: prev.dir === "desc" ? "asc" : "desc" }
     })
   }
+
+  const prefetchItem = useCallback(
+    (id: string) => router.prefetch(`/dashboard/menu/catalog/${id}`),
+    [router]
+  )
 
   return (
     <div className="flex flex-1 flex-col">
@@ -237,14 +254,14 @@ export function MenuCatalogContent({ rows }: Props) {
                 label={cfg.label}
                 count={attentionCounts[cfg.key]}
                 tone={cfg.tone}
-                active={activeAttention.has(cfg.key)}
+                active={(activeAttention & ATTENTION_BITS[cfg.key]) !== 0}
                 onClick={() => toggleAttention(cfg.key)}
               />
             ))}
-            {activeAttention.size > 0 && (
+            {activeAttention !== 0 && (
               <button
                 type="button"
-                onClick={() => setActiveAttention(new Set())}
+                onClick={() => setActiveAttention(0)}
                 className="toolbar-btn menu-filter-clear"
               >
                 Clear attention
@@ -257,7 +274,7 @@ export function MenuCatalogContent({ rows }: Props) {
       <div
         ref={scrollRef}
         data-perf-scroll
-        className="flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-5 sm:px-8 sm:py-7"
+        className="menu-catalog-scroll flex-1 overflow-y-auto bg-[var(--paper)] px-4 py-5 sm:px-8 sm:py-7"
       >
         <div className="menu-catalog-workbench dock-in dock-in-2">
           <label className="search-shell menu-catalog-search">
@@ -309,7 +326,11 @@ export function MenuCatalogContent({ rows }: Props) {
                   className="absolute left-0 top-0 w-full"
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <MenuRow row={r} showCategory={activeCategory === "all"} />
+                  <MenuRow
+                    row={r}
+                    showCategory={activeCategory === "all"}
+                    onPrefetch={prefetchItem}
+                  />
                 </li>
               )
             })}
@@ -349,7 +370,7 @@ function enrichRows(rows: MenuCatalogRow[]): EnrichedRow[] {
       profit30d,
       contribution: null,
       searchText: `${r.itemName} ${r.category}`.toLowerCase(),
-      attention: new Set<AttentionKey>()
+      attentionMask: 0
     }
   })
 
@@ -367,13 +388,14 @@ function enrichRows(rows: MenuCatalogRow[]): EnrichedRow[] {
   )
 
   for (const r of derived) {
-    const attention = new Set<AttentionKey>()
-    if (r.hasMissingCost) attention.add("missing")
-    if (r.partialCost && !r.hasMissingCost) attention.add("partial")
-    if (r.marginPct != null && r.marginPct < 50) attention.add("lowMargin")
-    if (topProfitIds.has(r.id)) attention.add("topProfit")
-    if (r.qtySold === 0) attention.add("noSales")
-    r.attention = attention
+    let attentionMask = 0
+    if (r.hasMissingCost) attentionMask |= ATTENTION_BITS.missing
+    if (r.partialCost && !r.hasMissingCost) attentionMask |= ATTENTION_BITS.partial
+    if (r.marginPct != null && r.marginPct < 50)
+      attentionMask |= ATTENTION_BITS.lowMargin
+    if (topProfitIds.has(r.id)) attentionMask |= ATTENTION_BITS.topProfit
+    if (r.qtySold === 0) attentionMask |= ATTENTION_BITS.noSales
+    r.attentionMask = attentionMask
     r.contribution =
       totalProfit > 0 && r.profit30d != null && r.profit30d > 0
         ? (r.profit30d / totalProfit) * 100
@@ -570,12 +592,14 @@ function SortHeader({
   )
 }
 
-function MenuRow({
+const MenuRow = memo(function MenuRow({
   row,
-  showCategory
+  showCategory,
+  onPrefetch
 }: {
   row: EnrichedRow
   showCategory: boolean
+  onPrefetch: (id: string) => void
 }) {
   const {
     computedCost: cost,
@@ -584,15 +608,14 @@ function MenuRow({
     profit30d,
     contribution
   } = row
-  const router = useRouter()
   const href = `/dashboard/menu/catalog/${row.id}`
 
   return (
     <Link
       href={href}
       prefetch={false}
-      onMouseEnter={() => router.prefetch(href)}
-      onFocus={() => router.prefetch(href)}
+      onMouseEnter={() => onPrefetch(row.id)}
+      onFocus={() => onPrefetch(row.id)}
       className="inv-row menu-row group"
     >
       <div className="menu-row__item min-w-0">
@@ -688,4 +711,4 @@ function MenuRow({
       <ChevronRight className="inv-row__chev menu-row__chevron h-4 w-4" />
     </Link>
   )
-}
+})

@@ -70,6 +70,21 @@
   position: relative;
 }
 
+/* The colored thread under the masthead — a single tonal echo of the
+   Chris N Eddy's wordmark gold. Sits 2px below the hairline-bold rule
+   so the two lines read as a paired newspaper nameplate edge, not as
+   a bordered card. */
+.editorial-brand::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: -3px;
+  height: 1px;
+  background: var(--brand-gold-soft);
+  pointer-events: none;
+}
+
 .editorial-brand .brand-issue {
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 9px;
@@ -4429,6 +4444,12 @@
   white-space: nowrap;
 }
 
+.menu-catalog-scroll {
+  overscroll-behavior: contain;
+  contain: layout paint;
+  scrollbar-gutter: stable;
+}
+
 .menu-ledger-head,
 .menu-row {
   grid-template-columns:
@@ -4455,6 +4476,7 @@
 
 .menu-catalog-list {
   border-bottom: 1px solid var(--hairline);
+  contain: layout paint;
 }
 
 .menu-row {
@@ -4463,6 +4485,7 @@
   align-items: start;
   padding: 15px 20px;
   border-top: 1px solid var(--hairline);
+  contain: layout paint;
 }
 
 .menu-catalog-list > li:first-child .menu-row {
@@ -5949,4 +5972,237 @@
   }
 }
 
+/* ────────────────────────────────────────────────────────────────────
+   Forecasts page — briefing block, section ribbon, section masthead.
+   Editorial-system aligned: hairlines, no shadows, two-tier type,
+   proofmark red on state only.
+   ──────────────────────────────────────────────────────────────────── */
+
+.forecasts-briefing {
+  padding: 16px 20px 18px;
+}
+
+.forecasts-briefing__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.forecasts-briefing__line {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--hairline);
+  color: var(--ink);
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+
+.forecasts-briefing__line:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.forecasts-briefing__line:last-child {
+  padding-bottom: 0;
+}
+
+.forecasts-briefing__glyph {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--ink-faint);
+  user-select: none;
+}
+
+.forecasts-briefing__body {
+  color: var(--ink-muted);
+}
+
+.forecasts-briefing__num {
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.forecasts-briefing__line.is-watch .forecasts-briefing__num {
+  color: var(--ink);
+}
+
+.forecasts-briefing__line.is-urgent .forecasts-briefing__glyph,
+.forecasts-briefing__line.is-urgent .forecasts-briefing__num {
+  color: var(--accent);
+}
+
+.forecasts-briefing__line.is-urgent .forecasts-briefing__body {
+  color: var(--ink);
+}
+
+.forecasts-briefing__empty {
+  margin: 4px 0 0;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-weight: 450;
+  font-size: 18px;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+  color: var(--ink-muted);
+  font-variation-settings: "opsz" 96, "SOFT" 50;
+}
+
+/* Sticky section ribbon directly below the topbar. ──────────────────── */
+
+.forecasts-ribbon {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(251, 246, 238, 0.92);
+  backdrop-filter: saturate(140%) blur(6px);
+  border-top: 1px solid var(--hairline-bold);
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.forecasts-ribbon__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 24px;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.forecasts-ribbon__list::-webkit-scrollbar {
+  display: none;
+}
+
+.forecasts-ribbon__item-wrap {
+  display: flex;
+}
+
+.forecasts-ribbon__item-wrap + .forecasts-ribbon__item-wrap::before {
+  content: "·";
+  align-self: center;
+  color: var(--ink-faint);
+  padding: 0 6px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+.forecasts-ribbon__item {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 11px 8px 10px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 140ms ease;
+}
+
+.forecasts-ribbon__item:hover {
+  color: var(--ink);
+}
+
+.forecasts-ribbon__item::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: bottom center;
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.forecasts-ribbon__item.is-active {
+  color: var(--accent-dark);
+}
+
+.forecasts-ribbon__item.is-active::after {
+  transform: scaleY(1);
+}
+
+.forecasts-ribbon__item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.forecasts-ribbon__marker {
+  color: var(--ink-faint);
+  letter-spacing: 0;
+}
+
+.forecasts-ribbon__item.is-active .forecasts-ribbon__marker {
+  color: var(--accent);
+}
+
+/* Section masthead — opens each filtered section.  ───────────────────── */
+
+.forecasts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.forecasts-section-masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.forecasts-section-masthead__title {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 26px;
+  line-height: 1.05;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  font-variation-settings: "opsz" 96, "SOFT" 50;
+}
+
+.forecasts-section-masthead__title-mark {
+  color: var(--accent-dark);
+  font-style: normal;
+  margin-right: 6px;
+}
+
+.forecasts-section-masthead__meta {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 720px) {
+  .forecasts-ribbon__list {
+    padding: 0 12px;
+  }
+  .forecasts-section-masthead__title {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forecasts-ribbon__item::after,
+  .forecasts-ribbon__item {
+    transition: none;
+  }
+}
 

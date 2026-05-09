@@ -2,7 +2,10 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
+import { MotionConfig } from "framer-motion"
 import { useState, type ReactNode } from "react"
+
+const SHOW_DEVTOOLS = process.env.NODE_ENV === "development"
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -19,8 +22,8 @@ export function QueryProvider({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
-      <ReactQueryDevtools initialIsOpen={false} />
+      <MotionConfig reducedMotion="user">{children}</MotionConfig>
+      {SHOW_DEVTOOLS ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </QueryClientProvider>
   )
 }

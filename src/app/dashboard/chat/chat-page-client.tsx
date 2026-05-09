@@ -1,14 +1,26 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useRef, useState } from "react"
 import type { UIMessage } from "ai"
 import { useChatDrawer } from "@/components/chat/chat-drawer-context"
-import { ChatThread } from "@/components/chat/chat-thread"
 import {
   hydrateConversationMessages,
   type SavedMessage,
 } from "@/lib/chat/hydrate-messages"
 import "./chat-page.css"
+
+const ChatThread = dynamic(
+  () => import("@/components/chat/chat-thread").then((m) => ({ default: m.ChatThread })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="chat-page__thread-loading" aria-live="polite">
+        Preparing the ledger.
+      </div>
+    ),
+  },
+)
 
 interface ConversationSummary {
   id: string
@@ -196,7 +208,7 @@ export function ChatPageClient({ initialConversations }: Props) {
     <div className="chat-page">
       <aside className="chat-page__rail">
         <div className="chat-page__rail-head">
-          <div className="chat-drawer__dept">Conversations</div>
+          <h1 className="chat-drawer__dept m-0 font-normal">Conversations</h1>
           <div className="chat-drawer__header-actions">
             <button
               type="button"

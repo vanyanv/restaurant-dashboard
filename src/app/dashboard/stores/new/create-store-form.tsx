@@ -65,7 +65,6 @@ export function CreateStoreForm() {
       router.refresh()
       
     } catch (error) {
-      console.error("Error creating store:", error)
       toast.error("Failed to create store", {
         description: error instanceof Error ? error.message : "Please try again.",
       })

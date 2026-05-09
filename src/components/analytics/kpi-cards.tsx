@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency, formatPct, formatNumber } from "@/lib/format"
 import type { StoreAnalyticsKpis, PeriodComparison } from "@/types/analytics"
 import { TrendingUp, TrendingDown } from "lucide-react"
@@ -14,30 +13,10 @@ interface KpiCardsProps {
 }
 
 const CARDS = [
-  {
-    key: "netSales" as const,
-    label: "Net Sales",
-    borderColor: "hsl(0, 72%, 51%)",
-    bgTint: "hsl(0, 72%, 51%, 0.04)",
-  },
-  {
-    key: "grossSales" as const,
-    label: "Gross Sales",
-    borderColor: "hsl(20, 91%, 48%)",
-    bgTint: "hsl(20, 91%, 48%, 0.04)",
-  },
-  {
-    key: "totalOrders" as const,
-    label: "Total Orders",
-    borderColor: "hsl(221, 83%, 53%)",
-    bgTint: "hsl(221, 83%, 53%, 0.04)",
-  },
-  {
-    key: "aov" as const,
-    label: "Average Order Value",
-    borderColor: "hsl(142, 71%, 45%)",
-    bgTint: "hsl(142, 71%, 45%, 0.04)",
-  },
+  { key: "netSales" as const, label: "Net Sales" },
+  { key: "grossSales" as const, label: "Gross Sales" },
+  { key: "totalOrders" as const, label: "Total Orders" },
+  { key: "aov" as const, label: "Average Order Value" },
 ]
 
 export function KpiCards({ kpis, comparison }: KpiCardsProps) {
@@ -77,47 +56,38 @@ export function KpiCards({ kpis, comparison }: KpiCardsProps) {
         const isPositive = hasGrowth && growth >= 0
 
         return (
-          <motion.div
+          <motion.section
             key={card.key}
+            className="inv-panel inv-panel--flush relative overflow-hidden"
             initial={hasAnimated.current ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: hasAnimated.current ? 0 : index * 0.08, ease: "easeOut" }}
             onAnimationComplete={() => { hasAnimated.current = true }}
           >
-            <Card
-              className="relative overflow-hidden border-t-[3px] py-3"
-              style={{
-                borderTopColor: card.borderColor,
-                backgroundColor: card.bgTint,
-              }}
-            >
-              <CardContent className="p-3">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {card.label}
-                </span>
-                <div className="mt-1 font-mono-numbers text-xl font-bold tracking-tight sm:text-2xl">
-                  {getValue(card.key)}
+            <div className="px-4 py-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+                {card.label}
+              </span>
+              <div className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl text-(--ink)">
+                {getValue(card.key)}
+              </div>
+              {hasGrowth && (
+                <div
+                  className={cn(
+                    "mt-1.5 inline-flex items-center gap-1 rounded-xs border border-(--hairline-bold) bg-(--accent-bg) px-2 py-0.5 text-xs font-medium tabular-nums",
+                    isPositive ? "text-(--accent-dark)" : "text-(--accent)"
+                  )}
+                >
+                  {isPositive ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3" />
+                  )}
+                  {formatPct(growth)} vs prior period
                 </div>
-                {hasGrowth && (
-                  <div
-                    className={cn(
-                      "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                      isPositive
-                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-                        : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"
-                    )}
-                  >
-                    {isPositive ? (
-                      <TrendingUp className="h-3 w-3" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3" />
-                    )}
-                    {formatPct(growth)} vs prior period
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
+              )}
+            </div>
+          </motion.section>
         )
       })}
     </div>

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import type { SyncProgressEvent } from "@/types/sync"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { bustTags } from "@/lib/cache/cached"
+import { logger } from "@/lib/logger"
 import {
   runMetricsSyncForStore,
   type MetricsSyncResult,
@@ -145,7 +146,7 @@ async function runSyncAllStores(
         onProgress: wrapEmit,
       })
     } catch (err) {
-      console.error(`[otter.metrics.sync] store ${sid} failed:`, err)
+      logger.error(`[otter.metrics.sync] store ${sid} failed:`, err)
       // Don't abort the loop on a single store's failure — continue with the
       // others so one bad store can't lock out the dashboard. Per-store
       // JobRun row already captured the FAILURE inside the runner.
@@ -254,7 +255,7 @@ export async function POST(request: NextRequest) {
         try {
           await runSyncAllStores(emit, triggeredBy)
         } catch (error) {
-          console.error("Otter sync error:", error)
+          logger.error("Otter sync error:", error)
           emit({
             phase: "error",
             status: "error",
@@ -284,7 +285,7 @@ export async function POST(request: NextRequest) {
     const result = await runSyncAllStores(() => {}, triggeredBy)
     return NextResponse.json(result)
   } catch (error) {
-    console.error("Otter sync error:", error)
+    logger.error("Otter sync error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 },

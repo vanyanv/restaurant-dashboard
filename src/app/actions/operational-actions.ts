@@ -5,23 +5,14 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getStores } from "./store-actions"
 import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
-import { getISOWeek, getISOWeekYear, startOfISOWeek, endOfISOWeek, format } from "date-fns"
+import {
+  bucketDailyToWeekly,
+  shapeCategoryBreakdown,
+} from "@/lib/operational-analytics-aggregation"
 import type {
   OperationsData,
-  WeeklyBucket,
-  CategorySpending,
   OperationsKpis,
 } from "@/types/operations"
-
-function dateToWeekKey(d: Date): string {
-  const y = getISOWeekYear(d)
-  const w = getISOWeek(d)
-  return `${y}-W${String(w).padStart(2, "0")}`
-}
-
-function shortWeekLabel(d: Date): string {
-  return `W${String(getISOWeek(d)).padStart(2, "0")}`
-}
 
 export async function getOperationalAnalytics(
   storeId?: string,
@@ -35,7 +26,6 @@ export async function getOperationalAnalytics(
 
   const storeIds = storeId ? [storeId] : stores.map((s) => s.id)
 
-  // Determine date range
   const days = options?.days ?? 30
   let rangeStart: Date
   let rangeEnd: Date
@@ -57,144 +47,133 @@ export async function getOperationalAnalytics(
     }
   }
 
-  const dayCount = Math.max(1, Math.ceil(
-    (rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)
-  ))
+  const dayCount = Math.max(
+    1,
+    Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24))
+  )
 
-  // Previous period for comparison
   const prevEnd = new Date(rangeStart.getTime() - 1)
   const prevStart = new Date(prevEnd)
   prevStart.setDate(prevStart.getDate() - dayCount)
   prevStart.setHours(0, 0, 0, 0)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invoiceWhereCurrent: any = {
-    accountId: session.user.accountId,
+  const accountId = session.user.accountId
+  const invoiceWhereCurrent = {
+    accountId,
     invoiceDate: { not: null, gte: rangeStart, lte: rangeEnd },
-  }
-  if (storeId) invoiceWhereCurrent.storeId = storeId
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invoiceWherePrevious: any = {
-    accountId: session.user.accountId,
+    ...(storeId ? { storeId } : {}),
+  } as const
+  const invoiceWherePrevious = {
+    accountId,
     invoiceDate: { not: null, gte: prevStart, lte: prevEnd },
-  }
-  if (storeId) invoiceWherePrevious.storeId = storeId
+    ...(storeId ? { storeId } : {}),
+  } as const
 
-  // 5 parallel queries
-  const [otterCurrent, otterPrevious, invoicesCurrent, invoicesPrevious, lineItemsCurrent] =
-    await Promise.all([
-      prisma.otterDailySummary.findMany({
-        where: { storeId: { in: storeIds }, date: { gte: rangeStart, lte: rangeEnd } },
-      }),
-      prisma.otterDailySummary.findMany({
-        where: { storeId: { in: storeIds }, date: { gte: prevStart, lte: prevEnd } },
-      }),
-      prisma.invoice.findMany({
-        where: invoiceWhereCurrent,
-        select: { totalAmount: true, invoiceDate: true, storeId: true },
-      }),
-      prisma.invoice.findMany({
-        where: invoiceWherePrevious,
-        select: { totalAmount: true },
-      }),
-      prisma.invoiceLineItem.findMany({
-        where: { invoice: invoiceWhereCurrent },
-        select: { category: true, extendedPrice: true },
-      }),
-    ])
+  const [
+    otterCurrentByDay,
+    otterPreviousAgg,
+    invoicesCurrentByDay,
+    invoicesPreviousAgg,
+    lineItemCategoryAgg,
+  ] = await Promise.all([
+    prisma.otterDailySummary.groupBy({
+      by: ["date"],
+      where: { storeId: { in: storeIds }, date: { gte: rangeStart, lte: rangeEnd } },
+      _sum: {
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpOrderCount: true,
+        tpOrderCount: true,
+      },
+    }),
+    prisma.otterDailySummary.aggregate({
+      where: { storeId: { in: storeIds }, date: { gte: prevStart, lte: prevEnd } },
+      _sum: {
+        fpGrossSales: true,
+        tpGrossSales: true,
+        fpOrderCount: true,
+        tpOrderCount: true,
+      },
+    }),
+    prisma.invoice.groupBy({
+      by: ["invoiceDate"],
+      where: invoiceWhereCurrent,
+      _sum: { totalAmount: true },
+    }),
+    prisma.invoice.aggregate({
+      where: invoiceWherePrevious,
+      _sum: { totalAmount: true },
+    }),
+    prisma.invoiceLineItem.groupBy({
+      by: ["category"],
+      where: { invoice: invoiceWhereCurrent },
+      _sum: { extendedPrice: true },
+    }),
+  ])
 
-  // Build weekly buckets
-  const bucketMap = new Map<string, {
-    weekLabel: string; weekStart: string; weekEnd: string
-    spending: number; revenue: number; orders: number
-  }>()
+  const weeklyBuckets = bucketDailyToWeekly(
+    otterCurrentByDay.map((r) => ({
+      date: r.date,
+      revenue: (r._sum.fpGrossSales ?? 0) + (r._sum.tpGrossSales ?? 0),
+      orders: (r._sum.fpOrderCount ?? 0) + (r._sum.tpOrderCount ?? 0),
+    })),
+    invoicesCurrentByDay
+      .filter((r): r is { invoiceDate: Date; _sum: { totalAmount: number | null } } =>
+        r.invoiceDate !== null
+      )
+      .map((r) => ({
+        date: r.invoiceDate,
+        spending: r._sum.totalAmount ?? 0,
+      }))
+  )
 
-  function ensureBucket(d: Date) {
-    const key = dateToWeekKey(d)
-    if (!bucketMap.has(key)) {
-      const ws = startOfISOWeek(d)
-      const we = endOfISOWeek(d)
-      bucketMap.set(key, {
-        weekLabel: shortWeekLabel(d),
-        weekStart: format(ws, "yyyy-MM-dd"),
-        weekEnd: format(we, "yyyy-MM-dd"),
-        spending: 0, revenue: 0, orders: 0,
-      })
-    }
-    return key
-  }
-
-  // Populate from Otter (revenue + orders)
-  for (const row of otterCurrent) {
-    const key = ensureBucket(row.date)
-    const b = bucketMap.get(key)!
-    b.revenue += (row.fpGrossSales ?? 0) + (row.tpGrossSales ?? 0)
-    b.orders += (row.fpOrderCount ?? 0) + (row.tpOrderCount ?? 0)
-  }
-
-  // Populate from invoices (spending)
-  for (const inv of invoicesCurrent) {
-    if (!inv.invoiceDate) continue
-    const key = ensureBucket(inv.invoiceDate)
-    bucketMap.get(key)!.spending += inv.totalAmount
-  }
-
-  // Convert to sorted array
-  const weeklyBuckets: WeeklyBucket[] = Array.from(bucketMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, b]) => ({
-      weekLabel: b.weekLabel,
-      weekStart: b.weekStart,
-      weekEnd: b.weekEnd,
-      totalSpending: b.spending,
-      totalRevenue: b.revenue,
-      totalOrders: b.orders,
-      costPerOrder: b.orders > 0 ? b.spending / b.orders : 0,
-      grossMarginPct: b.revenue > 0 ? ((b.revenue - b.spending) / b.revenue) * 100 : null,
-      cogsRatioPct: b.revenue > 0 ? (b.spending / b.revenue) * 100 : null,
+  const categoryBreakdown = shapeCategoryBreakdown(
+    lineItemCategoryAgg.map((r) => ({
+      category: r.category,
+      totalSpend: r._sum.extendedPrice ?? 0,
     }))
+  )
 
-  // Category breakdown from line items
-  const catMap: Record<string, number> = {}
-  for (const li of lineItemsCurrent) {
-    const cat = li.category ?? "Other"
-    catMap[cat] = (catMap[cat] ?? 0) + li.extendedPrice
-  }
-  const totalCatSpend = Object.values(catMap).reduce((s, v) => s + v, 0)
-  const categoryBreakdown: CategorySpending[] = Object.entries(catMap)
-    .map(([category, totalSpend]) => ({
-      category,
-      totalSpend,
-      percentOfTotal: totalCatSpend > 0 ? (totalSpend / totalCatSpend) * 100 : 0,
-    }))
-    .sort((a, b) => b.totalSpend - a.totalSpend)
+  const currentRevenue =
+    otterCurrentByDay.reduce(
+      (s, r) => s + (r._sum.fpGrossSales ?? 0) + (r._sum.tpGrossSales ?? 0),
+      0
+    )
+  const currentOrders =
+    otterCurrentByDay.reduce(
+      (s, r) => s + (r._sum.fpOrderCount ?? 0) + (r._sum.tpOrderCount ?? 0),
+      0
+    )
+  const currentSpending = invoicesCurrentByDay.reduce(
+    (s, r) => s + (r._sum.totalAmount ?? 0),
+    0
+  )
 
-  // Compute KPIs + comparison
-  function computeKpis(
-    otterRows: typeof otterCurrent,
-    invRows: { totalAmount: number }[]
+  const previousRevenue =
+    (otterPreviousAgg._sum.fpGrossSales ?? 0) +
+    (otterPreviousAgg._sum.tpGrossSales ?? 0)
+  const previousOrders =
+    (otterPreviousAgg._sum.fpOrderCount ?? 0) +
+    (otterPreviousAgg._sum.tpOrderCount ?? 0)
+  const previousSpending = invoicesPreviousAgg._sum.totalAmount ?? 0
+
+  function kpis(
+    revenue: number,
+    orders: number,
+    spending: number
   ): OperationsKpis {
-    const totalRevenue = otterRows.reduce(
-      (s, r) => s + (r.fpGrossSales ?? 0) + (r.tpGrossSales ?? 0), 0
-    )
-    const totalOrders = otterRows.reduce(
-      (s, r) => s + (r.fpOrderCount ?? 0) + (r.tpOrderCount ?? 0), 0
-    )
-    const totalSpending = invRows.reduce((s, r) => s + r.totalAmount, 0)
     return {
-      costPerOrder: totalOrders > 0 ? totalSpending / totalOrders : 0,
-      grossMarginPct: totalRevenue > 0
-        ? ((totalRevenue - totalSpending) / totalRevenue) * 100
-        : null,
-      totalSpending,
-      totalRevenue,
-      totalOrders,
+      costPerOrder: orders > 0 ? spending / orders : 0,
+      grossMarginPct:
+        revenue > 0 ? ((revenue - spending) / revenue) * 100 : null,
+      totalSpending: spending,
+      totalRevenue: revenue,
+      totalOrders: orders,
     }
   }
 
-  const current = computeKpis(otterCurrent, invoicesCurrent)
-  const previous = computeKpis(otterPrevious, invoicesPrevious)
+  const current = kpis(currentRevenue, currentOrders, currentSpending)
+  const previous = kpis(previousRevenue, previousOrders, previousSpending)
 
   const pctChange = (cur: number, prev: number) =>
     prev > 0 ? ((cur - prev) / prev) * 100 : null

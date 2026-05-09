@@ -22,9 +22,9 @@ export function EditorialTopbar({
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-1 h-4" />
         <span className="editorial-section-label">{section}</span>
-        <span className="font-display text-[18px] italic leading-none tracking-[-0.02em]">
+        <h1 className="font-display text-[18px] italic leading-none tracking-[-0.02em] m-0 font-normal">
           {title}
-        </span>
+        </h1>
         {stamps ? (
           <span className="ml-3 hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] sm:flex">
             <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />

@@ -52,6 +52,7 @@ export function StoreAnalyticsShell({
 
   return (
     <div>
+      <h1 className="sr-only">{store.name} analytics</h1>
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
@@ -76,7 +77,7 @@ export function StoreAnalyticsShell({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/analytics">
+          <Link href="/dashboard/analytics" aria-label="Back to analytics">
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <ArrowLeft className="h-4 w-4" />
             </Button>

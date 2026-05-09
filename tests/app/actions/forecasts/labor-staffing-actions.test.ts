@@ -18,11 +18,11 @@ vi.mock("@/lib/prisma", () => ({
 
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma"
+import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import {
-  getLaborStaffingForecast,
   COVERS_PER_STAFF_HOUR,
   MIN_STAFF,
-} from "@/app/actions/forecasts/labor-staffing-actions"
+} from "@/app/actions/forecasts/labor-staffing-constants"
 
 const sessionWith = (overrides: Record<string, unknown> = {}) => ({
   user: { id: "u1", accountId: "acct-A", ...overrides },

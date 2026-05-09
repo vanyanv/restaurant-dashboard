@@ -11,7 +11,7 @@ export function getChatOpenAIClient(): OpenAI {
 }
 
 export const CHAT_ROUTING_MODEL =
-  process.env.CHAT_ROUTING_MODEL ?? "gpt-4.1-mini"
+  process.env.CHAT_ROUTING_MODEL ?? "gpt-5-mini"
 export const CHAT_TITLE_MODEL =
   process.env.CHAT_TITLE_MODEL ?? "gpt-4.1-nano"
 export const CHAT_EMBEDDING_MODEL = "text-embedding-3-small"

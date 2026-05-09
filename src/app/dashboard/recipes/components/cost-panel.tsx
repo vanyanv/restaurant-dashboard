@@ -96,7 +96,7 @@ export function CostPanel({
 
         {/* Missing cost warning */}
         {missing > 0 && (
-          <div className="mt-5 flex items-start gap-2 border-l-2 border-[var(--accent)] bg-[var(--accent-bg)] px-3 py-2.5">
+          <div className="mt-5 flex items-start gap-2 border border-(--hairline-bold) bg-(--accent-bg) px-3 py-2.5">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-dark)]" />
             <div className="text-[11px] leading-snug text-[var(--accent-dark)]">
               <strong className="font-semibold">

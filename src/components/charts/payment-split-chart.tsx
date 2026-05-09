@@ -2,17 +2,11 @@
 
 import { Pie, PieChart, Cell } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 
 interface PaymentSplitChartProps {
   data: {
@@ -36,11 +30,11 @@ export function PaymentSplitChart({
   const chartConfig = {
     cash: {
       label: "Cash",
-      color: "hsl(var(--primary))",
+      color: "var(--ink)",
     },
     card: {
       label: "Card",
-      color: "hsl(var(--primary) / 0.5)",
+      color: "var(--accent)",
     },
   }
 
@@ -60,13 +54,16 @@ export function PaymentSplitChart({
   const cardPct = 100 - cashPct
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[200px] md:max-h-[250px]">
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">{title}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[200px] md:max-h-[250px]">
           <PieChart>
             <ChartTooltip
               content={
@@ -93,19 +90,18 @@ export function PaymentSplitChart({
             </Pie>
           </PieChart>
         </ChartContainer>
-        <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-cash)" }} />
-            <span className="text-muted-foreground">Cash</span>
-            <span className="font-medium">{cashPct}% ({formatCurrency(data.cashSales)})</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: "var(--color-card)" }} />
-            <span className="text-muted-foreground">Card</span>
-            <span className="font-medium">{cardPct}% ({formatCurrency(data.cardSales)})</span>
-          </div>
+      <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3" style={{ backgroundColor: "var(--color-cash)" }} />
+          <span className="text-(--ink-muted)">Cash</span>
+          <span className="font-medium tabular-nums">{cashPct}% ({formatCurrency(data.cashSales)})</span>
         </div>
-      </CardContent>
-    </Card>
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3" style={{ backgroundColor: "var(--color-card)" }} />
+          <span className="text-(--ink-muted)">Card</span>
+          <span className="font-medium tabular-nums">{cardPct}% ({formatCurrency(data.cardSales)})</span>
+        </div>
+      </div>
+    </section>
   )
 }

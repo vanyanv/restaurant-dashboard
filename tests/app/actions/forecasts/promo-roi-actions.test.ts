@@ -8,8 +8,8 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    store: { findFirst: vi.fn() },
-    otterDailySummary: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
+    store: { findFirst: vi.fn(), findMany: vi.fn() },
   },
 }))
 
@@ -23,6 +23,7 @@ const sessionWith = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
 })
 
 interface DayFixture {
@@ -64,7 +65,7 @@ describe("getPromoRoi", () => {
 
   it("returns no_data when there are no daily-summary rows", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue([] as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
     expect(await getPromoRoi({})).toEqual({ ok: false, error: "no_data" })
   })
 
@@ -86,7 +87,7 @@ describe("getPromoRoi", () => {
       { date: "2026-04-20", fpNet: 700, fpGross: 700 },
       { date: "2026-04-27", fpNet: 700, fpGross: 700 },
     ]
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue(
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
       fixtures.map(row) as never,
     )
 
@@ -106,16 +107,14 @@ describe("getPromoRoi", () => {
 
   it("aggregates across FP+3P platforms within a single date", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    // Two summary rows on the same Saturday: one css-pos, one doordash.
     const fixtures: DayFixture[] = [
       { date: "2026-04-04", fpNet: 800, fpGross: 800 },
       { date: "2026-04-11", fpNet: 800, fpGross: 800 },
       { date: "2026-04-18", fpNet: 800, fpGross: 800 },
       { date: "2026-04-25", fpNet: 800, fpGross: 800 },
-      { date: "2026-05-02", fpNet: 600, fpGross: 700, fpDisc: 100 },
-      { date: "2026-05-02", tpNet: 400, tpGross: 500, tpDisc: 100 },
+      { date: "2026-05-02", fpNet: 600, fpGross: 700, fpDisc: 100, tpNet: 400, tpGross: 500, tpDisc: 100 },
     ]
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue(
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
       fixtures.map(row) as never,
     )
     const result = await getPromoRoi({
@@ -142,7 +141,7 @@ describe("getPromoRoi", () => {
         fpDisc: 5,
       }
     })
-    vi.mocked(prisma.otterDailySummary.findMany).mockResolvedValue(
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
       fixtures.map(row) as never,
     )
     const result = await getPromoRoi({

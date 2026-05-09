@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getYelpService } from "@/lib/yelp"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { logger } from "@/lib/logger"
 
 // Sync specific store
 export async function POST(
@@ -97,7 +98,7 @@ export async function POST(
       })
 
     } catch (error) {
-      console.error(`Failed to sync Yelp data for store ${store.name}:`, error)
+      logger.error(`Failed to sync Yelp data for store ${store.name}:`, error)
       
       // Still update the lastSearch timestamp to prevent immediate retries
       await prisma.store.update({
@@ -121,7 +122,7 @@ export async function POST(
     }
 
   } catch (error) {
-    console.error("Yelp sync error:", error)
+    logger.error("Yelp sync error:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

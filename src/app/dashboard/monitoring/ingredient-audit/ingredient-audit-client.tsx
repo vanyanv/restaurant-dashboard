@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   Check,
   Clipboard,
@@ -125,6 +126,14 @@ export function IngredientAuditClient({ rows }: Props) {
       return haystack.includes(q)
     })
   }, [filters, rows])
+
+  const rowsViewportRef = useRef<HTMLDivElement | null>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => rowsViewportRef.current,
+    estimateSize: () => 84,
+    overscan: 8,
+  })
 
   const selectedRows = useMemo(
     () => rows.filter((row) => selected[row.rowId]),
@@ -289,17 +298,37 @@ export function IngredientAuditClient({ rows }: Props) {
             <span>Status</span>
             <span className="text-right">PDF</span>
           </div>
-          <div className="max-h-[calc(100vh-320px)] min-h-[520px] overflow-auto">
-            {filtered.map((row) => (
-              <AuditRow
-                key={row.rowId}
-                row={row}
-                selected={Boolean(selected[row.rowId])}
-                pdfActive={pdfRowId === row.rowId}
-                onToggle={() => toggleRow(row)}
-                onOpenPdf={() => setPdfRowId(row.rowId)}
-              />
-            ))}
+          <div
+            ref={rowsViewportRef}
+            className="max-h-[calc(100vh-320px)] min-h-[520px] overflow-auto"
+          >
+            <div
+              className="relative"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = filtered[virtualRow.index]
+                if (!row) return null
+                return (
+                  <div
+                    key={row.rowId}
+                    className="absolute left-0 top-0 w-full"
+                    style={{
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <AuditRow
+                      row={row}
+                      selected={Boolean(selected[row.rowId])}
+                      pdfActive={pdfRowId === row.rowId}
+                      onToggle={() => toggleRow(row)}
+                      onOpenPdf={() => setPdfRowId(row.rowId)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </section>
 

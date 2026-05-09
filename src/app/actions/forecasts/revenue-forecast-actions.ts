@@ -22,7 +22,8 @@ export interface RevenueForecastDay {
 }
 
 export interface RevenueForecastData {
-  storeId: string
+  /** Null when aggregating across all stores in the account. */
+  storeId: string | null
   storeName: string
   /** Most recent forecast generation timestamp; null when no forecasts exist. */
   generatedAt: Date | null
@@ -36,15 +37,12 @@ export type GetRevenueForecastResult =
   | { ok: false; error: "store_not_in_account" }
 
 /**
- * Read the latest 14-day daily revenue forecast for a store. Returns an
- * empty `days` array when the pipeline has not produced any forecasts yet —
- * the dashboard shows an "awaiting first run" empty state in that case.
- *
- * The Python pipeline writes a fresh row per (storeId, forecastDate) on
- * every run, so we keep only the latest `generatedAt` per (date, hour=0).
+ * Read the latest 14-day daily revenue forecast. When `storeId` is supplied,
+ * scopes to that single store; when omitted, sums across every active store
+ * in the user's account ("All stores" portfolio view).
  */
 export async function getRevenueForecast(input: {
-  storeId: string
+  storeId?: string
   horizonDays?: number
   asOf?: Date
 }): Promise<GetRevenueForecastResult | null> {
@@ -52,12 +50,28 @@ export async function getRevenueForecast(input: {
   const user = session?.user ?? null
   if (!user) return null
 
-  const store = await prisma.store.findUnique({
-    where: { id: input.storeId },
-    select: { id: true, name: true, accountId: true },
-  })
-  if (!store || store.accountId !== user.accountId) {
-    return { ok: false, error: "store_not_in_account" }
+  let storeIds: string[]
+  let storeName: string
+  let storeIdOut: string | null
+  if (input.storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: input.storeId },
+      select: { id: true, name: true, accountId: true },
+    })
+    if (!store || store.accountId !== user.accountId) {
+      return { ok: false, error: "store_not_in_account" }
+    }
+    storeIds = [store.id]
+    storeName = store.name
+    storeIdOut = store.id
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true },
+    })
+    storeIds = stores.map((s) => s.id)
+    storeName = "All stores"
+    storeIdOut = null
   }
 
   const horizonDays = input.horizonDays ?? 14
@@ -67,12 +81,12 @@ export async function getRevenueForecast(input: {
 
   const rows = await prisma.forecastDailyRevenue.findMany({
     where: {
-      storeId: input.storeId,
+      storeId: { in: storeIds },
       hourBucket: 0,
       forecastDate: { gte: startOfDay(asOf), lt: startOfDay(horizonEnd) },
     },
-    orderBy: [{ forecastDate: "asc" }, { generatedAt: "desc" }],
     select: {
+      storeId: true,
       forecastDate: true,
       predictedRevenue: true,
       p10: true,
@@ -82,20 +96,57 @@ export async function getRevenueForecast(input: {
     },
   })
 
-  // For each forecastDate keep only the most-recent generation.
-  const latestByDate = new Map<string, (typeof rows)[number]>()
+  // Latest generation per (storeId, date), then sum across stores per date.
+  const latestPerStoreDate = new Map<string, (typeof rows)[number]>()
   for (const r of rows) {
-    const key = r.forecastDate.toISOString().slice(0, 10)
-    const existing = latestByDate.get(key)
+    const key = `${r.storeId}|${r.forecastDate.toISOString().slice(0, 10)}`
+    const existing = latestPerStoreDate.get(key)
     if (!existing || r.generatedAt > existing.generatedAt) {
-      latestByDate.set(key, r)
+      latestPerStoreDate.set(key, r)
     }
   }
 
-  const days: RevenueForecastDay[] = Array.from(latestByDate.values())
-    .sort((a, b) => a.forecastDate.getTime() - b.forecastDate.getTime())
+  const aggByDate = new Map<
+    string,
+    {
+      date: Date
+      predictedRevenue: number
+      p10: number
+      p90: number
+      modelVersion: string
+      generatedAt: Date
+    }
+  >()
+  for (const r of latestPerStoreDate.values()) {
+    const key = r.forecastDate.toISOString().slice(0, 10)
+    const cur = aggByDate.get(key)
+    const pr = r.predictedRevenue
+    const p10 = r.p10 ?? pr
+    const p90 = r.p90 ?? pr
+    if (!cur) {
+      aggByDate.set(key, {
+        date: r.forecastDate,
+        predictedRevenue: pr,
+        p10,
+        p90,
+        modelVersion: r.modelVersion,
+        generatedAt: r.generatedAt,
+      })
+    } else {
+      cur.predictedRevenue += pr
+      cur.p10 += p10
+      cur.p90 += p90
+      if (r.generatedAt > cur.generatedAt) {
+        cur.generatedAt = r.generatedAt
+        cur.modelVersion = r.modelVersion
+      }
+    }
+  }
+
+  const days: RevenueForecastDay[] = Array.from(aggByDate.values())
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
     .map((r) => ({
-      date: r.forecastDate,
+      date: r.date,
       predictedRevenue: r.predictedRevenue,
       p10: r.p10,
       p90: r.p90,
@@ -111,6 +162,8 @@ export async function getRevenueForecast(input: {
         )
       : null
 
+  // MAPE is account-wide (single mlTrainingRun row, no per-store split). Show
+  // it for both single-store and aggregate views.
   const lastRun = await prisma.mlTrainingRun.findFirst({
     where: { target: "REVENUE", status: "SUCCEEDED", mape: { not: null } },
     orderBy: { startedAt: "desc" },
@@ -120,8 +173,8 @@ export async function getRevenueForecast(input: {
   return {
     ok: true,
     data: {
-      storeId: store.id,
-      storeName: store.name,
+      storeId: storeIdOut,
+      storeName,
       generatedAt,
       recentMape: lastRun?.mape ?? null,
       days,

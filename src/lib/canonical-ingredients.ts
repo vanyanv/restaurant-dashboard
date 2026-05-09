@@ -212,6 +212,27 @@ export type CanonicalIngredientCost = {
   sourceProductName: string | null
 }
 
+function shouldSkipRawInvoiceUnitFallback(
+  line: {
+    unit: string | null
+    packSize: number | null
+    unitSize: number | null
+    unitSizeUom: string | null
+  },
+  recipeUnit: string | null | undefined
+): boolean {
+  const normalizedRecipeUnit = canonicalizeUnit(recipeUnit)
+  const invoiceUnit = line.unit?.trim().toUpperCase()
+  const hasPackShape = line.packSize != null || line.unitSize != null
+
+  return (
+    normalizedRecipeUnit === "each" &&
+    invoiceUnit === "CS" &&
+    hasPackShape &&
+    !line.unitSizeUom
+  )
+}
+
 /**
  * Resolve the unit cost of a canonical ingredient.
  *
@@ -380,6 +401,10 @@ export async function getCanonicalIngredientCost(
           sourceSku: direct.sku,
           sourceProductName: direct.productName,
         }
+      }
+
+      if (shouldSkipRawInvoiceUnitFallback(direct, canonical.recipeUnit)) {
+        return null
       }
     }
     // Fallback: legacy raw-invoice-unit path (no recipeUnit or derivation failed).

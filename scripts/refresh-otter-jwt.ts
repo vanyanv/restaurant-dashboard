@@ -115,7 +115,52 @@ async function verifyToken(jwt: string): Promise<boolean> {
   }
 }
 
-async function updateVercel(jwt: string, env: Record<string, string>): Promise<void> {
+async function upsertVercelEnv(
+  projectId: string,
+  token: string,
+  existing: Array<{ id: string; key: string }>,
+  key: string,
+  value: string | undefined,
+): Promise<void> {
+  if (!value) return
+
+  const current = existing.find((e) => e.key === key)
+  if (current) {
+    const res = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env/${current.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    })
+    if (res.ok) {
+      console.log(`  Updated ${key} in Vercel`)
+    } else {
+      console.error(`  Failed to update ${key}: ${res.status} ${await res.text()}`)
+    }
+    return
+  }
+
+  const res = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      key,
+      value,
+      type: "encrypted",
+      target: ["production", "preview"],
+    }),
+  })
+  if (res.ok) {
+    console.log(`  Created ${key} in Vercel`)
+  } else {
+    console.error(`  Failed to create ${key}: ${res.status} ${await res.text()}`)
+  }
+}
+
+async function updateVercel(
+  jwt: string,
+  env: Record<string, string>,
+  credentials: { email?: string; password?: string },
+): Promise<void> {
   const token = process.env.VERCEL_TOKEN ?? env["VERCEL_TOKEN"]
   const projectId = process.env.VERCEL_PROJECT_ID ?? env["VERCEL_PROJECT_ID"]
 
@@ -135,38 +180,11 @@ async function updateVercel(jwt: string, env: Record<string, string>): Promise<v
   }
 
   const listData = await listRes.json()
-  const existing = listData.envs?.find((e: { key: string }) => e.key === "OTTER_JWT")
+  const existing = (listData.envs ?? []) as Array<{ id: string; key: string }>
 
-  if (existing) {
-    // Update existing
-    const res = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env/${existing.id}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ value: jwt }),
-    })
-    if (res.ok) {
-      console.log("  Updated OTTER_JWT in Vercel")
-    } else {
-      console.error(`  Failed to update: ${res.status} ${await res.text()}`)
-    }
-  } else {
-    // Create new
-    const res = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        key: "OTTER_JWT",
-        value: jwt,
-        type: "encrypted",
-        target: ["production", "preview"],
-      }),
-    })
-    if (res.ok) {
-      console.log("  Created OTTER_JWT in Vercel")
-    } else {
-      console.error(`  Failed to create: ${res.status} ${await res.text()}`)
-    }
-  }
+  await upsertVercelEnv(projectId, token, existing, "OTTER_JWT", jwt)
+  await upsertVercelEnv(projectId, token, existing, "OTTER_EMAIL", credentials.email)
+  await upsertVercelEnv(projectId, token, existing, "OTTER_PASSWORD", credentials.password)
 }
 
 const GH_REPO = "vanyanv/restaurant-dashboard"
@@ -356,7 +374,7 @@ async function main() {
 
   // 4. Push to Vercel
   console.log("Updating Vercel...")
-  await updateVercel(jwt, env)
+  await updateVercel(jwt, env, { email, password })
 
   // 5. Push to GitHub Actions
   console.log("Updating GitHub...")

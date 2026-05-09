@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { isCronRequest } from "@/lib/rate-limit"
 import { collectR2Stats } from "@/lib/monitoring/r2-stats"
 import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/logger"
 
 export const maxDuration = 60
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       byPrefix: stats.byPrefix,
     })
   } catch (err) {
-    console.error("[r2-snapshot] failed", err)
+    logger.error("[r2-snapshot] failed", err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "unknown" },
       { status: 500 },
