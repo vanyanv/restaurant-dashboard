@@ -11,6 +11,7 @@ import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
+import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
 import { prisma } from "@/lib/prisma"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
@@ -23,6 +24,7 @@ import { LaborStaffingCard } from "./components/labor-staffing-card"
 import { MenuEngineeringCard } from "./components/menu-engineering-card"
 import { LostSalesCard } from "./components/lost-sales-card"
 import { CashPositionCard } from "./components/cash-position-card"
+import { VendorReliabilityCard } from "./components/vendor-reliability-card"
 
 interface PageProps {
   searchParams: Promise<{ storeId?: string }>
@@ -61,6 +63,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     menuEngineeringResult,
     lostSalesResult,
     cashPositionResult,
+    vendorReliabilityResult,
     storeMeta,
   ] = await Promise.all([
     getRevenueForecast({ storeId }),
@@ -72,6 +75,7 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     getMenuEngineering({ storeId }),
     getLostSales({ storeId }),
     getCashPositionForecast({ storeId }),
+    getVendorReliability({}),
     prisma.store.findUnique({
       where: { id: storeId },
       select: { targetCogsPct: true },
@@ -119,6 +123,9 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
           <FoodCostForecastCard data={foodCostResult.data} targetPct={targetPct} />
         )}
         {cashPositionResult?.ok && <CashPositionCard data={cashPositionResult.data} />}
+        {vendorReliabilityResult?.ok && (
+          <VendorReliabilityCard data={vendorReliabilityResult.data} />
+        )}
         {anomalyResult?.ok && <AnomalyFeed data={anomalyResult.data} />}
         {lostSalesResult?.ok && <LostSalesCard data={lostSalesResult.data} />}
         {laborResult?.ok && <LaborStaffingCard data={laborResult.data} />}

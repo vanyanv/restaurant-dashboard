@@ -16,6 +16,7 @@ import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
+import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -691,6 +692,65 @@ export const getCashPositionForecastTool: ChatTool<
         cumulativeNet: day.cumulativeNet,
       })),
     }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getVendorReliability (chat tool)
+// ---------------------------------------------------------------------------
+
+const vendorReliabilityParams = z
+  .object({
+    lookbackDays: z.number().int().min(30).max(365).optional().default(180),
+    band: z
+      .enum(["high", "medium", "low", "insufficient_data"])
+      .optional()
+      .describe("Filter to one band. Omit for all rows."),
+    limit: z.number().int().min(1).max(100).optional().default(20),
+  })
+  .strict()
+
+export type VendorReliabilityChatRow = {
+  vendorName: string
+  invoiceCount: number
+  spend6mo: number
+  meanLeadDays: number | null
+  leadCV: number | null
+  monthlyTotalCV: number | null
+  priceVolatility: number | null
+  reliabilityScore: number
+  band: "high" | "medium" | "low" | "insufficient_data"
+}
+
+export const getVendorReliabilityTool: ChatTool<
+  typeof vendorReliabilityParams,
+  VendorReliabilityChatRow[] | { ok: false; error: string }
+> = {
+  name: "getVendorReliability",
+  description:
+    "Per-vendor reliability over the last N days (default 180). Three metrics: lead-time CV (std/mean of inter-invoice gaps), price volatility (avg per-ingredient std of month-over-month price moves), monthly-total CV. Composite reliabilityScore is 0-100 (higher = more reliable). Bands: high (≥75), medium (≥50), low (<50), insufficient_data (<4 invoices in window). Sorted by 180-day spend desc.",
+  parameters: vendorReliabilityParams,
+  async execute(args, ctx) {
+    const result = await getVendorReliability({
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    const rows = args.band
+      ? result.data.rows.filter((r) => r.band === args.band)
+      : result.data.rows
+    return rows.slice(0, args.limit ?? 20).map((r) => ({
+      vendorName: r.vendorName,
+      invoiceCount: r.invoiceCount,
+      spend6mo: r.spend6mo,
+      meanLeadDays: r.meanLeadDays,
+      leadCV: r.leadCV,
+      monthlyTotalCV: r.monthlyTotalCV,
+      priceVolatility: r.priceVolatility,
+      reliabilityScore: r.reliabilityScore,
+      band: r.band,
+    }))
   },
 }
 
