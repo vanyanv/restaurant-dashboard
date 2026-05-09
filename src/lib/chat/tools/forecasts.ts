@@ -20,6 +20,7 @@ import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability
 import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
 import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
 import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
+import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
 
 // ---------------------------------------------------------------------------
 // getRevenueForecast (chat tool)
@@ -1048,5 +1049,67 @@ export const getChannelMixTool: ChatTool<
       })),
       simulation: d.simulation,
     }
+  },
+}
+
+// ---------------------------------------------------------------------------
+// getCateringDetection (F26 chat tool)
+// ---------------------------------------------------------------------------
+
+const cateringParams = z
+  .object({
+    storeId: z.string().min(1).optional(),
+    lookbackDays: z.number().int().min(7).max(180).optional().default(60),
+    limit: z.number().int().min(1).max(100).optional().default(25),
+  })
+  .strict()
+
+export type CateringChatRow = {
+  orderId: string
+  externalDisplayId: string | null
+  storeId: string
+  platform: string
+  referenceTimeLocal: string
+  customerName: string | null
+  subtotal: number
+  total: number
+  itemQuantity: number
+  storePlatformMedianSubtotal: number
+  subtotalMultiplier: number
+  leadHours: number | null
+  triggers: string[]
+}
+
+export const getCateringDetectionTool: ChatTool<
+  typeof cateringParams,
+  CateringChatRow[] | { ok: false; error: string }
+> = {
+  name: "getCateringDetection",
+  description:
+    "Returns orders flagged as catering-like outliers vs the per-(store, platform) median: subtotal ≥ 3× median, OR ≥ $200 absolute, OR ≥ 12 items. leadHours is referenceTimeLocal − syncedAt; null when not actionable (post-fact data). Use to triage prep ahead of pickup. NOT a definitive catering classifier — a normal weekend rush can trigger; operator confirms.",
+  parameters: cateringParams,
+  async execute(args, ctx) {
+    const result = await getCateringDetection({
+      storeId: args.storeId,
+      lookbackDays: args.lookbackDays,
+    })
+    if (!result) return { ok: false, error: "no_session" }
+    if (!result.ok) return { ok: false, error: result.error }
+    void ctx
+    return result.data.orders.slice(0, args.limit ?? 25).map((o) => ({
+      orderId: o.orderId,
+      externalDisplayId: o.externalDisplayId,
+      storeId: o.storeId,
+      platform: o.platform,
+      referenceTimeLocal: o.referenceTimeLocal.toISOString(),
+      customerName: o.customerName,
+      subtotal: o.subtotal,
+      total: o.total,
+      itemQuantity: o.itemQuantity,
+      storePlatformMedianSubtotal: o.storePlatformMedianSubtotal,
+      subtotalMultiplier: o.subtotalMultiplier,
+      leadHours: o.leadHours,
+      triggers: o.triggers,
+    }))
   },
 }
