@@ -91,6 +91,7 @@ export async function getMenuEngineering(input: {
       select: { id: true },
     })
     storeIds = stores.map((s) => s.id)
+    storeName = "All stores"
   }
 
   const lookbackDays = input.lookbackDays ?? 30

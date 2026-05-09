@@ -4,6 +4,7 @@ import { isCronRequest } from "@/lib/rate-limit"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { Prisma } from "@/generated/prisma/client"
+import { logger } from "@/lib/logger"
 
 export const maxDuration = 300
 
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
       durationMs: Date.now() - startedAt,
     })
   } catch (err) {
-    console.error(`[cron/cogs/sweep] store ${store.id} failed:`, err)
+    logger.error(`[cron/cogs/sweep] store ${store.id} failed:`, err)
     return NextResponse.json(
       {
         error: "sweep failed",

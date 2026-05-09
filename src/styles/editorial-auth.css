@@ -1031,3 +1031,51 @@
   z-index: -1;
 }
 
+/* ---------------------------------------------------------------------
+ * Brand seal — wax-stamp ornament that echoes the Chris N Eddy's
+ * wordmark (vivid-red outline + golden-yellow fill). Permitted on
+ * .login-shell and .missing-dispatch only. Never on /dashboard/**.
+ * ------------------------------------------------------------------- */
+
+.brand-seal {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border: 1.5px solid var(--accent);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6) 0%, transparent 55%),
+    var(--brand-gold-soft);
+  display: grid;
+  place-items: center;
+  transform: rotate(-6deg);
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.18);
+}
+
+.brand-seal__mark {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-dark);
+  line-height: 1;
+  text-align: center;
+}
+
+.login-shell .brand-seal {
+  top: 14px;
+  right: 14px;
+}
+
+.missing-dispatch .brand-seal {
+  top: 22px;
+  right: 22px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-seal {
+    transform: none;
+  }
+}
+

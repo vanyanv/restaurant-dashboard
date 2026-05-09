@@ -8,9 +8,9 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    $queryRaw: vi.fn(),
     store: { findUnique: vi.fn(), findMany: vi.fn() },
-    forecastDailyRevenue: { findMany: vi.fn() },
-    invoice: { findMany: vi.fn() },
+    invoice: { groupBy: vi.fn() },
   },
 }))
 
@@ -24,8 +24,8 @@ const sessionWith = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(prisma.invoice.findMany).mockResolvedValue([] as never)
-  vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.invoice.groupBy).mockResolvedValue([] as never)
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
 })
 
 describe("getCashPositionForecast", () => {
@@ -63,21 +63,19 @@ describe("getCashPositionForecast", () => {
     // Two days of forecast: $5,000 each. 20% commission → $4,000 net inflow.
     const day0 = new Date("2026-05-09T00:00:00Z")
     const day1 = new Date("2026-05-10T00:00:00Z")
-    vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
       {
         forecastDate: day0,
         predictedRevenue: 5000,
-        generatedAt: new Date("2026-05-08T01:00:00Z"),
       },
       {
         forecastDate: day1,
         predictedRevenue: 5000,
-        generatedAt: new Date("2026-05-08T01:00:00Z"),
       },
     ] as never)
     // One invoice due on day1 for $1,000
-    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
-      { dueDate: day1, totalAmount: 1000 },
+    vi.mocked(prisma.invoice.groupBy).mockResolvedValue([
+      { dueDate: day1, _sum: { totalAmount: 1000 } },
     ] as never)
 
     const result = await getCashPositionForecast({
@@ -124,16 +122,10 @@ describe("getCashPositionForecast", () => {
       },
     ] as never)
     const day = new Date("2026-05-09T00:00:00Z")
-    vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
       {
         forecastDate: day,
-        predictedRevenue: 3000,
-        generatedAt: new Date("2026-05-08T01:00:00Z"),
-      },
-      {
-        forecastDate: day,
-        predictedRevenue: 3000,
-        generatedAt: new Date("2026-05-08T01:00:00Z"),
+        predictedRevenue: 6000,
       },
     ] as never)
     const result = await getCashPositionForecast({

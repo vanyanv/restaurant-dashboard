@@ -17,6 +17,9 @@ export default function NotFound() {
       style={{ minHeight: "100vh" }}
     >
       <div className="missing-dispatch full-bleed">
+        <span className="brand-seal" aria-hidden="true">
+          <span className="brand-seal__mark">C·N</span>
+        </span>
         <div className="dispatch-issue">ChrisnEddys · Vol. 01 · Missing page</div>
         <div className="dispatch-rule" aria-hidden="true" />
         <div className="dispatch-bracket" aria-hidden="true">

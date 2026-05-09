@@ -1,14 +1,8 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { formatCurrency } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import type { DailyTrend } from "@/types/analytics"
 
 interface RevenueHeatmapProps {
@@ -97,23 +91,27 @@ export function RevenueHeatmap({
   }, [data])
 
   const getIntensity = (value: number): string => {
-    if (maxVal === minVal) return "bg-chart-4/60"
+    if (maxVal === minVal) return "bg-(--accent)/55"
     const ratio = (value - minVal) / (maxVal - minVal)
-    if (ratio < 0.25) return "bg-chart-4/20"
-    if (ratio < 0.5) return "bg-chart-4/40"
-    if (ratio < 0.75) return "bg-chart-4/60"
-    return "bg-chart-4/90"
+    if (ratio < 0.25) return "bg-(--accent)/15"
+    if (ratio < 0.5) return "bg-(--accent)/35"
+    if (ratio < 0.75) return "bg-(--accent)/60"
+    return "bg-(--accent)/90"
   }
 
   if (data.length === 0) return null
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">{title}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <div>
         <div className="overflow-x-auto">
           <div className="relative min-w-fit">
             {/* Month labels */}
@@ -121,7 +119,7 @@ export function RevenueHeatmap({
               {monthLabels.map((m, i) => (
                 <div
                   key={i}
-                  className="text-xs text-muted-foreground"
+                  className="text-xs text-(--ink-muted)"
                   style={{
                     position: "absolute",
                     left: `${m.weekIndex * 16 + 32}px`,
@@ -138,7 +136,7 @@ export function RevenueHeatmap({
                 {DAY_LABELS.map((label, i) => (
                   <div
                     key={i}
-                    className="h-3 w-6 text-[10px] text-muted-foreground flex items-center justify-end pr-1"
+                    className="h-3 w-6 text-[10px] text-(--ink-muted) flex items-center justify-end pr-1"
                   >
                     {label}
                   </div>
@@ -151,10 +149,10 @@ export function RevenueHeatmap({
                   {week.map((cell, di) => (
                     <div
                       key={di}
-                      className={`h-3 w-3 rounded-[2px] ${
+                      className={`h-3 w-3 rounded-xs ${
                         cell.value !== null
                           ? getIntensity(cell.value)
-                          : "bg-muted/30"
+                          : "bg-(--paper-warm)"
                       }`}
                       onMouseEnter={(e) => {
                         if (cell.value !== null) {
@@ -179,7 +177,7 @@ export function RevenueHeatmap({
         {/* Tooltip */}
         {hoveredCell && (
           <div
-            className="fixed z-50 pointer-events-none bg-popover text-popover-foreground border rounded-md shadow-md px-2.5 py-1.5 text-xs"
+            className="fixed z-50 pointer-events-none bg-(--paper) text-(--ink) border border-(--hairline-bold) rounded-xs px-2.5 py-1.5 text-xs"
             style={{
               left: hoveredCell.x,
               top: hoveredCell.y - 40,
@@ -187,10 +185,10 @@ export function RevenueHeatmap({
             }}
           >
             <div className="font-medium">{hoveredCell.date}</div>
-            <div>{formatCurrency(hoveredCell.value)}</div>
+            <div className="tabular-nums text-(--ink-muted)">{formatCurrency(hoveredCell.value)}</div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

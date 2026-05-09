@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getInvoicePdfStream } from "@/lib/blob"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { logger } from "@/lib/logger"
 
 export async function GET(
   request: NextRequest,
@@ -37,7 +38,7 @@ export async function GET(
     result = await getInvoicePdfStream(invoice.pdfBlobPathname)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error("[invoice-pdf] Blob fetch failed", {
+    logger.error("[invoice-pdf] Blob fetch failed", {
       invoiceId: id,
       message,
     })

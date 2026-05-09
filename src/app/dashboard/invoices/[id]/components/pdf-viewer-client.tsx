@@ -22,7 +22,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
 
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
@@ -138,12 +137,12 @@ export default function PdfViewerClient({
 
   if (loadError) {
     return (
-      <Card className="h-full">
-        <CardContent className="flex h-full flex-col items-center justify-center text-center gap-3 p-6">
-          <FileWarning className="h-10 w-10 text-muted-foreground" />
+      <section className="inv-panel h-full">
+        <div className="flex h-full flex-col items-center justify-center text-center gap-3 p-6">
+          <FileWarning className="h-10 w-10 text-(--ink-muted)" />
           <div>
             <p className="font-medium">Failed to load PDF</p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-(--ink-muted) mt-1">
               {getPdfLoadErrorMessage(loadError)}
             </p>
           </div>
@@ -158,8 +157,8 @@ export default function PdfViewerClient({
             <RotateCw className="h-4 w-4 mr-1" />
             Retry
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     )
   }
 
@@ -167,10 +166,10 @@ export default function PdfViewerClient({
     <div
       ref={containerRef}
       tabIndex={0}
-      className="flex h-full w-full flex-col rounded-md border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring"
+      className="flex h-full w-full flex-col rounded-xs border border-(--hairline-bold) bg-(--paper-warm) focus:outline-hidden focus-visible:ring-1 focus-visible:ring-(--accent)"
     >
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-background/80 backdrop-blur px-2 py-1.5 rounded-t-md">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-(--hairline) bg-(--paper)/90 backdrop-blur px-2 py-1.5">
         <div className="flex items-center gap-1">
           <Button
             size="icon"
@@ -196,7 +195,7 @@ export default function PdfViewerClient({
               className="h-8 w-14 text-center px-1"
               aria-label="Current page"
             />
-            <span className="text-muted-foreground">/ {numPages || "—"}</span>
+            <span className="text-(--ink-muted) tabular-nums">/ {numPages || "—"}</span>
           </div>
           <Button
             size="icon"
@@ -214,7 +213,7 @@ export default function PdfViewerClient({
           <Button
             size="icon"
             variant="ghost"
-            className="h-9 w-9"
+            className="hidden h-9 w-9 md:inline-flex"
             onClick={zoomOut}
             disabled={scale <= MIN_SCALE}
             aria-label="Zoom out"
@@ -224,7 +223,7 @@ export default function PdfViewerClient({
           <button
             type="button"
             onClick={resetZoom}
-            className="text-xs tabular-nums min-w-[3rem] text-muted-foreground hover:text-foreground"
+            className="hidden text-xs tabular-nums min-w-[3rem] text-(--ink-muted) hover:text-(--ink) md:inline-flex"
             aria-label="Reset zoom"
           >
             {Math.round(scale * 100)}%
@@ -232,7 +231,7 @@ export default function PdfViewerClient({
           <Button
             size="icon"
             variant="ghost"
-            className="h-9 w-9"
+            className="hidden h-9 w-9 md:inline-flex"
             onClick={zoomIn}
             disabled={scale >= MAX_SCALE}
             aria-label="Zoom in"
@@ -242,7 +241,7 @@ export default function PdfViewerClient({
           <a
             href={fileUrl}
             download={`invoice-${invoiceId}.pdf`}
-            className="inline-flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent"
+            className="inline-flex items-center justify-center h-9 w-9 rounded-xs hover:bg-(--accent-bg) text-(--ink)"
             aria-label="Download PDF"
           >
             <Download className="h-4 w-4" />
@@ -262,13 +261,13 @@ export default function PdfViewerClient({
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
           loading={
-            <div className="flex items-center justify-center h-40 text-muted-foreground">
+            <div className="flex items-center justify-center h-40 text-(--ink-muted)">
               <Loader2 className="h-5 w-5 mr-2 animate-spin" />
               Loading PDF...
             </div>
           }
           error={
-            <div className="flex items-center justify-center h-40 text-muted-foreground">
+            <div className="flex items-center justify-center h-40 text-(--ink-muted)">
               Failed to load PDF.
             </div>
           }
@@ -282,7 +281,7 @@ export default function PdfViewerClient({
               renderTextLayer
               renderAnnotationLayer
               loading={
-                <div className="flex items-center justify-center h-40 text-muted-foreground">
+                <div className="flex items-center justify-center h-40 text-(--ink-muted)">
                   <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                   Rendering page...
                 </div>

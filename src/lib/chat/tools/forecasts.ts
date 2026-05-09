@@ -11,7 +11,6 @@ import { z } from "zod"
 import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
-import { getMenuItemElasticity } from "@/app/actions/forecasts/elasticity-actions"
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
@@ -20,8 +19,6 @@ import { getVendorReliability } from "@/app/actions/forecasts/vendor-reliability
 import { getPromoRoi } from "@/app/actions/forecasts/promo-roi-actions"
 import { getLaunchTrajectory } from "@/app/actions/forecasts/launch-trajectory-actions"
 import { getChannelMix } from "@/app/actions/forecasts/channel-mix-actions"
-import { getCateringDetection } from "@/app/actions/forecasts/catering-detection-actions"
-import { getRecipeSuggestions } from "@/app/actions/forecasts/recipe-suggestion-actions"
 import { getWasteRootCauses } from "@/app/actions/forecasts/waste-cluster-actions"
 
 // ---------------------------------------------------------------------------
@@ -318,7 +315,7 @@ export const getFoodCostForecastTool: ChatTool<
     if (!result.ok) return { ok: false, error: result.error }
     const d = result.data
     return {
-      storeId: d.storeId,
+      storeId: d.storeId ?? args.storeId,
       generatedAt: d.generatedAt ? d.generatedAt.toISOString() : null,
       blendedFoodCostPct: d.blendedFoodCostPct,
       totalPredictedRevenue: d.totalPredictedRevenue,
@@ -335,68 +332,6 @@ export const getFoodCostForecastTool: ChatTool<
     }
     // Note: ctx is unused — getFoodCostForecast does its own session lookup.
     void ctx
-  },
-}
-
-// ---------------------------------------------------------------------------
-// getMenuItemElasticity (chat tool)
-// ---------------------------------------------------------------------------
-
-const elasticityParams = z
-  .object({
-    storeId: z.string().min(1),
-    minConfidence: z
-      .enum(["low", "medium", "high"])
-      .optional()
-      .default("low")
-      .describe("Filter out fits below this confidence band."),
-    limit: z.number().int().min(1).max(50).optional().default(20),
-  })
-  .strict()
-
-export type ElasticityChatRow = {
-  itemSkuId: string
-  elasticity: number
-  meanPrice: number
-  meanQty: number
-  fitR2: number
-  pricePointCount: number
-  sampleSize: number
-  confidence: "low" | "medium" | "high" | "no_signal"
-  pctVolumeChangeAt10PctHike: number
-}
-
-const CONFIDENCE_RANK = { low: 1, medium: 2, high: 3 } as const
-
-export const getMenuItemElasticityTool: ChatTool<
-  typeof elasticityParams,
-  ElasticityChatRow[] | { ok: false; error: string }
-> = {
-  name: "getMenuItemElasticity",
-  description:
-    "Returns per-item price elasticity for ONE store, fitted nightly via OLS log(qty) ~ log(price) + weekday dummies. Negative coefficients are the norm; -1.0 is unit elastic. pctVolumeChangeAt10PctHike applies the elasticity to a hypothetical 10% price hike. Skip rows with confidence='no_signal' (constant price or positive coefficient).",
-  parameters: elasticityParams,
-  async execute(args, ctx) {
-    const result = await getMenuItemElasticity({ storeId: args.storeId })
-    if (!result) return { ok: false, error: "no_session" }
-    if (!result.ok) return { ok: false, error: result.error }
-    const minRank = CONFIDENCE_RANK[args.minConfidence ?? "low"]
-    const filtered = result.data.rows.filter((r) => {
-      if (r.confidence === "no_signal") return false
-      return CONFIDENCE_RANK[r.confidence] >= minRank
-    })
-    void ctx
-    return filtered.slice(0, args.limit ?? 20).map((r) => ({
-      itemSkuId: r.otterItemSkuId,
-      elasticity: r.elasticity,
-      meanPrice: r.meanPrice,
-      meanQty: r.meanQty,
-      fitR2: r.fitR2,
-      pricePointCount: r.pricePointCount,
-      sampleSize: r.sampleSize,
-      confidence: r.confidence,
-      pctVolumeChangeAt10PctHike: r.pctVolumeChangeAt10PctHike,
-    }))
   },
 }
 
@@ -448,7 +383,7 @@ export const getLaborStaffingForecastTool: ChatTool<
     void ctx
     const d = result.data
     return {
-      storeId: d.storeId,
+      storeId: d.storeId ?? args.storeId,
       meanAvgTicket: d.meanAvgTicket,
       coversPerStaffHour: d.coversPerStaffHour,
       minStaff: d.minStaff,
@@ -1051,126 +986,6 @@ export const getChannelMixTool: ChatTool<
       })),
       simulation: d.simulation,
     }
-  },
-}
-
-// ---------------------------------------------------------------------------
-// getCateringDetection (F26 chat tool)
-// ---------------------------------------------------------------------------
-
-const cateringParams = z
-  .object({
-    storeId: z.string().min(1).optional(),
-    lookbackDays: z.number().int().min(7).max(180).optional().default(60),
-    limit: z.number().int().min(1).max(100).optional().default(25),
-  })
-  .strict()
-
-export type CateringChatRow = {
-  orderId: string
-  externalDisplayId: string | null
-  storeId: string
-  platform: string
-  referenceTimeLocal: string
-  customerName: string | null
-  subtotal: number
-  total: number
-  itemQuantity: number
-  storePlatformMedianSubtotal: number
-  subtotalMultiplier: number
-  leadHours: number | null
-  triggers: string[]
-}
-
-export const getCateringDetectionTool: ChatTool<
-  typeof cateringParams,
-  CateringChatRow[] | { ok: false; error: string }
-> = {
-  name: "getCateringDetection",
-  description:
-    "Returns orders flagged as catering-like outliers vs the per-(store, platform) median: subtotal ≥ 3× median, OR ≥ $200 absolute, OR ≥ 12 items. leadHours is referenceTimeLocal − syncedAt; null when not actionable (post-fact data). Use to triage prep ahead of pickup. NOT a definitive catering classifier — a normal weekend rush can trigger; operator confirms.",
-  parameters: cateringParams,
-  async execute(args, ctx) {
-    const result = await getCateringDetection({
-      storeId: args.storeId,
-      lookbackDays: args.lookbackDays,
-    })
-    if (!result) return { ok: false, error: "no_session" }
-    if (!result.ok) return { ok: false, error: result.error }
-    void ctx
-    return result.data.orders.slice(0, args.limit ?? 25).map((o) => ({
-      orderId: o.orderId,
-      externalDisplayId: o.externalDisplayId,
-      storeId: o.storeId,
-      platform: o.platform,
-      referenceTimeLocal: o.referenceTimeLocal.toISOString(),
-      customerName: o.customerName,
-      subtotal: o.subtotal,
-      total: o.total,
-      itemQuantity: o.itemQuantity,
-      storePlatformMedianSubtotal: o.storePlatformMedianSubtotal,
-      subtotalMultiplier: o.subtotalMultiplier,
-      leadHours: o.leadHours,
-      triggers: o.triggers,
-    }))
-  },
-}
-
-// ---------------------------------------------------------------------------
-// getRecipeSuggestions (F28 chat tool)
-// ---------------------------------------------------------------------------
-
-const recipeSuggestionParams = z
-  .object({
-    storeId: z.string().min(1).optional(),
-    lookbackDays: z.number().int().min(7).max(180).optional().default(30),
-    limit: z.number().int().min(1).max(100).optional().default(20),
-  })
-  .strict()
-
-export type RecipeSuggestionChatRow = {
-  storeId: string
-  itemName: string
-  category: string
-  qty30d: number
-  candidates: {
-    recipeId: string
-    recipeName: string
-    similarity: number
-    confidence: "high" | "medium" | "low"
-    ingredientCount: number
-  }[]
-}
-
-export const getRecipeSuggestionsTool: ChatTool<
-  typeof recipeSuggestionParams,
-  RecipeSuggestionChatRow[] | { ok: false; error: string }
-> = {
-  name: "getRecipeSuggestions",
-  description:
-    "For every menu item the operator hasn't yet linked to a Recipe, returns up to 3 candidate recipes ranked by token-Jaccard name similarity (lowercased, punctuation-stripped, English stopwords removed). confidence is high (≥0.75), medium (≥0.5) or low (≥0.25). Items with no candidate above 0.25 still appear, with empty candidates — that's a 'no match found' signal so the operator knows the gap exists. Sorted by 30-day quantity desc. Suggestions only — never claim the mapping has been written.",
-  parameters: recipeSuggestionParams,
-  async execute(args, ctx) {
-    const result = await getRecipeSuggestions({
-      storeId: args.storeId,
-      lookbackDays: args.lookbackDays,
-    })
-    if (!result) return { ok: false, error: "no_session" }
-    if (!result.ok) return { ok: false, error: result.error }
-    void ctx
-    return result.data.items.slice(0, args.limit ?? 20).map((it) => ({
-      storeId: it.storeId,
-      itemName: it.itemName,
-      category: it.category,
-      qty30d: it.qty30d,
-      candidates: it.candidates.map((c) => ({
-        recipeId: c.recipeId,
-        recipeName: c.recipeName,
-        similarity: c.similarity,
-        confidence: c.confidence,
-        ingredientCount: c.ingredientCount,
-      })),
-    }))
   },
 }
 

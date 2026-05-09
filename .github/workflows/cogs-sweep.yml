@@ -18,25 +18,49 @@ concurrency:
   group: cogs-sweep
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   list-stores:
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.fetch.outputs.ids }}
     steps:
+      - uses: actions/checkout@v6
       - name: GET /api/cron/cogs/stores
         id: fetch
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           FORCE: ${{ github.event.inputs.force || 'false' }}
+          LOG_FILE: logs/cogs-sweep-list-stores.log
+          CRON_MAX_TIME: "30"
         run: |
-          payload=$(curl -fsSL "$APP_URL/api/cron/cogs/stores?force=$FORCE" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 30)
-          ids=$(echo "$payload" | jq -c '[.stores[].id]')
-          echo "Found stores: $ids"
-          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/run-with-cron-logging.sh bash -lc '
+            payload=$(.github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/cogs/stores?force=$FORCE")
+            ids=$(echo "$payload" | jq -c "[.stores[].id]")
+            echo "Found stores: $ids"
+            echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          '
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cogs-sweep-list-stores-log-${{ github.run_id }}
+          path: logs/cogs-sweep-list-stores.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: COGS Sweep Stores
+          ISSUE_TITLE: "[Auto] COGS Sweep Stores failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/cogs-sweep-list-stores.log
+          FAILED_EXIT_CODE: ${{ steps.fetch.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
 
   sweep:
     needs: list-stores
@@ -48,20 +72,34 @@ jobs:
       matrix:
         storeId: ${{ fromJson(needs.list-stores.outputs.ids) }}
     steps:
+      - uses: actions/checkout@v6
       - name: POST /api/cron/cogs/sweep (last 3 days)
+        id: cron
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           STORE_ID: ${{ matrix.storeId }}
           LOOKBACK: ${{ github.event.inputs.lookbackDays || '3' }}
           FORCE: ${{ github.event.inputs.force || 'false' }}
+          LOG_FILE: logs/cogs-sweep-${{ matrix.storeId }}.log
+          CRON_MAX_TIME: "295"
         run: |
-          response=$(curl -fsSL -X POST \
-            "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK&force=$FORCE" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 295)
-          echo "$response" | jq .
-          echo "### Store $STORE_ID" >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          echo "$response" | jq . >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          bash .github/scripts/run-with-cron-logging.sh \
+            .github/scripts/curl-cron-json.sh POST "$APP_URL/api/cron/cogs/sweep?storeId=$STORE_ID&lookbackDays=$LOOKBACK&force=$FORCE"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cogs-sweep-log-${{ matrix.storeId }}-${{ github.run_id }}
+          path: logs/cogs-sweep-${{ matrix.storeId }}.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: COGS Sweep
+          ISSUE_TITLE: "[Auto] COGS Sweep failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/cogs-sweep-${{ matrix.storeId }}.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

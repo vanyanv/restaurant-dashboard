@@ -9,21 +9,39 @@ concurrency:
   group: r2-snapshot
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
       - name: POST /api/cron/r2-snapshot
+        id: cron
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LOG_FILE: logs/r2-snapshot.log
+          CRON_MAX_TIME: "90"
         run: |
-          response=$(curl -fsSL -X POST "$APP_URL/api/cron/r2-snapshot" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 90)
-          echo "$response" | jq .
-          {
-            echo '```json'
-            echo "$response" | jq .
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          bash .github/scripts/run-with-cron-logging.sh \
+            .github/scripts/curl-cron-json.sh POST "$APP_URL/api/cron/r2-snapshot"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-snapshot-log-${{ github.run_id }}
+          path: logs/r2-snapshot.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: R2 Bucket Snapshot
+          ISSUE_TITLE: "[Auto] R2 Bucket Snapshot failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/r2-snapshot.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

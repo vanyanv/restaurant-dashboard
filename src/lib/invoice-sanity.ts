@@ -11,6 +11,16 @@ export const FUTURE_DATE_TOLERANCE_DAYS = 30
 // like Premier Meats #2232461 where quantity captured cases instead of pounds
 // and the implied math was off by ~60×.
 export const LINE_MATH_TOLERANCE = 0.02
+const CATCH_WEIGHT_MIN_LB = 5
+const CATCH_WEIGHT_MAX_LB = 5_000
+
+const CATCH_WEIGHT_VENDOR_RE =
+  /\b(premier\s+meats?|crystal\s+bay|ben\s+e\.?\s+keith)\b/i
+const MEAT_LINE_RE =
+  /\b(meat|beef|ground\s+beef|angus|chuck|brisket|ribeye|steak|sirloin|pork|bacon|ham|chicken|turkey|poultry|seafood|fish|salmon|tuna)\b/i
+const GRAM_UOMS = new Set(["G", "GR", "GM", "GRM", "GRAM", "GRAMS"])
+const PAPER_COUNT_PACK_RE =
+  /\b(bag|bags|bath\s+tissue|tissue|toilet|napkin|towel|roll|wrap|wrapper|cup|cups|lid|lids|glove|gloves|paper|liner|liners|foil|film|sheet|sheets|straw|straws)\b/i
 
 /**
  * Returns the extracted invoiceDate as a Date, or null if it's obviously wrong.
@@ -90,6 +100,127 @@ export function findLineMathMismatches(
   return mismatches
 }
 
+function roundQuantity(value: number): number {
+  return Math.round(value * 1000) / 1000
+}
+
+function isCatchWeightCandidate(
+  vendorName: string | null | undefined,
+  line: InvoiceExtraction["lineItems"][number],
+  impliedQuantity: number
+): boolean {
+  const currentUnit = line.unit?.trim().toUpperCase() ?? ""
+  if (currentUnit === "LB") return false
+
+  const category = line.category?.trim().toLowerCase() ?? ""
+  const productText = `${line.productName} ${line.description ?? ""}`
+  const vendorLooksMeat = CATCH_WEIGHT_VENDOR_RE.test(vendorName ?? "")
+  const lineLooksMeat =
+    category === "meat" ||
+    category === "poultry" ||
+    category === "seafood" ||
+    MEAT_LINE_RE.test(productText)
+
+  if (!vendorLooksMeat && !lineLooksMeat) return false
+
+  const absImplied = Math.abs(impliedQuantity)
+  if (absImplied < CATCH_WEIGHT_MIN_LB || absImplied > CATCH_WEIGHT_MAX_LB) {
+    return false
+  }
+
+  // Catch-weight misses usually capture case/carton count, while the printed
+  // dollars are per pound. Avoid rewriting tiny corrections or fee-like rows.
+  return Math.abs(impliedQuantity) > Math.abs(Number(line.quantity)) * 3
+}
+
+/**
+ * Fix LLM catch-weight mistakes where a meat invoice line captures the carton
+ * count (e.g. `6 CS`) even though unitPrice and extendedPrice prove the printed
+ * purchasable quantity is pounds.
+ */
+export function normalizeCatchWeightMeatLines(
+  extraction: InvoiceExtraction
+): InvoiceExtraction {
+  let changed = false
+  const lineItems = extraction.lineItems.map((line) => {
+    const qty = Number(line.quantity)
+    const unitPrice = Number(line.unitPrice)
+    const ext = Number(line.extendedPrice)
+    if (!Number.isFinite(qty) || !Number.isFinite(unitPrice) || !Number.isFinite(ext)) {
+      return line
+    }
+    if (Math.abs(ext) < 0.01 || Math.abs(unitPrice) < 0.0001) return line
+
+    const computed = qty * unitPrice
+    const drift = Math.abs(computed - ext) / Math.abs(ext)
+    if (drift <= LINE_MATH_TOLERANCE) return line
+
+    const impliedQuantity = ext / unitPrice
+    if (
+      !Number.isFinite(impliedQuantity) ||
+      !isCatchWeightCandidate(extraction.vendorName, line, impliedQuantity)
+    ) {
+      return line
+    }
+
+    changed = true
+    return {
+      ...line,
+      quantity: roundQuantity(impliedQuantity),
+      unit: "LB",
+      packSize: null,
+      unitSize: null,
+      unitSizeUom: null,
+    }
+  })
+
+  return changed ? { ...extraction, lineItems } : extraction
+}
+
+function looksLikePaperCountPack(line: InvoiceExtraction["lineItems"][number]): boolean {
+  const category = line.category?.trim().toLowerCase() ?? ""
+  const productText = `${line.productName} ${line.description ?? ""}`
+  return (
+    category === "paper/supplies" ||
+    category === "cleaning" ||
+    PAPER_COUNT_PACK_RE.test(productText)
+  )
+}
+
+/**
+ * Fix count-pack lines where the model read a single visible count as
+ * `packSize=N, unitSize=1` instead of one case containing N counted items.
+ */
+export function normalizeCountPackLines(extraction: InvoiceExtraction): InvoiceExtraction {
+  let changed = false
+  const lineItems = extraction.lineItems.map((line) => {
+    const unit = line.unit?.trim().toUpperCase() ?? ""
+    const uom = line.unitSizeUom?.trim().toUpperCase() ?? ""
+    if (
+      unit !== "CS" ||
+      (uom !== "" && uom !== "CT") ||
+      line.packSize == null ||
+      line.unitSize == null ||
+      line.packSize <= 50 ||
+      line.packSize > 1_000 ||
+      line.unitSize > 2 ||
+      !looksLikePaperCountPack(line)
+    ) {
+      return line
+    }
+
+    changed = true
+    return {
+      ...line,
+      packSize: 1,
+      unitSize: line.packSize,
+      unitSizeUom: "CT",
+    }
+  })
+
+  return changed ? { ...extraction, lineItems } : extraction
+}
+
 export interface PackShapeAnomaly {
   lineNumber: number
   productName: string
@@ -120,7 +251,31 @@ export function findPackShapeAnomalies(
     // Rule 1 — implausibly high packSize on case-goods. Real-world case-goods
     // almost never exceed 50/pack; values >50 are essentially always a fused-
     // column mis-split (e.g. "112 CT" → packSize=112).
-    if (li.unit === "CS" && li.packSize != null && li.packSize > 50) {
+    const unitSizeUom = li.unitSizeUom?.trim().toUpperCase() ?? null
+    const isSmallGramPacketCase =
+      unitSizeUom != null &&
+      GRAM_UOMS.has(unitSizeUom) &&
+      li.unitSize != null &&
+      li.unitSize > 0 &&
+      li.unitSize <= 10 &&
+      li.packSize != null &&
+      li.packSize <= 1_000
+    const isLargePaperCountPackCase =
+      (unitSizeUom == null || unitSizeUom === "CT") &&
+      li.packSize != null &&
+      li.packSize <= 200 &&
+      li.unitSize != null &&
+      li.unitSize >= 100 &&
+      li.unitSize <= 2_000 &&
+      looksLikePaperCountPack(li)
+
+    if (
+      li.unit === "CS" &&
+      li.packSize != null &&
+      li.packSize > 50 &&
+      !isSmallGramPacketCase &&
+      !isLargePaperCountPackCase
+    ) {
       reasons.push(
         `packSize=${li.packSize} for unit=CS is implausibly high — likely a fused PACK/SIZE split`
       )

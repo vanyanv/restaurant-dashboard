@@ -258,7 +258,7 @@ export function MatchPickerSheet({
       />
 
       <div
-        className="absolute right-0 top-0 flex h-full w-full max-w-[720px] flex-col border-l border-[var(--hairline-bold)] bg-[var(--paper)] animate-in slide-in-from-right duration-300"
+        className="absolute right-0 top-0 flex h-full w-full max-w-[92vw] flex-col border-l border-[var(--hairline-bold)] bg-[var(--paper)] animate-in slide-in-from-right duration-300 sm:max-w-[720px]"
         style={{
           backgroundImage:
             "radial-gradient(900px 600px at 100% 0%, #fff9ef 0%, transparent 55%), linear-gradient(180deg, var(--paper), var(--paper-deep))",
@@ -324,7 +324,8 @@ export function MatchPickerSheet({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search your pantry for a match…"
-              className="h-12 flex-1 bg-transparent font-display text-[18px] italic text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+              aria-label="Search pantry for matching ingredient"
+              className="h-12 flex-1 bg-transparent font-display text-[18px] italic text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-hidden"
             />
             {query && (
               <button
@@ -469,7 +470,7 @@ export function MatchPickerSheet({
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder="Mozzarella Cheese"
-                    className="mt-1.5 h-10 border-2 border-[var(--ink)] bg-[var(--paper)] px-3 font-display text-[16px] italic text-[var(--ink)] focus:outline-none"
+                    className="mt-1.5 h-10 border-2 border-[var(--ink)] bg-[var(--paper)] px-3 font-display text-[16px] italic text-[var(--ink)] focus:outline-hidden"
                   />
                 </label>
                 <label className="flex flex-col">
@@ -479,7 +480,7 @@ export function MatchPickerSheet({
                   <select
                     value={newUnit}
                     onChange={(e) => setNewUnit(e.target.value)}
-                    className="mt-1.5 h-10 border-2 border-[var(--ink)] bg-[var(--paper)] px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-none"
+                    className="mt-1.5 h-10 border-2 border-[var(--ink)] bg-[var(--paper)] px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-hidden"
                   >
                     <option value="">pick unit</option>
                     {DEFAULT_UNIT_OPTIONS.map((u) => (
@@ -496,7 +497,7 @@ export function MatchPickerSheet({
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
-                    className="mt-1.5 h-10 border-2 border-[var(--hairline-bold)] bg-[var(--paper)] px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-none"
+                    className="mt-1.5 h-10 border-2 border-[var(--hairline-bold)] bg-[var(--paper)] px-3 font-mono text-[12px] uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-hidden"
                   >
                     <option value="">(optional)</option>
                     {CATEGORY_BUCKETS.map((b) => (
@@ -698,10 +699,10 @@ function RailItem({
         type="button"
         onClick={onClick}
         className={cn(
-          "group relative flex w-full items-center gap-2 border-l-2 py-1.5 pl-2.5 pr-2 text-left transition",
+          "group relative flex w-full items-center gap-2 border py-1.5 pl-2.5 pr-2 text-left transition",
           active
-            ? "border-[var(--ink)] bg-[var(--paper-deep)]"
-            : "border-transparent hover:border-[var(--hairline-bold)] hover:bg-[var(--paper-deep)]/50"
+            ? "border-(--ink) bg-(--paper-deep)"
+            : "border-transparent hover:border-(--hairline-bold) hover:bg-(--paper-deep)/50"
         )}
       >
         {swatch && (

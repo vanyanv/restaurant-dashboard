@@ -95,9 +95,9 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
         />
 
         {data && !data.fixedLaborConfigured && !data.fixedRentConfigured && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-3 text-xs">
+          <div className="rounded-xs border border-(--hairline-bold) bg-(--paper-warm) p-3 text-xs text-(--ink-muted)">
             Labor and rent are not configured for this store.{" "}
-            <Link href={configureHref} className="underline font-medium">
+            <Link href={configureHref} className="underline font-medium text-(--accent-dark)">
               Set fixed costs →
             </Link>
           </div>
@@ -118,11 +118,11 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
             <Skeleton className="h-95" />
           </>
         ) : query.error ? (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <div className="rounded-xs border border-(--hairline-bold) bg-(--accent-bg) p-4 text-sm text-(--accent-dark)">
             {(query.error as Error).message}
           </div>
         ) : data && data.periods.length === 0 ? (
-          <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+          <div className="rounded-xs border border-(--hairline-bold) bg-(--paper) p-4 text-sm text-(--ink-muted)">
             No periods in the selected range.
           </div>
         ) : data ? (
@@ -189,7 +189,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
             />
 
             {data.cogs.refillFailedPeriodIndexes.length > 0 && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+              <div className="rounded-xs border border-(--hairline-bold) bg-(--accent-bg) px-4 py-3 text-sm text-(--accent-dark)">
                 <div className="flex items-baseline justify-between gap-4">
                   <div>
                     <strong>COGS not yet computed for {data.cogs.refillFailedPeriodIndexes.length} period{data.cogs.refillFailedPeriodIndexes.length === 1 ? "" : "s"}.</strong>{" "}
@@ -201,7 +201,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 shrink-0 border-red-400 bg-white text-xs text-red-900 hover:bg-red-100"
+                    className="h-8 shrink-0 rounded-xs border-(--hairline-bold) bg-(--paper) text-xs text-(--accent-dark) hover:bg-(--accent-bg)"
                     onClick={() => recomputeMutation.mutate()}
                     disabled={recomputeMutation.isPending}
                   >
@@ -212,10 +212,10 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
             )}
 
             {data.cogs.unmappedItems.length > 0 && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <div className="rounded-xs border border-(--hairline-bold) bg-(--paper-warm) px-4 py-3 text-sm text-(--ink-muted)">
                 <div className="flex items-baseline justify-between gap-4">
                   <div>
-                    <strong>COGS is undercounted.</strong>{" "}
+                    <strong className="text-(--ink)">COGS is undercounted.</strong>{" "}
                     {data.cogs.unmappedItems.length} sold item
                     {data.cogs.unmappedItems.length === 1 ? "" : "s"} ($
                     {data.cogs.unmappedItems
@@ -225,7 +225,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                   </div>
                   <a
                     href="/dashboard/recipes"
-                    className="shrink-0 underline hover:text-amber-700"
+                    className="shrink-0 underline hover:text-(--accent-dark)"
                   >
                     Build recipes →
                   </a>
@@ -234,10 +234,10 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
             )}
 
             {data.cogs.missingCostItems.length > 0 && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <div className="rounded-xs border border-(--hairline-bold) bg-(--paper-warm) px-4 py-3 text-sm text-(--ink-muted)">
                 <div className="flex items-baseline justify-between gap-4">
                   <div>
-                    <strong>COGS may be undercounted.</strong>{" "}
+                    <strong className="text-(--ink)">COGS may be undercounted.</strong>{" "}
                     {data.cogs.missingCostItems.length} mapped item
                     {data.cogs.missingCostItems.length === 1 ? "" : "s"} ($
                     {data.cogs.missingCostItems
@@ -248,7 +248,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                   </div>
                   <a
                     href="/dashboard/ingredients"
-                    className="shrink-0 underline hover:text-amber-700"
+                    className="shrink-0 underline hover:text-(--accent-dark)"
                   >
                     Fix ingredients →
                   </a>

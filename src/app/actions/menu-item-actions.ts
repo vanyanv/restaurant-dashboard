@@ -3,8 +3,15 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import { revalidatePath } from "next/cache"
 import type { MenuItemForCatalog } from "@/types/recipe"
+import type { OtterSubItemForCatalog as OtterSubItemForCatalogType } from "@/types/otter-subitem"
+import {
+  attachSubItemMappings,
+  type SubItemAggregateRow,
+} from "@/lib/otter-subitem-aggregation"
+import { mergeSellPrices } from "@/lib/menu-sell-price-aggregation"
 
 async function requireOwnerId(): Promise<string | null> {
   const session = await getServerSession(authOptions)
@@ -208,19 +215,7 @@ export async function unmapOtterItem(otterItemName: string): Promise<void> {
 
 /* ─────────────────────────────── sub-items (modifiers) ─────────────────────────────── */
 
-export type OtterSubItemForCatalog = {
-  skuId: string
-  /** Most common display name for this SKU. */
-  name: string
-  /** Parent sub-header (e.g. "Add Toppings (Meat & Cheese Base)") — most common seen. */
-  subHeader: string | null
-  occurrences: number
-  firstSeen: Date | null
-  lastSeen: Date | null
-  storeIds: string[]
-  mappedRecipeId: string | null
-  mappedRecipeName: string | null
-}
+export type OtterSubItemForCatalog = OtterSubItemForCatalogType
 
 /**
  * Aggregate every Otter order sub-item the owner has seen, grouped by skuId,
@@ -259,120 +254,103 @@ export async function getOtterSubItemsForCatalog(
     refTimeFloor.setDate(refTimeFloor.getDate() - sinceDays)
   }
 
-  const subs = await prisma.otterOrderSubItem.findMany({
-    where: {
-      orderItem: {
-        order: {
-          storeId: { in: storeIds },
-          ...(refTimeFloor ? { referenceTimeLocal: { gte: refTimeFloor } } : {}),
-        },
-      },
-    },
-    select: {
-      skuId: true,
-      name: true,
-      subHeader: true,
-      quantity: true,
-      orderItem: {
-        select: {
-          quantity: true,
-          order: {
-            select: { storeId: true, referenceTimeLocal: true },
-          },
-        },
-      },
-    },
-  })
-
-  type Agg = {
+  // DB-side aggregation: group by skuId in Postgres so we never materialize
+  // the ~100k join rows in JS. Mirrors the contract validated by
+  // `aggregateRawSubItemRows` in `src/lib/otter-subitem-aggregation.ts`.
+  type RawAggregate = {
     skuId: string
-    nameCounts: Map<string, number>
-    subHeaderCounts: Map<string, number>
-    occurrences: number
+    occurrences: string | number
+    mostCommonName: string
+    mostCommonHeader: string | null
     firstSeen: Date | null
     lastSeen: Date | null
-    storeIds: Set<string>
+    storeIds: string[]
   }
-  const bag = new Map<string, Agg>()
-  for (const s of subs) {
-    if (!s.skuId) continue
-    let a = bag.get(s.skuId)
-    if (!a) {
-      a = {
-        skuId: s.skuId,
-        nameCounts: new Map(),
-        subHeaderCounts: new Map(),
-        occurrences: 0,
-        firstSeen: null,
-        lastSeen: null,
-        storeIds: new Set(),
-      }
-      bag.set(s.skuId, a)
-    }
-    // Each row counts its own (subQty × parentItemQty) so we bias toward
-    // how many physical modifier-uses actually happened.
-    const uses = (s.quantity ?? 1) * (s.orderItem.quantity ?? 1)
-    a.occurrences += uses
-    a.nameCounts.set(s.name, (a.nameCounts.get(s.name) ?? 0) + uses)
-    const sh = s.subHeader ?? "__none__"
-    a.subHeaderCounts.set(sh, (a.subHeaderCounts.get(sh) ?? 0) + uses)
-    a.storeIds.add(s.orderItem.order.storeId)
-    const ts = s.orderItem.order.referenceTimeLocal
-    if (ts) {
-      if (!a.firstSeen || ts < a.firstSeen) a.firstSeen = ts
-      if (!a.lastSeen || ts > a.lastSeen) a.lastSeen = ts
-    }
-  }
+  const aggregates = await prisma.$queryRaw<RawAggregate[]>(Prisma.sql`
+    WITH per_combo AS (
+      SELECT
+        s."skuId"        AS sku_id,
+        s.name           AS name,
+        s."subHeader"    AS sub_header,
+        o."storeId"      AS store_id,
+        SUM(COALESCE(s.quantity, 1) * COALESCE(i.quantity, 1)) AS uses,
+        MIN(o."referenceTimeLocal") AS first_seen,
+        MAX(o."referenceTimeLocal") AS last_seen
+      FROM "OtterOrderSubItem" s
+      JOIN "OtterOrderItem" i ON i.id = s."orderItemId"
+      JOIN "OtterOrder" o     ON o.id = i."orderId"
+      WHERE o."storeId" = ANY(${storeIds}::text[])
+        AND s."skuId" IS NOT NULL
+        AND (
+          ${refTimeFloor}::timestamp IS NULL
+          OR o."referenceTimeLocal" >= ${refTimeFloor}::timestamp
+        )
+      GROUP BY 1, 2, 3, 4
+    ),
+    name_votes AS (
+      SELECT sku_id, name, SUM(uses) AS uses
+      FROM per_combo GROUP BY 1, 2
+    ),
+    header_votes AS (
+      SELECT sku_id, sub_header, SUM(uses) AS uses
+      FROM per_combo GROUP BY 1, 2
+    ),
+    top_name AS (
+      SELECT DISTINCT ON (sku_id) sku_id, name
+      FROM name_votes
+      ORDER BY sku_id, uses DESC, name
+    ),
+    top_header AS (
+      SELECT DISTINCT ON (sku_id) sku_id, sub_header
+      FROM header_votes
+      ORDER BY sku_id, uses DESC, sub_header NULLS LAST
+    ),
+    totals AS (
+      SELECT
+        sku_id,
+        SUM(uses)                       AS occurrences,
+        MIN(first_seen)                 AS first_seen,
+        MAX(last_seen)                  AS last_seen,
+        array_agg(DISTINCT store_id)    AS store_ids
+      FROM per_combo
+      GROUP BY 1
+    )
+    SELECT
+      t.sku_id        AS "skuId",
+      t.occurrences   AS "occurrences",
+      tn.name         AS "mostCommonName",
+      th.sub_header   AS "mostCommonHeader",
+      t.first_seen    AS "firstSeen",
+      t.last_seen     AS "lastSeen",
+      t.store_ids     AS "storeIds"
+    FROM totals t
+    JOIN top_name   tn ON tn.sku_id = t.sku_id
+    JOIN top_header th ON th.sku_id = t.sku_id
+    ORDER BY t.occurrences DESC
+  `)
+
+  const aggregateRows: SubItemAggregateRow[] = aggregates.map((a) => ({
+    skuId: a.skuId,
+    occurrences: Number(a.occurrences),
+    mostCommonName: a.mostCommonName ?? "",
+    mostCommonHeader: a.mostCommonHeader,
+    firstSeen: a.firstSeen,
+    lastSeen: a.lastSeen,
+    storeIds: a.storeIds,
+  }))
 
   const mappings = await prisma.otterSubItemMapping.findMany({
     where: { storeId: { in: storeIds } },
     include: { recipe: { select: { id: true, itemName: true } } },
   })
-  const mappingBySku = new Map<
-    string,
-    { recipeId: string; recipeName: string }
-  >()
-  for (const m of mappings) {
-    if (!mappingBySku.has(m.skuId)) {
-      mappingBySku.set(m.skuId, {
-        recipeId: m.recipeId,
-        recipeName: m.recipe.itemName,
-      })
-    }
-  }
-
-  const rows: OtterSubItemForCatalog[] = []
-  for (const a of bag.values()) {
-    const mostCommonName = pickTopKey(a.nameCounts) ?? ""
-    const mostCommonHeader = pickTopKey(a.subHeaderCounts)
-    const m = mappingBySku.get(a.skuId)
-    rows.push({
-      skuId: a.skuId,
-      name: mostCommonName,
-      subHeader: mostCommonHeader === "__none__" ? null : mostCommonHeader,
-      occurrences: a.occurrences,
-      firstSeen: a.firstSeen,
-      lastSeen: a.lastSeen,
-      storeIds: Array.from(a.storeIds),
-      mappedRecipeId: m?.recipeId ?? null,
-      mappedRecipeName: m?.recipeName ?? null,
-    })
-  }
-
-  rows.sort((a, b) => b.occurrences - a.occurrences)
-  return rows
-}
-
-function pickTopKey(counts: Map<string, number>): string | null {
-  let best: string | null = null
-  let bestN = -1
-  for (const [k, n] of counts) {
-    if (n > bestN) {
-      best = k
-      bestN = n
-    }
-  }
-  return best
+  return attachSubItemMappings(
+    aggregateRows,
+    mappings.map((m) => ({
+      skuId: m.skuId,
+      recipeId: m.recipeId,
+      recipeName: m.recipe.itemName,
+    }))
+  )
 }
 
 export async function mapOtterSubItemToRecipe(input: {
@@ -476,69 +454,43 @@ export async function getMenuItemSellPrices(
   const cutoff = new Date()
   cutoff.setUTCDate(cutoff.getUTCDate() - lookbackDays)
 
-  // Primary: OtterMenuItem daily rollups — averaged total_sales / total_qty per item.
-  const rollups = await prisma.otterMenuItem.findMany({
-    where: {
-      storeId: { in: storeIds },
-      isModifier: false,
-      date: { gte: cutoff },
-    },
-    select: {
-      itemName: true,
-      fpQuantitySold: true,
-      tpQuantitySold: true,
-      fpTotalSales: true,
-      tpTotalSales: true,
-    },
-  })
-
-  const agg = new Map<string, { qty: number; sales: number }>()
-  for (const r of rollups) {
-    const qty = (r.fpQuantitySold ?? 0) + (r.tpQuantitySold ?? 0)
-    const sales = (r.fpTotalSales ?? 0) + (r.tpTotalSales ?? 0)
-    if (qty <= 0) continue
-    const key = r.itemName.toLowerCase()
-    const existing = agg.get(key)
-    if (existing) {
-      existing.qty += qty
-      existing.sales += sales
-    } else {
-      agg.set(key, { qty, sales })
-    }
-  }
-
-  const prices = new Map<string, MenuItemSellPrice>()
-  for (const [key, { qty, sales }] of agg) {
-    if (qty <= 0 || sales <= 0) continue
-    prices.set(key, { avgPrice: sales / qty, qtySold: qty })
-  }
-
-  // Fallback: items present in recent OtterOrderItem but missing rollups.
-  // Group by lowercase name, take the most-recent-order price per name.
-  const recentOrderItems = await prisma.otterOrderItem.findMany({
-    where: {
-      order: {
+  const [primaryRows, fallbackRows] = await Promise.all([
+    prisma.otterMenuItem.groupBy({
+      by: ["itemName"],
+      where: {
         storeId: { in: storeIds },
-        referenceTimeLocal: { gte: cutoff },
+        isModifier: false,
+        date: { gte: cutoff },
       },
-      price: { gt: 0 },
-    },
-    select: {
-      name: true,
-      price: true,
-      quantity: true,
-      order: { select: { referenceTimeLocal: true } },
-    },
-    orderBy: { order: { referenceTimeLocal: "desc" } },
-    take: 5000,
-  })
+      _sum: {
+        fpQuantitySold: true,
+        tpQuantitySold: true,
+        fpTotalSales: true,
+        tpTotalSales: true,
+      },
+    }),
+    prisma.$queryRaw<
+      Array<{ name: string; price: number; quantity: number }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (LOWER(oi."name"))
+        oi."name", oi."price"::float AS "price", oi."quantity"::float AS "quantity"
+      FROM "OtterOrderItem" oi
+      JOIN "OtterOrder" oo ON oo."id" = oi."orderId"
+      WHERE oo."storeId" = ANY(${storeIds}::text[])
+        AND oo."referenceTimeLocal" >= ${cutoff}
+        AND oi."price" > 0
+      ORDER BY LOWER(oi."name"), oo."referenceTimeLocal" DESC
+    `),
+  ])
 
-  for (const oi of recentOrderItems) {
-    const key = oi.name.toLowerCase()
-    if (prices.has(key)) continue
-    const unit = oi.quantity > 0 ? oi.price / oi.quantity : oi.price
-    prices.set(key, { avgPrice: unit, qtySold: Math.round(oi.quantity) })
-  }
+  const merged = mergeSellPrices(
+    primaryRows.map((r) => ({
+      itemName: r.itemName,
+      totalQty: (r._sum.fpQuantitySold ?? 0) + (r._sum.tpQuantitySold ?? 0),
+      totalSales: (r._sum.fpTotalSales ?? 0) + (r._sum.tpTotalSales ?? 0),
+    })),
+    fallbackRows
+  )
 
-  return prices
+  return merged
 }

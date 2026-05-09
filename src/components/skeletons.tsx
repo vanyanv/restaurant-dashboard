@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -10,16 +9,13 @@ export function KpiCardsSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {Array.from({ length: 4 }).map((_, i) => (
-        <Card
-          key={i}
-          className="relative overflow-hidden border-t-[3px] border-t-muted"
-        >
-          <CardContent className="p-4 sm:p-5">
+        <section key={i} className="inv-panel inv-panel--flush relative overflow-hidden">
+          <div className="px-4 py-3">
             <Skeleton className="h-3 w-20" />
             <Skeleton className="mt-2.5 h-7 w-28 sm:h-8" />
-            {i < 2 && <Skeleton className="mt-3 h-5 w-24 rounded-full" />}
-          </CardContent>
-        </Card>
+            {i < 2 && <Skeleton className="mt-3 h-5 w-24 rounded-xs" />}
+          </div>
+        </section>
       ))}
     </div>
   )
@@ -41,26 +37,22 @@ export function ChartSkeleton({
   showToggle,
 }: ChartSkeletonProps) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1.5">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-52" />
-          </div>
-          {showToggle && (
-            <div className="flex gap-1">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-10 rounded-md" />
-              ))}
-            </div>
-          )}
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="space-y-1.5">
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-2.5 w-52" />
         </div>
-      </CardHeader>
-      <CardContent>
-        <Skeleton className={cn("w-full rounded-lg", height)} />
-      </CardContent>
-    </Card>
+        {showToggle && (
+          <div className="flex gap-1">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-7 w-10 rounded-xs" />
+            ))}
+          </div>
+        )}
+      </header>
+      <Skeleton className={cn("w-full rounded-xs", height)} />
+    </section>
   )
 }
 
@@ -70,14 +62,14 @@ export function ChartSkeleton({
 
 export function PieChartSkeleton({ className }: { className?: string }) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
         <div className="space-y-1.5">
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-3 w-44" />
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-2.5 w-44" />
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4 pt-2">
+      </header>
+      <div className="flex flex-col items-center gap-4">
         <Skeleton className="h-[200px] w-[200px] rounded-full" />
         <div className="flex gap-6">
           <div className="flex items-center gap-2">
@@ -89,8 +81,8 @@ export function PieChartSkeleton({ className }: { className?: string }) {
             <Skeleton className="h-3 w-14" />
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -100,28 +92,26 @@ export function PieChartSkeleton({ className }: { className?: string }) {
 
 export function HeatmapSkeleton({ className }: { className?: string }) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
         <div className="space-y-1.5">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-2.5 w-48" />
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex gap-[2px]">
-          {Array.from({ length: 10 }).map((_, col) => (
-            <div key={col} className="flex flex-col gap-[2px]">
-              {Array.from({ length: 7 }).map((_, row) => (
-                <Skeleton
-                  key={row}
-                  className="h-3 w-3 rounded-[2px]"
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+      </header>
+      <div className="flex gap-[2px]">
+        {Array.from({ length: 10 }).map((_, col) => (
+          <div key={col} className="flex flex-col gap-[2px]">
+            {Array.from({ length: 7 }).map((_, row) => (
+              <Skeleton
+                key={row}
+                className="h-3 w-3 rounded-xs"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -141,46 +131,44 @@ export function DataTableSkeleton({
   className,
 }: DataTableSkeletonProps) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-3">
+    <section className={cn("inv-panel inv-panel--flush", className)}>
+      <header className="inv-panel__head px-6 pt-4">
         <div className="space-y-1.5">
-          <Skeleton className="h-4 w-36" />
-          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-3 w-36" />
+          <Skeleton className="h-2.5 w-48" />
         </div>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-left pl-6">
-                  <Skeleton className="h-3 w-16" />
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-(--hairline-bold)">
+              <th className="px-4 py-3 text-left pl-6">
+                <Skeleton className="h-3 w-16" />
+              </th>
+              {Array.from({ length: columns - 1 }).map((_, i) => (
+                <th key={i} className="px-4 py-3 text-right">
+                  <Skeleton className="ml-auto h-3 w-14" />
                 </th>
-                {Array.from({ length: columns - 1 }).map((_, i) => (
-                  <th key={i} className="px-4 py-3 text-right">
-                    <Skeleton className="ml-auto h-3 w-14" />
-                  </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rows }).map((_, rowIdx) => (
+              <tr key={rowIdx} className="border-b border-(--hairline)">
+                <td className="px-4 py-3 pl-6">
+                  <Skeleton className="h-4 w-24" />
+                </td>
+                {Array.from({ length: columns - 1 }).map((_, cellIdx) => (
+                  <td key={cellIdx} className="px-4 py-3 text-right">
+                    <Skeleton className="ml-auto h-4 w-16" />
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: rows }).map((_, rowIdx) => (
-                <tr key={rowIdx} className="border-b border-border/40">
-                  <td className="px-4 py-3 pl-6">
-                    <Skeleton className="h-4 w-24" />
-                  </td>
-                  {Array.from({ length: columns - 1 }).map((_, cellIdx) => (
-                    <td key={cellIdx} className="px-4 py-3 text-right">
-                      <Skeleton className="ml-auto h-4 w-16" />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -190,49 +178,47 @@ export function DataTableSkeleton({
 
 export function MenuCategoryTableSkeleton({ className }: { className?: string }) {
   return (
-    <Card className={className}>
-      <CardHeader className="pb-3">
+    <section className={cn("inv-panel inv-panel--flush", className)}>
+      <header className="inv-panel__head px-6 pt-4">
         <div className="space-y-1.5">
-          <Skeleton className="h-4 w-36" />
-          <Skeleton className="h-3 w-56" />
+          <Skeleton className="h-3 w-36" />
+          <Skeleton className="h-2.5 w-56" />
         </div>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
-        <div className="max-h-[500px] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 pl-6 text-left">
-                  <Skeleton className="h-3 w-28" />
+      </header>
+      <div className="max-h-[500px] overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-(--hairline-bold)">
+              <th className="px-4 py-3 pl-6 text-left">
+                <Skeleton className="h-3 w-28" />
+              </th>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <th key={i} className="px-4 py-3 text-right">
+                  <Skeleton className="ml-auto h-3 w-14" />
                 </th>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <th key={i} className="px-4 py-3 text-right">
-                    <Skeleton className="ml-auto h-3 w-14" />
-                  </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 5 }).map((_, rowIdx) => (
+              <tr key={rowIdx} className="border-b border-(--hairline)">
+                <td className="px-4 py-3 pl-6">
+                  <div className="flex items-center gap-1.5">
+                    <Skeleton className="h-4 w-4 shrink-0" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                </td>
+                {Array.from({ length: 6 }).map((_, cellIdx) => (
+                  <td key={cellIdx} className="px-4 py-3 text-right">
+                    <Skeleton className="ml-auto h-4 w-14" />
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: 5 }).map((_, rowIdx) => (
-                <tr key={rowIdx} className="border-b border-border/40">
-                  <td className="px-4 py-3 pl-6">
-                    <div className="flex items-center gap-1.5">
-                      <Skeleton className="h-4 w-4 shrink-0" />
-                      <Skeleton className="h-4 w-28" />
-                    </div>
-                  </td>
-                  {Array.from({ length: 6 }).map((_, cellIdx) => (
-                    <td key={cellIdx} className="px-4 py-3 text-right">
-                      <Skeleton className="ml-auto h-4 w-14" />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -244,22 +230,22 @@ export function AdditionalMetricsSkeleton() {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       {Array.from({ length: 3 }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader className="pb-2">
-            <Skeleton className="h-4 w-32" />
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <section key={i} className="inv-panel">
+          <header className="inv-panel__head">
+            <Skeleton className="h-3 w-32" />
+          </header>
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Skeleton className="h-3.5 w-24" />
               <Skeleton className="h-3.5 w-16" />
             </div>
-            <div className="h-px bg-border" />
+            <div className="h-px bg-(--hairline)" />
             <div className="flex items-center justify-between">
               <Skeleton className="h-3.5 w-20" />
               <Skeleton className="h-3.5 w-16" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       ))}
     </div>
   )
@@ -273,11 +259,11 @@ export function DashboardPageSkeleton() {
   return (
     <div className="flex flex-col h-full">
       {/* Sticky header skeleton */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+      <div className="sticky top-0 z-30 bg-(--paper)/80 backdrop-blur-md border-b border-(--hairline-bold)">
         <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <Skeleton className="h-5 w-5 rounded" />
+              <Skeleton className="h-5 w-5 rounded-xs" />
               <Skeleton className="h-5 w-28" />
             </div>
             <div className="hidden sm:flex items-center gap-2">
@@ -285,8 +271,8 @@ export function DashboardPageSkeleton() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Skeleton className="h-8 w-48 rounded-md" />
-            <Skeleton className="h-8 w-20 rounded-md" />
+            <Skeleton className="h-8 w-48 rounded-xs" />
+            <Skeleton className="h-8 w-20 rounded-xs" />
           </div>
         </div>
       </div>
@@ -299,21 +285,21 @@ export function DashboardPageSkeleton() {
           showToggle
         />
         {/* Financial summary table skeleton (inline) */}
-        <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+        <section className="inv-panel inv-panel--flush overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-(--hairline-bold) bg-(--paper-warm)">
             <div className="flex items-center gap-2">
-              <Skeleton className="h-4 w-4 rounded" />
+              <Skeleton className="h-4 w-4 rounded-xs" />
               <div className="space-y-1.5">
                 <Skeleton className="h-3.5 w-28" />
                 <Skeleton className="h-2.5 w-20" />
               </div>
             </div>
-            <Skeleton className="h-8 w-[200px] rounded-md" />
+            <Skeleton className="h-8 w-[200px] rounded-xs" />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
+                <tr className="border-b border-(--hairline-bold) bg-(--paper-warm)/60">
                   <th className="px-4 py-3 text-left">
                     <Skeleton className="h-3 w-16" />
                   </th>
@@ -326,7 +312,7 @@ export function DashboardPageSkeleton() {
               </thead>
               <tbody>
                 {Array.from({ length: 3 }).map((_, rowIdx) => (
-                  <tr key={rowIdx} className="border-b border-border/40">
+                  <tr key={rowIdx} className="border-b border-(--hairline)">
                     <td className="px-4 py-3">
                       <Skeleton className="h-4 w-28" />
                     </td>
@@ -340,7 +326,7 @@ export function DashboardPageSkeleton() {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )
@@ -354,9 +340,9 @@ export function StoreAnalyticsPageSkeleton() {
   return (
     <div>
       {/* Header with breadcrumb */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <Skeleton className="h-6 w-6 rounded" />
-        <div className="mx-2 h-4 w-px bg-border" />
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-(--hairline-bold) px-4">
+        <Skeleton className="h-6 w-6 rounded-xs" />
+        <div className="mx-2 h-4 w-px bg-(--hairline)" />
         <div className="flex items-center gap-2">
           <Skeleton className="h-3 w-16" />
           <Skeleton className="h-3 w-3" />
@@ -367,14 +353,14 @@ export function StoreAnalyticsPageSkeleton() {
       </header>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-(--hairline-bold) px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-8 rounded" />
-          <Skeleton className="h-8 w-[180px] rounded-md" />
+          <Skeleton className="h-8 w-8 rounded-xs" />
+          <Skeleton className="h-8 w-[180px] rounded-xs" />
         </div>
         <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-48 rounded-md" />
-          <Skeleton className="h-8 w-20 rounded-md" />
+          <Skeleton className="h-8 w-48 rounded-xs" />
+          <Skeleton className="h-8 w-20 rounded-xs" />
         </div>
       </div>
 

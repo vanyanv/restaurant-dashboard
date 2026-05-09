@@ -11,15 +11,39 @@ concurrency:
   group: invoices-sync
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
       - name: POST /api/invoices/sync
+        id: cron
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LOG_FILE: logs/invoices-sync.log
+          CRON_MAX_TIME: "115"
         run: |
-          curl -fsSL -X POST "$APP_URL/api/invoices/sync" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 115
+          bash .github/scripts/run-with-cron-logging.sh \
+            .github/scripts/curl-cron-json.sh POST "$APP_URL/api/invoices/sync"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoices-sync-log-${{ github.run_id }}
+          path: logs/invoices-sync.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Invoices Sync
+          ISSUE_TITLE: "[Auto] Invoices Sync failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/invoices-sync.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

@@ -255,7 +255,8 @@ export function RecipeCanvas({
                 value={itemName}
                 onChange={(e) => setItemName(e.target.value)}
                 placeholder="Name this dish…"
-                className="mt-2 w-full bg-transparent font-display text-[28px] italic leading-[1.05] tracking-[-0.02em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none md:text-[38px]"
+                aria-label="Recipe name"
+                className="mt-2 w-full bg-transparent font-display text-[28px] italic leading-[1.05] tracking-[-0.02em] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-hidden md:text-[38px]"
                 style={{ fontFeatureSettings: "'ss01','dlig','liga'" }}
               />
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-dashed border-[var(--hairline-bold)] pb-4 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--ink-muted)]">
@@ -263,7 +264,8 @@ export function RecipeCanvas({
                   <input
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-28 bg-transparent uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-none"
+                    aria-label="Recipe category"
+                    className="w-28 bg-transparent uppercase tracking-[0.08em] text-[var(--ink)] focus:outline-hidden"
                     placeholder="category"
                   />
                 </MetaPill>
@@ -274,7 +276,8 @@ export function RecipeCanvas({
                     step={0.01}
                     value={servingSize}
                     onChange={(e) => setServingSize(e.target.value)}
-                    className="w-12 bg-transparent tabular-nums text-[var(--ink)] focus:outline-none"
+                    aria-label="Serving size"
+                    className="w-12 bg-transparent tabular-nums text-[var(--ink)] focus:outline-hidden"
                   />
                 </MetaPill>
                 <MetaPill label="Override">
@@ -286,7 +289,8 @@ export function RecipeCanvas({
                     placeholder="—"
                     value={foodCost}
                     onChange={(e) => setFoodCost(e.target.value)}
-                    className="w-14 bg-transparent tabular-nums text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+                    aria-label="Food cost override"
+                    className="w-14 bg-transparent tabular-nums text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-hidden"
                   />
                 </MetaPill>
                 <label className="flex cursor-pointer items-center gap-2">
@@ -376,7 +380,8 @@ export function RecipeCanvas({
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Prep instructions, allergens, plating…"
                 rows={3}
-                className="w-full resize-none border-b border-dashed border-[var(--hairline)] bg-transparent px-0 py-1 text-sm leading-relaxed text-[var(--ink)] placeholder:italic placeholder:text-[var(--ink-faint)] focus:border-[var(--ink)] focus:outline-none"
+                aria-label="Recipe notes"
+                className="w-full resize-none border-b border-dashed border-[var(--hairline)] bg-transparent px-0 py-1 text-sm leading-relaxed text-[var(--ink)] placeholder:italic placeholder:text-[var(--ink-faint)] focus:border-[var(--ink)] focus:outline-hidden"
               />
             </div>
 

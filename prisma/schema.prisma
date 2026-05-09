@@ -245,6 +245,7 @@ model OtterDailySummary {
   @@unique([storeId, date, platform, paymentMethod])
   @@index([storeId])
   @@index([date])
+  @@index([storeId, date, platform], map: "OtterDailySummary_store_date_platform_idx")
 }
 
 model OtterHourlySummary {
@@ -306,6 +307,7 @@ model OtterMenuItem {
 
   @@unique([storeId, date, category, itemName, isModifier])
   @@index([storeId, date])
+  @@index([storeId, isModifier, date, itemName], map: "OtterMenuItem_store_modifier_date_item_idx")
 }
 
 model OtterRating {
@@ -412,6 +414,9 @@ model Invoice {
   @@index([ownerId, vendorName, invoiceDate])
   @@index([accountId, vendorName, invoiceDate])
   @@index([accountId, isReturn])
+  @@index([accountId, dueDate, isReturn], map: "Invoice_account_dueDate_return_idx")
+  @@index([accountId, storeId, dueDate, isReturn], map: "Invoice_account_store_dueDate_return_idx")
+  @@index([accountId, invoiceDate, isReturn], map: "Invoice_account_invoiceDate_return_idx")
 }
 
 model InvoiceLineItem {
@@ -1349,6 +1354,7 @@ model ForecastDailyRevenue {
 
   @@unique([storeId, forecastDate, hourBucket, generatedAt])
   @@index([storeId, forecastDate])
+  @@index([storeId, forecastDate, hourBucket, generatedAt(sort: Desc)], map: "ForecastDailyRevenue_store_date_hour_generated_idx")
   @@index([generatedAt(sort: Desc)])
 }
 
@@ -1373,6 +1379,7 @@ model ForecastMenuItem {
 
   @@unique([storeId, otterItemSkuId, forecastDate, generatedAt])
   @@index([storeId, forecastDate])
+  @@index([storeId, forecastDate, otterItemSkuId, generatedAt(sort: Desc)], map: "ForecastMenuItem_store_date_sku_generated_idx")
   @@index([generatedAt(sort: Desc)])
 }
 

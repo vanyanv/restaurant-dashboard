@@ -14,18 +14,47 @@ concurrency:
   group: otter-orders-sync
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: POST /api/otter/orders-sync
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Sync Otter orders
+        id: sync
         env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OTTER_JWT: ${{ secrets.OTTER_JWT }}
+          OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
+          OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
           DAYS: ${{ github.event.inputs.days || '3' }}
+          LOG_FILE: logs/otter-orders-sync.log
         run: |
-          curl -fsSL -X POST "$APP_URL/api/otter/orders-sync" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            -H "Content-Type: application/json" \
-            --max-time 290 \
-            -d "{\"days\": $DAYS}"
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/sync-otter-orders.ts --days="$DAYS"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otter-orders-sync-log-${{ github.run_id }}
+          path: logs/otter-orders-sync.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Orders Sync
+          ISSUE_TITLE: "[Auto] Otter Orders Sync failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/otter-orders-sync.log
+          FAILED_EXIT_CODE: ${{ steps.sync.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

@@ -2,6 +2,10 @@ import { GoogleGenAI } from "@google/genai"
 import OpenAI from "openai"
 import type { InvoiceExtraction } from "@/types/invoice"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
+import {
+  normalizeCatchWeightMeatLines,
+  normalizeCountPackLines,
+} from "@/lib/invoice-sanity"
 
 export const PRIMARY_MODEL = "gpt-4.1-mini"
 export const FALLBACK_MODEL = "gemini-2.5-flash"
@@ -84,6 +88,24 @@ const KNOWN_SKU_PACK_PROFILES: KnownSkuPackProfile[] = [
     unitSizeUom: "LB",
     label: "Sysco Imported Tomato Bulk 5x6, 25-lb box",
   },
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "1405521",
+    unit: "CS",
+    packSize: 4,
+    unitSize: 1,
+    unitSizeUom: "GAL",
+    label: "Sysco Lyon chocolate syrup, 4x1-gal case",
+  },
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "5296108",
+    unit: "CS",
+    packSize: 4,
+    unitSize: 1,
+    unitSizeUom: "GAL",
+    label: "Sysco Lyon strawberry syrup, 4x1-gal case",
+  },
 ]
 
 /**
@@ -113,6 +135,12 @@ function applyKnownSkuPackProfiles(extraction: InvoiceExtraction): InvoiceExtrac
     )
   }
   return extraction
+}
+
+function normalizeExtraction(extraction: InvoiceExtraction): InvoiceExtraction {
+  return normalizeCountPackLines(
+    normalizeCatchWeightMeatLines(applyKnownSkuPackProfiles(extraction))
+  )
 }
 
 export function buildExtractionPrompt(): string {
@@ -433,8 +461,7 @@ export async function extractInvoiceData(
   fileName: string
 ): Promise<InvoiceExtractionResult> {
   try {
-    const extraction = await extractViaOpenAI(pdfBase64, fileName)
-    applyKnownSkuPackProfiles(extraction)
+    const extraction = normalizeExtraction(await extractViaOpenAI(pdfBase64, fileName))
     return { extraction, model: PRIMARY_MODEL }
   } catch (err) {
     if (!shouldFallBackToGemini(err)) throw err
@@ -442,8 +469,7 @@ export async function extractInvoiceData(
       `OpenAI extraction failed (${err instanceof Error ? err.message.slice(0, 120) : err}), ` +
       `falling back to Gemini ${FALLBACK_MODEL}`
     )
-    const extraction = await extractViaGemini(pdfBase64)
-    applyKnownSkuPackProfiles(extraction)
+    const extraction = normalizeExtraction(await extractViaGemini(pdfBase64))
     return { extraction, model: FALLBACK_MODEL }
   }
 }

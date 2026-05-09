@@ -79,6 +79,7 @@ export function LostSalesCard({ data }: Props) {
                 {e.itemName}
               </div>
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
+                {e.storeName ? `${e.storeName} · ` : ""}
                 {format(e.gapStart, "MMM d")} – {format(e.gapEnd, "MMM d")}
               </div>
             </div>

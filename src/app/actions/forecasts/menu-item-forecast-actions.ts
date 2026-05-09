@@ -27,7 +27,8 @@ export interface MenuItemForecast {
 }
 
 export interface MenuItemForecastData {
-  storeId: string
+  /** Null when aggregating across all stores. */
+  storeId: string | null
   storeName: string
   generatedAt: Date | null
   recentMape: number | null
@@ -39,7 +40,7 @@ export type GetMenuItemForecastResult =
   | { ok: false; error: "store_not_in_account" }
 
 export async function getMenuItemForecast(input: {
-  storeId: string
+  storeId?: string
   horizonDays?: number
   asOf?: Date
 }): Promise<GetMenuItemForecastResult | null> {
@@ -47,12 +48,28 @@ export async function getMenuItemForecast(input: {
   const user = session?.user ?? null
   if (!user) return null
 
-  const store = await prisma.store.findUnique({
-    where: { id: input.storeId },
-    select: { id: true, name: true, accountId: true },
-  })
-  if (!store || store.accountId !== user.accountId) {
-    return { ok: false, error: "store_not_in_account" }
+  let storeIds: string[]
+  let storeName: string
+  let storeIdOut: string | null
+  if (input.storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: input.storeId },
+      select: { id: true, name: true, accountId: true },
+    })
+    if (!store || store.accountId !== user.accountId) {
+      return { ok: false, error: "store_not_in_account" }
+    }
+    storeIds = [store.id]
+    storeName = store.name
+    storeIdOut = store.id
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true },
+    })
+    storeIds = stores.map((s) => s.id)
+    storeName = "All stores"
+    storeIdOut = null
   }
 
   const horizonDays = input.horizonDays ?? 7
@@ -62,11 +79,11 @@ export async function getMenuItemForecast(input: {
 
   const rows = await prisma.forecastMenuItem.findMany({
     where: {
-      storeId: input.storeId,
+      storeId: { in: storeIds },
       forecastDate: { gte: startOfDay(asOf), lt: startOfDay(horizonEnd) },
     },
-    orderBy: [{ otterItemSkuId: "asc" }, { forecastDate: "asc" }, { generatedAt: "desc" }],
     select: {
+      storeId: true,
       otterItemSkuId: true,
       forecastDate: true,
       predictedQty: true,
@@ -76,34 +93,55 @@ export async function getMenuItemForecast(input: {
     },
   })
 
-  // Latest generation per (sku, date)
+  // Latest generation per (storeId, sku, date)
   const byKey = new Map<string, (typeof rows)[number]>()
   for (const r of rows) {
-    const key = `${r.otterItemSkuId}|${r.forecastDate.toISOString().slice(0, 10)}`
+    const key = `${r.storeId}|${r.otterItemSkuId}|${r.forecastDate
+      .toISOString()
+      .slice(0, 10)}`
     const existing = byKey.get(key)
     if (!existing || r.generatedAt > existing.generatedAt) byKey.set(key, r)
   }
 
-  const itemsBucket = new Map<string, MenuItemForecastDay[]>()
+  // Aggregate qty across stores per (sku, date). Same SKU id across stores
+  // is intentionally merged — we want portfolio demand for each item.
+  type DayBuckets = Map<string, MenuItemForecastDay>
+  const itemsBucket = new Map<string, DayBuckets>()
   let latestGen: Date | null = null
   for (const r of byKey.values()) {
     if (!latestGen || r.generatedAt > latestGen) latestGen = r.generatedAt
-    const list = itemsBucket.get(r.otterItemSkuId) ?? []
-    list.push({
-      date: r.forecastDate,
-      predictedQty: r.predictedQty,
-      p10: r.p10,
-      p90: r.p90,
-    })
-    itemsBucket.set(r.otterItemSkuId, list)
+    const dateKey = r.forecastDate.toISOString().slice(0, 10)
+    const days = itemsBucket.get(r.otterItemSkuId) ?? new Map()
+    const cur = days.get(dateKey)
+    const pr = r.predictedQty
+    const p10 = r.p10 ?? pr
+    const p90 = r.p90 ?? pr
+    if (!cur) {
+      days.set(dateKey, {
+        date: r.forecastDate,
+        predictedQty: pr,
+        p10,
+        p90,
+      })
+    } else {
+      cur.predictedQty += pr
+      cur.p10 = (cur.p10 ?? 0) + p10
+      cur.p90 = (cur.p90 ?? 0) + p90
+    }
+    itemsBucket.set(r.otterItemSkuId, days)
   }
 
   const items: MenuItemForecast[] = Array.from(itemsBucket.entries())
-    .map(([sku, days]) => ({
-      otterItemSkuId: sku,
-      totalPredicted: days.reduce((s, d) => s + d.predictedQty, 0),
-      days: days.sort((a, b) => a.date.getTime() - b.date.getTime()),
-    }))
+    .map(([sku, days]) => {
+      const dayList = Array.from(days.values()).sort(
+        (a, b) => a.date.getTime() - b.date.getTime(),
+      )
+      return {
+        otterItemSkuId: sku,
+        totalPredicted: dayList.reduce((s, d) => s + d.predictedQty, 0),
+        days: dayList,
+      }
+    })
     .sort((a, b) => b.totalPredicted - a.totalPredicted)
 
   const lastRun = await prisma.mlTrainingRun.findFirst({
@@ -115,8 +153,8 @@ export async function getMenuItemForecast(input: {
   return {
     ok: true,
     data: {
-      storeId: store.id,
-      storeName: store.name,
+      storeId: storeIdOut,
+      storeName,
       generatedAt: latestGen,
       recentMape: lastRun?.mape ?? null,
       items,

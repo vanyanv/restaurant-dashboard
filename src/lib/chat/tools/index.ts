@@ -38,22 +38,33 @@ import { getPnlSummary } from "./pnl"
 import { searchPnlHistory } from "./pnl-history"
 import {
   getCashPositionForecastTool,
-  getCateringDetectionTool,
   getChannelMixTool,
   getFoodCostForecastTool,
   getLaborStaffingForecastTool,
   getLaunchTrajectoryTool,
   getLostSalesTool,
   getMenuEngineeringTool,
-  getMenuItemElasticityTool,
   getMenuItemForecast,
   getOpenAnomalies,
   getPromoRoiTool,
-  getRecipeSuggestionsTool,
   getRevenueForecast,
   getVendorReliabilityTool,
   getWasteRootCausesTool,
 } from "./forecasts"
+import {
+  getInventoryStatus,
+  getInventoryCoverage,
+  listStockCountsTool,
+  getRecentInventoryAdjustments,
+} from "./inventory"
+import {
+  getOrderById,
+  listOrdersByDay,
+  getOrderItemFrequency,
+} from "./orders"
+import { listVendorLeadTimes } from "./vendors"
+import { getMenuItemElasticity, simulatePriceChange } from "./elasticity"
+import { describeSchema } from "./describe-schema"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -66,6 +77,7 @@ export type { ChatTool, ChatToolContext } from "./types"
 export const chatTools = {
   // Meta
   listStores,
+  describeSchema,
   // Sales
   getDailySales,
   getHourlyTrend,
@@ -111,7 +123,6 @@ export const chatTools = {
   getMenuItemForecast,
   getOpenAnomalies,
   getFoodCostForecast: getFoodCostForecastTool,
-  getMenuItemElasticity: getMenuItemElasticityTool,
   getLaborStaffingForecast: getLaborStaffingForecastTool,
   getMenuEngineering: getMenuEngineeringTool,
   getLostSales: getLostSalesTool,
@@ -120,9 +131,21 @@ export const chatTools = {
   getPromoRoi: getPromoRoiTool,
   getLaunchTrajectory: getLaunchTrajectoryTool,
   getChannelMix: getChannelMixTool,
-  getCateringDetection: getCateringDetectionTool,
-  getRecipeSuggestions: getRecipeSuggestionsTool,
   getWasteRootCauses: getWasteRootCausesTool,
+  // Inventory
+  getInventoryStatus,
+  getInventoryCoverage,
+  listStockCounts: listStockCountsTool,
+  getRecentInventoryAdjustments,
+  // Orders (drilldown)
+  getOrderById,
+  listOrdersByDay,
+  getOrderItemFrequency,
+  // Vendors
+  listVendorLeadTimes,
+  // Elasticity (price what-ifs)
+  getMenuItemElasticity,
+  simulatePriceChange,
 } as const
 
 export type ChatToolName = keyof typeof chatTools

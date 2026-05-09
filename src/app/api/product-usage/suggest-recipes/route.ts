@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import OpenAI from "openai"
 import type { AiRecipeSuggestion } from "@/types/product-usage"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { logger } from "@/lib/logger"
 
 function getClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY
@@ -138,7 +139,7 @@ Guidelines:
 
     return NextResponse.json({ suggestions })
   } catch (err) {
-    console.error("AI recipe suggestion failed:", err)
+    logger.error("AI recipe suggestion failed:", err)
     return NextResponse.json(
       { error: "AI generation failed. Please try again." },
       { status: 500 }

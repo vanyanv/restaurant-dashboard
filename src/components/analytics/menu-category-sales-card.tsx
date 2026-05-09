@@ -3,12 +3,6 @@
 import { useId, useState, useTransition, memo } from "react"
 import { ChevronRight, Store } from "lucide-react"
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -70,13 +64,13 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
   const totalSales = data.totals.totalSales
 
   return (
-    <Card className={cn("flex flex-col py-3 gap-3", className)}>
-      <CardHeader className="pb-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-sm">Menu Categories</CardTitle>
+    <section className={cn("inv-panel inv-panel--flush flex flex-col", className)}>
+      <header className="inv-panel__head px-4 pt-3">
+        <div className="flex items-center justify-between gap-2 w-full">
+          <div className="flex items-baseline gap-2">
+            <span className="inv-panel__dept">Menu Categories</span>
             {data.dateRange && (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
                 {formatDateRange(data.dateRange.startDate, data.dateRange.endDate)}
               </span>
             )}
@@ -84,7 +78,7 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
           {stores.length > 1 && (
             <Select value={selectedStore} onValueChange={handleStoreChange}>
               <SelectTrigger className="h-7 w-[140px] text-xs">
-                <Store className="mr-1 h-3 w-3 text-muted-foreground" />
+                <Store className="mr-1 h-3 w-3 text-(--ink-muted)" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -98,15 +92,15 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
             </Select>
           )}
         </div>
-      </CardHeader>
-      <CardContent className={cn("flex-1 px-0 pb-0", isPending && "opacity-50 pointer-events-none")}>
+      </header>
+      <div className={cn("flex-1", isPending && "opacity-50 pointer-events-none")}>
         <div className="max-h-[220px] lg:max-h-[200px] overflow-y-auto">
           {data.categories.length === 0 ? (
-            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center py-12 text-sm text-(--ink-muted)">
               No menu data available
             </div>
           ) : (
-            <div className="divide-y divide-border/50">
+            <div className="divide-y divide-(--hairline)">
               {data.categories.map((cat) => (
                 <CategoryRow
                   key={cat.category}
@@ -121,16 +115,18 @@ export function MenuCategorySalesCard({ data: initialData, stores, className }: 
         </div>
         {/* Totals footer */}
         {data.categories.length > 0 && (
-          <div className="border-t border-border bg-muted/30 px-4 py-2.5 flex items-center justify-between text-xs font-semibold">
-            <span>Total</span>
-            <div className="flex items-center gap-4 tabular-nums">
+          <div className="border-t border-(--hairline-bold) bg-(--paper-warm) px-4 py-2.5 flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-(--ink) font-bold">
+              Total
+            </span>
+            <div className="flex items-center gap-4 tabular-nums text-xs font-semibold">
               <span>{formatNumber(data.totals.totalQuantitySold)} qty</span>
               <span>{formatCurrency(totalSales)}</span>
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -174,13 +170,13 @@ const CategoryRow = memo(function CategoryRow({
           </span>
           {/* Contribution bar */}
           <div className="hidden sm:flex items-center gap-1.5 w-[80px]">
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div className="flex-1 h-1.5 bg-(--hairline) overflow-hidden">
               <div
-                className="h-full rounded-full bg-primary/70 transition-all duration-300"
+                className="h-full bg-(--accent) transition-all duration-300"
                 style={{ width: `${Math.min(pct, 100)}%` }}
               />
             </div>
-            <span className="w-[30px] text-right text-[10px] tabular-nums text-[var(--ink-muted)]">
+            <span className="w-[30px] text-right text-[10px] tabular-nums text-(--ink-muted)">
               {pct.toFixed(0)}%
             </span>
           </div>
@@ -195,24 +191,24 @@ const CategoryRow = memo(function CategoryRow({
                 key={item.itemName}
                 className="flex items-center gap-2 pl-9 pr-4 py-1.5"
               >
-                <span className="flex-1 text-xs text-muted-foreground truncate">
+                <span className="flex-1 text-xs text-(--ink-muted) truncate">
                   {item.itemName}
                 </span>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-[11px] tabular-nums text-muted-foreground/70">
+                  <span className="text-[11px] tabular-nums text-(--ink-faint)">
                     {formatNumber(item.totalQuantitySold)}
                   </span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground w-[72px] text-right">
+                  <span className="text-[11px] tabular-nums text-(--ink-muted) w-[72px] text-right">
                     {formatCurrency(item.totalSales)}
                   </span>
                   <div className="hidden sm:flex items-center gap-1.5 w-[80px]">
-                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                    <div className="flex-1 h-1 bg-(--hairline) overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-primary/40 transition-all duration-300"
+                        className="h-full bg-(--ink-muted) transition-all duration-300"
                         style={{ width: `${Math.min(itemPct, 100)}%` }}
                       />
                     </div>
-                    <span className="text-[10px] tabular-nums text-muted-foreground/60 w-[30px] text-right">
+                    <span className="text-[10px] tabular-nums text-(--ink-faint) w-[30px] text-right">
                       {itemPct.toFixed(0)}%
                     </span>
                   </div>

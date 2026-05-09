@@ -36,6 +36,8 @@ export interface LostSaleEvent {
   itemName: string
   category: string
   storeId: string
+  /** Populated when the action runs in aggregate mode (multiple stores). */
+  storeName?: string
   gapStart: Date
   gapEnd: Date
   gapDays: number
@@ -72,6 +74,7 @@ export async function getLostSales(input: {
 
   let storeIds: string[]
   let storeName: string | null = null
+  const storeNameById = new Map<string, string>()
   if (input.storeId) {
     const store = await prisma.store.findUnique({
       where: { id: input.storeId },
@@ -82,12 +85,15 @@ export async function getLostSales(input: {
     }
     storeIds = [store.id]
     storeName = store.name
+    storeNameById.set(store.id, store.name)
   } else {
     const stores = await prisma.store.findMany({
       where: { accountId: user.accountId, isActive: true },
-      select: { id: true },
+      select: { id: true, name: true },
     })
     storeIds = stores.map((s) => s.id)
+    for (const s of stores) storeNameById.set(s.id, s.name)
+    storeName = "All stores"
   }
 
   const lookback = input.lookbackDays ?? DEFAULT_LOOKBACK_DAYS
@@ -100,6 +106,10 @@ export async function getLostSales(input: {
   const windowStart = new Date(windowEnd)
   windowStart.setUTCDate(windowStart.getUTCDate() - lookback)
 
+  // No orderBy — the [storeId, date] index doesn't cover [storeId, itemName, date],
+  // so adding a sort here forces a seq scan + in-memory sort on Hollywood-sized
+  // tables (60 days × hundreds of items). The grouping pass below doesn't
+  // depend on row order.
   const rows = await prisma.otterMenuItem.findMany({
     where: {
       storeId: { in: storeIds },
@@ -116,7 +126,6 @@ export async function getLostSales(input: {
       fpTotalSales: true,
       tpTotalSales: true,
     },
-    orderBy: [{ storeId: "asc" }, { itemName: "asc" }, { date: "asc" }],
   })
 
   type SeriesKey = string // `${storeId}|${itemName}`
@@ -152,6 +161,9 @@ export async function getLostSales(input: {
         event.baselineDailyQty * event.gapDays * event.meanUnitPrice
       events.push({
         storeId,
+        ...(storeIds.length > 1 && storeNameById.has(storeId)
+          ? { storeName: storeNameById.get(storeId)! }
+          : {}),
         itemName,
         category,
         gapStart: new Date(`${event.gapStartKey}T00:00:00.000Z`),

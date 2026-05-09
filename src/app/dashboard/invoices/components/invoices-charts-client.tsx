@@ -12,13 +12,6 @@ import {
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
 } from "@/components/charts/recharts"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { formatCurrency } from "@/lib/format"
 
 const CATEGORY_COLORS = [
@@ -54,9 +47,9 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)]">
+    <div className="border border-(--hairline-bold) bg-(--paper) px-3 py-2 text-sm text-(--ink)">
       <p className="font-medium">{payload[0].payload.name}</p>
-      <p className="text-[var(--ink-muted)]">
+      <p className="tabular-nums text-(--ink-muted)">
         {formatCurrency(payload[0].value)}
       </p>
     </div>
@@ -75,12 +68,16 @@ export function InvoicesCharts({
   return (
     <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
       {categoryData.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Spend by Category</CardTitle>
-            <CardDescription>Where your money goes</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <section className="inv-panel">
+          <header className="inv-panel__head">
+            <div className="flex flex-col gap-1">
+              <span className="inv-panel__dept">Spend by Category</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+                Where the spend lands
+              </span>
+            </div>
+          </header>
+          <div>
             <div className="flex items-center justify-center">
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -108,7 +105,7 @@ export function InvoicesCharts({
                     className="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: entry.fill }}
                   />
-                  <span className="max-w-[90px] truncate text-[var(--ink-muted)]">
+                  <span className="max-w-[90px] truncate text-(--ink-muted)">
                     {entry.name}
                   </span>
                   <span className="font-medium tabular-nums">
@@ -117,16 +114,20 @@ export function InvoicesCharts({
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
       {vendorData.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Spend by Vendor</CardTitle>
-            <CardDescription>Top suppliers by total spend</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <section className="inv-panel">
+          <header className="inv-panel__head">
+            <div className="flex flex-col gap-1">
+              <span className="inv-panel__dept">Spend by Vendor</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+                Top suppliers by total spend
+              </span>
+            </div>
+          </header>
+          <div>
             <ResponsiveContainer
               width="100%"
               height={vendorData.length * 44 + 20}
@@ -158,11 +159,11 @@ export function InvoicesCharts({
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     return (
-                      <div className="border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 py-2 text-sm text-[var(--ink)]">
+                      <div className="border border-(--hairline-bold) bg-(--paper) px-3 py-2 text-sm text-(--ink)">
                         <p className="font-medium">
                           {payload[0].payload.fullName}
                         </p>
-                        <p className="text-[var(--ink-muted)]">
+                        <p className="tabular-nums text-(--ink-muted)">
                           {formatCurrency(payload[0].value as number)}
                         </p>
                       </div>
@@ -177,8 +178,8 @@ export function InvoicesCharts({
                 />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
     </div>
   )

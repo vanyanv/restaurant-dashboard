@@ -1,6 +1,13 @@
 "use client"
 
-import { useTransition, useState, useCallback, useEffect } from "react"
+import {
+  type ReactNode,
+  useTransition,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react"
 import { ChevronDown } from "lucide-react"
 import { getProductMixData } from "@/app/actions/store-actions"
 
@@ -193,13 +200,16 @@ export function ProductMixContent({
 
         {/* Pareto / ABC Analysis */}
         {(isPending || hasData) && (
-          <DashboardSection title="ABC Analysis (Pareto)">
+          <LazyDashboardSection
+            title="ABC Analysis (Pareto)"
+            fallback={<ChartSkeleton />}
+          >
             {isPending ? (
               <ChartSkeleton />
             ) : hasData ? (
               <ParetoChart data={data.paretoItems} />
             ) : null}
-          </DashboardSection>
+          </LazyDashboardSection>
         )}
 
         {/* Menu Engineering Matrix — Collapsible */}
@@ -209,7 +219,10 @@ export function ProductMixContent({
 
         {/* Detailed Product Mix Table */}
         {(isPending || hasData) && (
-          <DashboardSection title="Detailed Product Mix">
+          <LazyDashboardSection
+            title="Detailed Product Mix"
+            fallback={<DataTableSkeleton columns={10} rows={8} />}
+          >
             {isPending ? (
               <DataTableSkeleton columns={10} rows={8} />
             ) : hasData ? (
@@ -218,9 +231,53 @@ export function ProductMixContent({
                 totals={data.tableTotals}
               />
             ) : null}
-          </DashboardSection>
+          </LazyDashboardSection>
         )}
       </div>
+    </div>
+  )
+}
+
+function LazyDashboardSection({
+  title,
+  fallback,
+  children,
+}: {
+  title: string
+  fallback: ReactNode
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [shouldMount, setShouldMount] = useState(false)
+
+  useEffect(() => {
+    if (shouldMount) return
+
+    const node = ref.current
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setShouldMount(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setShouldMount(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "480px 0px" },
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [shouldMount])
+
+  return (
+    <div ref={ref}>
+      <DashboardSection title={title}>
+        {shouldMount ? children : fallback}
+      </DashboardSection>
     </div>
   )
 }

@@ -84,6 +84,9 @@ export function LoginForm({
 
   return (
     <motion.div animate={shakeControls} className="login-shell dock-in dock-in-1">
+      <span className="brand-seal" aria-hidden="true">
+        <span className="brand-seal__mark">C·N</span>
+      </span>
       <AnimatePresence>
         {(formState === "loading" || formState === "success") && (
           <motion.div

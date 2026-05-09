@@ -28,10 +28,10 @@ interface SessionLike {
   user?: SessionUser | null
 }
 
-/** Each staff member can cover roughly this many orders per hour at peak. */
-export const COVERS_PER_STAFF_HOUR = 12
-/** Floor for recommended staffing during open hours. */
-export const MIN_STAFF = 2
+import {
+  COVERS_PER_STAFF_HOUR,
+  MIN_STAFF,
+} from "./labor-staffing-constants"
 /** Trailing window for both avg-ticket and hourly-share computations. */
 const HISTORY_DAYS = 28
 /** Default forward horizon. */
@@ -53,7 +53,8 @@ export interface LaborStaffingDay {
 }
 
 export interface LaborStaffingData {
-  storeId: string
+  /** Null when aggregating across all stores. */
+  storeId: string | null
   storeName: string
   generatedAt: Date | null
   meanAvgTicket: number
@@ -69,7 +70,7 @@ export type GetLaborStaffingResult =
   | { ok: false; error: "insufficient_history" }
 
 export async function getLaborStaffingForecast(input: {
-  storeId: string
+  storeId?: string
   horizonDays?: number
   asOf?: Date
 }): Promise<GetLaborStaffingResult | null> {
@@ -77,12 +78,28 @@ export async function getLaborStaffingForecast(input: {
   const user = session?.user ?? null
   if (!user) return null
 
-  const store = await prisma.store.findUnique({
-    where: { id: input.storeId },
-    select: { id: true, name: true, accountId: true },
-  })
-  if (!store || store.accountId !== user.accountId) {
-    return { ok: false, error: "store_not_in_account" }
+  let storeIds: string[]
+  let storeName: string
+  let storeIdOut: string | null
+  if (input.storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: input.storeId },
+      select: { id: true, name: true, accountId: true },
+    })
+    if (!store || store.accountId !== user.accountId) {
+      return { ok: false, error: "store_not_in_account" }
+    }
+    storeIds = [store.id]
+    storeName = store.name
+    storeIdOut = store.id
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true },
+    })
+    storeIds = stores.map((s) => s.id)
+    storeName = "All stores"
+    storeIdOut = null
   }
 
   const horizonDays = input.horizonDays ?? DEFAULT_HORIZON_DAYS
@@ -96,12 +113,12 @@ export async function getLaborStaffingForecast(input: {
   const [revenueRows, hourlyRows, dailyRows] = await Promise.all([
     prisma.forecastDailyRevenue.findMany({
       where: {
-        storeId: input.storeId,
+        storeId: { in: storeIds },
         hourBucket: 0,
         forecastDate: { gte: today, lt: horizonEnd },
       },
-      orderBy: [{ forecastDate: "asc" }, { generatedAt: "desc" }],
       select: {
+        storeId: true,
         forecastDate: true,
         predictedRevenue: true,
         generatedAt: true,
@@ -109,7 +126,7 @@ export async function getLaborStaffingForecast(input: {
     }),
     prisma.otterHourlySummary.findMany({
       where: {
-        storeId: input.storeId,
+        storeId: { in: storeIds },
         date: { gte: historyStart, lt: today },
       },
       select: { date: true, hour: true, orderCount: true },
@@ -117,7 +134,7 @@ export async function getLaborStaffingForecast(input: {
     prisma.otterDailySummary.groupBy({
       by: ["date"],
       where: {
-        storeId: input.storeId,
+        storeId: { in: storeIds },
         date: { gte: historyStart, lt: today },
       },
       _sum: {
@@ -133,15 +150,25 @@ export async function getLaborStaffingForecast(input: {
     return { ok: false, error: "insufficient_history" }
   }
 
-  // Latest generation per forecast date
+  // Latest generation per (storeId, forecast date), then sum predictedRevenue
+  // across stores per date so aggregate-mode staffing is portfolio-scaled.
   type RevRow = (typeof revenueRows)[number]
-  const latestRevenue = new Map<string, RevRow>()
+  const latestPerStoreDate = new Map<string, RevRow>()
   let latestGen: Date | null = null
   for (const r of revenueRows) {
-    const key = ymd(r.forecastDate as Date)
-    const existing = latestRevenue.get(key)
-    if (!existing || r.generatedAt > existing.generatedAt) latestRevenue.set(key, r)
+    const key = `${r.storeId}|${ymd(r.forecastDate as Date)}`
+    const existing = latestPerStoreDate.get(key)
+    if (!existing || r.generatedAt > existing.generatedAt) {
+      latestPerStoreDate.set(key, r)
+    }
     if (!latestGen || r.generatedAt > latestGen) latestGen = r.generatedAt
+  }
+  const latestRevenue = new Map<string, { predictedRevenue: number }>()
+  for (const r of latestPerStoreDate.values()) {
+    const k = ymd(r.forecastDate as Date)
+    const cur = latestRevenue.get(k)
+    if (!cur) latestRevenue.set(k, { predictedRevenue: r.predictedRevenue ?? 0 })
+    else cur.predictedRevenue += r.predictedRevenue ?? 0
   }
 
   // Mean avg ticket over the history window
@@ -224,8 +251,8 @@ export async function getLaborStaffingForecast(input: {
   return {
     ok: true,
     data: {
-      storeId: store.id,
-      storeName: store.name,
+      storeId: storeIdOut,
+      storeName,
       generatedAt: latestGen,
       meanAvgTicket,
       coversPerStaffHour: COVERS_PER_STAFF_HOUR,

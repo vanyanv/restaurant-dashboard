@@ -76,12 +76,17 @@
   --ring: 0 72% 51%;                  /* Focus ring: same as primary */
   --radius: 0.5rem;
   
-  /* Chart Colors - Restaurant themed */
-  --chart-1: 0 72% 51%;               /* Red: #DC2626 */
-  --chart-2: 20 91% 48%;              /* Orange: #EA580C */
-  --chart-3: 43 96% 56%;              /* Golden yellow: #F59E0B */
-  --chart-4: 142 71% 45%;             /* Fresh green: #10B981 */
-  --chart-5: 221 83% 53%;             /* Blue accent: #3B82F6 */
+  /* Chart Colors — editorial palette only.
+     Recharts via shadcn ChartContainer reads `hsl(var(--chart-N))` for each
+     series; we collapse the rainbow to ink + accent + the editorial earth-
+     tone tints so dashboard charts never leak generic Tailwind hues. Order:
+     1 primary ink, 2 muted ink, 3 accent (red), 4 subtract (oxblood),
+     5 accent dark. */
+  --chart-1: 24 8% 9%;                /* Ink: #1a1613 */
+  --chart-2: 36 11% 33%;              /* Ink-muted: #5d544a */
+  --chart-3: 0 72% 51%;               /* Accent red: #DC2626 */
+  --chart-4: 0 41% 38%;               /* Subtract: #8a3a3a */
+  --chart-5: 0 71% 38%;               /* Accent-dark: #a91d1d */
   
   /* Sidebar */
   --sidebar: 0 0% 100%;               /* White sidebar */
@@ -132,12 +137,13 @@
   --input: 0 0% 15%;                   /* Dark input border */
   --ring: 0 76% 60%;                   /* Red focus ring */
   
-  /* Chart Colors - Dark mode adjusted */
-  --chart-1: 0 76% 60%;                /* Bright red: #E53E3E */
-  --chart-2: 20 95% 58%;               /* Bright orange: #FB923C */
-  --chart-3: 43 96% 65%;               /* Bright yellow: #FCD34D */
-  --chart-4: 142 71% 55%;              /* Bright green: #34D399 */
-  --chart-5: 221 83% 63%;              /* Bright blue: #60A5FA */
+  /* Chart Colors — editorial palette (dark mode mirrors light: the
+     restaurant runs on cream paper either way; we just lift one stop). */
+  --chart-1: 24 8% 88%;                /* Ink lifted */
+  --chart-2: 36 11% 66%;               /* Muted ink lifted */
+  --chart-3: 0 76% 60%;                /* Accent red */
+  --chart-4: 0 41% 50%;                /* Subtract lifted */
+  --chart-5: 0 71% 48%;                /* Accent-dark lifted */
   
   /* Sidebar */
   --sidebar: 0 0% 8%;                  /* Dark sidebar: #141414 */

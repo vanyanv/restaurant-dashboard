@@ -493,6 +493,23 @@ function costAwareAlternatives(units: PackingUnits): Array<{ label: string; coun
     })
   }
 
+  // Multiple 1 Slider Combos can be packed as one burger + fries per medium
+  // 6x6. The generic smallest-fit path groups 2B+1F into a 9x6 and leaves
+  // stray fries, which can be more expensive than individual combo boxes.
+  const isExactSingleSliderComboBasket =
+    Number.isInteger(units.burgers) &&
+    units.burgers >= 2 &&
+    units.fries === units.burgers &&
+    units.loadedFries === 0 &&
+    units.grilledCheese === 0
+  if (isExactSingleSliderComboBasket) {
+    addAlternative(alternatives, seen, `${formatQty(units.burgers)}x(1 slider + fries) as medium 6x6`, {
+      medium_6x6: units.burgers,
+      large_9x6: 0,
+      one_compartment: 0,
+    })
+  }
+
   const maxLoadedSliderPairs = Math.min(Math.floor(units.burgers / 2), units.loadedFries)
   const loadedSliderPairOptions = isExactLoadedSliderRule
     ? [units.loadedFries]

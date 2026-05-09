@@ -3,13 +3,6 @@
 import { useMemo } from "react"
 import { Bar, BarChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -24,11 +17,11 @@ interface CategorySpendChartProps {
 const chartConfig = {
   purchasedCost: {
     label: "Purchased",
-    color: "hsl(20, 91%, 48%)",
+    color: "var(--ink-muted)",
   },
   theoreticalUsageCost: {
     label: "Theoretical",
-    color: "hsl(0, 72%, 51%)",
+    color: "var(--accent)",
   },
 }
 
@@ -40,79 +33,79 @@ export function CategorySpendChart({ data }: CategorySpendChartProps) {
   if (chartData.length === 0) return null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Category Spend</CardTitle>
-        <CardDescription>
-          Purchased vs theoretical cost by invoice category
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="h-[300px] w-full">
-          <BarChart
-            accessibilityLayer
-            data={chartData}
-            margin={{ left: 12, right: 12 }}
-          >
-            <XAxis
-              dataKey="category"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tick={{ fontSize: 11 }}
-              interval={0}
-              angle={-30}
-              textAnchor="end"
-              height={60}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tickFormatter={(value) => formatCurrency(value)}
-              tick={{ fontSize: 11 }}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  formatter={(value) => {
-                    const numValue =
-                      typeof value === "number" ? value : Number(value)
-                    return formatCurrency(numValue)
-                  }}
-                />
-              }
-            />
-            <Bar
-              dataKey="purchasedCost"
-              fill="var(--color-purchasedCost)"
-              radius={[4, 4, 0, 0]}
-            />
-            <Bar
-              dataKey="theoreticalUsageCost"
-              fill="var(--color-theoreticalUsageCost)"
-              radius={[4, 4, 0, 0]}
-            />
-          </BarChart>
-        </ChartContainer>
-        <div className="mt-4 flex items-center justify-center gap-x-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <div
-              className="h-2.5 w-2.5 rounded-sm"
-              style={{ backgroundColor: "hsl(20, 91%, 48%)" }}
-            />
-            <span>Purchased</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div
-              className="h-2.5 w-2.5 rounded-sm"
-              style={{ backgroundColor: "hsl(0, 72%, 51%)" }}
-            />
-            <span>Theoretical</span>
-          </div>
+    <section className="inv-panel">
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">Category Spend</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            Purchased vs theoretical · by category
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      </header>
+      <ChartContainer config={chartConfig} className="h-[300px] w-full">
+        <BarChart
+          accessibilityLayer
+          data={chartData}
+          margin={{ left: 12, right: 12 }}
+        >
+          <XAxis
+            dataKey="category"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tick={{ fontSize: 11, fill: "var(--ink-muted)" }}
+            interval={0}
+            angle={-30}
+            textAnchor="end"
+            height={60}
+          />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={(value) => formatCurrency(value)}
+            tick={{ fontSize: 11, fill: "var(--ink-muted)" }}
+          />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                formatter={(value) => {
+                  const numValue =
+                    typeof value === "number" ? value : Number(value)
+                  return formatCurrency(numValue)
+                }}
+              />
+            }
+          />
+          <Bar
+            dataKey="purchasedCost"
+            fill="var(--color-purchasedCost)"
+            radius={[2, 2, 0, 0]}
+          />
+          <Bar
+            dataKey="theoreticalUsageCost"
+            fill="var(--color-theoreticalUsageCost)"
+            radius={[2, 2, 0, 0]}
+          />
+        </BarChart>
+      </ChartContainer>
+      <div className="mt-4 flex items-center justify-center gap-x-4 text-xs text-(--ink-muted)">
+        <div className="flex items-center gap-1.5">
+          <div
+            className="h-2.5 w-2.5"
+            style={{ backgroundColor: "var(--ink-muted)" }}
+          />
+          <span>Purchased</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div
+            className="h-2.5 w-2.5"
+            style={{ backgroundColor: "var(--accent)" }}
+          />
+          <span>Theoretical</span>
+        </div>
+      </div>
+    </section>
   )
 }

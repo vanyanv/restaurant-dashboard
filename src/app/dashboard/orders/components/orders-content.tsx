@@ -115,7 +115,7 @@ export function OrdersContent({ initial, stores }: Props) {
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-1 h-4" />
         <span className="font-label text-[var(--ink-muted)]">Section</span>
-        <span className="font-display text-[17px] leading-none">Orders</span>
+        <h1 className="font-display text-[17px] leading-none m-0 font-normal">Orders</h1>
         <span className="ml-auto flex items-center gap-2 text-[11px] text-[var(--ink-muted)]">
           <span className="live-dot" />
           <span className="font-mono uppercase tracking-[0.18em] text-[10px]">
@@ -591,7 +591,7 @@ function FilterPopover({
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[min(calc(100vw-1rem),280px)] min-w-[220px] p-0 bg-[var(--paper)] border border-[var(--hairline-bold)] shadow-md"
+        className="w-[min(calc(100vw-1rem),280px)] min-w-[220px] rounded-xs p-0 bg-(--paper) border border-(--hairline-bold)"
       >
         <div className="py-1.5">{children}</div>
       </PopoverContent>

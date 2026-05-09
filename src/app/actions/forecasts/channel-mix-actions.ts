@@ -18,6 +18,7 @@
 // that the operator can actually shift orders; the operator interprets.
 
 import { getServerSession } from "next-auth"
+import { Prisma } from "@/generated/prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -92,6 +93,7 @@ export async function getChannelMix(input: {
 
   let storeId: string | null = null
   let storeName: string | null = null
+  let storeIds: string[]
   if (input.storeId) {
     const store = await prisma.store.findFirst({
       where: { id: input.storeId, accountId: user.accountId },
@@ -100,23 +102,43 @@ export async function getChannelMix(input: {
     if (!store) return { ok: false, error: "store_not_in_account" }
     storeId = store.id
     storeName = store.name
+    storeIds = [store.id]
+  } else {
+    storeName = "All stores"
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true },
+    })
+    storeIds = stores.map((store) => store.id)
   }
 
-  const rows = await prisma.otterDailySummary.findMany({
-    where: {
-      ...(storeId ? { storeId } : { store: { accountId: user.accountId } }),
-      date: { gte: windowStart, lte: windowEnd },
-    },
-    select: {
-      platform: true,
-      fpGrossSales: true,
-      fpFees: true,
-      fpOrderCount: true,
-      tpGrossSales: true,
-      tpFees: true,
-      tpOrderCount: true,
-    },
-  })
+  if (storeIds.length === 0) return { ok: false, error: "no_data" }
+
+  const rows = await prisma.$queryRaw<
+    Array<{
+      platform: string
+      fpGrossSales: number | null
+      fpFees: number | null
+      fpOrderCount: number | null
+      tpGrossSales: number | null
+      tpFees: number | null
+      tpOrderCount: number | null
+    }>
+  >(Prisma.sql`
+    SELECT
+      "platform",
+      SUM(COALESCE("fpGrossSales", 0))::double precision AS "fpGrossSales",
+      SUM(COALESCE("fpFees", 0))::double precision AS "fpFees",
+      SUM(COALESCE("fpOrderCount", 0))::integer AS "fpOrderCount",
+      SUM(COALESCE("tpGrossSales", 0))::double precision AS "tpGrossSales",
+      SUM(COALESCE("tpFees", 0))::double precision AS "tpFees",
+      SUM(COALESCE("tpOrderCount", 0))::integer AS "tpOrderCount"
+    FROM "OtterDailySummary"
+    WHERE "storeId" IN (${Prisma.join(storeIds)})
+      AND "date" >= ${windowStart}
+      AND "date" <= ${windowEnd}
+    GROUP BY "platform"
+  `)
 
   if (rows.length === 0) return { ok: false, error: "no_data" }
 

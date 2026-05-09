@@ -4,17 +4,11 @@ import { useMemo } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Bar, BarChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 import type { MenuCategoryData } from "@/types/analytics"
 
 interface TopItemsChartProps {
@@ -63,13 +57,16 @@ export function TopItemsChart({
   if (chartData.length === 0) return null
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">{title}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <ChartContainer
           config={chartConfig}
           className="w-full"
           style={{ height: chartHeight }}
@@ -115,7 +112,6 @@ export function TopItemsChart({
             />
           </BarChart>
         </ChartContainer>
-      </CardContent>
-    </Card>
+    </section>
   )
 }

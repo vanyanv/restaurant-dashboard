@@ -24,16 +24,16 @@ export function DayHighlights({ dailyTrends }: DayHighlightsProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+      <div className="inline-flex items-center gap-1.5 rounded-xs border border-(--hairline-bold) bg-(--accent-bg) px-3 py-1.5 text-xs font-medium text-(--accent-dark)">
         <TrendingUp className="h-3 w-3" />
-        <span className="text-muted-foreground">Best:</span>
+        <span className="text-(--ink-muted)">Best:</span>
         <span>{formatDate(best.date)}</span>
         <span className="font-semibold tabular-nums">{formatCurrency(best.grossRevenue)}</span>
       </div>
       {worst && (
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-400">
+        <div className="inline-flex items-center gap-1.5 rounded-xs border border-(--hairline-bold) bg-(--paper-warm) px-3 py-1.5 text-xs font-medium text-(--subtract)">
           <TrendingDown className="h-3 w-3" />
-          <span className="text-muted-foreground">Worst:</span>
+          <span className="text-(--ink-muted)">Worst:</span>
           <span>{formatDate(worst.date)}</span>
           <span className="font-semibold tabular-nums">{formatCurrency(worst.grossRevenue)}</span>
         </div>

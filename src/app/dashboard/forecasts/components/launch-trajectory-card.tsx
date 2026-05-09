@@ -101,6 +101,7 @@ export function LaunchTrajectoryCard({ data }: { data: LaunchTrajectoryData }) {
                 {l.itemName}
                 <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
                   {l.category}
+                  {l.storeName ? ` · ${l.storeName}` : ""}
                 </span>
               </div>
               <div className="font-mono text-[11px] text-[var(--ink-muted)]">

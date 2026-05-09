@@ -6,12 +6,23 @@
   --ink-faint: #a69d92;
   --paper: #fbf6ee;
   --paper-deep: #f4ecdf;
+  --paper-soft: #fff9ef;
+  --paper-warm: #fcf1dd;
   --hairline: #e8dfd3;
   --hairline-bold: #c9beaf;
   --accent: #dc2626;
   --accent-dark: #7c1515;
   --accent-bg: #fcecec;
   --subtract: #8a3a3a;
+
+  /* Brand-gold ornament tokens — a faint echo of the Chris N Eddy's wordmark
+     (golden-yellow fill, vivid-red outline). Permitted in exactly three sites:
+     (1) the brand-issue thread under the sidebar masthead,
+     (2) the /dashboard landing-page masthead rule,
+     (3) the .brand-seal ornament on /login and /not-found.
+     Never on numbers, rows, panels, state, charts, or platform stamps. */
+  --brand-gold: #e8a526;
+  --brand-gold-soft: #f5e0aa;
 
   /* Editorial inks for the monitoring command bridge — printer's plate
      colors that sit on cream paper. Each subsystem gets one. Status

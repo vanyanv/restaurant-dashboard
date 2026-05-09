@@ -3,17 +3,11 @@
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Bar, BarChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 
 interface StoreComparisonChartProps {
   data: Array<{
@@ -37,11 +31,11 @@ export function StoreComparisonChart({
   const chartConfig = {
     grossSales: {
       label: "Gross Sales",
-      color: "hsl(var(--primary))",
+      color: "var(--ink)",
     },
     netSales: {
       label: "Net Sales",
-      color: "hsl(var(--primary) / 0.5)",
+      color: "var(--accent)",
     },
   }
 
@@ -58,64 +52,66 @@ export function StoreComparisonChart({
   const chartHeight = Math.max(180, chartData.length * barHeight + 40)
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer
-          config={chartConfig}
-          className="w-full"
-          style={{ height: chartHeight }}
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">{title}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <ChartContainer
+        config={chartConfig}
+        className="w-full"
+        style={{ height: chartHeight }}
+      >
+        <BarChart
+          accessibilityLayer
+          data={chartData}
+          layout="vertical"
+          margin={{ left: 12, right: 12 }}
         >
-          <BarChart
-            accessibilityLayer
-            data={chartData}
-            layout="vertical"
-            margin={{ left: 12, right: 12 }}
-          >
-            <XAxis
-              type="number"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tickFormatter={(value) => formatCurrency(value)}
-            />
-            <YAxis
-              type="category"
-              dataKey="storeName"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              width={isMobile ? 80 : 120}
-              tick={{ fontSize: isMobile ? 11 : 14 }}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  formatter={(value) => {
-                    const numValue =
-                      typeof value === "number" ? value : Number(value)
-                    return formatCurrency(numValue)
-                  }}
-                />
-              }
-            />
-            <Bar
-              dataKey="grossSales"
-              fill="var(--color-grossSales)"
-              radius={[0, 4, 4, 0]}
-            />
-            <Bar
-              dataKey="netSales"
-              fill="var(--color-netSales)"
-              radius={[0, 4, 4, 0]}
-            />
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+          <XAxis
+            type="number"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={(value) => formatCurrency(value)}
+          />
+          <YAxis
+            type="category"
+            dataKey="storeName"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            width={isMobile ? 80 : 120}
+            tick={{ fontSize: isMobile ? 11 : 14 }}
+          />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                formatter={(value) => {
+                  const numValue =
+                    typeof value === "number" ? value : Number(value)
+                  return formatCurrency(numValue)
+                }}
+              />
+            }
+          />
+          <Bar
+            dataKey="grossSales"
+            fill="var(--color-grossSales)"
+            radius={[0, 2, 2, 0]}
+          />
+          <Bar
+            dataKey="netSales"
+            fill="var(--color-netSales)"
+            radius={[0, 2, 2, 0]}
+          />
+        </BarChart>
+      </ChartContainer>
+    </section>
   )
 }

@@ -15,6 +15,7 @@ import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
 import { bustTags } from "@/lib/cache/cached"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { logger } from "@/lib/logger"
 
 const PRICE_ALERT_PCT_THRESHOLD = 5
 const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
@@ -56,7 +57,7 @@ async function withConcurrency<T>(
           ),
         ])
       } catch (err) {
-        console.error(`Task ${index} failed:`, err)
+        logger.error(`Task ${index} failed:`, err)
         results[index] = null as T
       }
       completed++
@@ -92,7 +93,7 @@ interface SyncResult {
 async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, accountId: string): Promise<void> {
   const recipient = process.env.PRICE_ALERT_EMAIL || process.env.OTTER_EMAIL
   if (!recipient) {
-    console.warn("PRICE_ALERT_EMAIL / OTTER_EMAIL not set — skipping price-hike email")
+    logger.warn("PRICE_ALERT_EMAIL / OTTER_EMAIL not set — skipping price-hike email")
   }
 
   const newLines = await prisma.invoiceLineItem.findMany({
@@ -193,7 +194,7 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
   }
 
   if (hikes.length === 0) {
-    console.log(`Price-alert: no hikes ≥${PRICE_ALERT_PCT_THRESHOLD}% detected across ${newLines.length} new lines`)
+    logger.info(`Price-alert: no hikes ≥${PRICE_ALERT_PCT_THRESHOLD}% detected across ${newLines.length} new lines`)
     return
   }
 
@@ -201,7 +202,7 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
   hikes.sort((a, b) => b.pctChange - a.pctChange)
 
   for (const h of hikes) {
-    console.log(
+    logger.info(
       `Price hike: ${h.vendorName} ${h.productName} (sku ${h.sku ?? "—"}): ` +
       `$${h.prevPrice.toFixed(2)} → $${h.latestPrice.toFixed(2)} (+${h.pctChange.toFixed(1)}%)`
     )
@@ -211,9 +212,9 @@ async function detectAndAlertPriceHikes(invoiceIds: string[], userId: string, ac
   const { subject, html } = buildPriceAlertEmail(hikes)
   const result = await sendGraphMail({ toEmail: recipient, subject, html })
   if (result.sent) {
-    console.log(`Price-alert email sent to ${recipient}: ${hikes.length} hike(s)`)
+    logger.info(`Price-alert email sent to ${recipient}: ${hikes.length} hike(s)`)
   } else {
-    console.error(`Price-alert email NOT sent: ${result.error}`)
+    logger.error(`Price-alert email NOT sent: ${result.error}`)
   }
 }
 
@@ -331,7 +332,7 @@ async function runSync(
         const buffer = Buffer.from(pdf.contentBytes, "base64")
         pdfUpload = await putInvoicePdf(msg.id, buffer)
       } catch (uploadErr) {
-        console.error(`Failed to upload PDF to blob for "${msg.subject}":`, uploadErr)
+        logger.error(`Failed to upload PDF to blob for "${msg.subject}":`, uploadErr)
         // Continue without PDF — backfill script can retry later.
       }
 
@@ -346,7 +347,7 @@ async function runSync(
         pdfUpload,
       } satisfies ExtractedInvoice
     } catch (err) {
-      console.error(`Failed to extract invoice from email "${msg.subject}":`, err)
+      logger.error(`Failed to extract invoice from email "${msg.subject}":`, err)
       counts.errors++
       return null
     }
@@ -387,7 +388,7 @@ async function runSync(
 
     const mathMismatches = findLineMathMismatches(inv.extraction.lineItems)
     for (const m of mathMismatches) {
-      console.warn(
+      logger.warn(
         `[invoice-sync] math mismatch on ${contextLabel} line ${m.lineNumber} ` +
         `"${m.productName}": qty ${m.quantity} ${m.unit ?? ""} × $${m.unitPrice} = ` +
         `$${m.computed.toFixed(2)} but extendedPrice=$${m.extendedPrice.toFixed(2)} ` +
@@ -397,7 +398,7 @@ async function runSync(
 
     const packAnomalies = findPackShapeAnomalies(inv.extraction.lineItems)
     for (const a of packAnomalies) {
-      console.warn(
+      logger.warn(
         `[invoice-sync] pack-shape anomaly on ${contextLabel} line ${a.lineNumber} ` +
         `"${a.productName}" (${a.unit ?? "?"} pack=${a.packSize ?? "-"} × size=${a.unitSize ?? "-"} ${a.unitSizeUom ?? "-"}): ${a.reasons.join("; ")}`
       )
@@ -483,7 +484,7 @@ async function runSync(
           lineItems: {
             create: inv.lineItems.map((li) => {
               if (li.unit === "CS" && li.packSize == null) {
-                console.warn(
+                logger.warn(
                   `Line ${li.lineNumber} on ${inv.vendorName} #${inv.invoiceNumber} is unit=CS ` +
                   `but packSize is null — extraction may have missed the Pack column`
                 )
@@ -514,7 +515,7 @@ async function runSync(
       if (msg.includes("Unique constraint")) {
         counts.skipped++
       } else {
-        console.error(`Failed to save invoice ${inv.invoiceNumber}:`, err)
+        logger.error(`Failed to save invoice ${inv.invoiceNumber}:`, err)
         counts.errors++
       }
     }
@@ -531,13 +532,13 @@ async function runSync(
   if (createdInvoiceIds.length > 0) {
     try {
       const matchResult = await matchNewLineItems(accountId, createdInvoiceIds)
-      console.log(
+      logger.info(
         `[invoice-sync] matched ${matchResult.matchedBySku} by SKU, ` +
         `${matchResult.matchedByAlias} by alias, ${matchResult.unmatched} unmatched, ` +
         `${matchResult.costsUpdated} canonical costs refreshed`
       )
     } catch (err) {
-      console.error("Ingredient matching failed:", err)
+      logger.error("Ingredient matching failed:", err)
     }
   }
 
@@ -546,7 +547,7 @@ async function runSync(
     try {
       await detectAndAlertPriceHikes(createdInvoiceIds, userId, accountId)
     } catch (err) {
-      console.error("Price-alert detection failed:", err)
+      logger.error("Price-alert detection failed:", err)
     }
   }
 
@@ -628,7 +629,7 @@ export async function POST(request: NextRequest) {
             return result
           })
         } catch (error) {
-          console.error("Invoice sync error:", error)
+          logger.error("Invoice sync error:", error)
           emit({
             phase: "error", status: "error", totalProgress: 0,
             detail: error instanceof Error ? error.message : "Internal server error",
@@ -660,7 +661,7 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json(result)
   } catch (error) {
-    console.error("Invoice sync error:", error)
+    logger.error("Invoice sync error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }

@@ -14,21 +14,19 @@ interface QuickInsightsProps {
 const typeConfig = {
   info: {
     icon: Lightbulb,
-    classes: "bg-muted text-muted-foreground",
+    classes: "bg-(--paper) text-(--ink-muted) border border-(--hairline-bold)",
   },
   positive: {
     icon: TrendingUp,
-    classes:
-      "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
+    classes: "bg-(--accent-bg) text-(--accent-dark) border border-(--hairline-bold)",
   },
   negative: {
     icon: TrendingDown,
-    classes: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400",
+    classes: "bg-(--accent-bg) text-(--accent) border border-(--hairline-bold)",
   },
   warning: {
     icon: AlertTriangle,
-    classes:
-      "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
+    classes: "bg-(--paper-warm) text-(--ink) border border-(--hairline-bold)",
   },
 } as const
 

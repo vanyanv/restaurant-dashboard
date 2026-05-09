@@ -87,7 +87,7 @@ export default async function SettingsMastheadPage() {
           )}
           <div className="settings-owner-meta">
             <div className="owner-issue">Vol. 01 · The Editor</div>
-            <div className="owner-name">{user.name}</div>
+            <h1 className="owner-name m-0 font-normal">{user.name}</h1>
             <div className="owner-email">{user.email}</div>
             <div className="owner-stamp">
               {user.role.toLowerCase()} · since {memberSince}

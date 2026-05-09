@@ -2,17 +2,11 @@
 
 import { Bar, BarChart, XAxis, YAxis } from "@/components/charts/recharts"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart"
+import { cn } from "@/lib/utils"
 
 const PLATFORM_LABELS: Record<string, string> = {
   "css-pos": "Otter POS",
@@ -46,11 +40,11 @@ export function PlatformBreakdownChart({
   const chartConfig = {
     grossSales: {
       label: "Gross Sales",
-      color: "hsl(var(--primary))",
+      color: "var(--ink)",
     },
     netSales: {
       label: "Net Sales",
-      color: "hsl(var(--primary) / 0.6)",
+      color: "var(--accent)",
     },
   }
 
@@ -68,58 +62,44 @@ export function PlatformBreakdownChart({
   })
 
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig}>
-          <BarChart
-            accessibilityLayer
-            data={chartData}
-            margin={{
-              left: 12,
-              right: 12,
-            }}
-          >
-            <XAxis
-              dataKey="name"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tickFormatter={(value) => formatCurrency(value)}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  formatter={(value, name) => {
-                    const numValue =
-                      typeof value === "number" ? value : Number(value)
-                    return formatCurrency(numValue)
-                  }}
-                />
-              }
-            />
-            <Bar
-              dataKey="grossSales"
-              fill="var(--color-grossSales)"
-              radius={[4, 4, 0, 0]}
-            />
-            <Bar
-              dataKey="netSales"
-              fill="var(--color-netSales)"
-              radius={[4, 4, 0, 0]}
-            />
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+    <section className={cn("inv-panel", className)}>
+      <header className="inv-panel__head">
+        <div className="flex flex-col gap-1">
+          <span className="inv-panel__dept">{title}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {description}
+          </span>
+        </div>
+      </header>
+      <ChartContainer config={chartConfig}>
+        <BarChart
+          accessibilityLayer
+          data={chartData}
+          margin={{ left: 12, right: 12 }}
+        >
+          <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={(value) => formatCurrency(value)}
+          />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                formatter={(value) => {
+                  const numValue =
+                    typeof value === "number" ? value : Number(value)
+                  return formatCurrency(numValue)
+                }}
+              />
+            }
+          />
+          <Bar dataKey="grossSales" fill="var(--color-grossSales)" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="netSales" fill="var(--color-netSales)" radius={[2, 2, 0, 0]} />
+        </BarChart>
+      </ChartContainer>
+    </section>
   )
 }

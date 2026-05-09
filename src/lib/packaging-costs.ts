@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import {
   CONTAINER_GROUP_LABELS,
   PACKAGING_COST_AWARE_SCENARIO,
@@ -14,6 +15,10 @@ import {
   type ContainerGroup,
   type FulfillmentBucket,
 } from "@/lib/container-packaging"
+import {
+  summarizeAvoidedDineInCost,
+  type AvoidedCostSignatureRow,
+} from "@/lib/packaging-cost-aggregation"
 import type {
   PackagingContainerRow,
   PackagingCostData,
@@ -177,7 +182,7 @@ export async function getPackagingCostData(
     fulfillmentRows,
     recentEligibleOrders,
     recentExcludedExampleOrders,
-    excludedOrdersForAvoidedCost,
+    avoidedCostSignatureRows,
     invoiceLines,
   ] = await Promise.all([
     prisma.dailyCogsItem.aggregate({
@@ -264,31 +269,83 @@ export async function getPackagingCostData(
       orderBy: { referenceTimeLocal: "desc" },
       take: 6,
     }),
-    prisma.otterOrder.findMany({
-      where: {
-        ...orderWhere,
-        OR: [
-          { fulfillmentMode: { contains: "DINE_IN", mode: "insensitive" } },
-          { fulfillmentMode: { contains: "DINE IN", mode: "insensitive" } },
-        ],
-      },
-      select: {
-        fulfillmentMode: true,
-        items: {
-          select: {
-            name: true,
-            quantity: true,
-            subItems: {
-              select: {
-                name: true,
-                quantity: true,
-                subHeader: true,
-              },
-            },
-          },
-        },
-      },
-    }),
+    // Avoided dine-in cost: pre-group orders by basket signature in Postgres
+    // so we never materialize every dine-in order's nested items in JS. Each
+    // returned row carries a unique (fulfillmentMode, items[]) basket plus an
+    // `occurrences` count; the JS classifier then runs once per signature
+    // (often 10–100×) instead of once per order (often 1000s).
+    prisma.$queryRaw<
+      Array<{
+        fulfillmentMode: string | null
+        items: Array<{
+          name: string
+          quantity: number
+          subItems: Array<{
+            name: string
+            quantity: number
+            subHeader: string | null
+          }>
+        }>
+        occurrences: bigint | number
+      }>
+    >(Prisma.sql`
+      WITH dine_in_orders AS (
+        SELECT o.id, o."fulfillmentMode"
+        FROM "OtterOrder" o
+        WHERE o."storeId" = ANY(${storeIds}::text[])
+          AND o."referenceTimeLocal" >= ${range.start}
+          AND o."referenceTimeLocal" <= ${range.end}
+          AND (
+            o."fulfillmentMode" ILIKE '%dine_in%'
+            OR o."fulfillmentMode" ILIKE '%dine in%'
+          )
+      ),
+      item_subitems AS (
+        SELECT
+          i.id          AS item_id,
+          i."orderId"   AS order_id,
+          i.name        AS item_name,
+          i.quantity    AS item_qty,
+          (
+            SELECT COALESCE(
+              jsonb_agg(
+                jsonb_build_object(
+                  'name', s.name,
+                  'quantity', s.quantity,
+                  'subHeader', s."subHeader"
+                )
+                ORDER BY s.name, s.quantity, COALESCE(s."subHeader", '')
+              ),
+              '[]'::jsonb
+            )
+            FROM "OtterOrderSubItem" s
+            WHERE s."orderItemId" = i.id
+          ) AS sub_items
+        FROM "OtterOrderItem" i
+        WHERE i."orderId" IN (SELECT id FROM dine_in_orders)
+      ),
+      order_baskets AS (
+        SELECT
+          isi.order_id,
+          jsonb_agg(
+            jsonb_build_object(
+              'name', isi.item_name,
+              'quantity', isi.item_qty,
+              'subItems', isi.sub_items
+            )
+            ORDER BY isi.item_name, isi.item_qty
+          ) AS items
+        FROM item_subitems isi
+        GROUP BY isi.order_id
+      )
+      SELECT
+        d."fulfillmentMode" AS "fulfillmentMode",
+        ob.items            AS "items",
+        COUNT(*)            AS "occurrences"
+      FROM dine_in_orders d
+      JOIN order_baskets ob ON ob.order_id = d.id
+      GROUP BY d."fulfillmentMode", ob.items
+    `),
     prisma.invoiceLineItem.findMany({
       where: {
         invoice: invoiceWhere,
@@ -380,15 +437,14 @@ export async function getPackagingCostData(
     .filter((row) => row.orders > 0)
     .sort(sortFulfillment)
 
-  let avoidedDineInCost = 0
-  for (const order of excludedOrdersForAvoidedCost) {
-    const packed = packOrderCostAware(
-      { fulfillmentMode: order.fulfillmentMode, items: order.items },
-      unitCosts,
-      PACKAGING_SCENARIO,
-    )
-    avoidedDineInCost += costForCounts(packed.counts, unitCosts)
-  }
+  const avoidedCostRows: AvoidedCostSignatureRow[] = avoidedCostSignatureRows.map(
+    (row) => ({
+      fulfillmentMode: row.fulfillmentMode,
+      items: row.items,
+      occurrences: Number(row.occurrences),
+    })
+  )
+  const avoidedDineInCost = summarizeAvoidedDineInCost(avoidedCostRows, unitCosts)
 
   const purchasedUnitsByGroup = emptyContainerCounts()
   const purchasedCostByGroup = emptyMoneyByGroup()

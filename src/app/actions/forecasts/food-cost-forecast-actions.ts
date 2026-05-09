@@ -14,6 +14,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { computeRecipeCost } from "@/lib/recipe-cost"
+import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 
 interface SessionUser {
   id: string
@@ -39,7 +40,8 @@ export interface FoodCostForecastDay {
 }
 
 export interface FoodCostForecastData {
-  storeId: string
+  /** Null when aggregating across all stores in the account. */
+  storeId: string | null
   storeName: string
   generatedAt: Date | null
   days: FoodCostForecastDay[]
@@ -54,7 +56,7 @@ export type GetFoodCostForecastResult =
   | { ok: false; error: "store_not_in_account" }
 
 export async function getFoodCostForecast(input: {
-  storeId: string
+  storeId?: string
   horizonDays?: number
   asOf?: Date
 }): Promise<GetFoodCostForecastResult | null> {
@@ -62,12 +64,28 @@ export async function getFoodCostForecast(input: {
   const user = session?.user ?? null
   if (!user) return null
 
-  const store = await prisma.store.findUnique({
-    where: { id: input.storeId },
-    select: { id: true, name: true, accountId: true },
-  })
-  if (!store || store.accountId !== user.accountId) {
-    return { ok: false, error: "store_not_in_account" }
+  let storeIds: string[]
+  let storeName: string
+  let storeIdOut: string | null
+  if (input.storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: input.storeId },
+      select: { id: true, name: true, accountId: true },
+    })
+    if (!store || store.accountId !== user.accountId) {
+      return { ok: false, error: "store_not_in_account" }
+    }
+    storeIds = [store.id]
+    storeName = store.name
+    storeIdOut = store.id
+  } else {
+    const stores = await prisma.store.findMany({
+      where: { accountId: user.accountId, isActive: true },
+      select: { id: true },
+    })
+    storeIds = stores.map((s) => s.id)
+    storeName = "All stores"
+    storeIdOut = null
   }
 
   const horizonDays = input.horizonDays ?? 7
@@ -80,12 +98,12 @@ export async function getFoodCostForecast(input: {
   const [revenueRows, menuRows, mappings] = await Promise.all([
     prisma.forecastDailyRevenue.findMany({
       where: {
-        storeId: input.storeId,
+        storeId: { in: storeIds },
         hourBucket: 0,
         forecastDate: { gte: dayStart, lt: dayEnd },
       },
-      orderBy: [{ forecastDate: "asc" }, { generatedAt: "desc" }],
       select: {
+        storeId: true,
         forecastDate: true,
         predictedRevenue: true,
         p10: true,
@@ -95,11 +113,11 @@ export async function getFoodCostForecast(input: {
     }),
     prisma.forecastMenuItem.findMany({
       where: {
-        storeId: input.storeId,
+        storeId: { in: storeIds },
         forecastDate: { gte: dayStart, lt: dayEnd },
       },
-      orderBy: [{ otterItemSkuId: "asc" }, { forecastDate: "asc" }, { generatedAt: "desc" }],
       select: {
+        storeId: true,
         otterItemSkuId: true,
         forecastDate: true,
         predictedQty: true,
@@ -109,47 +127,95 @@ export async function getFoodCostForecast(input: {
       },
     }),
     prisma.otterItemMapping.findMany({
-      where: { storeId: input.storeId },
-      select: { otterItemName: true, recipeId: true },
+      where: { storeId: { in: storeIds } },
+      select: { storeId: true, otterItemName: true, recipeId: true },
     }),
   ])
 
-  // Latest generation per (date) for revenue and per (sku, date) for menu
   type RevenueRow = (typeof revenueRows)[number]
   type MenuRow = (typeof menuRows)[number]
-  const latestRevenue = new Map<string, RevenueRow>()
+
+  // Latest generation per (storeId, date) for revenue. In aggregate mode we
+  // then sum across stores per date.
+  const latestRevenuePerStoreDate = new Map<string, RevenueRow>()
   for (const r of revenueRows) {
-    const key = ymd(r.forecastDate as Date)
-    const existing = latestRevenue.get(key)
-    if (!existing || r.generatedAt > existing.generatedAt) latestRevenue.set(key, r)
+    const key = `${r.storeId}|${ymd(r.forecastDate as Date)}`
+    const existing = latestRevenuePerStoreDate.get(key)
+    if (!existing || r.generatedAt > existing.generatedAt) {
+      latestRevenuePerStoreDate.set(key, r)
+    }
   }
+  // Sum predicted revenue / p10 / p90 per date across stores.
+  const revenueByDate = new Map<
+    string,
+    { predictedRevenue: number; p10: number; p90: number; generatedAt: Date }
+  >()
+  for (const r of latestRevenuePerStoreDate.values()) {
+    const k = ymd(r.forecastDate as Date)
+    const cur = revenueByDate.get(k)
+    const pr = r.predictedRevenue ?? 0
+    const p10 = r.p10 ?? pr
+    const p90 = r.p90 ?? pr
+    if (!cur) {
+      revenueByDate.set(k, {
+        predictedRevenue: pr,
+        p10,
+        p90,
+        generatedAt: r.generatedAt,
+      })
+    } else {
+      cur.predictedRevenue += pr
+      cur.p10 += p10
+      cur.p90 += p90
+      if (r.generatedAt > cur.generatedAt) cur.generatedAt = r.generatedAt
+    }
+  }
+
+  // Latest generation per (storeId, sku, date) for menu items.
   const latestMenu = new Map<string, MenuRow>()
   for (const r of menuRows) {
-    const key = `${r.otterItemSkuId}|${ymd(r.forecastDate as Date)}`
+    const key = `${r.storeId}|${r.otterItemSkuId}|${ymd(r.forecastDate as Date)}`
     const existing = latestMenu.get(key)
     if (!existing || r.generatedAt > existing.generatedAt) latestMenu.set(key, r)
   }
 
-  const recipeIdByItemName = new Map(
-    mappings.map((m) => [m.otterItemName, m.recipeId]),
-  )
-  const recipeCostCache = new Map<string, { totalCost: number; partial: boolean }>()
-  async function getRecipeUnitCost(recipeId: string) {
-    const cached = recipeCostCache.get(recipeId)
-    if (cached) return cached
-    try {
-      const r = await computeRecipeCost(recipeId, asOf, { storeId: input.storeId })
-      const value = { totalCost: r.totalCost, partial: r.partial }
-      recipeCostCache.set(recipeId, value)
-      return value
-    } catch {
-      const value = { totalCost: 0, partial: true }
-      recipeCostCache.set(recipeId, value)
-      return value
-    }
+  // Recipe mapping is per-store: same otterItemName can map to different
+  // recipes across stores.
+  const recipeIdByStoreItem = new Map<string, string>()
+  for (const m of mappings) {
+    recipeIdByStoreItem.set(`${m.storeId}|${m.otterItemName}`, m.recipeId)
   }
 
-  // Bucket menu rows by date
+  // Pre-compute every unique recipe cost in parallel — eliminates the per-day
+  // sequential `await` chain that made Hollywood's render scale with menu size.
+  const uniqueRecipeIds = new Set<string>()
+  for (const r of latestMenu.values()) {
+    const recipeId = recipeIdByStoreItem.get(`${r.storeId}|${r.otterItemSkuId}`)
+    if (recipeId) uniqueRecipeIds.add(recipeId)
+  }
+  const recipeCostCache = new Map<string, { totalCost: number; partial: boolean }>()
+  if (!input.storeId) {
+    const batchedCosts = await batchRecipeCosts(user.accountId)
+    for (const recipeId of uniqueRecipeIds) {
+      recipeCostCache.set(
+        recipeId,
+        batchedCosts.get(recipeId) ?? { totalCost: 0, partial: true },
+      )
+    }
+  } else {
+    await Promise.all(
+      Array.from(uniqueRecipeIds).map(async (recipeId) => {
+        try {
+          const r = await computeRecipeCost(recipeId, asOf, { storeId: storeIds[0] })
+          recipeCostCache.set(recipeId, { totalCost: r.totalCost, partial: r.partial })
+        } catch {
+          recipeCostCache.set(recipeId, { totalCost: 0, partial: true })
+        }
+      }),
+    )
+  }
+
+  // Bucket menu rows by date (across stores).
   const menuByDate = new Map<string, MenuRow[]>()
   for (const r of latestMenu.values()) {
     const key = ymd(r.forecastDate as Date)
@@ -160,7 +226,7 @@ export async function getFoodCostForecast(input: {
 
   // Accumulate per-day rollups. Use the union of revenue + menu dates so we
   // surface a row even when one side has data and the other doesn't.
-  const allDates = new Set<string>([...latestRevenue.keys(), ...menuByDate.keys()])
+  const allDates = new Set<string>([...revenueByDate.keys(), ...menuByDate.keys()])
   const sortedDates = Array.from(allDates).sort()
 
   const days: FoodCostForecastDay[] = []
@@ -169,7 +235,7 @@ export async function getFoodCostForecast(input: {
   let totalFoodCost = 0
 
   for (const dateKey of sortedDates) {
-    const revenueRow = latestRevenue.get(dateKey) ?? null
+    const revenueRow = revenueByDate.get(dateKey) ?? null
     const items = menuByDate.get(dateKey) ?? []
 
     let foodCost = 0
@@ -179,19 +245,19 @@ export async function getFoodCostForecast(input: {
     let partialRecipeCost = false
 
     for (const item of items) {
-      const recipeId = recipeIdByItemName.get(item.otterItemSkuId)
+      const recipeId = recipeIdByStoreItem.get(`${item.storeId}|${item.otterItemSkuId}`)
       if (!recipeId) {
         unmappedItemCount += 1
         continue
       }
-      const recipeCost = await getRecipeUnitCost(recipeId)
+      const recipeCost = recipeCostCache.get(recipeId) ?? { totalCost: 0, partial: true }
       if (recipeCost.partial) partialRecipeCost = true
       foodCost += item.predictedQty * recipeCost.totalCost
       foodCostP10 += (item.p10 ?? item.predictedQty) * recipeCost.totalCost
       foodCostP90 += (item.p90 ?? item.predictedQty) * recipeCost.totalCost
     }
 
-    if (revenueRow && revenueRow.generatedAt && (!latestGen || revenueRow.generatedAt > latestGen)) {
+    if (revenueRow && (!latestGen || revenueRow.generatedAt > latestGen)) {
       latestGen = revenueRow.generatedAt
     }
 
@@ -224,8 +290,8 @@ export async function getFoodCostForecast(input: {
   return {
     ok: true,
     data: {
-      storeId: store.id,
-      storeName: store.name,
+      storeId: storeIdOut,
+      storeName,
       generatedAt: latestGen,
       days,
       totalPredictedRevenue: totalRevenue,

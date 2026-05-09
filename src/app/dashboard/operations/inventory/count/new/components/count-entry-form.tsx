@@ -228,7 +228,8 @@ function CountRow({ ingredient, row, onChange, onCommit }: CountRowProps) {
           }
         }}
         placeholder="0"
-        className="h-9 px-3 text-right border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-none focus:border-[var(--accent)] font-medium tabular-nums"
+        aria-label="Native quantity"
+        className="h-9 px-3 text-right border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-hidden focus-visible:border-(--accent) focus-visible:ring-1 focus-visible:ring-(--accent) font-medium tabular-nums"
         style={{ fontVariantNumeric: "tabular-nums lining-nums" }}
       />
       <input
@@ -237,7 +238,8 @@ function CountRow({ ingredient, row, onChange, onCommit }: CountRowProps) {
         onChange={(e) => onChange({ nativeUnit: e.target.value, saved: false })}
         onBlur={onCommit}
         placeholder={recipeUnit}
-        className="h-9 px-3 text-center border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-none focus:border-[var(--accent)] font-mono text-[12px] uppercase"
+        aria-label="Native unit"
+        className="h-9 px-3 text-center border border-[var(--hairline-bold)] rounded-[2px] bg-[rgba(255,253,247,0.72)] focus:outline-hidden focus-visible:border-(--accent) focus-visible:ring-1 focus-visible:ring-(--accent) font-mono text-[12px] uppercase"
       />
       <div
         className="text-right text-[13px] tabular-nums text-[var(--ink-muted)]"

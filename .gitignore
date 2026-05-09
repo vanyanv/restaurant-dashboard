@@ -60,6 +60,9 @@ backfill-failures.json
 # Mobile-audit screenshot artifacts (Playwright)
 /tmp-screenshots/
 
+# Performance audit scratch artifacts (Playwright screenshots + perf-audit reports)
+/tmp/
+
 # Local Playwright MCP browser snapshots (page YAML + console logs per session)
 .playwright-mcp/
 

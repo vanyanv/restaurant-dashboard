@@ -376,7 +376,7 @@ function MobileSummaryCard({
           value={gross}
           format={(n) => formatCurrency(n)}
           duration={420}
-          className="font-display-tight text-[20px] leading-none tabular-nums text-[color:var(--ink)]"
+          className="text-[20px] font-semibold leading-none tabular-nums text-[color:var(--ink)]"
         />
         <ChevronDown
           className="detail-chevron h-3.5 w-3.5 shrink-0 text-[color:var(--ink-faint)]"

@@ -175,7 +175,8 @@ export function IngredientsPantry({ canonicals, initialOpenId }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search your pantry — cilantro, mozzarella, olive oil…"
-            className="h-12 flex-1 bg-transparent font-display text-[18px] italic text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none"
+            aria-label="Search pantry ingredients"
+            className="h-12 flex-1 bg-transparent font-display text-[18px] italic text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-hidden"
           />
           {query && (
             <button
@@ -415,10 +416,10 @@ function RailItem({
         type="button"
         onClick={onClick}
         className={cn(
-          "group relative flex w-full items-center gap-2.5 border-l-2 py-2 pl-3 pr-2 text-left transition",
+          "group relative flex w-full items-center gap-2.5 border py-2 pl-3 pr-2 text-left transition",
           active
-            ? "border-[var(--ink)] bg-[var(--paper-deep)]"
-            : "border-transparent hover:border-[var(--hairline-bold)] hover:bg-[var(--paper-deep)]/50"
+            ? "border-(--ink) bg-(--paper-deep)"
+            : "border-transparent hover:border-(--hairline-bold) hover:bg-(--paper-deep)/50"
         )}
       >
         {swatch && (

@@ -1,8 +1,12 @@
 name: Refresh Otter JWT
 on:
   schedule:
-    - cron: '0 0 */2 * *' # every 2 days at midnight UTC
+    - cron: '0 0 * * *' # daily at midnight UTC; Otter tokens can age out before a 2-day cadence catches them
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   refresh:
@@ -15,7 +19,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx tsx scripts/refresh-otter-jwt.ts
+      - name: Refresh Otter JWT
+        id: cron
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/refresh-otter-jwt.ts
         env:
           CI: 'true'
           OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
@@ -23,3 +31,21 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          LOG_FILE: logs/refresh-otter-jwt.log
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refresh-otter-jwt-log-${{ github.run_id }}
+          path: logs/refresh-otter-jwt.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Refresh Otter JWT
+          ISSUE_TITLE: "[Auto] Refresh Otter JWT failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/refresh-otter-jwt.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

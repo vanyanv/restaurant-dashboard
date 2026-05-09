@@ -130,17 +130,18 @@ async function main() {
   console.log(`Found ${candidates.length} invoice(s) to reprocess.\n`)
   if (candidates.length === 0) return await prisma.$disconnect()
 
-  // Stores per owner
-  const ownerIds = Array.from(new Set(candidates.map((c) => c.ownerId)))
+  // Stores per account. This mirrors the live sync route; invoices may be
+  // owned by a different user than the store's original creator.
+  const accountIds = Array.from(new Set(candidates.map((c) => c.accountId)))
   const allStores = await prisma.store.findMany({
-    where: { ownerId: { in: ownerIds }, isActive: true },
-    select: { id: true, address: true, name: true, ownerId: true },
+    where: { accountId: { in: accountIds }, isActive: true },
+    select: { id: true, address: true, name: true, accountId: true },
   })
-  const storesByOwner = new Map<string, typeof allStores>()
+  const storesByAccount = new Map<string, typeof allStores>()
   for (const s of allStores) {
-    const arr = storesByOwner.get(s.ownerId) ?? []
+    const arr = storesByAccount.get(s.accountId) ?? []
     arr.push(s)
-    storesByOwner.set(s.ownerId, arr)
+    storesByAccount.set(s.accountId, arr)
   }
 
   const token = await getGraphToken()
@@ -187,8 +188,8 @@ async function main() {
     )
     const dateSuspect = Boolean(fresh.invoiceDate) && sanitizedDate === null
 
-    const ownerStores = storesByOwner.get(inv.ownerId) ?? []
-    const match = fresh.deliveryAddress ? matchInvoiceToStore(fresh.deliveryAddress, ownerStores) : null
+    const accountStores = storesByAccount.get(inv.accountId) ?? []
+    const match = fresh.deliveryAddress ? matchInvoiceToStore(fresh.deliveryAddress, accountStores) : null
 
     const mathMismatches = findLineMathMismatches(fresh.lineItems)
     const packAnomalies = findPackShapeAnomalies(fresh.lineItems)
@@ -203,7 +204,7 @@ async function main() {
     console.log(`  model used:     ${extractionModel}`)
     console.log(`  fresh date:     ${fresh.invoiceDate ?? "null"} → sanitized ${fmtDateOnly(sanitizedDate)}`)
     console.log(`  fresh lines:    ${fresh.lineItems.length} total, ${withPack} with pack/size, ${missingPackAfter} CS-without-pack`)
-    console.log(`  next status:    ${nextStatus}` + (match ? `  (store ${ownerStores.find((s) => s.id === match.storeId)?.name ?? "?"}, conf ${match.confidence.toFixed(2)})` : ""))
+    console.log(`  next status:    ${nextStatus}` + (match ? `  (store ${accountStores.find((s) => s.id === match.storeId)?.name ?? "?"}, conf ${match.confidence.toFixed(2)})` : ""))
     for (const m of mathMismatches) {
       console.log(
         `  ⚠ math mismatch line ${m.lineNumber} "${m.productName.slice(0, 45)}": ` +

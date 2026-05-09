@@ -3,8 +3,13 @@
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import { bustTags, cached, stableKey } from "@/lib/cache/cached"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
+import {
+  shapeTopProducts,
+  type RawProductAggregateRow,
+} from "@/lib/product-analytics-aggregation"
 import type {
   InvoiceKpis,
   ProductAnalytics,
@@ -12,6 +17,7 @@ import type {
   InvoiceStoreRow,
   InvoiceVendorRow,
 } from "@/types/invoice"
+import { logger } from "@/lib/logger"
 
 function isoToStartOfDay(iso: string): Date {
   return new Date(`${iso}T00:00:00`)
@@ -216,86 +222,42 @@ export async function getProductAnalytics(options?: {
 
   const { storeId, days, startDate, endDate } = options ?? {}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const invoiceWhere: any = { accountId: session.user.accountId }
-  if (storeId) invoiceWhere.storeId = storeId
+  const accountId = session.user.accountId
+  let dateFloor: Date
+  let dateCeil: Date | null = null
   if (startDate && endDate) {
-    invoiceWhere.invoiceDate = {
-      gte: isoToStartOfDay(startDate),
-      lte: isoToEndOfDay(endDate),
-    }
+    dateFloor = isoToStartOfDay(startDate)
+    dateCeil = isoToEndOfDay(endDate)
   } else {
     const fallbackDays = days ?? 90
-    const sinceDate = new Date()
-    sinceDate.setDate(sinceDate.getDate() - fallbackDays)
-    invoiceWhere.invoiceDate = { gte: sinceDate }
+    dateFloor = new Date()
+    dateFloor.setDate(dateFloor.getDate() - fallbackDays)
   }
 
-  const lineItems = await prisma.invoiceLineItem.findMany({
-    where: { invoice: invoiceWhere },
-    select: {
-      sku: true,
-      productName: true,
-      category: true,
-      quantity: true,
-      unit: true,
-      unitPrice: true,
-      extendedPrice: true,
-      invoiceId: true,
-    },
-  })
+  // GROUP BY in Postgres so we never materialize every line item in JS.
+  // Picks first non-null sku/category/unit per group via array_agg trick.
+  const rawRows = await prisma.$queryRaw<RawProductAggregateRow[]>(Prisma.sql`
+    SELECT
+      li."productName"                                              AS "productName",
+      (array_remove(array_agg(li.sku ORDER BY li.sku), NULL))[1]    AS "sku",
+      (array_remove(array_agg(li.category ORDER BY li.category), NULL))[1] AS "category",
+      (array_remove(array_agg(li.unit ORDER BY li.unit), NULL))[1]  AS "unit",
+      SUM(li.quantity)::float                                       AS "totalQuantity",
+      SUM(li."extendedPrice")::float                                AS "totalSpend",
+      AVG(li."unitPrice")::float                                    AS "avgUnitPrice",
+      COUNT(DISTINCT li."invoiceId")                                AS "invoiceCount"
+    FROM "InvoiceLineItem" li
+    JOIN "Invoice" i ON i.id = li."invoiceId"
+    WHERE i."accountId" = ${accountId}
+      AND i."invoiceDate" >= ${dateFloor}
+      AND (${dateCeil}::timestamp IS NULL OR i."invoiceDate" <= ${dateCeil})
+      AND (${storeId ?? null}::text IS NULL OR i."storeId" = ${storeId ?? null})
+    GROUP BY li."productName"
+    ORDER BY SUM(li."extendedPrice") DESC
+    LIMIT 200
+  `)
 
-  // Group by productName (primary key for grouping)
-  const productMap = new Map<string, {
-    sku: string | null
-    category: string | null
-    totalQuantity: number
-    totalSpend: number
-    unit: string | null
-    invoiceIds: Set<string>
-    priceSum: number
-    count: number
-  }>()
-
-  for (const li of lineItems) {
-    const key = li.productName
-    const existing = productMap.get(key)
-    if (existing) {
-      existing.totalQuantity += li.quantity
-      existing.totalSpend += li.extendedPrice
-      existing.invoiceIds.add(li.invoiceId)
-      existing.priceSum += li.unitPrice
-      existing.count++
-      if (!existing.sku && li.sku) existing.sku = li.sku
-    } else {
-      productMap.set(key, {
-        sku: li.sku,
-        category: li.category,
-        totalQuantity: li.quantity,
-        totalSpend: li.extendedPrice,
-        unit: li.unit,
-        invoiceIds: new Set([li.invoiceId]),
-        priceSum: li.unitPrice,
-        count: 1,
-      })
-    }
-  }
-
-  const topProducts = Array.from(productMap.entries())
-    .map(([productName, data]) => ({
-      productName,
-      sku: data.sku,
-      category: data.category,
-      totalQuantity: data.totalQuantity,
-      totalSpend: data.totalSpend,
-      unit: data.unit,
-      avgUnitPrice: data.priceSum / data.count,
-      invoiceCount: data.invoiceIds.size,
-    }))
-    .sort((a, b) => b.totalSpend - a.totalSpend)
-    .slice(0, 20)
-
-  return { topProducts }
+  return { topProducts: shapeTopProducts(rawRows, 20) }
 }
 
 export async function getInvoiceStoreBreakdown(options?: {
@@ -681,7 +643,7 @@ export async function setInvoiceIsReturn(
     try {
       await recomputeCanonicalCost(id)
     } catch (err) {
-      console.error(`recomputeCanonicalCost(${id}) failed after isReturn toggle:`, err)
+      logger.error(`recomputeCanonicalCost(${id}) failed after isReturn toggle:`, err)
     }
   }
 

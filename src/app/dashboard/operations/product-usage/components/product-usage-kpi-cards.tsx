@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/format"
 import { motion, useReducedMotion } from "framer-motion"
 import type { ProductUsageKpis } from "@/types/product-usage"
@@ -10,50 +9,44 @@ interface ProductUsageKpiCardsProps {
   kpis: ProductUsageKpis
 }
 
-function getWasteBorderColor(wastePercent: number): string {
-  if (wastePercent < 5) return "var(--platform-chownow)"
-  if (wastePercent <= 15) return "var(--platform-grubhub)"
-  return "var(--accent)"
+type Tone = "rest" | "warn" | "alert"
+
+function wasteTone(wastePercent: number): Tone {
+  if (wastePercent < 5) return "rest"
+  if (wastePercent <= 15) return "warn"
+  return "alert"
 }
 
-function getWasteBgTint(wastePercent: number): string {
-  if (wastePercent < 5) return "rgba(22, 160, 133, 0.04)"
-  if (wastePercent <= 15) return "rgba(241, 92, 38, 0.04)"
-  return "rgba(220, 38, 38, 0.04)"
+const TONE_STYLES: Record<Tone, { bg: string; border: string; valueColor: string }> = {
+  rest: {
+    bg: "rgba(255, 253, 247, 0.72)",
+    border: "var(--hairline-bold)",
+    valueColor: "var(--ink)",
+  },
+  warn: {
+    bg: "var(--paper-warm)",
+    border: "var(--hairline-bold)",
+    valueColor: "var(--ink)",
+  },
+  alert: {
+    bg: "var(--accent-bg)",
+    border: "var(--accent)",
+    valueColor: "var(--accent)",
+  },
 }
 
-const CARDS = [
-  {
-    key: "totalPurchasedCost" as const,
-    label: "Total Purchased",
-    borderColor: "var(--platform-grubhub)",
-    bgTint: "rgba(241, 92, 38, 0.04)",
-  },
-  {
-    key: "theoreticalIngredientCost" as const,
-    label: "Theoretical Cost",
-    borderColor: "var(--accent)",
-    bgTint: "rgba(220, 38, 38, 0.04)",
-  },
-  {
-    key: "wasteEstimatedCost" as const,
-    label: "Waste Cost",
-    borderColor: "var(--subtract)",
-    bgTint: "rgba(138, 58, 58, 0.04)",
-  },
-  {
-    key: "wastePercent" as const,
-    label: "Waste %",
-    borderColor: "dynamic",
-    bgTint: "dynamic",
-  },
+const CARDS: { key: keyof ProductUsageKpis; label: string; tone: Tone | "dynamic"; valueColor?: string }[] = [
+  { key: "totalPurchasedCost", label: "Total Purchased", tone: "rest" },
+  { key: "theoreticalIngredientCost", label: "Theoretical Cost", tone: "rest" },
+  { key: "wasteEstimatedCost", label: "Waste Cost", tone: "rest", valueColor: "var(--subtract)" },
+  { key: "wastePercent", label: "Waste %", tone: "dynamic" },
 ]
 
 export function ProductUsageKpiCards({ kpis }: ProductUsageKpiCardsProps) {
   const hasAnimated = useRef(false)
   const prefersReducedMotion = useReducedMotion()
 
-  const getValue = (key: string): string => {
+  const getValue = (key: keyof ProductUsageKpis): string => {
     switch (key) {
       case "totalPurchasedCost":
         return formatCurrency(kpis.totalPurchasedCost)
@@ -71,18 +64,14 @@ export function ProductUsageKpiCards({ kpis }: ProductUsageKpiCardsProps) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {CARDS.map((card, index) => {
-        const borderColor =
-          card.key === "wastePercent"
-            ? getWasteBorderColor(kpis.wastePercent)
-            : card.borderColor
-        const bgTint =
-          card.key === "wastePercent"
-            ? getWasteBgTint(kpis.wastePercent)
-            : card.bgTint
+        const tone = card.tone === "dynamic" ? wasteTone(kpis.wastePercent) : card.tone
+        const styles = TONE_STYLES[tone]
+        const valueColor = card.valueColor ?? styles.valueColor
 
         return (
-          <motion.div
+          <motion.section
             key={card.key}
+            className="inv-panel inv-panel--flush relative overflow-hidden"
             initial={hasAnimated.current || prefersReducedMotion ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -93,24 +82,23 @@ export function ProductUsageKpiCards({ kpis }: ProductUsageKpiCardsProps) {
             onAnimationComplete={() => {
               hasAnimated.current = true
             }}
+            style={{
+              backgroundColor: styles.bg,
+              borderColor: styles.border,
+            }}
           >
-            <Card
-              className="relative overflow-hidden py-3"
-              style={{
-                borderColor,
-                backgroundColor: bgTint,
-              }}
-            >
-              <CardContent className="p-3">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--ink-muted)]">
-                  {card.label}
-                </span>
-                <div className="mt-1 font-mono-numbers text-xl font-bold tracking-tight sm:text-2xl">
-                  {getValue(card.key)}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <div className="px-4 py-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+                {card.label}
+              </span>
+              <div
+                className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl"
+                style={{ color: valueColor }}
+              >
+                {getValue(card.key)}
+              </div>
+            </div>
+          </motion.section>
         )
       })}
     </div>

@@ -17,24 +17,48 @@ concurrency:
   group: otter-drain
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   list-stores:
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.fetch.outputs.ids }}
     steps:
+      - uses: actions/checkout@v6
       - name: GET /api/cron/otter/stores
         id: fetch
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LOG_FILE: logs/otter-drain-list-stores.log
+          CRON_MAX_TIME: "30"
         run: |
-          payload=$(curl -fsSL "$APP_URL/api/cron/otter/stores" \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            --max-time 30)
-          ids=$(echo "$payload" | jq -c '[.stores[].storeId]')
-          echo "Found stores: $ids"
-          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/run-with-cron-logging.sh bash -lc '
+            payload=$(.github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/otter/stores")
+            ids=$(echo "$payload" | jq -c "[.stores[].storeId]")
+            echo "Found stores: $ids"
+            echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          '
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otter-drain-list-stores-log-${{ github.run_id }}
+          path: logs/otter-drain-list-stores.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Order-Details Drain Stores
+          ISSUE_TITLE: "[Auto] Otter Order-Details Drain Stores failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/otter-drain-list-stores.log
+          FAILED_EXIT_CODE: ${{ steps.fetch.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
 
   drain:
     needs: list-stores
@@ -56,14 +80,36 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Drain order details for store ${{ matrix.storeId }}
+        id: cron
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OTTER_JWT: ${{ secrets.OTTER_JWT }}
+          OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
+          OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
           STORE_ID: ${{ matrix.storeId }}
           LIMIT: ${{ github.event.inputs.limit || '1500' }}
           OLDER_THAN_DAYS: ${{ github.event.inputs.olderThanDays || '3' }}
+          LOG_FILE: logs/otter-drain-${{ matrix.storeId }}.log
         run: |
-          npx tsx scripts/drain-otter-order-details.ts \
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/drain-otter-order-details.ts \
             --store-id="$STORE_ID" \
             --limit="$LIMIT" \
             --older-than-days="$OLDER_THAN_DAYS"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: otter-drain-log-${{ matrix.storeId }}-${{ github.run_id }}
+          path: logs/otter-drain-${{ matrix.storeId }}.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Order-Details Drain
+          ISSUE_TITLE: "[Auto] Otter Order-Details Drain failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/otter-drain-${{ matrix.storeId }}.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

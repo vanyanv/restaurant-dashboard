@@ -102,7 +102,7 @@ export function RecipesContent({ initialRecipes, stores }: RecipesContentProps) 
                 {recipes.map((recipe) => (
                   <div
                     key={recipe.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    className="flex items-center justify-between p-3 rounded-xs border border-(--hairline) bg-(--paper-warm)"
                   >
                     <div className="flex items-center gap-3">
                       <div>
