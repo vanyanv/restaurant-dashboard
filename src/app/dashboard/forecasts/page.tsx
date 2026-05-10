@@ -35,6 +35,10 @@ import { PromoRoiCard } from "./components/promo-roi-card"
 import { LaunchTrajectoryCard } from "./components/launch-trajectory-card"
 import { ChannelMixCard } from "./components/channel-mix-card"
 import { WasteClusterCard } from "./components/waste-cluster-card"
+import {
+  ExternalSignalsStrip,
+  ExternalSignalsStripFallback,
+} from "./components/external-signals-strip"
 
 // Recharts is only rendered on the revenue section; lazy-loading these two
 // cards keeps ~100 KB out of the initial route bundle when the user is on
@@ -211,6 +215,16 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
           selectedStoreId={storeId}
         />
       </EditorialTopbar>
+
+      <div className="px-6 pt-4">
+        <Suspense fallback={<ExternalSignalsStripFallback />}>
+          <ExternalSignalsStrip
+            storeIds={storeId ? [storeId] : stores.map((s) => s.id)}
+            storeId={storeId}
+            storeName={data.storeName}
+          />
+        </Suspense>
+      </div>
 
       <ForecastsRibbon current={section} available={sectionAvailability} />
 
