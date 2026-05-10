@@ -111,7 +111,7 @@ export function OrdersContent({ initial, stores }: Props) {
   return (
     <>
       {/* ─── Top strip ─── */}
-      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--hairline)] bg-[color-mix(in_srgb,var(--paper)_90%,transparent)] px-6 backdrop-blur-md">
+      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 border-b border-[var(--hairline-bold)] bg-[var(--paper)] px-6">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-1 h-4" />
         <span className="font-label text-[var(--ink-muted)]">Section</span>

@@ -82,7 +82,7 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
             <Skeleton className="h-105" />
           </>
         ) : query.error ? (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          <div className="inv-panel inv-panel--alert p-4 text-sm">
             {(query.error as Error).message}
           </div>
         ) : data ? (
@@ -134,7 +134,7 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
                 }))}
               />
             ) : (
-              <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
+              <div className="inv-panel inv-panel--empty p-6 text-sm">
                 No stores yet. Create one from{" "}
                 <a href="/dashboard/stores" className="underline">
                   Store Management

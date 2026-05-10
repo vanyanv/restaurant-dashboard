@@ -159,7 +159,7 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
               return (
                 <tr
                   key={rowKey}
-                  className="group border-b border-(--hairline) transition-colors hover:bg-[rgba(220,38,38,0.028)]"
+                  className="group border-b border-(--hairline) transition-colors hover:bg-[var(--row-hover-bg-soft)]"
                 >
                   <td className="sticky left-0 z-10 bg-[rgba(255,253,248,0.98)] px-3 py-2 transition-colors group-hover:bg-[rgba(250,232,232,0.98)]">
                     <div className="relative flex items-center gap-1">

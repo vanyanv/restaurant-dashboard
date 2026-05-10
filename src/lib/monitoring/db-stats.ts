@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 
 export type DbSize = {
@@ -9,7 +10,7 @@ export type DbSize = {
 export type TableSize = {
   table: string
   bytes: number
-  rows: bigint
+  rows: number
 }
 
 export type DbConnections = {
@@ -19,7 +20,7 @@ export type DbConnections = {
 
 const DEFAULT_CAP = 512 * 1024 * 1024 // Neon free tier
 
-export async function getDbSize(): Promise<DbSize> {
+async function getDbSizeUncached(): Promise<DbSize> {
   const rows = await prisma.$queryRaw<{ size: bigint }[]>`
     SELECT pg_database_size(current_database())::bigint AS size
   `
@@ -28,7 +29,15 @@ export async function getDbSize(): Promise<DbSize> {
   return { totalBytes, capBytes, pct: capBytes > 0 ? (totalBytes / capBytes) * 100 : 0 }
 }
 
-export async function getTableSizes(limit = 12): Promise<TableSize[]> {
+export const getDbSize = unstable_cache(
+  getDbSizeUncached,
+  ["monitoring:db-size"],
+  { revalidate: 30, tags: ["monitoring:db"] },
+)
+
+async function getTableSizesUncached(limit = 12): Promise<TableSize[]> {
+  // pg_total_relation_size is computed once per row; ORDER BY references the
+  // alias-equivalent expression so Postgres reuses the result.
   const rows = await prisma.$queryRaw<{ relname: string; bytes: bigint; rows: bigint }[]>`
     SELECT
       c.relname,
@@ -40,10 +49,16 @@ export async function getTableSizes(limit = 12): Promise<TableSize[]> {
     ORDER BY pg_total_relation_size(c.oid) DESC
     LIMIT ${limit}
   `
-  return rows.map((r) => ({ table: r.relname, bytes: Number(r.bytes), rows: r.rows }))
+  return rows.map((r) => ({ table: r.relname, bytes: Number(r.bytes), rows: Number(r.rows) }))
 }
 
-export async function getConnections(): Promise<DbConnections> {
+export const getTableSizes = unstable_cache(
+  getTableSizesUncached,
+  ["monitoring:table-sizes"],
+  { revalidate: 60, tags: ["monitoring:db"] },
+)
+
+async function getConnectionsUncached(): Promise<DbConnections> {
   const rows = await prisma.$queryRaw<{ active: bigint; max: bigint }[]>`
     SELECT
       (SELECT COUNT(*)::bigint FROM pg_stat_activity WHERE datname = current_database()) AS active,
@@ -51,3 +66,9 @@ export async function getConnections(): Promise<DbConnections> {
   `
   return { active: Number(rows[0]?.active ?? 0), max: Number(rows[0]?.max ?? 0) }
 }
+
+export const getConnections = unstable_cache(
+  getConnectionsUncached,
+  ["monitoring:db-connections"],
+  { revalidate: 10, tags: ["monitoring:db"] },
+)

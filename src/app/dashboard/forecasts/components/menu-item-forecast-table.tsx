@@ -62,7 +62,7 @@ export function MenuItemForecastTable({ data }: Props) {
           return (
             <div
               key={item.otterItemSkuId}
-              className="grid grid-cols-[1.4fr_120px_120px_120px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+              className="grid grid-cols-[1.4fr_120px_120px_120px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
             >
               <div className="text-[14px] text-[var(--ink)] truncate" title={item.otterItemSkuId}>
                 {item.otterItemSkuId}

@@ -4,7 +4,7 @@ import { SYSTEM_INK } from "../system-color"
 
 type Snapshot = {
   capturedAt: Date
-  totalBytes: bigint
+  totalBytes: number | bigint
   objectCount: number
   byPrefix: unknown // Json
 } | null

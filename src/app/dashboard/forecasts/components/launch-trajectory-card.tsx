@@ -92,7 +92,7 @@ export function LaunchTrajectoryCard({ data }: { data: LaunchTrajectoryData }) {
           return (
             <div
               key={`${l.storeId}-${l.category}-${l.itemName}`}
-              className="grid grid-cols-[1.6fr_90px_70px_100px_90px_140px_90px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+              className="grid grid-cols-[1.6fr_90px_70px_100px_90px_140px_90px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
             >
               <div
                 className="text-[14px] text-[var(--ink)] truncate"

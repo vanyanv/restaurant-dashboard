@@ -254,7 +254,7 @@ export function MatchPickerSheet({
         type="button"
         aria-label="Close"
         onClick={() => onOpenChange(false)}
-        className="absolute inset-0 bg-[#1a1613]/35 backdrop-blur-[2px] animate-in fade-in duration-200"
+        className="absolute inset-0 bg-[color-mix(in_srgb,var(--ink)_35%,transparent)] animate-in fade-in duration-200"
       />
 
       <div

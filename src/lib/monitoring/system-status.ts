@@ -3,6 +3,7 @@ import { getDbSize } from "./db-stats"
 import { getCacheHitRateByDay } from "./queries"
 import { getLatestR2Snapshot } from "./r2-stats"
 import { getLivePresence } from "./login-audit"
+import { getAllTokenHealth, summarizeTokenTone } from "./jwt-health"
 import type { System } from "@/components/monitoring/system-color"
 
 export type SystemStatus = {
@@ -68,6 +69,40 @@ async function authStatus(): Promise<SystemStatus> {
   }
 }
 
+async function tokensStatus(): Promise<SystemStatus> {
+  const rows = await getAllTokenHealth()
+  const tone = summarizeTokenTone(rows)
+
+  // Headline = the soonest-expiring known token, in days.
+  const known = rows.filter((r) => r.daysLeft !== null) as Array<{
+    provider: string
+    daysLeft: number
+  }>
+  let headline: string
+  if (known.length === 0) {
+    headline = rows.every((r) => !r.hasToken) ? "MISSING" : "UNKNOWN"
+  } else {
+    const soonest = known.reduce((a, b) => (a.daysLeft < b.daysLeft ? a : b))
+    headline =
+      soonest.daysLeft < 0
+        ? `${soonest.provider.toUpperCase()} EXPIRED`
+        : `${soonest.provider.toUpperCase()} ${soonest.daysLeft}d`
+  }
+
+  // Caption = compact two-token summary, e.g. "OTTER 0d · HARRI 27d".
+  const caption = rows
+    .map((r) => {
+      const name = r.provider.toUpperCase()
+      if (!r.hasToken) return `${name} —`
+      if (r.daysLeft === null) return `${name} ?`
+      if (r.daysLeft < 0) return `${name} expired`
+      return `${name} ${r.daysLeft}d`
+    })
+    .join(" · ")
+
+  return { system: "tokens", tone, headline, caption }
+}
+
 async function syncsStatus(): Promise<SystemStatus> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const recent = await prisma.jobRun.findMany({
@@ -95,6 +130,7 @@ export async function getAllSystemStatus(): Promise<SystemStatus[]> {
     safe("cache", cacheStatus),
     safe("auth", authStatus),
     safe("syncs", syncsStatus),
+    safe("tokens", tokensStatus),
   ])
 }
 

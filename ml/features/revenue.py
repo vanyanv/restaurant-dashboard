@@ -19,6 +19,12 @@ import numpy as np
 import pandas as pd
 
 from ml.db import connect
+from ml.features.external_signals import (
+    daily_signal_feature_columns,
+    fill_event_daily_defaults,
+    fill_weather_daily_defaults,
+    load_daily_external_signals,
+)
 
 
 # US holidays we care about for restaurant volume. The Phase 5 plan calls out
@@ -93,6 +99,22 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def build_enriched_features(
+    df: pd.DataFrame,
+    external_daily: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Build baseline revenue features plus daily weather/event signals."""
+    out = build_features(df)
+    if out.empty:
+        return out
+    if external_daily is None or external_daily.empty:
+        external_daily = pd.DataFrame({"date": out["date"].drop_duplicates()})
+    external_daily = fill_event_daily_defaults(fill_weather_daily_defaults(external_daily))
+    out = out.merge(external_daily, on="date", how="left")
+    out = fill_event_daily_defaults(fill_weather_daily_defaults(out))
+    return out
+
+
 def feature_columns() -> list[str]:
     return [
         "weekday",
@@ -110,6 +132,18 @@ def feature_columns() -> list[str]:
         "roll_90",
         "growth_rate_90",
     ]
+
+
+def enriched_feature_columns() -> list[str]:
+    return [*feature_columns(), *daily_signal_feature_columns()]
+
+
+def load_revenue_external_signals(
+    store_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> pd.DataFrame:
+    return load_daily_external_signals(store_id, start_date, end_date)
 
 
 def split_train_holdout(

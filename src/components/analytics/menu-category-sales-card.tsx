@@ -151,7 +151,7 @@ const CategoryRow = memo(function CategoryRow({
         onClick={onToggle}
         aria-expanded={isExpanded}
         aria-controls={regionId}
-        className="group relative flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-[rgba(220,38,38,0.045)] focus-visible:bg-[rgba(220,38,38,0.045)] focus-visible:outline-none focus-visible:shadow-[inset_3px_0_0_var(--accent)]"
+        className="group relative flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)] focus-visible:outline-none focus-visible:shadow-[inset_3px_0_0_var(--accent)]"
       >
         <span className="absolute left-0 top-[18%] bottom-[18%] w-[3px] origin-center scale-y-0 bg-[var(--accent)] transition-transform duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] group-hover:scale-y-100 group-focus-visible:scale-y-100" />
         <ChevronRight

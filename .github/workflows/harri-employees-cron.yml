@@ -1,0 +1,45 @@
+name: Harri Employees Monthly Refresh
+on:
+  schedule:
+    # 07:00 UTC on the 1st of each month. Names change rarely; once a month
+    # is plenty. Hot paths (hourly labor sync, alert reads) never call the
+    # team endpoint — they read names from the HarriEmployee cache.
+    - cron: '0 7 1 * *'
+  workflow_dispatch:
+
+concurrency:
+  group: harri-employees-cron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Refresh Harri team directory
+        id: cron
+        run: |
+          mkdir -p logs
+          npx tsx scripts/backfill-harri-employees.ts 2>&1 | tee logs/harri-employees-cron.log
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
+          HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
+          HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harri-employees-cron-log-${{ github.run_id }}
+          path: logs/harri-employees-cron.log
+          retention-days: 14

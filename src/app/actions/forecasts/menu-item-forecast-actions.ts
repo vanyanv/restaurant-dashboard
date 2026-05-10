@@ -1,16 +1,7 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export interface MenuItemForecastDay {
   date: Date
@@ -44,33 +35,13 @@ export async function getMenuItemForecast(input: {
   horizonDays?: number
   asOf?: Date
 }): Promise<GetMenuItemForecastResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
-  let storeIds: string[]
-  let storeName: string
-  let storeIdOut: string | null
-  if (input.storeId) {
-    const store = await prisma.store.findUnique({
-      where: { id: input.storeId },
-      select: { id: true, name: true, accountId: true },
-    })
-    if (!store || store.accountId !== user.accountId) {
-      return { ok: false, error: "store_not_in_account" }
-    }
-    storeIds = [store.id]
-    storeName = store.name
-    storeIdOut = store.id
-  } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true },
-    })
-    storeIds = stores.map((s) => s.id)
-    storeName = "All stores"
-    storeIdOut = null
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeIds, storeName, storeIdOut } = resolved.ctx
 
   const horizonDays = input.horizonDays ?? 7
   const asOf = input.asOf ?? new Date()

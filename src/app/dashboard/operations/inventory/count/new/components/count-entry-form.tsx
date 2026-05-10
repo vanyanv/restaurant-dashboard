@@ -125,7 +125,7 @@ export function CountEntryForm({ count, ingredients, resumed, storePicker }: Pro
           type="button"
           onClick={handleComplete}
           disabled={isCompleting || completedCount === 0}
-          className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[rgba(220,38,38,0.045)] hover:text-[var(--accent)] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--ink)]"
+          className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[var(--row-hover-bg)] hover:text-[var(--accent)] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--ink)]"
         >
           {isCompleting ? "Closing…" : "Complete count"}
         </button>
@@ -186,7 +186,7 @@ function CountRow({ ingredient, row, onChange, onCommit }: CountRowProps) {
   const confidenceLabel =
     ingredient.confidenceLevel === "MEDIUM" ? "MED" : ingredient.confidenceLevel
   return (
-    <div className="grid grid-cols-[1fr_120px_100px_120px_120px] gap-4 items-center px-5 py-3 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors">
+    <div className="grid grid-cols-[1fr_120px_100px_120px_120px] gap-4 items-center px-5 py-3 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors">
       <div>
         <div className="text-[14px] text-[var(--ink)] flex items-center gap-2">
           <span>{ingredient.name}</span>

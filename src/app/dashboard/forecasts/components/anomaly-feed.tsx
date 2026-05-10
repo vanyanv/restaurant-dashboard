@@ -64,7 +64,7 @@ export function AnomalyFeed({ data }: Props) {
           {data.events.map((e) => (
             <div
               key={e.id}
-              className="grid grid-cols-[100px_1fr_120px_120px_100px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+              className="grid grid-cols-[100px_1fr_120px_120px_100px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
             >
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-muted)]">
                 {format(new Date(e.occurredOn), "MMM d")}

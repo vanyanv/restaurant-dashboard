@@ -358,7 +358,7 @@ export function IngredientVarianceTable({
                     onMouseEnter={(e) => {
                       if (interactive) {
                         e.currentTarget.style.background =
-                          "rgba(220, 38, 38, 0.045)"
+                          "var(--row-hover-bg)"
                       }
                     }}
                     onMouseLeave={(e) => {

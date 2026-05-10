@@ -8,7 +8,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    store: { findFirst: vi.fn() },
+    store: { findUnique: vi.fn(), findMany: vi.fn() },
     stockCountLine: { findMany: vi.fn() },
     inventoryAdjustment: { findMany: vi.fn() },
     canonicalIngredient: { findMany: vi.fn() },
@@ -26,6 +26,10 @@ const sessionWith = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Default aggregate-mode store list; scoped tests override findUnique below.
+  vi.mocked(prisma.store.findMany).mockResolvedValue([
+    { id: "store-A", name: "Store A" },
+  ] as never)
   vi.mocked(prisma.inventoryAdjustment.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.canonicalIngredient.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.ingredientModelState.findMany).mockResolvedValue([] as never)
@@ -59,7 +63,11 @@ describe("getWasteRootCauses", () => {
 
   it("guards cross-account storeId", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+      id: "stranger",
+      name: "Stranger",
+      accountId: "acct-OTHER",
+    } as never)
     expect(await getWasteRootCauses({ storeId: "stranger" })).toEqual({
       ok: false,
       error: "store_not_in_account",

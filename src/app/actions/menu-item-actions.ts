@@ -191,6 +191,67 @@ export async function mapOtterItemToRecipe(input: {
   revalidatePath("/dashboard/recipes")
 }
 
+/**
+ * Bulk-confirm a list of (POS item → recipe) mappings in one round trip.
+ * Used by the "Confirm N high-confidence matches" topbar action on
+ * /dashboard/recipes when ML's top suggestion is high-confidence (≥0.75).
+ *
+ * Mirrors `mapOtterItemToRecipe`: validates every recipe is in the caller's
+ * account, then upserts an OtterItemMapping for every (store × pair). One
+ * transaction so the operator either gets all-or-nothing — partial commits
+ * would make the post-action P&L count untrustworthy.
+ */
+export async function mapOtterItemsBatch(
+  pairs: { otterItemName: string; recipeId: string }[]
+): Promise<{ mapped: number }> {
+  const scope = await requireScope()
+  if (!scope) throw new Error("Not authenticated")
+  const { accountId } = scope
+
+  if (pairs.length === 0) return { mapped: 0 }
+
+  const stores = await prisma.store.findMany({
+    where: { accountId },
+    select: { id: true },
+  })
+  if (stores.length === 0) return { mapped: 0 }
+
+  const recipeIds = Array.from(new Set(pairs.map((p) => p.recipeId)))
+  const validRecipes = await prisma.recipe.findMany({
+    where: { id: { in: recipeIds }, accountId },
+    select: { id: true },
+  })
+  const validIds = new Set(validRecipes.map((r) => r.id))
+  const filtered = pairs.filter((p) => validIds.has(p.recipeId))
+  if (filtered.length === 0) return { mapped: 0 }
+
+  await prisma.$transaction(
+    filtered.flatMap((p) =>
+      stores.map((s) =>
+        prisma.otterItemMapping.upsert({
+          where: {
+            storeId_otterItemName: {
+              storeId: s.id,
+              otterItemName: p.otterItemName,
+            },
+          },
+          create: {
+            storeId: s.id,
+            otterItemName: p.otterItemName,
+            recipeId: p.recipeId,
+          },
+          update: { recipeId: p.recipeId, confirmedAt: new Date() },
+        })
+      )
+    )
+  )
+
+  revalidatePath("/dashboard/menu/catalog")
+  revalidatePath("/dashboard/ingredients")
+  revalidatePath("/dashboard/recipes")
+  return { mapped: filtered.length }
+}
+
 export async function unmapOtterItem(otterItemName: string): Promise<void> {
   const scope = await requireScope()
   if (!scope) throw new Error("Not authenticated")

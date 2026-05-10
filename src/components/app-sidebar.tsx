@@ -70,6 +70,7 @@ const NAV: NavSection[] = [
           { title: "Analytics", url: "/dashboard/analytics" },
           { title: "P&L", url: "/dashboard/pnl" },
           { title: "COGS", url: "/dashboard/cogs" },
+          { title: "Labor", url: "/dashboard/labor" },
           { title: "Product Mix", url: "/dashboard/product-mix" },
         ],
       },

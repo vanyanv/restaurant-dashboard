@@ -14,17 +14,8 @@
 // The dashboard surfaces the missing-recipe coverage % separately so the
 // operator knows the classifier's coverage.
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export type MenuQuadrant = "STAR" | "PLOWHORSE" | "PUZZLE" | "DOG"
 
@@ -69,30 +60,13 @@ export async function getMenuEngineering(input: {
    * classifier doesn't drown in long-tail noise. */
   minSoldQty?: number
 }): Promise<GetMenuEngineeringResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
-  let storeIds: string[]
-  let storeName: string | null = null
-  if (input.storeId) {
-    const store = await prisma.store.findUnique({
-      where: { id: input.storeId },
-      select: { id: true, name: true, accountId: true },
-    })
-    if (!store || store.accountId !== user.accountId) {
-      return { ok: false, error: "store_not_in_account" }
-    }
-    storeIds = [store.id]
-    storeName = store.name
-  } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true },
-    })
-    storeIds = stores.map((s) => s.id)
-    storeName = "All stores"
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeIds, storeName } = resolved.ctx
 
   const lookbackDays = input.lookbackDays ?? 30
   const minSoldQty = input.minSoldQty ?? 5

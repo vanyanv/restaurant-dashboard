@@ -120,14 +120,14 @@ describe("getMenuEngineering", () => {
   it("rolls across all owned stores when no storeId is supplied", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
     vi.mocked(prisma.store.findMany).mockResolvedValue([
-      { id: "s1" },
-      { id: "s2" },
+      { id: "s1", name: "Store 1" },
+      { id: "s2", name: "Store 2" },
     ] as never)
     vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([] as never)
     await getMenuEngineering({})
     expect(prisma.store.findMany).toHaveBeenCalledWith({
       where: { accountId: "acct-A", isActive: true },
-      select: { id: true },
+      select: { id: true, name: true },
     })
     expect(prisma.dailyCogsItem.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({

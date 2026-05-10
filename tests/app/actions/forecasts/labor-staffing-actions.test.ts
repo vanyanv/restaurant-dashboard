@@ -10,9 +10,14 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     store: { findUnique: vi.fn() },
+    forecastHourlyOrders: { findMany: vi.fn() },
     forecastDailyRevenue: { findMany: vi.fn() },
     otterHourlySummary: { findMany: vi.fn() },
     otterDailySummary: { groupBy: vi.fn() },
+    harriDailyLabor: { findMany: vi.fn() },
+    storeWeatherSignal: { findMany: vi.fn() },
+    storeEventSignal: { findMany: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }))
 
@@ -30,6 +35,14 @@ const sessionWith = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(prisma.forecastHourlyOrders.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.otterHourlySummary.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.otterDailySummary.groupBy).mockResolvedValue([] as never)
+  vi.mocked(prisma.harriDailyLabor.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.storeWeatherSignal.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.storeEventSignal.findMany).mockResolvedValue([] as never)
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
 })
 
 describe("getLaborStaffingForecast", () => {
@@ -100,6 +113,7 @@ describe("getLaborStaffingForecast", () => {
     // Forecasted revenue for day0 = $5,600 → predictedOrders = 5600/28 = 200
     vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([
       {
+        storeId: "s1",
         forecastDate: day0,
         predictedRevenue: 5600,
         generatedAt: new Date("2026-05-08T01:00:00Z"),
@@ -152,6 +166,7 @@ describe("getLaborStaffingForecast", () => {
     ] as never)
     vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([
       {
+        storeId: "s1",
         forecastDate: day0,
         predictedRevenue: 280,
         generatedAt: new Date("2026-05-08T01:00:00Z"),
@@ -167,5 +182,128 @@ describe("getLaborStaffingForecast", () => {
     if (!result || !result.ok) throw new Error("expected ok")
     const hour12 = result.data.days[0].hours.find((h) => h.hour === 12)!
     expect(hour12.recommendedStaff).toBe(MIN_STAFF)
+  })
+
+  it("uses latest hourly ML rows when present", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+      id: "s1",
+      name: "S1",
+      accountId: "acct-A",
+    } as never)
+    const asOf = new Date("2026-05-08T12:00:00Z")
+    const day0 = new Date("2026-05-08T00:00:00Z")
+
+    vi.mocked(prisma.forecastHourlyOrders.findMany).mockResolvedValue([
+      {
+        storeId: "s1",
+        forecastDate: day0,
+        hourBucket: 12,
+        predictedOrders: 20,
+        p10: 15,
+        p90: 25,
+        generatedAt: new Date("2026-05-08T01:00:00Z"),
+      },
+      {
+        storeId: "s1",
+        forecastDate: day0,
+        hourBucket: 12,
+        predictedOrders: 30,
+        p10: 20,
+        p90: 40,
+        generatedAt: new Date("2026-05-08T02:00:00Z"),
+      },
+      {
+        storeId: "s1",
+        forecastDate: day0,
+        hourBucket: 13,
+        predictedOrders: 12,
+        p10: 8,
+        p90: 16,
+        generatedAt: new Date("2026-05-08T02:00:00Z"),
+      },
+    ] as never)
+    vi.mocked(prisma.harriDailyLabor.findMany).mockResolvedValue([
+      { date: day0, actualCost: null, forecastCost: 210 },
+    ] as never)
+
+    const result = await getLaborStaffingForecast({ storeId: "s1", horizonDays: 1, asOf })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.forecastSource).toBe("ml")
+    expect(result.data.generatedAt).toEqual(new Date("2026-05-08T02:00:00Z"))
+    expect(result.data.days[0].predictedOrders).toBe(42)
+    expect(result.data.days[0].scheduledLaborCost).toBe(210)
+    expect(result.data.days[0].expectedLaborCostPerOrder).toBe(5)
+    const hour12 = result.data.days[0].hours[12]
+    expect(hour12.predictedOrders).toBe(30)
+    expect(hour12.p10).toBe(20)
+    expect(hour12.p90).toBe(40)
+    expect(hour12.source).toBe("ml")
+    expect(hour12.recommendedStaff).toBe(Math.ceil(30 / COVERS_PER_STAFF_HOUR))
+  })
+
+  it("surfaces weather and event demand drivers from stored signals", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+      id: "s1",
+      name: "S1",
+      accountId: "acct-A",
+    } as never)
+    const asOf = new Date("2026-05-08T12:00:00Z")
+    const day0 = new Date("2026-05-08T00:00:00Z")
+
+    vi.mocked(prisma.forecastHourlyOrders.findMany).mockResolvedValue([
+      {
+        storeId: "s1",
+        forecastDate: day0,
+        hourBucket: 12,
+        predictedOrders: 24,
+        p10: 20,
+        p90: 30,
+        generatedAt: new Date("2026-05-08T02:00:00Z"),
+      },
+    ] as never)
+    vi.mocked(prisma.storeWeatherSignal.findMany).mockResolvedValue([
+      {
+        date: day0,
+        hour: 12,
+        precipitationMm: 7,
+        precipitationProbabilityPct: 90,
+        temperatureC: 18,
+        apparentTemperatureC: 18,
+        windSpeedKph: 8,
+        weatherCode: 61,
+      },
+    ] as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      {
+        date: day0,
+        hospitalityImpact: 3.5,
+        hospitalitySpend: 6000,
+        attendance: 7000,
+        eventCount: 2,
+        sportsCount: 1,
+        concertsCount: 0,
+        festivalsCount: 0,
+        performingArtsCount: 0,
+        communityCount: 0,
+        conferencesCount: 0,
+        exposCount: 0,
+        topEventTitle: "Dodgers Game",
+        topEventCategory: "sports",
+        topEventRank: 72,
+        topEventLocalRank: 88,
+        topEventAttendance: 52000,
+        topEventDistanceMiles: 4.2,
+        majorEventCount: 1,
+        highLocalRankEventCount: 1,
+      },
+    ] as never)
+
+    const result = await getLaborStaffingForecast({ storeId: "s1", horizonDays: 1, asOf })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.days[0].drivers.map((d) => d.label)).toContain("heavy rain")
+    expect(result.data.days[0].drivers.map((d) => d.label)).toContain("Dodgers Game nearby")
+    expect(result.data.days[0].hours[12].drivers[0].label).toBe("heavy rain")
   })
 })

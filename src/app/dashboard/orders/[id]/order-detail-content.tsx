@@ -44,7 +44,7 @@ export function OrderDetailContent({ order }: Props) {
   return (
     <>
       {/* ─── Top strip ─── */}
-      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-[var(--hairline)] bg-[color-mix(in_srgb,var(--paper)_90%,transparent)] px-3 backdrop-blur-md sm:gap-3 sm:px-6">
+      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-[var(--hairline-bold)] bg-[var(--paper)] px-3 sm:gap-3 sm:px-6">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-1 h-4" />
         <Link
@@ -154,7 +154,10 @@ export function OrderDetailContent({ order }: Props) {
           <div>
             <div className="font-display-tight text-[56px] leading-[0.9] md:text-[72px]">
               ${splitMoney(order.total).whole}
-              <span className="text-[var(--ink-muted)] text-[0.5em] tabular-nums">
+              <span
+                className="text-[var(--ink-muted)] text-[0.5em] tabular-nums"
+                style={{ fontVariantNumeric: "tabular-nums lining-nums" }}
+              >
                 .{splitMoney(order.total).cents}
               </span>
             </div>
@@ -322,7 +325,10 @@ function LedgerRow({
       }`}
     >
       <dt>{label}</dt>
-      <dd className="tabular-nums">
+      <dd
+        className="tabular-nums"
+        style={{ fontVariantNumeric: "tabular-nums lining-nums" }}
+      >
         {sign}${whole}
         <span className="text-[var(--ink-faint)]">.{cents}</span>
       </dd>

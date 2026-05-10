@@ -103,7 +103,7 @@ export function AdjustmentDialog({ storeId, ingredients }: Props) {
       <DialogTrigger asChild>
         <button
           type="button"
-          className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[rgba(220,38,38,0.045)] hover:text-[var(--accent)]"
+          className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[var(--row-hover-bg)] hover:text-[var(--accent)]"
         >
           Log adjustment
         </button>
@@ -213,7 +213,7 @@ export function AdjustmentDialog({ storeId, ingredients }: Props) {
             <button
               type="submit"
               disabled={isSaving}
-              className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[rgba(220,38,38,0.045)] hover:text-[var(--accent)] disabled:opacity-40"
+              className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[var(--row-hover-bg)] hover:text-[var(--accent)] disabled:opacity-40"
             >
               {isSaving ? "Saving…" : "Log adjustment"}
             </button>

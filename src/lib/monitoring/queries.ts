@@ -613,3 +613,241 @@ export async function getBridgeEvents(limit = 10): Promise<BridgeEventRow[]> {
   merged.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
   return merged.slice(0, limit)
 }
+
+export type BusyHoursRunRow = {
+  storeId: string
+  startedAt: Date
+  completedAt: Date | null
+  status: "RUNNING" | "SUCCEEDED" | "FAILED"
+  mape: number | null
+  mae: number | null
+  sampleSize: number | null
+  modelVersion: string | null
+  errorMessage: string | null
+}
+
+export type HarriCoverageRow = {
+  storeId: string
+  storeName: string
+  daysWithLabor: number
+  coveragePct: number
+  lastSyncedAt: Date | null
+  insufficient: boolean
+}
+
+export type StaleBusyHoursForecastRow = {
+  storeId: string
+  storeName: string
+  latestGeneratedAt: Date | null
+  latestForecastDate: Date | null
+  forecastRows: number
+  stale: boolean
+}
+
+export type BusyHoursAccuracy = {
+  reconciledRows: number
+  mape: number | null
+  mae: number | null
+}
+
+export type BusyHoursModelStatus = {
+  runs: BusyHoursRunRow[]
+  harriCoverage: HarriCoverageRow[]
+  staleForecasts: StaleBusyHoursForecastRow[]
+  accuracy: BusyHoursAccuracy
+}
+
+export async function getBusyHoursModelStatus(): Promise<BusyHoursModelStatus> {
+  const [runs, harriCoverage, staleForecasts, accuracyRows] = await Promise.all([
+    prisma.$queryRaw<BusyHoursRunRow[]>`
+      SELECT DISTINCT ON (scope)
+        scope AS "storeId",
+        "startedAt",
+        "completedAt",
+        status::text AS status,
+        mape,
+        mae,
+        "sampleSize",
+        "modelVersion",
+        "errorMessage"
+      FROM "MlTrainingRun"
+      WHERE target = 'BUSY_HOURS'::"MlTarget"
+        AND scope IS NOT NULL
+      ORDER BY scope, "startedAt" DESC
+    `,
+    prisma.$queryRaw<HarriCoverageRow[]>`
+      SELECT
+        s.id AS "storeId",
+        s.name AS "storeName",
+        COUNT(hdl.date)::int AS "daysWithLabor",
+        LEAST(1.0, COUNT(hdl.date)::float / 90.0) AS "coveragePct",
+        MAX(hdl."syncedAt") AS "lastSyncedAt",
+        (COUNT(hdl.date)::float / 90.0) < 0.6 AS insufficient
+      FROM "Store" s
+      LEFT JOIN "HarriDailyLabor" hdl
+        ON hdl."storeId" = s.id
+       AND hdl.date >= (CURRENT_DATE - 90)
+       AND hdl.date < CURRENT_DATE
+      WHERE s."isActive" = true
+      GROUP BY s.id, s.name
+      ORDER BY s.name ASC
+    `,
+    prisma.$queryRaw<StaleBusyHoursForecastRow[]>`
+      SELECT
+        s.id AS "storeId",
+        s.name AS "storeName",
+        MAX(fho."generatedAt") AS "latestGeneratedAt",
+        MAX(fho."forecastDate") AS "latestForecastDate",
+        COUNT(fho.id)::int AS "forecastRows",
+        (
+          MAX(fho."generatedAt") IS NULL
+          OR MAX(fho."generatedAt") < (NOW() - INTERVAL '36 hours')
+          OR COUNT(fho.id) < 24
+        ) AS stale
+      FROM "Store" s
+      LEFT JOIN "ForecastHourlyOrders" fho
+        ON fho."storeId" = s.id
+       AND fho."forecastDate" >= CURRENT_DATE
+       AND fho."forecastDate" < (CURRENT_DATE + 14)
+      WHERE s."isActive" = true
+      GROUP BY s.id, s.name
+      ORDER BY s.name ASC
+    `,
+    prisma.$queryRaw<BusyHoursAccuracy[]>`
+      SELECT
+        COUNT(*)::int AS "reconciledRows",
+        AVG(ABS("errorPct"))::float AS mape,
+        AVG(ABS("actualOrders" - "predictedOrders"))::float AS mae
+      FROM "ForecastHourlyOrders"
+      WHERE "reconciledAt" IS NOT NULL
+        AND "forecastDate" >= (CURRENT_DATE - 30)
+    `,
+  ])
+  return {
+    runs,
+    harriCoverage,
+    staleForecasts,
+    accuracy: accuracyRows[0] ?? { reconciledRows: 0, mape: null, mae: null },
+  }
+}
+
+export type ExternalSignalCoverageSummary = {
+  activeStores: number
+  geocodedStores: number
+  missingCoordinates: number
+}
+
+export type ExternalSignalFreshnessRow = {
+  storeId: string
+  storeName: string
+  weatherSyncedAt: Date | null
+  eventSyncedAt: Date | null
+  weatherRows: number
+  eventRows: number
+  rawEventRows: number
+  radiusMiles: number | null
+  radiusProvider: string | null
+  radiusUpdatedAt: Date | null
+  staleWeather: boolean
+  staleEvents: boolean
+  earliestWeatherDate: Date | null
+  latestWeatherDate: Date | null
+  earliestEventDate: Date | null
+  latestEventDate: Date | null
+}
+
+export type PromotedModelFlavorRow = {
+  target: "REVENUE" | "BUSY_HOURS" | "MENU_ITEM" | "INVENTORY"
+  modelVersion: string | null
+  startedAt: Date
+  mape: number | null
+  mae: number | null
+}
+
+export type ExternalSignalStatus = {
+  coverage: ExternalSignalCoverageSummary
+  freshness: ExternalSignalFreshnessRow[]
+  promotedModels: PromotedModelFlavorRow[]
+}
+
+export async function getExternalSignalStatus(): Promise<ExternalSignalStatus> {
+  const [coverageRows, freshness, promotedModels] = await Promise.all([
+    prisma.$queryRaw<ExternalSignalCoverageSummary[]>`
+      SELECT
+        COUNT(*)::int AS "activeStores",
+        COUNT(*) FILTER (WHERE latitude IS NOT NULL AND longitude IS NOT NULL)::int AS "geocodedStores",
+        COUNT(*) FILTER (WHERE latitude IS NULL OR longitude IS NULL)::int AS "missingCoordinates"
+      FROM "Store"
+      WHERE "isActive" = true
+    `,
+    prisma.$queryRaw<ExternalSignalFreshnessRow[]>`
+      WITH weather AS (
+        SELECT
+          "storeId",
+          MAX("syncedAt") AS "weatherSyncedAt",
+          COUNT(*)::int AS "weatherRows",
+          MIN(date) AS "earliestWeatherDate",
+          MAX(date) AS "latestWeatherDate"
+        FROM "StoreWeatherSignal"
+        GROUP BY "storeId"
+      ),
+      events AS (
+        SELECT
+          "storeId",
+          MAX("syncedAt") AS "eventSyncedAt",
+          COUNT(*)::int AS "eventRows",
+          MIN(date) AS "earliestEventDate",
+          MAX(date) AS "latestEventDate"
+        FROM "StoreEventSignal"
+        GROUP BY "storeId"
+      ),
+      event_details AS (
+        SELECT
+          "storeId",
+          COUNT(*)::int AS "rawEventRows"
+        FROM "StoreEventDetailSignal"
+        GROUP BY "storeId"
+      )
+      SELECT
+        s.id AS "storeId",
+        s.name AS "storeName",
+        w."weatherSyncedAt",
+        e."eventSyncedAt",
+        COALESCE(w."weatherRows", 0)::int AS "weatherRows",
+        COALESCE(e."eventRows", 0)::int AS "eventRows",
+        COALESCE(ed."rawEventRows", 0)::int AS "rawEventRows",
+        s."eventSignalRadiusMiles"::float AS "radiusMiles",
+        s."eventSignalRadiusProvider" AS "radiusProvider",
+        s."eventSignalRadiusUpdatedAt" AS "radiusUpdatedAt",
+        (w."weatherSyncedAt" IS NULL OR w."weatherSyncedAt" < (NOW() - INTERVAL '36 hours')) AS "staleWeather",
+        (e."eventSyncedAt" IS NULL OR e."eventSyncedAt" < (NOW() - INTERVAL '36 hours')) AS "staleEvents",
+        w."earliestWeatherDate",
+        w."latestWeatherDate",
+        e."earliestEventDate",
+        e."latestEventDate"
+      FROM "Store" s
+      LEFT JOIN weather w ON w."storeId" = s.id
+      LEFT JOIN events e ON e."storeId" = s.id
+      LEFT JOIN event_details ed ON ed."storeId" = s.id
+      WHERE s."isActive" = true
+      ORDER BY s.name ASC
+    `,
+    prisma.$queryRaw<PromotedModelFlavorRow[]>`
+      SELECT DISTINCT ON (target)
+        target::text AS target,
+        "modelVersion",
+        "startedAt",
+        mape,
+        mae
+      FROM "MlTrainingRun"
+      WHERE target IN ('REVENUE'::"MlTarget", 'BUSY_HOURS'::"MlTarget")
+        AND status = 'SUCCEEDED'::"MlTrainingStatus"
+      ORDER BY target, "startedAt" DESC
+    `,
+  ])
+  return {
+    coverage: coverageRows[0] ?? { activeStores: 0, geocodedStores: 0, missingCoordinates: 0 },
+    freshness,
+    promotedModels,
+  }
+}

@@ -81,7 +81,7 @@ export function PromoRoiCard({ data }: { data: PromoRoiData }) {
           return (
             <div
               key={e.date.toISOString()}
-              className="grid grid-cols-[110px_60px_120px_120px_120px_100px_80px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+              className="grid grid-cols-[110px_60px_120px_120px_120px_100px_80px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
             >
               <div className="text-[13px] text-[var(--ink)] font-mono">
                 {fmtDate(e.date)}

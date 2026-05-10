@@ -77,7 +77,7 @@ describe("getOpenAnomalies", () => {
     expect(result.data.events).toHaveLength(1)
     expect(result.data.events[0].zScore).toBe(-3.4)
     expect(prisma.anomalyEvent.findMany).toHaveBeenCalledWith({
-      where: { storeId: "s1", status: "OPEN" },
+      where: { storeId: { in: ["s1"] }, status: "OPEN" },
       orderBy: [{ occurredOn: "desc" }, { detectedAt: "desc" }],
       take: 20,
       select: expect.any(Object),

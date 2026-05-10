@@ -1,0 +1,54 @@
+name: Harri JWT Heartbeat
+on:
+  schedule:
+    # Daily 08:00 UTC. Runs after the monthly employee cron (07:00) on the
+    # 1st so they don't compete. The 4-hour labor sync runs at :15; this
+    # heartbeat at :00 of an off-hour avoids overlap. Failure opens a
+    # `cron-failure` GH issue so we get warned hours-to-days before the
+    # next labor cron would actually break.
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Probe Harri auth
+        id: cron
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/heartbeat-harri-jwt.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
+          HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
+          HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
+          LOG_FILE: logs/harri-jwt-heartbeat.log
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harri-jwt-heartbeat-log-${{ github.run_id }}
+          path: logs/harri-jwt-heartbeat.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Harri JWT Heartbeat
+          ISSUE_TITLE: "[Auto] Harri refresh token dead — rotate manually"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/harri-jwt-heartbeat.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

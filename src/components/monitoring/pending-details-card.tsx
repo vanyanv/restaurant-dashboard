@@ -43,7 +43,7 @@ export function PendingDetailsCard({ rows }: { rows: PendingDetailsRow[] }) {
                   gridTemplateColumns: "1fr 100px 120px",
                   gap: 16,
                   alignItems: "baseline",
-                  background: isProblem ? "rgba(220,38,38,0.045)" : undefined,
+                  background: isProblem ? "var(--row-hover-bg)" : undefined,
                 }}
               >
                 <span style={{ ...fraunces17, color: "var(--ink)" }}>{r.storeName}</span>

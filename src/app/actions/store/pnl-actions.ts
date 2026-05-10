@@ -261,11 +261,35 @@ export async function getStorePnL(input: {
     })
     const cogs = summarizeDailyCogs(cogsRows, periods)
 
+    // Harri labor actuals (LiveWire). Bucket per-period; computeStorePnL
+    // uses these to override the fixed-monthly labor line when coverage
+    // is high, with proportional fixed-cost fallback for uncovered days.
+    const harriDaily = await prisma.harriDailyLabor.findMany({
+      where: {
+        storeId: store.id,
+        date: { gte: overallStart, lte: overallEnd },
+        actualCost: { not: null },
+      },
+      select: { date: true, actualCost: true },
+    })
+    const harriLaborByPeriod = periods.map((p) => {
+      let actualUsd = 0
+      let coveredDays = 0
+      for (const r of harriDaily) {
+        if (r.date >= p.startDate && r.date <= p.endDate && r.actualCost != null) {
+          actualUsd += r.actualCost
+          coveredDays += 1
+        }
+      }
+      return { actualUsd, coveredDays }
+    })
+
     const computed = computeStorePnL({
       bucketed,
       periods,
       store,
       cogsValues: cogs.cogsValues,
+      harriLaborByPeriod,
     })
 
     const refillFailedPeriodIndexes: number[] = []
