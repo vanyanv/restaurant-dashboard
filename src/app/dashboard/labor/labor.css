@@ -641,7 +641,9 @@
 .labor-stores__row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1.4fr) minmax(280px, 1fr);
+  /* nums column is `auto` so the totals always render at content width;
+     a fixed 1fr track was overflowing under the bars at narrow widths. */
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 1.6fr) auto;
   gap: 24px;
   align-items: center;
   padding: 18px 22px;
@@ -722,6 +724,8 @@
   flex-direction: column;
   justify-content: center;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .labor-stores__bar {
@@ -736,10 +740,11 @@
 
 .labor-stores__nums {
   display: grid;
-  grid-template-columns: minmax(80px, auto) minmax(80px, auto) minmax(120px, auto) minmax(80px, auto);
+  grid-template-columns: minmax(80px, max-content) minmax(80px, max-content) minmax(120px, max-content) minmax(64px, max-content);
   gap: 16px;
   align-items: baseline;
   justify-content: end;
+  white-space: nowrap;
 }
 
 .labor-stores__actual {

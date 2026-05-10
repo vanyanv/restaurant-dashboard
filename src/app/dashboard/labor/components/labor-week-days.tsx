@@ -33,6 +33,7 @@ function fmtClockTime(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
   })
 }
 
