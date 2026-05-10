@@ -1297,3 +1297,590 @@
   color: var(--ink-faint);
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   Stock-count flow — operator data entry surface. Number pad is custom
+   so layout never jumps with the iOS numeric keyboard. The whole flow
+   lives in /m/count and uses editorial tokens only.
+   ───────────────────────────────────────────────────────────────────── */
+
+.m-count-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.m-count-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 4px;
+}
+
+.m-count-progress__caption {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.m-count-progress__bar {
+  flex: 1 1 100%;
+  height: 2px;
+  background: var(--hairline);
+  position: relative;
+  overflow: hidden;
+}
+
+.m-count-progress__bar-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-count-progress__bar-fill {
+    transition: none;
+  }
+}
+
+.m-count-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 18px 22px;
+}
+
+.m-count-card__category {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.m-count-card__name {
+  margin: 2px 0 0;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+}
+
+.m-count-card__unit {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.m-count-card__unit strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.m-count-card__readout {
+  margin-top: 14px;
+  padding: 14px 0 8px;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.m-count-card__readout-num {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 56px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.m-count-card__readout-unit {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  align-self: flex-end;
+  margin-bottom: 6px;
+}
+
+.m-count-card__previous {
+  margin-top: 10px;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.m-count-card__error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 36%, var(--hairline-bold));
+  background: var(--accent-bg);
+  color: var(--accent-dark);
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  border-radius: 2px;
+}
+
+/* Number pad — custom 4×3 grid. No iOS numeric keyboard, no layout jump. */
+.m-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.m-keypad__key {
+  appearance: none;
+  background: rgba(255, 253, 247, 0.85);
+  border: 0;
+  padding: 18px 0;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transition: background-color 80ms ease, color 80ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-keypad__key:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.m-keypad__key:active {
+  background: var(--accent-bg);
+  color: var(--accent-dark);
+}
+
+.m-keypad__key:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.m-keypad__key--erase {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.m-count-actions,
+.m-count-footer {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.m-count-footer {
+  grid-template-columns: 1fr 2fr;
+}
+
+.m-count-actions .toolbar-btn,
+.m-count-footer .toolbar-btn {
+  padding: 12px 10px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-btn--accent {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.toolbar-btn--accent:hover {
+  background: color-mix(in oklab, var(--accent-bg) 70%, var(--paper));
+}
+
+.toolbar-btn--accent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Adjustment sheet — full-bleed overlay above the count flow. Slides up
+   from the bottom; reduced-motion disables the slide. */
+.m-sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  background: var(--paper);
+  border-top: 1px solid var(--hairline-bold);
+  z-index: 60;
+  padding: 14px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: m-sheet-slide-in 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes m-sheet-slide-in {
+  from {
+    transform: translateY(20%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-sheet {
+    animation: none;
+  }
+}
+
+.m-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 12px;
+}
+
+.m-sheet__dept {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.m-sheet__close {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ink-muted);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.m-sheet__close:hover {
+  color: var(--accent);
+}
+
+.m-sheet__lead {
+  margin: 0 0 12px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.m-sheet__lead em {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.m-sheet__reasons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.m-sheet__reasons .toolbar-btn {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.m-sheet__reason-desc {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.toolbar-btn--accent .m-sheet__reason-desc {
+  color: var(--accent-dark);
+}
+
+.m-sheet__label {
+  display: block;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+.m-sheet__input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.m-sheet__input:focus {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.m-sheet__actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+}
+
+.m-sheet__actions .toolbar-btn {
+  padding: 12px 10px;
+  text-align: center;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* /m/count landing surfaces */
+.m-count-start {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.m-count-start__label {
+  display: block;
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.m-count-start__select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  padding: 11px 12px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.m-count-start__cta {
+  padding: 12px 16px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.m-count-link {
+  color: var(--accent-dark);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.m-count-link:hover {
+  color: var(--accent);
+}
+
+.m-count-howto {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.m-count-howto li::marker {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   /m/monitoring — DEVELOPER-only bridge. Compact subsystem pills, 3-up
+   24h activity strip, sync status table, recent events feed. Editorial
+   tokens only; status colour comes through `.inv-stamp[data-tone]`.
+   ───────────────────────────────────────────────────────────────────── */
+
+.m-mon-pills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.m-mon-pill {
+  background: rgba(255, 253, 247, 0.72);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 76px;
+}
+
+.m-mon-pill__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.m-mon-pill__name {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.m-mon-pill__head-line {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.014em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1.1;
+}
+
+.m-mon-pill__caption {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* 3-up activity sparkline strip */
+.m-mon-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.m-mon-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.m-mon-mini__caption {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-mon-mini__total {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1.1;
+}
+
+.m-mon-mini__totalcap {
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.m-mon-mini__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 2px;
+}
+
+/* Phone-tightened external-signals strip — scoped to /m/forecasts so the
+   desktop layout is untouched. The strip's @media(720px) already shrinks
+   columns; this further tightens label width on narrow phones. */
+.editorial-surface--mobile .ext-strip {
+  padding: 12px 14px 14px;
+}
+
+.editorial-surface--mobile .ext-strip__grid,
+.editorial-surface--mobile .ext-strip__skel {
+  grid-template-columns: 56px repeat(7, minmax(36px, 1fr));
+  column-gap: 2px;
+}
+
+.editorial-surface--mobile .ext-strip__cell {
+  padding: 6px 3px 8px;
+  font-size: 10.5px;
+}
+
+.editorial-surface--mobile .ext-strip__cell-meta,
+.editorial-surface--mobile .ext-strip__cell-cap {
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+}
+
+.editorial-surface--mobile .ext-strip__label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  padding: 8px 4px 8px 0;
+}
+
