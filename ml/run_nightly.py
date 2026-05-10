@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import sys
+import time
 import traceback
 
 from ml.anomaly.zscore import (
@@ -32,14 +33,18 @@ from ml.features.menu_item import load_top_items
 from ml.features.revenue import list_active_store_ids
 from ml.models.menu_item import forecast as forecast_menu_item
 from ml.models.menu_item import train as train_menu_item
+from ml.models.hourly_orders import forecast as forecast_hourly_orders
+from ml.models.hourly_orders import train as train_hourly_orders
 from ml.models.revenue import forecast as forecast_revenue
 from ml.models.revenue import train as train_revenue
 
 
 REVENUE_HORIZON_DAYS = 14
 MENU_ITEM_HORIZON_DAYS = 7
+BUSY_HOURS_HORIZON_DAYS = 14
 TOP_N_ITEMS_PER_STORE = 30
 MODEL_TYPE = "xgboost"
+ENRICHED_FLAVOR = "weather-events"
 
 
 def _model_version() -> str:
@@ -77,6 +82,45 @@ def _close_run(run_id: str, *, mape: float | None, mae: float | None,
             cur.execute(sql, (mape, mae, sample_size, status, error, run_id))
 
 
+def _set_run_model_version(run_id: str, model_version: str) -> None:
+    sql = 'UPDATE "MlTrainingRun" SET "modelVersion" = %s WHERE id = %s'
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (model_version, run_id))
+
+
+def should_promote_enriched(baseline, enriched) -> bool:
+    """Accuracy gate for weather/event models.
+
+    Promote when enriched MAPE improves by >=3% relative, or when MAE improves
+    by >=5% without material MAPE regression (<=0.5% relative worse).
+    """
+    if baseline is None or enriched is None:
+        return False
+    if baseline.mape is None or enriched.mape is None:
+        return False
+    if baseline.mape > 0 and enriched.mape <= baseline.mape * 0.97:
+        return True
+    if baseline.mae is not None and enriched.mae is not None and baseline.mae > 0:
+        mae_improved = enriched.mae <= baseline.mae * 0.95
+        mape_not_worse = enriched.mape <= baseline.mape * 1.005
+        return bool(mae_improved and mape_not_worse)
+    return False
+
+
+def _select_result(baseline, enriched):
+    if should_promote_enriched(baseline, enriched):
+        return enriched, "promoted"
+    if enriched is None:
+        return baseline, "enriched_skipped"
+    return baseline, "baseline_won"
+
+
+def _version_with_flavor(model_version: str, result) -> str:
+    flavor = getattr(result, "flavor", "baseline") or "baseline"
+    return f"{model_version}-{flavor}"
+
+
 def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> int:
     if not rows:
         return 0
@@ -109,8 +153,8 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
 def run_revenue_for_store(store_id: str, model_version: str) -> dict:
     run_id = _open_run("REVENUE", store_id, model_version)
     try:
-        result = train_revenue(store_id)
-        if result is None:
+        baseline = train_revenue(store_id, enriched=False)
+        if baseline is None:
             _close_run(
                 run_id,
                 mape=None,
@@ -121,8 +165,18 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             )
             return {"store_id": store_id, "ok": False, "reason": "insufficient_history"}
 
+        enriched = train_revenue(store_id, enriched=True)
+        result, gate = _select_result(baseline, enriched)
+        selected_version = _version_with_flavor(model_version, result)
+        _set_run_model_version(run_id, selected_version)
         rows = forecast_revenue(store_id, result, horizon_days=REVENUE_HORIZON_DAYS)
-        written = _write_revenue_forecasts(store_id, model_version, rows)
+        written = _write_revenue_forecasts(store_id, selected_version, rows)
+        warning = None
+        if gate != "promoted":
+            warning = (
+                f"{gate}; enriched_mape={getattr(enriched, 'mape', None)}; "
+                f"baseline_mape={baseline.mape}"
+            )
 
         _close_run(
             run_id,
@@ -130,6 +184,7 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             mae=result.mae,
             sample_size=result.sample_size,
             status="SUCCEEDED",
+            error=warning,
         )
         return {
             "store_id": store_id,
@@ -137,6 +192,8 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             "rows_written": written,
             "mape": result.mape,
             "mae": result.mae,
+            "model_flavor": result.flavor,
+            "selection": gate,
         }
     except Exception as exc:  # pylint: disable=broad-except
         tb = traceback.format_exc()
@@ -256,6 +313,114 @@ def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
     }
 
 
+def _write_hourly_order_forecasts(store_id: str, model_version: str, rows: list) -> int:
+    if not rows:
+        return 0
+    sql = """
+        INSERT INTO "ForecastHourlyOrders"
+            (id, "storeId", "forecastDate", "hourBucket",
+             "predictedOrders", p10, p90, "modelVersion")
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    written = 0
+    with connect() as conn:
+        with conn.cursor() as cur:
+            for r in rows:
+                cur.execute(
+                    sql,
+                    (
+                        cuid_like(),
+                        store_id,
+                        r.forecast_date,
+                        r.hour_bucket,
+                        r.predicted_orders,
+                        r.p10,
+                        r.p90,
+                        model_version,
+                    ),
+                )
+                written += 1
+    return written
+
+
+def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
+    start = time.perf_counter()
+    run_id = _open_run("BUSY_HOURS", store_id, model_version)
+    try:
+        baseline = train_hourly_orders(store_id, enriched=False)
+        if baseline is None:
+            _close_run(
+                run_id,
+                mape=None,
+                mae=None,
+                sample_size=None,
+                status="FAILED",
+                error="insufficient_hourly_history",
+            )
+            return {
+                "store_id": store_id,
+                "ok": False,
+                "reason": "insufficient_hourly_history",
+                "duration_ms": round((time.perf_counter() - start) * 1000),
+            }
+
+        enriched = train_hourly_orders(store_id, enriched=True)
+        result, gate = _select_result(baseline, enriched)
+        selected_version = _version_with_flavor(model_version, result)
+        _set_run_model_version(run_id, selected_version)
+        rows = forecast_hourly_orders(
+            store_id, result, horizon_days=BUSY_HOURS_HORIZON_DAYS
+        )
+        written = _write_hourly_order_forecasts(store_id, selected_version, rows)
+        warning = None
+        if result.harri_coverage < 0.6:
+            warning = f"low_harri_coverage:{result.harri_coverage:.2f}"
+        if gate != "promoted":
+            gate_warning = (
+                f"{gate}; enriched_mape={getattr(enriched, 'mape', None)}; "
+                f"baseline_mape={baseline.mape}"
+            )
+            warning = f"{warning}; {gate_warning}" if warning else gate_warning
+
+        _close_run(
+            run_id,
+            mape=result.mape,
+            mae=result.mae,
+            sample_size=result.sample_size,
+            status="SUCCEEDED",
+            error=warning,
+        )
+        return {
+            "store_id": store_id,
+            "ok": True,
+            "rows_written": written,
+            "mape": result.mape,
+            "mae": result.mae,
+            "sample_size": result.sample_size,
+            "harri_coverage": result.harri_coverage,
+            "model_flavor": result.flavor,
+            "selection": gate,
+            "warning": warning,
+            "duration_ms": round((time.perf_counter() - start) * 1000),
+        }
+    except Exception as exc:  # pylint: disable=broad-except
+        tb = traceback.format_exc()
+        _close_run(
+            run_id,
+            mape=None,
+            mae=None,
+            sample_size=None,
+            status="FAILED",
+            error=f"{type(exc).__name__}: {exc}\n{tb[-500:]}",
+        )
+        return {
+            "store_id": store_id,
+            "ok": False,
+            "reason": str(exc),
+            "duration_ms": round((time.perf_counter() - start) * 1000),
+        }
+
+
 def run_anomaly_detection_for_store(store_id: str) -> dict:
     """Score yesterday's revenue + top-N item quantities against the
     trailing 28-day distribution. Flag |z| >= 3 with method ZSCORE.
@@ -299,6 +464,11 @@ def main() -> int:
         menu_result = run_menu_items_for_store(store_id, model_version)
         print({"target": "MENU_ITEM", **menu_result})
         if not menu_result.get("ok"):
+            failures += 1
+
+        busy_hours_result = run_busy_hours_for_store(store_id, model_version)
+        print({"target": "BUSY_HOURS", **busy_hours_result})
+        if not busy_hours_result.get("ok"):
             failures += 1
 
         anomaly_result = run_anomaly_detection_for_store(store_id)

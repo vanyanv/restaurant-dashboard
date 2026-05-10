@@ -50,7 +50,7 @@ export default async function StockCountsListPage({ searchParams }: PageProps) {
       >
         <Link
           href="/dashboard/operations/inventory/count/new"
-          className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[rgba(220,38,38,0.045)] hover:text-[var(--accent)]"
+          className="font-mono text-[10px] uppercase tracking-[0.18em] border border-[var(--hairline-bold)] px-3 py-1.5 rounded-[2px] hover:bg-[var(--row-hover-bg)] hover:text-[var(--accent)]"
         >
           Start count
         </Link>
@@ -74,7 +74,7 @@ export default async function StockCountsListPage({ searchParams }: PageProps) {
               <Link
                 key={c.id}
                 href={`/dashboard/operations/inventory/counts/${c.id}`}
-                className="grid grid-cols-[140px_1fr_140px_120px_120px] gap-4 items-center px-5 py-3 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+                className="grid grid-cols-[140px_1fr_140px_120px_120px] gap-4 items-center px-5 py-3 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
               >
                 <span className="font-mono text-[12px] text-[var(--ink)]">
                   {fmtDate(c.countedAt)}

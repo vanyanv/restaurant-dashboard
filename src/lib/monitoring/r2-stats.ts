@@ -1,4 +1,5 @@
 import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3"
+import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 
 let client: S3Client | null = null
@@ -66,9 +67,21 @@ export async function collectR2Stats(): Promise<R2BucketStats> {
   return { totalBytes, objectCount, byPrefix }
 }
 
-export async function getLatestR2Snapshot() {
-  return prisma.r2BucketSnapshot.findFirst({ orderBy: { capturedAt: "desc" } })
+// Daily cron writes one snapshot at 04:00 UTC, so a 5-minute cache is
+// invisible while collapsing the per-request roundtrip.
+async function getLatestR2SnapshotUncached() {
+  const row = await prisma.r2BucketSnapshot.findFirst({ orderBy: { capturedAt: "desc" } })
+  if (!row) return null
+  // unstable_cache JSON-serializes — BigInt is unrepresentable. Bucket size is
+  // well under 2^53 bytes for any plausible state, so Number is safe.
+  return { ...row, totalBytes: Number(row.totalBytes) }
 }
+
+export const getLatestR2Snapshot = unstable_cache(
+  getLatestR2SnapshotUncached,
+  ["monitoring:r2-latest"],
+  { revalidate: 300, tags: ["monitoring:r2"] },
+)
 
 export async function getR2SnapshotHistory(days = 30) {
   const since = new Date(Date.now() - days * 86_400_000)

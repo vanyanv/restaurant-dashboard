@@ -316,6 +316,15 @@ export interface ComputedPnL {
   bottomLine: number[]
 }
 
+/** Per-period Harri labor actuals. Pass to computeStorePnL to override the
+ *  fixed-monthly labor estimate with real numbers from /lib/harri-labor-sync. */
+export type HarriLaborByPeriod = {
+  /** Sum of HarriDailyLabor.actualCost (USD) for all days in the period that have data. */
+  actualUsd: number
+  /** Number of days in the period that have a HarriDailyLabor row. */
+  coveredDays: number
+}
+
 /**
  * Pure: given bucketed Otter rows, periods, and store fixed-cost inputs,
  * produce the full PnL row array AND derived per-period KPI arrays.
@@ -328,8 +337,12 @@ export function computeStorePnL(input: {
    *  Gross Profit subtotal are inserted between Net Sales After Commissions and Labor,
    *  and the bottom line subtracts COGS too. */
   cogsValues?: number[]
+  /** Optional per-period Harri labor actuals. When supplied (one entry per
+   *  period), the labor row uses real Harri data with coverage-aware fallback
+   *  to fixedMonthlyLabor for uncovered days. */
+  harriLaborByPeriod?: HarriLaborByPeriod[]
 }): ComputedPnL {
-  const { bucketed, periods, store, cogsValues } = input
+  const { bucketed, periods, store, cogsValues, harriLaborByPeriod } = input
 
   const perPeriodSalesValues = bucketed.map((rows) => salesRowValues(rows))
   const totalSales = perPeriodSalesValues.map((vals) => vals.reduce((a, b) => a + b, 0))
@@ -402,9 +415,47 @@ export function computeStorePnL(input: {
     })
   }
 
-  const laborValues = periods.map(
+  // ─── Labor row ───
+  // Coverage-aware blend: Harri actuals for covered days + per-day fixed
+  // estimate for the rest. Label reflects overall coverage across the
+  // requested period range.
+  const fixedLaborByPeriod = periods.map(
     (p) => monthlyCostForDays(store.fixedMonthlyLabor, p.days) ?? 0
   )
+  let laborValues: number[]
+  let laborLabel = "Labor (fixed)"
+  let laborUnknown: boolean[]
+  if (harriLaborByPeriod && harriLaborByPeriod.length === periods.length) {
+    laborValues = periods.map((p, i) => {
+      const h = harriLaborByPeriod[i]
+      const days = p.days
+      if (days <= 0) return 0
+      const covered = Math.max(0, Math.min(days, h.coveredDays))
+      if (covered === 0) {
+        return fixedLaborByPeriod[i]
+      }
+      // Estimate uncovered portion proportionally from monthly fixed.
+      const perDayFixed = days > 0 ? fixedLaborByPeriod[i] / days : 0
+      const uncoveredEstimate = perDayFixed * (days - covered)
+      return h.actualUsd + uncoveredEstimate
+    })
+    laborUnknown = periods.map((p, i) => {
+      const h = harriLaborByPeriod[i]
+      if (h.coveredDays >= p.days) return false
+      // Partial / no Harri coverage falls back on fixed; flag as unknown only
+      // when the fixed estimate is also missing.
+      return store.fixedMonthlyLabor == null && h.coveredDays === 0
+    })
+    const totalDays = periods.reduce((a, p) => a + p.days, 0)
+    const totalCovered = harriLaborByPeriod.reduce((a, h) => a + Math.max(0, h.coveredDays), 0)
+    if (totalDays > 0 && totalCovered / totalDays >= 0.8) laborLabel = "Labor (actual)"
+    else if (totalCovered > 0) laborLabel = "Labor (partial)"
+    else laborLabel = store.fixedMonthlyLabor == null ? "Labor (fixed)" : "Labor (estimated)"
+  } else {
+    laborValues = fixedLaborByPeriod
+    laborUnknown = periods.map(() => store.fixedMonthlyLabor == null)
+  }
+
   const rentValues = periods.map(
     (p) => monthlyCostForDays(store.fixedMonthlyRent, p.days) ?? 0
   )
@@ -414,14 +465,13 @@ export function computeStorePnL(input: {
   const towelsValues = periods.map(
     (p) => monthlyCostForDays(store.fixedMonthlyTowels, p.days) ?? 0
   )
-  const laborUnknown = periods.map(() => store.fixedMonthlyLabor == null)
   const rentUnknown = periods.map(() => store.fixedMonthlyRent == null)
   const cleaningUnknown = periods.map(() => store.fixedMonthlyCleaning == null)
   const towelsUnknown = periods.map(() => store.fixedMonthlyTowels == null)
 
   rows.push({
     code: LABOR_CODE,
-    label: "Labor (fixed)",
+    label: laborLabel,
     values: laborValues.map((v) => -v),
     percents: laborValues.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
     isFixed: true,

@@ -112,7 +112,7 @@ const CategoryRows = memo(function CategoryRows({
   return (
     <>
       <TableRow
-        className="cursor-pointer hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+        className="cursor-pointer hover:bg-[var(--row-hover-bg)] transition-colors"
         onClick={onToggle}
       >
         <TableCell className="pl-6 font-medium">

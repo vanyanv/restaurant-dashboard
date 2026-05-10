@@ -22,9 +22,8 @@
 //   - Items launched fewer than 7 days ago get a trajectory but no
 //     projection (insufficient signal for a 90-day extrapolation).
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 interface SessionUser {
   id: string
@@ -88,7 +87,7 @@ export async function getLaunchTrajectory(input: {
   recentDays?: number
   asOf?: Date
 }): Promise<GetLaunchTrajectoryResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
@@ -102,26 +101,9 @@ export async function getLaunchTrajectory(input: {
     baselineStart.getUTCDate() - DEFAULT_PRIOR_BASELINE_DAYS,
   )
 
-  let storeId: string | null = null
-  let storeName: string | null = null
-  const storeNameById = new Map<string, string>()
-  if (input.storeId) {
-    const store = await prisma.store.findFirst({
-      where: { id: input.storeId, accountId: user.accountId },
-      select: { id: true, name: true },
-    })
-    if (!store) return { ok: false, error: "store_not_in_account" }
-    storeId = store.id
-    storeName = store.name
-    storeNameById.set(store.id, store.name)
-  } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true, name: true },
-    })
-    for (const s of stores) storeNameById.set(s.id, s.name)
-    storeName = "All stores"
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeName, storeNameById, storeIdOut: storeId } = resolved.ctx
 
   // Pull all rows in [baselineStart, windowEnd] so we can verify a clean
   // pre-launch zero baseline in one query.

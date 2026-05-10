@@ -158,6 +158,16 @@ model Store {
   // stores remain valid until set via the topbar chip.
   targetCogsPct Float?
 
+  // Optional geocoding used by offline weather / event signal backfills.
+  latitude               Float?
+  longitude              Float?
+  geocodedAt             DateTime?
+  geocodeProvider        String?
+  geocodeConfidence      Float?
+  eventSignalRadiusMiles Float?
+  eventSignalRadiusProvider  String?
+  eventSignalRadiusUpdatedAt DateTime?
+
   // Relations
   owner                User                   @relation("StoreOwner", fields: [ownerId], references: [id])
   account              Account                @relation(fields: [accountId], references: [id])
@@ -180,13 +190,26 @@ model Store {
   inventoryAdjustments InventoryAdjustment[]
   modelStates          IngredientModelState[]
   forecastDailyRevenue ForecastDailyRevenue[]
+  forecastHourlyOrders ForecastHourlyOrders[]
   forecastMenuItems    ForecastMenuItem[]
   anomalyEvents        AnomalyEvent[]
   menuItemElasticities MenuItemElasticity[]
+  weatherSignals       StoreWeatherSignal[]
+  eventSignals         StoreEventSignal[]
+  eventDetailSignals   StoreEventDetailSignal[]
+  externalSignalRuns   ExternalSignalSyncRun[]
+
+  // Harri scheduling integration (LiveWire) — labor cost + clock-in alerts
+  harriBrands            HarriBrand[]
+  harriDailyLabor        HarriDailyLabor[]
+  harriPositionDaily     HarriPositionDaily[]
+  harriTimekeepingAlerts HarriTimekeepingAlert[]
+  harriEmployees         HarriEmployee[]
 
   @@index([ownerId])
   @@index([accountId])
   @@index([yelpBusinessId])
+  @@index([latitude, longitude])
 }
 
 model OtterStore {
@@ -1287,6 +1310,7 @@ enum MlTarget {
   REVENUE
   MENU_ITEM
   INVENTORY
+  BUSY_HOURS
 }
 
 enum AnomalyMethod {
@@ -1358,6 +1382,31 @@ model ForecastDailyRevenue {
   @@index([generatedAt(sort: Desc)])
 }
 
+/// Hourly order-demand forecast per store. Written by the nightly Python
+/// pipeline after training on Otter hourly order history plus bounded Harri
+/// labor context. Dashboard request paths read these precomputed rows only.
+model ForecastHourlyOrders {
+  id              String    @id @default(cuid())
+  storeId         String
+  forecastDate    DateTime  @db.Date
+  hourBucket      Int
+  predictedOrders Float
+  p10             Float?
+  p90             Float?
+  modelVersion    String
+  generatedAt     DateTime  @default(now())
+  actualOrders    Float?
+  errorPct        Float?
+  reconciledAt    DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, forecastDate, hourBucket, generatedAt])
+  @@index([storeId, forecastDate])
+  @@index([storeId, forecastDate, hourBucket, generatedAt(sort: Desc)], map: "ForecastHourlyOrders_store_date_hour_generated_idx")
+  @@index([generatedAt(sort: Desc)])
+}
+
 /// Daily menu-item demand forecast per store. Joined by `otterItemSkuId`,
 /// which matches `OtterOrderItem.skuId` (the stable identifier used by sales
 /// history).
@@ -1381,6 +1430,120 @@ model ForecastMenuItem {
   @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, otterItemSkuId, generatedAt(sort: Desc)], map: "ForecastMenuItem_store_date_sku_generated_idx")
   @@index([generatedAt(sort: Desc)])
+}
+
+/// Store-hour weather features precomputed by offline Open-Meteo sync jobs.
+/// Dashboard request paths must read these rows only; no weather provider calls.
+model StoreWeatherSignal {
+  id                            String   @id @default(cuid())
+  storeId                       String
+  date                          DateTime @db.Date
+  hour                          Int
+  temperatureC                  Float?
+  apparentTemperatureC          Float?
+  precipitationMm               Float?
+  precipitationProbabilityPct   Float?
+  windSpeedKph                  Float?
+  relativeHumidityPct           Float?
+  weatherCode                   Int?
+  provider                      String   @default("open-meteo")
+  syncedAt                      DateTime @default(now()) @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, hour])
+  @@index([storeId, date])
+  @@index([syncedAt(sort: Desc)])
+}
+
+/// Store-day event-demand features precomputed by PredictHQ sync jobs.
+/// Category counts are intentionally denormalized so ML and dashboards can
+/// join one compact daily row without scanning raw provider payloads.
+model StoreEventSignal {
+  id                         String   @id @default(cuid())
+  storeId                    String
+  date                       DateTime @db.Date
+  radiusMiles                Float?
+  hospitalityImpact          Float?
+  hospitalitySpend           Float?
+  attendance                 Float?
+  eventCount                 Int      @default(0)
+  sportsCount                Int      @default(0)
+  concertsCount              Int      @default(0)
+  festivalsCount             Int      @default(0)
+  performingArtsCount        Int      @default(0)
+  communityCount             Int      @default(0)
+  conferencesCount           Int      @default(0)
+  exposCount                 Int      @default(0)
+  topEventTitle              String?
+  topEventCategory           String?
+  topEventStartsAt           DateTime?
+  topEventRank               Float?
+  topEventLocalRank          Float?
+  topEventAttendance         Float?
+  topEventDistanceMiles      Float?
+  majorEventCount            Int      @default(0)
+  highLocalRankEventCount    Int      @default(0)
+  provider                   String   @default("predicthq")
+  raw                        Json?
+  syncedAt                   DateTime @default(now()) @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date])
+  @@index([storeId, date])
+  @@index([syncedAt(sort: Desc)])
+}
+
+/// Raw-ish top PredictHQ event rows retained for explanations and feature
+/// engineering. The sync stores a bounded, location-scoped subset only.
+model StoreEventDetailSignal {
+  id                 String    @id @default(cuid())
+  storeId            String
+  providerEventId    String
+  date               DateTime  @db.Date
+  startsAt           DateTime?
+  endsAt             DateTime?
+  title              String?
+  category           String?
+  labels             Json?
+  rank               Float?
+  localRank          Float?
+  attendance         Float?
+  distanceMiles      Float?
+  venueName          String?
+  venueId            String?
+  raw                Json?
+  syncedAt           DateTime  @default(now()) @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, providerEventId])
+  @@index([storeId, date])
+  @@index([storeId, date, localRank(sort: Desc)])
+  @@index([syncedAt(sort: Desc)])
+}
+
+/// Provider sync audit trail for weather/event backfills and rolling refreshes.
+model ExternalSignalSyncRun {
+  id          String    @id @default(cuid())
+  provider    String
+  storeId     String?
+  startDate   DateTime? @db.Date
+  endDate     DateTime? @db.Date
+  status      String
+  rowsWritten Int       @default(0)
+  error       String?
+  durationMs  Int?
+  triggeredBy String
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  store Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([provider, startedAt(sort: Desc)])
+  @@index([storeId, provider, startedAt(sort: Desc)])
+  @@index([status, startedAt(sort: Desc)])
 }
 
 /// Anomaly events flagged by the nightly pipeline. Operators triage these
@@ -1436,4 +1599,115 @@ model MenuItemElasticity {
 
   @@unique([storeId, otterItemSkuId])
   @@index([storeId, computedAt(sort: Desc)])
+}
+
+// ---------------------------------------------------------------------------
+// Harri scheduling integration (LiveWire). Labor cost + clock-in/out alerts.
+// Auth: AWS Cognito JWT (see docs/harri-api-notes.md). Sync runner:
+// src/lib/harri-labor-sync.ts. All cost values stored as USD (already
+// converted from Harri's native cents at write time).
+// ---------------------------------------------------------------------------
+
+model HarriBrand {
+  id         String    @id @default(cuid())
+  storeId    String
+  brandId    Int       @unique // Harri operations brand id (one per physical store)
+  brandName  String?
+  active     Boolean   @default(true)
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+model HarriDailyLabor {
+  id            String   @id @default(cuid())
+  storeId       String
+  date          DateTime @db.Date
+  actualCost    Float? // USD
+  forecastCost  Float? // USD
+  categories    Json? // [{ id, code, name, total_labor_cost (USD) }]
+  syncedAt      DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date])
+  @@index([date])
+  @@index([storeId, date])
+}
+
+// Per-day, per-position labor breakdown. One row per (storeId, date,
+// categoryCode, positionCode). Source: /lpm-api/.../categories/positions/pay_types.
+model HarriPositionDaily {
+  id              String   @id @default(cuid())
+  storeId         String
+  date            DateTime @db.Date
+  categoryCode    String // e.g. "QS", "MANAGE"
+  categoryName    String?
+  positionCode    String // e.g. "line-cook-5", "cashier", "operator"
+  positionName    String?
+  payType         String // "HOURLY" | "SALARIED"
+  totalLabor      Float? // USD (sum of all cost amounts)
+  netAmount       Float?
+  overtimeAmount  Float?
+  bonusAmount     Float?
+  totalShiftCount Int?
+  actualSeconds   Int?
+  userIds         Int[] // Harri user ids who worked this position that day
+  rawCost         Json? // full cost object preserved for forensics
+  syncedAt        DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, categoryCode, positionCode, payType])
+  @@index([storeId, date])
+}
+
+model HarriTimekeepingAlert {
+  id            String    @id @default(cuid())
+  harriAlertId  BigInt    @unique // upsert key from API
+  storeId       String
+  date          DateTime  @db.Date
+  employeeId    Int
+  userId        Int
+  positionId    Int?
+  positionCode  String?
+  positionName  String?
+  categoryCode  String?
+  alertTime     DateTime
+  alertCode     String // EARLY_CLOCK_IN, LATE_CLOCK_OUT, MISSED_CLOCK_OUT_OT_NOW, ...
+  alertTypeId   Int
+  timeDiffSec   Int? // seconds early/late
+  missedClockAt DateTime? // present on MISSED_* alerts
+  syncedAt      DateTime  @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, date])
+  @@index([userId, date])
+}
+
+// Directory cache for Harri team members. Refreshed on a monthly cron, never
+// from the labor sync hot path. The (storeId, userId) unique key matches how
+// alerts join — Harri's user_id is a global id but the same person can exist
+// at multiple brands, so we scope by store.
+model HarriEmployee {
+  id         String   @id @default(cuid())
+  storeId    String
+  brandId    Int
+  userId     Int
+  employeeId Int?
+  firstName  String?
+  lastName   String?
+  email      String?
+  status     String?
+  syncedAt   DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, userId])
+  @@index([storeId])
+  @@index([userId])
 }

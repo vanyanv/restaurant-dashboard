@@ -1,6 +1,6 @@
 /** Subsystems shown on the command bridge. The order here is the order
  * they render in the system-health strip. */
-export const SYSTEMS = ["db", "r2", "cache", "auth", "syncs"] as const
+export const SYSTEMS = ["db", "r2", "cache", "auth", "syncs", "tokens"] as const
 export type System = (typeof SYSTEMS)[number]
 
 /** Per-system identity color. References the editorial ink tokens added
@@ -13,6 +13,7 @@ export const SYSTEM_INK: Record<System, string> = {
   cache:  "var(--ink-ledger)",
   auth:   "var(--ink-plum)",
   syncs:  "var(--ink-olive)",
+  tokens: "var(--ink-sepia)",
 }
 
 export const SYSTEM_LABEL: Record<System, string> = {
@@ -21,6 +22,7 @@ export const SYSTEM_LABEL: Record<System, string> = {
   cache:  "CACHE",
   auth:   "AUTH",
   syncs:  "SYNCS",
+  tokens: "TOKENS",
 }
 
 /** Where each pill links on click. */
@@ -30,6 +32,7 @@ export const SYSTEM_HREF: Record<System, string> = {
   cache:  "/dashboard/monitoring/cache",
   auth:   "/dashboard/monitoring/people",
   syncs:  "/dashboard/monitoring/activity#syncs",
+  tokens: "/dashboard/monitoring/infrastructure#tokens",
 }
 
 export type StatusTone = "ok" | "warn" | "danger"

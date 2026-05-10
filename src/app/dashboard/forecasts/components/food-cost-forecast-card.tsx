@@ -120,7 +120,7 @@ export function FoodCostForecastCard({ data, targetPct }: Props) {
           return (
             <div
               key={d.date.toISOString()}
-              className="grid grid-cols-[100px_120px_120px_120px_120px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+              className="grid grid-cols-[100px_120px_120px_120px_120px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
             >
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-muted)]">
                 {format(d.date, "EEE M/d")}

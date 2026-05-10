@@ -14,17 +14,8 @@
 //    AND only flagging items whose pre-gap baseline was strong (≥ minBaselineQty).
 //  - Detecting partial-day stock-outs (we only have day grain).
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 const DEFAULT_LOOKBACK_DAYS = 60
 const DEFAULT_BASELINE_DAYS = 14
@@ -68,33 +59,13 @@ export async function getLostSales(input: {
   maxGapDays?: number
   asOf?: Date
 }): Promise<GetLostSalesResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
-  let storeIds: string[]
-  let storeName: string | null = null
-  const storeNameById = new Map<string, string>()
-  if (input.storeId) {
-    const store = await prisma.store.findUnique({
-      where: { id: input.storeId },
-      select: { id: true, name: true, accountId: true },
-    })
-    if (!store || store.accountId !== user.accountId) {
-      return { ok: false, error: "store_not_in_account" }
-    }
-    storeIds = [store.id]
-    storeName = store.name
-    storeNameById.set(store.id, store.name)
-  } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true, name: true },
-    })
-    storeIds = stores.map((s) => s.id)
-    for (const s of stores) storeNameById.set(s.id, s.name)
-    storeName = "All stores"
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeIds, storeName, storeNameById } = resolved.ctx
 
   const lookback = input.lookbackDays ?? DEFAULT_LOOKBACK_DAYS
   const baselineDays = input.baselineDays ?? DEFAULT_BASELINE_DAYS

@@ -69,7 +69,7 @@ export function ChannelMixCard({ data }: { data: ChannelMixData }) {
         {data.rows.map((r) => (
           <div
             key={r.platform}
-            className="grid grid-cols-[1.4fr_100px_100px_100px_100px_100px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+            className="grid grid-cols-[1.4fr_100px_100px_100px_100px_100px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
           >
             <div className="text-[14px] text-[var(--ink)]">
               {PLATFORM_LABEL[r.platform] ?? r.platform}

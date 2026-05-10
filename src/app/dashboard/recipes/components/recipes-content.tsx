@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, useTransition, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { ChevronDown, Sparkles } from "lucide-react"
@@ -26,6 +26,11 @@ import { cn } from "@/lib/utils"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { MenuItemList } from "./menu-item-list"
 import type { CanvasInitialValue } from "./recipe-canvas"
+import {
+  mapOtterItemToRecipe,
+  mapOtterItemsBatch,
+} from "@/app/actions/menu-item-actions"
+import type { RecipeCandidate } from "@/app/actions/forecasts/recipe-suggestion-actions"
 
 // `RecipeCanvas` pulls in @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/modifiers,
 // and a chunk of recipe-editor logic. The canvas only renders once the user
@@ -57,6 +62,17 @@ type Props = {
    * so the editor UI never waits on that invoice scan.
    */
   unmatchedCountSlot?: ReactNode
+  /**
+   * Seed value for the menu-list filter chip. The `?filter=unbuilt` deep-link
+   * from the P&L unmapped banner lands here; an undefined value falls back to
+   * the default ("unbuilt"), so the existing landing behavior is unchanged.
+   */
+  initialFilter?: Filter
+  /**
+   * Top-3 F28 candidates per Otter item name (lowercased). Empty/missing
+   * entries render as "no close match — build a recipe" on the row.
+   */
+  suggestionsByItem?: Map<string, RecipeCandidate[]>
 }
 
 type Filter = "unbuilt" | "all" | "prep" | "confirmed"
@@ -66,9 +82,80 @@ export function RecipesContent({
   initialRecipes,
   initialCanonicalIngredients,
   unmatchedCountSlot,
+  initialFilter,
+  suggestionsByItem,
 }: Props) {
   const router = useRouter()
-  const [filter, setFilter] = useState<Filter>("unbuilt")
+  const [filter, setFilter] = useState<Filter>(initialFilter ?? "unbuilt")
+  const suggestions = suggestionsByItem ?? new Map<string, RecipeCandidate[]>()
+  const [confirmingItem, setConfirmingItem] = useState<string | null>(null)
+  const [, startConfirmTransition] = useTransition()
+  const [batchOpen, setBatchOpen] = useState(false)
+  const [batchPending, startBatchTransition] = useTransition()
+  const [batchError, setBatchError] = useState<string | null>(null)
+
+  /**
+   * Build the high-confidence batch preview lazily — reads ML's top suggestion
+   * for every unbuilt menu item and keeps only those at ≥0.75 similarity.
+   * Recompute when either input changes (e.g., after a confirm refreshes the
+   * server data).
+   */
+  const highConfidencePairs = useMemo(() => {
+    const pairs: Array<{
+      otterItemName: string
+      recipeId: string
+      recipeName: string
+      similarity: number
+    }> = []
+    for (const m of initialMenuItems) {
+      if (m.mappedRecipeId) continue
+      const candidates = suggestions.get(m.otterItemName.toLowerCase())
+      const top = candidates?.[0]
+      if (!top || top.confidence !== "high") continue
+      pairs.push({
+        otterItemName: m.otterItemName,
+        recipeId: top.recipeId,
+        recipeName: top.recipeName,
+        similarity: top.similarity,
+      })
+    }
+    return pairs
+  }, [initialMenuItems, suggestions])
+
+  const confirmMapping = useCallback(
+    (otterItemName: string, recipeId: string) => {
+      setConfirmingItem(otterItemName)
+      startConfirmTransition(async () => {
+        try {
+          await mapOtterItemToRecipe({ otterItemName, recipeId })
+          router.refresh()
+        } finally {
+          setConfirmingItem(null)
+        }
+      })
+    },
+    [router]
+  )
+
+  const runBatchConfirm = useCallback(() => {
+    setBatchError(null)
+    startBatchTransition(async () => {
+      try {
+        await mapOtterItemsBatch(
+          highConfidencePairs.map(({ otterItemName, recipeId }) => ({
+            otterItemName,
+            recipeId,
+          }))
+        )
+        setBatchOpen(false)
+        router.refresh()
+      } catch (err) {
+        setBatchError(
+          err instanceof Error ? err.message : "Batch confirm failed"
+        )
+      }
+    })
+  }, [highConfidencePairs, router])
   const [editor, setEditor] = useState<CanvasInitialValue | null>(null)
   const [selectedMenuItemName, setSelectedMenuItemName] = useState<string | null>(
     null
@@ -282,6 +369,18 @@ export function RecipesContent({
           </span>
         )}
         {unmatchedCountSlot}
+        {highConfidencePairs.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setBatchOpen(true)}
+            className="h-8 border-[var(--hairline-bold)] bg-[var(--paper)] text-[var(--accent)]"
+          >
+            <Sparkles className="mr-1 h-3.5 w-3.5" />
+            Confirm {highConfidencePairs.length} ML match
+            {highConfidencePairs.length === 1 ? "" : "es"}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -311,6 +410,9 @@ export function RecipesContent({
             onSelectMenuItem={openForMenuItem}
             onSelectRecipe={openForRecipe}
             onAddPrepRecipe={startNewPrepRecipe}
+            suggestionsByItem={suggestions}
+            onConfirmMapping={confirmMapping}
+            confirmingItem={confirmingItem}
           />
         )}
 
@@ -368,6 +470,9 @@ export function RecipesContent({
                     startNewPrepRecipe()
                     setPickerOpen(false)
                   }}
+                  suggestionsByItem={suggestions}
+                  onConfirmMapping={confirmMapping}
+                  confirmingItem={confirmingItem}
                 />
               </SheetContent>
             </Sheet>
@@ -449,6 +554,66 @@ export function RecipesContent({
               className="bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--accent-dark)]"
             >
               {createPending ? "Adding…" : "Add ingredient"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={batchOpen} onOpenChange={setBatchOpen}>
+        <DialogContent className="max-w-lg border-[var(--hairline-bold)] bg-[var(--paper)]">
+          <DialogHeader>
+            <DialogTitle className="font-display text-[22px] italic">
+              Confirm {highConfidencePairs.length} ML match
+              {highConfidencePairs.length === 1 ? "" : "es"}
+            </DialogTitle>
+            <DialogDescription className="text-[var(--ink-muted)]">
+              These POS items will be linked to the proposed recipes. Audit the
+              full list before confirming — at least one of these is probably
+              wrong if recipes share words.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-[320px] overflow-y-auto border-y border-[var(--hairline)]">
+            {highConfidencePairs.map((p) => (
+              <li
+                key={p.otterItemName}
+                className="flex items-baseline justify-between gap-3 border-b border-[var(--hairline)] px-1 py-2 last:border-b-0"
+              >
+                <span className="truncate font-display text-[14px] text-[var(--ink)]">
+                  {p.otterItemName}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ink-muted)]">
+                  →
+                </span>
+                <span className="flex-1 truncate font-display text-[14px] italic text-[var(--ink)]">
+                  {p.recipeName}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] tabular-nums text-[var(--accent)]">
+                  {Math.round(p.similarity * 100)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+          {batchError && (
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--accent)]">
+              {batchError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setBatchOpen(false)}
+              disabled={batchPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={runBatchConfirm}
+              disabled={batchPending || highConfidencePairs.length === 0}
+              className="bg-[var(--ink)] text-[var(--paper)] hover:bg-[var(--accent-dark)]"
+            >
+              {batchPending
+                ? "Confirming…"
+                : `Confirm ${highConfidencePairs.length}`}
             </Button>
           </DialogFooter>
         </DialogContent>

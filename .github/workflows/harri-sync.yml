@@ -1,0 +1,56 @@
+name: Harri Labor Sync
+on:
+  schedule:
+    # Every 4 hours, 15 min past the Otter trio (which all run at :00 of */4).
+    # Re-syncs the trailing 3 days for every active HarriBrand — covers
+    # retroactive punch edits without re-pulling weeks of data each tick.
+    - cron: '15 */4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: harri-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Sync Harri labor
+        id: cron
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            npx tsx scripts/sync-harri-hourly.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
+          HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
+          HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
+          LOG_FILE: logs/harri-sync.log
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harri-sync-log-${{ github.run_id }}
+          path: logs/harri-sync.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Harri Labor Sync
+          ISSUE_TITLE: "[Auto] Harri Labor Sync failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/harri-sync.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh

@@ -72,7 +72,7 @@ export function LostSalesCard({ data }: Props) {
         {data.events.slice(0, 30).map((e) => (
           <div
             key={`${e.storeId}|${e.itemName}|${e.gapStart.toISOString()}`}
-            className="grid grid-cols-[1.4fr_120px_120px_100px_140px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+            className="grid grid-cols-[1.4fr_120px_120px_100px_140px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
           >
             <div>
               <div className="text-[14px] text-[var(--ink)] truncate" title={e.itemName}>

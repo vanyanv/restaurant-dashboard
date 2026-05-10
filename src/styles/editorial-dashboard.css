@@ -5371,7 +5371,7 @@
 .store-row:hover .store-row__expand,
 .store-row:focus-within .store-row__expand,
 .store-row--open .store-row__expand {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 
 .store-row__expand:focus-visible {

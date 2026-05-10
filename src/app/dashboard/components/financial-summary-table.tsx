@@ -220,7 +220,7 @@ export function FinancialSummaryTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[color:var(--hairline-bold)] bg-[rgba(0,0,0,0.02)]">
-              <th className="sticky left-0 z-20 min-w-[160px] bg-[rgba(244,236,223,0.95)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-muted)] backdrop-blur-sm">
+              <th className="sticky left-0 z-20 min-w-[160px] bg-[var(--paper-deep)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-muted)]">
                 {viewBy === "location" ? "Location" : "Channel"}
               </th>
               {COLUMNS.map((col) => (
@@ -238,7 +238,7 @@ export function FinancialSummaryTable({
             {filteredRows.map((row) => (
               <tr
                 key={row.storeId}
-                className="group border-b border-[color:var(--hairline)] transition-colors hover:bg-[rgba(220,38,38,0.028)]"
+                className="group border-b border-[color:var(--hairline)] transition-colors hover:bg-[var(--row-hover-bg-soft)]"
               >
                 <td className="sticky left-0 z-10 bg-[rgba(255,253,248,0.98)] px-3 py-2 transition-colors group-hover:bg-[rgba(250,232,232,0.98)]">
                   <div className="relative flex items-center gap-1">
@@ -289,7 +289,7 @@ export function FinancialSummaryTable({
 
           <tfoot>
             <tr className="border-t-2 border-[color:var(--hairline-bold)] bg-[rgba(0,0,0,0.03)]">
-              <td className="sticky left-0 z-10 bg-[rgba(244,236,223,0.95)] px-3 py-2 backdrop-blur-sm">
+              <td className="sticky left-0 z-10 bg-[var(--paper-deep)] px-3 py-2">
                 <span className="font-[family-name:var(--font-dm-sans)] text-[10px] font-bold uppercase tracking-[0.22em] text-[color:var(--ink)]">
                   Total
                 </span>

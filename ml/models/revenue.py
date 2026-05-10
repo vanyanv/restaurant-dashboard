@@ -16,11 +16,15 @@ import pandas as pd
 from xgboost import XGBRegressor
 
 from ml.features.revenue import (
+    build_enriched_features,
     build_features,
+    enriched_feature_columns,
     feature_columns,
     load_daily_revenue,
+    load_revenue_external_signals,
     split_train_holdout,
 )
+from ml.features.external_signals import external_signal_coverage
 
 
 @dataclass
@@ -30,6 +34,9 @@ class TrainResult:
     mae: float
     sample_size: int
     holdout_residual_std: float
+    flavor: str = "baseline"
+    signal_coverage: float = 0.0
+    feature_names: tuple[str, ...] = ()
 
 
 @dataclass
@@ -40,18 +47,34 @@ class ForecastRow:
     p90: float
 
 
-def train(store_id: str) -> Optional[TrainResult]:
+def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
     history = load_daily_revenue(store_id)
     if history.empty or len(history) < 60:
         # Need enough history for lag-28 + rolling-28 to be meaningful.
         return None
 
-    feats = build_features(history)
+    external_daily = pd.DataFrame()
+    signal_coverage = 0.0
+    if enriched:
+        external_daily = load_revenue_external_signals(
+            store_id,
+            history["date"].min().date(),
+            history["date"].max().date(),
+        )
+        signal_coverage = external_signal_coverage(external_daily)
+        if signal_coverage < 0.6:
+            return None
+        feats = build_enriched_features(history, external_daily)
+        cols = enriched_feature_columns()
+        flavor = "weather-events"
+    else:
+        feats = build_features(history)
+        cols = feature_columns()
+        flavor = "baseline"
     train_df, holdout_df = split_train_holdout(feats, holdout_days=30)
     if train_df.empty or holdout_df.empty:
         return None
 
-    cols = feature_columns()
     model = XGBRegressor(
         n_estimators=400,
         max_depth=4,
@@ -79,6 +102,9 @@ def train(store_id: str) -> Optional[TrainResult]:
         mae=mae,
         sample_size=len(train_df),
         holdout_residual_std=holdout_residual_std,
+        flavor=flavor,
+        signal_coverage=signal_coverage,
+        feature_names=tuple(cols),
     )
 
 
@@ -89,7 +115,14 @@ def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list
 
     feats = build_features(history)
     last_date = feats["date"].max().date()
-    cols = feature_columns()
+    cols = list(result.feature_names or feature_columns())
+    external_daily = pd.DataFrame()
+    if result.flavor == "weather-events":
+        external_daily = load_revenue_external_signals(
+            store_id,
+            history["date"].min().date(),
+            last_date + dt.timedelta(days=horizon_days),
+        )
 
     rolling = feats.copy()
     out: list[ForecastRow] = []
@@ -99,7 +132,10 @@ def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list
         target_date = last_date + dt.timedelta(days=offset)
         new_row_seed = pd.DataFrame({"date": [pd.Timestamp(target_date)], "revenue": [np.nan]})
         rolling = pd.concat([rolling[["date", "revenue"]], new_row_seed], ignore_index=True)
-        rolling = build_features(rolling)
+        if result.flavor == "weather-events":
+            rolling = build_enriched_features(rolling, external_daily)
+        else:
+            rolling = build_features(rolling)
         feat_row = rolling.iloc[-1]
         x = feat_row[cols].to_frame().T
         pred = float(model_safe_predict(result.model, x))

@@ -224,10 +224,11 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                     of sales) aren&apos;t mapped to a recipe yet.
                   </div>
                   <a
-                    href="/dashboard/recipes"
+                    href="/dashboard/recipes?filter=unbuilt"
                     className="shrink-0 underline hover:text-(--accent-dark)"
                   >
-                    Build recipes →
+                    Review {data.cogs.unmappedItems.length} item
+                    {data.cogs.unmappedItems.length === 1 ? "" : "s"} →
                   </a>
                 </div>
               </div>
@@ -250,7 +251,8 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                     href="/dashboard/ingredients"
                     className="shrink-0 underline hover:text-(--accent-dark)"
                   >
-                    Fix ingredients →
+                    Fix {data.cogs.missingCostItems.length} ingredient
+                    {data.cogs.missingCostItems.length === 1 ? "" : "s"} →
                   </a>
                 </div>
               </div>

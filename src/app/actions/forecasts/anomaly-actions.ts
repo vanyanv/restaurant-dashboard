@@ -1,16 +1,7 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export type AnomalyTarget = "REVENUE" | "MENU_ITEM" | "INGREDIENT" | "LABOR" | "REFUNDS"
 export type AnomalyMethod = "ZSCORE" | "ISOLATION_FOREST"
@@ -46,36 +37,13 @@ export async function getOpenAnomalies(input: {
   storeId?: string
   limit?: number
 }): Promise<GetOpenAnomaliesResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
-  let storeIds: string[]
-  let storeName: string
-  let storeIdOut: string | null
-  const storeNameById = new Map<string, string>()
-  if (input.storeId) {
-    const store = await prisma.store.findUnique({
-      where: { id: input.storeId },
-      select: { id: true, name: true, accountId: true },
-    })
-    if (!store || store.accountId !== user.accountId) {
-      return { ok: false, error: "store_not_in_account" }
-    }
-    storeIds = [store.id]
-    storeName = store.name
-    storeIdOut = store.id
-    storeNameById.set(store.id, store.name)
-  } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true, name: true },
-    })
-    storeIds = stores.map((s) => s.id)
-    for (const s of stores) storeNameById.set(s.id, s.name)
-    storeName = "All stores"
-    storeIdOut = null
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeIds, storeName, storeIdOut, storeNameById } = resolved.ctx
 
   const limit = input.limit ?? 20
   const events = await prisma.anomalyEvent.findMany({
@@ -130,7 +98,7 @@ export async function acknowledgeAnomaly(input: {
   anomalyId: string
   explanation?: string | null
 }): Promise<AcknowledgeAnomalyResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 

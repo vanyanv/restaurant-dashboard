@@ -1,4 +1,5 @@
 import { Suspense } from "react"
+import dynamic from "next/dynamic"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
@@ -8,6 +9,7 @@ import { getMenuItemForecast } from "@/app/actions/forecasts/menu-item-forecast-
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
+import { getProfitRiskForecast } from "@/app/actions/forecasts/profit-risk-actions"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
@@ -21,19 +23,30 @@ import { EditorialTopbar } from "../components/editorial-topbar"
 import { ForecastsStorePicker } from "./components/forecasts-store-picker"
 import { ForecastsBriefing } from "./components/forecasts-briefing"
 import { ForecastsRibbon } from "./components/forecasts-ribbon"
-import { RevenueForecastCard } from "./components/revenue-forecast-card"
 import { MenuItemForecastTable } from "./components/menu-item-forecast-table"
 import { AnomalyFeed } from "./components/anomaly-feed"
 import { FoodCostForecastCard } from "./components/food-cost-forecast-card"
 import { LaborStaffingCard } from "./components/labor-staffing-card"
+import { ProfitRiskCard } from "./components/profit-risk-card"
 import { MenuEngineeringCard } from "./components/menu-engineering-card"
 import { LostSalesCard } from "./components/lost-sales-card"
-import { CashPositionCard } from "./components/cash-position-card"
 import { VendorReliabilityCard } from "./components/vendor-reliability-card"
 import { PromoRoiCard } from "./components/promo-roi-card"
 import { LaunchTrajectoryCard } from "./components/launch-trajectory-card"
 import { ChannelMixCard } from "./components/channel-mix-card"
 import { WasteClusterCard } from "./components/waste-cluster-card"
+
+// Recharts is only rendered on the revenue section; lazy-loading these two
+// cards keeps ~100 KB out of the initial route bundle when the user is on
+// menu / costs / operations / anomalies.
+const RevenueForecastCard = dynamic(() =>
+  import("./components/revenue-forecast-card").then(
+    (m) => m.RevenueForecastCard,
+  ),
+)
+const CashPositionCard = dynamic(() =>
+  import("./components/cash-position-card").then((m) => m.CashPositionCard),
+)
 import { buildBriefing } from "./lib/build-briefing"
 import { logger } from "@/lib/logger"
 import {
@@ -114,7 +127,17 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
   if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
   const params = await searchParams
-  const stores = await getStores()
+  // No storeId → portfolio "All stores" view. With a storeId → single-store
+  // deep dive (must belong to the user's account). getRevenueForecast does
+  // its own membership check via resolveStoreContext, so it can run in
+  // parallel with getStores; we still validate store ownership against the
+  // returned stores list before rendering.
+  const storeId: string | undefined = params.storeId
+  const [stores, revenueResult] = await Promise.all([
+    getStores(),
+    timeForecast("revenue", storeId, () => getRevenueForecast({ storeId })),
+  ])
+
   if (stores.length === 0) {
     return (
       <div className="px-6 py-10">
@@ -127,18 +150,11 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
     )
   }
 
-  // No storeId → portfolio "All stores" view. With a storeId → single-store
-  // deep dive (must belong to the user's account).
-  const storeId: string | undefined = params.storeId
   if (storeId && !stores.some((s) => s.id === storeId)) {
     redirect("/dashboard/forecasts")
   }
 
   const section = parseSection(params.section)
-
-  const revenueResult = await timeForecast("revenue", storeId, () =>
-    getRevenueForecast({ storeId }),
-  )
 
   if (!revenueResult || !revenueResult.ok) {
     return (
@@ -370,14 +386,16 @@ async function CostsSection({ storeId }: { storeId: string | undefined }) {
 }
 
 async function OperationsSection({ storeId }: { storeId: string | undefined }) {
-  const [laborResult, lostSalesResult] = await Promise.all([
+  const [laborResult, profitRiskResult, lostSalesResult] = await Promise.all([
     timeForecast("labor", storeId, () => getLaborStaffingForecast({ storeId })),
+    timeForecast("profit-risk", storeId, () => getProfitRiskForecast({ storeId })),
     timeForecast("lost-sales", storeId, () => getLostSales({ storeId })),
   ])
 
   return (
     <>
       {laborResult?.ok && <LaborStaffingCard data={laborResult.data} />}
+      {profitRiskResult?.ok && <ProfitRiskCard data={profitRiskResult.data} />}
       {lostSalesResult?.ok && <LostSalesCard data={lostSalesResult.data} />}
     </>
   )

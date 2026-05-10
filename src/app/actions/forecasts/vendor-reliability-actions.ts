@@ -15,18 +15,9 @@
 // Higher = more reliable. Short-ship % isn't computable yet — we don't
 // track promised vs delivered quantity below the invoice header.
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession } from "./_shared"
 
 export interface VendorReliabilityRow {
   vendorName: string
@@ -62,7 +53,7 @@ export async function getVendorReliability(input: {
   lookbackDays?: number
   asOf?: Date
 }): Promise<GetVendorReliabilityResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 

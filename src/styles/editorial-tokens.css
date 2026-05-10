@@ -15,6 +15,14 @@
   --accent-bg: #fcecec;
   --subtract: #8a3a3a;
 
+  /* Row-hover wash — the canonical interactive-row background tint.
+     Was hard-coded as rgba(220, 38, 38, 0.045) (or 0.028 for orders) across
+     30+ sites; centralising lets the editorial palette evolve without a
+     codebase-wide find/replace. Use --row-hover-bg-focus on focus shadows. */
+  --row-hover-bg: rgba(220, 38, 38, 0.045);
+  --row-hover-bg-soft: rgba(220, 38, 38, 0.028);
+  --row-hover-bg-focus: rgba(220, 38, 38, 0.18);
+
   /* Brand-gold ornament tokens — a faint echo of the Chris N Eddy's wordmark
      (golden-yellow fill, vivid-red outline). Permitted in exactly three sites:
      (1) the brand-issue thread under the sidebar masthead,
@@ -100,7 +108,8 @@
 
 .font-display-tight {
   font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  font-feature-settings: "tnum", "ss01";
+  font-feature-settings: "tnum", "lnum", "ss01";
+  font-variant-numeric: tabular-nums lining-nums;
   font-variation-settings: "opsz" 144, "SOFT" 30;
   letter-spacing: -0.03em;
   font-weight: 500;
@@ -170,7 +179,7 @@
 
 .editorial-tr:hover,
 .editorial-tr:focus-within {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 
 .editorial-tr:focus-within {
@@ -220,7 +229,7 @@
 
 .order-row:hover,
 .order-row:focus-visible {
-  background: rgba(220, 38, 38, 0.028);
+  background: var(--row-hover-bg-soft);
   outline: none;
 }
 
@@ -277,6 +286,23 @@
 
 .inv-panel--flush {
   padding: 0;
+}
+
+/* Error / alert variant — replaces shadcn `border-destructive bg-destructive/10
+   text-destructive` blocks with a docket-correct stamp. Uses the proofmark wash
+   so the surface still reads as paper, not as a SaaS toast. */
+.inv-panel--alert {
+  background: var(--accent-bg);
+  border-color: color-mix(in oklab, var(--accent) 36%, var(--hairline-bold));
+  color: var(--accent-dark);
+}
+
+/* Empty / null state variant — replaces shadcn `border p-6 text-muted-foreground`
+   centered-message blocks. Hairline frame on warm paper, ink-muted body, no
+   round corners, no shadow. */
+.inv-panel--empty {
+  text-align: center;
+  color: var(--ink-muted);
 }
 
 .inv-panel__head {
@@ -345,7 +371,7 @@
 
 .inv-row:hover,
 .inv-row:focus-visible {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
   outline: none;
 }
 
@@ -672,7 +698,7 @@
    ───────────────────────────────────────────────────────────────────── */
 
 .inv-row:active {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 .inv-row:active::before {
   transform: scaleY(1);
@@ -686,7 +712,7 @@
 }
 
 .order-row:active {
-  background: rgba(220, 38, 38, 0.028);
+  background: var(--row-hover-bg-soft);
 }
 .order-row:active::before {
   transform: scaleY(1);
@@ -798,7 +824,7 @@
 }
 
 .price-monitor-row.is-selected {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 
 .price-monitor-row.is-selected::before {
@@ -1290,7 +1316,7 @@
 }
 
 .editorial-surface [data-slot="table-row"]:hover {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 
 .editorial-surface .shadow,

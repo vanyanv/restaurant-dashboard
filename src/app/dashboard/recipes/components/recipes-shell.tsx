@@ -23,7 +23,13 @@ import {
  * item, open editor, drag/drop, dialog state), so they are streamed as one
  * unit rather than as two independent Suspense boundaries.
  */
-export function RecipesShell() {
+type RecipesFilter = "unbuilt" | "all" | "prep" | "confirmed"
+
+export function RecipesShell({
+  initialFilter,
+}: {
+  initialFilter?: RecipesFilter
+}) {
   const unmatchedCountSlot = (
     <SectionErrorBoundary label="Count unavailable">
       <Suspense fallback={<UnmatchedCountFallback />}>
@@ -35,7 +41,10 @@ export function RecipesShell() {
   return (
     <SectionErrorBoundary label="Recipes editor unavailable">
       <Suspense fallback={<RecipesEditorSkeleton />}>
-        <RecipeEditorSection unmatchedCountSlot={unmatchedCountSlot} />
+        <RecipeEditorSection
+          unmatchedCountSlot={unmatchedCountSlot}
+          initialFilter={initialFilter}
+        />
       </Suspense>
     </SectionErrorBoundary>
   )

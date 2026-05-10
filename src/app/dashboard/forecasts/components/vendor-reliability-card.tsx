@@ -83,7 +83,7 @@ export function VendorReliabilityCard({ data }: Props) {
         {data.rows.map((r) => (
           <div
             key={r.vendorNameNormalized}
-            className="grid grid-cols-[1.4fr_120px_100px_100px_120px_100px_100px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[rgba(220,38,38,0.045)] transition-colors"
+            className="grid grid-cols-[1.4fr_120px_100px_100px_120px_100px_100px] gap-4 items-center px-5 py-2 border-t border-[var(--hairline)] hover:bg-[var(--row-hover-bg)] transition-colors"
           >
             <div className="text-[14px] text-[var(--ink)] truncate" title={r.vendorName}>
               {r.vendorName}

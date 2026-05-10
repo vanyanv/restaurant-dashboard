@@ -17,18 +17,9 @@
 // "incremental dollars sit on the table at the current mix". No promise
 // that the operator can actually shift orders; the operator interprets.
 
-import { getServerSession } from "next-auth"
 import { Prisma } from "@/generated/prisma/client"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 const DEFAULT_LOOKBACK_DAYS = 90
 const FP_PLATFORM = "css-pos"
@@ -80,7 +71,7 @@ export async function getChannelMix(input: {
   shiftPct?: number
   asOf?: Date
 }): Promise<GetChannelMixResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
@@ -91,26 +82,9 @@ export async function getChannelMix(input: {
   const windowStart = new Date(windowEnd)
   windowStart.setUTCDate(windowStart.getUTCDate() - lookbackDays)
 
-  let storeId: string | null = null
-  let storeName: string | null = null
-  let storeIds: string[]
-  if (input.storeId) {
-    const store = await prisma.store.findFirst({
-      where: { id: input.storeId, accountId: user.accountId },
-      select: { id: true, name: true },
-    })
-    if (!store) return { ok: false, error: "store_not_in_account" }
-    storeId = store.id
-    storeName = store.name
-    storeIds = [store.id]
-  } else {
-    storeName = "All stores"
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true },
-    })
-    storeIds = stores.map((store) => store.id)
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeIds, storeName, storeIdOut: storeId } = resolved.ctx
 
   if (storeIds.length === 0) return { ok: false, error: "no_data" }
 

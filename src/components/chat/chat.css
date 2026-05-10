@@ -438,12 +438,12 @@
    entity the assistant is calling out (e.g. the biggest invoice). */
 .chat-artifact.is-highlighted {
   box-shadow: inset 4px 0 0 var(--accent);
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 
 /* Row-level highlight inside TableCard / TrendCard table view. */
 .chat-artifact__table tbody tr.is-highlighted > td {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
   box-shadow: inset 4px 0 0 var(--accent);
 }
 .chat-artifact__table tbody tr.is-highlighted > td:not(:first-child) {

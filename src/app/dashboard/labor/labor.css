@@ -1,0 +1,847 @@
+/* /dashboard/labor — editorial-docket labor docket.
+   Reuses .inv-panel from editorial-tokens.css. All colors come from
+   the editorial palette: --ink, --ink-muted, --ink-faint, --paper,
+   --hairline, --hairline-bold, --accent. No raw Tailwind colors. */
+
+.labor-shell {
+  padding: 32px 28px 80px;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.labor-shell__header {
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 18px;
+}
+
+.labor-shell__title {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 6px 0 4px;
+}
+
+.labor-empty {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 32px 22px;
+  text-align: center;
+}
+
+.labor-shell__folio {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+
+/* Week navigator ----------------------------------------------------------- */
+
+.labor-weeknav {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 24px;
+}
+
+.labor-weeknav__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.labor-weeknav__eyebrow {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.labor-weeknav__title {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 24px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.labor-weeknav__sub {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+
+.labor-weeknav__right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.labor-weeknav__btn {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--hairline-bold);
+  padding: 10px 16px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.labor-weeknav__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.labor-weeknav__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.labor-weeknav__btn--ghost {
+  border-color: var(--hairline);
+  color: var(--ink-muted);
+}
+
+.labor-weeknav__picker {
+  position: absolute;
+  right: 24px;
+  top: calc(100% + 6px);
+  background: var(--paper-soft);
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+
+.labor-weeknav__date {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.labor-weeknav__hint {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+/* KPI strip ---------------------------------------------------------------- */
+
+.labor-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.labor-kpi {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.labor-kpi__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.labor-kpi__num {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: clamp(24px, 3.2vw, 28px);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.labor-kpi__num--muted { color: var(--ink-muted); font-weight: 500; }
+.labor-kpi__num--bad   { color: var(--accent); }
+
+.labor-kpi__sub {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+/* Day-by-day breakdown ----------------------------------------------------- */
+
+.labor-days {
+  display: flex;
+  flex-direction: column;
+}
+
+.labor-days__row {
+  position: relative;
+  border-top: 1px solid var(--hairline);
+}
+
+.labor-days__row:first-child { border-top: 0; }
+
+.labor-days__row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8%;
+  bottom: 8%;
+  width: 4px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  pointer-events: none;
+}
+
+.labor-days__row:hover::before,
+.labor-days__row--open::before {
+  transform: scaleY(1);
+}
+
+.labor-days__hit {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(180px, 1.4fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: center;
+  width: 100%;
+  padding: 16px 22px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+  font: inherit;
+  color: inherit;
+}
+
+.labor-days__hit:hover {
+  background: var(--row-hover-bg);
+}
+
+.labor-days__hit:disabled {
+  cursor: default;
+}
+
+.labor-days__row--open .labor-days__hit {
+  background: var(--row-hover-bg);
+}
+
+.labor-days__row--missing .labor-days__hit {
+  opacity: 0.55;
+}
+
+.labor-days__date {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.labor-days__dow {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.labor-days__md {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.labor-days__row--open .labor-days__md {
+  color: var(--accent);
+}
+
+.labor-days__bars {
+  position: relative;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.labor-days__bar {
+  height: 12px;
+  border-radius: 1px;
+}
+
+.labor-days__bar--forecast {
+  background: var(--hairline-bold);
+}
+
+.labor-days__bar--actual {
+  background: var(--ink);
+}
+
+.labor-days__row--open .labor-days__bar--actual,
+.labor-days__hit:hover .labor-days__bar--actual {
+  background: var(--accent);
+}
+
+.labor-days__nums {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) minmax(80px, auto) minmax(70px, auto) minmax(80px, auto);
+  gap: 16px;
+  align-items: baseline;
+  justify-content: end;
+}
+
+.labor-days__actual {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-days__row--open .labor-days__actual,
+.labor-days__hit:hover .labor-days__actual {
+  color: var(--accent);
+}
+
+.labor-days__forecast {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-days__var {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-days__var--bad { color: var(--accent); }
+.labor-days__var--neutral { color: var(--ink-muted); }
+
+.labor-days__alerts {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+/* Drawer (per-day alerts) -------------------------------------------------- */
+
+.labor-days__drawer {
+  border-top: 1px dashed var(--hairline);
+  padding: 8px 22px 18px 64px;
+  background: rgba(220, 38, 38, 0.025);
+  animation: labor-drawer-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes labor-drawer-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.labor-days__alerts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.labor-days__alert {
+  display: grid;
+  grid-template-columns: 70px minmax(180px, 1fr) 80px minmax(160px, 1fr);
+  gap: 16px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.labor-days__alert:first-child { border-top: 0; }
+
+.labor-days__alert-time {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+.labor-days__alert-code {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.labor-days__alert-diff {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-days__alert-meta {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+/* 13-week trend chart ------------------------------------------------------ */
+
+.labor-trend {
+  padding: 22px 24px 18px;
+}
+
+.labor-trend__chart {
+  display: grid;
+  grid-template-columns: repeat(13, 1fr);
+  gap: 6px;
+  align-items: end;
+  height: 160px;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 6px;
+}
+
+.labor-trend__col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  text-decoration: none;
+  border-radius: 2px;
+  transition: background 160ms ease;
+}
+
+.labor-trend__col:hover {
+  background: var(--row-hover-bg);
+}
+
+.labor-trend__col--selected {
+  background: rgba(220, 38, 38, 0.07);
+}
+
+.labor-trend__col--selected::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 2px;
+  background: var(--accent);
+}
+
+.labor-trend__col-bars {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+}
+
+.labor-trend__bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: 1px 1px 0 0;
+}
+
+.labor-trend__bar--forecast {
+  background: var(--hairline-bold);
+}
+
+.labor-trend__bar--actual {
+  background: var(--ink);
+}
+
+.labor-trend__col--bad .labor-trend__bar--actual {
+  background: var(--accent);
+}
+
+.labor-trend__col:hover .labor-trend__bar--actual,
+.labor-trend__col--selected .labor-trend__bar--actual {
+  background: var(--accent);
+}
+
+.labor-trend__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.labor-trend__col--selected .labor-trend__label {
+  color: var(--accent);
+}
+
+.labor-trend__legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+
+.labor-trend__swatch {
+  display: inline-block;
+  width: 12px;
+  height: 4px;
+  border-radius: 1px;
+}
+
+.labor-trend__swatch--actual { background: var(--ink); margin-left: 8px; }
+.labor-trend__swatch--forecast { background: var(--hairline-bold); margin-left: 8px; }
+
+.labor-trend__legend-spacer { flex: 1; }
+
+/* Store tabs (multi-store selector) ---------------------------------------- */
+
+.labor-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--hairline-bold);
+  margin: 0;
+  padding: 0;
+}
+
+.labor-tabs__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px 18px 16px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-decoration: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+  margin-bottom: -1px;
+}
+
+.labor-tabs__tab:hover:not(.labor-tabs__tab--active):not(.labor-tabs__tab--disabled) {
+  color: var(--ink);
+  background: rgba(220, 38, 38, 0.035);
+}
+
+.labor-tabs__tab--active {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.labor-tabs__tab--active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.labor-tabs__tab--disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.labor-tabs__hint {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.labor-tabs__hint--off {
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-style: italic;
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+.labor-tabs__tab--active .labor-tabs__hint {
+  color: var(--accent);
+  opacity: 0.6;
+}
+
+/* All-stores ranking panel ------------------------------------------------- */
+
+.labor-stores {
+  display: flex;
+  flex-direction: column;
+}
+
+.labor-stores__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1.4fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: center;
+  padding: 18px 22px;
+  border-top: 1px solid var(--hairline);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.labor-stores__row:first-child { border-top: 0; }
+
+.labor-stores__row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8%;
+  bottom: 8%;
+  width: 4px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  pointer-events: none;
+}
+
+.labor-stores__row:hover {
+  background: var(--row-hover-bg);
+}
+
+.labor-stores__row:hover::before {
+  transform: scaleY(1);
+}
+
+.labor-stores__row--off {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.labor-stores__row--off:hover {
+  background: transparent;
+}
+
+.labor-stores__name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.labor-stores__title {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.labor-stores__row:hover .labor-stores__title {
+  color: var(--accent);
+}
+
+.labor-stores__row--off .labor-stores__title {
+  color: var(--ink-muted);
+}
+
+.labor-stores__folio {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.labor-stores__bars {
+  position: relative;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.labor-stores__bar {
+  height: 12px;
+  border-radius: 1px;
+}
+
+.labor-stores__bar--forecast { background: var(--hairline-bold); }
+.labor-stores__bar--actual { background: var(--ink); }
+
+.labor-stores__row:hover .labor-stores__bar--actual { background: var(--accent); }
+
+.labor-stores__nums {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) minmax(80px, auto) minmax(120px, auto) minmax(80px, auto);
+  gap: 16px;
+  align-items: baseline;
+  justify-content: end;
+}
+
+.labor-stores__actual {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-stores__row:hover .labor-stores__actual { color: var(--accent); }
+
+.labor-stores__forecast {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-stores__var {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+}
+
+.labor-stores__var--bad { color: var(--accent); }
+.labor-stores__var--neutral { color: var(--ink-muted); }
+
+.labor-stores__alerts {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+/* Responsive ---------------------------------------------------------------- */
+
+@media (max-width: 960px) {
+  .labor-shell { padding: 24px 20px 64px; gap: 22px; }
+  .labor-kpi-strip { grid-template-columns: repeat(2, 1fr); }
+  .labor-weeknav { grid-template-columns: auto 1fr auto; gap: 14px; padding: 14px 16px; }
+  .labor-weeknav__title { font-size: 20px; }
+  .labor-stores__row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px 18px;
+  }
+  .labor-stores__nums { justify-content: start; gap: 12px 18px; flex-wrap: wrap; }
+  .labor-days__hit {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px 18px;
+  }
+  .labor-days__nums { justify-content: start; gap: 12px 16px; flex-wrap: wrap; }
+  .labor-days__drawer { padding-left: 22px; }
+  .labor-days__alert { grid-template-columns: 60px 1fr 70px; }
+  .labor-days__alert-meta { grid-column: 1 / -1; }
+  .labor-trend__chart {
+    grid-template-columns: repeat(13, minmax(34px, 1fr));
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .labor-trend__col { scroll-snap-align: start; }
+}
+
+@media (max-width: 600px) {
+  .labor-shell { padding: 20px 16px 56px; gap: 18px; }
+  .labor-kpi-strip { grid-template-columns: 1fr; gap: 10px; }
+  .labor-weeknav {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+  .labor-weeknav__center { align-items: flex-start; }
+  .labor-weeknav__right { justify-content: flex-start; flex-wrap: wrap; }
+  .labor-weeknav__btn { padding: 12px 14px; }
+  .labor-weeknav__picker { right: 16px; left: 16px; }
+  .labor-tabs__tab { padding: 14px 14px 16px; }
+}
+
+/* Motion accessibility ----------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .labor-days__row::before,
+  .labor-stores__row::before {
+    transition: none;
+  }
+  .labor-days__hit,
+  .labor-stores__row,
+  .labor-trend__col,
+  .labor-tabs__tab,
+  .labor-weeknav__btn {
+    transition: none;
+  }
+  .labor-days__drawer { animation: none; }
+}

@@ -1,7 +1,7 @@
 import { monoLabel, number, fraunces17 } from "./styles"
 
 type Db = { totalBytes: number; capBytes: number; pct: number }
-type Tbl = { table: string; bytes: number; rows: bigint }
+type Tbl = { table: string; bytes: number; rows: number }
 type Conn = { active: number; max: number }
 
 export function DatabasePanel({

@@ -2,9 +2,11 @@
 
 import { useMemo, useRef, type RefObject } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Plus, CircleCheck, CircleDashed } from "lucide-react"
+import { Plus, CircleCheck, CircleDashed, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { MenuItemForCatalog, RecipeSummary } from "@/types/recipe"
+import type { RecipeCandidate } from "@/app/actions/forecasts/recipe-suggestion-actions"
+import { LinkRecipePopover } from "./link-recipe-popover"
 
 type Filter = "unbuilt" | "all" | "prep" | "confirmed"
 
@@ -18,6 +20,19 @@ type Props = {
   onSelectMenuItem: (m: MenuItemForCatalog) => void
   onSelectRecipe: (r: RecipeSummary) => void
   onAddPrepRecipe: () => void
+  /**
+   * Top-3 ML candidates per Otter item name (lowercased). When a row has at
+   * least one high/medium-confidence candidate, the row gains an inline
+   * `Confirm` pill that calls `onConfirmMapping` directly — no canvas
+   * detour. Missing/low candidates render as "build a recipe" instead.
+   */
+  suggestionsByItem?: Map<string, RecipeCandidate[]>
+  onConfirmMapping?: (otterItemName: string, recipeId: string) => void
+  /**
+   * Item name currently being confirmed (single-shot or popover-pick).
+   * Used to disable the row's actions and signal the in-flight write.
+   */
+  confirmingItem?: string | null
 }
 
 export function MenuItemList({
@@ -30,6 +45,9 @@ export function MenuItemList({
   onSelectMenuItem,
   onSelectRecipe,
   onAddPrepRecipe,
+  suggestionsByItem,
+  onConfirmMapping,
+  confirmingItem,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const prepRecipes = useMemo(
@@ -123,6 +141,10 @@ export function MenuItemList({
             scrollRef={scrollRef}
             selectedItemName={selectedMenuItemName}
             onSelect={onSelectMenuItem}
+            recipes={sellableRecipes}
+            suggestionsByItem={suggestionsByItem}
+            onConfirmMapping={onConfirmMapping}
+            confirmingItem={confirmingItem}
             emptyLabel={
               filter === "unbuilt"
                 ? "Every menu item has a recipe."
@@ -140,18 +162,30 @@ function MenuItemRows({
   scrollRef,
   selectedItemName,
   onSelect,
+  recipes,
+  suggestionsByItem,
+  onConfirmMapping,
+  confirmingItem,
   emptyLabel,
 }: {
   items: MenuItemForCatalog[]
   scrollRef: RefObject<HTMLDivElement | null>
   selectedItemName: string | null
   onSelect: (m: MenuItemForCatalog) => void
+  recipes: RecipeSummary[]
+  suggestionsByItem?: Map<string, RecipeCandidate[]>
+  onConfirmMapping?: (otterItemName: string, recipeId: string) => void
+  confirmingItem?: string | null
   emptyLabel: string
 }) {
+  // Unbuilt rows grow taller (extra ML caption line + actions row), so we
+  // bump the virtualizer estimate when the suggestion pipeline is wired in.
+  // Falls back to the stock 58px when the parent didn't pass suggestions.
+  const estimate = suggestionsByItem ? 78 : 58
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 58,
+    estimateSize: () => estimate,
     overscan: 10,
   })
 
@@ -168,6 +202,17 @@ function MenuItemRows({
         const m = items[virtualRow.index]
         const isSelected = selectedItemName === m.otterItemName
         const hasRecipe = !!m.mappedRecipeId
+        const candidates =
+          suggestionsByItem?.get(m.otterItemName.toLowerCase()) ?? []
+        const top = candidates[0]
+        const isConfirming = confirmingItem === m.otterItemName
+        const showSuggestionRow =
+          !hasRecipe && (suggestionsByItem !== undefined || candidates.length > 0)
+        const canConfirm =
+          !hasRecipe &&
+          !!top &&
+          (top.confidence === "high" || top.confidence === "medium") &&
+          !!onConfirmMapping
         return (
           <li
             key={`${m.otterItemName}::${m.category}`}
@@ -176,9 +221,7 @@ function MenuItemRows({
             className="absolute left-0 top-0 w-full"
             style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
-            <button
-              type="button"
-              onClick={() => onSelect(m)}
+            <div
               className={cn(
                 "group relative flex w-full items-start gap-2.5 border-b border-[var(--hairline)] px-4 py-2.5 text-left transition",
                 isSelected
@@ -192,14 +235,24 @@ function MenuItemRows({
                   className="absolute inset-y-0 left-0 w-[2px] bg-[var(--accent)]"
                 />
               )}
-              <div className="mt-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => onSelect(m)}
+                className="absolute inset-0"
+                aria-label={
+                  hasRecipe
+                    ? `Open recipe for ${m.otterItemName}`
+                    : `Build recipe for ${m.otterItemName}`
+                }
+              />
+              <div className="pointer-events-none relative mt-1 shrink-0">
                 {hasRecipe ? (
                   <CircleCheck className="h-3.5 w-3.5 text-[var(--accent)]" />
                 ) : (
                   <CircleDashed className="h-3.5 w-3.5 text-[var(--ink-faint)]" />
                 )}
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className="pointer-events-none relative flex-1 overflow-hidden">
                 <div className="truncate font-display text-[14px] leading-snug text-[var(--ink)]">
                   {m.otterItemName}
                 </div>
@@ -210,12 +263,88 @@ function MenuItemRows({
                     {Math.round(m.totalQtySoldAllTime).toLocaleString()} sold
                   </span>
                 </div>
+                {showSuggestionRow && (
+                  <SuggestionCaption candidate={top} />
+                )}
               </div>
-            </button>
+              {!hasRecipe && (
+                <div className="relative flex shrink-0 items-center gap-1">
+                  {canConfirm && top && (
+                    <button
+                      type="button"
+                      disabled={isConfirming}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onConfirmMapping?.(m.otterItemName, top.recipeId)
+                      }}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1 border px-2 font-mono text-[10px] uppercase tracking-[0.1em] transition",
+                        top.confidence === "high"
+                          ? "border-[var(--accent)] bg-[var(--paper)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--paper)]"
+                          : "border-[var(--ink)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--ink)] hover:text-[var(--paper)]",
+                        isConfirming && "opacity-50"
+                      )}
+                    >
+                      {isConfirming ? "…" : "Confirm"}
+                    </button>
+                  )}
+                  {onConfirmMapping && (
+                    <LinkRecipePopover
+                      otterItemName={m.otterItemName}
+                      candidates={candidates}
+                      recipes={recipes}
+                      onPick={(recipeId) =>
+                        onConfirmMapping(m.otterItemName, recipeId)
+                      }
+                      onBuildNew={() => onSelect(m)}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           </li>
         )
       })}
     </ul>
+  )
+}
+
+function SuggestionCaption({
+  candidate,
+}: {
+  candidate: RecipeCandidate | undefined
+}) {
+  if (!candidate) {
+    return (
+      <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--ink-faint)]">
+        No close match — build a recipe
+      </div>
+    )
+  }
+  const { confidence, recipeName, similarity } = candidate
+  const tone =
+    confidence === "high"
+      ? "text-[var(--accent)]"
+      : confidence === "medium"
+        ? "text-[var(--ink)]"
+        : "text-[var(--ink-muted)]"
+  const label =
+    confidence === "low" ? "Best guess" : "ML proposes"
+  return (
+    <div
+      className={cn(
+        "mt-1 flex items-center gap-1 truncate font-mono text-[10px] uppercase tracking-[0.08em]",
+        tone
+      )}
+    >
+      <Sparkles className="h-3 w-3 shrink-0" />
+      <span className="truncate">
+        {label}: <span className="italic">{recipeName}</span> ·{" "}
+        <span className="tabular-nums">
+          {Math.round(similarity * 100)}%
+        </span>
+      </span>
+    </div>
   )
 }
 

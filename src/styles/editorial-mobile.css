@@ -320,7 +320,7 @@
 .m-section-row:hover,
 .m-section-row:focus-visible,
 .m-section-row:active {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
   outline: none;
 }
 .m-section-row:hover::before,
@@ -1045,7 +1045,7 @@
 }
 
 .ed-cal__day--in-range {
-  background: rgba(220, 38, 38, 0.045);
+  background: var(--row-hover-bg);
 }
 
 .ed-cal__day--start,

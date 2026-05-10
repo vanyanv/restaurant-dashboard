@@ -14,22 +14,13 @@
 // the lines populated by the calibration-update step (Phase 4). Earlier
 // counts written before that pipeline existed are ignored.
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
   classifyWastePattern,
   type WasteClassification,
   type WasteClusterLabel,
 } from "@/lib/inventory/waste-clustering"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
+import { getCachedSession, resolveStoreContext } from "./_shared"
 
 const DEFAULT_LOOKBACK_WEEKS = 12
 
@@ -66,7 +57,7 @@ export async function getWasteRootCauses(input: {
   lookbackWeeks?: number
   asOf?: Date
 }): Promise<GetWasteClusterResult | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
+  const session = await getCachedSession()
   const user = session?.user ?? null
   if (!user) return null
 
@@ -76,26 +67,9 @@ export async function getWasteRootCauses(input: {
   const windowStart = new Date(windowEnd)
   windowStart.setUTCDate(windowStart.getUTCDate() - lookbackWeeks * 7)
 
-  let storeId: string | null = null
-  let storeName: string | null = null
-  const storeNameById = new Map<string, string>()
-  if (input.storeId) {
-    const store = await prisma.store.findFirst({
-      where: { id: input.storeId, accountId: user.accountId },
-      select: { id: true, name: true },
-    })
-    if (!store) return { ok: false, error: "store_not_in_account" }
-    storeId = store.id
-    storeName = store.name
-    storeNameById.set(store.id, store.name)
-  } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: { id: true, name: true },
-    })
-    for (const s of stores) storeNameById.set(s.id, s.name)
-    storeName = "All stores"
-  }
+  const resolved = await resolveStoreContext(input.storeId, user.accountId)
+  if (!resolved.ok) return resolved
+  const { storeName, storeNameById, storeIdOut: storeId } = resolved.ctx
 
   // Lines from completed counts in the window with a frozen estimate.
   const lines = await prisma.stockCountLine.findMany({

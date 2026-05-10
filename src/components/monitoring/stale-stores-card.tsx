@@ -39,7 +39,7 @@ export function StaleStoresCard({ rows }: { rows: StaleStoreRow[] }) {
                 gridTemplateColumns: "1fr 140px 100px",
                 gap: 16,
                 alignItems: "baseline",
-                background: r.isStale ? "rgba(220,38,38,0.045)" : undefined,
+                background: r.isStale ? "var(--row-hover-bg)" : undefined,
               }}
             >
               <span style={{ ...fraunces17, color: "var(--ink)" }}>{r.storeName}</span>

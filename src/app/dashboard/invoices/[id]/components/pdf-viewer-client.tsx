@@ -169,7 +169,7 @@ export default function PdfViewerClient({
       className="flex h-full w-full flex-col rounded-xs border border-(--hairline-bold) bg-(--paper-warm) focus:outline-hidden focus-visible:ring-1 focus-visible:ring-(--accent)"
     >
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-(--hairline) bg-(--paper)/90 backdrop-blur px-2 py-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-(--hairline-bold) bg-(--paper) px-2 py-1.5">
         <div className="flex items-center gap-1">
           <Button
             size="icon"

@@ -93,7 +93,7 @@ export function StoreSyncGrid({ grid }: { grid: StoreSyncGrid }) {
                       style={{
                         padding: "10px 12px",
                         borderBottom: "1px solid var(--hairline)",
-                        background: isProblem ? "rgba(220,38,38,0.045)" : undefined,
+                        background: isProblem ? "var(--row-hover-bg)" : undefined,
                         verticalAlign: "top",
                         whiteSpace: "nowrap",
                       }}
