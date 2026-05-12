@@ -7,7 +7,7 @@
 
 CREATE TABLE IF NOT EXISTS "MlForecastEvaluation" (
   "id"                  TEXT PRIMARY KEY,
-  "target"              TEXT NOT NULL,
+  "target"              "MlTarget" NOT NULL,
   "storeId"             TEXT NOT NULL,
   "modelVersion"        TEXT NOT NULL,
   "horizonDay"          INTEGER NOT NULL DEFAULT 0,

@@ -389,14 +389,20 @@ Append to `prisma/schema.prisma` (after the existing `ForecastMenuItem` model ar
 /// Written nightly by `ml/evaluation/evaluator.py` after reconciliation.
 /// Reads are powered by `src/app/actions/forecasts/quality-actions.ts`
 /// (to be added in Phase 1 Weeks 5–8) and chat tool `getForecastQuality`.
+///
+/// Target taxonomy: REVENUE / MENU_ITEM are inherently daily; BUSY_HOURS is
+/// inherently hourly. Granularity is implicit in the enum value. The Python
+/// pipeline writes the enum value as an uppercase string ("REVENUE",
+/// "BUSY_HOURS", "MENU_ITEM") via raw SQL — Postgres coerces it to the
+/// `MlTarget` enum on insert.
 model MlForecastEvaluation {
   id                 String   @id @default(cuid())
-  /// One of: "revenue_daily", "orders_hourly", "menu_item_daily".
-  target             String
+  /// REVENUE / MENU_ITEM (daily) or BUSY_HOURS (hourly). Granularity is implicit.
+  target             MlTarget
   storeId            String
   /// modelVersion of the forecasts being evaluated (matches Forecast*.modelVersion).
   modelVersion       String
-  /// 0 = whole-day (revenue/menu_item). 0-23 = hour bucket (orders_hourly only).
+  /// 0 = whole-day (REVENUE/MENU_ITEM). 0-23 = hour bucket (BUSY_HOURS only).
   horizonDay         Int      @default(0)
   /// Inclusive evaluation window in business dates.
   windowStart        DateTime @db.Date
@@ -1099,7 +1105,7 @@ def _make_input():
     p97_5   = preds + 60.0
     baseline_preds = np.array([105.0, 195.0, 295.0, 245.0, 195.0, 215.0, 265.0])
     return EvaluationInput(
-        target="revenue_daily",
+        target="REVENUE",
         store_id="s1",
         model_version="rev-2026-05-12",
         horizon_day=0,
@@ -1121,7 +1127,7 @@ def test_build_evaluation_row_populates_all_metrics():
     inp = _make_input()
     row = build_evaluation_row(inp)
 
-    assert row["target"] == "revenue_daily"
+    assert row["target"] == "REVENUE"
     assert row["storeId"] == "s1"
     assert row["sampleSize"] == 7
     assert row["wape"] is not None
@@ -1137,7 +1143,7 @@ def test_build_evaluation_row_populates_all_metrics():
 
 def test_build_evaluation_row_handles_zero_sample():
     inp = EvaluationInput(
-        target="revenue_daily",
+        target="REVENUE",
         store_id="s1",
         model_version="rev-2026-05-12",
         horizon_day=0,
@@ -1633,7 +1639,7 @@ def run_evaluation_pass(conn, store_id: str, today: date) -> None:
     window_end = today - timedelta(days=1)
     window_start = window_end - timedelta(days=27)
 
-    # 1) revenue_daily
+    # 1) REVENUE (daily)
     revenue_rows = _fetch_reconciled_revenue(conn, store_id, window_start, window_end)
     if revenue_rows.empty:
         return
@@ -1643,7 +1649,7 @@ def run_evaluation_pass(conn, store_id: str, today: date) -> None:
         horizon_days=len(revenue_rows),
     )
     inp = EvaluationInput(
-        target="revenue_daily",
+        target="REVENUE",
         store_id=store_id,
         model_version=revenue_rows["modelVersion"].iloc[-1],
         horizon_day=0,
@@ -1661,7 +1667,7 @@ def run_evaluation_pass(conn, store_id: str, today: date) -> None:
     )
     upsert_evaluation_row(conn, build_evaluation_row(inp))
 
-    # Repeat for orders_hourly and menu_item_daily — analogous shape.
+    # Repeat for BUSY_HOURS (hourly) and MENU_ITEM (daily) — analogous shape.
 ```
 
 Add `_fetch_reconciled_revenue` / `_fetch_reconciled_hourly_orders` / `_fetch_reconciled_menu_item` helpers that join the forecast table with itself on `reconciledAt IS NOT NULL` and return a DataFrame.
@@ -1768,7 +1774,7 @@ Adjust `notes` column name to whatever `MlTrainingRun` actually uses for the sta
 psql "$DATABASE_URL" -c "
 SELECT \"storeId\", AVG(\"intervalCoverage80\") AS avg_coverage_80
 FROM \"MlForecastEvaluation\"
-WHERE target = 'revenue_daily' AND \"computedAt\" > NOW() - INTERVAL '7 days'
+WHERE target = 'REVENUE' AND \"computedAt\" > NOW() - INTERVAL '7 days'
 GROUP BY 1;"
 ```
 

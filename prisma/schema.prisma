@@ -1439,8 +1439,8 @@ model ForecastMenuItem {
 /// (to be added in Phase 1 Weeks 5–8) and chat tool `getForecastQuality`.
 model MlForecastEvaluation {
   id                 String   @id @default(cuid())
-  /// One of: "revenue_daily", "orders_hourly", "menu_item_daily".
-  target             String
+  /// REVENUE / MENU_ITEM (daily) or BUSY_HOURS (hourly). Granularity is implicit.
+  target             MlTarget
   storeId            String
   /// modelVersion of the forecasts being evaluated (matches Forecast*.modelVersion).
   modelVersion       String
