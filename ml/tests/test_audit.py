@@ -13,3 +13,14 @@ def test_summarize_reconciliation_returns_per_table_coverage():
     assert summary["ForecastMenuItem"]["coverage_pct"] == 100.0
     assert summary["ForecastDailyRevenue"]["passes_80pct_gate"] is True
     assert summary["ForecastHourlyOrders"]["passes_80pct_gate"] is False
+
+
+def test_summarize_reconciliation_handles_zero_total():
+    rows = [
+        {"table": "ForecastDailyRevenue", "total": 0, "reconciled": 0},
+    ]
+    summary = summarize_reconciliation(rows)
+    assert summary["ForecastDailyRevenue"]["total"] == 0
+    assert summary["ForecastDailyRevenue"]["reconciled"] == 0
+    assert summary["ForecastDailyRevenue"]["coverage_pct"] == 0.0
+    assert summary["ForecastDailyRevenue"]["passes_80pct_gate"] is False
