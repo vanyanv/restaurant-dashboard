@@ -15,20 +15,22 @@ from xgboost import XGBRegressor
 @dataclass
 class ConformalWrapper:
     point_model: XGBRegressor
-    mapie80: MapieRegressor
-    mapie95: MapieRegressor
+    mapie: MapieRegressor
 
     def predict_intervals(
         self, X: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Return (point, lower80, upper80, lower95, upper95)."""
         point = self.point_model.predict(X)
-        _, intervals80 = self.mapie80.predict(X, alpha=0.2)
-        _, intervals95 = self.mapie95.predict(X, alpha=0.05)
-        lower80 = intervals80[:, 0, 0]
-        upper80 = intervals80[:, 1, 0]
-        lower95 = intervals95[:, 0, 0]
-        upper95 = intervals95[:, 1, 0]
+        # MAPIE with method="base" + cv="prefit" computes conformity scores at
+        # fit time and applies alpha at predict time, so a single fitted object
+        # can produce multiple intervals via alpha=[...]. Resulting intervals
+        # have shape (n_samples, 2, len(alpha)).
+        _, intervals = self.mapie.predict(X, alpha=[0.2, 0.05])
+        lower80 = intervals[:, 0, 0]
+        upper80 = intervals[:, 1, 0]
+        lower95 = intervals[:, 0, 1]
+        upper95 = intervals[:, 1, 1]
         return point, lower80, upper80, lower95, upper95
 
 
@@ -39,16 +41,12 @@ def wrap_xgboost_conformal(
     X_calib: np.ndarray,
     y_calib: np.ndarray,
 ) -> ConformalWrapper:
-    """Fit `base` on train, fit two MAPIE wrappers (80% and 95%) on calib.
+    """Fit `base` on train, fit one MAPIE wrapper on calib.
 
     The calibration set MUST be disjoint from the training set to preserve
     the conformal coverage guarantee. Callers are responsible for the split.
     """
     base.fit(X_train, y_train)
-
-    mapie80 = MapieRegressor(estimator=base, method="base", cv="prefit")
-    mapie80.fit(X_calib, y_calib)
-    mapie95 = MapieRegressor(estimator=base, method="base", cv="prefit")
-    mapie95.fit(X_calib, y_calib)
-
-    return ConformalWrapper(point_model=base, mapie80=mapie80, mapie95=mapie95)
+    mapie = MapieRegressor(estimator=base, method="base", cv="prefit")
+    mapie.fit(X_calib, y_calib)
+    return ConformalWrapper(point_model=base, mapie=mapie)
