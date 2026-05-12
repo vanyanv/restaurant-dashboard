@@ -106,6 +106,7 @@ def _seasonal_naive_wape_from_holdout(
     history: pd.DataFrame,
     *,
     granularity: str,
+    value_col: str,
 ) -> Optional[float]:
     """Compute the seasonal-naive WAPE on the same `y_true` rows.
 
@@ -113,6 +114,11 @@ def _seasonal_naive_wape_from_holdout(
     prediction for row i is history[value at i-7d]; for hourly it's
     history[value at i-168h]. We approximate by aligning the trailing
     portion of `history` against `y_true` and shifting by the season.
+
+    `value_col` is the name of the target column in `history` ("revenue"
+    for REVENUE, "orders" for BUSY_HOURS). Required — no default — to
+    avoid the silent-wrong-column failure mode if upstream adds columns
+    after the target.
 
     Returns None when history is shorter than one full season.
     """
@@ -124,10 +130,16 @@ def _seasonal_naive_wape_from_holdout(
     if len(history) < season + len(y_true):
         return None
 
+    if value_col not in history.columns:
+        raise KeyError(
+            f"_seasonal_naive_wape_from_holdout: value_col={value_col!r} "
+            f"not in history columns {list(history.columns)}"
+        )
+
     # The naive prediction for the last len(y_true) rows is the value
     # `season` steps earlier in history. We assume `history` is the full
     # observed series including the holdout rows.
-    values = history.iloc[:, -1].to_numpy(dtype=float)  # last column is the target
+    values = history[value_col].to_numpy(dtype=float)
     if len(values) < season + len(y_true):
         return None
     holdout_preds = values[-(season + len(y_true)) : -season]
@@ -198,10 +210,14 @@ def select_with_gate(
     baseline_wape = metrics.wape(np.asarray(baseline_y_true, dtype=float),
                                  np.asarray(baseline_y_pred, dtype=float))
 
+    # Pick the explicit target column name by target — never rely on
+    # column-order positional access (silent breakage if upstream adds columns).
+    value_col = "orders" if target == "BUSY_HOURS" else "revenue"
     naive_wape = _seasonal_naive_wape_from_holdout(
         np.asarray(enriched_y_true, dtype=float),
         model_history,
         granularity=granularity,
+        value_col=value_col,
     )
 
     if enriched_wape is None or baseline_wape is None or naive_wape is None:

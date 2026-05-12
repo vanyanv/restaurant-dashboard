@@ -36,7 +36,9 @@ def _daily_history(days: int = 60, seed: int = 1) -> pd.DataFrame:
     weekday = dates.weekday.to_numpy()
     base = 1000.0 + 200.0 * (weekday >= 5)
     noise = rng.normal(scale=50.0, size=days)
-    return pd.DataFrame({"date": dates, "value": base + noise})
+    # Column is named "revenue" so the explicit value_col in select_with_gate
+    # (target=REVENUE -> "revenue") finds it.
+    return pd.DataFrame({"date": dates, "revenue": base + noise})
 
 
 def test_enriched_promotes_when_beating_both_baselines():
@@ -44,7 +46,7 @@ def test_enriched_promotes_when_beating_both_baselines():
     # Enriched predictions tightly track true values; baseline-XGB clearly worse;
     # seasonal-naive WAPE on the underlying weekly-seasonal series will also be
     # clearly worse than the near-perfect enriched fit.
-    actuals = history["value"].to_numpy()[-14:]
+    actuals = history["revenue"].to_numpy()[-14:]
     enriched_pred = actuals * 1.005  # ~0.5% off
     baseline_pred = actuals * 1.15   # ~15% off
 
@@ -65,11 +67,11 @@ def test_enriched_promotes_when_beating_both_baselines():
 
 def test_enriched_falls_back_when_seasonal_naive_too_close():
     history = _daily_history(60)
-    actuals = history["value"].to_numpy()[-14:]
+    actuals = history["revenue"].to_numpy()[-14:]
     # The strongly weekly-seasonal series makes seasonal-naive a tough
     # baseline. Compute it explicitly on the same window so we know its
     # WAPE precisely, then make enriched only marginally better.
-    naive_pred = history["value"].to_numpy()[-21:-7]
+    naive_pred = history["revenue"].to_numpy()[-21:-7]
     naive_resid = actuals - naive_pred
     naive_wape = float(np.sum(np.abs(naive_resid))) / float(np.sum(np.abs(actuals)))
     # Enriched only ~2% relative improvement vs seasonal-naive — below threshold.
@@ -98,7 +100,7 @@ def test_enriched_falls_back_when_seasonal_naive_too_close():
 def test_falls_back_to_old_gate_when_holdout_too_short():
     # Daily history with <7 days — seasonal-naive cannot be computed.
     short_history = _daily_history(5)
-    actuals = short_history["value"].to_numpy()
+    actuals = short_history["revenue"].to_numpy()
     enriched_pred = actuals * 1.005
     baseline_pred = actuals * 1.15
 
@@ -121,7 +123,7 @@ def test_falls_back_to_old_gate_when_holdout_too_short():
 
 def test_enriched_none_returns_baseline():
     history = _daily_history(60)
-    actuals = history["value"].to_numpy()[-14:]
+    actuals = history["revenue"].to_numpy()[-14:]
     baseline = _Result(mape=0.10, mae=80.0, holdout_y_true=actuals,
                        holdout_y_pred=actuals * 1.10)
     chosen, label, _ = select_with_gate(
