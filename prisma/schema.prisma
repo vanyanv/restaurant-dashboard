@@ -569,6 +569,16 @@ model CanonicalIngredient {
   photoContentType  String?
   photoUploadedAt   DateTime?
 
+  /// Pack definition for three-tier mobile stock counting.
+  /// `caseUnit` + `recipeUnitsPerCase` define tier 1 (case-level). Both null
+  /// hides the case tier and the count card falls back to canonical-only.
+  /// `innerPackUnit` + `innerPacksPerCase` define tier 2 (inner-pack); both
+  /// null hides that tier (e.g. catch-weight meat has no inner pack).
+  caseUnit               String?
+  innerPackUnit          String?
+  recipeUnitsPerCase     Float?
+  innerPacksPerCase      Float?
+
   owner                User                   @relation(fields: [ownerId], references: [id])
   account              Account                @relation(fields: [accountId], references: [id])
   aliases              IngredientAlias[]

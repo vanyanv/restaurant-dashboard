@@ -99,9 +99,18 @@ export async function saveCountLine(input: {
   sessionId: string
   ingredientId: string
   qty: number
+  /** Audit trail: how the operator typed it (e.g. "1.25 CS" → 1.25, "CS"). */
+  nativeQty?: number | null
+  nativeUnit?: string | null
 }): Promise<SaveCountLineResult> {
   if (!Number.isFinite(input.qty) || input.qty < 0) {
     throw new Error("qty must be a non-negative number")
+  }
+  if (
+    input.nativeQty != null &&
+    (!Number.isFinite(input.nativeQty) || input.nativeQty < 0)
+  ) {
+    throw new Error("nativeQty must be a non-negative number")
   }
   const { me, stockCount } = await requireSessionAndOwnership(input.sessionId)
   if (stockCount.status !== StockCountStatus.IN_PROGRESS) {
@@ -114,6 +123,9 @@ export async function saveCountLine(input: {
   })
   if (!ingredient) throw new Error("Ingredient not found")
 
+  const nativeQty = input.nativeQty ?? null
+  const nativeUnit = input.nativeUnit?.trim() || null
+
   const upserted = await prisma.stockCountLine.upsert({
     where: {
       stockCountId_canonicalIngredientId: {
@@ -125,9 +137,13 @@ export async function saveCountLine(input: {
       stockCountId: input.sessionId,
       canonicalIngredientId: input.ingredientId,
       qtyInRecipeUnit: input.qty,
+      nativeQty,
+      nativeUnit,
     },
     update: {
       qtyInRecipeUnit: input.qty,
+      nativeQty,
+      nativeUnit,
     },
     select: { id: true },
   })
