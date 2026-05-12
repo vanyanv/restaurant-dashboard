@@ -221,6 +221,10 @@ export function MatchPickerSheet({
           trend30d: null,
           hasPhoto: false,
           photoVersion: null,
+          caseUnit: null,
+          innerPackUnit: null,
+          recipeUnitsPerCase: null,
+          innerPacksPerCase: null,
         })
         onMatched(group.key, result.canonicalIngredientId)
         onOpenChange(false)

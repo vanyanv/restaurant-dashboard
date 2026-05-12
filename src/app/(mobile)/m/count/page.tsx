@@ -42,7 +42,11 @@ export default async function MobileCountPage({
 
   if (requestedSessionId) {
     return (
-      <SessionView sessionId={requestedSessionId} accountId={accountId} />
+      <SessionView
+        sessionId={requestedSessionId}
+        accountId={accountId}
+        canEditDefinition={session.user.role === "DEVELOPER"}
+      />
     )
   }
 
@@ -148,9 +152,11 @@ export default async function MobileCountPage({
 async function SessionView({
   sessionId,
   accountId,
+  canEditDefinition,
 }: {
   sessionId: string
   accountId: string
+  canEditDefinition: boolean
 }) {
   const stockCount = await prisma.stockCount.findFirst({
     where: { id: sessionId, store: { accountId } },
@@ -208,6 +214,12 @@ async function SessionView({
       name: true,
       category: true,
       recipeUnit: true,
+      photoBlobPathname: true,
+      photoUploadedAt: true,
+      caseUnit: true,
+      innerPackUnit: true,
+      recipeUnitsPerCase: true,
+      innerPacksPerCase: true,
     },
     orderBy: [{ category: "asc" }, { name: "asc" }],
   })
@@ -217,6 +229,12 @@ async function SessionView({
     name: i.name,
     category: i.category,
     recipeUnit: i.recipeUnit,
+    hasPhoto: i.photoBlobPathname != null,
+    photoVersion: i.photoUploadedAt?.toISOString() ?? null,
+    caseUnit: i.caseUnit,
+    innerPackUnit: i.innerPackUnit,
+    recipeUnitsPerCase: i.recipeUnitsPerCase,
+    innerPacksPerCase: i.innerPacksPerCase,
   }))
 
   return (
@@ -231,6 +249,7 @@ async function SessionView({
         storeId={stockCount.storeId}
         storeName={stockCount.store.name}
         ingredients={list}
+        canEditDefinition={canEditDefinition}
         initialLines={stockCount.lines.map((l) => ({
           ingredientId: l.canonicalIngredientId,
           qty: l.qtyInRecipeUnit,
