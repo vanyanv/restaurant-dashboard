@@ -29,7 +29,11 @@ from ml.evaluation.evaluator import EvaluationInput, build_evaluation_row, upser
 
 _LOG = logging.getLogger(__name__)
 
-_EVAL_WINDOW_DAYS = 28
+# 35 days so the trailing 28d evaluation window always has a full t-7 lookback
+# for seasonal-naive. With a 28d window the first 7 days have no t-7 reference
+# in `by_date` and silently fall back to `actual` (0 error), biasing baselineWape
+# toward zero. 35d = 28d evaluation + 7d seasonal-naive prefix.
+_EVAL_WINDOW_DAYS = 35
 _CONSISTENCY_WINDOW_DAYS = 14
 _DISCREPANCY_THRESHOLD_PCT = 15.0
 
@@ -189,14 +193,31 @@ def _fetch_future_items_with_price(conn, store_id: str, today: dt.date) -> list[
 
 def _seasonal_naive_baseline(dates: list[dt.date], actuals: np.ndarray) -> np.ndarray:
     """Compute y[t-7] from the observed actuals, falling back to the row's own
-    actual when t-7 is not in the window (window can be exactly 28 days but
-    the first 7 may not have a t-7 reference).
+    actual when t-7 is not in the window.
+
+    With the 35-day fetch window paired with the 28-day evaluation window the
+    fallback should essentially never fire — every evaluation date has its t-7
+    reference in `by_date`. We still log the fallback count when >0 so
+    pre-rollout edges (sparse history, gaps in reconciliation) are visible
+    instead of silently biasing baselineWape toward zero.
     """
     by_date = {d: float(a) for d, a in zip(dates, actuals)}
     out = []
+    fallback_count = 0
     for d, a in zip(dates, actuals):
         prev = by_date.get(d - dt.timedelta(days=7))
-        out.append(float(prev) if prev is not None else float(a))
+        if prev is None:
+            fallback_count += 1
+            out.append(float(a))
+        else:
+            out.append(float(prev))
+    if fallback_count > 0:
+        _LOG.debug(
+            "_seasonal_naive_baseline: %d/%d rows fell back to actual "
+            "(no t-7 reference in window)",
+            fallback_count,
+            len(dates),
+        )
     return np.asarray(out, dtype=float)
 
 
