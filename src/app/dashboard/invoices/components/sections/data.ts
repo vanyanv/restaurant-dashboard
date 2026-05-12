@@ -55,7 +55,7 @@ function formatRangeLabel(start: Date, end: Date): string {
     day: "numeric",
     year: "numeric",
   })
-  return `${startFmt} — ${endFmt}`
+  return `${startFmt} to ${endFmt}`
 }
 
 export function resolvePeriod(

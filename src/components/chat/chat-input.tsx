@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { SendHorizontal } from "lucide-react"
 
 interface Props {
   onSubmit: (text: string) => void
@@ -10,6 +11,7 @@ interface Props {
   error?: string | null
   /** When the parent wants to seed the input (e.g. clicked a suggestion). */
   initialText?: string
+  metaHint?: string
 }
 
 /** Composer in the search-shell register. Single textarea that auto-grows
@@ -21,9 +23,11 @@ export function ChatInput({
   isStreaming,
   error,
   initialText,
+  metaHint = "⌘K to toggle · Esc to close · Shift+Enter for newline",
 }: Props) {
   const [value, setValue] = useState("")
   const ref = useRef<HTMLTextAreaElement>(null)
+  const canSend = value.trim().length > 0 && !disabled
 
   useEffect(() => {
     if (initialText) {
@@ -55,7 +59,11 @@ export function ChatInput({
           className="chat-input"
           rows={1}
           value={value}
-          placeholder={isStreaming ? "Answering…" : "Ask about sales, costs, invoices, or menu prices."}
+          placeholder={
+            isStreaming
+              ? "Answering…"
+              : "Ask about sales, costs, invoices, or menu prices."
+          }
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -76,21 +84,21 @@ export function ChatInput({
           aria-label="Chat input"
         />
         {isStreaming ? (
-          <span
-            className="live-dot"
-            aria-label="streaming"
-            title="streaming"
-          />
+          <span className="live-dot" aria-label="streaming" title="streaming" />
         ) : (
-          <span className="kbd-chip" aria-hidden>
-            ↵
-          </span>
+          <button
+            type="button"
+            className="chat-input-send"
+            onClick={submit}
+            disabled={!canSend}
+            aria-label="Send message"
+          >
+            <SendHorizontal aria-hidden />
+          </button>
         )}
       </div>
       <div className="chat-input-meta">
-        <span className="chat-input-meta__hint">
-          ⌘K to toggle · Esc to close · Shift+Enter for newline
-        </span>
+        <span className="chat-input-meta__hint">{metaHint}</span>
         {error && <span className="chat-input-meta__error">{error}</span>}
       </div>
     </div>

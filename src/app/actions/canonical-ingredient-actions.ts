@@ -70,6 +70,8 @@ export async function listCanonicalIngredients(): Promise<
       latestVendor: cost?.sourceVendor ? normalizeVendorName(cost.sourceVendor) : null,
       latestSku: cost?.sourceSku ?? null,
       trend30d: trendsByCanonical.get(c.id) ?? null,
+      hasPhoto: c.photoBlobPathname != null,
+      photoVersion: c.photoUploadedAt ? c.photoUploadedAt.toISOString() : null,
     }
   })
 }

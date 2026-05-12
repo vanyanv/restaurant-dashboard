@@ -13,6 +13,7 @@ export default async function MobileIngredientsPage() {
   if (!session) redirect("/login")
 
   const ingredients = await listCanonicalIngredients()
+  const canUploadPhotos = session.user.role === "DEVELOPER"
 
   const rows = ingredients.map((i) => ({
     id: i.id,
@@ -22,27 +23,32 @@ export default async function MobileIngredientsPage() {
     recipeUnit: i.recipeUnit,
     costPerRecipeUnit: i.costPerRecipeUnit,
     trendPct: i.trend30d?.pctChange ?? null,
+    hasPhoto: i.hasPhoto,
+    photoVersion: i.photoVersion,
   }))
 
   const costed = rows.filter((r) => r.costPerRecipeUnit != null).length
+  const photographed = rows.filter((r) => r.hasPhoto).length
 
   return (
     <>
       <PageHead
         dept="CATALOG"
         title="Ingredients"
-        sub={`${rows.length} canonical · ${costed} costed`}
+        sub={`${rows.length} canonical · ${costed} costed · ${photographed} with photo`}
       />
 
       <div className="dock-in dock-in-2" style={{ marginBottom: 14 }}>
         <div className="m-readonly-note">
-          Read-only on mobile · edit costs and aliases on desktop
+          {canUploadPhotos
+            ? "Tap any row to view or replace its reference photo."
+            : "Read-only on mobile · edit costs and aliases on desktop"}
         </div>
       </div>
 
       <div className="dock-in dock-in-3">
         <Panel flush>
-          <IngredientsSearch rows={rows} />
+          <IngredientsSearch rows={rows} canUploadPhotos={canUploadPhotos} />
         </Panel>
       </div>
     </>

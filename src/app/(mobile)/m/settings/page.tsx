@@ -36,7 +36,7 @@ export default async function MobileSettingsPage() {
           <Link
             href="/dashboard/settings"
             prefetch={false}
-            className="toolbar-btn"
+            className="m-toolbar-btn"
             style={{ display: "inline-block" }}
           >
             Open on desktop →
@@ -48,7 +48,12 @@ export default async function MobileSettingsPage() {
         <Panel flush>
           <SectionList
             sections={[
-              { href: "/api/auth/signout", label: "Sign out", dept: "SESSION" },
+              {
+                href: "/api/auth/signout",
+                label: "Sign out",
+                dept: "SESSION",
+                group: "Account",
+              },
             ]}
           />
         </Panel>

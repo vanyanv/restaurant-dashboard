@@ -4,6 +4,7 @@ import {
   findPackShapeAnomalies,
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
+  parsePerCaseWeights,
 } from "@/lib/invoice-sanity"
 
 function extraction(
@@ -39,16 +40,153 @@ function extraction(
   }
 }
 
+describe("parsePerCaseWeights", () => {
+  it("returns null for null or empty descriptions", () => {
+    expect(parsePerCaseWeights(null)).toBeNull()
+    expect(parsePerCaseWeights("")).toBeNull()
+  })
+
+  it("extracts a comma-separated weight list from a Premier Meats description", () => {
+    const result = parsePerCaseWeights(
+      "EDIT PER REP 71.05, 71.25, 71.05, 71.05, 71.05, 71.05\n" +
+        "*Pork CA Prop12 Compliant* *Veal CA Prop12 Compliant* Thank you for your Business!!"
+    )
+    expect(result).toEqual([71.05, 71.25, 71.05, 71.05, 71.05, 71.05])
+  })
+
+  it("handles a leading 'Weights:' label", () => {
+    expect(parsePerCaseWeights("Weights: 71.25, 71.25, 71.25, 71.25, 71.05, 69.85")).toEqual([
+      71.25, 71.25, 71.25, 71.25, 71.05, 69.85,
+    ])
+  })
+
+  it("returns the longest comma-separated run when there are interspersed numbers", () => {
+    expect(
+      parsePerCaseWeights("70.45, 70.45, 71.05, 70.25, 70.45, 70.25, 70.45, 70.65, 70.45")
+    ).toEqual([70.45, 70.45, 71.05, 70.25, 70.45, 70.25, 70.45, 70.65, 70.45])
+  })
+
+  it("returns null when only one weight is present", () => {
+    expect(parsePerCaseWeights("Weight: 70.45 lb. Thanks!")).toBeNull()
+  })
+
+  it("returns null when no weight-like numbers are present", () => {
+    expect(parsePerCaseWeights("*Pork CA Prop12 Compliant* Thank you for your Business!!")).toBeNull()
+  })
+
+  it("rejects runs containing numbers outside the [0.25, 200] plausible weight range", () => {
+    // Wildly oversized numbers — not realistic per-case weights
+    expect(parsePerCaseWeights("Item ids: 9999, 9999, 9999")).toBeNull()
+  })
+})
+
 describe("normalizeCatchWeightMeatLines", () => {
-  it("converts Premier/Crystal Bay carton-count meat mistakes to implied LB weight", () => {
+  it("converts Premier/Crystal Bay carton-count meat mistakes to implied LB weight and infers pack fields from the original carton count", () => {
     const result = normalizeCatchWeightMeatLines(extraction())
     const line = result.lineItems[0]
 
     expect(line.quantity).toBeCloseTo(426.5, 3)
     expect(line.unit).toBe("LB")
-    expect(line.packSize).toBeNull()
-    expect(line.unitSize).toBeNull()
-    expect(line.unitSizeUom).toBeNull()
+    // Carton count (6 CS) is preserved as packSize; unitSize derived from total/count.
+    expect(line.packSize).toBe(6)
+    expect(line.unitSize).toBeCloseTo(71.083, 2)
+    expect(line.unitSizeUom).toBe("LB")
+  })
+
+  it("uses per-case weights from description when available (invoice 2262868 verbatim)", () => {
+    const result = normalizeCatchWeightMeatLines(
+      extraction({
+        invoiceNumber: "2262868",
+        subtotal: 2753.51,
+        totalAmount: 2753.51,
+        lineItems: [
+          {
+            lineNumber: 1,
+            sku: "0014046-01",
+            productName: "GROUND BEEF FINE GRND 73/27 CREEKSTONE",
+            description:
+              "70.45, 70.45, 71.05, 70.25, 70.45, 70.25, 70.45, 70.65, 70.45\n" +
+              "*Pork CA Prop12 Compliant* *Veal CA Prop12 Compliant* Thank you for your Business!!",
+            category: "Meat",
+            quantity: 9,
+            unit: "CS",
+            packSize: null,
+            unitSize: null,
+            unitSizeUom: null,
+            unitPrice: 4.34,
+            extendedPrice: 2753.51,
+          },
+        ],
+      })
+    )
+
+    const line = result.lineItems[0]
+    expect(line.quantity).toBeCloseTo(634.45, 2)
+    expect(line.unit).toBe("LB")
+    expect(line.packSize).toBe(9)
+    expect(line.unitSize).toBeCloseTo(70.494, 2)
+    expect(line.unitSizeUom).toBe("LB")
+  })
+
+  it("falls back to packSize=null when the original quantity is not a plausible case count and description has no weights", () => {
+    // Quantity of 99 cases isn't a plausible carton count for a single line.
+    const result = normalizeCatchWeightMeatLines(
+      extraction({
+        lineItems: [
+          {
+            lineNumber: 1,
+            sku: "0014046-01",
+            productName: "GROUND BEEF FINE GRND 73/27 CREEKSTONE",
+            description: null,
+            category: "Meat",
+            quantity: 99,
+            unit: "CS",
+            packSize: null,
+            unitSize: null,
+            unitSizeUom: null,
+            unitPrice: 4.34,
+            extendedPrice: 1851.01,
+          },
+        ],
+      })
+    )
+
+    expect(result.lineItems[0].unit).toBe("LB")
+    expect(result.lineItems[0].packSize).toBeNull()
+    expect(result.lineItems[0].unitSize).toBeNull()
+    expect(result.lineItems[0].unitSizeUom).toBeNull()
+  })
+
+  it("does not touch non-meat lines even when math doesn't reconcile", () => {
+    const result = normalizeCatchWeightMeatLines(
+      extraction({
+        vendorName: "Sysco",
+        lineItems: [
+          {
+            lineNumber: 1,
+            sku: "1763432",
+            productName: "Imported Fresh Tomato Bulk 5x6",
+            description: null,
+            category: "Produce",
+            quantity: 1,
+            unit: "CS",
+            packSize: 1,
+            unitSize: 25,
+            unitSizeUom: "LB",
+            unitPrice: 38.5,
+            extendedPrice: 38.5,
+          },
+        ],
+      })
+    )
+
+    expect(result.lineItems[0]).toMatchObject({
+      quantity: 1,
+      unit: "CS",
+      packSize: 1,
+      unitSize: 25,
+      unitSizeUom: "LB",
+    })
   })
 
   it("leaves already-correct catch-weight meat unchanged", () => {
@@ -82,7 +220,7 @@ describe("normalizeCatchWeightMeatLines", () => {
     })
   })
 
-  it("preserves a negative implied LB quantity on return meat lines", () => {
+  it("preserves a negative implied LB quantity on return meat lines and infers absolute pack count", () => {
     const result = normalizeCatchWeightMeatLines(
       extraction({
         isReturn: true,
@@ -109,6 +247,10 @@ describe("normalizeCatchWeightMeatLines", () => {
 
     expect(result.lineItems[0].quantity).toBeCloseTo(-623.021, 3)
     expect(result.lineItems[0].unit).toBe("LB")
+    // Pack count is always positive even on returns.
+    expect(result.lineItems[0].packSize).toBe(6)
+    expect(result.lineItems[0].unitSize).toBeCloseTo(103.836, 2)
+    expect(result.lineItems[0].unitSizeUom).toBe("LB")
   })
 })
 

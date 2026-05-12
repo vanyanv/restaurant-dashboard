@@ -62,7 +62,9 @@ export default async function MobilePnLPage({
         <PageHead dept="P&L" title="Profit & Loss" sub={subLabel} />
         <MPnLToolbar pathname="/m/pnl" searchParams={sp} range={range} />
         <div className="m-empty dock-in dock-in-2">
-          <strong>Couldn&apos;t load P&amp;L.</strong> {result.error}
+          <strong>Couldn&apos;t load P&amp;L.</strong> Try another period or
+          return in a minute. The ledger kept the current range so you can
+          retry without rebuilding the view.
         </div>
       </div>
     )

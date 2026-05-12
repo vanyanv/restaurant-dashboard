@@ -217,58 +217,66 @@ export function MenuCatalogContent({ rows }: Props) {
             />
           )}
         </div>
-        <div className="menu-catalog-controls__section">
-          <span className="menu-catalog-controls__label">Category</span>
-          <div
-            className="menu-catalog-controls__scroll"
-            role="list"
-            aria-label="Category filters"
-          >
+        <FilterDisclosure
+          label="Category"
+          activeLabel={
+            activeCategory === "all" ? "All items" : String(activeCategory)
+          }
+          count={filtered.length}
+          total={enriched.length}
+          defaultOpen={activeCategory !== "all"}
+        >
+          <CategoryPill
+            label="All"
+            count={enriched.length}
+            active={activeCategory === "all"}
+            onClick={() => setActiveCategory("all")}
+          />
+          {categories.map(([cat, count]) => (
             <CategoryPill
-              label="All"
-              count={enriched.length}
-              active={activeCategory === "all"}
-              onClick={() => setActiveCategory("all")}
+              key={cat}
+              label={cat}
+              count={count}
+              active={activeCategory === cat}
+              onClick={() => setActiveCategory(cat)}
             />
-            {categories.map(([cat, count]) => (
-              <CategoryPill
-                key={cat}
-                label={cat}
-                count={count}
-                active={activeCategory === cat}
-                onClick={() => setActiveCategory(cat)}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="menu-catalog-controls__section menu-catalog-controls__section--attention">
-          <span className="menu-catalog-controls__label">Attention</span>
-          <div
-            className="menu-catalog-controls__scroll"
-            role="list"
-            aria-label="Attention filters"
-          >
-            {ATTENTION_CONFIG.map((cfg) => (
-              <AttentionPill
-                key={cfg.key}
-                label={cfg.label}
-                count={attentionCounts[cfg.key]}
-                tone={cfg.tone}
-                active={(activeAttention & ATTENTION_BITS[cfg.key]) !== 0}
-                onClick={() => toggleAttention(cfg.key)}
-              />
-            ))}
-            {activeAttention !== 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveAttention(0)}
-                className="toolbar-btn menu-filter-clear"
-              >
-                Clear attention
-              </button>
-            )}
-          </div>
-        </div>
+          ))}
+        </FilterDisclosure>
+        <FilterDisclosure
+          label="Attention"
+          activeLabel={
+            activeAttention === 0
+              ? "All signals"
+              : ATTENTION_CONFIG.filter(
+                  (cfg) => (activeAttention & ATTENTION_BITS[cfg.key]) !== 0,
+                )
+                  .map((cfg) => cfg.label)
+                  .join(" + ")
+          }
+          count={filtered.length}
+          total={enriched.length}
+          defaultOpen={activeAttention !== 0}
+        >
+          {ATTENTION_CONFIG.map((cfg) => (
+            <AttentionPill
+              key={cfg.key}
+              label={cfg.label}
+              count={attentionCounts[cfg.key]}
+              tone={cfg.tone}
+              active={(activeAttention & ATTENTION_BITS[cfg.key]) !== 0}
+              onClick={() => toggleAttention(cfg.key)}
+            />
+          ))}
+          {activeAttention !== 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveAttention(0)}
+              className="toolbar-btn menu-filter-clear"
+            >
+              Clear attention
+            </button>
+          )}
+        </FilterDisclosure>
       </div>
 
       <div
@@ -502,6 +510,41 @@ function AttentionPill({
       {label}
       <span className="menu-filter-pill__count">{count}</span>
     </button>
+  )
+}
+
+function FilterDisclosure({
+  label,
+  activeLabel,
+  count,
+  total,
+  defaultOpen,
+  children
+}: {
+  label: string
+  activeLabel: string
+  count: number
+  total: number
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <details className="menu-filter-disclosure" open={defaultOpen}>
+      <summary className="menu-filter-disclosure__summary">
+        <span className="menu-catalog-controls__label">{label}</span>
+        <span className="menu-filter-disclosure__state">{activeLabel}</span>
+        <span className="menu-filter-disclosure__count">
+          {count.toLocaleString()} / {total.toLocaleString()}
+        </span>
+      </summary>
+      <div
+        className="menu-catalog-controls__scroll"
+        role="list"
+        aria-label={`${label} filters`}
+      >
+        {children}
+      </div>
+    </details>
   )
 }
 

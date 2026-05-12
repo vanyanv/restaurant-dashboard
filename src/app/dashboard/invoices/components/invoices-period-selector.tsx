@@ -4,6 +4,7 @@ import { useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   DateRangePicker,
+  type DrawerPreset,
   type PresetOption,
 } from "@/components/analytics/date-range-picker"
 import type { InvoicePeriodKey } from "./sections/data"
@@ -16,10 +17,30 @@ interface InvoicesPeriodSelectorProps {
 }
 
 const INVOICE_PRESETS: readonly PresetOption[] = [
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-  { label: "Quarter", value: "3months" },
-  { label: "Year", value: "year" },
+  { label: "7 days", value: "week" },
+  { label: "30 days", value: "month" },
+  { label: "90 days", value: "3months" },
+  { label: "12 months", value: "year" },
+]
+
+const rollingWindow = (days: number) => (today: Date): [Date, Date] => {
+  const start = new Date(today)
+  start.setDate(start.getDate() - (days - 1))
+  return [start, today]
+}
+
+const lastTwelveMonths = (today: Date): [Date, Date] => {
+  const start = new Date(today)
+  start.setFullYear(start.getFullYear() - 1)
+  start.setDate(start.getDate() + 1)
+  return [start, today]
+}
+
+const INVOICE_DRAWER_PRESETS: DrawerPreset[] = [
+  { group: "Invoice ranges", label: "Last 7 days", compute: rollingWindow(7) },
+  { group: "Invoice ranges", label: "Last 30 days", compute: rollingWindow(30) },
+  { group: "Invoice ranges", label: "Last 90 days", compute: rollingWindow(90) },
+  { group: "Invoice ranges", label: "Last 12 months", compute: lastTwelveMonths },
 ]
 
 export function InvoicesPeriodSelector({
@@ -72,7 +93,7 @@ export function InvoicesPeriodSelector({
     >
       <div className="flex flex-col gap-0.5">
         <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-(--ink-faint)">
-          Ledger period
+          Invoice range
         </span>
         <span className="text-sm italic text-(--ink-muted)">{label}</span>
       </div>
@@ -83,6 +104,7 @@ export function InvoicesPeriodSelector({
         onRangeChange={handleRangeChange}
         isPending={isPending}
         presets={INVOICE_PRESETS}
+        drawerPresets={INVOICE_DRAWER_PRESETS}
         activePresetValue={period === "custom" ? undefined : period}
         onPresetClick={handlePresetClick}
       />
