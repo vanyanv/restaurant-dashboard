@@ -562,6 +562,13 @@ model CanonicalIngredient {
   costLocked        Boolean   @default(false)
   costUpdatedAt     DateTime?
 
+  /// Product reference photo stored in R2 under `products/{id}-{uuid}.{ext}`.
+  /// Set by the DEVELOPER-only mobile admin uploader; served through an
+  /// authenticated API route (no public URL). One photo per ingredient.
+  photoBlobPathname String?
+  photoContentType  String?
+  photoUploadedAt   DateTime?
+
   owner                User                   @relation(fields: [ownerId], references: [id])
   account              Account                @relation(fields: [accountId], references: [id])
   aliases              IngredientAlias[]

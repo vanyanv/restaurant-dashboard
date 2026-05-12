@@ -25,8 +25,15 @@ export function MobileRouteLoading({
 }: MobileLoadingProps) {
   if (chat) {
     return (
-      <div className="m-chat-shell" data-perf-shell={route}>
+      <div
+        className="m-chat-shell m-chat-shell--immersive"
+        data-perf-shell={route}
+      >
         <div className="m-chat-toolbar">
+          <div className="m-chat-toolbar__nav">
+            <div className="m-skel-button" />
+            <div className="m-skel-button" />
+          </div>
           <div className="m-skel-line m-skel-line--select" />
           <div className="m-skel-button" />
         </div>
@@ -82,7 +89,9 @@ export function MobileRouteLoading({
         <div className="m-page-head__rule" />
       </header>
 
-      <div className={`m-masthead ${cells === 3 ? "m-masthead--three" : "m-masthead--two"}`}>
+      <div
+        className={`m-masthead ${cells === 3 ? "m-masthead--three" : "m-masthead--two"}`}
+      >
         {Array.from({ length: cells }).map((_, i) => (
           <div key={i} className="m-masthead__cell">
             <div className="m-skel-line m-skel-line--cap" />

@@ -38,6 +38,10 @@ export type CanonicalIngredientSummary = {
   latestSku: string | null
   /** ~30d price trend, sourced from matched invoice line items. Null when no comparable baseline exists. */
   trend30d: IngredientTrend | null
+  /** True when the canonical has a product reference photo stored in R2. */
+  hasPhoto: boolean
+  /** Cache-busting key — uploaded-at timestamp as ISO string, null when no photo. */
+  photoVersion: string | null
 }
 
 export type RecipeIngredientInput = {
