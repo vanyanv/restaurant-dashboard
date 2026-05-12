@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useCallback, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   saveCountLine,
@@ -8,6 +8,7 @@ import {
   abandonStockCount,
   logAdjustment,
 } from "@/app/actions/mobile-stock-count-actions"
+import { setCanonicalPackDefinition } from "@/app/actions/canonical-ingredient-actions"
 
 // Mirrored locally so we don't pull the Prisma client into the browser bundle.
 // Keep in sync with prisma/schema.prisma → enum InventoryAdjustmentReason.
@@ -26,6 +27,12 @@ export type CountIngredient = {
   name: string
   category: string | null
   recipeUnit: string | null
+  hasPhoto: boolean
+  photoVersion: string | null
+  caseUnit: string | null
+  innerPackUnit: string | null
+  recipeUnitsPerCase: number | null
+  innerPacksPerCase: number | null
 }
 
 export type CountInitialLine = {
@@ -39,54 +46,74 @@ type Props = {
   storeName: string
   ingredients: CountIngredient[]
   initialLines: CountInitialLine[]
+  canEditDefinition: boolean
 }
-
-const KEYPAD = [
-  ["7", "8", "9"],
-  ["4", "5", "6"],
-  ["1", "2", "3"],
-  [".", "0", "⌫"],
-] as const
 
 const ADJUSTMENT_REASONS: Array<{
   value: InventoryAdjustmentReason
   label: string
   description: string
 }> = [
-  {
-    value: ADJUSTMENT_REASON.THEFT,
-    label: "Theft",
-    description: "missing without explanation",
-  },
-  {
-    value: ADJUSTMENT_REASON.EXPIRY,
-    label: "Expiry",
-    description: "discarded after spoil",
-  },
-  {
-    value: ADJUSTMENT_REASON.SUPPLIER_RETURN,
-    label: "Supplier return",
-    description: "sent back to vendor",
-  },
-  {
-    value: ADJUSTMENT_REASON.DAMAGE,
-    label: "Damage",
-    description: "broken / unusable",
-  },
+  { value: ADJUSTMENT_REASON.THEFT, label: "Theft", description: "missing without explanation" },
+  { value: ADJUSTMENT_REASON.EXPIRY, label: "Expiry", description: "discarded after spoil" },
+  { value: ADJUSTMENT_REASON.SUPPLIER_RETURN, label: "Supplier return", description: "sent back to vendor" },
+  { value: ADJUSTMENT_REASON.DAMAGE, label: "Damage", description: "broken / unusable" },
 ]
 
 const fmtQty = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: 2 })
 
+function parseField(s: string): number {
+  if (s === "" || s === ".") return 0
+  const n = Number(s)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+
+function computeCanonical(
+  ingredient: CountIngredient,
+  draft: TierDraft,
+): { canonical: number; nativeQty: number; nativeUnit: string } {
+  const cases = parseField(draft.cases)
+  const inner = parseField(draft.inner)
+  const loose = parseField(draft.loose)
+
+  const perCase = ingredient.recipeUnitsPerCase ?? 0
+  const innerPerCase = ingredient.innerPacksPerCase ?? 0
+  const perInner = perCase > 0 && innerPerCase > 0 ? perCase / innerPerCase : 0
+
+  const canonical = cases * perCase + inner * perInner + loose
+
+  // nativeQty = case-equivalent. When no case tier is defined, fall back to loose value.
+  let nativeQty = 0
+  let nativeUnit = ingredient.recipeUnit ?? ""
+  if (perCase > 0) {
+    nativeQty =
+      cases + (innerPerCase > 0 ? inner / innerPerCase : 0) + loose / perCase
+    nativeUnit = ingredient.caseUnit ?? "CS"
+  } else {
+    nativeQty = loose
+  }
+
+  return { canonical, nativeQty, nativeUnit }
+}
+
+type TierDraft = { cases: string; inner: string; loose: string }
+
 export function CountFlow({
   sessionId,
   storeId,
   storeName,
-  ingredients,
+  ingredients: initialIngredients,
   initialLines,
+  canEditDefinition,
 }: Props) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+
+  // Local mirror of ingredients so optimistic photo + pack-def edits don't need a page refresh.
+  const [ingredients, setIngredients] =
+    useState<CountIngredient[]>(initialIngredients)
+
   const [savedQty, setSavedQty] = useState<Record<string, number>>(() => {
     const out: Record<string, number> = {}
     for (const line of initialLines) out[line.ingredientId] = line.qty
@@ -94,7 +121,7 @@ export function CountFlow({
   })
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [index, setIndex] = useState(0)
-  const [input, setInput] = useState("")
+  const [drafts, setDrafts] = useState<Record<string, TierDraft>>({})
   const [error, setError] = useState<string | null>(null)
   const [adjustment, setAdjustment] = useState<{
     ingredientId: string
@@ -102,52 +129,38 @@ export function CountFlow({
     qty: number
   } | null>(null)
   const [adjustmentNote, setAdjustmentNote] = useState("")
+  const [packEditorOpen, setPackEditorOpen] = useState(false)
 
   const total = ingredients.length
   const counted = Object.keys(savedQty).length
   const current = ingredients[index] ?? null
   const allDone = counted + skipped.size >= total
-  const currentRecorded =
-    current && current.id in savedQty ? savedQty[current.id] : null
 
-  const inputNumber = useMemo(() => {
-    if (input === "" || input === ".") return null
-    const parsed = Number(input)
-    return Number.isFinite(parsed) ? parsed : null
-  }, [input])
+  const currentDraft: TierDraft = current
+    ? drafts[current.id] ?? { cases: "", inner: "", loose: "" }
+    : { cases: "", inner: "", loose: "" }
 
-  function pressKey(k: (typeof KEYPAD)[number][number]) {
+  const liveTotal = current ? computeCanonical(current, currentDraft) : null
+
+  function setDraft(id: string, patch: Partial<TierDraft>) {
     setError(null)
-    if (k === "⌫") {
-      setInput((s) => s.slice(0, -1))
-      return
-    }
-    if (k === ".") {
-      if (input.includes(".")) return
-      setInput((s) => (s === "" ? "0." : s + "."))
-      return
-    }
-    if (input === "0") {
-      setInput(k)
-      return
-    }
-    if (input.length >= 8) return
-    setInput((s) => s + k)
+    setDrafts((m) => ({
+      ...m,
+      [id]: { ...(m[id] ?? { cases: "", inner: "", loose: "" }), ...patch },
+    }))
   }
 
   function clear() {
-    setInput("")
+    if (!current) return
+    setDrafts((m) => ({ ...m, [current.id]: { cases: "", inner: "", loose: "" } }))
     setError(null)
   }
 
   function advance() {
-    setInput("")
     setError(null)
     setIndex((i) => Math.min(i + 1, total - 1))
   }
-
   function back() {
-    setInput("")
     setError(null)
     setIndex((i) => Math.max(0, i - 1))
   }
@@ -159,18 +172,28 @@ export function CountFlow({
   }
 
   function save() {
-    if (!current) return
-    if (inputNumber == null || inputNumber < 0) {
-      setError("Enter a non-negative number")
+    if (!current || !liveTotal) return
+    if (
+      currentDraft.cases === "" &&
+      currentDraft.inner === "" &&
+      currentDraft.loose === ""
+    ) {
+      setError("Enter at least one tier")
       return
     }
-    const qty = inputNumber
+    const qty = liveTotal.canonical
+    if (!Number.isFinite(qty) || qty < 0) {
+      setError("Total must be non-negative")
+      return
+    }
     startTransition(async () => {
       try {
         await saveCountLine({
           sessionId,
           ingredientId: current.id,
           qty,
+          nativeQty: liveTotal.nativeQty,
+          nativeUnit: liveTotal.nativeUnit,
         })
         setSavedQty((m) => ({ ...m, [current.id]: qty }))
         setSkipped((s) => {
@@ -179,9 +202,6 @@ export function CountFlow({
           next.delete(current.id)
           return next
         })
-        // Offer to log an adjustment when the count is suspiciously low (zero or
-        // a meaningful drop vs prior). We don't know "expected" in cut 1, so
-        // simply prompt on zero — that's the most common adjustment trigger.
         if (qty === 0) {
           setAdjustment({
             ingredientId: current.id,
@@ -242,9 +262,7 @@ export function CountFlow({
 
   function abandon() {
     if (
-      !confirm(
-        "Abandon this count? Saved counts stay logged but the session closes.",
-      )
+      !confirm("Abandon this count? Saved counts stay logged but the session closes.")
     )
       return
     startTransition(async () => {
@@ -258,6 +276,25 @@ export function CountFlow({
     })
   }
 
+  const onPhotoUpdated = useCallback(
+    (id: string, version: string | null, hasPhoto: boolean) => {
+      setIngredients((rows) =>
+        rows.map((r) => (r.id === id ? { ...r, hasPhoto, photoVersion: version } : r)),
+      )
+    },
+    [],
+  )
+
+  const onPackUpdated = useCallback(
+    (id: string, patch: Partial<CountIngredient>) => {
+      setIngredients((rows) =>
+        rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+      )
+      setPackEditorOpen(false)
+    },
+    [],
+  )
+
   if (!current) {
     return (
       <div className="inv-panel inv-panel--empty">
@@ -266,15 +303,17 @@ export function CountFlow({
     )
   }
 
+  const tierDef = describeTiers(current)
+
   return (
     <div className="m-count-flow">
+      {/* Progress folio */}
       <div className="m-count-progress" aria-label="Progress">
         <span className="m-count-progress__caption">
-          {storeName} · {index + 1} of {total}
+          {storeName} · No. {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
         </span>
         <span className="m-count-progress__caption">
-          {counted} counted
-          {skipped.size > 0 ? ` · ${skipped.size} skipped` : ""}
+          {counted} counted{skipped.size > 0 ? ` · ${skipped.size} skipped` : ""}
         </span>
         <div className="m-count-progress__bar" role="presentation">
           <div
@@ -286,47 +325,114 @@ export function CountFlow({
         </div>
       </div>
 
-      <section className="inv-panel m-count-card dock-in dock-in-2">
-        <div className="m-count-card__category">
-          {current.category ?? "—"}
-        </div>
-        <h2 className="m-count-card__name">{current.name}</h2>
-        <div className="m-count-card__unit">
-          counted in <strong>{current.recipeUnit ?? "—"}</strong>
-        </div>
+      {/* The dossier card */}
+      <article className="inv-panel m-count-dossier dock-in dock-in-2">
+        <PhotoBlock
+          ingredient={current}
+          canUpload={canEditDefinition}
+          onPhotoUpdated={onPhotoUpdated}
+          onError={setError}
+        />
 
-        <div className="m-count-card__readout" aria-live="polite">
-          <span className="m-count-card__readout-num">
-            {input === "" ? "0" : input}
+        <header className="m-count-dossier__head">
+          <span className="m-count-dossier__category">
+            {current.category ?? "Uncategorized"}
           </span>
-          <span className="m-count-card__readout-unit">
-            {current.recipeUnit ?? ""}
+          <h2 className="m-count-dossier__name">{current.name}</h2>
+          <span className="m-count-dossier__rule" aria-hidden />
+          <span className="m-count-dossier__unit">
+            counted in {current.recipeUnit ?? "—"}
           </span>
-        </div>
+        </header>
 
-        {currentRecorded != null ? (
-          <div className="m-count-card__previous">
-            already saved · {fmtQty(currentRecorded)} {current.recipeUnit ?? ""}
+        {tierDef.hasCase ? (
+          <div className="m-count-tiers" role="group" aria-label="Count tiers">
+            <TierRow
+              roman="I"
+              label={`Cases · ${tierDef.caseUnit}`}
+              hint={tierDef.perCaseLabel}
+              value={currentDraft.cases}
+              autoFocus
+              onChange={(s) => setDraft(current.id, { cases: s })}
+              pending={pending}
+            />
+            {tierDef.hasInner ? (
+              <TierRow
+                roman="II"
+                label={`Inner · ${tierDef.innerPackUnit}`}
+                hint={tierDef.perInnerLabel}
+                value={currentDraft.inner}
+                onChange={(s) => setDraft(current.id, { inner: s })}
+                pending={pending}
+              />
+            ) : null}
+            <TierRow
+              roman={tierDef.hasInner ? "III" : "II"}
+              label={`Loose · ${current.recipeUnit ?? "unit"}`}
+              hint="open / partial"
+              value={currentDraft.loose}
+              onChange={(s) => setDraft(current.id, { loose: s })}
+              pending={pending}
+            />
           </div>
+        ) : (
+          <div className="m-count-tiers" role="group" aria-label="Count">
+            <TierRow
+              roman="—"
+              label={`Quantity · ${current.recipeUnit ?? "unit"}`}
+              hint="canonical units"
+              value={currentDraft.loose}
+              autoFocus
+              onChange={(s) => setDraft(current.id, { loose: s })}
+              pending={pending}
+            />
+            {canEditDefinition ? (
+              <button
+                type="button"
+                className="m-count-define"
+                onClick={() => setPackEditorOpen(true)}
+                disabled={pending}
+              >
+                + Define case structure
+              </button>
+            ) : (
+              <p className="m-count-define-note">
+                Case structure not yet set for this ingredient.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="m-count-total" aria-live="polite">
+          <span className="m-count-total__label">Total</span>
+          <span className="m-count-total__rule" aria-hidden />
+          <span className="m-count-total__value">
+            <strong>{fmtQty(liveTotal?.canonical ?? 0)}</strong>{" "}
+            <em className="m-count-total__unit">{current.recipeUnit ?? ""}</em>
+          </span>
+        </div>
+
+        {current.id in savedQty ? (
+          <p className="m-count-dossier__previous">
+            already saved · {fmtQty(savedQty[current.id])} {current.recipeUnit ?? ""}
+          </p>
         ) : null}
 
-        {error ? <div className="m-count-card__error">{error}</div> : null}
-      </section>
+        {error ? <p className="m-count-dossier__error">{error}</p> : null}
 
-      <div className="m-keypad" role="group" aria-label="Number pad">
-        {KEYPAD.flat().map((k) => (
+        {canEditDefinition && tierDef.hasCase ? (
           <button
-            key={k}
             type="button"
-            className={`m-keypad__key${k === "⌫" ? " m-keypad__key--erase" : ""}`}
-            onClick={() => pressKey(k)}
+            className="m-count-dossier__redefine"
+            onClick={() => setPackEditorOpen(true)}
             disabled={pending}
           >
-            {k}
+            edit pack definition
           </button>
-        ))}
-      </div>
+        ) : null}
+      </article>
 
+      {/* Actions row */}
       <div className="m-count-actions">
         <button
           type="button"
@@ -340,7 +446,7 @@ export function CountFlow({
           type="button"
           className="toolbar-btn"
           onClick={clear}
-          disabled={pending || input === ""}
+          disabled={pending}
         >
           Clear
         </button>
@@ -354,9 +460,9 @@ export function CountFlow({
         </button>
         <button
           type="button"
-          className="toolbar-btn toolbar-btn--accent"
+          className="toolbar-btn toolbar-btn--accent m-count-save"
           onClick={save}
-          disabled={pending || input === "" || input === "."}
+          disabled={pending}
         >
           {pending ? "Saving…" : "Save · Next"}
         </button>
@@ -392,9 +498,375 @@ export function CountFlow({
           pending={pending}
         />
       ) : null}
+
+      {packEditorOpen && canEditDefinition ? (
+        <PackEditorSheet
+          ingredient={current}
+          onClose={() => setPackEditorOpen(false)}
+          onSaved={(patch) => onPackUpdated(current.id, patch)}
+        />
+      ) : null}
     </div>
   )
 }
+
+/* ──────────────────────────────  helpers  ────────────────────────────── */
+
+function describeTiers(ing: CountIngredient): {
+  hasCase: boolean
+  hasInner: boolean
+  caseUnit: string
+  innerPackUnit: string
+  perCaseLabel: string
+  perInnerLabel: string
+} {
+  const hasCase = ing.caseUnit != null && ing.recipeUnitsPerCase != null
+  const hasInner = hasCase && ing.innerPackUnit != null && ing.innerPacksPerCase != null
+  const caseUnit = ing.caseUnit ?? "CS"
+  const innerPackUnit = ing.innerPackUnit ?? ""
+  const perCase = ing.recipeUnitsPerCase ?? 0
+  const innerPerCase = ing.innerPacksPerCase ?? 0
+  return {
+    hasCase,
+    hasInner,
+    caseUnit,
+    innerPackUnit,
+    perCaseLabel: hasCase
+      ? `≈ ${fmtQty(perCase)} ${ing.recipeUnit ?? ""} / ${caseUnit.toLowerCase()}`
+      : "",
+    perInnerLabel: hasInner
+      ? `${innerPerCase} per ${caseUnit.toLowerCase()} · ≈ ${fmtQty(perCase / innerPerCase)} ${ing.recipeUnit ?? ""} ea`
+      : "",
+  }
+}
+
+/* ──────────────────────────────  Tier Row  ────────────────────────────── */
+
+function TierRow({
+  roman,
+  label,
+  hint,
+  value,
+  autoFocus,
+  onChange,
+  pending,
+}: {
+  roman: string
+  label: string
+  hint: string
+  value: string
+  autoFocus?: boolean
+  onChange: (v: string) => void
+  pending: boolean
+}) {
+  return (
+    <label className={`m-count-tier${value !== "" ? " m-count-tier--filled" : ""}`}>
+      <span className="m-count-tier__roman">{roman}</span>
+      <span className="m-count-tier__label">{label}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        pattern="[0-9]*[.]?[0-9]*"
+        value={value}
+        autoFocus={autoFocus}
+        onChange={(e) => {
+          const next = e.target.value
+          if (next === "" || /^[0-9]*\.?[0-9]*$/.test(next)) onChange(next)
+        }}
+        onFocus={(e) => e.target.select()}
+        disabled={pending}
+        className="m-count-tier__input"
+        aria-label={label}
+      />
+      <span className="m-count-tier__hint">{hint}</span>
+    </label>
+  )
+}
+
+/* ──────────────────────────────  Photo Block  ────────────────────────────── */
+
+function photoSrc(id: string, version: string | null): string {
+  const base = `/api/canonical-ingredients/${id}/photo`
+  return version ? `${base}?v=${encodeURIComponent(version)}` : base
+}
+
+function PhotoBlock({
+  ingredient,
+  canUpload,
+  onPhotoUpdated,
+  onError,
+}: {
+  ingredient: CountIngredient
+  canUpload: boolean
+  onPhotoUpdated: (id: string, version: string | null, hasPhoto: boolean) => void
+  onError: (msg: string | null) => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  const onPick = () => {
+    onError(null)
+    fileInputRef.current?.click()
+  }
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append("photo", file)
+      const res = await fetch(`/api/canonical-ingredients/${ingredient.id}/photo`, {
+        method: "POST",
+        body: form,
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        onError(body?.error ?? `Upload failed (${res.status})`)
+        return
+      }
+      onPhotoUpdated(ingredient.id, new Date().toISOString(), true)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <figure
+      className={`m-count-photo${
+        ingredient.hasPhoto ? " m-count-photo--present" : " m-count-photo--empty"
+      }`}
+    >
+      {ingredient.hasPhoto ? (
+        <img
+          src={photoSrc(ingredient.id, ingredient.photoVersion)}
+          alt={`Reference photo of ${ingredient.name}`}
+          className="m-count-photo__image"
+        />
+      ) : (
+        <div className="m-count-photo__placeholder">
+          <span className="m-count-photo__placeholder-mark" aria-hidden>
+            ※
+          </span>
+          <span className="m-count-photo__placeholder-text">
+            {canUpload ? "no reference photo yet" : "no reference photo"}
+          </span>
+        </div>
+      )}
+
+      {canUpload ? (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            onChange={onFileChange}
+            hidden
+          />
+          <button
+            type="button"
+            className="m-count-photo__btn"
+            onClick={onPick}
+            disabled={uploading}
+            aria-label={ingredient.hasPhoto ? "Replace photo" : "Take photo"}
+          >
+            {uploading ? "…" : ingredient.hasPhoto ? "replace" : "take photo"}
+          </button>
+        </>
+      ) : null}
+    </figure>
+  )
+}
+
+/* ──────────────────────────────  Pack Editor Sheet  ────────────────────────────── */
+
+function PackEditorSheet({
+  ingredient,
+  onClose,
+  onSaved,
+}: {
+  ingredient: CountIngredient
+  onClose: () => void
+  onSaved: (patch: Partial<CountIngredient>) => void
+}) {
+  const [caseUnit, setCaseUnit] = useState(ingredient.caseUnit ?? "CS")
+  const [recipeUnitsPerCase, setRupc] = useState(
+    ingredient.recipeUnitsPerCase != null ? String(ingredient.recipeUnitsPerCase) : "",
+  )
+  const [includeInner, setIncludeInner] = useState(ingredient.innerPackUnit != null)
+  const [innerPackUnit, setInnerPackUnit] = useState(ingredient.innerPackUnit ?? "PK")
+  const [innerPacksPerCase, setIppc] = useState(
+    ingredient.innerPacksPerCase != null ? String(ingredient.innerPacksPerCase) : "",
+  )
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSave = () => {
+    const rupc = Number(recipeUnitsPerCase)
+    if (!Number.isFinite(rupc) || rupc <= 0) {
+      setError("Recipe units per case must be positive")
+      return
+    }
+    const ippc = includeInner ? Number(innerPacksPerCase) : null
+    if (includeInner && (!Number.isFinite(ippc!) || ippc! <= 0)) {
+      setError("Inner packs per case must be positive")
+      return
+    }
+    setError(null)
+    startTransition(async () => {
+      try {
+        await setCanonicalPackDefinition({
+          canonicalIngredientId: ingredient.id,
+          caseUnit,
+          recipeUnitsPerCase: rupc,
+          innerPackUnit: includeInner ? innerPackUnit : null,
+          innerPacksPerCase: ippc,
+        })
+        onSaved({
+          caseUnit: caseUnit.toUpperCase(),
+          recipeUnitsPerCase: rupc,
+          innerPackUnit: includeInner ? innerPackUnit.toUpperCase() : null,
+          innerPacksPerCase: ippc,
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not save pack definition")
+      }
+    })
+  }
+
+  const handleClear = () => {
+    setError(null)
+    startTransition(async () => {
+      try {
+        await setCanonicalPackDefinition({
+          canonicalIngredientId: ingredient.id,
+          caseUnit: null,
+          recipeUnitsPerCase: null,
+          innerPackUnit: null,
+          innerPacksPerCase: null,
+        })
+        onSaved({
+          caseUnit: null,
+          recipeUnitsPerCase: null,
+          innerPackUnit: null,
+          innerPacksPerCase: null,
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not clear")
+      }
+    })
+  }
+
+  return (
+    <div className="m-sheet m-sheet--pack" role="dialog" aria-label="Define pack structure">
+      <div className="m-sheet__head">
+        <span className="m-sheet__dept">PACK · DEFINITION</span>
+        <button
+          type="button"
+          className="m-sheet__close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      <div className="m-sheet__body">
+        <p className="m-sheet__lead">
+          <em>{ingredient.name}</em> · counted in {ingredient.recipeUnit ?? "—"}
+        </p>
+
+        <div className="m-pack-grid">
+          <label className="m-pack-field">
+            <span className="m-pack-field__label">Case label</span>
+            <input
+              className="m-pack-field__input"
+              value={caseUnit}
+              onChange={(e) => setCaseUnit(e.target.value.toUpperCase())}
+              maxLength={6}
+              disabled={pending}
+            />
+          </label>
+          <label className="m-pack-field">
+            <span className="m-pack-field__label">
+              {ingredient.recipeUnit ?? "unit"}s per case
+            </span>
+            <input
+              className="m-pack-field__input"
+              inputMode="decimal"
+              value={recipeUnitsPerCase}
+              onChange={(e) => setRupc(e.target.value)}
+              disabled={pending}
+            />
+          </label>
+        </div>
+
+        <label className="m-pack-toggle">
+          <input
+            type="checkbox"
+            checked={includeInner}
+            onChange={(e) => setIncludeInner(e.target.checked)}
+            disabled={pending}
+          />
+          <span>Case contains an inner pack</span>
+        </label>
+
+        {includeInner ? (
+          <div className="m-pack-grid">
+            <label className="m-pack-field">
+              <span className="m-pack-field__label">Inner label</span>
+              <input
+                className="m-pack-field__input"
+                value={innerPackUnit}
+                onChange={(e) => setInnerPackUnit(e.target.value.toUpperCase())}
+                maxLength={6}
+                disabled={pending}
+              />
+            </label>
+            <label className="m-pack-field">
+              <span className="m-pack-field__label">Inner per case</span>
+              <input
+                className="m-pack-field__input"
+                inputMode="decimal"
+                value={innerPacksPerCase}
+                onChange={(e) => setIppc(e.target.value)}
+                disabled={pending}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {error ? <p className="m-sheet__error">{error}</p> : null}
+      </div>
+      <div className="m-sheet__actions">
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={handleClear}
+          disabled={pending}
+        >
+          Clear definition
+        </button>
+        <button
+          type="button"
+          className="toolbar-btn toolbar-btn--accent"
+          onClick={handleSave}
+          disabled={pending}
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ──────────────────────────────  Adjustment Sheet  ────────────────────────────── */
 
 function AdjustmentSheet({
   ingredientName,
@@ -417,7 +889,7 @@ function AdjustmentSheet({
   return (
     <div className="m-sheet" role="dialog" aria-label="Log adjustment">
       <div className="m-sheet__head">
-        <span className="m-sheet__dept">LOG ADJUSTMENT</span>
+        <span className="m-sheet__dept">LOG · ADJUSTMENT</span>
         <button
           type="button"
           className="m-sheet__close"
@@ -429,8 +901,7 @@ function AdjustmentSheet({
       </div>
       <div className="m-sheet__body">
         <p className="m-sheet__lead">
-          You counted zero <em>{ingredientName}</em>. Log what removed it from
-          stock?
+          You counted zero <em>{ingredientName}</em>. Log what removed it from stock?
         </p>
         <div className="m-sheet__reasons">
           {ADJUSTMENT_REASONS.map((r) => (
@@ -498,3 +969,4 @@ function AdjustmentSheet({
     </div>
   )
 }
+

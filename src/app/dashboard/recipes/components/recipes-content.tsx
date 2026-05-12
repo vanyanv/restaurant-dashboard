@@ -335,6 +335,10 @@ export function RecipesContent({
               trend30d: null,
               hasPhoto: false,
               photoVersion: null,
+              caseUnit: null,
+              innerPackUnit: null,
+              recipeUnitsPerCase: null,
+              innerPacksPerCase: null,
             },
           ].sort((a, b) => a.name.localeCompare(b.name))
         )

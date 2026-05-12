@@ -72,8 +72,76 @@ export async function listCanonicalIngredients(): Promise<
       trend30d: trendsByCanonical.get(c.id) ?? null,
       hasPhoto: c.photoBlobPathname != null,
       photoVersion: c.photoUploadedAt ? c.photoUploadedAt.toISOString() : null,
+      caseUnit: c.caseUnit,
+      innerPackUnit: c.innerPackUnit,
+      recipeUnitsPerCase: c.recipeUnitsPerCase,
+      innerPacksPerCase: c.innerPacksPerCase,
     }
   })
+}
+
+/**
+ * Set or clear the three-tier pack definition on a canonical. DEVELOPER-only —
+ * operators (OWNER) consume this data during stock count but don't author it.
+ *
+ * Pass null on a field to clear it. `caseUnit` ↔ `recipeUnitsPerCase` go
+ * together; `innerPackUnit` ↔ `innerPacksPerCase` go together.
+ */
+export async function setCanonicalPackDefinition(input: {
+  canonicalIngredientId: string
+  caseUnit: string | null
+  recipeUnitsPerCase: number | null
+  innerPackUnit: string | null
+  innerPacksPerCase: number | null
+}): Promise<void> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) throw new Error("Not authenticated")
+  if (session.user.role !== "DEVELOPER") {
+    throw new Error("Only developers can edit pack definitions")
+  }
+
+  const accountId = session.user.accountId
+  const existing = await prisma.canonicalIngredient.findFirst({
+    where: { id: input.canonicalIngredientId, accountId },
+    select: { id: true },
+  })
+  if (!existing) throw new Error("Canonical ingredient not found")
+
+  const norm = (s: string | null) => {
+    if (s == null) return null
+    const trimmed = s.trim().toUpperCase()
+    return trimmed === "" ? null : trimmed
+  }
+  const num = (n: number | null) => {
+    if (n == null) return null
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new Error("Pack values must be positive numbers")
+    }
+    return n
+  }
+
+  const caseUnit = norm(input.caseUnit)
+  const recipeUnitsPerCase = num(input.recipeUnitsPerCase)
+  const innerPackUnit = norm(input.innerPackUnit)
+  const innerPacksPerCase = num(input.innerPacksPerCase)
+
+  if ((caseUnit == null) !== (recipeUnitsPerCase == null)) {
+    throw new Error("caseUnit and recipeUnitsPerCase must be set together")
+  }
+  if ((innerPackUnit == null) !== (innerPacksPerCase == null)) {
+    throw new Error("innerPackUnit and innerPacksPerCase must be set together")
+  }
+  if (innerPackUnit != null && caseUnit == null) {
+    throw new Error("Inner-pack tier requires the case tier to be set")
+  }
+
+  await prisma.canonicalIngredient.update({
+    where: { id: input.canonicalIngredientId },
+    data: { caseUnit, recipeUnitsPerCase, innerPackUnit, innerPacksPerCase },
+  })
+
+  revalidatePath("/m/count")
+  revalidatePath("/m/ingredients")
 }
 
 /**

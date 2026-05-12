@@ -13,7 +13,6 @@ export default async function MobileIngredientsPage() {
   if (!session) redirect("/login")
 
   const ingredients = await listCanonicalIngredients()
-  const canUploadPhotos = session.user.role === "DEVELOPER"
 
   const rows = ingredients.map((i) => ({
     id: i.id,
@@ -40,15 +39,13 @@ export default async function MobileIngredientsPage() {
 
       <div className="dock-in dock-in-2" style={{ marginBottom: 14 }}>
         <div className="m-readonly-note">
-          {canUploadPhotos
-            ? "Tap any row to view or replace its reference photo."
-            : "Read-only on mobile · edit costs and aliases on desktop"}
+          Reference catalog · take or replace photos during stock count
         </div>
       </div>
 
       <div className="dock-in dock-in-3">
         <Panel flush>
-          <IngredientsSearch rows={rows} canUploadPhotos={canUploadPhotos} />
+          <IngredientsSearch rows={rows} />
         </Panel>
       </div>
     </>

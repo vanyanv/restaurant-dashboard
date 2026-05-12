@@ -42,6 +42,14 @@ export type CanonicalIngredientSummary = {
   hasPhoto: boolean
   /** Cache-busting key — uploaded-at timestamp as ISO string, null when no photo. */
   photoVersion: string | null
+  /** Display label for tier-1 of a three-tier count (e.g. "CS", "BX"). Null = case tier hidden. */
+  caseUnit: string | null
+  /** Display label for tier-2 (e.g. "PK", "LOAF"). Null = inner-pack tier hidden. */
+  innerPackUnit: string | null
+  /** Canonical recipe units in one full case. */
+  recipeUnitsPerCase: number | null
+  /** Inner packs in one case. Pairs with innerPackUnit. */
+  innerPacksPerCase: number | null
 }
 
 export type RecipeIngredientInput = {
