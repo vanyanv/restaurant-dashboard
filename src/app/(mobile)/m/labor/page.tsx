@@ -92,7 +92,17 @@ export default async function MobileLaborPage({
   const today = todayUtc()
   const sevenDaysAgo = daysAgoUtc(6)
 
-  const [weeklyRows, alerts, positionsToday]: [
+  // Harri's positions endpoint 500s on most dates (gateway-side issue, see
+  // JobRun.metadata.positionsFailures). Show the most-recent date we have
+  // any rows for instead of strictly today, so the panel isn't usually empty.
+  const latestPositionsRow = await prisma.harriPositionDaily.findFirst({
+    where: { storeId },
+    orderBy: { date: "desc" },
+    select: { date: true },
+  })
+  const positionsDate = latestPositionsRow?.date ?? null
+
+  const [weeklyRows, alerts, positions]: [
     HarriDailyRow[],
     Awaited<ReturnType<typeof getHarriAlerts>>,
     Array<{
@@ -108,20 +118,22 @@ export default async function MobileLaborPage({
   ] = await Promise.all([
     getHarriDailyLabor(storeId, sevenDaysAgo, endOfDayUtc(today)),
     getHarriAlerts(storeId, daysAgoUtc(13), endOfDayUtc(today)),
-    prisma.harriPositionDaily.findMany({
-      where: { storeId, date: today },
-      select: {
-        id: true,
-        categoryName: true,
-        categoryCode: true,
-        positionName: true,
-        positionCode: true,
-        totalLabor: true,
-        overtimeAmount: true,
-        actualSeconds: true,
-      },
-      orderBy: [{ totalLabor: "desc" }],
-    }),
+    positionsDate
+      ? prisma.harriPositionDaily.findMany({
+          where: { storeId, date: positionsDate },
+          select: {
+            id: true,
+            categoryName: true,
+            categoryCode: true,
+            positionName: true,
+            positionCode: true,
+            totalLabor: true,
+            overtimeAmount: true,
+            actualSeconds: true,
+          },
+          orderBy: [{ totalLabor: "desc" }],
+        })
+      : Promise.resolve([]),
   ])
 
   const todayKey = today.toISOString().slice(0, 10)
@@ -163,7 +175,7 @@ export default async function MobileLaborPage({
     },
   ]
 
-  const positionRows = positionsToday.map((p) => ({
+  const positionRows = positions.map((p) => ({
     id: p.id,
     category: p.categoryName ?? p.categoryCode,
     position: p.positionName ?? p.positionCode,
@@ -171,6 +183,14 @@ export default async function MobileLaborPage({
     totalLabor: p.totalLabor,
     overtimeAmount: p.overtimeAmount,
   }))
+  const positionsDateKey = positionsDate
+    ? positionsDate.toISOString().slice(0, 10)
+    : null
+  const positionsHeader = positionsDateKey
+    ? positionsDateKey === todayKey
+      ? `POSITIONS · ${todayKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
+      : `POSITIONS · LATEST AVAILABLE · ${positionsDateKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
+    : `POSITIONS · UNAVAILABLE`
 
   return (
     <div data-perf-ready="/m/labor">
@@ -209,9 +229,7 @@ export default async function MobileLaborPage({
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <Panel
-          dept={`POSITIONS · ${todayKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`}
-        >
+        <Panel dept={positionsHeader}>
           <LaborPositionList rows={positionRows} />
         </Panel>
       </div>

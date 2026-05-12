@@ -60,7 +60,7 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
         endDate: endDate.toISOString(),
       },
     },
-    async ({ addRows }) => {
+    async ({ addRows, jobRunId }) => {
       const brand = await prisma.harriBrand.findFirst({
         where: { storeId, active: true },
       })
@@ -106,21 +106,40 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       )
 
       // ---------------------------------------------------------------
-      // Phase 2 — positions/pay_types in a single multi-day call.
+      // Phase 2 — positions/pay_types, one HTTP call per day.
       //
-      // Harri's gateway intermittently 500s on this endpoint (likely a
-      // backend rollup not always available). Treat as best-effort: log
-      // and continue without per-position rows. Daily totals + alerts
-      // still feed the P&L correctly.
+      // Harri's gateway 500s on this endpoint for most dates (verified
+      // 2026-05-12: 7 of 8 recent days return 500, one returns 200). A
+      // single multi-day call therefore fails whenever ANY day in the
+      // range is bad, which means a wide-window cron writes nothing. By
+      // looping per-day we capture whatever days the gateway happens to
+      // serve, and a per-day failure doesn't poison the rest. Failures
+      // are aggregated into positionsFailures and surfaced on the JobRun
+      // row so the issue stays visible.
       // ---------------------------------------------------------------
-      let positionsEnv: HarriEnvelope<HarriPositionsPayTypesResponse> | null = null
-      try {
-        positionsEnv = await harriFetch<HarriEnvelope<HarriPositionsPayTypesResponse>>(
-          buildPositionsPayTypesUrl(brandId, startDate, endDate)
+      type PositionsResult =
+        | { date: Date; ok: true; data: HarriPositionsPayTypesResponse }
+        | { date: Date; ok: false; error: string }
+
+      const positionsByDay: PositionsResult[] = await Promise.all(
+        days.map(async (date): Promise<PositionsResult> => {
+          try {
+            const env = await harriFetch<HarriEnvelope<HarriPositionsPayTypesResponse>>(
+              buildPositionsPayTypesUrl(brandId, date, date)
+            )
+            return { date, ok: true, data: env.data }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            return { date, ok: false, error: msg.slice(0, 200) }
+          }
+        })
+      )
+
+      const positionsFailures = positionsByDay.filter((r) => !r.ok).length
+      if (positionsFailures > 0) {
+        console.warn(
+          `[harri.sync] positions/pay_types: ${positionsFailures}/${positionsByDay.length} days failed (Harri gateway 500s — known issue)`
         )
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.warn(`[harri.sync] positions/pay_types unavailable, continuing: ${msg.slice(0, 200)}`)
       }
 
       // ---------------------------------------------------------------
@@ -155,11 +174,12 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       }
 
       // ---------------------------------------------------------------
-      // Persist per-position rows (only when Phase 2 succeeded)
+      // Persist per-position rows from whichever days Harri returned.
       // ---------------------------------------------------------------
       let positionsWritten = 0
-      if (positionsEnv) {
-        for (const day of positionsEnv.data.days) {
+      for (const result of positionsByDay) {
+        if (!result.ok) continue
+        for (const day of result.data.days) {
           const dateOnly = parseHarriDateOnly(day.date)
           for (const row of expandPositionsForDay(day)) {
             await prisma.harriPositionDaily.upsert({
@@ -226,6 +246,29 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
         where: { id: brand.id },
         data: { lastSyncAt: new Date() },
       })
+
+      // Surface positions endpoint health on the JobRun row so a recurring
+      // gateway issue is visible without grepping container logs.
+      if (positionsFailures > 0) {
+        const failedDates = positionsByDay
+          .filter((r): r is Extract<PositionsResult, { ok: false }> => !r.ok)
+          .map((r) => ({ date: r.date.toISOString().slice(0, 10), error: r.error }))
+        await prisma.jobRun
+          .update({
+            where: { id: jobRunId },
+            data: {
+              metadata: {
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+                positionsDaysTotal: positionsByDay.length,
+                positionsDaysOk: positionsByDay.length - positionsFailures,
+                positionsDaysFailed: positionsFailures,
+                positionsFailures: failedDates.slice(0, 30),
+              },
+            },
+          })
+          .catch(() => {})
+      }
 
       addRows(daysWritten + positionsWritten + alertsWritten)
       return { daysWritten, positionsWritten, alertsWritten }
