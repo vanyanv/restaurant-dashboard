@@ -240,7 +240,17 @@ def _write_menu_item_forecasts(
 
 def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
     """Train + forecast top-N menu items at one store under a single
-    MlTrainingRun row keyed on target=MENU_ITEM."""
+    MlTrainingRun row keyed on target=MENU_ITEM.
+
+    Promotion-gate note (Phase 1): MENU_ITEM is INTENTIONALLY outside the
+    seasonal-naive promotion gate that `_select_result` applies to REVENUE
+    and BUSY_HOURS. The per-SKU `train_menu_item` only produces ONE flavor
+    (no baseline-vs-enriched pair), so there's nothing to gate between.
+    Each SKU's model is published as-is; promotion gating for menu items
+    is deferred to a future phase that introduces a comparable baseline.
+    See `decide_promotion` docstring in ml.evaluation.promotion for the
+    list of targets the gate currently applies to.
+    """
     run_id = _open_run("MENU_ITEM", store_id, model_version)
     items = load_top_items(store_id, top_n=TOP_N_ITEMS_PER_STORE)
     if not items:

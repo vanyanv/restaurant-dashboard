@@ -44,6 +44,11 @@ def decide_promotion(
 ) -> PromotionDecision:
     """Gate: enriched model must beat BOTH baseline-XGBoost and seasonal-naive
     by >= `improvement_threshold` relative WAPE, else falls back.
+
+    Phase 1 scope: this gate applies only to REVENUE and BUSY_HOURS. MENU_ITEM
+    training produces a single per-SKU model (no baseline-vs-enriched pair),
+    so there is nothing to gate between for that target — see
+    `ml.run_nightly.run_menu_items_for_store` for the explanation.
     """
     def rel_improvement(base: float) -> float:
         if base <= 0:
