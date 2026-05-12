@@ -21,7 +21,6 @@ import os
 import sys
 import time
 import traceback
-from dataclasses import dataclass
 
 from ml.anomaly.zscore import (
     detect_menu_item_anomalies,
@@ -30,8 +29,19 @@ from ml.anomaly.zscore import (
 )
 from ml.elasticity.menu_item import run_for_store as run_elasticity_for_store
 from ml.db import connect, cuid_like
+from ml.evaluation.nightly_integration import (
+    run_consistency_check,
+    run_evaluation_pass,
+)
+from ml.evaluation.promotion import (
+    PromotionDecision,
+    decide_promotion,
+    select_with_gate,
+    should_promote_enriched,
+)
 from ml.features.menu_item import load_top_items
-from ml.features.revenue import list_active_store_ids
+from ml.features.revenue import list_active_store_ids, load_daily_revenue
+from ml.features.hourly_orders import load_hourly_orders
 from ml.models.menu_item import forecast as forecast_menu_item
 from ml.models.menu_item import train as train_menu_item
 from ml.models.hourly_orders import forecast as forecast_hourly_orders
@@ -90,82 +100,19 @@ def _set_run_model_version(run_id: str, model_version: str) -> None:
             cur.execute(sql, (model_version, run_id))
 
 
-@dataclass
-class PromotionDecision:
-    promoted: bool
-    label: str  # "enriched" | "fallback"
-    reason: str
+def _select_result(baseline, enriched, *, target: str, store_id: str):
+    """Thin wrapper around `select_with_gate`. Returns (chosen, label, reason).
 
-
-def decide_promotion(
-    *,
-    enriched_wape: float,
-    baseline_xgb_wape: float,
-    seasonal_naive_wape: float,
-    improvement_threshold: float = 0.05,
-) -> PromotionDecision:
-    """Gate: enriched model must beat BOTH baseline-XGBoost and seasonal-naive
-    by >= `improvement_threshold` relative WAPE, else falls back.
-
-    Relative improvement is `(baseline - enriched) / baseline`.
+    For daily targets (REVENUE / MENU_ITEM) the model_history is the
+    daily-revenue series; for hourly (BUSY_HOURS) it's the hourly-orders
+    series. We load lazily here because the caller already issued a
+    training pass against the same window.
     """
-    def rel_improvement(base: float) -> float:
-        if base <= 0:
-            return 0.0
-        return (base - enriched_wape) / base
-
-    vs_xgb = rel_improvement(baseline_xgb_wape)
-    vs_naive = rel_improvement(seasonal_naive_wape)
-
-    if vs_xgb >= improvement_threshold and vs_naive >= improvement_threshold:
-        return PromotionDecision(
-            promoted=True,
-            label="enriched",
-            reason=(
-                f"enriched WAPE {enriched_wape:.4f} beats baseline-XGB "
-                f"{baseline_xgb_wape:.4f} (+{vs_xgb*100:.1f}%) and seasonal-naive "
-                f"{seasonal_naive_wape:.4f} (+{vs_naive*100:.1f}%)"
-            ),
-        )
-    return PromotionDecision(
-        promoted=False,
-        label="fallback",
-        reason=(
-            f"enriched WAPE {enriched_wape:.4f} fails gate: vs XGB +{vs_xgb*100:.1f}% "
-            f"vs naive +{vs_naive*100:.1f}% (threshold {improvement_threshold*100:.0f}%)"
-        ),
-    )
-
-
-def should_promote_enriched(baseline, enriched) -> bool:
-    """Accuracy gate for weather/event models.
-
-    Promote when enriched MAPE improves by >=3% relative, or when MAE improves
-    by >=5% without material MAPE regression (<=0.5% relative worse).
-    """
-    if baseline is None or enriched is None:
-        return False
-    if baseline.mape is None or enriched.mape is None:
-        return False
-    if baseline.mape > 0 and enriched.mape <= baseline.mape * 0.97:
-        return True
-    if baseline.mae is not None and enriched.mae is not None and baseline.mae > 0:
-        mae_improved = enriched.mae <= baseline.mae * 0.95
-        mape_not_worse = enriched.mape <= baseline.mape * 1.005
-        return bool(mae_improved and mape_not_worse)
-    return False
-
-
-def _select_result(baseline, enriched):
-    # TODO(seasonal-naive-gate): once TrainResult exposes holdout actuals + a
-    # WAPE field (and the hourly model exposes its 168h holdout), feed them
-    # plus seasonal_naive_{daily,hourly} WAPE into `decide_promotion`. For now
-    # this remains the enriched-vs-baseline-XGBoost-only gate.
-    if should_promote_enriched(baseline, enriched):
-        return enriched, "promoted"
-    if enriched is None:
-        return baseline, "enriched_skipped"
-    return baseline, "baseline_won"
+    if target == "BUSY_HOURS":
+        history = load_hourly_orders(store_id)[["date", "hour", "orders"]]
+    else:
+        history = load_daily_revenue(store_id)[["date", "revenue"]]
+    return select_with_gate(baseline, enriched, target=target, model_history=history)
 
 
 def _version_with_flavor(model_version: str, result) -> str:
@@ -218,17 +165,16 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             return {"store_id": store_id, "ok": False, "reason": "insufficient_history"}
 
         enriched = train_revenue(store_id, enriched=True)
-        result, gate = _select_result(baseline, enriched)
+        result, gate, gate_reason = _select_result(
+            baseline, enriched, target="REVENUE", store_id=store_id
+        )
         selected_version = _version_with_flavor(model_version, result)
         _set_run_model_version(run_id, selected_version)
         rows = forecast_revenue(store_id, result, horizon_days=REVENUE_HORIZON_DAYS)
         written = _write_revenue_forecasts(store_id, selected_version, rows)
         warning = None
         if gate != "promoted":
-            warning = (
-                f"{gate}; enriched_mape={getattr(enriched, 'mape', None)}; "
-                f"baseline_mape={baseline.mape}"
-            )
+            warning = f"{gate}: {gate_reason}"
 
         _close_run(
             run_id,
@@ -417,7 +363,9 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
             }
 
         enriched = train_hourly_orders(store_id, enriched=True)
-        result, gate = _select_result(baseline, enriched)
+        result, gate, gate_reason = _select_result(
+            baseline, enriched, target="BUSY_HOURS", store_id=store_id
+        )
         selected_version = _version_with_flavor(model_version, result)
         _set_run_model_version(run_id, selected_version)
         rows = forecast_hourly_orders(
@@ -428,10 +376,7 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
         if result.harri_coverage < 0.6:
             warning = f"low_harri_coverage:{result.harri_coverage:.2f}"
         if gate != "promoted":
-            gate_warning = (
-                f"{gate}; enriched_mape={getattr(enriched, 'mape', None)}; "
-                f"baseline_mape={baseline.mape}"
-            )
+            gate_warning = f"{gate}: {gate_reason}"
             warning = f"{warning}; {gate_warning}" if warning else gate_warning
 
         _close_run(
@@ -659,6 +604,22 @@ def main() -> int:
         except Exception as exc:  # pylint: disable=broad-except
             print({
                 "phase": "RECONCILE",
+                "store_id": store_id,
+                "ok": False,
+                "reason": str(exc),
+            })
+            failures += 1
+
+        # Evaluator + consistency checks run AFTER reconciliation so the
+        # trailing 28-day window has the latest actuals filled in.
+        try:
+            with connect() as conn:
+                run_evaluation_pass(conn, store_id, dt.date.today())
+                run_consistency_check(conn, store_id, dt.date.today())
+            print({"phase": "EVALUATE", "store_id": store_id, "ok": True})
+        except Exception as exc:  # pylint: disable=broad-except
+            print({
+                "phase": "EVALUATE",
                 "store_id": store_id,
                 "ok": False,
                 "reason": str(exc),

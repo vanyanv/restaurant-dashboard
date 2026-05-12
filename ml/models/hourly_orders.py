@@ -13,7 +13,7 @@ to the legacy holdout-residual-std heuristic and tag the flavor with
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -57,6 +57,10 @@ class TrainResult:
     external_hourly: pd.DataFrame | None = None
     conformal: Optional[ConformalWrapper] = None
     uses_fallback_interval: bool = False
+    # Holdout arrays used by the seasonal-naive promotion gate; empty arrays
+    # mean "no holdout exposed" (back-compat default).
+    holdout_y_true: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    holdout_y_pred: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
 
 
 @dataclass
@@ -180,6 +184,8 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         external_hourly=external_hourly,
         conformal=conformal,
         uses_fallback_interval=uses_fallback,
+        holdout_y_true=np.asarray(actuals, dtype=float),
+        holdout_y_pred=np.asarray(preds, dtype=float),
     )
 
 
