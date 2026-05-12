@@ -21,6 +21,7 @@ import os
 import sys
 import time
 import traceback
+from dataclasses import dataclass
 
 from ml.anomaly.zscore import (
     detect_menu_item_anomalies,
@@ -89,6 +90,53 @@ def _set_run_model_version(run_id: str, model_version: str) -> None:
             cur.execute(sql, (model_version, run_id))
 
 
+@dataclass
+class PromotionDecision:
+    promoted: bool
+    label: str  # "enriched" | "fallback"
+    reason: str
+
+
+def decide_promotion(
+    *,
+    enriched_wape: float,
+    baseline_xgb_wape: float,
+    seasonal_naive_wape: float,
+    improvement_threshold: float = 0.05,
+) -> PromotionDecision:
+    """Gate: enriched model must beat BOTH baseline-XGBoost and seasonal-naive
+    by >= `improvement_threshold` relative WAPE, else falls back.
+
+    Relative improvement is `(baseline - enriched) / baseline`.
+    """
+    def rel_improvement(base: float) -> float:
+        if base <= 0:
+            return 0.0
+        return (base - enriched_wape) / base
+
+    vs_xgb = rel_improvement(baseline_xgb_wape)
+    vs_naive = rel_improvement(seasonal_naive_wape)
+
+    if vs_xgb >= improvement_threshold and vs_naive >= improvement_threshold:
+        return PromotionDecision(
+            promoted=True,
+            label="enriched",
+            reason=(
+                f"enriched WAPE {enriched_wape:.4f} beats baseline-XGB "
+                f"{baseline_xgb_wape:.4f} (+{vs_xgb*100:.1f}%) and seasonal-naive "
+                f"{seasonal_naive_wape:.4f} (+{vs_naive*100:.1f}%)"
+            ),
+        )
+    return PromotionDecision(
+        promoted=False,
+        label="fallback",
+        reason=(
+            f"enriched WAPE {enriched_wape:.4f} fails gate: vs XGB +{vs_xgb*100:.1f}% "
+            f"vs naive +{vs_naive*100:.1f}% (threshold {improvement_threshold*100:.0f}%)"
+        ),
+    )
+
+
 def should_promote_enriched(baseline, enriched) -> bool:
     """Accuracy gate for weather/event models.
 
@@ -109,6 +157,10 @@ def should_promote_enriched(baseline, enriched) -> bool:
 
 
 def _select_result(baseline, enriched):
+    # TODO(seasonal-naive-gate): once TrainResult exposes holdout actuals + a
+    # WAPE field (and the hourly model exposes its 168h holdout), feed them
+    # plus seasonal_naive_{daily,hourly} WAPE into `decide_promotion`. For now
+    # this remains the enriched-vs-baseline-XGBoost-only gate.
     if should_promote_enriched(baseline, enriched):
         return enriched, "promoted"
     if enriched is None:
