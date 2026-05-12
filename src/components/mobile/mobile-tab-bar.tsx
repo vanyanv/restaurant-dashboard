@@ -3,11 +3,28 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
+import {
+  FileText,
+  Home,
+  Menu,
+  MessageSquareText,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react"
 import { isTabActive, type MobileTab } from "@/lib/mobile/tabs"
+
+const TAB_ICONS: Record<MobileTab["icon"], LucideIcon> = {
+  home: Home,
+  pnl: TrendingUp,
+  invoices: FileText,
+  chat: MessageSquareText,
+  more: Menu,
+}
 
 export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
   const pathname = usePathname() ?? "/m"
   const router = useRouter()
+  const chatMode = pathname === "/m/chat" || pathname.startsWith("/m/chat/")
 
   useEffect(() => {
     const warm = () => {
@@ -28,10 +45,13 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
     return () => window.clearTimeout(id)
   }, [router, tabs])
 
+  if (chatMode) return null
+
   return (
     <nav className="m-tabbar" aria-label="Primary">
       {tabs.map((tab) => {
         const active = isTabActive(tab, pathname)
+        const Icon = TAB_ICONS[tab.icon]
         return (
           <Link
             key={tab.href}
@@ -40,7 +60,8 @@ export function MobileTabBar({ tabs }: { tabs: MobileTab[] }) {
             className={`m-tabbar__item${active ? " is-active" : ""}`}
             aria-current={active ? "page" : undefined}
           >
-            {tab.label}
+            <Icon className="m-tabbar__icon" aria-hidden />
+            <span className="m-tabbar__label">{tab.label}</span>
           </Link>
         )
       })}

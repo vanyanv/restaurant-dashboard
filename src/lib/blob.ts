@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   NoSuchKey,
   PutObjectCommand,
@@ -117,6 +118,101 @@ export async function getInvoicePdfStream(pathname: string): Promise<InvoicePdfF
     if (err instanceof NoSuchKey || (err as { name?: string }).name === "NoSuchKey") {
       return { statusCode: 404, stream: toEmptyStream() }
     }
+    throw err
+  }
+}
+
+// --- Product photos (one per CanonicalIngredient) ----------------------------
+
+const PRODUCT_PHOTO_CONTENT_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} as const
+
+export type ProductPhotoContentType = keyof typeof PRODUCT_PHOTO_CONTENT_TYPES
+
+export type ProductPhotoUpload = {
+  pathname: string
+  size: number
+  uploadedAt: Date
+}
+
+export type ProductPhotoFetch = {
+  statusCode: number
+  stream: ReadableStream<Uint8Array>
+  contentType: string | null
+}
+
+export function isProductPhotoContentType(value: string): value is ProductPhotoContentType {
+  return value in PRODUCT_PHOTO_CONTENT_TYPES
+}
+
+export async function putProductPhoto(
+  canonicalIngredientId: string,
+  photoBytes: Buffer,
+  contentType: ProductPhotoContentType,
+): Promise<ProductPhotoUpload> {
+  const { client, bucket } = getR2Client()
+  const safeId = canonicalIngredientId.replace(/[^A-Za-z0-9._-]/g, "_")
+  const ext = PRODUCT_PHOTO_CONTENT_TYPES[contentType]
+  const key = `products/${safeId}-${randomUUID()}.${ext}`
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: photoBytes,
+      ContentType: contentType,
+    }),
+  )
+
+  return {
+    pathname: key,
+    size: photoBytes.byteLength,
+    uploadedAt: new Date(),
+  }
+}
+
+export async function getProductPhotoStream(pathname: string): Promise<ProductPhotoFetch> {
+  const { client, bucket } = getR2Client()
+
+  try {
+    const result = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: pathname,
+      }),
+    )
+
+    return {
+      statusCode: result.$metadata.httpStatusCode ?? 200,
+      stream: toWebStream(result.Body),
+      contentType: result.ContentType ?? null,
+    }
+  } catch (err) {
+    if (err instanceof NoSuchKey || (err as { name?: string }).name === "NoSuchKey") {
+      return { statusCode: 404, stream: toEmptyStream(), contentType: null }
+    }
+    throw err
+  }
+}
+
+/**
+ * Best-effort delete. Swallows NoSuchKey so callers can safely replace photos
+ * without checking existence first; any other error propagates.
+ */
+export async function deleteProductPhoto(pathname: string): Promise<void> {
+  const { client, bucket } = getR2Client()
+  try {
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: pathname,
+      }),
+    )
+  } catch (err) {
+    if (err instanceof NoSuchKey || (err as { name?: string }).name === "NoSuchKey") return
     throw err
   }
 }

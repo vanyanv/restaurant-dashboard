@@ -831,7 +831,8 @@
   font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
   text-align: left;
-  padding: 9px 12px;
+  min-height: 44px;
+  padding: 11px 12px;
   border: 1px solid var(--hairline-bold);
   background: rgba(255, 253, 247, 0.6);
   color: var(--ink);
@@ -928,18 +929,56 @@
   color: var(--accent);
 }
 
-/* Send affordance: hovering or focusing the composer reddens the kbd
-   chip so the owner sees that Enter is the send key. The .live-dot that
-   replaces it during streaming crossfades in via the parent's chat-input
-   row transition. */
-.chat-input-row .kbd-chip {
-  transition: color 160ms ease, border-color 160ms ease;
+/* Send affordance: an icon button gives touch users an obvious action while
+   Enter remains the fast path for keyboard users. */
+.chat-input-send {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
-.chat-input-row:hover .kbd-chip,
-.chat-input-row:focus-within .kbd-chip {
+.chat-input-send svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.chat-input-row:hover .chat-input-send:not(:disabled),
+.chat-input-row:focus-within .chat-input-send:not(:disabled),
+.chat-input-send:not(:disabled):hover,
+.chat-input-send:not(:disabled):focus-visible {
   color: var(--accent);
   border-color: var(--accent);
+  outline: none;
+}
+
+.chat-input-send:not(:disabled):active {
+  background: var(--accent-bg);
+  transform: scale(0.94);
+  transition: color 100ms ease, border-color 100ms ease, background 100ms ease, transform 80ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chat-input-send:disabled {
+  color: var(--ink-faint);
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@media (max-width: 640px) {
+  .chat-input-send {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
 }
 
 @keyframes chat-livedot-fade-in {
@@ -952,9 +991,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-input-row .kbd-chip,
+  .chat-input-send,
+  .chat-input-send:not(:disabled):active,
   .chat-input-row .live-dot {
     transition: none;
+    transform: none;
     animation: none;
   }
 }

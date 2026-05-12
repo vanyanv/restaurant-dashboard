@@ -28,6 +28,7 @@ interface Props {
    * by the caller). Parent surfaces clear their context id so the next
    * send creates a fresh conversation instead of failing again. */
   onConversationLost?: () => void
+  inputHint?: string
 }
 
 /** Wraps `useChat` for the drawer + page surfaces. Exports a single
@@ -42,6 +43,7 @@ export function ChatThread({
   onTurnFinish,
   onConversationCaptured,
   onConversationLost,
+  inputHint,
 }: Props = {}) {
   const { conversationId } = useChatDrawer()
   const [seedText, setSeedText] = useState<string | undefined>(undefined)
@@ -166,7 +168,8 @@ export function ChatThread({
         ) : (
           messages.map((m, idx) => {
             const isLast = idx === messages.length - 1
-            const streamingThis = isStreaming && isLast && m.role === "assistant"
+            const streamingThis =
+              isStreaming && isLast && m.role === "assistant"
             // Cap stagger index so a long thread's reveal doesn't grow into
             // a multi-second wave. After the sixth row, every reveal lands
             // at the same time as the chat-thread fade.
@@ -189,6 +192,7 @@ export function ChatThread({
         isStreaming={isStreaming}
         error={errorText}
         initialText={seedText}
+        metaHint={inputHint}
       />
     </>
   )

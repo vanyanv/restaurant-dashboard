@@ -219,6 +219,8 @@ export function MatchPickerSheet({
           latestVendor: null,
           latestSku: null,
           trend30d: null,
+          hasPhoto: false,
+          photoVersion: null,
         })
         onMatched(group.key, result.canonicalIngredientId)
         onOpenChange(false)

@@ -12,6 +12,8 @@ export type MobileCatalogRow = {
   subValue?: string | null
   searchText: string
   valueTone?: "default" | "accent" | "muted"
+  /** Optional leading slot (e.g. ingredient thumbnail). */
+  leading?: ReactNode
 }
 
 type Props = {
@@ -20,6 +22,8 @@ type Props = {
   ariaLabel: string
   emptyLabel?: string
   actions?: ReactNode
+  /** Optional row-tap handler. When omitted, rows are non-interactive. */
+  onSelect?: (id: string) => void
 }
 
 export function MobileCatalogList({
@@ -28,6 +32,7 @@ export function MobileCatalogList({
   ariaLabel,
   emptyLabel = "No matches.",
   actions,
+  onSelect,
 }: Props) {
   const [query, setQuery] = useState("")
   const deferredQuery = useDeferredValue(query)
@@ -73,6 +78,34 @@ export function MobileCatalogList({
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const row = filtered[virtualRow.index]
+              const interactive = typeof onSelect === "function"
+              const inner = (
+                <div className="inv-row m-catalog-row">
+                  {row.leading ? (
+                    <span className="m-catalog-row__leading">{row.leading}</span>
+                  ) : null}
+                  <span className="m-catalog-row__main">
+                    <span className="inv-row__vendor-name m-catalog-row__title">
+                      {row.title}
+                    </span>
+                    <span className="m-catalog-row__meta">{row.meta}</span>
+                  </span>
+                  <span className="m-catalog-row__value">
+                    <span
+                      className={cn(
+                        "inv-row__total",
+                        row.valueTone === "muted" && "m-catalog-row__value--muted",
+                        row.valueTone === "accent" && "m-catalog-row__value--accent",
+                      )}
+                    >
+                      {row.value}
+                    </span>
+                    {row.subValue ? (
+                      <span className="m-catalog-row__subvalue">{row.subValue}</span>
+                    ) : null}
+                  </span>
+                </div>
+              )
               return (
                 <div
                   key={row.id}
@@ -81,28 +114,17 @@ export function MobileCatalogList({
                   className="m-catalog-list__item"
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <div className="inv-row m-catalog-row">
-                    <span className="m-catalog-row__main">
-                      <span className="inv-row__vendor-name m-catalog-row__title">
-                        {row.title}
-                      </span>
-                      <span className="m-catalog-row__meta">{row.meta}</span>
-                    </span>
-                    <span className="m-catalog-row__value">
-                      <span
-                        className={cn(
-                          "inv-row__total",
-                          row.valueTone === "muted" && "m-catalog-row__value--muted",
-                          row.valueTone === "accent" && "m-catalog-row__value--accent",
-                        )}
-                      >
-                        {row.value}
-                      </span>
-                      {row.subValue ? (
-                        <span className="m-catalog-row__subvalue">{row.subValue}</span>
-                      ) : null}
-                    </span>
-                  </div>
+                  {interactive ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect!(row.id)}
+                      className="m-catalog-list__item-button"
+                    >
+                      {inner}
+                    </button>
+                  ) : (
+                    inner
+                  )}
                 </div>
               )
             })}

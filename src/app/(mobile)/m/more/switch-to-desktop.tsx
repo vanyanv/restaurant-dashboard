@@ -9,7 +9,7 @@ export function SwitchToDesktopButton() {
     window.location.href = "/dashboard"
   }
   return (
-    <button type="button" className="toolbar-btn" onClick={setCookieAndGo}>
+    <button type="button" className="m-toolbar-btn" onClick={setCookieAndGo}>
       Switch to desktop view →
     </button>
   )

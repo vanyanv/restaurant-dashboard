@@ -247,9 +247,24 @@ packSize>30. For Produce + CT, packSize > 2 is essentially never real — flag i
 re-splitting.
 
 Rules:
-- If the product is meat sold by weight (Premier Meats, Ben E. Keith, similar deli meats)
-  the invoice has NO pack — a single weighed item. Put the weight in quantity with
-  unit="LB"; set packSize=null, unitSize=null, unitSizeUom=null.
+- CATCH-WEIGHT MEAT (Premier Meats, Crystal Bay, Ben E. Keith, similar deli/butcher
+  vendors; or category ∈ {Meat, Poultry, Seafood}) — these invoices typically have
+  BOTH an "Order Qty" column with a case count (e.g. "9.00 CS") AND a "Shipped Qty"
+  column with a pound total (e.g. "634.45 LB"). Many also list each carton's
+  weighed value below the line as a comma-separated list (e.g.
+  "70.45, 70.45, 71.05, 70.25, 70.45, ..."), and/or a "BX/CS TOTAL = N" footer.
+  Capture all of these signals in the existing fields:
+      quantity     = the LB total from the Shipped Qty column (so quantity × unitPrice
+                     reconciles against extendedPrice; unitPrice is per-LB)
+      unit         = "LB"
+      packSize     = the case count (Order Qty / BX/CS column / footer total) as an
+                     integer in [1, 30]
+      unitSize     = arithmetic mean of the per-case weights when a weight list is
+                     printed under the line; otherwise quantity / packSize
+      unitSizeUom  = "LB"
+  When the invoice shows ONLY a pound total and no case count, weight list, or BX/CS
+  footer can be found, fall back to packSize=null, unitSize=null, unitSizeUom=null.
+  Never guess a case count.
 - If only a count appears (produce: "1 CS 24 CT"), set packSize=24, unitSize=1,
   unitSizeUom="CT".
 - If the split is truly ambiguous AND no plausible interpretation exists, return

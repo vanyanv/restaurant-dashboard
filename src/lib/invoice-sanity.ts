@@ -104,6 +104,82 @@ function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000
 }
 
+const CATCH_WEIGHT_MIN_PER_CASE_LB = 0.25
+const CATCH_WEIGHT_MAX_PER_CASE_LB = 200
+const CATCH_WEIGHT_MAX_INFERRED_CASES = 30
+
+/**
+ * Pull a comma-separated list of per-case weights out of an invoice line's
+ * description text. Premier Meats and similar catch-weight vendors print the
+ * actual weighed value of each carton below the line (e.g.
+ * `"70.45, 70.45, 71.05, 70.25, ..."`). When at least two numbers in the
+ * plausible per-case weight range are joined only by commas + whitespace, this
+ * returns them in order. Otherwise returns null — the caller must validate
+ * against the line's total quantity before acting on the result.
+ */
+export function parsePerCaseWeights(description: string | null): number[] | null {
+  if (!description) return null
+
+  const numRe = /\b\d{1,3}(?:\.\d{1,3})?\b/g
+  const matches: Array<{ value: number; start: number; end: number }> = []
+  let m: RegExpExecArray | null
+  while ((m = numRe.exec(description)) !== null) {
+    matches.push({
+      value: parseFloat(m[0]),
+      start: m.index,
+      end: m.index + m[0].length,
+    })
+  }
+  if (matches.length < 2) return null
+
+  // Find the longest contiguous run where the gap between consecutive matches
+  // is exactly one comma plus surrounding whitespace (newlines count).
+  let bestRun: number[] = []
+  let currentRun: number[] = [matches[0].value]
+  for (let i = 1; i < matches.length; i++) {
+    const gap = description.slice(matches[i - 1].end, matches[i].start)
+    if (/^\s*,\s*$/.test(gap)) {
+      currentRun.push(matches[i].value)
+    } else {
+      if (currentRun.length > bestRun.length) bestRun = currentRun
+      currentRun = [matches[i].value]
+    }
+  }
+  if (currentRun.length > bestRun.length) bestRun = currentRun
+
+  if (bestRun.length < 2) return null
+  const allInRange = bestRun.every(
+    (v) => v >= CATCH_WEIGHT_MIN_PER_CASE_LB && v <= CATCH_WEIGHT_MAX_PER_CASE_LB
+  )
+  if (!allInRange) return null
+  return bestRun
+}
+
+/**
+ * Given the line's original carton count (before catch-weight normalization
+ * rewrote `quantity → impliedLB`) and the implied LB total, infer pack fields:
+ *
+ *   packSize  = round(|originalQuantity|)   if it's a plausible integer ∈ [1, 30]
+ *   unitSize  = |impliedQuantity| / packSize
+ *   unitSizeUom = "LB"
+ *
+ * Returns null when no plausible inference can be made.
+ */
+function inferCatchWeightPackFromCartonCount(
+  originalQuantity: number,
+  impliedQuantity: number
+): { packSize: number; unitSize: number; unitSizeUom: "LB" } | null {
+  const absCases = Math.abs(originalQuantity)
+  if (!Number.isFinite(absCases) || absCases <= 0) return null
+  const rounded = Math.round(absCases)
+  if (Math.abs(rounded - absCases) > 0.01) return null
+  if (rounded < 1 || rounded > CATCH_WEIGHT_MAX_INFERRED_CASES) return null
+  const unitSize = Math.abs(impliedQuantity) / rounded
+  if (!Number.isFinite(unitSize) || unitSize <= 0) return null
+  if (unitSize < CATCH_WEIGHT_MIN_PER_CASE_LB || unitSize > CATCH_WEIGHT_MAX_PER_CASE_LB) return null
+  return { packSize: rounded, unitSize, unitSizeUom: "LB" }
+}
+
 function isCatchWeightCandidate(
   vendorName: string | null | undefined,
   line: InvoiceExtraction["lineItems"][number],
@@ -137,6 +213,21 @@ function isCatchWeightCandidate(
  * Fix LLM catch-weight mistakes where a meat invoice line captures the carton
  * count (e.g. `6 CS`) even though unitPrice and extendedPrice prove the printed
  * purchasable quantity is pounds.
+ *
+ * After rewriting `quantity → impliedLB, unit → "LB"`, the function also tries
+ * to recover the case structure that was originally on the invoice. Preference
+ * order:
+ *
+ *   1. Per-case weight list in `description` (most reliable — uses
+ *      `parsePerCaseWeights` and validates that the sum is within 2% of the
+ *      implied LB total).
+ *   2. The original `quantity` value (the carton count the model captured
+ *      before we realized it should be a pound total), when it's a plausible
+ *      integer in `[1, CATCH_WEIGHT_MAX_INFERRED_CASES]`.
+ *
+ * If neither yields a sane result, pack fields stay null. Downstream readers
+ * use the convention `unit === "LB" && packSize >= 1 && unitSizeUom === "LB"`
+ * as the catch-weight signature.
  */
 export function normalizeCatchWeightMeatLines(
   extraction: InvoiceExtraction
@@ -163,14 +254,32 @@ export function normalizeCatchWeightMeatLines(
       return line
     }
 
+    // Try description first (more accurate). Fall back to carton count.
+    const weights = parsePerCaseWeights(line.description)
+    let pack: { packSize: number; unitSize: number; unitSizeUom: "LB" } | null = null
+    if (weights) {
+      const sum = weights.reduce((acc, v) => acc + v, 0)
+      const ratio = Math.abs(sum - Math.abs(impliedQuantity)) / Math.abs(impliedQuantity)
+      if (ratio <= LINE_MATH_TOLERANCE) {
+        pack = {
+          packSize: weights.length,
+          unitSize: sum / weights.length,
+          unitSizeUom: "LB",
+        }
+      }
+    }
+    if (!pack) {
+      pack = inferCatchWeightPackFromCartonCount(qty, impliedQuantity)
+    }
+
     changed = true
     return {
       ...line,
       quantity: roundQuantity(impliedQuantity),
       unit: "LB",
-      packSize: null,
-      unitSize: null,
-      unitSizeUom: null,
+      packSize: pack ? pack.packSize : null,
+      unitSize: pack ? roundQuantity(pack.unitSize) : null,
+      unitSizeUom: pack ? pack.unitSizeUom : null,
     }
   })
 
