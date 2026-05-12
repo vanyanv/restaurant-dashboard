@@ -33,7 +33,9 @@ from ml.features.revenue import (
 from ml.features.external_signals import external_signal_coverage
 
 
-MIN_CALIBRATION_ROWS = 10
+# MAPIE's 95% wrapper needs >=20 samples (1/alpha). Below that the inner
+# call raises, so anything smaller forces the legacy-residual-std fallback.
+MIN_CALIBRATION_ROWS = 20
 
 
 @dataclass

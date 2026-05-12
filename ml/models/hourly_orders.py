@@ -35,6 +35,8 @@ from ml.features.hourly_orders import (
 )
 
 
+# MAPIE's 95% wrapper needs >=20 samples (1/alpha). With hourly granularity
+# any reasonable history clears this — 24 also rounds to a full day.
 MIN_CALIBRATION_ROWS = 24
 
 
