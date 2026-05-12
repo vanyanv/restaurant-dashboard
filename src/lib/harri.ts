@@ -89,7 +89,7 @@ async function refreshAccessToken(): Promise<string> {
   return access
 }
 
-async function getHarriJwt(): Promise<string> {
+export async function getHarriJwt(): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
 
   // 1. Static env override takes priority unless near expiry (5-min buffer).
