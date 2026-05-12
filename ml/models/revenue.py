@@ -68,7 +68,12 @@ def _conformal_split(feats: pd.DataFrame, cols: list[str]) -> tuple[
     Drops rows missing any feature so the calibration set is dense, then
     splits by index position. Returns (train, calib, holdout).
     """
-    clean = feats.dropna(subset=cols).reset_index(drop=True)
+    # Explicit chronological sort: calibration/holdout MUST be strictly future of train.
+    clean = (
+        feats.dropna(subset=cols)
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
     n = len(clean)
     n_train = int(n * 0.80)
     n_calib = int(n * 0.10)
