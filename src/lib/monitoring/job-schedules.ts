@@ -21,6 +21,7 @@ export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   "monitoring.sweep":       { cadenceMinutes: 15,      description: "every 15m" },
   "monitoring.cleanup":     { cadenceMinutes: 60 * 24, description: "daily" },
   "monitoring.db-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
+  "ml.operator-gate-check": { cadenceMinutes: 60 * 24, description: "daily" },
 }
 
 export const OVERDUE_MULTIPLIER = 1.5
