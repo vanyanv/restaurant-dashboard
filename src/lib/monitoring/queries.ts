@@ -758,6 +758,12 @@ type DailyGateRun = {
   status: "SUCCESS" | "FAILURE"
 }
 
+function isMissingRelationError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string; meta?: unknown }
+  const detail = `${err.message ?? ""} ${JSON.stringify(err.meta ?? {})}`
+  return err.code === "P2010" && (detail.includes("does not exist") || detail.includes("TableDoesNotExist"))
+}
+
 function countConsecutiveSuccesses(rows: DailyGateRun[]): number {
   let streak = 0
   for (const row of rows) {
@@ -768,14 +774,7 @@ function countConsecutiveSuccesses(rows: DailyGateRun[]): number {
 }
 
 export async function getOperatorGateStatus(): Promise<OperatorGateStatus> {
-  const [
-    latestRun,
-    dailyRuns,
-    evalRows,
-    seasonalRows,
-    coverageRows,
-    reconciliationRows,
-  ] = await Promise.all([
+  const [latestRun, dailyRuns] = await Promise.all([
     prisma.jobRun.findFirst({
       where: { jobName: "ml.operator-gate-check" },
       orderBy: { startedAt: "desc" },
@@ -794,6 +793,71 @@ export async function getOperatorGateStatus(): Promise<OperatorGateStatus> {
       ORDER BY 1 DESC
       LIMIT 14
     `,
+  ])
+
+  const fallback: OperatorGateStatus = {
+    latestRun: latestRun
+      ? {
+          startedAt: latestRun.startedAt,
+          completedAt: latestRun.completedAt,
+          status: latestRun.status,
+          durationMs: latestRun.durationMs,
+          errorMessage: latestRun.errorMessage,
+        }
+      : null,
+    passStreak: countConsecutiveSuccesses(dailyRuns),
+    neededPasses: 7,
+    gates: [
+      {
+        key: "evalRows",
+        label: "Eval rows today",
+        passed: false,
+        detail: "MlForecastEvaluation table is not present in this database",
+      },
+      {
+        key: "seasonalNaive",
+        label: "Seasonal-naive gate",
+        passed: false,
+        detail: "Waiting for schema migration and the next nightly training run",
+      },
+      {
+        key: "coverage",
+        label: "Revenue interval coverage",
+        passed: false,
+        detail: "MlForecastEvaluation table is required for coverage checks",
+      },
+      {
+        key: "reconciliation",
+        label: "Reconciliation coverage",
+        passed: false,
+        detail: "Waiting for the operator gate check to run after schema is ready",
+      },
+    ],
+  }
+
+  const [schemaReady] = await prisma.$queryRaw<{ exists: boolean }[]>`
+    SELECT to_regclass('"MlForecastEvaluation"') IS NOT NULL AS "exists"
+  `
+  if (!schemaReady?.exists) return fallback
+
+  let evalRows: { expected: number; covered: number }[]
+  let seasonalRows: { naiveMentions: number; totalRuns: number }[]
+  let coverageRows: {
+    stores: number
+    minCoverage: number | null
+    avgCoverage: number | null
+    maxCoverage: number | null
+    outsideAcceptBand: number
+  }[]
+  let reconciliationRows: { tables: number; passingTables: number; minCoveragePct: number | null }[]
+
+  try {
+    [
+      evalRows,
+      seasonalRows,
+      coverageRows,
+      reconciliationRows,
+    ] = await Promise.all([
     prisma.$queryRaw<{ expected: number; covered: number }[]>`
       WITH pairs AS (
         SELECT s.id AS "storeId", t.target
@@ -869,7 +933,11 @@ export async function getOperatorGateStatus(): Promise<OperatorGateStatus> {
         MIN(CASE WHEN total > 0 THEN reconciled::float / total * 100 ELSE 0 END)::float AS "minCoveragePct"
       FROM coverage
     `,
-  ])
+    ])
+  } catch (error) {
+    if (isMissingRelationError(error)) return fallback
+    throw error
+  }
 
   const evalSummary = evalRows[0] ?? { expected: 0, covered: 0 }
   const seasonal = seasonalRows[0] ?? { naiveMentions: 0, totalRuns: 0 }
