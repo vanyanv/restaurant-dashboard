@@ -29,8 +29,20 @@ from ml.anomaly.zscore import (
 )
 from ml.elasticity.menu_item import run_for_store as run_elasticity_for_store
 from ml.db import connect, cuid_like
+from ml.evaluation.nightly_integration import (
+    run_consistency_check,
+    run_evaluation_pass,
+)
+from ml.evaluation.promotion import (
+    PromotionDecision,
+    decide_promotion,
+    select_with_gate,
+    should_promote_enriched,
+)
+from ml.evaluation.reconcile import reconcile_past_forecasts
 from ml.features.menu_item import load_top_items
-from ml.features.revenue import list_active_store_ids
+from ml.features.revenue import list_active_store_ids, load_daily_revenue
+from ml.features.hourly_orders import load_hourly_orders
 from ml.models.menu_item import forecast as forecast_menu_item
 from ml.models.menu_item import train as train_menu_item
 from ml.models.hourly_orders import forecast as forecast_hourly_orders
@@ -89,31 +101,19 @@ def _set_run_model_version(run_id: str, model_version: str) -> None:
             cur.execute(sql, (model_version, run_id))
 
 
-def should_promote_enriched(baseline, enriched) -> bool:
-    """Accuracy gate for weather/event models.
+def _select_result(baseline, enriched, *, target: str, store_id: str):
+    """Thin wrapper around `select_with_gate`. Returns (chosen, label, reason).
 
-    Promote when enriched MAPE improves by >=3% relative, or when MAE improves
-    by >=5% without material MAPE regression (<=0.5% relative worse).
+    For daily targets (REVENUE / MENU_ITEM) the model_history is the
+    daily-revenue series; for hourly (BUSY_HOURS) it's the hourly-orders
+    series. We load lazily here because the caller already issued a
+    training pass against the same window.
     """
-    if baseline is None or enriched is None:
-        return False
-    if baseline.mape is None or enriched.mape is None:
-        return False
-    if baseline.mape > 0 and enriched.mape <= baseline.mape * 0.97:
-        return True
-    if baseline.mae is not None and enriched.mae is not None and baseline.mae > 0:
-        mae_improved = enriched.mae <= baseline.mae * 0.95
-        mape_not_worse = enriched.mape <= baseline.mape * 1.005
-        return bool(mae_improved and mape_not_worse)
-    return False
-
-
-def _select_result(baseline, enriched):
-    if should_promote_enriched(baseline, enriched):
-        return enriched, "promoted"
-    if enriched is None:
-        return baseline, "enriched_skipped"
-    return baseline, "baseline_won"
+    if target == "BUSY_HOURS":
+        history = load_hourly_orders(store_id)[["date", "hour", "orders"]]
+    else:
+        history = load_daily_revenue(store_id)[["date", "revenue"]]
+    return select_with_gate(baseline, enriched, target=target, model_history=history)
 
 
 def _version_with_flavor(model_version: str, result) -> str:
@@ -166,17 +166,16 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             return {"store_id": store_id, "ok": False, "reason": "insufficient_history"}
 
         enriched = train_revenue(store_id, enriched=True)
-        result, gate = _select_result(baseline, enriched)
+        result, gate, gate_reason = _select_result(
+            baseline, enriched, target="REVENUE", store_id=store_id
+        )
         selected_version = _version_with_flavor(model_version, result)
         _set_run_model_version(run_id, selected_version)
         rows = forecast_revenue(store_id, result, horizon_days=REVENUE_HORIZON_DAYS)
         written = _write_revenue_forecasts(store_id, selected_version, rows)
         warning = None
         if gate != "promoted":
-            warning = (
-                f"{gate}; enriched_mape={getattr(enriched, 'mape', None)}; "
-                f"baseline_mape={baseline.mape}"
-            )
+            warning = f"{gate}: {gate_reason}"
 
         _close_run(
             run_id,
@@ -242,7 +241,17 @@ def _write_menu_item_forecasts(
 
 def run_menu_items_for_store(store_id: str, model_version: str) -> dict:
     """Train + forecast top-N menu items at one store under a single
-    MlTrainingRun row keyed on target=MENU_ITEM."""
+    MlTrainingRun row keyed on target=MENU_ITEM.
+
+    Promotion-gate note (Phase 1): MENU_ITEM is INTENTIONALLY outside the
+    seasonal-naive promotion gate that `_select_result` applies to REVENUE
+    and BUSY_HOURS. The per-SKU `train_menu_item` only produces ONE flavor
+    (no baseline-vs-enriched pair), so there's nothing to gate between.
+    Each SKU's model is published as-is; promotion gating for menu items
+    is deferred to a future phase that introduces a comparable baseline.
+    See `decide_promotion` docstring in ml.evaluation.promotion for the
+    list of targets the gate currently applies to.
+    """
     run_id = _open_run("MENU_ITEM", store_id, model_version)
     items = load_top_items(store_id, top_n=TOP_N_ITEMS_PER_STORE)
     if not items:
@@ -365,7 +374,9 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
             }
 
         enriched = train_hourly_orders(store_id, enriched=True)
-        result, gate = _select_result(baseline, enriched)
+        result, gate, gate_reason = _select_result(
+            baseline, enriched, target="BUSY_HOURS", store_id=store_id
+        )
         selected_version = _version_with_flavor(model_version, result)
         _set_run_model_version(run_id, selected_version)
         rows = forecast_hourly_orders(
@@ -376,10 +387,7 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
         if result.harri_coverage < 0.6:
             warning = f"low_harri_coverage:{result.harri_coverage:.2f}"
         if gate != "promoted":
-            gate_warning = (
-                f"{gate}; enriched_mape={getattr(enriched, 'mape', None)}; "
-                f"baseline_mape={baseline.mape}"
-            )
+            gate_warning = f"{gate}: {gate_reason}"
             warning = f"{warning}; {gate_warning}" if warning else gate_warning
 
         _close_run(
@@ -479,6 +487,34 @@ def main() -> int:
         elasticity_result = run_elasticity_for_store(store_id)
         print({"phase": "ELASTICITY", **elasticity_result})
         if not elasticity_result.get("ok"):
+            failures += 1
+
+        try:
+            reconcile_result = reconcile_past_forecasts(store_id)
+            print({"phase": "RECONCILE", **reconcile_result})
+        except Exception as exc:  # pylint: disable=broad-except
+            print({
+                "phase": "RECONCILE",
+                "store_id": store_id,
+                "ok": False,
+                "reason": str(exc),
+            })
+            failures += 1
+
+        # Evaluator + consistency checks run AFTER reconciliation so the
+        # trailing 28-day window has the latest actuals filled in.
+        try:
+            with connect() as conn:
+                run_evaluation_pass(conn, store_id, dt.date.today())
+                run_consistency_check(conn, store_id, dt.date.today())
+            print({"phase": "EVALUATE", "store_id": store_id, "ok": True})
+        except Exception as exc:  # pylint: disable=broad-except
+            print({
+                "phase": "EVALUATE",
+                "store_id": store_id,
+                "ok": False,
+                "reason": str(exc),
+            })
             failures += 1
     return 0 if failures == 0 else 1
 
