@@ -39,6 +39,16 @@ The script prints one JSON-ish dict per store. It writes:
 Sets `DATABASE_URL` from the `DATABASE_URL` repo secret. Logs go to the
 workflow artifact `ml-nightly-log-<run_id>` for 14 days.
 
+`.github/workflows/ml-operator-gate-check.yml` runs the Phase 1 validation
+discipline check each morning on cron `0 14 * * *` UTC:
+
+```bash
+ml/.venv/bin/python -m ml.evaluation.operator_gate_check
+```
+
+The check writes `JobRun` rows under `ml.operator-gate-check`; the ML
+monitoring tab shows the latest run, gate signals, and the 7-PASS streak.
+
 ## Adding a new target
 
 1. Build a feature module in `ml/features/<target>.py`.

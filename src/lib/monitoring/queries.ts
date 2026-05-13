@@ -731,6 +731,203 @@ export async function getBusyHoursModelStatus(): Promise<BusyHoursModelStatus> {
   }
 }
 
+export type OperatorGateRun = {
+  startedAt: Date | null
+  completedAt: Date | null
+  status: "RUNNING" | "SUCCESS" | "FAILURE" | "PARTIAL" | null
+  durationMs: number | null
+  errorMessage: string | null
+}
+
+export type OperatorGateSignal = {
+  key: "evalRows" | "seasonalNaive" | "coverage" | "reconciliation"
+  label: string
+  passed: boolean
+  detail: string
+}
+
+export type OperatorGateStatus = {
+  latestRun: OperatorGateRun | null
+  passStreak: number
+  neededPasses: number
+  gates: OperatorGateSignal[]
+}
+
+type DailyGateRun = {
+  day: Date
+  status: "SUCCESS" | "FAILURE"
+}
+
+function countConsecutiveSuccesses(rows: DailyGateRun[]): number {
+  let streak = 0
+  for (const row of rows) {
+    if (row.status !== "SUCCESS") break
+    streak += 1
+  }
+  return streak
+}
+
+export async function getOperatorGateStatus(): Promise<OperatorGateStatus> {
+  const [
+    latestRun,
+    dailyRuns,
+    evalRows,
+    seasonalRows,
+    coverageRows,
+    reconciliationRows,
+  ] = await Promise.all([
+    prisma.jobRun.findFirst({
+      where: { jobName: "ml.operator-gate-check" },
+      orderBy: { startedAt: "desc" },
+      select: { startedAt: true, completedAt: true, status: true, durationMs: true, errorMessage: true },
+    }),
+    prisma.$queryRaw<DailyGateRun[]>`
+      SELECT
+        date_trunc('day', "startedAt") AS day,
+        CASE
+          WHEN BOOL_OR(status = 'SUCCESS'::"JobStatus") THEN 'SUCCESS'
+          ELSE 'FAILURE'
+        END AS status
+      FROM "JobRun"
+      WHERE "jobName" = 'ml.operator-gate-check'
+      GROUP BY 1
+      ORDER BY 1 DESC
+      LIMIT 14
+    `,
+    prisma.$queryRaw<{ expected: number; covered: number }[]>`
+      WITH pairs AS (
+        SELECT s.id AS "storeId", t.target
+        FROM "Store" s
+        CROSS JOIN (VALUES
+          ('REVENUE'::"MlTarget"),
+          ('BUSY_HOURS'::"MlTarget"),
+          ('MENU_ITEM'::"MlTarget")
+        ) AS t(target)
+        WHERE s."isActive" = true
+      )
+      SELECT
+        COUNT(*)::int AS expected,
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1
+            FROM "MlForecastEvaluation" e
+            WHERE e."storeId" = pairs."storeId"
+              AND e.target = pairs.target
+              AND e."computedAt"::date = CURRENT_DATE
+          )
+        )::int AS covered
+      FROM pairs
+    `,
+    prisma.$queryRaw<{ naiveMentions: number; totalRuns: number }[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE "errorMessage" ILIKE '%seasonal-naive%')::int AS "naiveMentions",
+        COUNT(*)::int AS "totalRuns"
+      FROM "MlTrainingRun"
+      WHERE "startedAt" >= (CURRENT_DATE - INTERVAL '7 days')
+    `,
+    prisma.$queryRaw<{ stores: number; minCoverage: number | null; avgCoverage: number | null; maxCoverage: number | null; outsideAcceptBand: number }[]>`
+      WITH per_store AS (
+        SELECT
+          s.id,
+          AVG(e."intervalCoverage80")::float AS coverage
+        FROM "Store" s
+        JOIN "MlForecastEvaluation" e
+          ON e."storeId" = s.id
+         AND e.target = 'REVENUE'::"MlTarget"
+         AND e."computedAt" >= (NOW() - INTERVAL '7 days')
+         AND e."intervalCoverage80" IS NOT NULL
+        WHERE s."isActive" = true
+        GROUP BY s.id
+      )
+      SELECT
+        COUNT(*)::int AS stores,
+        MIN(coverage)::float AS "minCoverage",
+        AVG(coverage)::float AS "avgCoverage",
+        MAX(coverage)::float AS "maxCoverage",
+        COUNT(*) FILTER (WHERE coverage < 0.75 OR coverage > 0.85)::int AS "outsideAcceptBand"
+      FROM per_store
+    `,
+    prisma.$queryRaw<{ tables: number; passingTables: number; minCoveragePct: number | null }[]>`
+      WITH coverage AS (
+        SELECT 'ForecastDailyRevenue' AS table_name, COUNT(*)::int AS total, COUNT("actualRevenue")::int AS reconciled
+        FROM "ForecastDailyRevenue"
+        WHERE "forecastDate" < CURRENT_DATE
+        UNION ALL
+        SELECT 'ForecastHourlyOrders' AS table_name, COUNT(*)::int AS total, COUNT("actualOrders")::int AS reconciled
+        FROM "ForecastHourlyOrders"
+        WHERE "forecastDate" < CURRENT_DATE
+        UNION ALL
+        SELECT 'ForecastMenuItem' AS table_name, COUNT(*)::int AS total, COUNT("actualQty")::int AS reconciled
+        FROM "ForecastMenuItem"
+        WHERE "forecastDate" < CURRENT_DATE
+      )
+      SELECT
+        COUNT(*)::int AS tables,
+        COUNT(*) FILTER (
+          WHERE total > 0 AND (reconciled::float / NULLIF(total, 0)) >= 0.8
+        )::int AS "passingTables",
+        MIN(CASE WHEN total > 0 THEN reconciled::float / total * 100 ELSE 0 END)::float AS "minCoveragePct"
+      FROM coverage
+    `,
+  ])
+
+  const evalSummary = evalRows[0] ?? { expected: 0, covered: 0 }
+  const seasonal = seasonalRows[0] ?? { naiveMentions: 0, totalRuns: 0 }
+  const coverage = coverageRows[0] ?? {
+    stores: 0,
+    minCoverage: null,
+    avgCoverage: null,
+    maxCoverage: null,
+    outsideAcceptBand: 0,
+  }
+  const reconciliation = reconciliationRows[0] ?? { tables: 0, passingTables: 0, minCoveragePct: null }
+
+  const coverageDetail =
+    coverage.stores > 0
+      ? `${coverage.stores} stores, avg ${((coverage.avgCoverage ?? 0) * 100).toFixed(1)}%, range ${((coverage.minCoverage ?? 0) * 100).toFixed(1)}-${((coverage.maxCoverage ?? 0) * 100).toFixed(1)}%`
+      : "No revenue coverage rows in the trailing 7 days"
+
+  return {
+    latestRun: latestRun
+      ? {
+          startedAt: latestRun.startedAt,
+          completedAt: latestRun.completedAt,
+          status: latestRun.status,
+          durationMs: latestRun.durationMs,
+          errorMessage: latestRun.errorMessage,
+        }
+      : null,
+    passStreak: countConsecutiveSuccesses(dailyRuns),
+    neededPasses: 7,
+    gates: [
+      {
+        key: "evalRows",
+        label: "Eval rows today",
+        passed: evalSummary.expected > 0 && evalSummary.covered === evalSummary.expected,
+        detail: `${evalSummary.covered}/${evalSummary.expected} active store-target pairs covered`,
+      },
+      {
+        key: "seasonalNaive",
+        label: "Seasonal-naive gate",
+        passed: seasonal.naiveMentions > 0,
+        detail: `${seasonal.naiveMentions}/${seasonal.totalRuns} runs mention seasonal-naive in 7 days`,
+      },
+      {
+        key: "coverage",
+        label: "Revenue interval coverage",
+        passed: coverage.stores > 0 && coverage.outsideAcceptBand === 0,
+        detail: coverageDetail,
+      },
+      {
+        key: "reconciliation",
+        label: "Reconciliation coverage",
+        passed: reconciliation.tables === 3 && reconciliation.passingTables === 3,
+        detail: `${reconciliation.passingTables}/${reconciliation.tables} tables >=80%, floor ${(reconciliation.minCoveragePct ?? 0).toFixed(1)}%`,
+      },
+    ],
+  }
+}
+
 export type ExternalSignalCoverageSummary = {
   activeStores: number
   geocodedStores: number

@@ -31,17 +31,71 @@ Gates (from `docs/superpowers/plans/2026-05-12-...`, Task 13):
 
 from __future__ import annotations
 import sys
+import time
+import traceback
 from datetime import date, timedelta
+from typing import Any
 
-from ml.db import connect
+from psycopg2.extras import Json
+
+from ml.db import connect, cuid_like
 from ml.evaluation.audit import fetch_reconciliation_rows, summarize_reconciliation
 
 
+_JOB_NAME = "ml.operator-gate-check"
 _COVERAGE_TARGET_LOW = 0.78
 _COVERAGE_TARGET_HIGH = 0.82
 _COVERAGE_ACCEPT_LOW = 0.75
 _COVERAGE_ACCEPT_HIGH = 0.85
 _WINDOW_DAYS = 7
+
+
+def _open_job_run() -> str:
+    run_id = cuid_like()
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            '''
+            INSERT INTO "JobRun" (id, "jobName", "triggeredBy", status, metadata)
+            VALUES (%s, %s, 'github-actions', 'RUNNING'::"JobStatus", %s)
+            ''',
+            (run_id, _JOB_NAME, Json({"windowDays": _WINDOW_DAYS, "date": date.today().isoformat()})),
+        )
+    return run_id
+
+
+def _close_job_run(
+    run_id: str,
+    *,
+    status: str,
+    duration_ms: int,
+    metadata: dict[str, Any],
+    error: BaseException | None = None,
+) -> None:
+    message = str(error)[:4000] if error else None
+    stack = traceback.format_exc()[:8000] if error else None
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            '''
+            UPDATE "JobRun"
+            SET status = %s::"JobStatus",
+                "completedAt" = CURRENT_TIMESTAMP,
+                "durationMs" = %s,
+                "rowsWritten" = %s,
+                metadata = %s,
+                "errorMessage" = %s,
+                "errorStack" = %s
+            WHERE id = %s
+            ''',
+            (
+                status,
+                duration_ms,
+                1 if status == "SUCCESS" else 0,
+                Json(metadata),
+                message,
+                stack,
+                run_id,
+            ),
+        )
 
 
 def gate1_eval_rows_today(conn) -> tuple[bool, str]:
@@ -166,7 +220,7 @@ def gate4_reconciliation_health() -> tuple[bool, str]:
     return all_pass, "\n".join(lines)
 
 
-def main() -> int:
+def _run_checks() -> tuple[int, dict[str, Any]]:
     print("=== Phase 1 Weeks 1–4 — Operator Gate Daily Check ===")
     print(f"Date: {date.today().isoformat()}")
     print()
@@ -201,7 +255,44 @@ def main() -> int:
 
     overall = g1_pass and g2_pass and (g3_strict or g3_accept) and g4_pass
     print("OVERALL:", "PASS — observation continues" if overall else "FAIL — investigate")
-    return 0 if overall else 1
+    metadata = {
+        "date": date.today().isoformat(),
+        "windowDays": _WINDOW_DAYS,
+        "gate1EvalRowsToday": g1_pass,
+        "gate2SeasonalNaiveFired": g2_pass,
+        "gate3RevenueCoverageStrict": g3_strict,
+        "gate3RevenueCoverageAcceptBand": g3_accept,
+        "gate4ReconciliationHealthy": g4_pass,
+        "overallPass": overall,
+    }
+    return (0 if overall else 1), metadata
+
+
+def main() -> int:
+    job_run_id = _open_job_run()
+    started = time.monotonic()
+    try:
+        exit_code, metadata = _run_checks()
+        _close_job_run(
+            job_run_id,
+            status="SUCCESS" if exit_code == 0 else "FAILURE",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            metadata=metadata,
+        )
+        return exit_code
+    except Exception as err:
+        _close_job_run(
+            job_run_id,
+            status="FAILURE",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            metadata={
+                "date": date.today().isoformat(),
+                "windowDays": _WINDOW_DAYS,
+                "overallPass": False,
+            },
+            error=err,
+        )
+        raise
 
 
 if __name__ == "__main__":
