@@ -1,14 +1,26 @@
-"""XGBoost hourly order-demand forecaster."""
+"""XGBoost hourly order-demand forecaster.
+
+Prediction intervals are calibrated via split conformal prediction
+(MAPIE, see `ml/evaluation/conformal.py`). Chronological 80/10/10 split
+keyed on row position: train -> conformal calibration -> held-out. With a
+60-day hourly history that's roughly 1152 train / 144 calib / 144 holdout
+hours, which clears the conformal coverage floor with margin.
+
+When the calibration window is smaller than 24 hourly rows we fall back
+to the legacy holdout-residual-std heuristic and tag the flavor with
+`-fallback` so the evaluator can distinguish coverage-guaranteed runs.
+"""
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
 
+from ml.evaluation.conformal import ConformalWrapper, wrap_xgboost_conformal
 from ml.features.external_signals import external_signal_coverage
 from ml.features.hourly_orders import (
     build_enriched_feature_matrix,
@@ -21,6 +33,11 @@ from ml.features.hourly_orders import (
     load_order_external_signals,
     split_train_holdout,
 )
+
+
+# MAPIE's 95% wrapper needs >=20 samples (1/alpha). With hourly granularity
+# any reasonable history clears this — 24 also rounds to a full day.
+MIN_CALIBRATION_ROWS = 24
 
 
 @dataclass
@@ -38,6 +55,12 @@ class TrainResult:
     signal_coverage: float = 0.0
     feature_names: tuple[str, ...] = ()
     external_hourly: pd.DataFrame | None = None
+    conformal: Optional[ConformalWrapper] = None
+    uses_fallback_interval: bool = False
+    # Holdout arrays used by the seasonal-naive promotion gate; empty arrays
+    # mean "no holdout exposed" (back-compat default).
+    holdout_y_true: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
+    holdout_y_pred: np.ndarray = field(default_factory=lambda: np.array([], dtype=float))
 
 
 @dataclass
@@ -47,6 +70,28 @@ class ForecastRow:
     predicted_orders: float
     p10: float
     p90: float
+
+
+def _conformal_split(feats: pd.DataFrame, cols: list[str]) -> tuple[
+    pd.DataFrame, pd.DataFrame, pd.DataFrame
+]:
+    """80/10/10 chronological split — train / calibration / held-out.
+
+    Time-ordered by (date, hour) before slicing so the calibration set and
+    the held-out window are both strictly in the future of the train set.
+    """
+    clean = (
+        feats.dropna(subset=cols)
+        .sort_values(["date", "hour"])
+        .reset_index(drop=True)
+    )
+    n = len(clean)
+    n_train = int(n * 0.80)
+    n_calib = int(n * 0.10)
+    train_df = clean.iloc[:n_train]
+    calib_df = clean.iloc[n_train : n_train + n_calib]
+    holdout_df = clean.iloc[n_train + n_calib :]
+    return train_df, calib_df, holdout_df
 
 
 def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
@@ -74,11 +119,12 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         feats = build_feature_matrix(hourly, daily, harri_daily)
         cols = feature_columns()
         flavor = "baseline"
-    train_df, holdout_df = split_train_holdout(feats, holdout_days=14)
+
+    train_df, calib_df, holdout_df = _conformal_split(feats, cols)
     if train_df.empty or holdout_df.empty:
         return None
 
-    model = XGBRegressor(
+    base = XGBRegressor(
         n_estimators=500,
         max_depth=5,
         learning_rate=0.04,
@@ -90,21 +136,43 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         random_state=42,
         n_jobs=2,
     )
-    model.fit(train_df[cols], train_df["target_orders"])
 
-    preds = model.predict(holdout_df[cols])
-    actuals = holdout_df["target_orders"].to_numpy(dtype=float)
+    uses_fallback = len(calib_df) < MIN_CALIBRATION_ROWS
+    conformal: Optional[ConformalWrapper] = None
+    if uses_fallback:
+        legacy_train, legacy_holdout = split_train_holdout(feats, holdout_days=14)
+        if legacy_train.empty or legacy_holdout.empty:
+            return None
+        base.fit(legacy_train[cols], legacy_train["target_orders"])
+        eval_df = legacy_holdout
+        train_size = len(legacy_train)
+    else:
+        X_train = train_df[cols].to_numpy(dtype=float, na_value=np.nan)
+        y_train = train_df["target_orders"].to_numpy(dtype=float)
+        X_calib = calib_df[cols].to_numpy(dtype=float, na_value=np.nan)
+        y_calib = calib_df["target_orders"].to_numpy(dtype=float)
+        conformal = wrap_xgboost_conformal(base, X_train, y_train, X_calib, y_calib)
+        eval_df = holdout_df
+        train_size = len(train_df)
+
+    preds = base.predict(eval_df[cols])
+    actuals = eval_df["target_orders"].to_numpy(dtype=float)
     safe_actuals = np.where(actuals == 0, 1.0, actuals)
     mape = float(np.mean(np.abs((preds - actuals) / safe_actuals)))
     mae = float(np.mean(np.abs(preds - actuals)))
     holdout_residual_std = float(np.std(preds - actuals, ddof=1)) if len(preds) > 1 else 0.0
     harri_coverage = _harri_coverage(harri_daily, hourly["date"].max())
 
+    if uses_fallback:
+        flavor = f"{flavor}-fallback"
+    else:
+        flavor = f"{flavor}-conformal"
+
     return TrainResult(
-        model=model,
+        model=base,
         mape=mape,
         mae=mae,
-        sample_size=len(train_df),
+        sample_size=train_size,
         holdout_residual_std=holdout_residual_std,
         harri_coverage=harri_coverage,
         history=hourly,
@@ -114,6 +182,10 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         signal_coverage=signal_coverage,
         feature_names=tuple(cols),
         external_hourly=external_hourly,
+        conformal=conformal,
+        uses_fallback_interval=uses_fallback,
+        holdout_y_true=np.asarray(actuals, dtype=float),
+        holdout_y_pred=np.asarray(preds, dtype=float),
     )
 
 
@@ -129,8 +201,9 @@ def forecast(
     rolling_daily = _daily_from_history(rolling_hourly, result.daily)
     last_date = rolling_hourly["date"].max().date()
     cols = list(result.feature_names or feature_columns())
+    is_enriched = result.flavor.startswith("weather-events")
     external_hourly = result.external_hourly
-    if result.flavor == "weather-events":
+    if is_enriched:
         external_hourly = load_order_external_signals(
             store_id,
             rolling_hourly["date"].min().date(),
@@ -152,7 +225,7 @@ def forecast(
         day_predictions: list[float] = []
 
         for hour in range(24):
-            if result.flavor == "weather-events":
+            if is_enriched:
                 feats = build_enriched_feature_matrix(
                     rolling_hourly, rolling_daily, result.harri_daily, external_hourly
                 )
@@ -162,7 +235,20 @@ def forecast(
                 (feats["date"] == pd.Timestamp(target_date)) & (feats["hour"] == hour)
             ][0]
             x = feats.loc[[row_idx], cols]
-            pred = max(0.0, model_safe_predict(result.model, x))
+            x_arr = x.to_numpy(dtype=float, na_value=np.nan)
+
+            if result.conformal is not None and not result.uses_fallback_interval:
+                point, lower80, upper80, _, _ = result.conformal.predict_intervals(x_arr)
+                pred = max(0.0, float(point[0]))
+                p10 = float(lower80[0])
+                p90 = float(upper80[0])
+            else:
+                pred = max(0.0, float(result.model.predict(x_arr)[0]))
+                widening = 1.0 + 0.025 * offset
+                sigma = result.holdout_residual_std * widening
+                p10 = pred - 1.28 * sigma
+                p90 = pred + 1.28 * sigma
+
             day_predictions.append(pred)
             mask = (
                 (rolling_hourly["date"] == pd.Timestamp(target_date))
@@ -170,15 +256,13 @@ def forecast(
             )
             rolling_hourly.loc[mask, "orders"] = pred
 
-            widening = 1.0 + 0.025 * offset
-            sigma = result.holdout_residual_std * widening
             out.append(
                 ForecastRow(
                     forecast_date=target_date,
                     hour_bucket=hour,
                     predicted_orders=pred,
-                    p10=max(0.0, pred - 1.28 * sigma),
-                    p90=max(0.0, pred + 1.28 * sigma),
+                    p10=max(0.0, p10),
+                    p90=max(0.0, p90),
                 )
             )
 

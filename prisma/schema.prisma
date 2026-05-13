@@ -192,6 +192,7 @@ model Store {
   forecastDailyRevenue ForecastDailyRevenue[]
   forecastHourlyOrders ForecastHourlyOrders[]
   forecastMenuItems    ForecastMenuItem[]
+  mlForecastEvaluations MlForecastEvaluation[]
   anomalyEvents        AnomalyEvent[]
   menuItemElasticities MenuItemElasticity[]
   weatherSignals       StoreWeatherSignal[]
@@ -1447,6 +1448,48 @@ model ForecastMenuItem {
   @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, otterItemSkuId, generatedAt(sort: Desc)], map: "ForecastMenuItem_store_date_sku_generated_idx")
   @@index([generatedAt(sort: Desc)])
+}
+
+/// Per-target, per-store, per-horizon, per-window forecast evaluation.
+/// Written nightly by `ml/evaluation/evaluator.py` after reconciliation.
+/// Reads are powered by `src/app/actions/forecasts/quality-actions.ts`
+/// (to be added in Phase 1 Weeks 5–8) and chat tool `getForecastQuality`.
+model MlForecastEvaluation {
+  id                 String   @id @default(cuid())
+  /// REVENUE / MENU_ITEM (daily) or BUSY_HOURS (hourly). Granularity is implicit.
+  target             MlTarget
+  storeId            String
+  /// modelVersion of the forecasts being evaluated (matches Forecast*.modelVersion).
+  modelVersion       String
+  /// 0 = whole-day (revenue/menu_item). 0-23 = hour bucket (orders_hourly only).
+  horizonDay         Int      @default(0)
+  /// Inclusive evaluation window in business dates.
+  windowStart        DateTime @db.Date
+  windowEnd          DateTime @db.Date
+  /// Aggregate accuracy metrics over the window.
+  wape               Float?
+  mape               Float?
+  mae                Float?
+  bias               Float?
+  /// Empirical coverage of 80%/95% predictive intervals on this window.
+  intervalCoverage80 Float?
+  intervalCoverage95 Float?
+  /// WAPE of the seasonal-naive (`y[t-7]`) baseline on the same rows.
+  baselineWape       Float?
+  /// WAPE of the enriched (weather+events) model variant if separately fit.
+  enrichedWape       Float?
+  /// Count of forecast rows whose actuals are not yet reconciled within the window.
+  staleRowCount      Int      @default(0)
+  /// Count of reconciled rows used for the metrics. Zero => row is informational only.
+  sampleSize         Int      @default(0)
+  /// When this evaluation row was written.
+  computedAt         DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([target, storeId, modelVersion, horizonDay, windowStart, windowEnd])
+  @@index([storeId, target, computedAt(sort: Desc)])
+  @@index([computedAt(sort: Desc)])
 }
 
 /// Store-hour weather features precomputed by offline Open-Meteo sync jobs.
