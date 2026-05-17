@@ -106,12 +106,26 @@ def _schema_ready(conn) -> bool:
 
 
 def gate1_eval_rows_today(conn) -> tuple[bool, str]:
-    """Each (active store × MlTarget) wrote at least one row today."""
+    """Each trainable (active store × MlTarget) wrote at least one row today.
+
+    A pair is "trainable" if it has at least one SUCCEEDED MlTrainingRun in
+    the trailing _WINDOW_DAYS. Stores with insufficient_history will never
+    produce an evaluation row, so demanding one would be guaranteed-to-fail
+    noise; we skip them with status "skipped" and surface the count in the
+    gate detail so they remain visible.
+    """
     with conn.cursor() as cur:
         cur.execute(
             '''
+            WITH trainable AS (
+                SELECT DISTINCT scope AS "storeId", target
+                FROM "MlTrainingRun"
+                WHERE status = 'SUCCEEDED'
+                  AND "startedAt" >= CURRENT_DATE - %s::int
+            )
             SELECT s.id AS "storeId", s.name, t.target,
-                   COUNT(e.id) AS rows_today
+                   COUNT(e.id) AS rows_today,
+                   (tr."storeId" IS NOT NULL) AS is_trainable
             FROM "Store" s
             CROSS JOIN (VALUES ('REVENUE'::"MlTarget"),
                                ('BUSY_HOURS'::"MlTarget"),
@@ -119,21 +133,35 @@ def gate1_eval_rows_today(conn) -> tuple[bool, str]:
             LEFT JOIN "MlForecastEvaluation" e
               ON e."storeId" = s.id AND e.target = t.target
               AND e."computedAt"::date = CURRENT_DATE
+            LEFT JOIN trainable tr
+              ON tr."storeId" = s.id AND tr.target = t.target
             WHERE s."isActive" = true
-            GROUP BY 1, 2, 3
+            GROUP BY 1, 2, 3, tr."storeId"
             ORDER BY 2, 3
-            '''
+            ''',
+            (_WINDOW_DAYS,),
         )
         rows = cur.fetchall()
 
     if not rows:
         return False, "no active stores"
 
-    missing = [r for r in rows if r[3] == 0]
-    lines = [f"  {name:<24} {target:<11} {count} rows" for _, name, target, count in rows]
+    lines = []
+    missing = []
+    skipped = 0
+    for _, name, target, count, is_trainable in rows:
+        if not is_trainable:
+            lines.append(f"  {name:<24} {target:<11} skipped (no SUCCEEDED training in {_WINDOW_DAYS}d)")
+            skipped += 1
+        else:
+            lines.append(f"  {name:<24} {target:<11} {count} rows")
+            if count == 0:
+                missing.append((name, target))
     detail = "\n".join(lines)
+    if skipped:
+        detail = f"{detail}\n  ({skipped} pair(s) skipped — no recent training)"
     if missing:
-        return False, f"{len(missing)} (store, target) pairs missing today\n{detail}"
+        return False, f"{len(missing)} trainable (store, target) pairs missing today\n{detail}"
     return True, detail
 
 

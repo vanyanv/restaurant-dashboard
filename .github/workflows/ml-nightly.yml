@@ -46,9 +46,9 @@ jobs:
 
       - name: Run nightly pipeline
         id: pipeline
-        run: |
-          mkdir -p logs
-          python -m ml.run_nightly 2>&1 | tee logs/ml-nightly.log
+        env:
+          LOG_FILE: logs/ml-nightly.log
+        run: .github/scripts/run-with-cron-logging.sh python -m ml.run_nightly
 
       - name: Upload pipeline log
         if: always()
