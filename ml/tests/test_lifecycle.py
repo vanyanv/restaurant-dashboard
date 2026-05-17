@@ -79,3 +79,30 @@ def test_flip_to_ready_executes_update_statement():
     assert "lifecycleStage" in args.args[0]
     assert "'ready'" in args.args[0]
     assert args.args[1] == ("store-gln",)
+
+
+def test_list_stores_by_stage_filters_correctly(monkeypatch):
+    """list_stores_by_stage(stages=('ready',)) filters via SQL parameter."""
+    from ml.features.revenue import list_stores_by_stage
+
+    cur = MagicMock()
+    cur.__enter__ = lambda self: self
+    cur.__exit__ = lambda *a: False
+    cur.fetchall.return_value = [("hwd",)]
+    cur.execute = MagicMock()
+    conn = MagicMock()
+    conn.__enter__ = lambda self: self
+    conn.__exit__ = lambda *a: False
+    conn.cursor.return_value = cur
+
+    @staticmethod
+    def fake_connect():
+        return conn
+
+    monkeypatch.setattr("ml.features.revenue.connect", fake_connect)
+
+    out = list_stores_by_stage(stages=("ready",))
+    assert out == ["hwd"]
+    sql, params = cur.execute.call_args.args
+    assert "lifecycleStage" in sql
+    assert params == (["ready"],)
