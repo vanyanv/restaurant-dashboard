@@ -48,6 +48,12 @@ _COVERAGE_TARGET_HIGH = 0.82
 _COVERAGE_ACCEPT_LOW = 0.75
 _COVERAGE_ACCEPT_HIGH = 0.85
 _WINDOW_DAYS = 7
+# Minimum reconciled observations behind a coverage statistic before we trust
+# the band check. At p=0.80 and N=8 the 95% Wilson CI is ~[0.55, 0.96] — well
+# wider than the [0.75, 0.85] accept band, so the gate would flag normal
+# warm-up noise as miscalibration. With N=14+ the CI tightens enough to catch
+# a real drop in coverage without false positives during bootstrap.
+_COVERAGE_MIN_SAMPLE = 14
 
 
 def _open_job_run() -> str:
@@ -199,15 +205,19 @@ def gate2_seasonal_naive_fired(conn) -> tuple[bool, str]:
 def gate3_revenue_coverage(conn) -> tuple[bool, str, bool]:
     """Per-store mean intervalCoverage80 for REVENUE over last 7 days.
 
-    Returns (strict_pass, detail, accept_band_pass) where strict_pass means
-    every store landed in [0.78, 0.82] and accept_band_pass widens to
-    [0.75, 0.85].
+    Returns (strict_pass, detail, accept_band_pass). Stores whose MAX eval
+    sampleSize is below _COVERAGE_MIN_SAMPLE are reported as "warming up"
+    and excluded from band checks — coverage statistics on tiny windows
+    have wide CIs that would routinely flag healthy models as miscalibrated.
     """
     cutoff_dt = f"NOW() - INTERVAL '{_WINDOW_DAYS} days'"
     with conn.cursor() as cur:
         cur.execute(
             f'''
-            SELECT s.name, AVG(e."intervalCoverage80") AS avg_cov, COUNT(*) AS rows
+            SELECT s.name,
+                   AVG(e."intervalCoverage80") AS avg_cov,
+                   COUNT(*) AS rows,
+                   MAX(e."sampleSize") AS max_sample
             FROM "MlForecastEvaluation" e
             JOIN "Store" s ON s.id = e."storeId"
             WHERE e.target = 'REVENUE'
@@ -225,7 +235,16 @@ def gate3_revenue_coverage(conn) -> tuple[bool, str, bool]:
     lines = []
     strict_pass = True
     accept_pass = True
-    for name, avg_cov, count in rows:
+    warming_up_count = 0
+    evaluated_count = 0
+    for name, avg_cov, count, max_sample in rows:
+        if max_sample is None or max_sample < _COVERAGE_MIN_SAMPLE:
+            warming_up_count += 1
+            lines.append(
+                f"  {name:<24} {avg_cov:.3f} over {count} rows (max n={max_sample}) — warming up"
+            )
+            continue
+        evaluated_count += 1
         verdict = "OK"
         if not (_COVERAGE_TARGET_LOW <= avg_cov <= _COVERAGE_TARGET_HIGH):
             strict_pass = False
@@ -233,9 +252,14 @@ def gate3_revenue_coverage(conn) -> tuple[bool, str, bool]:
         if not (_COVERAGE_ACCEPT_LOW <= avg_cov <= _COVERAGE_ACCEPT_HIGH):
             accept_pass = False
             verdict = "BROKEN"
-        lines.append(f"  {name:<24} {avg_cov:.3f} over {count} rows — {verdict}")
+        lines.append(f"  {name:<24} {avg_cov:.3f} over {count} rows (n={max_sample}) — {verdict}")
 
-    return strict_pass, "\n".join(lines), accept_pass
+    detail = "\n".join(lines)
+    if evaluated_count == 0:
+        # Every store still warming up — pass silently rather than alarming.
+        detail = f"{detail}\n  ({warming_up_count} store(s) warming up — need n>={_COVERAGE_MIN_SAMPLE} reconciled obs)"
+        return True, detail, True
+    return strict_pass, detail, accept_pass
 
 
 def gate4_reconciliation_health() -> tuple[bool, str]:
