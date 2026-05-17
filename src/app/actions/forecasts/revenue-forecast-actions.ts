@@ -10,6 +10,11 @@ export interface RevenueForecastDay {
   p90: number | null
   modelVersion: string
   generatedAt: Date
+  /** `transfer` means the row was produced by ml/transfer/hollywood_prior.py
+   *  for a warming_up store; `native` means the per-store XGBoost model.
+   *  When aggregating across stores, set to `transfer` if any contributing
+   *  row was transfer (conservative — surfaces the caption on mixed days). */
+  forecastSource: "native" | "transfer"
 }
 
 export interface RevenueForecastData {
@@ -66,6 +71,7 @@ export async function getRevenueForecast(input: {
         p90: true,
         modelVersion: true,
         generatedAt: true,
+        forecastSource: true,
       },
     }),
     prisma.mlTrainingRun.findFirst({
@@ -94,6 +100,7 @@ export async function getRevenueForecast(input: {
       p90: number
       modelVersion: string
       generatedAt: Date
+      forecastSource: "native" | "transfer"
     }
   >()
   for (const r of latestPerStoreDate.values()) {
@@ -110,6 +117,7 @@ export async function getRevenueForecast(input: {
         p90,
         modelVersion: r.modelVersion,
         generatedAt: r.generatedAt,
+        forecastSource: r.forecastSource,
       })
     } else {
       cur.predictedRevenue += pr
@@ -118,6 +126,9 @@ export async function getRevenueForecast(input: {
       if (r.generatedAt > cur.generatedAt) {
         cur.generatedAt = r.generatedAt
         cur.modelVersion = r.modelVersion
+      }
+      if (r.forecastSource === "transfer") {
+        cur.forecastSource = "transfer"
       }
     }
   }
@@ -131,6 +142,7 @@ export async function getRevenueForecast(input: {
       p90: r.p90,
       modelVersion: r.modelVersion,
       generatedAt: r.generatedAt,
+      forecastSource: r.forecastSource,
     }))
 
   const generatedAt =
