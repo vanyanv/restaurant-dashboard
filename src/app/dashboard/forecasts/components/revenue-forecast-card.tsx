@@ -12,6 +12,7 @@ import {
 } from "recharts"
 import { format } from "date-fns"
 import type { RevenueForecastData } from "@/app/actions/forecasts/revenue-forecast-actions"
+import { TransferSourceCaption } from "@/components/forecast/transfer-source-caption"
 
 interface Props {
   data: RevenueForecastData
@@ -60,6 +61,16 @@ export function RevenueForecastCard({ data }: Props) {
   }
 
   const totalPredicted = data.days.reduce((sum, d) => sum + d.predictedRevenue, 0)
+  const hasTransfer = data.days.some((d) => d.forecastSource === "transfer")
+  const dayNumber = data.openedAt
+    ? Math.max(
+        1,
+        Math.floor(
+          (Date.now() - new Date(data.openedAt).getTime()) /
+            (1000 * 60 * 60 * 24),
+        ) + 1,
+      )
+    : 1
   const chartRows: ChartRow[] = data.days.map((d) => ({
     date: d.date.toISOString().slice(0, 10),
     predicted: d.predictedRevenue,
@@ -170,6 +181,15 @@ export function RevenueForecastCard({ data }: Props) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {hasTransfer && (
+        <div className="px-5 pb-4">
+          <TransferSourceCaption
+            storeName={data.storeName}
+            dayNumber={dayNumber}
+          />
+        </div>
+      )}
     </section>
   )
 }

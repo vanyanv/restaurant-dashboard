@@ -26,6 +26,10 @@ export interface RevenueForecastData {
   /** MAPE on the last reconciled window — null until the pipeline runs. */
   recentMape: number | null
   days: RevenueForecastDay[]
+  /** When the store physically opened; null for aggregate views or for stores
+   *  that haven't opened yet. Used by the W5 transfer-source caption to
+   *  compute "day N of <store>" labelling. */
+  openedAt: Date | null
 }
 
 export type GetRevenueForecastResult =
@@ -55,8 +59,17 @@ export async function getRevenueForecast(input: {
   const horizonEnd = new Date(asOf)
   horizonEnd.setDate(horizonEnd.getDate() + horizonDays)
 
+  // openedAt lookup only meaningful for a single scoped store; for aggregate
+  // views the caption never renders so the value stays null.
+  const storeOpenedAtPromise = storeIdOut
+    ? prisma.store.findUnique({
+        where: { id: storeIdOut },
+        select: { openedAt: true },
+      })
+    : Promise.resolve(null)
+
   // Forecast rows and the latest training run are independent — fetch in parallel.
-  const [rows, lastRun] = await Promise.all([
+  const [rows, lastRun, storeRow] = await Promise.all([
     prisma.forecastDailyRevenue.findMany({
       where: {
         storeId: { in: storeIds },
@@ -79,6 +92,7 @@ export async function getRevenueForecast(input: {
       orderBy: { startedAt: "desc" },
       select: { mape: true },
     }),
+    storeOpenedAtPromise,
   ])
 
   // Latest generation per (storeId, date), then sum across stores per date.
@@ -163,6 +177,7 @@ export async function getRevenueForecast(input: {
       generatedAt,
       recentMape: lastRun?.mape ?? null,
       days,
+      openedAt: storeRow?.openedAt ?? null,
     },
   }
 }
