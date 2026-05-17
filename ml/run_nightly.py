@@ -38,11 +38,22 @@ from ml.evaluation.promotion import (
     decide_promotion,
     select_with_gate,
     should_promote_enriched,
+    transfer_forecast_wape,
 )
 from ml.evaluation.reconcile import reconcile_past_forecasts
 from ml.features.menu_item import load_top_items
-from ml.features.revenue import list_active_store_ids, load_daily_revenue
+from ml.features.revenue import (
+    list_active_store_ids,
+    list_stores_by_stage,
+    load_daily_revenue,
+)
 from ml.features.hourly_orders import load_hourly_orders
+from ml.lifecycle import (
+    READY_PROMOTION_MIN_SAMPLE,
+    flip_to_ready,
+    should_promote_to_ready,
+)
+from ml.transfer.hollywood_prior import write_transfer_forecasts_for_store
 from ml.models.menu_item import forecast as forecast_menu_item
 from ml.models.menu_item import train as train_menu_item
 from ml.models.hourly_orders import forecast as forecast_hourly_orders
@@ -455,67 +466,189 @@ def run_anomaly_detection_for_store(store_id: str) -> dict:
         return {"store_id": store_id, "ok": False, "reason": str(exc)}
 
 
+def resolve_hollywood_store_id() -> str | None:
+    """Resolve the operational anchor store by name suffix.
+
+    Per project memory `project_store_lifecycle`, Hollywood is the only
+    operational store today. The production row's name is
+    "Chris N Eddys - Hollywood"; we match on suffix so this works in any
+    environment without a hard-coded ID.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            'SELECT id FROM "Store" '
+            'WHERE name ILIKE %s AND "isActive" = true '
+            'AND "lifecycleStage" = \'ready\'::"LifecycleStage" LIMIT 1',
+            ("%Hollywood",),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def _load_store_init_scalar(store_id: str) -> float | None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            'SELECT "initialTransferScalar" FROM "Store" WHERE id = %s',
+            (store_id,),
+        )
+        row = cur.fetchone()
+    return float(row[0]) if row and row[0] is not None else None
+
+
+def run_transfer_forecasts_for_store(
+    store_id: str, hollywood_store_id: str, model_version: str,
+) -> dict:
+    initial = _load_store_init_scalar(store_id)
+    transfer_version = f"transfer-{model_version}"
+    with connect() as conn:
+        result = write_transfer_forecasts_for_store(
+            conn,
+            new_store_id=store_id,
+            hollywood_store_id=hollywood_store_id,
+            model_version=transfer_version,
+            initial_scalar=initial,
+        )
+    return {
+        "store_id": store_id,
+        "ok": result.ok,
+        "rows_written": result.revenue_rows_written,
+        "scalar_used": result.scalar_used,
+        "warning": result.warning or None,
+    }
+
+
+def maybe_promote_to_ready(store_id: str, native_result: dict) -> dict:
+    """Run the warming_up -> ready check after a successful native train.
+
+    Native WAPE comes from the most recent MlForecastEvaluation row for the
+    store (REVENUE target). Transfer WAPE comes from
+    `transfer_forecast_wape`. The two thresholds (>=5% rel improvement,
+    sample_size >= 60) are enforced by `should_promote_to_ready`.
+    """
+    sample_size = native_result.get("sample_size") or 0
+    if sample_size < READY_PROMOTION_MIN_SAMPLE:
+        return {"store_id": store_id, "promoted": False, "reason": "insufficient_sample"}
+
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                SELECT wape FROM "MlForecastEvaluation"
+                WHERE "storeId" = %s AND target = 'REVENUE'::"MlTarget"
+                ORDER BY "computedAt" DESC
+                LIMIT 1
+                ''',
+                (store_id,),
+            )
+            row = cur.fetchone()
+        if not row or row[0] is None:
+            return {"store_id": store_id, "promoted": False, "reason": "no_native_wape_row"}
+        native_wape = float(row[0])
+        transfer_wape = transfer_forecast_wape(conn, store_id=store_id, lookback_days=60)
+        if not should_promote_to_ready(
+            native_wape=native_wape,
+            transfer_wape=transfer_wape,
+            sample_size=sample_size,
+        ):
+            return {
+                "store_id": store_id,
+                "promoted": False,
+                "reason": (
+                    f"native_wape={native_wape:.4f} "
+                    f"transfer_wape={transfer_wape and round(transfer_wape, 4)} "
+                    f"n={sample_size}"
+                ),
+            }
+        flip_to_ready(conn, store_id=store_id)
+    return {"store_id": store_id, "promoted": True, "native_wape": native_wape}
+
+
+def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
+    """Run the post-W1-4 pipeline for one `ready` store.
+
+    Returns the count of failures. Extracted so the main() loop can run the
+    same sequence whether the store is in `ready` or has just been promoted
+    from `warming_up` mid-loop.
+    """
+    failures = 0
+    menu_result = run_menu_items_for_store(store_id, model_version)
+    print({"target": "MENU_ITEM", **menu_result})
+    if not menu_result.get("ok"):
+        failures += 1
+
+    busy_hours_result = run_busy_hours_for_store(store_id, model_version)
+    print({"target": "BUSY_HOURS", **busy_hours_result})
+    if not busy_hours_result.get("ok"):
+        failures += 1
+
+    anomaly_result = run_anomaly_detection_for_store(store_id)
+    print({"phase": "ANOMALY", **anomaly_result})
+    if not anomaly_result.get("ok"):
+        failures += 1
+
+    elasticity_result = run_elasticity_for_store(store_id)
+    print({"phase": "ELASTICITY", **elasticity_result})
+    if not elasticity_result.get("ok"):
+        failures += 1
+
+    try:
+        reconcile_result = reconcile_past_forecasts(store_id)
+        print({"phase": "RECONCILE", **reconcile_result})
+    except Exception as exc:  # pylint: disable=broad-except
+        print({"phase": "RECONCILE", "store_id": store_id, "ok": False, "reason": str(exc)})
+        failures += 1
+
+    try:
+        with connect() as conn:
+            run_evaluation_pass(conn, store_id, dt.date.today())
+            run_consistency_check(conn, store_id, dt.date.today())
+        print({"phase": "EVALUATE", "store_id": store_id, "ok": True})
+    except Exception as exc:  # pylint: disable=broad-except
+        print({"phase": "EVALUATE", "store_id": store_id, "ok": False, "reason": str(exc)})
+        failures += 1
+
+    return failures
+
+
 def main() -> int:
     model_version = _model_version()
-    store_ids = list_active_store_ids()
-    if not store_ids:
-        print("no active stores")
-        return 0
+
+    pre_open = list_stores_by_stage(stages=("pre_open",))
+    warming_up = list_stores_by_stage(stages=("warming_up",))
+    ready = list_stores_by_stage(stages=("ready",))
+
+    for store_id in pre_open:
+        print({"phase": "LIFECYCLE", "store_id": store_id, "stage": "pre_open", "action": "skipped"})
+
+    hollywood_id = None
+    if warming_up:
+        hollywood_id = resolve_hollywood_store_id()
+        if hollywood_id is None:
+            print({"phase": "LIFECYCLE", "warning": "no_hollywood_anchor_skipping_transfers"})
 
     failures = 0
-    for store_id in store_ids:
+    for store_id in warming_up:
+        if hollywood_id:
+            t_result = run_transfer_forecasts_for_store(store_id, hollywood_id, model_version)
+            print({"phase": "TRANSFER", **t_result})
+            if not t_result.get("ok"):
+                failures += 1
+        # Also train native so the lifecycle gate has data to evaluate.
+        revenue_result = run_revenue_for_store(store_id, model_version)
+        print({"target": "REVENUE", **revenue_result})
+        if revenue_result.get("ok"):
+            promo = maybe_promote_to_ready(store_id, revenue_result)
+            print({"phase": "LIFECYCLE", **promo})
+        else:
+            failures += 1
+
+    for store_id in ready:
         revenue_result = run_revenue_for_store(store_id, model_version)
         print({"target": "REVENUE", **revenue_result})
         if not revenue_result.get("ok"):
             failures += 1
+        failures += _run_full_pipeline_for_store(store_id, model_version)
 
-        menu_result = run_menu_items_for_store(store_id, model_version)
-        print({"target": "MENU_ITEM", **menu_result})
-        if not menu_result.get("ok"):
-            failures += 1
-
-        busy_hours_result = run_busy_hours_for_store(store_id, model_version)
-        print({"target": "BUSY_HOURS", **busy_hours_result})
-        if not busy_hours_result.get("ok"):
-            failures += 1
-
-        anomaly_result = run_anomaly_detection_for_store(store_id)
-        print({"phase": "ANOMALY", **anomaly_result})
-        if not anomaly_result.get("ok"):
-            failures += 1
-
-        elasticity_result = run_elasticity_for_store(store_id)
-        print({"phase": "ELASTICITY", **elasticity_result})
-        if not elasticity_result.get("ok"):
-            failures += 1
-
-        try:
-            reconcile_result = reconcile_past_forecasts(store_id)
-            print({"phase": "RECONCILE", **reconcile_result})
-        except Exception as exc:  # pylint: disable=broad-except
-            print({
-                "phase": "RECONCILE",
-                "store_id": store_id,
-                "ok": False,
-                "reason": str(exc),
-            })
-            failures += 1
-
-        # Evaluator + consistency checks run AFTER reconciliation so the
-        # trailing 28-day window has the latest actuals filled in.
-        try:
-            with connect() as conn:
-                run_evaluation_pass(conn, store_id, dt.date.today())
-                run_consistency_check(conn, store_id, dt.date.today())
-            print({"phase": "EVALUATE", "store_id": store_id, "ok": True})
-        except Exception as exc:  # pylint: disable=broad-except
-            print({
-                "phase": "EVALUATE",
-                "store_id": store_id,
-                "ok": False,
-                "reason": str(exc),
-            })
-            failures += 1
     return 0 if failures == 0 else 1
 
 
