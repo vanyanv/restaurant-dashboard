@@ -77,32 +77,38 @@ Frequent commits — one per step that has a working test or visible change.
 **Files:**
 - Modify: `ml/requirements.txt`
 
-- [ ] **Step 1: Pin a known-good version**
+- [ ] **Step 1: Discover the latest installable version**
 
-Add to `ml/requirements.txt` (preserve existing pins and ordering):
-
-```
-hierarchicalforecast==0.4.3
-```
-
-If the install later complains about pandas/numpy upper-bound conflicts with the existing pins (pandas 2.2.3, numpy 2.1.3), pin a different `hierarchicalforecast` release whose `pyproject.toml` allows pandas ≥2.2 and numpy ≥2.0 — and document the version chosen in the commit message.
-
-- [ ] **Step 2: Install**
+The library is `hierarchicalforecast` from Nixtla (PyPI: https://pypi.org/project/hierarchicalforecast/). API verified via the Context7 docs cache at planning time — the call site is `HierarchicalReconciliation.reconcile(Y_hat_df=, S_df=, tags=, Y_df=)`. `Y_df` is **insample fitted values** as a long-format DataFrame with columns `unique_id`, `ds`, `y` (required for `mint_shrink`; not required for `ols`).
 
 ```bash
 source ml/.venv/bin/activate
+pip index versions hierarchicalforecast 2>&1 | head -3
+```
+
+Pick the highest released non-pre-release version. Note pandas/numpy upper bounds in its `pyproject.toml` — the project currently pins pandas 2.2.3 / numpy 2.1.3.
+
+- [ ] **Step 2: Pin and install**
+
+Add the chosen version to `ml/requirements.txt`:
+
+```
+hierarchicalforecast==<version>
+```
+
+```bash
 pip install -r ml/requirements.txt
 ```
 
-Expected: `Successfully installed hierarchicalforecast-…` with no resolver conflicts.
+Expected: `Successfully installed hierarchicalforecast-…` with no resolver conflicts. If pip complains about pandas/numpy bounds, downgrade `hierarchicalforecast` one minor version at a time until the resolver accepts. Document the final version in the commit message.
 
-- [ ] **Step 3: Smoke-import**
+- [ ] **Step 3: Smoke-import the exact symbols Task 6 uses**
 
 ```bash
-python -c "from hierarchicalforecast.core import HierarchicalReconciliation; from hierarchicalforecast.methods import MinTrace; print('ok')"
+python -c "from hierarchicalforecast.core import HierarchicalReconciliation; from hierarchicalforecast.methods import MinTrace; r = HierarchicalReconciliation([MinTrace(method='mint_shrink'), MinTrace(method='ols')]); print('ok', r.__class__.__name__)"
 ```
 
-Expected: `ok`.
+Expected: `ok HierarchicalReconciliation`.
 
 - [ ] **Step 4: Commit**
 
@@ -715,7 +721,7 @@ from ml.reconciliation.hierarchy import (
 )
 
 
-def test_single_store_s_matrix_rolls_items_to_categories_to_revenue():
+def test_single_store_s_df_rolls_items_to_categories_to_revenue():
     # 2 categories, 3 items:
     #   Sandwiches: [Bacon Eddy, Cheesy Eddy]
     #   Drinks:     [Iced Coffee]
@@ -725,38 +731,35 @@ def test_single_store_s_matrix_rolls_items_to_categories_to_revenue():
         "Iced Coffee": "Drinks",
     }
 
-    S, tags = build_single_store_hierarchy(item_to_category=item_to_category)
+    S_df, tags = build_single_store_hierarchy(item_to_category=item_to_category)
 
-    # Top level (revenue) + 2 categories + 3 items = 6 rows.
-    # Bottom level (items) = 3 columns.
-    assert S.shape == (6, 3)
+    # Top (revenue) + 2 categories + 3 items = 6 rows. Columns = 3 leaves.
+    assert S_df.shape == (6, 3)
+    assert list(S_df.columns) == ["Bacon Eddy", "Cheesy Eddy", "Iced Coffee"]
 
-    # Revenue row should be all 1s (sum every item).
-    revenue_idx = tags["revenue"][0]
-    assert np.allclose(S[revenue_idx], [1, 1, 1])
-
+    # Revenue row sums every item.
+    assert (S_df.loc["revenue"] == 1).all()
     # Sandwiches row sums the 2 sandwich items.
-    sandwich_idx = tags["category"].index("Sandwiches") + 1  # +1 for revenue offset
-    # The exact row index depends on tags ordering; resolve by name->row map exposed in tags.
-    sandwich_row = tags["row_index"]["Sandwiches"]
-    sandwich_cols = [tags["row_index"][i] - len(tags["revenue"]) - len(tags["category"])
-                     for i in ["Bacon Eddy", "Cheesy Eddy"]]
-    # If row_index keys both categories and items, simpler check:
-    assert S[tags["row_index"]["Sandwiches"]].sum() == 2  # 2 contributing items
-    assert S[tags["row_index"]["Drinks"]].sum() == 1
+    assert S_df.loc["Sandwiches"].sum() == 2
+    assert S_df.loc["Drinks"].sum() == 1
+    # Each leaf row picks itself (identity block).
+    assert S_df.loc["Bacon Eddy", "Bacon Eddy"] == 1
+    assert S_df.loc["Bacon Eddy", "Iced Coffee"] == 0
 
 
 def test_tags_keys_are_level_names():
-    """The `tags` dict keys must be the level names so MinTrace can address each level."""
+    """tags must expose each level name as a list of unique_ids (the keys
+    hierarchicalforecast addresses for reconciliation)."""
     item_to_category = {"Item A": "Cat A", "Item B": "Cat B"}
     _, tags = build_single_store_hierarchy(item_to_category=item_to_category)
-    assert set(tags.keys()) >= {"revenue", "category", "item", "row_index"}
+    assert set(tags.keys()) >= {"revenue", "category", "item"}
+    assert tags["revenue"] == ["revenue"]
+    assert set(tags["item"]) == {"Item A", "Item B"}
 
 
 def test_multi_store_hierarchy_adds_chain_level():
     """Chain ≈ Σ stores. With 2 stores each contributing items, the chain row
-    must sum every leaf, store rows sum that store's items, and category rows
-    sum the items in that store-category pair."""
+    must sum every leaf and store rows sum that store's items."""
     stores = {
         "store-hwd": {
             "Bacon Eddy":  "Sandwiches",
@@ -766,12 +769,13 @@ def test_multi_store_hierarchy_adds_chain_level():
             "Bacon Eddy":  "Sandwiches",
         },
     }
-    S, tags = build_multi_store_hierarchy(stores=stores)
-    # 3 leaf items total (HWD has 2, GLN has 1).
-    assert S.shape[1] == 3
-    # Chain row is all 1s.
-    chain_idx = tags["row_index"]["__chain__"]
-    assert np.allclose(S[chain_idx], [1, 1, 1])
+    S_df, tags = build_multi_store_hierarchy(stores=stores)
+    # 3 leaves total (HWD has 2 items, GLN has 1).
+    assert S_df.shape[1] == 3
+    assert (S_df.loc["__chain__"] == 1).all()
+    # Store rows.
+    assert S_df.loc["store-hwd"].sum() == 2
+    assert S_df.loc["store-gln"].sum() == 1
 
 
 def test_empty_input_raises():
@@ -787,31 +791,40 @@ Expected: ModuleNotFoundError.
 
 - [ ] **Step 3: Implement**
 
-Create `ml/reconciliation/hierarchy.py`:
+Create `ml/reconciliation/hierarchy.py`. NOTE the return type is `pd.DataFrame`, not numpy — `HierarchicalReconciliation.reconcile()` expects `S_df` as a pandas DataFrame indexed by series unique_id with columns = leaf unique_ids.
 
 ```python
-"""S-matrix + tags builder for hierarchicalforecast.
+"""S_df + tags builder for hierarchicalforecast.
 
 Single-store: 3 levels (revenue, category, item).
-Multi-store:  4 levels (chain, store, category, item) — exercised by the
-              unit test in W8 but not by the nightly pipeline until GLN/VNYS
-              reach `ready`.
+Multi-store:  4 levels (chain, store, store_category, item) — exercised by
+              the unit test in W8 but not by the nightly pipeline until
+              GLN/VNYS reach `ready`.
+
+`HierarchicalReconciliation.reconcile()` API contract (verified against
+Nixtla docs at planning time):
+  * S_df: pandas DataFrame, rows = all series unique_ids (top + middle +
+    bottom), columns = bottom-level series unique_ids, values = roll-up
+    weights (0 or 1).
+  * tags: dict[level_name -> list[unique_id]].
+  * Y_hat_df: long-format DataFrame with columns unique_id, ds, y_hat (and
+    optional p10/p90).
+  * Y_df: long-format DataFrame with columns unique_id, ds, y — the
+    insample fitted values used by mint_shrink to estimate the covariance.
 """
 from __future__ import annotations
 
-from typing import Dict
-
 import numpy as np
+import pandas as pd
 
 
 def build_single_store_hierarchy(*, item_to_category: dict[str, str]):
-    """Return (S, tags) where:
-      * S is shape (n_top + n_cat + n_item, n_item).
-      * tags["revenue"] = ["revenue"]
-      * tags["category"] = sorted unique categories
-      * tags["item"] = sorted item names (column order)
-      * tags["row_index"] = dict mapping every series id (and "revenue") to
-        its row index in S.
+    """Return (S_df, tags).
+
+    Series unique_id convention (single-store, no namespace prefix):
+      * top:    "revenue"
+      * middle: each category name
+      * bottom: each item name
     """
     if not item_to_category:
         raise ValueError("empty item_to_category — hierarchy needs at least one item")
@@ -821,42 +834,42 @@ def build_single_store_hierarchy(*, item_to_category: dict[str, str]):
     n_items = len(items)
     n_cat = len(categories)
 
+    # Row order: revenue, then categories (sorted), then items (sorted).
+    index = ["revenue"] + categories + items
     S = np.zeros((1 + n_cat + n_items, n_items), dtype=float)
 
-    # Revenue (top) row: all 1s.
+    # Top: all 1s.
     S[0, :] = 1.0
-
-    # Category rows.
+    # Categories: 1 where item belongs.
     cat_to_row = {cat: 1 + i for i, cat in enumerate(categories)}
     for col, item in enumerate(items):
-        cat = item_to_category[item]
-        S[cat_to_row[cat], col] = 1.0
-
-    # Item (bottom) rows: identity.
+        S[cat_to_row[item_to_category[item]], col] = 1.0
+    # Items (bottom): identity block.
     for col, item in enumerate(items):
         S[1 + n_cat + col, col] = 1.0
 
-    row_index = {"revenue": 0}
-    for cat, row in cat_to_row.items():
-        row_index[cat] = row
-    for col, item in enumerate(items):
-        row_index[item] = 1 + n_cat + col
+    S_df = pd.DataFrame(S, index=index, columns=items)
 
     tags = {
         "revenue": ["revenue"],
         "category": categories,
         "item": items,
-        "row_index": row_index,
     }
-    return S, tags
+    # Convenience row-index map (not consumed by hierarchicalforecast; used
+    # by ml.reconciliation.reconcile when writing values back).
+    row_index = {name: i for i, name in enumerate(index)}
+    tags["__row_index__"] = row_index
+    return S_df, tags
 
 
 def build_multi_store_hierarchy(*, stores: dict[str, dict[str, str]]):
-    """4-level hierarchy: chain → store → category → item.
+    """4-level hierarchy: chain → store → store_category → leaf_item.
 
-    `stores` maps store_id → {item_name: category_name}. Item names are
-    namespaced by store in the output column ordering so two stores selling
-    the same item get distinct leaves.
+    Series unique_id convention (must namespace by store):
+      * top:    "__chain__"
+      * level 2: each store_id
+      * level 3: "{store_id}:{category}"
+      * bottom: "{store_id}:{item}"
     """
     if not stores or not any(stores.values()):
         raise ValueError("empty stores — multi-store hierarchy needs at least one item")
@@ -869,54 +882,47 @@ def build_multi_store_hierarchy(*, stores: dict[str, dict[str, str]]):
     n_leaves = len(leaves)
     store_ids = sorted(stores.keys())
     n_stores = len(store_ids)
-    # category-per-store rows: one row per (store, category) pair with at least one item
     store_cat_pairs = sorted({(s, c) for s, _, c in leaves})
     n_pairs = len(store_cat_pairs)
 
+    chain_id = "__chain__"
+    store_cat_ids = [f"{s}:{c}" for s, c in store_cat_pairs]
+    leaf_ids = [f"{s}:{item}" for s, item, _ in leaves]
+
+    index = [chain_id] + store_ids + store_cat_ids + leaf_ids
     n_rows = 1 + n_stores + n_pairs + n_leaves
     S = np.zeros((n_rows, n_leaves), dtype=float)
 
-    # Chain
+    # Chain.
     S[0, :] = 1.0
-    # Store rows
-    store_to_row: Dict[str, int] = {}
+    # Stores.
     for i, store_id in enumerate(store_ids):
         row = 1 + i
-        store_to_row[store_id] = row
         for col, (s, _, _) in enumerate(leaves):
             if s == store_id:
                 S[row, col] = 1.0
-    # Store-category rows
-    pair_to_row: Dict[tuple, int] = {}
-    for i, pair in enumerate(store_cat_pairs):
-        row = 1 + n_stores + i
-        pair_to_row[pair] = row
-        s, c = pair
-        for col, (sx, _, cx) in enumerate(leaves):
-            if sx == s and cx == c:
-                S[row, col] = 1.0
-    # Leaf rows
+    # Store-category.
+    pair_to_row = {pair: 1 + n_stores + i for i, pair in enumerate(store_cat_pairs)}
+    for col, (s, _, c) in enumerate(leaves):
+        S[pair_to_row[(s, c)], col] = 1.0
+    # Leaf identity block.
     leaf_offset = 1 + n_stores + n_pairs
     for col in range(n_leaves):
         S[leaf_offset + col, col] = 1.0
 
-    row_index = {"__chain__": 0}
-    for s, row in store_to_row.items():
-        row_index[s] = row
-    for (s, c), row in pair_to_row.items():
-        row_index[f"{s}:{c}"] = row
-    for col, (s, item, _) in enumerate(leaves):
-        row_index[f"{s}:{item}"] = leaf_offset + col
+    S_df = pd.DataFrame(S, index=index, columns=leaf_ids)
 
     tags = {
-        "chain": ["__chain__"],
+        "chain": [chain_id],
         "store": store_ids,
-        "store_category": [f"{s}:{c}" for s, c in store_cat_pairs],
-        "leaf": [f"{s}:{item}" for s, item, _ in leaves],
-        "row_index": row_index,
+        "store_category": store_cat_ids,
+        "leaf": leaf_ids,
+        "__row_index__": {name: i for i, name in enumerate(index)},
     }
-    return S, tags
+    return S_df, tags
 ```
+
+The test in Step 1 still asserts shape correctness on the underlying values (`S_df.values.shape` or just `S_df.shape`), which is what `(6, 3)` checks. Adjust the test assertions to use `S_df.shape` / `S_df.loc["Sandwiches"].sum()` rather than positional indexing into a numpy array.
 
 - [ ] **Step 4: Run, expect PASS**
 
@@ -985,12 +991,31 @@ def _consistent_forecast_frame():
     }
 
 
-def test_reconcile_consistent_hierarchy_returns_ok_with_unchanged_values():
-    """When inputs already coherent, MinTrace output should match within tolerance."""
+def _fitted_y_df_for_consistent_frame():
+    """Long-format insample fitted values matching the hierarchy. 28 days of
+    history per series at the same coherent values, plus a small noise term
+    so the mint_shrink covariance estimator has non-degenerate residuals."""
+    rng = np.random.default_rng(seed=42)
+    dates = pd.date_range(end=pd.Timestamp("2026-05-26"), periods=28, freq="D")
+    rows = []
+    for uid, base in [
+        ("revenue", 100.0),
+        ("Sandwiches", 100.0),
+        ("Bacon Eddy", 50.0),   # qty 5 * $10
+        ("Cheesy Eddy", 50.0),
+    ]:
+        noise = rng.normal(0, 1.0, size=len(dates))
+        for ds, n in zip(dates, noise):
+            rows.append({"unique_id": uid, "ds": ds, "y": base + n})
+    return pd.DataFrame(rows)
+
+
+def test_reconcile_consistent_hierarchy_returns_ok():
+    """When inputs already coherent, MinTrace returns reconciled values
+    close to the inputs (within rounding). We assert ok=True + ≥3 writes,
+    not specific reconciled values (sensitive to lib-version internals)."""
     forecast = _consistent_forecast_frame()
-    # Synthetic residuals: all zeros (the helper falls back to identity when
-    # residuals are degenerate so the consistent input passes through.)
-    residuals = np.zeros((4, 28))  # 4 series x 28 days of history
+    y_df = _fitted_y_df_for_consistent_frame()
 
     cur = MagicMock()
     cur.__enter__ = lambda self: self
@@ -1005,12 +1030,12 @@ def test_reconcile_consistent_hierarchy_returns_ok_with_unchanged_values():
         conn,
         store_id="store-hwd",
         forecast_frame=forecast,
-        residuals=residuals,
+        y_df=y_df,
         method="mint_shrink",
     )
 
     assert isinstance(result, ReconcileResult)
-    assert result.ok
+    assert result.ok, result.warning
     # Expect ≥1 write for each level (revenue, category, item).
     assert result.rows_written >= 3
 
@@ -1034,19 +1059,57 @@ def test_reconcile_falls_soft_on_reconciler_exception(monkeypatch):
 
     result = reconcile_store_hierarchy(
         conn, store_id="store-hwd", forecast_frame=forecast,
-        residuals=np.zeros((4, 28)), method="mint_shrink",
+        y_df=_fitted_y_df_for_consistent_frame(), method="mint_shrink",
     )
     assert not result.ok
     assert "singular" in result.warning.lower() or "runtimeerror" in result.warning.lower()
 
 
-def test_reconcile_uses_upsert_on_storeId_date_target():
-    """Re-running reconciliation must not duplicate rows.
-    Verify by checking the INSERT statement uses ON CONFLICT … DO UPDATE."""
-    from ml.reconciliation.reconcile import _REVENUE_UPSERT_SQL, _CATEGORY_UPSERT_SQL, _ITEM_UPSERT_SQL
+def test_reconcile_falls_back_to_ols_when_y_df_empty(monkeypatch):
+    """mint_shrink needs Y_df with insample residuals. When Y_df is empty
+    (cold-start / no historical actuals), we should fall back to method='ols'
+    automatically and still produce reconciled writes."""
+    from ml.reconciliation import reconcile as recmod
+
+    calls = []
+    original = recmod._run_min_trace
+    def spy(S_df, tags, y_hat_df, y_df, method):
+        calls.append(method)
+        return original(S_df, tags, y_hat_df, y_df, method)
+    monkeypatch.setattr(recmod, "_run_min_trace", spy)
+
+    forecast = _consistent_forecast_frame()
+    cur = MagicMock()
+    cur.__enter__ = lambda self: self
+    cur.__exit__ = lambda *a: False
+    conn = MagicMock()
+    conn.__enter__ = lambda self: self
+    conn.__exit__ = lambda *a: False
+    conn.cursor.return_value = cur
+
+    result = reconcile_store_hierarchy(
+        conn, store_id="store-hwd", forecast_frame=forecast,
+        y_df=pd.DataFrame(columns=["unique_id", "ds", "y"]),
+        method="mint_shrink",
+    )
+    # The wrapper should have tried mint_shrink first OR jumped straight to ols
+    # — either is acceptable as long as it lands on ols and produces writes.
+    assert "ols" in calls
+    assert result.ok
+    assert result.method == "ols"
+
+
+def test_reconcile_sql_writers_have_idempotent_marker():
+    """The three back-write SQL templates are idempotent — by ON CONFLICT
+    (for ForecastDailyCategory aggregator inserts) or by UPDATE keyed on the
+    row's natural identity (for ForecastDailyRevenue / ForecastMenuItem,
+    which are written by the model trainer). The string 'ON CONFLICT' or
+    'UPDATE' must appear in each."""
+    from ml.reconciliation.reconcile import (
+        _REVENUE_UPSERT_SQL, _CATEGORY_UPSERT_SQL, _ITEM_UPSERT_SQL,
+    )
     for sql in (_REVENUE_UPSERT_SQL, _CATEGORY_UPSERT_SQL, _ITEM_UPSERT_SQL):
-        assert "ON CONFLICT" in sql
-        assert "DO UPDATE" in sql
+        assert "UPDATE" in sql or "ON CONFLICT" in sql
 ```
 
 - [ ] **Step 2: Run, expect FAIL**
@@ -1065,10 +1128,14 @@ Create `ml/reconciliation/reconcile.py`:
 Reads point forecasts from the in-memory forecast_frame (built by the caller
 from the latest ForecastDailyRevenue / ForecastDailyCategory / ForecastMenuItem
 native rows), runs MinTrace from `hierarchicalforecast`, and writes reconciled
-point estimates back via idempotent upsert. Fails soft on any exception —
+point estimates back via idempotent UPDATE. Fails soft on any exception —
 unreconciled values remain in place and a warning is returned.
 
-The (S, tags) hierarchy comes from ml.reconciliation.hierarchy.
+Auto-fallback: when `method='mint_shrink'` but `y_df` is empty (cold-start
+store, no historical actuals yet), retries with `method='ols'` which doesn't
+need the insample residuals. The final method used is reported on the result.
+
+The (S_df, tags) hierarchy comes from ml.reconciliation.hierarchy.
 """
 from __future__ import annotations
 
@@ -1085,6 +1152,9 @@ from ml.reconciliation.hierarchy import build_single_store_hierarchy
 _LOG = logging.getLogger(__name__)
 
 
+_METHODS_REQUIRING_Y_DF = {"mint_shrink", "mint_cov", "wls_var"}
+
+
 @dataclass
 class ReconcileResult:
     ok: bool
@@ -1093,6 +1163,8 @@ class ReconcileResult:
     warning: str = ""
 
 
+# UPDATE-idempotent: the natural key of each row is unique, so re-running just
+# overwrites the same reconciled columns with the same values.
 _REVENUE_UPSERT_SQL = '''
     UPDATE "ForecastDailyRevenue"
     SET "reconciledRevenue" = %s,
@@ -1106,10 +1178,7 @@ _REVENUE_UPSERT_SQL = '''
         WHERE "storeId" = %s AND "forecastDate" = %s AND "hourBucket" = 0
           AND "forecastSource" = 'native'
       )
-    -- ON CONFLICT not needed; UPDATE is naturally idempotent.
 '''
-# The marker text "ON CONFLICT … DO UPDATE" is enforced for the category and
-# item paths via INSERT ... ON CONFLICT. The test below grep's all three.
 
 _CATEGORY_UPSERT_SQL = '''
     UPDATE "ForecastDailyCategory"
@@ -1117,7 +1186,6 @@ _CATEGORY_UPSERT_SQL = '''
         "reconciledAt" = CURRENT_TIMESTAMP,
         "reconciliationMethod" = %s
     WHERE "storeId" = %s AND date = %s AND "categoryName" = %s
-    -- ON CONFLICT (no insert; the row was created by category_aggregator) DO UPDATE
 '''
 
 _ITEM_UPSERT_SQL = '''
@@ -1130,20 +1198,38 @@ _ITEM_UPSERT_SQL = '''
         WHERE "storeId" = %s AND "forecastDate" = %s AND "otterItemSkuId" = %s
           AND "forecastSource" = 'native'
       )
-    -- ON CONFLICT DO UPDATE marker (UPDATE-idempotent by row uniqueness)
 '''
 
 
-def _run_min_trace(S, tags, y_hat, residuals, method: str):
-    """Thin wrapper so tests can monkeypatch this single call site."""
+def _run_min_trace(S_df, tags, y_hat_df, y_df, method: str) -> pd.DataFrame:
+    """Thin wrapper so tests can monkeypatch this single call site.
+
+    `tags` here is the *level-name* dict only — the __row_index__ entry from
+    ml.reconciliation.hierarchy is stripped before passing in. Returns the
+    reconciler's output DataFrame; column for the reconciled values is named
+    like 'MinTrace/mint_shrink' (one column per reconciler in the list).
+    """
     from hierarchicalforecast.core import HierarchicalReconciliation
     from hierarchicalforecast.methods import MinTrace
+
+    public_tags = {k: v for k, v in tags.items() if not k.startswith("__")}
     reconciler = HierarchicalReconciliation([MinTrace(method=method)])
-    # API shape: reconcile(Y_hat_df=..., S_df=..., tags=..., Y_df=residuals)
-    # See hierarchicalforecast docs for the exact column conventions.
-    return reconciler.reconcile(
-        Y_hat_df=y_hat, S_df=pd.DataFrame(S), tags=tags, Y_df=residuals,
-    )
+    kwargs = {"Y_hat_df": y_hat_df, "S_df": S_df, "tags": public_tags}
+    if method in _METHODS_REQUIRING_Y_DF:
+        kwargs["Y_df"] = y_df
+    return reconciler.reconcile(**kwargs)
+
+
+def _reconciled_column_name(reconciled_df: pd.DataFrame) -> Optional[str]:
+    """Find the reconciler-output column. Convention is 'MinTrace/<method>'
+    but the helper tolerates any non-meta numeric column added by the lib."""
+    meta = {"unique_id", "ds", "y", "y_hat"}
+    for col in reconciled_df.columns:
+        if col in meta:
+            continue
+        if pd.api.types.is_numeric_dtype(reconciled_df[col]):
+            return col
+    return None
 
 
 def reconcile_store_hierarchy(
@@ -1151,63 +1237,104 @@ def reconcile_store_hierarchy(
     *,
     store_id: str,
     forecast_frame: dict[str, Any],
-    residuals: np.ndarray,
+    y_df: pd.DataFrame,
     method: str = "mint_shrink",
 ) -> ReconcileResult:
-    """Reconcile one (store, date) hierarchy and write results back.
+    """Reconcile one store's hierarchy across the forecast horizon and write
+    results back.
 
     `forecast_frame` shape (built by the caller):
       {
         "revenue":    [(date, point, p10, p90), ...],
         "categories": { category_name: [(date, point, p10, p90), ...], ... },
-        "items":      { item_name:     [(date, qty, p10, p90), ...], ... },
+        "items":      { item_name:     [(date, qty,   p10, p90), ...], ... },
         "prices":     { item_name: avg_price, ... },
         "item_to_category": { item_name: category_name, ... },
       }
 
-    Fails soft. Caller logs the warning into JobRun.
+    `y_df` is a long-format DataFrame with columns unique_id, ds, y holding
+    insample historical actuals — required for mint_shrink covariance
+    estimation. May be empty; we fall back to method='ols' automatically.
+
+    Fails soft on any other exception; caller logs the warning into JobRun.
     """
+    chosen_method = method
+    if method in _METHODS_REQUIRING_Y_DF and (y_df is None or y_df.empty):
+        chosen_method = "ols"
+
     try:
-        S, tags = build_single_store_hierarchy(
+        S_df, tags = build_single_store_hierarchy(
             item_to_category=forecast_frame["item_to_category"],
         )
-        # Assemble y_hat dataframe in the row order expected by S.
-        y_hat = _build_y_hat_df(forecast_frame, tags)
-        reconciled = _run_min_trace(S, tags, y_hat, residuals, method)
+        y_hat_df = _build_y_hat_df(forecast_frame, S_df)
+        reconciled = _run_min_trace(S_df, tags, y_hat_df, y_df, chosen_method)
     except Exception as exc:  # pylint: disable=broad-except
-        return ReconcileResult(ok=False, method=method, warning=f"{type(exc).__name__}: {exc}")
+        # If the failure was due to mint_shrink residual issues, try ols once.
+        if chosen_method == "mint_shrink":
+            try:
+                chosen_method = "ols"
+                reconciled = _run_min_trace(S_df, tags, y_hat_df, y_df, chosen_method)
+            except Exception as exc2:  # pylint: disable=broad-except
+                return ReconcileResult(
+                    ok=False, method=chosen_method,
+                    warning=f"{type(exc).__name__}: {exc}; ols-fallback: {exc2}",
+                )
+        else:
+            return ReconcileResult(
+                ok=False, method=chosen_method,
+                warning=f"{type(exc).__name__}: {exc}",
+            )
 
-    rows_written = _write_reconciled(conn, store_id, reconciled, forecast_frame, method)
-    return ReconcileResult(ok=True, rows_written=rows_written, method=method)
+    rows_written = _write_reconciled(conn, store_id, reconciled, forecast_frame, chosen_method)
+    return ReconcileResult(ok=True, rows_written=rows_written, method=chosen_method)
 
 
-def _build_y_hat_df(forecast_frame, tags) -> pd.DataFrame:
-    """Build the Y_hat dataframe in (row_index → date → value) order. See
-    hierarchicalforecast docs for the exact column convention; the helper
-    here is intentionally thin so swapping libs later is a one-spot change."""
+def _build_y_hat_df(forecast_frame, S_df: pd.DataFrame) -> pd.DataFrame:
+    """Long-format Y_hat_df with columns unique_id, ds, y_hat.
+
+    Series ids match the S_df row index (revenue / category names / item
+    names). Item-level values are converted from qty -> revenue via avg
+    price so every level is in dollars.
+    """
     rows = []
-    # Revenue
     for date, point, _p10, _p90 in forecast_frame["revenue"]:
-        rows.append({"unique_id": "revenue", "ds": date, "y_hat": point})
-    # Categories
+        rows.append({"unique_id": "revenue", "ds": pd.Timestamp(date), "y_hat": float(point)})
     for cat, series in forecast_frame["categories"].items():
         for date, point, _p10, _p90 in series:
-            rows.append({"unique_id": cat, "ds": date, "y_hat": point})
-    # Items (qty × price, since the hierarchy is in revenue units)
+            rows.append({"unique_id": cat, "ds": pd.Timestamp(date), "y_hat": float(point)})
     for item, series in forecast_frame["items"].items():
-        price = forecast_frame["prices"].get(item, 1.0)
+        price = forecast_frame["prices"].get(item, 1.0) or 1.0
         for date, qty, _p10, _p90 in series:
-            rows.append({"unique_id": item, "ds": date, "y_hat": float(qty) * price})
-    return pd.DataFrame(rows)
+            rows.append({"unique_id": item, "ds": pd.Timestamp(date), "y_hat": float(qty) * price})
+    df = pd.DataFrame(rows)
+    # Defensive: filter to series the S_df knows about (paranoia against drift
+    # between forecast_frame and item_to_category).
+    return df[df["unique_id"].isin(S_df.index)].reset_index(drop=True)
 
 
-def _write_reconciled(conn, store_id: str, reconciled_df, forecast_frame, method: str) -> int:
+def _write_reconciled(
+    conn, store_id: str, reconciled_df: pd.DataFrame, forecast_frame, method: str,
+) -> int:
     """Idempotent write of reconciled values back to the three forecast tables."""
+    col = _reconciled_column_name(reconciled_df)
+    if col is None or reconciled_df.empty:
+        return 0
+
+    # Pre-index for O(1) lookup.
+    indexed = reconciled_df.set_index(["unique_id", "ds"])[col]
+
+    def _get(uid: str, date) -> Optional[float]:
+        try:
+            v = indexed.loc[(uid, pd.Timestamp(date))]
+            return float(v) if pd.notna(v) else None
+        except (KeyError, TypeError):
+            return None
+
     written = 0
     with conn.cursor() as cur:
-        # Revenue
-        for date, point, p10, p90 in forecast_frame["revenue"]:
-            new_point = _lookup(reconciled_df, "revenue", date)
+        # Revenue (top).
+        for date, _point, p10, p90 in forecast_frame["revenue"]:
+            new_point = _get("revenue", date)
             if new_point is None:
                 continue
             cur.execute(
@@ -1215,44 +1342,30 @@ def _write_reconciled(conn, store_id: str, reconciled_df, forecast_frame, method
                 (new_point, p10, p90, method, store_id, date, store_id, date),
             )
             written += 1
-        # Categories
+        # Categories.
         for cat, series in forecast_frame["categories"].items():
             for date, _point, _p10, _p90 in series:
-                new_point = _lookup(reconciled_df, cat, date)
+                new_point = _get(cat, date)
                 if new_point is None:
                     continue
                 cur.execute(_CATEGORY_UPSERT_SQL, (new_point, method, store_id, date, cat))
                 written += 1
-        # Items (convert reconciled revenue back to qty via avg price)
+        # Items: reconciled output is in revenue units; divide by avg price
+        # to recover qty for the ForecastMenuItem.reconciledQty column.
         for item, series in forecast_frame["items"].items():
             price = forecast_frame["prices"].get(item, 1.0) or 1.0
             for date, _qty, _p10, _p90 in series:
-                new_point = _lookup(reconciled_df, item, date)
-                if new_point is None:
+                new_rev = _get(item, date)
+                if new_rev is None:
                     continue
-                new_qty = float(new_point) / price
+                new_qty = new_rev / price
                 cur.execute(
                     _ITEM_UPSERT_SQL,
                     (new_qty, method, store_id, date, item, store_id, date, item),
                 )
                 written += 1
     return written
-
-
-def _lookup(df, unique_id: str, date) -> Optional[float]:
-    if df is None or df.empty:
-        return None
-    sel = df[(df["unique_id"] == unique_id) & (df["ds"] == date)]
-    if sel.empty:
-        return None
-    # Reconciled column is method-specific in hf; pick the first non-meta numeric.
-    numeric = sel.select_dtypes(include=[np.number])
-    if numeric.empty:
-        return None
-    return float(numeric.iloc[0, -1])
 ```
-
-The "ON CONFLICT DO UPDATE" string appears as a comment in each SQL block so the test's contractual grep stays meaningful even though we use UPDATE (idempotent by row uniqueness) for the two forecast tables and INSERT-or-UPDATE only for ForecastDailyCategory in the aggregator.
 
 - [ ] **Step 4: Run, expect PASS**
 
@@ -1421,76 +1534,271 @@ The new phase slots between the existing `RECONCILE` (actuals backfill) and `EVA
 In `ml/run_nightly.py`, add to the import block:
 
 ```python
-from ml.reconciliation.avg_price import compute_item_avg_prices, AVG_PRICE_FALLBACK
+from ml.reconciliation.avg_price import compute_item_avg_prices
 from ml.reconciliation.category_aggregator import aggregate_categories_for_store
 from ml.reconciliation.reconcile import reconcile_store_hierarchy
 from ml.reconciliation.snapshot import write_reconciliation_snapshot
-from ml.evaluation.consistency import compute_revenue_item_discrepancy  # name pinned in Task 7
+from ml.evaluation.consistency import compute_revenue_item_discrepancy  # name verified in Task 7
 ```
 
-If `compute_revenue_item_discrepancy` doesn't exist with that name, use whatever function `ml/evaluation/consistency.py` exposes that returns per-day discrepancies — adjust the import to the actual name found in Step 7 Step 1.
+If `compute_revenue_item_discrepancy` is named differently in `ml/evaluation/consistency.py`, use the actual symbol that returns per-day discrepancies — adjust the import and call sites here.
 
 - [ ] **Step 2: Add the orchestrator**
+
+`_load_historical_y_df` returns the long-format insample DataFrame the reconciler needs. Source of truth: `ForecastDailyRevenue.actualRevenue` (revenue level), `ForecastMenuItem.actualQty × avg_price` (item level), and a derived `ForecastDailyCategory` actuals computed from `OtterMenuItem` historical sales (since we don't store category-level actuals directly). When any historical actuals are missing for a series, the empty-Y_df branch in `reconcile.py` kicks in and falls back to `method='ols'` automatically.
+
+`compute_revenue_item_discrepancy` from `ml/evaluation/consistency.py` returns per-day discrepancies — at planning time, verify whether it already supports a `use_reconciled` flag. If not, add it as an optional kwarg in this commit (small one-liner: branch on `reconciledRevenue` / `reconciledQty` vs raw); the existing call sites get the default behavior unchanged.
 
 Just above `_run_full_pipeline_for_store`, add:
 
 ```python
+HISTORICAL_Y_DF_DAYS = 28
+
+
 def run_hierarchical_reconciliation_for_store(store_id: str) -> dict:
     """Run category aggregation + MinTrace + snapshot for one ready store.
 
     Fails soft at every layer:
-      - category aggregator failure → reconciliation skipped, ok=False
-      - reconciler failure → unreconciled values stay, ok=False
-      - snapshot failure → row not written, but reconciled values still land
+      - category aggregator failure -> reconciliation skipped, ok=False
+      - reconciler failure -> unreconciled values stay, ok=False (after
+        reconcile.py's own internal ols fallback has been tried)
+      - snapshot failure -> row not written, but reconciled values still land
     """
     today = dt.date.today()
     with connect() as conn:
         agg = aggregate_categories_for_store(conn, store_id=store_id)
         if not agg.ok:
-            return {"store_id": store_id, "ok": False, "phase": "category", "warning": agg.warning}
+            return {"store_id": store_id, "ok": False, "phase": "category",
+                    "warning": agg.warning}
 
-        forecast_frame = _build_forecast_frame(conn, store_id, today)
+        forecast_frame = _build_forecast_frame(conn, store_id)
         if forecast_frame is None:
-            return {"store_id": store_id, "ok": False, "phase": "frame", "warning": "no_forecast_frame"}
+            return {"store_id": store_id, "ok": False, "phase": "frame",
+                    "warning": "no_forecast_frame"}
 
-        residuals = _load_recent_residuals(conn, store_id)
+        y_df = _load_historical_y_df(conn, store_id, forecast_frame, HISTORICAL_Y_DF_DAYS)
         pre = compute_revenue_item_discrepancy(conn, store_id, today)
 
         rec = reconcile_store_hierarchy(
             conn, store_id=store_id, forecast_frame=forecast_frame,
-            residuals=residuals, method="mint_shrink",
+            y_df=y_df, method="mint_shrink",
         )
 
         if rec.ok:
-            post = compute_revenue_item_discrepancy(conn, store_id, today, use_reconciled=True)
-            write_reconciliation_snapshot(
-                conn, store_id=store_id, date=today,
-                pre_discrepancies=pre, post_discrepancies=post,
-                method_used=rec.method,
+            post = compute_revenue_item_discrepancy(
+                conn, store_id, today, use_reconciled=True,
             )
+            try:
+                write_reconciliation_snapshot(
+                    conn, store_id=store_id, date=today,
+                    pre_discrepancies=pre, post_discrepancies=post,
+                    method_used=rec.method,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                # Snapshot failure is non-blocking — reconciled values landed.
+                print({"phase": "RECONCILE_HIERARCHICAL", "store_id": store_id,
+                       "warning": f"snapshot_failed: {exc}"})
     return {"store_id": store_id, "ok": rec.ok, "rows_written": rec.rows_written,
-            "warning": rec.warning or None}
+            "method": rec.method, "warning": rec.warning or None}
 
 
-def _build_forecast_frame(conn, store_id, today):
-    """Assemble the dict that reconcile.reconcile_store_hierarchy consumes."""
-    # Pulls latest native ForecastDailyRevenue / ForecastDailyCategory /
-    # ForecastMenuItem rows for the next 14 days. Returns None if any level
-    # is empty (caller fails soft). Implementation is straight SQL — keep
-    # in this module rather than the reconciliation package because it's
-    # nightly-specific glue.
-    ...
+def _build_forecast_frame(conn, store_id):
+    """Assemble the dict reconcile.reconcile_store_hierarchy consumes.
+
+    Pulls latest native ForecastDailyRevenue / ForecastDailyCategory /
+    ForecastMenuItem rows for the next 14 days. Returns None if any level
+    is empty (caller fails soft). DISTINCT ON pattern matches
+    ml.transfer.hollywood_prior:_load_hollywood_recent_forecasts.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("forecastDate")
+                   "forecastDate", "predictedRevenue", p10, p90
+            FROM "ForecastDailyRevenue"
+            WHERE "storeId" = %s
+              AND "hourBucket" = 0
+              AND "forecastSource" = 'native'
+              AND "forecastDate" >= CURRENT_DATE
+              AND "forecastDate" <  CURRENT_DATE + INTERVAL '14 days'
+            ORDER BY "forecastDate", "generatedAt" DESC
+            ''',
+            (store_id,),
+        )
+        revenue = [(d, float(p), _f(p10), _f(p90)) for d, p, p10, p90 in cur.fetchall()]
+    if not revenue:
+        return None
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT date, "categoryName", revenue
+            FROM "ForecastDailyCategory"
+            WHERE "storeId" = %s
+              AND date >= CURRENT_DATE
+              AND date <  CURRENT_DATE + INTERVAL '14 days'
+            ORDER BY "categoryName", date
+            ''',
+            (store_id,),
+        )
+        categories: dict[str, list] = {}
+        for d, cat, rev in cur.fetchall():
+            categories.setdefault(cat, []).append((d, float(rev), None, None))
+    if not categories:
+        return None
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("otterItemSkuId", "forecastDate")
+                   "otterItemSkuId", "forecastDate", "predictedQty", p10, p90
+            FROM "ForecastMenuItem"
+            WHERE "storeId" = %s
+              AND "forecastSource" = 'native'
+              AND "forecastDate" >= CURRENT_DATE
+              AND "forecastDate" <  CURRENT_DATE + INTERVAL '14 days'
+            ORDER BY "otterItemSkuId", "forecastDate", "generatedAt" DESC
+            ''',
+            (store_id,),
+        )
+        items: dict[str, list] = {}
+        for item, d, qty, p10, p90 in cur.fetchall():
+            items.setdefault(item, []).append((d, float(qty), _f(p10), _f(p90)))
+    if not items:
+        return None
+
+    prices = compute_item_avg_prices(conn, store_id=store_id, lookback_days=60)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("itemName") "itemName", category
+            FROM "OtterMenuItem"
+            WHERE "storeId" = %s AND "isModifier" = false
+            ORDER BY "itemName", date DESC
+            ''',
+            (store_id,),
+        )
+        item_to_category = dict(cur.fetchall())
+
+    # Restrict to items we have a category for (otherwise hierarchy.py raises).
+    filtered_items = {k: v for k, v in items.items() if k in item_to_category}
+    if not filtered_items:
+        return None
+
+    return {
+        "revenue": revenue,
+        "categories": categories,
+        "items": filtered_items,
+        "prices": prices,
+        "item_to_category": {k: item_to_category[k] for k in filtered_items},
+    }
 
 
-def _load_recent_residuals(conn, store_id):
-    """28-day per-series residual matrix from MlForecastEvaluation. Returns
-    a numpy array shape (n_series, n_days). Used by MinTrace shrink covariance."""
-    ...
+def _load_historical_y_df(conn, store_id, forecast_frame, days: int):
+    """Long-format insample fitted values for mint_shrink (unique_id, ds, y).
+
+    Sources:
+      * revenue:    ForecastDailyRevenue.actualRevenue
+      * categories: derived from OtterMenuItem rows via the same aggregation
+                    the nightly category_aggregator does (qty * avg_price,
+                    grouped by category)
+      * items:      ForecastMenuItem.actualQty * avg_price for that item
+
+    Series IDs MUST match the forecast_frame keys (hierarchy.py builds the
+    S_df index from those). Returns a pandas DataFrame; may be empty if no
+    history is reconciled yet, in which case reconcile.py falls back to ols.
+    """
+    import pandas as pd  # local import; module-level already has it but keep DRY
+    prices = forecast_frame["prices"]
+    rows = []
+
+    with conn.cursor() as cur:
+        # Revenue actuals.
+        cur.execute(
+            '''
+            SELECT "forecastDate", "actualRevenue"
+            FROM "ForecastDailyRevenue"
+            WHERE "storeId" = %s
+              AND "hourBucket" = 0
+              AND "forecastSource" = 'native'
+              AND "actualRevenue" IS NOT NULL
+              AND "forecastDate" >= CURRENT_DATE - %s::INTEGER
+              AND "forecastDate" <  CURRENT_DATE
+            ORDER BY "forecastDate"
+            ''',
+            (store_id, days),
+        )
+        for d, actual in cur.fetchall():
+            rows.append({"unique_id": "revenue", "ds": pd.Timestamp(d), "y": float(actual)})
+
+        # Category historical actuals from OtterMenuItem (qty * avg_price).
+        cur.execute(
+            '''
+            SELECT date, category,
+                   SUM(("fpQuantitySold" + "tpQuantitySold")) AS qty,
+                   AVG(
+                     CASE WHEN ("fpQuantitySold" + "tpQuantitySold") > 0
+                          THEN ("fpTotalSales" + "tpTotalSales")
+                               / ("fpQuantitySold" + "tpQuantitySold")
+                     END
+                   ) AS avg_price
+            FROM "OtterMenuItem"
+            WHERE "storeId" = %s
+              AND "isModifier" = false
+              AND date >= CURRENT_DATE - %s::INTEGER
+              AND date <  CURRENT_DATE
+            GROUP BY date, category
+            ''',
+            (store_id, days),
+        )
+        for d, cat, qty, avg_price in cur.fetchall():
+            if avg_price is None or qty is None:
+                continue
+            rows.append({
+                "unique_id": cat, "ds": pd.Timestamp(d),
+                "y": float(qty) * float(avg_price),
+            })
+
+        # Item actuals (qty * known avg_price).
+        cur.execute(
+            '''
+            SELECT "otterItemSkuId", "forecastDate", "actualQty"
+            FROM "ForecastMenuItem"
+            WHERE "storeId" = %s
+              AND "forecastSource" = 'native'
+              AND "actualQty" IS NOT NULL
+              AND "forecastDate" >= CURRENT_DATE - %s::INTEGER
+              AND "forecastDate" <  CURRENT_DATE
+            ORDER BY "otterItemSkuId", "forecastDate"
+            ''',
+            (store_id, days),
+        )
+        for item, d, actual_qty in cur.fetchall():
+            price = prices.get(item)
+            if price is None:
+                continue  # No price -> can't put on the revenue scale; skip.
+            rows.append({
+                "unique_id": item, "ds": pd.Timestamp(d),
+                "y": float(actual_qty) * price,
+            })
+
+    if not rows:
+        return pd.DataFrame(columns=["unique_id", "ds", "y"])
+    df = pd.DataFrame(rows)
+    # Keep only series the forecast hierarchy will know about.
+    known_ids = (
+        {"revenue"}
+        | set(forecast_frame["categories"].keys())
+        | set(forecast_frame["items"].keys())
+    )
+    return df[df["unique_id"].isin(known_ids)].reset_index(drop=True)
+
+
+def _f(v):
+    """Cast Decimal/None to float/None for the forecast_frame tuples."""
+    return float(v) if v is not None else None
 ```
-
-Write out `_build_forecast_frame` and `_load_recent_residuals` with concrete SQL — they're not stubs. Use the SQL patterns already established in `ml/transfer/hollywood_prior.py:_load_hollywood_recent_forecasts` (DISTINCT ON for latest-per-key) and `ml/evaluation/audit.py` (residual reads from `MlForecastEvaluation`).
-
-`compute_revenue_item_discrepancy` from `ml/evaluation/consistency.py` may not currently support a `use_reconciled=True` mode. If not, extend it in a small follow-up commit — read the function first, decide whether to add an optional flag or to write a sibling `compute_revenue_item_discrepancy_reconciled` helper.
 
 - [ ] **Step 3: Insert into the pipeline**
 
@@ -1793,39 +2101,51 @@ The `build_multi_store_hierarchy` from Task 5 is already covered by `test_hierar
 def test_multi_store_minTrace_preserves_chain_sum():
     """End-to-end: build a multi-store hierarchy with 2 synthetic stores,
     run MinTrace, assert the reconciled chain row equals the sum of the
-    reconciled store rows within numerical tolerance."""
-    from hierarchicalforecast.core import HierarchicalReconciliation
-    from hierarchicalforecast.methods import MinTrace
+    reconciled store rows within numerical tolerance.
+
+    Uses ml.reconciliation.reconcile._run_min_trace so we exercise the same
+    wrapper the nightly pipeline uses (including the public_tags filter that
+    strips our __row_index__ helper)."""
     import pandas as pd
+    from ml.reconciliation.reconcile import _run_min_trace, _reconciled_column_name
 
     stores = {
         "store-a": {"item1": "cat-x", "item2": "cat-y"},
         "store-b": {"item3": "cat-x"},
     }
-    S, tags = build_multi_store_hierarchy(stores=stores)
+    S_df, tags = build_multi_store_hierarchy(stores=stores)
 
-    # Build dummy y_hat with coherent values: items at 10/20/30, sum-up to
-    # chain = 60 after aggregation through S.
-    leaves = tags["leaf"]  # store:item form
-    bottom_values = np.array([10.0, 20.0, 30.0])
-    full = S @ bottom_values
-    y_hat = pd.DataFrame({"unique_id": [...], "ds": pd.Timestamp("2026-05-27"), "y_hat": full})
-    # (Use the row ordering exposed by tags["row_index"] to fill unique_id.)
+    # Coherent leaves: 10 / 20 / 30. Rolling up through S gives every parent.
+    leaf_ids = tags["leaf"]
+    leaf_values = pd.Series([10.0, 20.0, 30.0], index=leaf_ids)
+    full = S_df @ leaf_values  # one value per series in S_df.index
 
-    # Residuals: pretend 28 days of zero residuals (degenerate; MinTrace
-    # falls back to OLS). Lib version may require a non-degenerate residual
-    # matrix — pin synthetic noise if so.
-    residuals = np.random.normal(0, 1, (S.shape[0], 28))
+    ds_today = pd.Timestamp("2026-05-27")
+    y_hat_df = pd.DataFrame({
+        "unique_id": full.index,
+        "ds": ds_today,
+        "y_hat": full.values,
+    })
 
-    reconciler = HierarchicalReconciliation([MinTrace(method="mint_shrink")])
-    out = reconciler.reconcile(Y_hat_df=y_hat, S_df=pd.DataFrame(S), tags=tags, Y_df=residuals)
+    # Synthetic Y_df with mild noise so mint_shrink has non-degenerate residuals.
+    rng = np.random.default_rng(seed=42)
+    dates = pd.date_range(end=pd.Timestamp("2026-05-26"), periods=28, freq="D")
+    y_rows = []
+    for uid in full.index:
+        base = float(full.loc[uid])
+        for d in dates:
+            y_rows.append({"unique_id": uid, "ds": d, "y": base + rng.normal(0, 1.0)})
+    y_df = pd.DataFrame(y_rows)
 
-    chain_row = out[out["unique_id"] == "__chain__"]["y_hat"].iloc[0]  # reconciled column
-    store_rows = out[out["unique_id"].isin(["store-a", "store-b"])]["y_hat"].sum()
+    out = _run_min_trace(S_df, tags, y_hat_df, y_df, method="mint_shrink")
+
+    col = _reconciled_column_name(out)
+    assert col is not None, list(out.columns)
+
+    chain_row = out[out["unique_id"] == "__chain__"][col].iloc[0]
+    store_rows = out[out["unique_id"].isin(["store-a", "store-b"])][col].sum()
     assert abs(chain_row - store_rows) < 0.01, (chain_row, store_rows)
 ```
-
-Adjust the column-name details to match the lib's actual reconciled-column naming (resolved in Task 6 step 4).
 
 - [ ] **Step 2: Run, expect PASS**
 
@@ -2044,7 +2364,13 @@ Cross-checked against [spec §2](../specs/2026-05-17-ml-phase1-weeks5-12-design.
 | Exit gate: ML_USE_RECONCILED=false reverts cleanly | Task 14 (verify default branch) |
 | Spec migration discipline: db push + manual SQL | Task 2 |
 
-No placeholders. Type names consistent (`CategoryAggregationResult`, `ReconcileResult`, `ForecastSourcePreference`, `defaultForecastPreference`, `isReconciledStale`, `compute_item_avg_prices`, `build_single_store_hierarchy`, `build_multi_store_hierarchy`, `reconcile_store_hierarchy`, `write_reconciliation_snapshot`, `run_hierarchical_reconciliation_for_store`, `gate_reconciliation_post_median`) — verified by ctrl-F.
+No placeholders. Type names consistent across tasks (`CategoryAggregationResult`, `ReconcileResult`, `ForecastSourcePreference`, `defaultForecastPreference`, `isReconciledStale`, `compute_item_avg_prices`, `build_single_store_hierarchy`, `build_multi_store_hierarchy`, `reconcile_store_hierarchy`, `_run_min_trace`, `_reconciled_column_name`, `_build_forecast_frame`, `_load_historical_y_df`, `write_reconciliation_snapshot`, `run_hierarchical_reconciliation_for_store`, `gate_reconciliation_post_median`) — verified by ctrl-F.
+
+**Library-API soft spots resolved at planning time** (Context7 cache on Nixtla's docs):
+- `HierarchicalReconciliation.reconcile(Y_hat_df, S_df, tags, Y_df)` — Y_df is long-format insample fitted values, NOT a numpy residual matrix.
+- `S_df` is a pandas DataFrame indexed by series unique_id with columns = leaf unique_ids.
+- Reconciled values land in a column named like `'MinTrace/mint_shrink'`; helper `_reconciled_column_name` resolves it generically.
+- `mint_shrink` requires Y_df with insample residuals; auto-fallback to `'ols'` when Y_df is empty (cold-start) or the shrinkage raises.
 
 Subsequent plan:
 - [W9-12 growth + quality panel](2026-05-17-ml-phase1-w9-12-growth.md) — to be written after W6-8 ships, because the growth-opportunity formulas in §3.2 consume reconciled forecast values via the same `prefer` parameter built in Task 10.
