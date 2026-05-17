@@ -159,46 +159,56 @@ model Store {
   targetCogsPct Float?
 
   // Optional geocoding used by offline weather / event signal backfills.
-  latitude               Float?
-  longitude              Float?
-  geocodedAt             DateTime?
-  geocodeProvider        String?
-  geocodeConfidence      Float?
-  eventSignalRadiusMiles Float?
+  latitude                   Float?
+  longitude                  Float?
+  geocodedAt                 DateTime?
+  geocodeProvider            String?
+  geocodeConfidence          Float?
+  eventSignalRadiusMiles     Float?
   eventSignalRadiusProvider  String?
   eventSignalRadiusUpdatedAt DateTime?
 
+  // ML lifecycle (Phase 1 W5). Drives nightly job behavior:
+  //   pre_open   -> skip training/forecasting; dashboard shows "Opening soon"
+  //   warming_up -> emit Hollywood-derived transfer forecasts; train native in parallel
+  //   ready      -> native model in production; participates in MinTrace reconciliation
+  // pre_open -> warming_up is an ops flip (set when the store physically opens).
+  // warming_up -> ready is automatic via ml.lifecycle.should_promote_to_ready.
+  lifecycleStage        LifecycleStage @default(pre_open)
+  initialTransferScalar Float?
+  openedAt              DateTime?
+
   // Relations
-  owner                User                   @relation("StoreOwner", fields: [ownerId], references: [id])
-  account              Account                @relation(fields: [accountId], references: [id])
-  prepTasks            PrepTask[]
-  otterStores          OtterStore[]
-  otterSummaries       OtterDailySummary[]
-  otterHourlySummaries OtterHourlySummary[]
-  otterMenuCategories  OtterMenuCategory[]
-  otterMenuItems       OtterMenuItem[]
-  otterRatings         OtterRating[]
-  invoices             Invoice[]
-  ingredientAliases    IngredientAlias[]
-  otterItemMappings    OtterItemMapping[]
-  otterSubItemMappings OtterSubItemMapping[]
-  otterOrders          OtterOrder[]
-  dailyCogsItems       DailyCogsItem[]
-  aiForecastRuns       AiForecastRun[]
-  jobRuns              JobRun[]
-  stockCounts          StockCount[]
-  inventoryAdjustments InventoryAdjustment[]
-  modelStates          IngredientModelState[]
-  forecastDailyRevenue ForecastDailyRevenue[]
-  forecastHourlyOrders ForecastHourlyOrders[]
-  forecastMenuItems    ForecastMenuItem[]
+  owner                 User                     @relation("StoreOwner", fields: [ownerId], references: [id])
+  account               Account                  @relation(fields: [accountId], references: [id])
+  prepTasks             PrepTask[]
+  otterStores           OtterStore[]
+  otterSummaries        OtterDailySummary[]
+  otterHourlySummaries  OtterHourlySummary[]
+  otterMenuCategories   OtterMenuCategory[]
+  otterMenuItems        OtterMenuItem[]
+  otterRatings          OtterRating[]
+  invoices              Invoice[]
+  ingredientAliases     IngredientAlias[]
+  otterItemMappings     OtterItemMapping[]
+  otterSubItemMappings  OtterSubItemMapping[]
+  otterOrders           OtterOrder[]
+  dailyCogsItems        DailyCogsItem[]
+  aiForecastRuns        AiForecastRun[]
+  jobRuns               JobRun[]
+  stockCounts           StockCount[]
+  inventoryAdjustments  InventoryAdjustment[]
+  modelStates           IngredientModelState[]
+  forecastDailyRevenue  ForecastDailyRevenue[]
+  forecastHourlyOrders  ForecastHourlyOrders[]
+  forecastMenuItems     ForecastMenuItem[]
   mlForecastEvaluations MlForecastEvaluation[]
-  anomalyEvents        AnomalyEvent[]
-  menuItemElasticities MenuItemElasticity[]
-  weatherSignals       StoreWeatherSignal[]
-  eventSignals         StoreEventSignal[]
-  eventDetailSignals   StoreEventDetailSignal[]
-  externalSignalRuns   ExternalSignalSyncRun[]
+  anomalyEvents         AnomalyEvent[]
+  menuItemElasticities  MenuItemElasticity[]
+  weatherSignals        StoreWeatherSignal[]
+  eventSignals          StoreEventSignal[]
+  eventDetailSignals    StoreEventDetailSignal[]
+  externalSignalRuns    ExternalSignalSyncRun[]
 
   // Harri scheduling integration (LiveWire) — labor cost + clock-in alerts
   harriBrands            HarriBrand[]
@@ -574,10 +584,10 @@ model CanonicalIngredient {
   /// hides the case tier and the count card falls back to canonical-only.
   /// `innerPackUnit` + `innerPacksPerCase` define tier 2 (inner-pack); both
   /// null hides that tier (e.g. catch-weight meat has no inner pack).
-  caseUnit               String?
-  innerPackUnit          String?
-  recipeUnitsPerCase     Float?
-  innerPacksPerCase      Float?
+  caseUnit           String?
+  innerPackUnit      String?
+  recipeUnitsPerCase Float?
+  innerPacksPerCase  Float?
 
   owner                User                   @relation(fields: [ownerId], references: [id])
   account              Account                @relation(fields: [accountId], references: [id])
@@ -1331,6 +1341,25 @@ enum MlTarget {
   BUSY_HOURS
 }
 
+/// Phase 1 W5: store lifecycle progression. See `Store.lifecycleStage`.
+/// Transitions: pre_open -> warming_up (ops flip) -> ready (auto via
+/// ml.lifecycle.should_promote_to_ready when native beats transfer-forecast
+/// WAPE by >=5% with sampleSize >= 60).
+enum LifecycleStage {
+  pre_open
+  warming_up
+  ready
+}
+
+/// Phase 1 W5: where a forecast row came from. `transfer` rows are emitted
+/// by ml/transfer/hollywood_prior.py for warming_up stores; `native` rows
+/// are emitted by the per-store XGBoost models. Reconciliation status is
+/// signaled separately by `reconciledAt`.
+enum ForecastSource {
+  native
+  transfer
+}
+
 enum AnomalyMethod {
   ZSCORE
   ISOLATION_FOREST
@@ -1376,21 +1405,24 @@ model MlTrainingRun {
 /// (storeId, forecastDate) per generation. Newer rows supersede older ones —
 /// the dashboard reads the latest by `generatedAt`.
 model ForecastDailyRevenue {
-  id               String    @id @default(cuid())
+  id               String         @id @default(cuid())
   storeId          String
-  forecastDate     DateTime  @db.Date
+  forecastDate     DateTime       @db.Date
   /// 0 means whole-day; 1-23 means a specific hour bucket (when we add it).
-  hourBucket       Int       @default(0)
+  hourBucket       Int            @default(0)
   predictedRevenue Float
   /// 10th / 90th percentile of the predictive interval.
   p10              Float?
   p90              Float?
   modelVersion     String
-  generatedAt      DateTime  @default(now())
+  generatedAt      DateTime       @default(now())
   /// Backfilled by reconciliation when the day closes.
   actualRevenue    Float?
   errorPct         Float?
   reconciledAt     DateTime?
+  /// Phase 1 W5: 'native' for per-store XGBoost rows; 'transfer' for
+  /// Hollywood-prior rows emitted while the store is warming_up.
+  forecastSource   ForecastSource @default(native)
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1398,24 +1430,26 @@ model ForecastDailyRevenue {
   @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, hourBucket, generatedAt(sort: Desc)], map: "ForecastDailyRevenue_store_date_hour_generated_idx")
   @@index([generatedAt(sort: Desc)])
+  @@index([storeId, forecastSource])
 }
 
 /// Hourly order-demand forecast per store. Written by the nightly Python
 /// pipeline after training on Otter hourly order history plus bounded Harri
 /// labor context. Dashboard request paths read these precomputed rows only.
 model ForecastHourlyOrders {
-  id              String    @id @default(cuid())
+  id              String         @id @default(cuid())
   storeId         String
-  forecastDate    DateTime  @db.Date
+  forecastDate    DateTime       @db.Date
   hourBucket      Int
   predictedOrders Float
   p10             Float?
   p90             Float?
   modelVersion    String
-  generatedAt     DateTime  @default(now())
+  generatedAt     DateTime       @default(now())
   actualOrders    Float?
   errorPct        Float?
   reconciledAt    DateTime?
+  forecastSource  ForecastSource @default(native)
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1423,24 +1457,26 @@ model ForecastHourlyOrders {
   @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, hourBucket, generatedAt(sort: Desc)], map: "ForecastHourlyOrders_store_date_hour_generated_idx")
   @@index([generatedAt(sort: Desc)])
+  @@index([storeId, forecastSource])
 }
 
 /// Daily menu-item demand forecast per store. Joined by `otterItemSkuId`,
 /// which matches `OtterOrderItem.skuId` (the stable identifier used by sales
 /// history).
 model ForecastMenuItem {
-  id             String    @id @default(cuid())
+  id             String         @id @default(cuid())
   storeId        String
   otterItemSkuId String
-  forecastDate   DateTime  @db.Date
+  forecastDate   DateTime       @db.Date
   predictedQty   Float
   p10            Float?
   p90            Float?
   modelVersion   String
-  generatedAt    DateTime  @default(now())
+  generatedAt    DateTime       @default(now())
   actualQty      Float?
   errorPct       Float?
   reconciledAt   DateTime?
+  forecastSource ForecastSource @default(native)
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1448,6 +1484,7 @@ model ForecastMenuItem {
   @@index([storeId, forecastDate])
   @@index([storeId, forecastDate, otterItemSkuId, generatedAt(sort: Desc)], map: "ForecastMenuItem_store_date_sku_generated_idx")
   @@index([generatedAt(sort: Desc)])
+  @@index([storeId, forecastSource])
 }
 
 /// Per-target, per-store, per-horizon, per-window forecast evaluation.
@@ -1495,19 +1532,19 @@ model MlForecastEvaluation {
 /// Store-hour weather features precomputed by offline Open-Meteo sync jobs.
 /// Dashboard request paths must read these rows only; no weather provider calls.
 model StoreWeatherSignal {
-  id                            String   @id @default(cuid())
-  storeId                       String
-  date                          DateTime @db.Date
-  hour                          Int
-  temperatureC                  Float?
-  apparentTemperatureC          Float?
-  precipitationMm               Float?
-  precipitationProbabilityPct   Float?
-  windSpeedKph                  Float?
-  relativeHumidityPct           Float?
-  weatherCode                   Int?
-  provider                      String   @default("open-meteo")
-  syncedAt                      DateTime @default(now()) @updatedAt
+  id                          String   @id @default(cuid())
+  storeId                     String
+  date                        DateTime @db.Date
+  hour                        Int
+  temperatureC                Float?
+  apparentTemperatureC        Float?
+  precipitationMm             Float?
+  precipitationProbabilityPct Float?
+  windSpeedKph                Float?
+  relativeHumidityPct         Float?
+  weatherCode                 Int?
+  provider                    String   @default("open-meteo")
+  syncedAt                    DateTime @default(now()) @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1520,33 +1557,33 @@ model StoreWeatherSignal {
 /// Category counts are intentionally denormalized so ML and dashboards can
 /// join one compact daily row without scanning raw provider payloads.
 model StoreEventSignal {
-  id                         String   @id @default(cuid())
-  storeId                    String
-  date                       DateTime @db.Date
-  radiusMiles                Float?
-  hospitalityImpact          Float?
-  hospitalitySpend           Float?
-  attendance                 Float?
-  eventCount                 Int      @default(0)
-  sportsCount                Int      @default(0)
-  concertsCount              Int      @default(0)
-  festivalsCount             Int      @default(0)
-  performingArtsCount        Int      @default(0)
-  communityCount             Int      @default(0)
-  conferencesCount           Int      @default(0)
-  exposCount                 Int      @default(0)
-  topEventTitle              String?
-  topEventCategory           String?
-  topEventStartsAt           DateTime?
-  topEventRank               Float?
-  topEventLocalRank          Float?
-  topEventAttendance         Float?
-  topEventDistanceMiles      Float?
-  majorEventCount            Int      @default(0)
-  highLocalRankEventCount    Int      @default(0)
-  provider                   String   @default("predicthq")
-  raw                        Json?
-  syncedAt                   DateTime @default(now()) @updatedAt
+  id                      String    @id @default(cuid())
+  storeId                 String
+  date                    DateTime  @db.Date
+  radiusMiles             Float?
+  hospitalityImpact       Float?
+  hospitalitySpend        Float?
+  attendance              Float?
+  eventCount              Int       @default(0)
+  sportsCount             Int       @default(0)
+  concertsCount           Int       @default(0)
+  festivalsCount          Int       @default(0)
+  performingArtsCount     Int       @default(0)
+  communityCount          Int       @default(0)
+  conferencesCount        Int       @default(0)
+  exposCount              Int       @default(0)
+  topEventTitle           String?
+  topEventCategory        String?
+  topEventStartsAt        DateTime?
+  topEventRank            Float?
+  topEventLocalRank       Float?
+  topEventAttendance      Float?
+  topEventDistanceMiles   Float?
+  majorEventCount         Int       @default(0)
+  highLocalRankEventCount Int       @default(0)
+  provider                String    @default("predicthq")
+  raw                     Json?
+  syncedAt                DateTime  @default(now()) @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1558,23 +1595,23 @@ model StoreEventSignal {
 /// Raw-ish top PredictHQ event rows retained for explanations and feature
 /// engineering. The sync stores a bounded, location-scoped subset only.
 model StoreEventDetailSignal {
-  id                 String    @id @default(cuid())
-  storeId            String
-  providerEventId    String
-  date               DateTime  @db.Date
-  startsAt           DateTime?
-  endsAt             DateTime?
-  title              String?
-  category           String?
-  labels             Json?
-  rank               Float?
-  localRank          Float?
-  attendance         Float?
-  distanceMiles      Float?
-  venueName          String?
-  venueId            String?
-  raw                Json?
-  syncedAt           DateTime  @default(now()) @updatedAt
+  id              String    @id @default(cuid())
+  storeId         String
+  providerEventId String
+  date            DateTime  @db.Date
+  startsAt        DateTime?
+  endsAt          DateTime?
+  title           String?
+  category        String?
+  labels          Json?
+  rank            Float?
+  localRank       Float?
+  attendance      Float?
+  distanceMiles   Float?
+  venueName       String?
+  venueId         String?
+  raw             Json?
+  syncedAt        DateTime  @default(now()) @updatedAt
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1683,13 +1720,13 @@ model HarriBrand {
 }
 
 model HarriDailyLabor {
-  id            String   @id @default(cuid())
-  storeId       String
-  date          DateTime @db.Date
-  actualCost    Float? // USD
-  forecastCost  Float? // USD
-  categories    Json? // [{ id, code, name, total_labor_cost (USD) }]
-  syncedAt      DateTime @default(now())
+  id           String   @id @default(cuid())
+  storeId      String
+  date         DateTime @db.Date
+  actualCost   Float? // USD
+  forecastCost Float? // USD
+  categories   Json? // [{ id, code, name, total_labor_cost (USD) }]
+  syncedAt     DateTime @default(now())
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
