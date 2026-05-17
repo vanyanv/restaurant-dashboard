@@ -57,3 +57,22 @@ monitoring tab shows the latest run, gate signals, and the 7-PASS streak.
 3. Wire it into `ml/run_nightly.py` alongside `run_revenue_for_store`.
 4. Add a `MlTarget` enum value if needed and a forecast table in the
    Prisma schema. Document it back here.
+
+## Lifecycle stages (W5)
+
+Stores progress `pre_open → warming_up → ready`:
+
+- `pre_open` — physically not open. Nightly pipeline skips entirely;
+  dashboard shows "Opening soon".
+- `warming_up` — open but native model untrustworthy. Nightly emits
+  transfer-source forecasts derived from Hollywood
+  (`ml/transfer/hollywood_prior.py`), trains native in parallel, and
+  refuses to promote until native WAPE beats transfer WAPE by ≥5% with
+  `sampleSize ≥ 60`.
+- `ready` — native model in production. Participates in all phases.
+
+Promotion is automatic via `ml/lifecycle.py::should_promote_to_ready`; the
+only manual flip is `pre_open → warming_up`, done by ops when the store
+physically opens. See `docs/superpowers/specs/2026-05-17-ml-phase1-weeks5-12-design.md`
+§1 for the full design and `docs/superpowers/plans/2026-05-17-ml-phase1-w5-onboarding.md`
+for the implementation log.
