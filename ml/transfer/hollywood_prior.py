@@ -69,3 +69,123 @@ def widened_interval(
     if new_p10 < 0:
         new_p10 = 0.0
     return point, new_p10, new_p90
+
+
+from ml.db import cuid_like
+
+
+@dataclass
+class TransferWriteResult:
+    ok: bool
+    revenue_rows_written: int = 0
+    menu_item_rows_written: int = 0
+    hourly_rows_written: int = 0
+    scalar_used: Optional[float] = None
+    warning: str = ""
+
+
+def _load_hollywood_recent_forecasts(cur, hollywood_store_id: str, days: int):
+    """Latest forecast per (date, hourBucket=0) for Hollywood in the next `days`."""
+    cur.execute(
+        '''
+        SELECT DISTINCT ON ("forecastDate")
+               "forecastDate", "predictedRevenue", p10, p90
+        FROM "ForecastDailyRevenue"
+        WHERE "storeId" = %s
+          AND "hourBucket" = 0
+          AND "forecastSource" = 'native'
+          AND "forecastDate" >= CURRENT_DATE
+        ORDER BY "forecastDate" ASC, "generatedAt" DESC
+        LIMIT %s
+        ''',
+        (hollywood_store_id, days),
+    )
+    return cur.fetchall()
+
+
+def _load_trailing_actuals(cur, store_id: str, days: int) -> list[float]:
+    """Trailing actuals from OtterDailySummary (sum of fpNetSales + tpNetSales).
+
+    Used to compute the multiplicative scalar - same source the reconciler
+    writes into ForecastDailyRevenue.actualRevenue.
+    """
+    cur.execute(
+        '''
+        SELECT COALESCE("fpNetSales", 0) + COALESCE("tpNetSales", 0) AS actual
+        FROM "OtterDailySummary"
+        WHERE "storeId" = %s
+          AND date >= CURRENT_DATE - %s::INTEGER
+        ORDER BY date DESC
+        LIMIT %s
+        ''',
+        (store_id, days, days),
+    )
+    return [float(r[0]) for r in cur.fetchall()]
+
+
+def write_transfer_forecasts_for_store(
+    conn,
+    *,
+    new_store_id: str,
+    hollywood_store_id: str,
+    model_version: str,
+    initial_scalar: Optional[float],
+    horizon_days: int = 14,
+) -> TransferWriteResult:
+    """Write transfer-source revenue forecasts for one warming_up store.
+
+    Fails soft (returns ok=False + warning) on:
+      - no recent Hollywood forecasts to project from
+      - insufficient actuals + no initial_scalar fallback
+
+    Menu-item and hourly transfer writes are deliberately scoped out of W5
+    (revenue only) - the UI caption attaches to the revenue card and any
+    operator-action surface that reads revenue. Extend in a later phase if
+    we need item-level transfer forecasts.
+    """
+    with conn.cursor() as cur:
+        hollywood = _load_hollywood_recent_forecasts(cur, hollywood_store_id, horizon_days)
+    if not hollywood:
+        return TransferWriteResult(ok=False, warning="hollywood_has_no_recent_forecasts")
+
+    with conn.cursor() as cur:
+        new_actuals = _load_trailing_actuals(cur, new_store_id, 14)
+    with conn.cursor() as cur:
+        holly_actuals = _load_trailing_actuals(cur, hollywood_store_id, 14)
+
+    try:
+        scalar = compute_transfer_scalar(
+            new_store_actuals=new_actuals,
+            hollywood_actuals_same_window=holly_actuals,
+            initial_scalar=initial_scalar,
+        )
+    except ValueError as exc:
+        return TransferWriteResult(ok=False, warning=f"scalar_unavailable: {exc}")
+
+    written = 0
+    with conn.cursor() as cur:
+        for row in hollywood:
+            forecast_date, point, p10, p90 = row
+            scaled_point = float(point) * scalar
+            scaled_p10 = float(p10) * scalar if p10 is not None else None
+            scaled_p90 = float(p90) * scalar if p90 is not None else None
+            new_point, new_p10, new_p90 = widened_interval(
+                point=scaled_point, p10=scaled_p10, p90=scaled_p90,
+            )
+            cur.execute(
+                '''
+                INSERT INTO "ForecastDailyRevenue"
+                    (id, "storeId", "forecastDate", "hourBucket",
+                     "predictedRevenue", p10, p90, "modelVersion", "forecastSource")
+                VALUES (%s, %s, %s, 0, %s, %s, %s, %s, 'transfer')
+                ''',
+                (cuid_like(), new_store_id, forecast_date,
+                 new_point, new_p10, new_p90, model_version),
+            )
+            written += 1
+
+    return TransferWriteResult(
+        ok=True,
+        revenue_rows_written=written,
+        scalar_used=scalar,
+    )
