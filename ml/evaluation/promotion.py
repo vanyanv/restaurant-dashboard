@@ -243,3 +243,39 @@ def select_with_gate(
     if decision.promoted:
         return enriched, "promoted", decision.reason
     return baseline, "gate_rejected", decision.reason
+
+
+def transfer_forecast_wape(
+    conn,
+    *,
+    store_id: str,
+    lookback_days: int = 60,
+) -> Optional[float]:
+    """WAPE of this store's reconciled transfer forecasts over the trailing
+    `lookback_days`. Returns None if no reconciled transfer rows exist or
+    Σ|actual| is zero.
+
+    Used by the W5 lifecycle gate: native model must beat THIS value by >=5%
+    before a warming_up store flips to ready. See ml.lifecycle.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT "predictedRevenue", "actualRevenue"
+            FROM "ForecastDailyRevenue"
+            WHERE "storeId" = %s
+              AND "forecastSource" = 'transfer'
+              AND "actualRevenue" IS NOT NULL
+              AND "reconciledAt" IS NOT NULL
+              AND "forecastDate" >= CURRENT_DATE - %s::INTEGER
+            ''',
+            (store_id, lookback_days),
+        )
+        rows = cur.fetchall()
+    if not rows:
+        return None
+    abs_err = sum(abs(float(p) - float(a)) for p, a in rows)
+    abs_act = sum(abs(float(a)) for _, a in rows)
+    if abs_act == 0:
+        return None
+    return abs_err / abs_act
