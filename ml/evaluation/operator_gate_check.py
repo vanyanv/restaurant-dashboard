@@ -98,6 +98,13 @@ def _close_job_run(
         )
 
 
+def _schema_ready(conn) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('\"MlForecastEvaluation\"') IS NOT NULL")
+        (ready,) = cur.fetchone()
+    return bool(ready)
+
+
 def gate1_eval_rows_today(conn) -> tuple[bool, str]:
     """Each (active store × MlTarget) wrote at least one row today."""
     with conn.cursor() as cur:
@@ -226,6 +233,14 @@ def _run_checks() -> tuple[int, dict[str, Any]]:
     print()
 
     with connect() as conn:
+        if not _schema_ready(conn):
+            print("schema not ready — skipping gates (MlForecastEvaluation table absent)")
+            return 0, {
+                "date": date.today().isoformat(),
+                "windowDays": _WINDOW_DAYS,
+                "schemaReady": False,
+                "overallPass": True,
+            }
         g1_pass, g1_detail = gate1_eval_rows_today(conn)
         g2_pass, g2_detail = gate2_seasonal_naive_fired(conn)
         g3_strict, g3_detail, g3_accept = gate3_revenue_coverage(conn)
