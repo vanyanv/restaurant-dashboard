@@ -134,3 +134,46 @@ def test_enriched_none_returns_baseline():
     )
     assert chosen is baseline
     assert label == "enriched_skipped"
+
+
+# --- transfer_forecast_wape (Phase 1 W5) ---
+
+from unittest.mock import MagicMock
+
+from ml.evaluation.promotion import transfer_forecast_wape
+
+
+def _mk_conn_with_rows(rows):
+    cur = MagicMock()
+    cur.__enter__ = lambda self: self
+    cur.__exit__ = lambda *a: False
+    cur.fetchall.return_value = rows
+    conn = MagicMock()
+    conn.__enter__ = lambda self: self
+    conn.__exit__ = lambda *a: False
+    conn.cursor.return_value = cur
+    return conn, cur
+
+
+def test_transfer_forecast_wape_computes_wape_from_reconciled_transfer_rows():
+    # 3 rows; predicted vs actual: |800-1000|+|1100-1000|+|900-1000| = 400
+    # Σ actual = 3000 -> WAPE = 400/3000 ≈ 0.1333.
+    rows = [
+        (800.0, 1000.0),
+        (1100.0, 1000.0),
+        (900.0, 1000.0),
+    ]
+    conn, _ = _mk_conn_with_rows(rows)
+    wape = transfer_forecast_wape(conn, store_id="store-gln", lookback_days=60)
+    assert wape is not None
+    assert abs(wape - (400 / 3000)) < 1e-9
+
+
+def test_transfer_forecast_wape_returns_none_when_no_rows():
+    conn, _ = _mk_conn_with_rows([])
+    assert transfer_forecast_wape(conn, store_id="store-gln", lookback_days=60) is None
+
+
+def test_transfer_forecast_wape_returns_none_when_sum_actuals_zero():
+    conn, _ = _mk_conn_with_rows([(0.0, 0.0), (5.0, 0.0)])
+    assert transfer_forecast_wape(conn, store_id="store-gln", lookback_days=60) is None
