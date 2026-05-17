@@ -92,3 +92,117 @@ def test_widened_interval_clamps_p10_at_zero():
 def test_widened_interval_passthrough_when_p10_or_p90_none():
     point, p10, p90 = widened_interval(point=50.0, p10=None, p90=60.0)
     assert (point, p10, p90) == (50.0, None, 60.0)
+
+
+# --- writer tests (use psycopg2 mock cursor pattern from test_nightly_integration) ---
+
+import datetime as dt
+from unittest.mock import MagicMock
+
+from ml.transfer.hollywood_prior import (
+    write_transfer_forecasts_for_store,
+    TransferWriteResult,
+)
+
+
+def _mk_cursor(rowsets: list[list[tuple]]):
+    """Build a cursor whose successive fetchall()s return rowsets[i]."""
+    cur = MagicMock()
+    cur.__enter__ = lambda self: self
+    cur.__exit__ = lambda *a: False
+    cur.fetchall.side_effect = rowsets
+    cur.execute = MagicMock()
+    return cur
+
+
+def _mk_conn(cursors: list):
+    conn = MagicMock()
+    conn.__enter__ = lambda self: self
+    conn.__exit__ = lambda *a: False
+    it = iter(cursors)
+    conn.cursor.side_effect = lambda *a, **k: next(it)
+    return conn
+
+
+def test_write_transfer_forecasts_writes_revenue_rows_with_widened_intervals():
+    """Hollywood has 1 day of native forecasts at $3000 (p10 $2800, p90 $3200).
+    New store has 14 days of $1500 actuals so scalar = 0.5. After widening
+    intervals by 1.5x: scaled p10 = 1400 -> widened p10 = 1500 - 1.5*(1500-1400) = 1350.
+    """
+    # cur 1 (load hollywood forecasts): one row (date, point, p10, p90).
+    hollywood_rows = [(dt.date(2026, 5, 20), 3000.0, 2800.0, 3200.0)]
+    # cur 2 (load new-store actuals):
+    new_actuals = [(1500.0,)] * 14
+    # cur 3 (load hollywood actuals):
+    holly_actuals = [(3000.0,)] * 14
+    # cur 4 (insert): no fetchall expected.
+    insert_cur = MagicMock()
+    insert_cur.__enter__ = lambda self: self
+    insert_cur.__exit__ = lambda *a: False
+    insert_cur.execute = MagicMock()
+
+    cursors = [
+        _mk_cursor([hollywood_rows]),
+        _mk_cursor([new_actuals]),
+        _mk_cursor([holly_actuals]),
+        insert_cur,
+    ]
+    conn = _mk_conn(cursors)
+
+    result = write_transfer_forecasts_for_store(
+        conn,
+        new_store_id="store-gln",
+        hollywood_store_id="store-hwd",
+        model_version="transfer-20260520",
+        initial_scalar=0.5,
+    )
+
+    assert isinstance(result, TransferWriteResult)
+    assert result.ok
+    assert result.revenue_rows_written == 1
+    assert result.scalar_used == pytest.approx(0.5)
+    # Verify INSERT was called with 'transfer' literal in SQL.
+    assert insert_cur.execute.call_count == 1
+    sql, params = insert_cur.execute.call_args.args
+    assert "'transfer'" in sql
+    assert "ForecastDailyRevenue" in sql
+
+
+def test_write_transfer_forecasts_fails_soft_when_hollywood_has_no_recent_forecasts():
+    """If Hollywood has no recent forecasts, return ok=False with a warning."""
+    cursors = [
+        _mk_cursor([[]]),  # hollywood_rows empty
+    ]
+    conn = _mk_conn(cursors)
+
+    result = write_transfer_forecasts_for_store(
+        conn,
+        new_store_id="store-gln",
+        hollywood_store_id="store-hwd",
+        model_version="transfer-20260520",
+        initial_scalar=0.5,
+    )
+
+    assert not result.ok
+    assert "hollywood_has_no_recent_forecasts" in result.warning
+
+
+def test_write_transfer_forecasts_fails_soft_when_no_actuals_and_no_initial():
+    """Under 7 actuals AND no initial_scalar -> ValueError surfaces as ok=False."""
+    cursors = [
+        _mk_cursor([[(dt.date(2026, 5, 20), 3000.0, 2800.0, 3200.0)]]),
+        _mk_cursor([[(1500.0,)] * 3]),
+        _mk_cursor([[(3000.0,)] * 3]),
+    ]
+    conn = _mk_conn(cursors)
+
+    result = write_transfer_forecasts_for_store(
+        conn,
+        new_store_id="store-gln",
+        hollywood_store_id="store-hwd",
+        model_version="transfer-20260520",
+        initial_scalar=None,
+    )
+
+    assert not result.ok
+    assert "initial_scalar" in result.warning.lower()
