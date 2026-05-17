@@ -164,6 +164,25 @@ def list_active_store_ids() -> list[str]:
             return [row[0] for row in cur.fetchall()]
 
 
+def list_stores_by_stage(*, stages: tuple[str, ...]) -> list[str]:
+    """Active store IDs filtered by `Store.lifecycleStage`.
+
+    Pass e.g. `("ready",)` to enumerate stores that should train native
+    models, or `("warming_up",)` for the transfer-writer pass. See spec
+    §1 for the lifecycle definition.
+    """
+    sql = '''
+        SELECT id FROM "Store"
+        WHERE "isActive" = true
+          AND "lifecycleStage"::TEXT = ANY(%s)
+        ORDER BY name
+    '''
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (list(stages),))
+            return [row[0] for row in cur.fetchall()]
+
+
 def latest_history_date(store_id: str) -> Optional[datetime]:
     sql = 'SELECT MAX(date) FROM "OtterDailySummary" WHERE "storeId" = %s'
     with connect() as conn:
