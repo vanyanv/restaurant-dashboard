@@ -73,7 +73,7 @@ def decide_promotion(
         label="fallback",
         reason=(
             f"enriched WAPE {enriched_wape:.4f} fails gate: vs XGB +{vs_xgb*100:.1f}% "
-            f"vs naive +{vs_naive*100:.1f}% (threshold {improvement_threshold*100:.0f}%)"
+            f"vs seasonal-naive +{vs_naive*100:.1f}% (threshold {improvement_threshold*100:.0f}%)"
         ),
     )
 
