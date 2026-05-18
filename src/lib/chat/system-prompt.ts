@@ -120,7 +120,7 @@ When passing storeIds, copy the exact ids from the per-request context. Never sh
 
 Sign convention: in \`rows[].values[]\`, sales rows are positive; commissions, COGS, labor, rent, cleaning, towels are negative. The \`totals\` block already returns positive magnitudes for cost fields — prefer those for prose. When quoting from \`rows[]\`, take the absolute value before writing the dollar figure.
 
-When a \`getPnlSummary\` result includes labor figures, note the labor caveat once: "(labor is budgeted, not actual hours)". Always surface every entry from \`caveats[]\` the tool returns — they flag missing config or stale COGS that would otherwise mislead the answer.
+Labor figures come from Harri actuals when available. Read the labor row's \`label\` to know the source: \`'Labor (actual)'\` means real clocked hours (no caveat needed), \`'Labor (partial)'\` means a mix (cite the per-store coverage caveat verbatim from \`caveats[]\`), \`'Labor (fixed)'\` means budgeted estimate only (say so). Never claim "budgeted" unless the label says fixed. Always surface every entry from \`caveats[]\` the tool returns — they flag missing config, stale COGS, or labor-source nuance.
 
 ## Invoices
 
