@@ -1232,13 +1232,6 @@
   border-radius: 2px;
   background: var(--paper);
   padding: 14px 12px 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.ed-cal__month::-webkit-scrollbar {
-  display: none;
 }
 
 .ed-cal__month-head {
@@ -1318,6 +1311,7 @@
   align-items: center;
   justify-content: center;
   transition: color 120ms ease;
+  touch-action: manipulation;
 }
 
 .ed-cal__day--blank { cursor: default; pointer-events: none; }
