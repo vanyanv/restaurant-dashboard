@@ -20,6 +20,7 @@ import {
   MessageSquare,
   TrendingUp,
   Sparkles,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
@@ -81,18 +82,9 @@ const NAV: NavSection[] = [
         icon: MessageSquare,
       },
       {
-        title: "Forecasts",
-        url: "/dashboard/forecasts",
-        icon: TrendingUp,
-      },
-      {
-        title: "Intelligence",
-        url: "/dashboard/intelligence/opportunities",
-        icon: Sparkles,
-        items: [
-          { title: "Opportunities", url: "/dashboard/intelligence/opportunities" },
-          { title: "Quality", url: "/dashboard/intelligence/quality" },
-        ],
+        title: "Decisions",
+        url: "/dashboard/decisions",
+        icon: CalendarDays,
       },
       {
         title: "Orders",
@@ -209,6 +201,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             items: [
               ...section.items,
               { title: "Monitoring", url: "/dashboard/monitoring", icon: Activity },
+              { title: "Forecasts (dev)", url: "/dashboard/forecasts", icon: TrendingUp },
+              {
+                title: "Intelligence (dev)",
+                url: "/dashboard/intelligence/opportunities",
+                icon: Sparkles,
+                items: [
+                  { title: "Opportunities", url: "/dashboard/intelligence/opportunities" },
+                  { title: "Quality", url: "/dashboard/intelligence/quality" },
+                ],
+              },
             ],
           }
         : section,

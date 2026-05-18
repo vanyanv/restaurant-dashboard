@@ -1,3 +1,6 @@
+import { getServerSession } from "next-auth"
+import { redirect } from "next/navigation"
+import { authOptions } from "@/lib/auth"
 import { getOpportunities } from "@/app/actions/growth/opportunities-actions"
 import { OpportunityRow } from "./components/opportunity-row"
 import { OpportunitiesEmptyState } from "./components/opportunities-empty-state"
@@ -5,6 +8,10 @@ import { OpportunitiesEmptyState } from "./components/opportunities-empty-state"
 export default async function OpportunitiesPage(props: {
   searchParams: Promise<{ storeId?: string }>
 }) {
+  const session = await getServerSession(authOptions)
+  if (!session) redirect("/login")
+  // OWNER users land on /dashboard/decisions; this page is now DEVELOPER-only.
+  if (session.user.role !== "DEVELOPER") redirect("/dashboard/decisions")
   const { storeId } = await props.searchParams
   const result = await getOpportunities({ storeId })
   if (!result || !result.ok) {
