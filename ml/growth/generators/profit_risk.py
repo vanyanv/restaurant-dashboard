@@ -45,11 +45,12 @@ def _load_forecast_revenue(conn, store_id):
 
 
 def _load_forecast_labor(conn, store_id):
-    """Trailing-30d daily-labor average × 7 days, as the simplest baseline."""
+    """Trailing-30d daily-labor average × 7 days, as the simplest baseline.
+    Prefer forecastCost when present, else actualCost."""
     with conn.cursor() as cur:
         cur.execute(
             '''
-            SELECT AVG("dailyLaborCost")
+            SELECT AVG(COALESCE("forecastCost", "actualCost"))
             FROM "HarriDailyLabor"
             WHERE "storeId" = %s AND date >= CURRENT_DATE - 30
             ''',
