@@ -129,6 +129,8 @@ export default async function ForecastsPage({ searchParams }: PageProps) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
   if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
+  // OWNER users land on /dashboard/decisions; this page is now DEVELOPER-only.
+  if (session.user.role !== "DEVELOPER") redirect("/dashboard/decisions")
 
   const params = await searchParams
   // No storeId → portfolio "All stores" view. With a storeId → single-store
