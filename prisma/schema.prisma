@@ -1601,6 +1601,20 @@ model MlReconciliationDaily {
   @@index([storeId, date(sort: Desc)])
 }
 
+/// Phase 1 W11: per-day operator-gate verdicts. The W11-12 quality panel
+/// section 4 reads from this table instead of JobRun.status — see plan
+/// docs/superpowers/plans/2026-05-17-ml-phase1-w9-12-growth.md Task 12.
+model OperatorGateDailyVerdict {
+  id          String   @id @default(cuid())
+  verdictDate DateTime @db.Date
+  gateName    String
+  passed      Boolean
+  detail      String?
+  computedAt  DateTime @default(now())
+
+  @@unique([verdictDate, gateName])
+}
+
 /// One row per (store, day, opportunityType, title) produced by the
 /// nightly growth pipeline (ml/growth/generators/*). Read-only feed —
 /// no operator feedback capture in Phase 1. See spec §3.1.
