@@ -205,6 +205,7 @@ model Store {
   mlForecastEvaluations MlForecastEvaluation[]
   forecastDailyCategory ForecastDailyCategory[]
   mlReconciliationDaily MlReconciliationDaily[]
+  growthOpportunities   GrowthOpportunity[]
   anomalyEvents         AnomalyEvent[]
   menuItemElasticities  MenuItemElasticity[]
   weatherSignals        StoreWeatherSignal[]
@@ -1362,6 +1363,22 @@ enum ForecastSource {
   transfer
 }
 
+/// W9 opportunity types — locked at 5 for Phase 1. The 3 deferred values
+/// (launch_analogue, lost_sales, weak_promo) extend additively in Phase 2.
+enum OpportunityType {
+  reprice
+  menu_engineering
+  channel_mix
+  food_cost_risk
+  profit_risk
+}
+
+enum OpportunityConfidence {
+  low
+  medium
+  high
+}
+
 enum AnomalyMethod {
   ZSCORE
   ISOLATION_FOREST
@@ -1582,6 +1599,29 @@ model MlReconciliationDaily {
 
   @@unique([storeId, date])
   @@index([storeId, date(sort: Desc)])
+}
+
+/// One row per (store, day, opportunityType, title) produced by the
+/// nightly growth pipeline (ml/growth/generators/*). Read-only feed —
+/// no operator feedback capture in Phase 1. See spec §3.1.
+model GrowthOpportunity {
+  id                    String                @id @default(cuid())
+  storeId               String
+  asOfDate              DateTime              @db.Date
+  opportunityType       OpportunityType
+  title                 String
+  estimatedDollarImpact Float
+  confidence            OpportunityConfidence
+  /// Array of { kind, ref, value } — see GrowthOpportunity.evidence type.
+  evidence              Json                  @default("[]")
+  caveats               String[]              @default([])
+  suggestedAction       String
+  createdAt             DateTime              @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, asOfDate, opportunityType, title])
+  @@index([storeId, asOfDate(sort: Desc)])
 }
 
 /// Store-hour weather features precomputed by offline Open-Meteo sync jobs.
