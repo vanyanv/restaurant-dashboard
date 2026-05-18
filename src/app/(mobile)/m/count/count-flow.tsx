@@ -765,20 +765,20 @@ function PackEditorSheet({
   }
 
   return (
-    <div className="m-sheet m-sheet--pack" role="dialog" aria-label="Define pack structure">
-      <div className="m-sheet__head">
-        <span className="m-sheet__dept">PACK · DEFINITION</span>
+    <div className="m-count-sheet m-count-sheet--pack" role="dialog" aria-label="Define pack structure">
+      <div className="m-count-sheet__head">
+        <span className="m-count-sheet__dept">PACK · DEFINITION</span>
         <button
           type="button"
-          className="m-sheet__close"
+          className="m-count-sheet__close"
           onClick={onClose}
           aria-label="Close"
         >
           ×
         </button>
       </div>
-      <div className="m-sheet__body">
-        <p className="m-sheet__lead">
+      <div className="m-count-sheet__body">
+        <p className="m-count-sheet__lead">
           <em>{ingredient.name}</em> · counted in {ingredient.recipeUnit ?? "—"}
         </p>
 
@@ -842,9 +842,9 @@ function PackEditorSheet({
           </div>
         ) : null}
 
-        {error ? <p className="m-sheet__error">{error}</p> : null}
+        {error ? <p className="m-count-sheet__error">{error}</p> : null}
       </div>
-      <div className="m-sheet__actions">
+      <div className="m-count-sheet__actions">
         <button
           type="button"
           className="toolbar-btn"
@@ -887,23 +887,23 @@ function AdjustmentSheet({
   const [reason, setReason] = useState<InventoryAdjustmentReason | null>(null)
 
   return (
-    <div className="m-sheet" role="dialog" aria-label="Log adjustment">
-      <div className="m-sheet__head">
-        <span className="m-sheet__dept">LOG · ADJUSTMENT</span>
+    <div className="m-count-sheet" role="dialog" aria-label="Log adjustment">
+      <div className="m-count-sheet__head">
+        <span className="m-count-sheet__dept">LOG · ADJUSTMENT</span>
         <button
           type="button"
-          className="m-sheet__close"
+          className="m-count-sheet__close"
           onClick={onDismiss}
           aria-label="Dismiss without logging"
         >
           ×
         </button>
       </div>
-      <div className="m-sheet__body">
-        <p className="m-sheet__lead">
+      <div className="m-count-sheet__body">
+        <p className="m-count-sheet__lead">
           You counted zero <em>{ingredientName}</em>. Log what removed it from stock?
         </p>
-        <div className="m-sheet__reasons">
+        <div className="m-count-sheet__reasons">
           {ADJUSTMENT_REASONS.map((r) => (
             <button
               key={r.value}
@@ -913,12 +913,12 @@ function AdjustmentSheet({
               disabled={pending}
             >
               {r.label}
-              <span className="m-sheet__reason-desc">{r.description}</span>
+              <span className="m-count-sheet__reason-desc">{r.description}</span>
             </button>
           ))}
         </div>
 
-        <label className="m-sheet__label">
+        <label className="m-count-sheet__label">
           QTY (positive)
           <input
             type="number"
@@ -928,22 +928,22 @@ function AdjustmentSheet({
             value={qty}
             onChange={(e) => setQty(e.target.value)}
             disabled={pending}
-            className="m-sheet__input"
+            className="m-count-sheet__input"
           />
         </label>
 
-        <label className="m-sheet__label">
+        <label className="m-count-sheet__label">
           NOTES (OPTIONAL)
           <textarea
             value={note}
             onChange={(e) => onNoteChange(e.target.value)}
             disabled={pending}
-            className="m-sheet__input"
+            className="m-count-sheet__input"
             rows={2}
           />
         </label>
       </div>
-      <div className="m-sheet__actions">
+      <div className="m-count-sheet__actions">
         <button
           type="button"
           className="toolbar-btn"

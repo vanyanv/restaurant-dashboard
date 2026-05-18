@@ -2118,7 +2118,7 @@
 }
 
 /* ── Pack-definition sheet body ─────────────────────────────────── */
-.m-sheet--pack .m-pack-grid {
+.m-count-sheet--pack .m-pack-grid {
   display: grid;
   grid-template-columns: minmax(0, 110px) 1fr;
   column-gap: 12px;
@@ -2178,7 +2178,7 @@
 }
 
 /* Sheet error variant (re-used by pack editor) */
-.m-sheet__error {
+.m-count-sheet__error {
   margin: 10px 0 0;
   padding: 8px 10px;
   border: 1px solid color-mix(in oklab, var(--accent) 36%, var(--hairline-bold));
@@ -2274,8 +2274,11 @@
 }
 
 /* Adjustment sheet — full-bleed overlay above the count flow. Slides up
-   from the bottom; reduced-motion disables the slide. */
-.m-sheet {
+   from the bottom; reduced-motion disables the slide. Renamed from
+   .m-sheet to .m-count-sheet to avoid colliding with the date-range
+   sheet shell (src/components/mobile/date-sheet) which also uses
+   .m-sheet. */
+.m-count-sheet {
   position: fixed;
   inset: auto 0 0 0;
   max-height: calc(100dvh - 40px);
@@ -2284,10 +2287,10 @@
   border-top: 1px solid var(--hairline-bold);
   z-index: 60;
   padding: 14px 16px calc(20px + env(safe-area-inset-bottom, 0px));
-  animation: m-sheet-slide-in 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation: m-count-sheet-slide-in 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
-@keyframes m-sheet-slide-in {
+@keyframes m-count-sheet-slide-in {
   from {
     transform: translateY(20%);
     opacity: 0;
@@ -2299,12 +2302,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .m-sheet {
+  .m-count-sheet {
     animation: none;
   }
 }
 
-.m-sheet__head {
+.m-count-sheet__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2313,7 +2316,7 @@
   margin-bottom: 12px;
 }
 
-.m-sheet__dept {
+.m-count-sheet__dept {
   font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.24em;
@@ -2321,7 +2324,7 @@
   color: var(--ink-faint);
 }
 
-.m-sheet__close {
+.m-count-sheet__close {
   appearance: none;
   background: transparent;
   border: 0;
@@ -2334,11 +2337,11 @@
   cursor: pointer;
 }
 
-.m-sheet__close:hover {
+.m-count-sheet__close:hover {
   color: var(--accent);
 }
 
-.m-sheet__lead {
+.m-count-sheet__lead {
   margin: 0 0 12px;
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
   font-size: 13px;
@@ -2346,21 +2349,21 @@
   line-height: 1.45;
 }
 
-.m-sheet__lead em {
+.m-count-sheet__lead em {
   font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
   font-style: italic;
   font-weight: 500;
   color: var(--ink);
 }
 
-.m-sheet__reasons {
+.m-count-sheet__reasons {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 14px;
 }
 
-.m-sheet__reasons .toolbar-btn {
+.m-count-sheet__reasons .toolbar-btn {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
@@ -2372,7 +2375,7 @@
   text-align: left;
 }
 
-.m-sheet__reason-desc {
+.m-count-sheet__reason-desc {
   font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.14em;
@@ -2381,11 +2384,11 @@
   font-weight: 400;
 }
 
-.toolbar-btn--accent .m-sheet__reason-desc {
+.toolbar-btn--accent .m-count-sheet__reason-desc {
   color: var(--accent-dark);
 }
 
-.m-sheet__label {
+.m-count-sheet__label {
   display: block;
   font-family: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
   font-size: 9.5px;
@@ -2395,7 +2398,7 @@
   margin-bottom: 10px;
 }
 
-.m-sheet__input {
+.m-count-sheet__input {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -2409,18 +2412,18 @@
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-.m-sheet__input:focus {
+.m-count-sheet__input:focus {
   border-color: var(--ink);
   outline: none;
 }
 
-.m-sheet__actions {
+.m-count-sheet__actions {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 8px;
 }
 
-.m-sheet__actions .toolbar-btn {
+.m-count-sheet__actions .toolbar-btn {
   padding: 12px 10px;
   text-align: center;
   font-size: 12px;
