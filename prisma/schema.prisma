@@ -203,6 +203,8 @@ model Store {
   forecastHourlyOrders  ForecastHourlyOrders[]
   forecastMenuItems     ForecastMenuItem[]
   mlForecastEvaluations MlForecastEvaluation[]
+  forecastDailyCategory ForecastDailyCategory[]
+  mlReconciliationDaily MlReconciliationDaily[]
   anomalyEvents         AnomalyEvent[]
   menuItemElasticities  MenuItemElasticity[]
   weatherSignals        StoreWeatherSignal[]
@@ -1405,24 +1407,31 @@ model MlTrainingRun {
 /// (storeId, forecastDate) per generation. Newer rows supersede older ones —
 /// the dashboard reads the latest by `generatedAt`.
 model ForecastDailyRevenue {
-  id               String         @id @default(cuid())
-  storeId          String
-  forecastDate     DateTime       @db.Date
+  id                   String         @id @default(cuid())
+  storeId              String
+  forecastDate         DateTime       @db.Date
   /// 0 means whole-day; 1-23 means a specific hour bucket (when we add it).
-  hourBucket       Int            @default(0)
-  predictedRevenue Float
+  hourBucket           Int            @default(0)
+  predictedRevenue     Float
   /// 10th / 90th percentile of the predictive interval.
-  p10              Float?
-  p90              Float?
-  modelVersion     String
-  generatedAt      DateTime       @default(now())
+  p10                  Float?
+  p90                  Float?
+  modelVersion         String
+  generatedAt          DateTime       @default(now())
   /// Backfilled by reconciliation when the day closes.
-  actualRevenue    Float?
-  errorPct         Float?
-  reconciledAt     DateTime?
+  actualRevenue        Float?
+  errorPct             Float?
+  reconciledAt         DateTime?
   /// Phase 1 W5: 'native' for per-store XGBoost rows; 'transfer' for
   /// Hollywood-prior rows emitted while the store is warming_up.
-  forecastSource   ForecastSource @default(native)
+  forecastSource       ForecastSource @default(native)
+  /// Phase 1 W6-8: reconciled point + interval from MinTrace. Null until the
+  /// nightly reconciliation pass writes them. Read helpers fall back to raw
+  /// values when null or stale (>48h). See ml/reconciliation/reconcile.py.
+  reconciledRevenue    Float?
+  reconciledP10        Float?
+  reconciledP90        Float?
+  reconciliationMethod String?
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1464,19 +1473,23 @@ model ForecastHourlyOrders {
 /// which matches `OtterOrderItem.skuId` (the stable identifier used by sales
 /// history).
 model ForecastMenuItem {
-  id             String         @id @default(cuid())
-  storeId        String
-  otterItemSkuId String
-  forecastDate   DateTime       @db.Date
-  predictedQty   Float
-  p10            Float?
-  p90            Float?
-  modelVersion   String
-  generatedAt    DateTime       @default(now())
-  actualQty      Float?
-  errorPct       Float?
-  reconciledAt   DateTime?
-  forecastSource ForecastSource @default(native)
+  id                   String         @id @default(cuid())
+  storeId              String
+  otterItemSkuId       String
+  forecastDate         DateTime       @db.Date
+  predictedQty         Float
+  p10                  Float?
+  p90                  Float?
+  modelVersion         String
+  generatedAt          DateTime       @default(now())
+  actualQty            Float?
+  errorPct             Float?
+  reconciledAt         DateTime?
+  forecastSource       ForecastSource @default(native)
+  /// Phase 1 W6-8: reconciled qty from MinTrace (after dividing reconciled
+  /// revenue at this item by the per-item avg price).
+  reconciledQty        Float?
+  reconciliationMethod String?
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
@@ -1527,6 +1540,48 @@ model MlForecastEvaluation {
   @@unique([target, storeId, modelVersion, horizonDay, windowStart, windowEnd])
   @@index([storeId, target, computedAt(sort: Desc)])
   @@index([computedAt(sort: Desc)])
+}
+
+/// Phase 1 W6-8: middle level of the BottomUp reconciliation hierarchy.
+/// Written nightly by `ml/reconciliation/category_aggregator.py` by aggregating
+/// ForecastMenuItem.predictedQty × avgPrice per category.
+model ForecastDailyCategory {
+  id                   String    @id @default(cuid())
+  storeId              String
+  date                 DateTime  @db.Date
+  categoryName         String
+  revenue              Float
+  reconciledRevenue    Float?
+  reconciledAt         DateTime?
+  reconciliationMethod String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date, categoryName])
+  @@index([storeId, date])
+}
+
+/// Phase 1 W6-8: one row per (store, date) capturing pre/post discrepancy
+/// after the nightly hierarchical reconciliation. Powers the W11-12 quality
+/// panel section 2 sparkline.
+model MlReconciliationDaily {
+  id                       String   @id @default(cuid())
+  storeId                  String
+  date                     DateTime @db.Date
+  prePctDiscrepancyMedian  Float?
+  prePctDiscrepancyP95     Float?
+  postPctDiscrepancyMedian Float?
+  postPctDiscrepancyP95    Float?
+  methodUsed               String
+  sampleSize               Int      @default(0)
+  createdAt                DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date])
+  @@index([storeId, date(sort: Desc)])
 }
 
 /// Store-hour weather features precomputed by offline Open-Meteo sync jobs.
