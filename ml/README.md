@@ -98,3 +98,17 @@ When GLN/VNYS reach `ready` (post-W5), the multi-store hierarchy
 single-store builder in `run_hierarchical_reconciliation_for_store`. The
 chain-sum invariant is pinned at
 `ml/tests/test_hierarchy.py::test_multi_store_minTrace_preserves_chain_sum`.
+
+## Growth opportunities + quality panel (W9-12)
+
+The nightly pipeline runs five generators (`ml/growth/generators/*`) per
+ready store and upserts results into `GrowthOpportunity`. The
+`/dashboard/intelligence/opportunities` page reads the latest rows;
+`/dashboard/intelligence/quality` shows accuracy / reconciliation / lifecycle /
+gate-streak in four `.inv-panel` sections. See spec §3 and the W9-12 plan.
+
+To add a sixth opportunity type in Phase 2: extend the `OpportunityType` enum
+(both Prisma and `src/types/growth.ts`), drop a new generator file under
+`ml/growth/generators/`, and register it in `ml/growth/generators/__init__.py`.
+The Phase 2 deferred list lives as a comment in `src/types/growth.ts`:
+launch_analogue, lost_sales, weak_promo.
