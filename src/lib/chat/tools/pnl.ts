@@ -325,6 +325,52 @@ function buildTotals(input: {
   }
 }
 
+/** Per-store labor coverage summary used to write caveats. */
+export interface LaborCoverage {
+  storeName: string
+  /** Total days in the requested window for this store. */
+  totalDays: number
+  /** Number of days that had a HarriDailyLabor row with actualCost. */
+  coveredDays: number
+  /** Whether the store has a fixedMonthlyLabor configured. Stores with no
+   *  fixed-budget config are flagged by the separate `laborMissing` caveat
+   *  and should NOT be mentioned in the no-actuals caveat. */
+  hasFixedMonthlyLabor: boolean
+}
+
+/** Build per-store labor caveats based on Harri coverage.
+ *
+ *  - Stores with coverage >= 80%: no caveat (the row label "Labor (actual)"
+ *    carries the meaning).
+ *  - Stores with 0 < coverage < 80%: emit a per-store partial caveat.
+ *  - Stores with coverage == 0 AND a fixed budget configured: combined into
+ *    one caveat naming all the affected stores.
+ *  - Stores with no fixed budget configured: skipped (already flagged by the
+ *    existing `laborMissing` caveat path in computeWindow).
+ */
+export function buildLaborCaveats(coverage: LaborCoverage[]): string[] {
+  const caveats: string[] = []
+  const noActualStores: string[] = []
+  for (const c of coverage) {
+    if (c.totalDays <= 0) continue
+    const pct = c.coveredDays / c.totalDays
+    if (pct >= 0.8) continue
+    if (c.coveredDays === 0) {
+      if (c.hasFixedMonthlyLabor) noActualStores.push(c.storeName)
+      continue
+    }
+    caveats.push(
+      `Labor for ${c.storeName}: actual for ${c.coveredDays}/${c.totalDays} days, budgeted estimate for remainder.`,
+    )
+  }
+  if (noActualStores.length > 0) {
+    caveats.push(
+      `Labor for ${noActualStores.join(", ")}: fixed-monthly budget pro-rated by days, not actuals (no Harri data in this window).`,
+    )
+  }
+  return caveats
+}
+
 interface WindowComputation {
   rows: PnLRow[]
   totals: PnlTotals
