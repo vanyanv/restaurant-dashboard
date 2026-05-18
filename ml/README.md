@@ -76,3 +76,25 @@ only manual flip is `pre_open → warming_up`, done by ops when the store
 physically opens. See `docs/superpowers/specs/2026-05-17-ml-phase1-weeks5-12-design.md`
 §1 for the full design and `docs/superpowers/plans/2026-05-17-ml-phase1-w5-onboarding.md`
 for the implementation log.
+
+## Hierarchical reconciliation (W6-8)
+
+The nightly pipeline writes reconciled point estimates back to the existing
+forecast tables (`reconciledRevenue` / `reconciledP10` / `reconciledP90` /
+`reconciledQty`) using Nixtla `MinTrace(method='mint_shrink')` — falls back
+to `ols` automatically when historical actuals are too sparse for the
+shrinkage covariance estimator. The dashboard reads reconciled values by
+default; flip `ML_USE_RECONCILED=false` in Vercel to revert to unreconciled
+reads (reconciliation continues to write columns; only the read path
+changes — full rollback in seconds, no redeploy).
+
+Health is tracked in `MlReconciliationDaily` (one row per store-day, pre/post
+discrepancy percentiles). The gate
+`python -m ml.evaluation.reconciliation_gate_check` exits 0 if
+`postPctDiscrepancyMedian ≤ 15%` for the trailing 7 days.
+
+When GLN/VNYS reach `ready` (post-W5), the multi-store hierarchy
+(`ml/reconciliation/hierarchy.py::build_multi_store_hierarchy`) replaces the
+single-store builder in `run_hierarchical_reconciliation_for_store`. The
+chain-sum invariant is pinned at
+`ml/tests/test_hierarchy.py::test_multi_store_minTrace_preserves_chain_sum`.
