@@ -659,12 +659,42 @@ def _build_forecast_frame(conn, store_id):
     if not filtered_items:
         return None
 
+    # hierarchicalforecast requires every series to share the same date set.
+    # The revenue forecast horizon (14d) often exceeds the menu-item horizon
+    # (7d). Compute the intersection of dates that EVERY item AND the revenue
+    # series cover, and trim everything to that window. (Categories are
+    # derived from items so they share the item date set.)
+    revenue_dates = {d for d, _, _, _ in revenue}
+    item_date_sets = [{d for d, _, _, _ in series} for series in filtered_items.values()]
+    common_dates = revenue_dates.intersection(*item_date_sets) if item_date_sets else set()
+    if not common_dates:
+        return None
+
+    def _filter_series(series):
+        return [tup for tup in series if tup[0] in common_dates]
+
+    filtered_revenue = _filter_series(revenue)
+    filtered_categories = {
+        cat: _filter_series(series) for cat, series in categories.items()
+    }
+    # Drop categories that have no rows after filtering.
+    filtered_categories = {k: v for k, v in filtered_categories.items() if v}
+    filtered_items_trimmed = {
+        item: _filter_series(series) for item, series in filtered_items.items()
+    }
+    filtered_items_trimmed = {k: v for k, v in filtered_items_trimmed.items() if v}
+
+    if not filtered_revenue or not filtered_categories or not filtered_items_trimmed:
+        return None
+
     return {
-        "revenue": revenue,
-        "categories": categories,
-        "items": filtered_items,
+        "revenue": filtered_revenue,
+        "categories": filtered_categories,
+        "items": filtered_items_trimmed,
         "prices": prices,
-        "item_to_category": {k: item_to_category[k] for k in filtered_items},
+        "item_to_category": {
+            k: item_to_category[k] for k in filtered_items_trimmed
+        },
     }
 
 
