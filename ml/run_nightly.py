@@ -54,6 +54,10 @@ from ml.lifecycle import (
     should_promote_to_ready,
 )
 from ml.transfer.hollywood_prior import write_transfer_forecasts_for_store
+from ml.reconciliation.avg_price import compute_item_avg_prices, AVG_PRICE_FALLBACK
+from ml.reconciliation.category_aggregator import aggregate_categories_for_store
+from ml.reconciliation.reconcile import reconcile_store_hierarchy
+from ml.reconciliation.snapshot import write_reconciliation_snapshot
 from ml.models.menu_item import forecast as forecast_menu_item
 from ml.models.menu_item import train as train_menu_item
 from ml.models.hourly_orders import forecast as forecast_hourly_orders
@@ -563,6 +567,316 @@ def maybe_promote_to_ready(store_id: str, native_result: dict) -> dict:
     return {"store_id": store_id, "promoted": True, "native_wape": native_wape}
 
 
+HISTORICAL_Y_DF_DAYS = 28
+RECONCILIATION_HORIZON_DAYS = 14
+
+
+def _f(v):
+    """Cast Decimal/None to float/None for the forecast_frame tuples."""
+    return float(v) if v is not None else None
+
+
+def _build_forecast_frame(conn, store_id):
+    """Assemble the dict reconcile.reconcile_store_hierarchy consumes.
+
+    Pulls latest native ForecastDailyRevenue / ForecastDailyCategory /
+    ForecastMenuItem rows for the next 14 days. Returns None if any level
+    is empty (caller fails soft).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("forecastDate")
+                   "forecastDate", "predictedRevenue", p10, p90
+            FROM "ForecastDailyRevenue"
+            WHERE "storeId" = %s
+              AND "hourBucket" = 0
+              AND "forecastSource" = 'native'
+              AND "forecastDate" >= CURRENT_DATE
+              AND "forecastDate" <  CURRENT_DATE + %s::INTEGER
+            ORDER BY "forecastDate", "generatedAt" DESC
+            ''',
+            (store_id, RECONCILIATION_HORIZON_DAYS),
+        )
+        revenue = [(d, float(p), _f(p10), _f(p90)) for d, p, p10, p90 in cur.fetchall()]
+    if not revenue:
+        return None
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT date, "categoryName", revenue
+            FROM "ForecastDailyCategory"
+            WHERE "storeId" = %s
+              AND date >= CURRENT_DATE
+              AND date <  CURRENT_DATE + %s::INTEGER
+            ORDER BY "categoryName", date
+            ''',
+            (store_id, RECONCILIATION_HORIZON_DAYS),
+        )
+        categories: dict[str, list] = {}
+        for d, cat, rev in cur.fetchall():
+            categories.setdefault(cat, []).append((d, float(rev), None, None))
+    if not categories:
+        return None
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("otterItemSkuId", "forecastDate")
+                   "otterItemSkuId", "forecastDate", "predictedQty", p10, p90
+            FROM "ForecastMenuItem"
+            WHERE "storeId" = %s
+              AND "forecastSource" = 'native'
+              AND "forecastDate" >= CURRENT_DATE
+              AND "forecastDate" <  CURRENT_DATE + %s::INTEGER
+            ORDER BY "otterItemSkuId", "forecastDate", "generatedAt" DESC
+            ''',
+            (store_id, RECONCILIATION_HORIZON_DAYS),
+        )
+        items: dict[str, list] = {}
+        for item, d, qty, p10, p90 in cur.fetchall():
+            items.setdefault(item, []).append((d, float(qty), _f(p10), _f(p90)))
+    if not items:
+        return None
+
+    prices = compute_item_avg_prices(conn, store_id=store_id, lookback_days=60)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("itemName") "itemName", category
+            FROM "OtterMenuItem"
+            WHERE "storeId" = %s AND "isModifier" = false
+            ORDER BY "itemName", date DESC
+            ''',
+            (store_id,),
+        )
+        item_to_category = dict(cur.fetchall())
+
+    # Restrict to items we have a category for (hierarchy.py needs the mapping).
+    filtered_items = {k: v for k, v in items.items() if k in item_to_category}
+    if not filtered_items:
+        return None
+
+    return {
+        "revenue": revenue,
+        "categories": categories,
+        "items": filtered_items,
+        "prices": prices,
+        "item_to_category": {k: item_to_category[k] for k in filtered_items},
+    }
+
+
+def _load_historical_y_df(conn, store_id, forecast_frame, days: int):
+    """Long-format insample fitted values for mint_shrink (unique_id, ds, y)."""
+    import pandas as pd
+    prices = forecast_frame["prices"]
+    rows = []
+
+    with conn.cursor() as cur:
+        # Revenue actuals.
+        cur.execute(
+            '''
+            SELECT "forecastDate", "actualRevenue"
+            FROM "ForecastDailyRevenue"
+            WHERE "storeId" = %s
+              AND "hourBucket" = 0
+              AND "forecastSource" = 'native'
+              AND "actualRevenue" IS NOT NULL
+              AND "forecastDate" >= CURRENT_DATE - %s::INTEGER
+              AND "forecastDate" <  CURRENT_DATE
+            ORDER BY "forecastDate"
+            ''',
+            (store_id, days),
+        )
+        for d, actual in cur.fetchall():
+            rows.append({"unique_id": "revenue", "ds": pd.Timestamp(d), "y": float(actual)})
+
+        # Category historical actuals from OtterMenuItem (qty * avg_price).
+        cur.execute(
+            '''
+            SELECT date, category,
+                   SUM(("fpQuantitySold" + "tpQuantitySold")) AS qty,
+                   AVG(
+                     CASE WHEN ("fpQuantitySold" + "tpQuantitySold") > 0
+                          THEN ("fpTotalSales" + "tpTotalSales")
+                               / ("fpQuantitySold" + "tpQuantitySold")
+                     END
+                   ) AS avg_price
+            FROM "OtterMenuItem"
+            WHERE "storeId" = %s
+              AND "isModifier" = false
+              AND date >= CURRENT_DATE - %s::INTEGER
+              AND date <  CURRENT_DATE
+            GROUP BY date, category
+            ''',
+            (store_id, days),
+        )
+        for d, cat, qty, avg_price in cur.fetchall():
+            if avg_price is None or qty is None:
+                continue
+            rows.append({
+                "unique_id": cat, "ds": pd.Timestamp(d),
+                "y": float(qty) * float(avg_price),
+            })
+
+        # Item actuals (qty * known avg_price).
+        cur.execute(
+            '''
+            SELECT "otterItemSkuId", "forecastDate", "actualQty"
+            FROM "ForecastMenuItem"
+            WHERE "storeId" = %s
+              AND "forecastSource" = 'native'
+              AND "actualQty" IS NOT NULL
+              AND "forecastDate" >= CURRENT_DATE - %s::INTEGER
+              AND "forecastDate" <  CURRENT_DATE
+            ORDER BY "otterItemSkuId", "forecastDate"
+            ''',
+            (store_id, days),
+        )
+        for item, d, actual_qty in cur.fetchall():
+            price = prices.get(item)
+            if price is None:
+                continue  # No price -> can't put on the revenue scale; skip.
+            rows.append({
+                "unique_id": item, "ds": pd.Timestamp(d),
+                "y": float(actual_qty) * price,
+            })
+
+    if not rows:
+        return pd.DataFrame(columns=["unique_id", "ds", "y"])
+    df = pd.DataFrame(rows)
+    known_ids = (
+        {"revenue"}
+        | set(forecast_frame["categories"].keys())
+        | set(forecast_frame["items"].keys())
+    )
+    return df[df["unique_id"].isin(known_ids)].reset_index(drop=True)
+
+
+def _compute_pre_post_discrepancies(forecast_frame, use_reconciled: bool) -> list[float]:
+    """Per-day signed discrepancy: (revenue − Σ(item_qty × avg_price)) / revenue.
+
+    When `use_reconciled=True`, falls back to raw values if a row hasn't been
+    reconciled. For W6-8 this proxy gives the snapshot writer something to
+    percentile; the in-memory frame is the same one MinTrace was run against.
+    """
+    # forecast_frame items value tuples are (date, qty_or_revenue, p10, p90).
+    # For the pre snapshot, use the raw qty values directly. For post, the
+    # frame doesn't yet contain reconciled values (those land via UPDATEs
+    # after the reconciler runs), so the caller-provided indicator is moot
+    # here — both pre and post are computed from the same in-memory frame in
+    # this W6-8 implementation. The post snapshot is meaningful because by
+    # the time we compute it, _write_reconciled has updated the DB; this
+    # function reads from forecast_frame, not the DB. Concretely: post
+    # discrepancy is approximated as the residual after MinTrace has been
+    # run, but we don't re-read it here — instead, we treat the pre/post
+    # snapshot as equal in this implementation and rely on the operator to
+    # query MlReconciliationDaily once the post-write completes in a future
+    # iteration. The plan's exit gate observation will surface this.
+    revenue_by_date = {d: pt for d, pt, _, _ in forecast_frame["revenue"]}
+    prices = forecast_frame["prices"]
+    item_sum_by_date: dict = {}
+    for item, series in forecast_frame["items"].items():
+        price = prices.get(item, 1.0) or 1.0
+        for d, qty, _, _ in series:
+            item_sum_by_date[d] = item_sum_by_date.get(d, 0.0) + float(qty) * price
+    discrepancies = []
+    for d, rev in revenue_by_date.items():
+        if rev == 0:
+            continue
+        item_sum = item_sum_by_date.get(d, 0.0)
+        discrepancies.append((rev - item_sum) / rev)
+    return discrepancies
+
+
+def _compute_post_discrepancies_from_db(conn, store_id: str) -> list[float]:
+    """Post-snapshot: read reconciled values back from the DB (set by the
+    UPDATEs in reconcile._write_reconciled), recompute per-day discrepancy."""
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT DISTINCT ON ("forecastDate")
+                   "forecastDate",
+                   COALESCE("reconciledRevenue", "predictedRevenue") AS rev
+            FROM "ForecastDailyRevenue"
+            WHERE "storeId" = %s
+              AND "hourBucket" = 0
+              AND "forecastSource" = 'native'
+              AND "forecastDate" >= CURRENT_DATE
+              AND "forecastDate" <  CURRENT_DATE + %s::INTEGER
+            ORDER BY "forecastDate", "generatedAt" DESC
+            ''',
+            (store_id, RECONCILIATION_HORIZON_DAYS),
+        )
+        revenue_rows = cur.fetchall()
+    if not revenue_rows:
+        return []
+    revenue_by_date = {d: float(r) for d, r in revenue_rows}
+
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT date, "reconciledRevenue", revenue
+            FROM "ForecastDailyCategory"
+            WHERE "storeId" = %s
+              AND date >= CURRENT_DATE
+              AND date <  CURRENT_DATE + %s::INTEGER
+            ''',
+            (store_id, RECONCILIATION_HORIZON_DAYS),
+        )
+        cat_by_date: dict = {}
+        for d, rec, raw in cur.fetchall():
+            cat_by_date[d] = cat_by_date.get(d, 0.0) + float(rec if rec is not None else raw)
+
+    discrepancies = []
+    for d, rev in revenue_by_date.items():
+        if rev == 0:
+            continue
+        cat_sum = cat_by_date.get(d, 0.0)
+        discrepancies.append((rev - cat_sum) / rev)
+    return discrepancies
+
+
+def run_hierarchical_reconciliation_for_store(store_id: str) -> dict:
+    """Run category aggregation + MinTrace + snapshot for one ready store.
+
+    Fails soft at every layer.
+    """
+    today = dt.date.today()
+    with connect() as conn:
+        agg = aggregate_categories_for_store(conn, store_id=store_id)
+        if not agg.ok:
+            return {"store_id": store_id, "ok": False, "phase": "category", "warning": agg.warning}
+
+        forecast_frame = _build_forecast_frame(conn, store_id)
+        if forecast_frame is None:
+            return {"store_id": store_id, "ok": False, "phase": "frame", "warning": "no_forecast_frame"}
+
+        y_df = _load_historical_y_df(conn, store_id, forecast_frame, HISTORICAL_Y_DF_DAYS)
+        pre = _compute_pre_post_discrepancies(forecast_frame, use_reconciled=False)
+
+        rec = reconcile_store_hierarchy(
+            conn, store_id=store_id, forecast_frame=forecast_frame,
+            y_df=y_df, method="mint_shrink",
+        )
+
+        if rec.ok:
+            post = _compute_post_discrepancies_from_db(conn, store_id)
+            try:
+                write_reconciliation_snapshot(
+                    conn, store_id=store_id, date=today,
+                    pre_discrepancies=pre, post_discrepancies=post,
+                    method_used=rec.method,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                print({"phase": "RECONCILE_HIERARCHICAL", "store_id": store_id,
+                       "warning": f"snapshot_failed: {exc}"})
+    return {"store_id": store_id, "ok": rec.ok, "rows_written": rec.rows_written,
+            "method": rec.method, "warning": rec.warning or None}
+
+
 def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
     """Run the post-W1-4 pipeline for one `ready` store.
 
@@ -597,6 +911,11 @@ def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
     except Exception as exc:  # pylint: disable=broad-except
         print({"phase": "RECONCILE", "store_id": store_id, "ok": False, "reason": str(exc)})
         failures += 1
+
+    # W6-8: hierarchical reconciliation. Non-blocking — partial output is still
+    # useful and the read path falls back to raw values when reconciled is null.
+    rec_result = run_hierarchical_reconciliation_for_store(store_id)
+    print({"phase": "RECONCILE_HIERARCHICAL", **rec_result})
 
     try:
         with connect() as conn:
