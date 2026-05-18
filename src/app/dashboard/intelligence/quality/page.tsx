@@ -1,6 +1,8 @@
 import { Suspense } from "react"
 import { AccuracySection } from "./components/accuracy-section"
 import { ReconciliationSection } from "./components/reconciliation-section"
+import { LifecycleSection } from "./components/lifecycle-section"
+import { GateStreakSection } from "./components/gate-streak-section"
 
 export default function QualityPage() {
   return (
@@ -11,7 +13,12 @@ export default function QualityPage() {
       <Suspense fallback={<div className="inv-panel px-5 py-6">Loading reconciliation…</div>}>
         <ReconciliationSection />
       </Suspense>
-      {/* Lifecycle + gate streak land in Task 13. */}
+      <Suspense fallback={<div className="inv-panel px-5 py-6">Loading lifecycle…</div>}>
+        <LifecycleSection />
+      </Suspense>
+      <Suspense fallback={<div className="inv-panel px-5 py-6">Loading gate streak…</div>}>
+        <GateStreakSection />
+      </Suspense>
     </div>
   )
 }
