@@ -450,7 +450,7 @@ export function computeStorePnL(input: {
     const totalCovered = harriLaborByPeriod.reduce((a, h) => a + Math.max(0, h.coveredDays), 0)
     if (totalDays > 0 && totalCovered / totalDays >= 0.8) laborLabel = "Labor (actual)"
     else if (totalCovered > 0) laborLabel = "Labor (partial)"
-    else laborLabel = store.fixedMonthlyLabor == null ? "Labor (fixed)" : "Labor (estimated)"
+    else laborLabel = store.fixedMonthlyLabor != null ? "Labor (fixed)" : "Labor (estimated)"
   } else {
     laborValues = fixedLaborByPeriod
     laborUnknown = periods.map(() => store.fixedMonthlyLabor == null)
