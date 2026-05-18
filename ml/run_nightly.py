@@ -54,6 +54,8 @@ from ml.lifecycle import (
     should_promote_to_ready,
 )
 from ml.transfer.hollywood_prior import write_transfer_forecasts_for_store
+from ml.growth.generators import REGISTRY as GROWTH_REGISTRY
+from ml.growth.writer import write_opportunities
 from ml.reconciliation.avg_price import compute_item_avg_prices, AVG_PRICE_FALLBACK
 from ml.reconciliation.category_aggregator import aggregate_categories_for_store
 from ml.reconciliation.reconcile import reconcile_store_hierarchy
@@ -907,6 +909,28 @@ def run_hierarchical_reconciliation_for_store(store_id: str) -> dict:
             "method": rec.method, "warning": rec.warning or None}
 
 
+def run_growth_opportunities_for_store(store_id: str) -> dict:
+    """Run all registered growth generators for one ready store and upsert
+    the resulting GrowthOpportunity rows.
+
+    Fail-soft per generator: a single generator throwing only loses its
+    type's opportunities for the night; other generators still write.
+    """
+    today = dt.date.today()
+    total_written = 0
+    generator_results: list[dict] = []
+    with connect() as conn:
+        for opp_type, gen_fn in GROWTH_REGISTRY:
+            try:
+                ops = gen_fn(conn, store_id=store_id, as_of_date=today)
+                written = write_opportunities(conn, ops)
+                total_written += written
+                generator_results.append({"type": opp_type, "ok": True, "count": len(ops), "written": written})
+            except Exception as exc:  # pylint: disable=broad-except
+                generator_results.append({"type": opp_type, "ok": False, "reason": f"{type(exc).__name__}: {exc}"})
+    return {"store_id": store_id, "total_written": total_written, "generators": generator_results}
+
+
 def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
     """Run the post-W1-4 pipeline for one `ready` store.
 
@@ -955,6 +979,10 @@ def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
     except Exception as exc:  # pylint: disable=broad-except
         print({"phase": "EVALUATE", "store_id": store_id, "ok": False, "reason": str(exc)})
         failures += 1
+
+    # W9-10: growth opportunity generators. Fail-soft per generator.
+    growth = run_growth_opportunities_for_store(store_id)
+    print({"phase": "GROWTH", **growth})
 
     return failures
 
