@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
+import { recomputeCanonicalCost, getLineItemBaseQty } from "@/lib/ingredient-cost"
 import { revalidatePath } from "next/cache"
 
 async function requireOwnerId(): Promise<string | null> {
@@ -98,15 +98,12 @@ export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]
     UnmatchedLineItemGroup["derivedCostPreview"]
   >()
   for (const li of samples) {
-    const packSize = li.packSize ?? 1
-    const unitSize = li.unitSize ?? 1
-    const totalBaseQty = li.quantity * packSize * unitSize
-    const baseUom = li.unitSizeUom ?? li.unit
+    const resolved = getLineItemBaseQty(li)
     const derivedCostPreview =
-      totalBaseQty > 0 && baseUom && li.extendedPrice > 0
+      resolved && resolved.totalBaseQty > 0 && li.extendedPrice > 0
         ? {
-            costPerBase: li.extendedPrice / totalBaseQty,
-            baseUnit: baseUom.toLowerCase(),
+            costPerBase: li.extendedPrice / resolved.totalBaseQty,
+            baseUnit: resolved.baseUom.toLowerCase(),
           }
         : null
     previewBySample.set(li.id, derivedCostPreview)
