@@ -15,6 +15,11 @@
   --accent-bg: #fcecec;
   --subtract: #8a3a3a;
 
+  /* Verdict tones for the W11 quality panel. Quiet, low-saturation hues that
+     sit alongside ink — never compete with --accent. Use only for status. */
+  --ink-good: oklch(0.55 0.10 145);
+  --ink-warn: oklch(0.60 0.13 75);
+
   /* Row-hover wash — the canonical interactive-row background tint.
      Was hard-coded as rgba(220, 38, 38, 0.045) (or 0.028 for orders) across
      30+ sites; centralising lets the editorial palette evolve without a
