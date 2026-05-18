@@ -409,7 +409,7 @@ async function computeWindow(input: {
   const overallStart = periods[0].startDate
   const overallEnd = periods[periods.length - 1].endDate
 
-  const [summaries, cogsRows] = await Promise.all([
+  const [summaries, cogsRows, harriRows] = await Promise.all([
     ctx.prisma.otterDailySummary.findMany({
       where: {
         storeId: { in: storeIds },
@@ -444,6 +444,14 @@ async function computeWindow(input: {
         status: true,
       },
     }),
+    ctx.prisma.harriDailyLabor.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: overallStart, lte: overallEnd },
+        actualCost: { not: null },
+      },
+      select: { storeId: true, date: true, actualCost: true },
+    }),
   ])
 
   const summariesByStore = new Map<string, SummaryRow[]>()
@@ -458,10 +466,17 @@ async function computeWindow(input: {
     arr.push(r)
     cogsByStore.set(r.storeId, arr)
   }
+  const harriByStore = new Map<string, { date: Date; actualCost: number | null }[]>()
+  for (const r of harriRows as { storeId: string; date: Date; actualCost: number | null }[]) {
+    const arr = harriByStore.get(r.storeId) ?? []
+    arr.push({ date: r.date, actualCost: r.actualCost })
+    harriByStore.set(r.storeId, arr)
+  }
 
   const perStore: PnlStoreBlock[] = []
   const refillCaveats = new Set<string>()
   const laborMissing: string[] = []
+  const laborCoverage: LaborCoverage[] = []
 
   for (const store of stores) {
     const storeSummaries = summariesByStore.get(store.id) ?? []
@@ -471,11 +486,35 @@ async function computeWindow(input: {
     const orderCounts = bucketOrderCount(storeSummaries, periods)
     const orderCount = sum(orderCounts)
 
+    // Build per-period Harri labor actuals for this store.
+    const storeHarri = harriByStore.get(store.id) ?? []
+    const harriLaborByPeriod = periods.map((p) => {
+      let actualUsd = 0
+      let coveredDays = 0
+      for (const r of storeHarri) {
+        if (r.date >= p.startDate && r.date <= p.endDate && r.actualCost != null) {
+          actualUsd += r.actualCost
+          coveredDays += 1
+        }
+      }
+      return { actualUsd, coveredDays }
+    })
+
+    const totalDays = periods.reduce((a, p) => a + p.days, 0)
+    const totalCovered = harriLaborByPeriod.reduce((a, h) => a + h.coveredDays, 0)
+    laborCoverage.push({
+      storeName: store.name,
+      totalDays,
+      coveredDays: totalCovered,
+      hasFixedMonthlyLabor: store.fixedMonthlyLabor != null,
+    })
+
     const computed = computeStorePnL({
       bucketed,
       periods,
       store,
       cogsValues,
+      harriLaborByPeriod,
     })
 
     // Refill-gap detection: any period with sales but no cogs rows.
@@ -568,11 +607,8 @@ async function computeWindow(input: {
       `Labor not configured for: ${laborMissing.join(", ")} — labor totals exclude these stores.`,
     )
   }
-  if (totals.laborDollars > 0) {
-    caveats.push(
-      "Labor figures are budgeted (fixed monthly amount pro-rated by days), not actual hours worked.",
-    )
-  }
+  // Coverage-aware labor caveats (replaces the old unconditional "budgeted" caveat).
+  caveats.push(...buildLaborCaveats(laborCoverage))
   if (refillCaveats.size > 0) {
     const sample = Array.from(refillCaveats).slice(0, 3).join("; ")
     const more = refillCaveats.size > 3 ? ` (+${refillCaveats.size - 3} more)` : ""
