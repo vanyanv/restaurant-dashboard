@@ -1,6 +1,11 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import {
+  defaultForecastPreference,
+  isReconciledStale,
+  type ForecastSourcePreference,
+} from "@/lib/forecasts/reconciliation-prefs"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export interface MenuItemForecastDay {
@@ -34,6 +39,9 @@ export async function getMenuItemForecast(input: {
   storeId?: string
   horizonDays?: number
   asOf?: Date
+  /** W6-8: 'reconciled' returns reconciledQty when present and fresh (<48h);
+   *  falls back to raw predictedQty otherwise. Defaults to the ML_USE_RECONCILED env. */
+  prefer?: ForecastSourcePreference
 }): Promise<GetMenuItemForecastResult | null> {
   const session = await getCachedSession()
   const user = session?.user ?? null
@@ -43,6 +51,7 @@ export async function getMenuItemForecast(input: {
   if (!resolved.ok) return resolved
   const { storeIds, storeName, storeIdOut } = resolved.ctx
 
+  const prefer = input.prefer ?? defaultForecastPreference()
   const horizonDays = input.horizonDays ?? 7
   const asOf = input.asOf ?? new Date()
   const horizonEnd = new Date(asOf)
@@ -61,6 +70,8 @@ export async function getMenuItemForecast(input: {
       p10: true,
       p90: true,
       generatedAt: true,
+      reconciledQty: true,
+      reconciledAt: true,
     },
   })
 
@@ -84,7 +95,12 @@ export async function getMenuItemForecast(input: {
     const dateKey = r.forecastDate.toISOString().slice(0, 10)
     const days = itemsBucket.get(r.otterItemSkuId) ?? new Map()
     const cur = days.get(dateKey)
-    const pr = r.predictedQty
+    // W6-8: prefer reconciledQty when opted in AND fresh.
+    const useReconciled =
+      prefer === "reconciled"
+      && r.reconciledQty != null
+      && !isReconciledStale(r.reconciledAt)
+    const pr = useReconciled ? r.reconciledQty! : r.predictedQty
     const p10 = r.p10 ?? pr
     const p90 = r.p90 ?? pr
     if (!cur) {

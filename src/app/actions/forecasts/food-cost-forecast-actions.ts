@@ -13,6 +13,11 @@
 import { prisma } from "@/lib/prisma"
 import { computeRecipeCost } from "@/lib/recipe-cost"
 import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
+import {
+  defaultForecastPreference,
+  isReconciledStale,
+  type ForecastSourcePreference,
+} from "@/lib/forecasts/reconciliation-prefs"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export interface FoodCostForecastDay {
@@ -50,6 +55,9 @@ export async function getFoodCostForecast(input: {
   storeId?: string
   horizonDays?: number
   asOf?: Date
+  /** W6-8: forwards to revenue + menu-item reads. 'reconciled' uses
+   *  reconciledRevenue / reconciledQty when present and fresh. */
+  prefer?: ForecastSourcePreference
 }): Promise<GetFoodCostForecastResult | null> {
   const session = await getCachedSession()
   const user = session?.user ?? null
@@ -59,6 +67,7 @@ export async function getFoodCostForecast(input: {
   if (!resolved.ok) return resolved
   const { storeIds, storeName, storeIdOut } = resolved.ctx
 
+  const prefer = input.prefer ?? defaultForecastPreference()
   const horizonDays = input.horizonDays ?? 7
   const asOf = input.asOf ?? new Date()
   const horizonEnd = new Date(asOf)
@@ -80,6 +89,10 @@ export async function getFoodCostForecast(input: {
         p10: true,
         p90: true,
         generatedAt: true,
+        reconciledRevenue: true,
+        reconciledP10: true,
+        reconciledP90: true,
+        reconciledAt: true,
       },
     }),
     prisma.forecastMenuItem.findMany({
@@ -95,6 +108,8 @@ export async function getFoodCostForecast(input: {
         p10: true,
         p90: true,
         generatedAt: true,
+        reconciledQty: true,
+        reconciledAt: true,
       },
     }),
     prisma.otterItemMapping.findMany({
@@ -124,9 +139,17 @@ export async function getFoodCostForecast(input: {
   for (const r of latestRevenuePerStoreDate.values()) {
     const k = ymd(r.forecastDate as Date)
     const cur = revenueByDate.get(k)
-    const pr = r.predictedRevenue ?? 0
-    const p10 = r.p10 ?? pr
-    const p90 = r.p90 ?? pr
+    const useReconciled =
+      prefer === "reconciled"
+      && r.reconciledRevenue != null
+      && !isReconciledStale(r.reconciledAt)
+    const pr = useReconciled
+      ? (r.reconciledRevenue ?? 0)
+      : (r.predictedRevenue ?? 0)
+    const rawP10 = useReconciled ? r.reconciledP10 : r.p10
+    const rawP90 = useReconciled ? r.reconciledP90 : r.p90
+    const p10 = rawP10 ?? pr
+    const p90 = rawP90 ?? pr
     if (!cur) {
       revenueByDate.set(k, {
         predictedRevenue: pr,
@@ -223,9 +246,15 @@ export async function getFoodCostForecast(input: {
       }
       const recipeCost = recipeCostCache.get(recipeId) ?? { totalCost: 0, partial: true }
       if (recipeCost.partial) partialRecipeCost = true
-      foodCost += item.predictedQty * recipeCost.totalCost
-      foodCostP10 += (item.p10 ?? item.predictedQty) * recipeCost.totalCost
-      foodCostP90 += (item.p90 ?? item.predictedQty) * recipeCost.totalCost
+      // W6-8: prefer reconciledQty when opted in AND fresh.
+      const useReconciled =
+        prefer === "reconciled"
+        && item.reconciledQty != null
+        && !isReconciledStale(item.reconciledAt)
+      const qty = useReconciled ? item.reconciledQty! : item.predictedQty
+      foodCost += qty * recipeCost.totalCost
+      foodCostP10 += (item.p10 ?? qty) * recipeCost.totalCost
+      foodCostP90 += (item.p90 ?? qty) * recipeCost.totalCost
     }
 
     if (revenueRow && (!latestGen || revenueRow.generatedAt > latestGen)) {

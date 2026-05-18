@@ -1,6 +1,11 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import {
+  defaultForecastPreference,
+  isReconciledStale,
+  type ForecastSourcePreference,
+} from "@/lib/forecasts/reconciliation-prefs"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export interface RevenueForecastDay {
@@ -45,6 +50,10 @@ export async function getRevenueForecast(input: {
   storeId?: string
   horizonDays?: number
   asOf?: Date
+  /** W6-8: 'reconciled' returns reconciledRevenue/p10/p90 when present and
+   *  fresh (<48h); falls back to raw values otherwise. 'raw' bypasses
+   *  reconciled values entirely. Defaults to the ML_USE_RECONCILED env. */
+  prefer?: ForecastSourcePreference
 }): Promise<GetRevenueForecastResult | null> {
   const session = await getCachedSession()
   const user = session?.user ?? null
@@ -54,6 +63,7 @@ export async function getRevenueForecast(input: {
   if (!resolved.ok) return resolved
   const { storeIds, storeName, storeIdOut } = resolved.ctx
 
+  const prefer = input.prefer ?? defaultForecastPreference()
   const horizonDays = input.horizonDays ?? 14
   const asOf = input.asOf ?? new Date()
   const horizonEnd = new Date(asOf)
@@ -85,6 +95,10 @@ export async function getRevenueForecast(input: {
         modelVersion: true,
         generatedAt: true,
         forecastSource: true,
+        reconciledRevenue: true,
+        reconciledP10: true,
+        reconciledP90: true,
+        reconciledAt: true,
       },
     }),
     prisma.mlTrainingRun.findFirst({
@@ -120,9 +134,17 @@ export async function getRevenueForecast(input: {
   for (const r of latestPerStoreDate.values()) {
     const key = r.forecastDate.toISOString().slice(0, 10)
     const cur = aggByDate.get(key)
-    const pr = r.predictedRevenue
-    const p10 = r.p10 ?? pr
-    const p90 = r.p90 ?? pr
+    // W6-8: branch per-row to reconciled values when the flag opts in AND the
+    // row has a fresh reconciledRevenue. Otherwise, raw values stand.
+    const useReconciled =
+      prefer === "reconciled"
+      && r.reconciledRevenue != null
+      && !isReconciledStale(r.reconciledAt)
+    const pr = useReconciled ? r.reconciledRevenue! : r.predictedRevenue
+    const rawP10 = useReconciled ? r.reconciledP10 : r.p10
+    const rawP90 = useReconciled ? r.reconciledP90 : r.p90
+    const p10 = rawP10 ?? pr
+    const p90 = rawP90 ?? pr
     if (!cur) {
       aggByDate.set(key, {
         date: r.forecastDate,
