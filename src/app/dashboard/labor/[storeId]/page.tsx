@@ -13,26 +13,9 @@ import { LaborWeekNav } from "../components/labor-week-nav"
 import { LaborWeekKpis } from "../components/labor-week-kpis"
 import { LaborWeekDays } from "../components/labor-week-days"
 import { LaborWeekTrend } from "../components/labor-week-trend"
+import { isoMondayUTC, parseWeekParam } from "@/lib/labor-week"
 
 const TREND_WEEKS = 13
-
-function isoMondayUTC(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  const dow = out.getUTCDay()
-  const offset = dow === 0 ? -6 : 1 - dow
-  out.setUTCDate(out.getUTCDate() + offset)
-  return out
-}
-
-function parseWeekParam(s: string | undefined): Date {
-  const today = new Date()
-  if (s) {
-    const d = new Date(`${s}T00:00:00.000Z`)
-    if (!isNaN(d.getTime())) return isoMondayUTC(d)
-  }
-  return isoMondayUTC(today)
-}
 
 export default async function StoreLaborPage(props: {
   params: Promise<{ storeId: string }>

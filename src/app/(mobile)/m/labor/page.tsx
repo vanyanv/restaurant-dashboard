@@ -7,7 +7,14 @@ import {
   getHarriDailyLabor,
   getHarriAlerts,
   type HarriDailyRow,
+  type HarriAlertRow,
 } from "@/app/actions/harri-actions"
+import {
+  isoMondayUTC,
+  parseWeekParam,
+  addDaysUTC,
+  isoDate,
+} from "@/lib/labor-week"
 import { PageHead } from "@/components/mobile/page-head"
 import {
   MastheadFigures,
@@ -17,7 +24,8 @@ import { MobileStoreSelect } from "@/components/mobile/m-store-select"
 import { Panel } from "@/components/mobile/panel"
 import { LaborWeekStrip } from "@/components/mobile/labor-week-strip"
 import { LaborPositionList } from "@/components/mobile/labor-position-list"
-import { LaborAlertsList } from "@/components/mobile/labor-alerts-list"
+import { MLaborWeekNav } from "@/components/mobile/m-labor-week-nav"
+import { MLaborDayRows } from "@/components/mobile/m-labor-day-rows"
 
 export const dynamic = "force-dynamic"
 
@@ -34,27 +42,17 @@ const fmtPct = (n: number | null | undefined) =>
     ? "—"
     : `${n >= 0 ? "+" : ""}${(n * 100).toFixed(1)}%`
 
-function startOfDayUTC(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}
-
-function todayUtc(): Date {
-  const now = new Date()
-  return startOfDayUTC(now)
-}
-
-function daysAgoUtc(n: number): Date {
-  const out = todayUtc()
-  out.setUTCDate(out.getUTCDate() - n)
-  return out
-}
-
-function endOfDayUtc(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(23, 59, 59, 999)
-  return out
+const fmtRangeShort = (weekStartIso: string): string => {
+  const start = new Date(`${weekStartIso}T00:00:00.000Z`)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 6)
+  const f = (d: Date) =>
+    d.toLocaleDateString("en-US", {
+      month: "numeric",
+      day: "numeric",
+      timeZone: "UTC",
+    })
+  return `${f(start)}–${f(end)}`
 }
 
 export default async function MobileLaborPage({
@@ -89,8 +87,19 @@ export default async function MobileLaborPage({
       : stores[0].id
   const activeStore = stores.find((s) => s.id === storeId)!
 
-  const today = todayUtc()
-  const sevenDaysAgo = daysAgoUtc(6)
+  const weekStart = parseWeekParam(sp.week)
+  const weekEnd = addDaysUTC(weekStart, 6)
+  const weekEndOfDay = new Date(weekEnd)
+  weekEndOfDay.setUTCHours(23, 59, 59, 999)
+
+  const priorWeekStart = addDaysUTC(weekStart, -7)
+  const priorWeekEnd = addDaysUTC(weekStart, -1)
+  const priorWeekEndOfDay = new Date(priorWeekEnd)
+  priorWeekEndOfDay.setUTCHours(23, 59, 59, 999)
+
+  const thisWeekIso = isoDate(isoMondayUTC(new Date()))
+  const weekIso = isoDate(weekStart)
+  const isCurrentWeek = weekIso === thisWeekIso
 
   // Harri's positions endpoint 500s on most dates (gateway-side issue, see
   // JobRun.metadata.positionsFailures). Show the most-recent date we have
@@ -102,9 +111,10 @@ export default async function MobileLaborPage({
   })
   const positionsDate = latestPositionsRow?.date ?? null
 
-  const [weeklyRows, alerts, positions]: [
+  const [weekRows, alerts, priorRows, positions]: [
     HarriDailyRow[],
-    Awaited<ReturnType<typeof getHarriAlerts>>,
+    HarriAlertRow[],
+    HarriDailyRow[],
     Array<{
       id: string
       categoryName: string | null
@@ -116,8 +126,9 @@ export default async function MobileLaborPage({
       actualSeconds: number | null
     }>,
   ] = await Promise.all([
-    getHarriDailyLabor(storeId, sevenDaysAgo, endOfDayUtc(today)),
-    getHarriAlerts(storeId, daysAgoUtc(13), endOfDayUtc(today)),
+    getHarriDailyLabor(storeId, weekStart, weekEndOfDay),
+    getHarriAlerts(storeId, weekStart, weekEndOfDay),
+    getHarriDailyLabor(storeId, priorWeekStart, priorWeekEndOfDay),
     positionsDate
       ? prisma.harriPositionDaily.findMany({
           where: { storeId, date: positionsDate },
@@ -136,42 +147,57 @@ export default async function MobileLaborPage({
       : Promise.resolve([]),
   ])
 
-  const todayKey = today.toISOString().slice(0, 10)
-  const todayRow = weeklyRows.find((r) => r.date === todayKey) ?? null
-  const actualToday = todayRow?.actualCost ?? null
-  const forecastToday = todayRow?.forecastCost ?? null
-  const variancePct = todayRow?.variancePct ?? null
+  const totalActual = weekRows.reduce((s, r) => s + (r.actualCost ?? 0), 0)
+  const totalForecast = weekRows.reduce((s, r) => s + (r.forecastCost ?? 0), 0)
+  const variance = totalActual - totalForecast
+  const variancePct = totalForecast === 0 ? null : variance / totalForecast
   const overbudget = variancePct != null && variancePct > 0.05
+
+  const priorActual = priorRows.reduce((s, r) => s + (r.actualCost ?? 0), 0)
+  const hasPrior = priorRows.some((r) => r.actualCost != null) && priorActual > 0
+  const wowDelta = hasPrior ? (totalActual - priorActual) / priorActual : null
+  const wowOverbudget = wowDelta != null && wowDelta > 0.05
+
+  const daysWithData = weekRows.filter((r) => r.actualCost != null).length
+
+  const alertsByDate: Record<string, HarriAlertRow[]> = {}
+  for (const a of alerts) {
+    if (!alertsByDate[a.date]) alertsByDate[a.date] = []
+    alertsByDate[a.date].push(a)
+  }
 
   const cells: MastheadCell[] = [
     {
-      label: "ACTUAL · TODAY",
-      value: actualToday != null ? fmtMoney(actualToday) : "—",
-      sub:
-        forecastToday != null ? `vs ${fmtMoney(forecastToday)} forecast` : "no forecast",
+      label: "ACTUAL · WEEK",
+      value: fmtMoney(totalActual),
+      sub: isCurrentWeek
+        ? `${daysWithData}/7 days · in progress`
+        : daysWithData === 7
+          ? "closed week"
+          : `${daysWithData}/7 days recorded`,
+    },
+    {
+      label: "VS LAST WEEK",
+      value: hasPrior ? (
+        <span style={{ color: wowOverbudget ? "var(--accent)" : "var(--ink)" }}>
+          {fmtPct(wowDelta)}
+        </span>
+      ) : (
+        "—"
+      ),
+      sub: hasPrior ? `vs ${fmtMoney(priorActual)} prior` : "no prior data",
     },
     {
       label: "VARIANCE",
       value: (
-        <span
-          style={{
-            color: overbudget ? "var(--accent)" : "var(--ink)",
-          }}
-        >
+        <span style={{ color: overbudget ? "var(--accent)" : "var(--ink)" }}>
           {fmtPct(variancePct)}
         </span>
       ),
       sub:
-        variancePct == null
-          ? "no comparison"
-          : overbudget
-            ? "over budget"
-            : "within band",
-    },
-    {
-      label: "ALERTS · 14D",
-      value: alerts.length.toLocaleString("en-US"),
-      sub: `${alerts.filter((a) => a.alertCode.includes("MISSED")).length} missed`,
+        totalForecast === 0
+          ? "no forecast"
+          : `${variance >= 0 ? "+" : "-"}${fmtMoney(Math.abs(variance))} vs forecast`,
     },
   ]
 
@@ -183,14 +209,15 @@ export default async function MobileLaborPage({
     totalLabor: p.totalLabor,
     overtimeAmount: p.overtimeAmount,
   }))
-  const positionsDateKey = positionsDate
-    ? positionsDate.toISOString().slice(0, 10)
-    : null
+  const positionsDateKey = positionsDate ? isoDate(positionsDate) : null
+  const todayKey = isoDate(new Date())
   const positionsHeader = positionsDateKey
     ? positionsDateKey === todayKey
-      ? `POSITIONS · ${todayKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
+      ? `POSITIONS · ${positionsDateKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
       : `POSITIONS · LATEST AVAILABLE · ${positionsDateKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
     : `POSITIONS · UNAVAILABLE`
+
+  const weekRangeShort = fmtRangeShort(weekIso)
 
   return (
     <div data-perf-ready="/m/labor">
@@ -216,29 +243,43 @@ export default async function MobileLaborPage({
 
       <PageHead
         dept="INTELLIGENCE · § LABOR"
-        title="Today's labor"
+        title={isCurrentWeek ? "This week's labor" : "Week labor"}
         sub={`${activeStore.name} · Harri sync`}
       />
 
       <MastheadFigures cells={cells} />
 
+      <MLaborWeekNav
+        weekStart={weekIso}
+        thisWeek={thisWeekIso}
+        isCurrentWeek={isCurrentWeek}
+        daysWithData={daysWithData}
+      />
+
       <div style={{ marginTop: 14 }}>
-        <Panel dept="ACTUAL VS FORECAST · LAST 7D">
-          <LaborWeekStrip rows={weeklyRows} label="ACTUAL VS FORECAST" />
+        <Panel dept={`ACTUAL VS FORECAST · ${weekRangeShort}`}>
+          <LaborWeekStrip
+            rows={weekRows}
+            label={`ACTUAL VS FORECAST · ${weekRangeShort}`}
+          />
+        </Panel>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <Panel
+          dept={`DAY-BY-DAY · ${alerts.length} ALERT${alerts.length === 1 ? "" : "S"}`}
+        >
+          <MLaborDayRows
+            weekStart={weekIso}
+            rows={weekRows}
+            alertsByDate={alertsByDate}
+          />
         </Panel>
       </div>
 
       <div style={{ marginTop: 14 }}>
         <Panel dept={positionsHeader}>
           <LaborPositionList rows={positionRows} />
-        </Panel>
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        <Panel
-          dept={`TIMEKEEPING ALERTS · 14D · ${alerts.length} TOTAL`}
-        >
-          <LaborAlertsList alerts={alerts} limit={30} />
         </Panel>
       </div>
     </div>
