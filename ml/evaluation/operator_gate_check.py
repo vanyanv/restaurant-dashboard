@@ -65,6 +65,34 @@ _WINDOW_DAYS = 7
 _COVERAGE_MIN_SAMPLE = 14
 
 
+_VERDICT_GATE_NAMES = (
+    "gate1_eval_rows_today",
+    "gate2_seasonal_naive_fired",
+    "gate3_revenue_coverage",
+    "gate4_reconciliation_health",
+)
+
+
+def _persist_daily_verdicts(target_date: date, verdicts: dict[str, tuple[bool, str]]) -> None:
+    """Upsert one OperatorGateDailyVerdict row per (verdictDate, gateName).
+
+    Called both for today's run and for `--as-of` historical replays — the W11
+    quality panel reads from this table instead of JobRun.status.
+    """
+    sql = '''
+        INSERT INTO "OperatorGateDailyVerdict"
+            (id, "verdictDate", "gateName", passed, detail, "computedAt")
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT ("verdictDate", "gateName") DO UPDATE SET
+            passed = EXCLUDED.passed,
+            detail = EXCLUDED.detail,
+            "computedAt" = EXCLUDED."computedAt"
+    '''
+    with connect() as conn, conn.cursor() as cur:
+        for gate_name, (passed, detail) in verdicts.items():
+            cur.execute(sql, (cuid_like(), target_date, gate_name, passed, detail))
+
+
 def _open_job_run() -> str:
     run_id = cuid_like()
     with connect() as conn, conn.cursor() as cur:
@@ -357,6 +385,19 @@ def _run_checks(target_date: date) -> tuple[int, dict[str, Any]]:
 
     overall = g1_pass and g2_pass and (g3_strict or g3_accept) and g4_pass
     print("OVERALL:", "PASS — observation continues" if overall else "FAIL — investigate")
+
+    # W11: persist per-gate verdicts for the quality panel streak counter.
+    try:
+        _persist_daily_verdicts(target_date, {
+            "gate1_eval_rows_today":      (g1_pass, g1_detail),
+            "gate2_seasonal_naive_fired": (g2_pass, g2_detail),
+            "gate3_revenue_coverage":     (g3_strict or g3_accept, g3_detail),
+            "gate4_reconciliation_health": (g4_pass, g4_detail),
+        })
+    except Exception as exc:  # pylint: disable=broad-except
+        # Non-blocking: the dashboard streak might lag a day, but the run still exits cleanly.
+        print(f"warning: failed to persist daily verdicts: {exc}")
+
     metadata = {
         "date": target_date.isoformat(),
         "windowDays": _WINDOW_DAYS,
