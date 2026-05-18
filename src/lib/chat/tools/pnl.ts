@@ -467,7 +467,7 @@ async function computeWindow(input: {
     cogsByStore.set(r.storeId, arr)
   }
   const harriByStore = new Map<string, { date: Date; actualCost: number | null }[]>()
-  for (const r of harriRows as { storeId: string; date: Date; actualCost: number | null }[]) {
+  for (const r of harriRows) {
     const arr = harriByStore.get(r.storeId) ?? []
     arr.push({ date: r.date, actualCost: r.actualCost })
     harriByStore.set(r.storeId, arr)
@@ -477,6 +477,7 @@ async function computeWindow(input: {
   const refillCaveats = new Set<string>()
   const laborMissing: string[] = []
   const laborCoverage: LaborCoverage[] = []
+  const totalDays = periods.reduce((a, p) => a + p.days, 0)
 
   for (const store of stores) {
     const storeSummaries = summariesByStore.get(store.id) ?? []
@@ -486,7 +487,6 @@ async function computeWindow(input: {
     const orderCounts = bucketOrderCount(storeSummaries, periods)
     const orderCount = sum(orderCounts)
 
-    // Build per-period Harri labor actuals for this store.
     const storeHarri = harriByStore.get(store.id) ?? []
     const harriLaborByPeriod = periods.map((p) => {
       let actualUsd = 0
@@ -500,7 +500,6 @@ async function computeWindow(input: {
       return { actualUsd, coveredDays }
     })
 
-    const totalDays = periods.reduce((a, p) => a + p.days, 0)
     const totalCovered = harriLaborByPeriod.reduce((a, h) => a + h.coveredDays, 0)
     laborCoverage.push({
       storeName: store.name,
@@ -607,7 +606,6 @@ async function computeWindow(input: {
       `Labor not configured for: ${laborMissing.join(", ")} — labor totals exclude these stores.`,
     )
   }
-  // Coverage-aware labor caveats (replaces the old unconditional "budgeted" caveat).
   caveats.push(...buildLaborCaveats(laborCoverage))
   if (refillCaveats.size > 0) {
     const sample = Array.from(refillCaveats).slice(0, 3).join("; ")
