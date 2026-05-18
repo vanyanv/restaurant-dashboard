@@ -39,7 +39,7 @@ def build_single_store_hierarchy(*, item_to_category: dict[str, str]):
     n_cat = len(categories)
 
     # Row order: revenue, categories (sorted), items (sorted).
-    index = ["revenue"] + categories + items
+    unique_ids = ["revenue"] + categories + items
     S = np.zeros((1 + n_cat + n_items, n_items), dtype=float)
 
     # Top: all 1s.
@@ -52,7 +52,10 @@ def build_single_store_hierarchy(*, item_to_category: dict[str, str]):
     for col, item in enumerate(items):
         S[1 + n_cat + col, col] = 1.0
 
-    S_df = pd.DataFrame(S, index=index, columns=items)
+    # hierarchicalforecast contract: S_df has `unique_id` as a column (NOT
+    # the index) plus one column per leaf unique_id.
+    S_df = pd.DataFrame(S, columns=items)
+    S_df.insert(0, "unique_id", unique_ids)
 
     tags = {
         "revenue": ["revenue"],
@@ -61,7 +64,7 @@ def build_single_store_hierarchy(*, item_to_category: dict[str, str]):
     }
     # Convenience row-index map (not consumed by hierarchicalforecast; used
     # by ml.reconciliation.reconcile when writing values back).
-    row_index = {name: i for i, name in enumerate(index)}
+    row_index = {name: i for i, name in enumerate(unique_ids)}
     tags["__row_index__"] = row_index
     return S_df, tags
 
@@ -93,7 +96,7 @@ def build_multi_store_hierarchy(*, stores: dict[str, dict[str, str]]):
     store_cat_ids = [f"{s}:{c}" for s, c in store_cat_pairs]
     leaf_ids = [f"{s}:{item}" for s, item, _ in leaves]
 
-    index = [chain_id] + store_ids + store_cat_ids + leaf_ids
+    unique_ids = [chain_id] + store_ids + store_cat_ids + leaf_ids
     n_rows = 1 + n_stores + n_pairs + n_leaves
     S = np.zeros((n_rows, n_leaves), dtype=float)
 
@@ -114,13 +117,14 @@ def build_multi_store_hierarchy(*, stores: dict[str, dict[str, str]]):
     for col in range(n_leaves):
         S[leaf_offset + col, col] = 1.0
 
-    S_df = pd.DataFrame(S, index=index, columns=leaf_ids)
+    S_df = pd.DataFrame(S, columns=leaf_ids)
+    S_df.insert(0, "unique_id", unique_ids)
 
     tags = {
         "chain": [chain_id],
         "store": store_ids,
         "store_category": store_cat_ids,
         "leaf": leaf_ids,
-        "__row_index__": {name: i for i, name in enumerate(index)},
+        "__row_index__": {name: i for i, name in enumerate(unique_ids)},
     }
     return S_df, tags
