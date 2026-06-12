@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Run the @smoke E2E subset before pushing. ~30s.
+# Bypass with `git push --no-verify` for WIP feature branches.
+
+echo "→ Running E2E smoke suite (pre-push)..."
+npm run e2e:smoke
