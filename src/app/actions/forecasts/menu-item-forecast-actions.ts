@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayLocal as startOfDay } from "@/lib/date-utils"
 import { prisma } from "@/lib/prisma"
 import {
   defaultForecastPreference,
@@ -149,8 +150,3 @@ export async function getMenuItemForecast(input: {
   }
 }
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d)
-  out.setHours(0, 0, 0, 0)
-  return out
-}

@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // F18 — Lost-sale detection. An item is "86'd" when it sold consistently for
 // weeks and then drops to zero for ≥ minGapDays consecutive days. We treat
 // every gap window as lost revenue priced at:
@@ -261,12 +262,3 @@ function detectGaps(args: {
   return out
 }
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}

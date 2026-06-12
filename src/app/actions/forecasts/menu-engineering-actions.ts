@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 // F22 — Menu engineering classifier. Splits the menu into the four
 // classic Kasavana–Smith quadrants based on a median split of velocity
 // (quantity sold) and unit margin (revenue/qty − cogs/qty):
@@ -182,8 +183,3 @@ function median(sorted: number[]): number {
   return sorted[mid]
 }
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}

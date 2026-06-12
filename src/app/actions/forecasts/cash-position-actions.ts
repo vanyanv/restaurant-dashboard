@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // F25 — Cash position forecast. Projects cash inflow vs outflow daily for
 // the next 14 days, derived from existing signals only:
 //
@@ -238,12 +239,3 @@ export async function getCashPositionForecast(input: {
   }
 }
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}

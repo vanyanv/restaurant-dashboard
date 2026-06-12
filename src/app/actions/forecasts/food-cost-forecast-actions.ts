@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayLocal as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // Forward food cost % forecast. Joins:
 //   - ForecastDailyRevenue (latest generation per date)
 //   - ForecastMenuItem    (latest generation per (sku, date))
@@ -301,12 +302,3 @@ export async function getFoodCostForecast(input: {
   }
 }
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d)
-  out.setHours(0, 0, 0, 0)
-  return out
-}
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}

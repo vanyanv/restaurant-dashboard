@@ -1,5 +1,6 @@
 "use server"
 
+import { ymdUTC as ymd } from "@/lib/date-utils"
 import {
   getFoodCostForecast,
   type FoodCostForecastDay,
@@ -144,6 +145,3 @@ function buildOperatorActions(
   return [...actions].slice(0, 4)
 }
 
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
