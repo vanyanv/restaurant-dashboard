@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -75,8 +76,16 @@ scripts/eval-chat/runs/
 # graphify knowledge graph output
 /graphify-out/
 
+# Playwright e2e artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
 # Python ML pipeline (ml/) local artifacts
 __pycache__/
 *.pyc
 .venv-ml/
 ml/.venv/
+
+# local runtime logs
+/logs/
