@@ -13,7 +13,12 @@ import { LaborWeekNav } from "../components/labor-week-nav"
 import { LaborWeekKpis } from "../components/labor-week-kpis"
 import { LaborWeekDays } from "../components/labor-week-days"
 import { LaborWeekTrend } from "../components/labor-week-trend"
-import { isoMondayUTC, parseWeekParam } from "@/lib/labor-week"
+import {
+  isoMondayUTC,
+  buildLaborWeekWindow,
+  aggregateLaborWeek,
+  groupAlertsByDate,
+} from "@/lib/labor-week"
 
 const TREND_WEEKS = 13
 
@@ -56,17 +61,8 @@ export default async function StoreLaborPage(props: {
     hasBrand: brandSet.has(s.id),
   }))
 
-  const weekStart = parseWeekParam(sp.week)
-  const weekEnd = new Date(weekStart)
-  weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
-
-  const priorWeekStart = new Date(weekStart)
-  priorWeekStart.setUTCDate(priorWeekStart.getUTCDate() - 7)
-  const priorWeekEnd = new Date(weekStart)
-  priorWeekEnd.setUTCDate(priorWeekEnd.getUTCDate() - 1)
-
-  const thisWeekIso = isoMondayUTC(new Date()).toISOString().slice(0, 10)
-  const weekIso = weekStart.toISOString().slice(0, 10)
+  const { weekStart, weekEnd, priorWeekStart, priorWeekEnd, weekIso, thisWeekIso } =
+    buildLaborWeekWindow(sp.week)
 
   const [daily, alerts, prior, trend] = await Promise.all([
     getHarriDailyLabor(store.id, weekStart, weekEnd),
@@ -75,13 +71,10 @@ export default async function StoreLaborPage(props: {
     getHarriTrend(store.id, isoMondayUTC(new Date()), TREND_WEEKS),
   ])
 
-  const alertsByDate: Record<string, typeof alerts> = {}
-  for (const a of alerts) {
-    if (!alertsByDate[a.date]) alertsByDate[a.date] = []
-    alertsByDate[a.date].push(a)
-  }
-  const priorWeekActual = prior.reduce((a, r) => a + (r.actualCost ?? 0), 0) || null
-  const daysWithData = daily.filter((r) => r.actualCost != null).length
+  const alertsByDate = groupAlertsByDate(alerts)
+  const agg = aggregateLaborWeek(daily, prior)
+  const priorWeekActual = agg.priorActual || null
+  const daysWithData = agg.daysWithData
 
   return (
     <main className="labor-shell">
