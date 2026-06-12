@@ -1,3 +1,4 @@
+import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { Suspense } from "react"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
@@ -20,14 +21,6 @@ import {
 } from "@/app/dashboard/forecasts/components/external-signals-strip"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
 
 const fmtPct = (n: number | null) =>
   n == null || !Number.isFinite(n) ? "—" : `${(n * 100).toFixed(1)}%`

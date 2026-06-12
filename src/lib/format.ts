@@ -7,6 +7,51 @@ export function formatCurrency(amount: number): string {
   return currencyFormatter.format(amount)
 }
 
+const wholeCurrencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+})
+
+/** USD with no cents — the mobile-page KPI style ("$1,235"). */
+export function formatCurrencyWhole(amount: number): string {
+  return wholeCurrencyFormatter.format(amount)
+}
+
+// ─── Null-safe family (chat artifacts / cards) ───
+// Missing values render as an em dash; negatives use U+2212, not a hyphen.
+
+export function fmtMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—"
+  const abs = Math.abs(n)
+  return (
+    (n < 0 ? "−" : "") +
+    "$" +
+    abs.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  )
+}
+
+export function fmtCount(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—"
+  return Math.round(n).toLocaleString()
+}
+
+/** Takes a 0-1 ratio (not a pre-scaled percent — that's formatPct). */
+export function fmtPctFromRatio(n: number | null | undefined, digits = 1): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—"
+  return `${(n * 100).toFixed(digits)}%`
+}
+
+export function fmtSignedMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—"
+  if (n === 0) return "$0.00"
+  return (n > 0 ? "+" : "") + fmtMoney(n)
+}
+
 export function formatCompact(amount: number): string {
   const abs = Math.abs(amount)
   const sign = amount < 0 ? "-" : ""

@@ -1,3 +1,4 @@
+import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
@@ -10,14 +11,6 @@ import {
 import { Panel } from "@/components/mobile/panel"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
 
 export default async function MobileProductMixPage({
   searchParams,

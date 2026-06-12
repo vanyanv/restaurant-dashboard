@@ -1,3 +1,4 @@
+import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
@@ -13,14 +14,6 @@ import { Panel } from "@/components/mobile/panel"
 import { MPnLToolbar } from "@/components/mobile/m-pnl-toolbar"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
 
 const fmtPct = (n: number) => `${n.toFixed(1)}%`
 

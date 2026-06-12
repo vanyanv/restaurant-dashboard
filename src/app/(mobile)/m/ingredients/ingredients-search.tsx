@@ -1,5 +1,6 @@
 "use client"
 
+import { formatCurrency as fmtMoney } from "@/lib/format"
 import { useMemo } from "react"
 import {
   MobileCatalogList,
@@ -17,14 +18,6 @@ type Row = {
   hasPhoto: boolean
   photoVersion: string | null
 }
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 
 const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`
 

@@ -1,3 +1,4 @@
+import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
@@ -28,14 +29,6 @@ import { MLaborWeekNav } from "@/components/mobile/m-labor-week-nav"
 import { MLaborDayRows } from "@/components/mobile/m-labor-day-rows"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
 
 const fmtPct = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n)

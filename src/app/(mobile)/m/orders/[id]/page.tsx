@@ -1,3 +1,4 @@
+import { formatCurrency as fmtMoney } from "@/lib/format"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
@@ -11,14 +12,6 @@ import {
 } from "@/components/mobile/masthead-figures"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 
 const fmtTime = (d: Date) =>
   d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })

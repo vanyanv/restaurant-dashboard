@@ -1,3 +1,4 @@
+import { formatCurrency as fmtMoney, formatCurrencyWhole as fmtMoneyAggregate } from "@/lib/format"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
@@ -11,22 +12,6 @@ import {
 import { Panel } from "@/components/mobile/panel"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-
-const fmtMoneyAggregate = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
 
 const fmtDateShort = (iso: string | null) => {
   if (!iso) return "—"
