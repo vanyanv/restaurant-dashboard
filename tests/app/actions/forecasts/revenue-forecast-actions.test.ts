@@ -62,6 +62,7 @@ describe("getRevenueForecast", () => {
         storeId: "s1",
         storeName: "Store 1",
         generatedAt: null,
+        openedAt: null,
         recentMape: null,
         days: [],
       },
