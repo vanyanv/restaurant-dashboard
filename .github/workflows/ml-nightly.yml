@@ -50,6 +50,26 @@ jobs:
           LOG_FILE: logs/ml-nightly.log
         run: .github/scripts/run-with-cron-logging.sh python -m ml.run_nightly
 
+      # F21 — fan-out AnomalyEvent rows into the unified Alert inbox.
+      # Failure is non-fatal: alerts are a UX surface on top of detection
+      # results that already landed in this job's main step.
+      - name: Ingest alerts
+        if: success()
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          INGEST_URL: ${{ secrets.ALERTS_INGEST_URL }}
+        run: |
+          if [ -z "$INGEST_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "ALERTS_INGEST_URL or CRON_SECRET not set — skipping."
+            exit 0
+          fi
+          curl -sS -X POST "$INGEST_URL" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"sinceDays": 14}' \
+            --max-time 110
+
       - name: Upload pipeline log
         if: always()
         uses: actions/upload-artifact@v4
@@ -68,3 +88,11 @@ jobs:
           LOG_FILE: logs/ml-nightly.log
           FAILED_EXIT_CODE: ${{ steps.pipeline.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: ML Nightly
+          ISSUE_TITLE: "[Auto] ML Nightly failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh
