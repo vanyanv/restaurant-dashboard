@@ -114,31 +114,7 @@ export function Num({ children }: { children: ReactNode }) {
   return <span className="chat-artifact__num">{children}</span>
 }
 
-export function fmtMoney(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—"
-  const abs = Math.abs(n)
-  return (
-    (n < 0 ? "−" : "") +
-    "$" +
-    abs.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  )
-}
-
-export function fmtCount(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—"
-  return Math.round(n).toLocaleString()
-}
-
-export function fmtPct(n: number | null | undefined, digits = 1): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—"
-  return `${(n * 100).toFixed(digits)}%`
-}
-
-export function fmtSignedMoney(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—"
-  if (n === 0) return "$0.00"
-  return (n > 0 ? "+" : "") + fmtMoney(n)
-}
+// Formatter implementations live in lib/format; re-exported here so the many
+// artifact consumers keep their existing import path.
+export { fmtMoney, fmtCount, fmtSignedMoney } from "@/lib/format"
+export { fmtPctFromRatio as fmtPct } from "@/lib/format"

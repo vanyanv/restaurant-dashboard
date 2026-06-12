@@ -1,3 +1,4 @@
+import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -17,14 +18,6 @@ import {
 } from "@/lib/mobile/period"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
 
 const fmtPct = (n: number | null) =>
   n == null ? "—" : `${n.toFixed(1)}%`

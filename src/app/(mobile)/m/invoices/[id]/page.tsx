@@ -1,3 +1,4 @@
+import { formatCurrency } from "@/lib/format"
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
@@ -11,15 +12,9 @@ import {
 } from "@/components/mobile/masthead-figures"
 import { InvoiceActions } from "./invoice-actions"
 
-export const dynamic = "force-dynamic"
+const fmtMoney = (n: number | null | undefined) => formatCurrency(n ?? 0)
 
-const fmtMoney = (n: number | null | undefined) =>
-  (n ?? 0).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
+export const dynamic = "force-dynamic"
 
 const fmtDate = (iso: string | null) => {
   if (!iso) return "—"

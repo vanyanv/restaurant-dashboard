@@ -1,3 +1,4 @@
+import { formatCurrency as fmtMoney } from "@/lib/format"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
@@ -14,14 +15,6 @@ import {
 } from "@/lib/mobile/period"
 
 export const dynamic = "force-dynamic"
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 
 const fmtTime = (d: Date | string) => {
   const date = typeof d === "string" ? new Date(d) : d

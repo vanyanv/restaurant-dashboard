@@ -1,5 +1,6 @@
 "use client"
 
+import { formatCurrency as fmtMoney } from "@/lib/format"
 import { useMemo } from "react"
 import {
   MobileCatalogList,
@@ -16,14 +17,6 @@ type Row = {
   computedCost: number | null
   partialCost: boolean
 }
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
 
 export function RecipesSearch({ rows }: { rows: Row[] }) {
   const catalogRows = useMemo<MobileCatalogRow[]>(() => {
