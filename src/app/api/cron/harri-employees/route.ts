@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { NextResponse } from "next/server"
+import { withCronAuth } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 import { refreshHarriEmployees } from "@/lib/harri-employee-sync"
 import { bustTags } from "@/lib/cache/cached"
@@ -14,24 +12,8 @@ export const maxDuration = 120
  * for that store. The labor cron does NOT call this — names change rarely
  * and the bulk-users endpoint is rate-limited (10 ids per call).
  */
-export async function POST(request: NextRequest) {
-  const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
-  if (limited) return limited
-
-  const fromCron = isCronRequest(request)
-  if (!fromCron) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-    if (!hasOwnerAccess(session.user.role)) {
-      return NextResponse.json(
-        { error: "Only owners can run the Harri employee refresh" },
-        { status: 403 }
-      )
-    }
-  }
-
+export const POST = withCronAuth(
+  async (_request, { fromCron }) => {
   const brands = await prisma.harriBrand.findMany({
     where: { active: true },
     select: { storeId: true, brandId: true },
@@ -76,4 +58,10 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ brands: brands.length, totalUpserted, summaries })
-}
+  },
+  {
+    ownerFallback: {
+      forbiddenMessage: "Only owners can run the Harri employee refresh",
+    },
+  }
+)

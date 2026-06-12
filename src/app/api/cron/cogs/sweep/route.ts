@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronRequest } from "@/lib/rate-limit"
+import { withCronAuth } from "@/lib/cron-auth"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { Prisma } from "@/generated/prisma/client"
@@ -27,11 +27,7 @@ type CogsSweepOutcome = {
  * and only drops items that fell out of the source data, so historical rows
  * for other days can never be touched.
  */
-export async function POST(request: NextRequest) {
-  if (!isCronRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export const POST = withCronAuth(async (request) => {
   const startedAt = Date.now()
   const url = new URL(request.url)
   const storeId = url.searchParams.get("storeId")
@@ -158,7 +154,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
 async function shouldSkipCogsSweep(input: {
   storeId: string
