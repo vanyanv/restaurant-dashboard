@@ -62,6 +62,14 @@ jobs:
           LOG_FILE: logs/cogs-refresh-list-stores.log
           FAILED_EXIT_CODE: ${{ steps.fetch.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: COGS Refresh Stores
+          ISSUE_TITLE: "[Auto] COGS Refresh Stores failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh
 
   refresh:
     needs: list-stores
@@ -104,3 +112,11 @@ jobs:
           LOG_FILE: logs/cogs-refresh-${{ matrix.storeId }}.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: COGS Refresh
+          ISSUE_TITLE: "[Auto] COGS Refresh failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

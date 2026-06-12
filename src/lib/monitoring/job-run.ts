@@ -3,6 +3,7 @@
  * work, NOT for per-request handlers. Don't wrap a hot HTTP path in this.
  */
 import { prisma } from "@/lib/prisma"
+import { withPrismaRetry } from "@/lib/prisma-retry"
 import { JobStatus, Prisma } from "@/generated/prisma/client"
 
 export type JobRunCtx = {
@@ -27,16 +28,22 @@ export async function withJobRun<T>(
   opts: JobRunOpts,
   fn: (ctx: JobRunCtx) => Promise<T>,
 ): Promise<T> {
-  const run = await prisma.jobRun.create({
-    data: {
-      jobName,
-      storeId: opts.storeId ?? null,
-      triggeredBy: opts.triggeredBy,
-      metadata: opts.metadata ? (opts.metadata as Prisma.InputJsonValue) : Prisma.DbNull,
-      status: JobStatus.RUNNING,
-    },
-    select: { id: true, startedAt: true },
-  })
+  // First DB call of the run — most exposed to Neon cold-start ETIMEDOUTs
+  // (incidents #40/#41), so retry transient connection failures.
+  const run = await withPrismaRetry(
+    () =>
+      prisma.jobRun.create({
+        data: {
+          jobName,
+          storeId: opts.storeId ?? null,
+          triggeredBy: opts.triggeredBy,
+          metadata: opts.metadata ? (opts.metadata as Prisma.InputJsonValue) : Prisma.DbNull,
+          status: JobStatus.RUNNING,
+        },
+        select: { id: true, startedAt: true },
+      }),
+    { label: `withJobRun:${jobName}` },
+  )
 
   let rows = 0
   const addRows = (n: number) => { rows += n }

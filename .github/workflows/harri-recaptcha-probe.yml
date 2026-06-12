@@ -1,0 +1,33 @@
+name: Harri reCAPTCHA Probe (spike)
+
+# Manual-only research spike (incidents #42/#43): tests whether a self-harvested
+# reCAPTCHA v3 token can pass Harri's Cognito pre-auth Lambda from a GitHub
+# Actions runner (datacenter IP — the hard case). PASS here means we can wire a
+# fully head-less, scheduled token refresh. FAIL means fall back to a residential
+# runner or the manual headed rotation. Intentionally has NO incident reporting:
+# a FAIL is an expected experimental outcome, not a cron failure.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run reCAPTCHA harvest probe
+        run: xvfb-run -a npx tsx scripts/probe-harri-recaptcha.ts --ci
+        env:
+          HARRI_EMAIL: ${{ secrets.HARRI_EMAIL }}
+          HARRI_PASSWORD: ${{ secrets.HARRI_PASSWORD }}
+          HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
+          HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}

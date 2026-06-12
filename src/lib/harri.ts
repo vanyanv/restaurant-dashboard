@@ -73,7 +73,7 @@ async function refreshAccessToken(): Promise<string> {
   }
 
   const data = (await res.json()) as {
-    AuthenticationResult?: { AccessToken?: string }
+    AuthenticationResult?: { AccessToken?: string; RefreshToken?: string }
     __type?: string
     message?: string
   }
@@ -86,7 +86,35 @@ async function refreshAccessToken(): Promise<string> {
 
   cachedJwt = access
   cachedJwtExp = decodeJwtExp(access)
+
+  // Rotation capture: if Cognito's app client has refresh-token rotation
+  // enabled, REFRESH_TOKEN_AUTH returns a *new* refresh token here. Persisting
+  // it keeps the credential alive indefinitely (no 30-day cliff, no manual
+  // re-login) — true Otter-style auto-refresh. If rotation is off this field is
+  // absent and we no-op. Best-effort + fire-and-forget so it never blocks sync.
+  const rotated = data.AuthenticationResult?.RefreshToken
+  if (rotated && rotated !== refreshToken) {
+    process.env.HARRI_REFRESH_TOKEN = rotated
+    console.log("[harri.auth] Cognito returned a rotated refresh token (rotated=true); persisting")
+    void persistRotatedRefreshToken(rotated)
+  } else {
+    console.log(`[harri.auth] refreshed access token (rotated=${rotated ? "same" : "false"})`)
+  }
+
   return access
+}
+
+/** Best-effort persistence of a rotated refresh token; never throws. */
+async function persistRotatedRefreshToken(rotated: string): Promise<void> {
+  try {
+    const { persistHarriRefreshToken } = await import("./harri-token-store")
+    const result = await persistHarriRefreshToken(rotated)
+    console.log(
+      `[harri.auth] rotated token persisted · envLocal=${result.envLocal} vercel=${result.vercel} github=${result.github}`
+    )
+  } catch (err) {
+    console.error("[harri.auth] failed to persist rotated refresh token:", err)
+  }
 }
 
 export async function getHarriJwt(): Promise<string> {
@@ -223,6 +251,9 @@ export type HarriUser = {
 
 const MAX_RETRIES = 3
 const RETRY_BASE_MS = 2000
+// 403 (transient gateway block) / 429 (rate limit) / 502-504 (upstream blips)
+// are retryable with backoff rather than an immediate throw.
+const RETRYABLE_STATUSES = new Set([403, 429, 502, 503, 504])
 
 export async function harriFetch<T>(url: string): Promise<T> {
   let jwt = await getHarriJwt()
@@ -255,7 +286,7 @@ export async function harriFetch<T>(url: string): Promise<T> {
       continue
     }
 
-    if ((response.status === 403 || response.status === 429) && attempt < MAX_RETRIES) {
+    if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
       const backoff = RETRY_BASE_MS * attempt
       console.log(
         `Harri API ${response.status} — retrying in ${backoff / 1000}s (attempt ${attempt}/${MAX_RETRIES})`

@@ -37,6 +37,16 @@ from ml.features.external_signals import external_signal_coverage
 # call raises, so anything smaller forces the legacy-residual-std fallback.
 MIN_CALIBRATION_ROWS = 20
 
+# Per-day interval widening factor for multi-step forecasts. Iterative
+# forecasting compounds error as the horizon grows, but the conformal interval
+# (MAPIE method="base") is a single 1-step-calibrated half-width applied to every
+# row — so without widening the long horizons systematically under-cover
+# (incident #38: REVENUE 80% coverage measured ~0.60). The conformal path anchors
+# at offset-1 (its calibration IS the 1-step case, so horizon 1 stays unchanged);
+# the residual-std fallback anchors at offset (its holdout std already mixes
+# horizons). k=0.05 → +5% width per extra day, ~+65% by day 14.
+HORIZON_WIDENING_PER_DAY = 0.05
+
 
 @dataclass
 class TrainResult:
@@ -212,13 +222,17 @@ def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list
         if result.conformal is not None and not result.uses_fallback_interval:
             point, lower80, upper80, _, _ = result.conformal.predict_intervals(x_arr)
             pred = float(point[0])
-            p10 = float(lower80[0])
-            p90 = float(upper80[0])
+            # The conformal half-width is 1-step-calibrated; inflate it for the
+            # extra forecast steps so coverage holds across the horizon. Anchor
+            # at offset-1 → horizon 1 keeps the raw (correct) 1-step width.
+            widening = 1.0 + HORIZON_WIDENING_PER_DAY * (offset - 1)
+            p10 = pred - (pred - float(lower80[0])) * widening
+            p90 = pred + (float(upper80[0]) - pred) * widening
         else:
             pred = float(result.model.predict(x_arr)[0])
             # Legacy ±1.28 SD ≈ 80% PI from holdout residual std, widened by
-            # 1 + 0.05 * offset to reflect compounding uncertainty.
-            widening = 1.0 + 0.05 * offset
+            # 1 + k * offset to reflect compounding uncertainty.
+            widening = 1.0 + HORIZON_WIDENING_PER_DAY * offset
             sigma = result.holdout_residual_std * widening
             p10 = pred - 1.28 * sigma
             p90 = pred + 1.28 * sigma

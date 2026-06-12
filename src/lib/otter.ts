@@ -289,6 +289,9 @@ async function getOtterJwt(): Promise<string> {
 
 const MAX_RETRIES = 3
 const RETRY_BASE_MS = 2000
+// Statuses worth a backoff-and-retry rather than an immediate throw: 403
+// (transient access-denied), 429 (rate limit), and 502/503/504 (upstream blips).
+const RETRYABLE_STATUSES = new Set([403, 429, 502, 503, 504])
 
 async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]> {
   let jwt = await getOtterJwt()
@@ -322,9 +325,15 @@ async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]
       continue
     }
 
-    if (response.status === 403 && attempt < MAX_RETRIES) {
+    // 403 (transient access-denied) and 429/5xx (rate-limit / upstream
+    // unavailable) are retryable with backoff. Otter periodically returns 503s
+    // that clear within seconds, so a throw on the first one fails the whole
+    // cron unnecessarily (see incident #39).
+    if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
       const backoff = RETRY_BASE_MS * attempt
-      console.log(`Otter API 403 — retrying in ${backoff / 1000}s (attempt ${attempt}/${MAX_RETRIES})`)
+      console.log(
+        `Otter API ${response.status} — retrying in ${backoff / 1000}s (attempt ${attempt}/${MAX_RETRIES})`
+      )
       await new Promise((r) => setTimeout(r, backoff))
       continue
     }

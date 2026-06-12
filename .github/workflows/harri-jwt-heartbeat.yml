@@ -34,6 +34,13 @@ jobs:
           HARRI_COGNITO_CLIENT_ID: ${{ secrets.HARRI_COGNITO_CLIENT_ID }}
           HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
           HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
+          # Lets refreshAccessToken() persist a rotated refresh token back to the
+          # repo/Vercel secrets if Cognito hands one back (rotation capture, #43).
+          GH_PAT: ${{ secrets.GH_PAT }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          HARRI_EMAIL: ${{ secrets.HARRI_EMAIL }}
+          HARRI_PASSWORD: ${{ secrets.HARRI_PASSWORD }}
           LOG_FILE: logs/harri-jwt-heartbeat.log
       - name: Upload failure log
         if: failure()
@@ -52,3 +59,11 @@ jobs:
           LOG_FILE: logs/harri-jwt-heartbeat.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Harri JWT Heartbeat
+          ISSUE_TITLE: "[Auto] Harri refresh token dead — rotate manually"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh
