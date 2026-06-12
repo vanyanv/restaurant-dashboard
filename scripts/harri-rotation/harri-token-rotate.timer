@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly Harri refresh-token rotation (well inside the 30-day expiry)
+
+[Timer]
+# Weekly gives ~4x margin on the 30-day refresh-token life. Persistent=true
+# means a missed run (machine off) fires on the next boot instead of waiting a
+# full week — important since this box isn't always on.
+OnCalendar=Mon 10:00
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

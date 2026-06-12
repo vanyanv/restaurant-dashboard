@@ -1,0 +1,12 @@
+[Unit]
+Description=Harri refresh-token rotation (headed login on residential IP)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+# WSLg display env so the headed Chromium can render. Adjust XDG_RUNTIME_DIR if
+# your uid != 1000 (check: id -u).
+Environment=DISPLAY=:0
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/home/vardan/restaurant-dashboard/scripts/rotate-harri-token.sh
