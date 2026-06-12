@@ -1,23 +1,11 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { recomputeCanonicalCost, getLineItemBaseQty } from "@/lib/ingredient-cost"
 import { revalidatePath } from "next/cache"
-
-async function requireOwnerId(): Promise<string | null> {
-  const session = await getServerSession(authOptions)
-  return session?.user?.id ?? null
-}
-
-async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return null
-  return { ownerId: session.user.id, accountId: session.user.accountId }
-}
 
 export type UnmatchedLineItemGroup = {
   /** Stable key combining vendor+sku (or vendor+productName when sku is null). */

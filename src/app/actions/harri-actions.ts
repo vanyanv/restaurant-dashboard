@@ -2,19 +2,8 @@
 
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { requireOwnerStore } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
-
-async function requireOwnerStore(storeId: string) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) throw new Error("Unauthorized")
-  if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
-  const store = await prisma.store.findFirst({
-    where: { id: storeId, accountId: session.user.accountId },
-    select: { id: true, name: true, fixedMonthlyLabor: true },
-  })
-  if (!store) throw new Error("Store not found")
-  return store
-}
 
 export type HarriDailyRow = {
   date: string // YYYY-MM-DD
