@@ -65,12 +65,6 @@ A comprehensive restaurant management dashboard built with Next.js 15, featuring
 
 Visit [http://localhost:3000](http://localhost:3000) to see the application.
 
-### Demo Accounts
-
-After seeding, you can use these accounts:
-
-- **Owner**: `demo@restaurantos.com` / `demo123`
-- **Manager**: `manager@restaurantos.com` / `manager123`
 
 ## Production Deployment
 
