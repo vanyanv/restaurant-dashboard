@@ -1,7 +1,6 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { revalidatePath } from "next/cache"
@@ -12,17 +11,6 @@ import {
   type SubItemAggregateRow,
 } from "@/lib/otter-subitem-aggregation"
 import { mergeSellPrices } from "@/lib/menu-sell-price-aggregation"
-
-async function requireOwnerId(): Promise<string | null> {
-  const session = await getServerSession(authOptions)
-  return session?.user?.id ?? null
-}
-
-async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return null
-  return { ownerId: session.user.id, accountId: session.user.accountId }
-}
 
 /**
  * All distinct Otter-sold items across the owner's stores, with:

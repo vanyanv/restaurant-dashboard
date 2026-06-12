@@ -1,23 +1,9 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSessionUser as requireSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
 import type { ConfidenceLevel } from "@/lib/inventory/calibration"
-
-interface SessionUser {
-  id: string
-  accountId: string
-}
-interface SessionLike {
-  user?: SessionUser | null
-}
-
-async function requireSession(): Promise<SessionUser | null> {
-  const session = (await getServerSession(authOptions)) as SessionLike | null
-  return session?.user ?? null
-}
 
 async function loadStoreIdsForAccount(accountId: string): Promise<string[]> {
   const stores = await prisma.store.findMany({

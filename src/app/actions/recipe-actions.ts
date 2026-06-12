@@ -1,7 +1,6 @@
 "use server"
 
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import {
   computeRecipeCost,
@@ -20,17 +19,6 @@ import {
   getMenuItemsForCatalog,
 } from "@/app/actions/menu-item-actions"
 import { resolveSellPriceForRecipe } from "@/lib/menu-sell-price"
-
-async function requireScope(): Promise<{ ownerId: string; accountId: string } | null> {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return null
-  return { ownerId: session.user.id, accountId: session.user.accountId }
-}
-
-async function requireOwnerId(): Promise<string | null> {
-  const session = await getServerSession(authOptions)
-  return session?.user?.id ?? null
-}
 
 function validateIngredients(input: RecipeInput): void {
   for (const [i, ing] of input.ingredients.entries()) {
