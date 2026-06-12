@@ -71,6 +71,7 @@ function parseArgs(): { days: number; dailyOnly: boolean; storeIdFilter: string 
 async function main() {
   const { prisma } = await import("../src/lib/prisma")
   const { runMetricsSyncForStore } = await import("../src/lib/otter-metrics-sync")
+  const { withPrismaRetry } = await import("../src/lib/prisma-retry")
 
   const { days, dailyOnly, storeIdFilter } = parseArgs()
 
@@ -83,9 +84,14 @@ async function main() {
   )
 
   // Fetch active Otter stores, optionally filtered to one internal store.
-  const otterStores = await prisma.otterStore.findMany({
-    include: { store: { select: { id: true, name: true, isActive: true } } },
-  })
+  // First DB call of the run — retry Neon cold-start ETIMEDOUTs (incident #41).
+  const otterStores = await withPrismaRetry(
+    () =>
+      prisma.otterStore.findMany({
+        include: { store: { select: { id: true, name: true, isActive: true } } },
+      }),
+    { label: "backfill-otter:otterStore.findMany" },
+  )
   const activeStores = otterStores.filter(
     (os) =>
       os.store.isActive && (storeIdFilter == null || os.storeId === storeIdFilter),

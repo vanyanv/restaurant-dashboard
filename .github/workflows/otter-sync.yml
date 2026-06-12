@@ -56,6 +56,14 @@ jobs:
           LOG_FILE: logs/otter-sync-list-stores.log
           FAILED_EXIT_CODE: ${{ steps.fetch.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Daily Sync Stores
+          ISSUE_TITLE: "[Auto] Otter Daily Sync Stores failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh
 
   sync:
     needs: list-stores
@@ -107,3 +115,11 @@ jobs:
           LOG_FILE: logs/otter-sync-${{ matrix.storeId }}.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Daily Sync
+          ISSUE_TITLE: "[Auto] Otter Daily Sync failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

@@ -61,3 +61,11 @@ jobs:
           LOG_FILE: logs/ml-operator-gate-check.log
           FAILED_EXIT_CODE: ${{ steps.gate.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: ML Operator Gate Check
+          ISSUE_TITLE: "[Auto] ML Operator Gate Check failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

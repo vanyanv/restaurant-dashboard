@@ -49,3 +49,11 @@ jobs:
           LOG_FILE: logs/refresh-otter-jwt.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Refresh Otter JWT
+          ISSUE_TITLE: "[Auto] Refresh Otter JWT failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

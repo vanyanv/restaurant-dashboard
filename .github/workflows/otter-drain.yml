@@ -59,6 +59,14 @@ jobs:
           LOG_FILE: logs/otter-drain-list-stores.log
           FAILED_EXIT_CODE: ${{ steps.fetch.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Order-Details Drain Stores
+          ISSUE_TITLE: "[Auto] Otter Order-Details Drain Stores failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh
 
   drain:
     needs: list-stores
@@ -113,3 +121,11 @@ jobs:
           LOG_FILE: logs/otter-drain-${{ matrix.storeId }}.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
         run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Otter Order-Details Drain
+          ISSUE_TITLE: "[Auto] Otter Order-Details Drain failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh
