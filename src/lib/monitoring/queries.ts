@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { JOB_SCHEDULES, isOverdue } from "./job-schedules"
 
@@ -12,26 +13,41 @@ export type SyncRow = {
 }
 
 export async function getSyncs(storeId?: string | null): Promise<SyncRow[]> {
-  const knownJobs = Object.keys(JOB_SCHEDULES)
-  const latest = await Promise.all(
-    knownJobs.map(async (jobName) => {
-      const row = await prisma.jobRun.findFirst({
-        where: { jobName, ...(storeId ? { storeId } : {}) },
-        orderBy: { startedAt: "desc" },
-        select: { startedAt: true, status: true, rowsWritten: true, durationMs: true },
-      })
-      return {
-        jobName,
-        lastRunAt: row?.startedAt ?? null,
-        status: row?.status ?? null,
-        rowsWritten: row?.rowsWritten ?? null,
-        durationMs: row?.durationMs ?? null,
-        overdue: isOverdue(jobName, row?.startedAt ?? null),
-        cadenceLabel: JOB_SCHEDULES[jobName].description,
-      }
-    }),
-  )
-  return latest
+  // One DISTINCT ON pass over JobRun instead of a findFirst per known job —
+  // same [jobName, startedAt DESC] index, single round trip. Jobs that have
+  // never run still get a null row via the JOB_SCHEDULES left-merge below.
+  const latest = await prisma.$queryRaw<
+    {
+      jobName: string
+      startedAt: Date
+      status: SyncRow["status"]
+      rowsWritten: number | null
+      durationMs: number | null
+    }[]
+  >`
+    SELECT DISTINCT ON ("jobName")
+      "jobName",
+      "startedAt",
+      status::text AS status,
+      "rowsWritten",
+      "durationMs"
+    FROM "JobRun"
+    ${storeId ? Prisma.sql`WHERE "storeId" = ${storeId}` : Prisma.empty}
+    ORDER BY "jobName", "startedAt" DESC
+  `
+  const byJob = new Map(latest.map((r) => [r.jobName, r]))
+  return Object.keys(JOB_SCHEDULES).map((jobName) => {
+    const row = byJob.get(jobName)
+    return {
+      jobName,
+      lastRunAt: row?.startedAt ?? null,
+      status: row?.status ?? null,
+      rowsWritten: row?.rowsWritten ?? null,
+      durationMs: row?.durationMs ?? null,
+      overdue: isOverdue(jobName, row?.startedAt ?? null),
+      cadenceLabel: JOB_SCHEDULES[jobName].description,
+    }
+  })
 }
 
 export async function getRecentErrors(limit = 50) {
