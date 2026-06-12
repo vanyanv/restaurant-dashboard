@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDay, ymdUTC as ymd } from "@/lib/date-utils"
 // Hourly labor optimization. Prefer the nightly BUSY_HOURS ML forecast
 // (ForecastHourlyOrders). Fall back to the deterministic daily-revenue ×
 // historical hourly-share projection when the hourly ML generation is absent.
@@ -390,14 +391,6 @@ export async function getLaborStaffingForecast(input: {
   }
 }
 
-function startOfDay(d: Date): Date {
-  // UTC-consistent so the day key matches forecast rows (which use @db.Date,
-  // i.e. UTC midnight) regardless of the runner's local timezone.
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}
-
 async function loadEventSignalRows(
   storeIds: string[],
   startDate: Date,
@@ -468,10 +461,6 @@ function isUndefinedColumnError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
   const candidate = error as { code?: string; message?: string }
   return candidate.code === "42703" || candidate.message?.includes("does not exist") === true
-}
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
 }
 
 function sumNullable(a: number | null, b: number | null): number | null {

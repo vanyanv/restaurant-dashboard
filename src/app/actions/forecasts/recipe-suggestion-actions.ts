@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F28 — Auto-completing recipe builder. For every OtterMenuItem the
 // operator hasn't yet mapped to a Recipe, surface the top-N most-similar
 // existing recipes from the same account as candidate completions. The
@@ -249,8 +250,3 @@ function confidenceFor(sim: number): RecipeSuggestionConfidence {
   return "low"
 }
 
-function startOfDayUtc(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}

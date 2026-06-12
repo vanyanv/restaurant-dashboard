@@ -47,6 +47,4 @@ export async function resolveStoreIds(
 }
 
 /** Format a Date as `YYYY-MM-DD` in UTC — matches `@db.Date` semantics. */
-export function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
+export { ymdUTC as ymd } from "@/lib/date-utils"

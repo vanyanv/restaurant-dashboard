@@ -9,6 +9,11 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns"
+// UTC-floor on purpose: OtterDailySummary.date is a Postgres @db.Date stored
+// at UTC midnight (e.g. May 1 LA business day → 2026-05-01T00:00:00Z).
+// Period boundaries must land on the same instant or bucketSummariesByPeriod
+// drops every row when the server runs in non-UTC TZ (e.g. local dev in PDT).
+import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 
 export type Granularity = "daily" | "weekly" | "monthly"
 
@@ -141,16 +146,6 @@ export function buildPeriods(
     monthStart = startOfMonth(addDays(monthEnd, 1))
   }
   return periods
-}
-
-function startOfDay(d: Date): Date {
-  // UTC-floor on purpose: OtterDailySummary.date is a Postgres @db.Date stored
-  // at UTC midnight (e.g. May 1 LA business day → 2026-05-01T00:00:00Z).
-  // Period boundaries must land on the same instant or bucketSummariesByPeriod
-  // drops every row when the server runs in non-UTC TZ (e.g. local dev in PDT).
-  const n = new Date(d)
-  n.setUTCHours(0, 0, 0, 0)
-  return n
 }
 
 // ─── Fixed-cost conversion ───

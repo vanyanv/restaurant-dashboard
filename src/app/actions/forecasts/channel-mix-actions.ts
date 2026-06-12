@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F24 — Channel mix optimizer. Per platform (css-pos, doordash, ubereats,
 // grubhub), compute over the lookback window:
 //
@@ -230,8 +231,3 @@ export async function getChannelMix(input: {
   }
 }
 
-function startOfDayUtc(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}

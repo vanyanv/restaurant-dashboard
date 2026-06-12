@@ -1,3 +1,4 @@
+import { ymdUTC as ymd } from "@/lib/date-utils"
 // Shared "external signals" query helper for the External-Signals Strip.
 //
 // Joins three Postgres tables in one round-trip per (storeIds, dateRange):
@@ -63,10 +64,6 @@ export interface ExternalSignals {
 }
 
 const HORIZON_DAYS_DEFAULT = 7
-
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
 
 function startOfTodayUtc(): Date {
   const now = new Date()

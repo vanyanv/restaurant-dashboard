@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F17 — Promotion ROI. We don't have a "Promotion" entity in the schema, so
 // we infer past promotional days from elevated daily discount share in
 // OtterDailySummary. For each detected promo day:
@@ -215,8 +216,3 @@ function stdSample(xs: number[]): number {
   return Math.sqrt(variance)
 }
 
-function startOfDayUtc(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}

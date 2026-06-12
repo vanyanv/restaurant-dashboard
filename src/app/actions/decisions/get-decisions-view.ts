@@ -1,5 +1,6 @@
 "use server"
 
+import { ymdUTC as ymd } from "@/lib/date-utils"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -71,9 +72,6 @@ export type GetDecisionsViewResult =
 const WEEKDAY = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 const MONTH = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
-function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
 function weekdayShort(d: Date): string {
   return WEEKDAY[d.getUTCDay()]!
 }

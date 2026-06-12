@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 // F27 — Vendor reliability scoring. Three metrics over the last 6 months:
 //
 //   1. lead-time CV    — std / mean of inter-invoice day gaps. High
@@ -269,8 +270,3 @@ function clamp(x: number, lo: number, hi: number): number {
   return x
 }
 
-function startOfDay(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}

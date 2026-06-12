@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F29 — Waste root-cause clustering. For each (store, ingredient) with at
 // least a few completed counts in the lookback window, classify the
 // dominant residual pattern via the rule-based clusterer in
@@ -247,8 +248,3 @@ export async function getWasteRootCauses(input: {
   }
 }
 
-function startOfDayUtc(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}

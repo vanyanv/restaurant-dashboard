@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { startOfDayUTC } from "@/lib/date-utils"
 import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
 import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
 import {
@@ -578,12 +579,6 @@ export async function recomputeDailyCogsForRange(input: {
     rowsUpserted: results.reduce((sum, result) => sum + result.rowsUpserted, 0),
     rowsDeleted: results.reduce((sum, result) => sum + result.rowsDeleted, 0),
   }
-}
-
-function startOfDayUTC(d: Date): Date {
-  const n = new Date(d)
-  n.setUTCHours(0, 0, 0, 0)
-  return n
 }
 
 function addDaysUTC(d: Date, n: number): Date {

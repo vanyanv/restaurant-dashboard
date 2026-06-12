@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { ymdUTC as ymd } from "@/lib/date-utils"
 import {
   bucketSummariesByPeriod,
   buildPeriods,
@@ -162,8 +163,6 @@ export interface PnlSummaryResult {
 }
 
 const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
-
-const ymd = (d: Date): string => d.toISOString().slice(0, 10)
 
 /** Default granularity: daily for short windows, weekly for longer ones. */
 function defaultGranularity(from: Date, to: Date): Granularity {

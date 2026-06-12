@@ -1,5 +1,6 @@
 "use server"
 
+import { startOfDayUTC as startOfDayUtc } from "@/lib/date-utils"
 // F23 — New-item launch trajectory. We classify a menu item as "newly
 // launched" when:
 //
@@ -240,8 +241,3 @@ function stdSample(xs: number[]): number {
   return Math.sqrt(variance)
 }
 
-function startOfDayUtc(d: Date): Date {
-  const out = new Date(d)
-  out.setUTCHours(0, 0, 0, 0)
-  return out
-}
