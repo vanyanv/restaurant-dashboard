@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Sparkles,
   CalendarDays,
+  BellRing,
   type LucideIcon,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
@@ -201,6 +202,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             items: [
               ...section.items,
               { title: "Monitoring", url: "/dashboard/monitoring", icon: Activity },
+              { title: "Alerts (dev)", url: "/dashboard/alerts", icon: BellRing },
               { title: "Forecasts (dev)", url: "/dashboard/forecasts", icon: TrendingUp },
               {
                 title: "Intelligence (dev)",

@@ -59,6 +59,7 @@ model Account {
   pnlNarrativeEmbeddings        PnlNarrativeEmbedding[]
   invites                       Invite[]
   vendorLeadTimes               VendorLeadTime[]
+  alertPreferences              AlertPreference[]
 }
 
 /// Single-use, time-limited signup token. An OWNER on an account creates
@@ -207,6 +208,8 @@ model Store {
   mlReconciliationDaily MlReconciliationDaily[]
   growthOpportunities   GrowthOpportunity[]
   anomalyEvents         AnomalyEvent[]
+  alerts                Alert[]
+  alertPreferences      AlertPreference[]
   menuItemElasticities  MenuItemElasticity[]
   weatherSignals        StoreWeatherSignal[]
   eventSignals          StoreEventSignal[]
@@ -1775,6 +1778,99 @@ model AnomalyEvent {
 
   @@index([storeId, occurredOn(sort: Desc)])
   @@index([status, detectedAt(sort: Desc)])
+}
+
+/// F21 — Smart Contextual Alerts. Unified inbox of operator-facing
+/// notifications. One row per surfaced alert. Sources:
+///   ANOMALY_EVENT  — derived from an AnomalyEvent (F12 z-score detector)
+///   PRICE_DELTA    — residual-based price-change alert (Phase 2)
+///   HARRI_VARIANCE — labor variance from Harri (Phase 3 dual-write)
+///   QUANTITY_SPIKE — Otter order quantity outlier (Phase 2 dual-write)
+///   NEW_PRODUCT    — first appearance of a product (Phase 2 dual-write)
+/// `dedupeKey` is unique to make repeated ingest idempotent.
+model Alert {
+  id             String        @id @default(cuid())
+  storeId        String
+  source         AlertSource
+  /// Only populated when source = ANOMALY_EVENT.
+  anomalyEventId String?
+  target         AlertTarget
+  /// Free-form id within target — menu-item sku, ingredient id, vendor id.
+  /// Null for store-wide signals like REVENUE.
+  targetId       String?
+  severity       AlertSeverity
+  title          String
+  body           String?
+  /// Source-specific payload (residual, %change, etc.) for the UI.
+  metadata       Json?
+  occurredOn     DateTime      @db.Date
+  detectedAt     DateTime      @default(now())
+  status         AlertStatus   @default(OPEN)
+  acknowledgedAt DateTime?
+  explanation    String?
+  /// `<source>:<storeId>:<target>:<targetId|->:<occurredOn>` — used to
+  /// make ingestion idempotent. Unique.
+  dedupeKey      String        @unique
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status, occurredOn(sort: Desc)])
+  @@index([status, detectedAt(sort: Desc)])
+}
+
+/// F21 — Per-(account, store?, target?) alert routing preferences.
+/// `storeId = null` means "applies to every store in the account".
+/// `target  = null` means "applies to every target". `minSeverity` filters
+/// out lower tiers; `muted = true` is a hard mute regardless of severity.
+model AlertPreference {
+  id          String        @id @default(cuid())
+  accountId   String
+  storeId     String?
+  target      AlertTarget?
+  minSeverity AlertSeverity @default(INFO)
+  muted       Boolean       @default(false)
+  /// Delivery channels. `IN_APP` is always implied; reserved for future
+  /// `EMAIL` / `SMS` fan-out.
+  channels    String[]      @default(["IN_APP"])
+  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime      @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, storeId, target])
+  @@index([accountId])
+}
+
+enum AlertSource {
+  ANOMALY_EVENT
+  PRICE_DELTA
+  HARRI_VARIANCE
+  QUANTITY_SPIKE
+  NEW_PRODUCT
+}
+
+enum AlertTarget {
+  REVENUE
+  MENU_ITEM
+  INGREDIENT
+  LABOR
+  REFUNDS
+  PRICE
+  PRODUCT
+}
+
+enum AlertSeverity {
+  INFO
+  WATCH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  DISMISSED
+  EXPLAINED
 }
 
 /// Per (store, otterItemSkuId) price elasticity — extracted nightly by an
