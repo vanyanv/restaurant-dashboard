@@ -305,9 +305,20 @@ async function main() {
 
   // Default: headed (real browser, passes reCAPTCHA). --headless flag for
   // diagnostics only; will trip the Lambda reCAPTCHA gate.
+  //
+  // --auto: headed but submit programmatically (no human click). Proven to pass
+  // reCAPTCHA v3 from a residential IP (see scripts/probe-harri-recaptcha.ts),
+  // so the whole rotation can run unattended on a machine with a residential IP.
   const headless = process.argv.includes("--headless")
+  const autoClick = headless || process.argv.includes("--auto")
   console.log(
-    `Signing in to Harri as ${email} (${headless ? "HEADLESS — likely to fail reCAPTCHA" : "headed — click Log in yourself"})...`
+    `Signing in to Harri as ${email} (${
+      headless
+        ? "HEADLESS — likely to fail reCAPTCHA"
+        : autoClick
+          ? "headed + auto-submit (unattended)"
+          : "headed — click Log in yourself"
+    })...`
   )
   const browser = await chromium.launch({
     headless,
@@ -337,10 +348,9 @@ async function main() {
     await emailLoc.fill(email)
     await passwordLoc.fill(password)
 
-    if (headless) {
-      // CI / diagnostic path. Will almost certainly fail at reCAPTCHA — kept
-      // so the daily heartbeat can use the same login attempt to surface a
-      // clear signal when the token is dead AND the headed path stops working.
+    if (autoClick) {
+      // Submit programmatically. In headed mode on a residential IP this passes
+      // reCAPTCHA v3; in headless mode it will likely trip the Lambda gate.
       const submit = page
         .locator('button:has-text("Log in"), button:has-text("Sign in"), button[type="submit"]')
         .first()

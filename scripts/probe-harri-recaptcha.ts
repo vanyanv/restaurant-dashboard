@@ -92,11 +92,20 @@ async function main() {
     console.error("HARRI_EMAIL and HARRI_PASSWORD are required (.env.local or CI secrets)")
     process.exit(1)
   }
-  const ci = process.argv.includes("--ci") || process.argv.includes("--headless") || !!process.env.CI
+  // headless and auto-click are independent knobs:
+  //   (default)    headed + human click           — best score, needs you
+  //   --auto       headed + programmatic submit    — unattended residential test
+  //   --headless   headless + programmatic submit  — diagnostic
+  //   --ci         headless + programmatic submit  — datacenter gate (implies both)
+  const headless =
+    process.argv.includes("--headless") || process.argv.includes("--ci") || !!process.env.CI
+  const autoClick = headless || process.argv.includes("--auto")
 
-  console.log(`\n[probe] mode=${ci ? "headless/autoclick (CI gate)" : "headed/local"}`)
+  console.log(
+    `\n[probe] mode=${headless ? "headless" : "headed"} submit=${autoClick ? "auto" : "manual"}`,
+  )
   const browser = await chromium.launch({
-    headless: ci,
+    headless,
     args: ["--disable-blink-features=AutomationControlled"],
   })
   const context = await browser.newContext({
@@ -142,7 +151,7 @@ async function main() {
     await emailLoc.fill(email)
     await passwordLoc.fill(password)
 
-    if (ci) {
+    if (autoClick) {
       const submit = page
         .locator('button:has-text("Log in"), button:has-text("Sign in"), button[type="submit"]')
         .first()
@@ -154,7 +163,7 @@ async function main() {
       )
     }
 
-    const deadline = Date.now() + (ci ? 60_000 : 180_000)
+    const deadline = Date.now() + (autoClick ? 90_000 : 180_000)
     while (Date.now() < deadline) {
       if (await hasRefreshToken(page)) {
         obtained = true
