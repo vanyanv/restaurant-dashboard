@@ -11,10 +11,10 @@ import {
   type HarriAlertRow,
 } from "@/app/actions/harri-actions"
 import {
-  isoMondayUTC,
-  parseWeekParam,
-  addDaysUTC,
   isoDate,
+  buildLaborWeekWindow,
+  aggregateLaborWeek,
+  groupAlertsByDate,
 } from "@/lib/labor-week"
 import { PageHead } from "@/components/mobile/page-head"
 import {
@@ -80,19 +80,11 @@ export default async function MobileLaborPage({
       : stores[0].id
   const activeStore = stores.find((s) => s.id === storeId)!
 
-  const weekStart = parseWeekParam(sp.week)
-  const weekEnd = addDaysUTC(weekStart, 6)
-  const weekEndOfDay = new Date(weekEnd)
-  weekEndOfDay.setUTCHours(23, 59, 59, 999)
-
-  const priorWeekStart = addDaysUTC(weekStart, -7)
-  const priorWeekEnd = addDaysUTC(weekStart, -1)
-  const priorWeekEndOfDay = new Date(priorWeekEnd)
-  priorWeekEndOfDay.setUTCHours(23, 59, 59, 999)
-
-  const thisWeekIso = isoDate(isoMondayUTC(new Date()))
-  const weekIso = isoDate(weekStart)
-  const isCurrentWeek = weekIso === thisWeekIso
+  // weekEnd is day 7 at UTC midnight — HarriDailyLabor.date is @db.Date so
+  // lte-midnight includes the final day (same rows the old 23:59:59.999
+  // end-of-day bound returned).
+  const { weekStart, weekEnd, priorWeekStart, priorWeekEnd, weekIso, thisWeekIso, isCurrentWeek } =
+    buildLaborWeekWindow(sp.week)
 
   // Harri's positions endpoint 500s on most dates (gateway-side issue, see
   // JobRun.metadata.positionsFailures). Show the most-recent date we have
@@ -119,9 +111,9 @@ export default async function MobileLaborPage({
       actualSeconds: number | null
     }>,
   ] = await Promise.all([
-    getHarriDailyLabor(storeId, weekStart, weekEndOfDay),
-    getHarriAlerts(storeId, weekStart, weekEndOfDay),
-    getHarriDailyLabor(storeId, priorWeekStart, priorWeekEndOfDay),
+    getHarriDailyLabor(storeId, weekStart, weekEnd),
+    getHarriAlerts(storeId, weekStart, weekEnd),
+    getHarriDailyLabor(storeId, priorWeekStart, priorWeekEnd),
     positionsDate
       ? prisma.harriPositionDaily.findMany({
           where: { storeId, date: positionsDate },
@@ -140,24 +132,20 @@ export default async function MobileLaborPage({
       : Promise.resolve([]),
   ])
 
-  const totalActual = weekRows.reduce((s, r) => s + (r.actualCost ?? 0), 0)
-  const totalForecast = weekRows.reduce((s, r) => s + (r.forecastCost ?? 0), 0)
-  const variance = totalActual - totalForecast
-  const variancePct = totalForecast === 0 ? null : variance / totalForecast
-  const overbudget = variancePct != null && variancePct > 0.05
+  const {
+    totalActual,
+    totalForecast,
+    variance,
+    variancePct,
+    overbudget,
+    daysWithData,
+    priorActual,
+    hasPrior,
+    wowDelta,
+    wowOverbudget,
+  } = aggregateLaborWeek(weekRows, priorRows)
 
-  const priorActual = priorRows.reduce((s, r) => s + (r.actualCost ?? 0), 0)
-  const hasPrior = priorRows.some((r) => r.actualCost != null) && priorActual > 0
-  const wowDelta = hasPrior ? (totalActual - priorActual) / priorActual : null
-  const wowOverbudget = wowDelta != null && wowDelta > 0.05
-
-  const daysWithData = weekRows.filter((r) => r.actualCost != null).length
-
-  const alertsByDate: Record<string, HarriAlertRow[]> = {}
-  for (const a of alerts) {
-    if (!alertsByDate[a.date]) alertsByDate[a.date] = []
-    alertsByDate[a.date].push(a)
-  }
+  const alertsByDate = groupAlertsByDate(alerts)
 
   const cells: MastheadCell[] = [
     {
