@@ -1,46 +1,30 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
+import { NextResponse } from "next/server"
+import { withCronAuth } from "@/lib/cron-auth"
 import { runHourlySync } from "@/lib/hourly-sync"
 import { bustTags } from "@/lib/cache/cached"
 
 export const maxDuration = 60
 
-export async function POST(request: NextRequest) {
-  const limited = await rateLimit(request, RATE_LIMIT_TIERS.strict)
-  if (limited) return limited
-
-  // Allow cron (CRON_SECRET bearer) or authenticated owner for manual triggers.
-  const fromCron = isCronRequest(request)
-  if (!fromCron) {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-    if (!hasOwnerAccess(session.user.role)) {
+// Allow cron (CRON_SECRET bearer) or authenticated owner for manual triggers.
+export const POST = withCronAuth(
+  async (_request, { fromCron }) => {
+    try {
+      const result = await runHourlySync({
+        triggeredBy: fromCron ? "cron" : "manual",
+      })
+      if (result.bucketsWritten > 0) {
+        await bustTags(["otter", "dash", "pnl"])
+      }
+      return NextResponse.json(result)
+    } catch (error) {
+      console.error("Otter hourly sync error:", error)
       return NextResponse.json(
-        { error: "Only owners can run the hourly sync" },
-        { status: 403 }
+        {
+          error: error instanceof Error ? error.message : "Internal server error",
+        },
+        { status: 500 }
       )
     }
-  }
-
-  try {
-    const result = await runHourlySync({
-      triggeredBy: fromCron ? "cron" : "manual",
-    })
-    if (result.bucketsWritten > 0) {
-      await bustTags(["otter", "dash", "pnl"])
-    }
-    return NextResponse.json(result)
-  } catch (error) {
-    console.error("Otter hourly sync error:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Internal server error",
-      },
-      { status: 500 }
-    )
-  }
-}
+  },
+  { ownerFallback: { forbiddenMessage: "Only owners can run the hourly sync" } }
+)

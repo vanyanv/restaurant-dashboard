@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronRequest } from "@/lib/rate-limit"
+import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 
 /**
@@ -14,11 +14,7 @@ import { withJobRun } from "@/lib/monitoring/job-run"
  * Distinct from /api/cron/cogs/stores because Otter has the
  * (store → otterStoreIds[]) relationship to surface; COGS just needs Store rows.
  */
-export async function GET(request: NextRequest) {
-  if (!isCronRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export const GET = withCronAuth(async () => {
   const stores = await withJobRun(
     "otter.stores",
     { triggeredBy: "github-actions" },
@@ -49,4 +45,4 @@ export async function GET(request: NextRequest) {
   )
 
   return NextResponse.json({ stores })
-}
+})

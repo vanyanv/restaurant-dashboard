@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronRequest } from "@/lib/rate-limit"
+import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { recomputeAccountVendorLeadTimes } from "@/lib/inventory/vendor-lead-time"
 
@@ -12,11 +12,7 @@ export const maxDuration = 120
  * inter-invoice cadence as a proxy for delivery lead time. Reorder reads
  * pick this up — they never recompute on the request path.
  */
-export async function POST(request: NextRequest) {
-  if (!isCronRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export const POST = withCronAuth(async () => {
   const result = await withJobRun(
     "vendor-lead-time.recompute",
     { triggeredBy: "github-actions" },
@@ -54,4 +50,4 @@ export async function POST(request: NextRequest) {
   )
 
   return NextResponse.json(result)
-}
+})

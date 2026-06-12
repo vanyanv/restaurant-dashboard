@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronRequest } from "@/lib/rate-limit"
+import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 
 /**
@@ -9,11 +9,7 @@ import { withJobRun } from "@/lib/monitoring/job-run"
  * `[.stores[].storeId]` into a per-store matrix so each shard is bounded
  * to one store. Mirrors /api/cron/otter/stores.
  */
-export async function GET(request: NextRequest) {
-  if (!isCronRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export const GET = withCronAuth(async () => {
   const stores = await withJobRun(
     "harri.stores",
     { triggeredBy: "github-actions" },
@@ -38,4 +34,4 @@ export async function GET(request: NextRequest) {
   )
 
   return NextResponse.json({ stores })
-}
+})

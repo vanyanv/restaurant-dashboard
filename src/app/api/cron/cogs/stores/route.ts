@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isCronRequest } from "@/lib/rate-limit"
+import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 
 /**
@@ -9,11 +9,7 @@ import { withJobRun } from "@/lib/monitoring/job-run"
  * into a per-store matrix so each downstream sweep call is bounded to one
  * store and stays well under Vercel's function timeout.
  */
-export async function GET(request: NextRequest) {
-  if (!isCronRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export const GET = withCronAuth(async (request) => {
   const url = new URL(request.url)
   const force = url.searchParams.get("force") === "true"
 
@@ -56,4 +52,4 @@ export async function GET(request: NextRequest) {
   )
 
   return NextResponse.json(result)
-}
+})
