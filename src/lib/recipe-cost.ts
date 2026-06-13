@@ -287,8 +287,15 @@ async function walk(
  * Cheaper dry-run: just walks the recipe graph and validates there are no cycles
  * and that every terminal node has a resolvable ref. Used by recipe-actions
  * before a save to surface cycle errors without running cost queries.
+ *
+ * Pass the transaction client when calling inside a transaction — the walk
+ * must see the uncommitted ingredient writes, and a cycle then rolls the
+ * whole save back instead of needing a compensating delete.
  */
-export async function assertNoCycles(recipeId: string): Promise<void> {
+export async function assertNoCycles(
+  recipeId: string,
+  db: Pick<typeof prisma, "recipeIngredient"> = prisma
+): Promise<void> {
   const visited = new Set<string>()
   async function walkIds(id: string, stack: string[]) {
     if (stack.includes(id)) {
@@ -297,7 +304,7 @@ export async function assertNoCycles(recipeId: string): Promise<void> {
     if (visited.has(id)) return
     visited.add(id)
 
-    const ingredients = await prisma.recipeIngredient.findMany({
+    const ingredients = await db.recipeIngredient.findMany({
       where: { recipeId: id, componentRecipeId: { not: null } },
       select: { componentRecipeId: true },
     })

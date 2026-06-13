@@ -6,7 +6,6 @@ import {
   computeRecipeCost,
   computeIngredientLineCost,
   assertNoCycles,
-  RecipeCycleError,
   type RecipeCostLine,
   type RecipeCostResult,
 } from "@/lib/recipe-cost"
@@ -110,6 +109,16 @@ export async function upsertRecipe(
   validateIngredients(input)
 
   const { id } = await prisma.$transaction(async (tx) => {
+    if (input.id) {
+      // Scope the update by accountId — a bare update({ where: { id } })
+      // would let any authenticated user overwrite another account's recipe.
+      const existing = await tx.recipe.findFirst({
+        where: { id: input.id, accountId },
+        select: { id: true },
+      })
+      if (!existing) throw new Error("Recipe not found")
+    }
+
     const recipe = input.id
       ? await tx.recipe.update({
           where: { id: input.id },
@@ -150,18 +159,14 @@ export async function upsertRecipe(
       })
     }
 
+    // Cycle check inside the transaction (reading uncommitted writes via tx):
+    // a RecipeCycleError aborts the whole save, so an update rolls back to
+    // the prior version instead of being deleted by a post-commit
+    // compensation, and a create leaves nothing behind.
+    await assertNoCycles(recipe.id, tx)
+
     return { id: recipe.id }
   })
-
-  try {
-    await assertNoCycles(id)
-  } catch (err) {
-    if (err instanceof RecipeCycleError) {
-      await prisma.recipe.delete({ where: { id } }).catch(() => null)
-      throw err
-    }
-    throw err
-  }
 
   revalidatePath("/dashboard/recipes")
   revalidatePath("/dashboard/menu/catalog")
