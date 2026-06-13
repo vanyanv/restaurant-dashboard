@@ -33,6 +33,10 @@ export type SeedResult = {
   skipped: number
 }
 
+/** Line items scanned per page — bounds memory on accounts with large
+ *  invoice backlogs (the old single findMany loaded every unlinked row). */
+const SEED_SCAN_BATCH = 500
+
 /**
  * Walk every unlinked InvoiceLineItem for this owner and give each one a
  * canonical ingredient. Identity precedence:
@@ -52,18 +56,6 @@ export async function seedCanonicalIngredientsFromInvoices(
   ownerId: string,
   accountId: string
 ): Promise<SeedResult> {
-  const lineItems = await prisma.invoiceLineItem.findMany({
-    where: { invoice: { accountId }, canonicalIngredientId: null },
-    select: {
-      id: true,
-      sku: true,
-      productName: true,
-      unit: true,
-      category: true,
-      invoice: { select: { vendorName: true, storeId: true } },
-    },
-  })
-
   const existingSkuMatches = await prisma.ingredientSkuMatch.findMany({
     where: { accountId },
     select: { vendorName: true, sku: true, canonicalIngredientId: true },
@@ -93,106 +85,135 @@ export async function seedCanonicalIngredientsFromInvoices(
   let skuMatchesCreated = 0
   let skipped = 0
 
-  for (const li of lineItems) {
-    const vendor = normalizeVendorName(li.invoice.vendorName)
-    const skuKey = li.sku ? `${vendor}::${li.sku}` : null
-    const canonicalName = normalizeProductName(li.productName)
-    const now = new Date()
-
-    // Path A: SKU-carrying line — identity is (vendor, sku).
-    if (skuKey && li.sku) {
-      let canonicalId = skuIndex.get(skuKey)
-      if (!canonicalId) {
-        // First time seeing this SKU — try name reuse, else create.
-        canonicalId = canonicalByName.get(canonicalName)
-        if (!canonicalId) {
-          const created = await prisma.canonicalIngredient.create({
-            data: {
-              ownerId,
-              accountId,
-              name: canonicalName,
-              defaultUnit: normalizeUnitToken(li.unit),
-              category: li.category ?? null,
-            },
-          })
-          canonicalId = created.id
-          canonicalByName.set(canonicalName, canonicalId)
-          canonicalsCreated++
-        }
-        const normalizedUnit = normalizeUnitToken(li.unit)
-        await prisma.ingredientSkuMatch.upsert({
-          where: {
-            ownerId_vendorName_sku: { ownerId, vendorName: vendor, sku: li.sku },
-          },
-          update: { canonicalIngredientId: canonicalId, confirmedAt: now },
-          create: {
-            ownerId,
-            accountId,
-            vendorName: vendor,
-            sku: li.sku,
-            canonicalIngredientId: canonicalId,
-            conversionFactor: 1,
-            fromUnit: normalizedUnit,
-            toUnit: normalizedUnit,
-            confirmedBy: ownerId,
-          },
-        })
-        skuIndex.set(skuKey, canonicalId)
-        skuMatchesCreated++
-      }
-
-      await prisma.invoiceLineItem.update({
-        where: { id: li.id },
-        data: { canonicalIngredientId: canonicalId, matchSource: "sku", matchedAt: now },
-      })
-      continue
-    }
-
-    // Path B: no SKU — per-store alias by raw productName.
-    if (!li.invoice.storeId) {
-      skipped++
-      continue
-    }
-    const aliasKey = `${li.invoice.storeId}::${li.productName.toLowerCase()}`
-    if (seenAlias.has(aliasKey)) {
-      skipped++
-      continue
-    }
-
-    const normalizedUnit = normalizeUnitToken(li.unit)
-    let canonicalId = canonicalByName.get(canonicalName)
-    if (!canonicalId) {
-      const created = await prisma.canonicalIngredient.create({
-        data: {
-          ownerId,
-          accountId,
-          name: canonicalName,
-          defaultUnit: normalizedUnit,
-          category: li.category ?? null,
-        },
-      })
-      canonicalId = created.id
-      canonicalByName.set(canonicalName, canonicalId)
-      canonicalsCreated++
-    }
-
-    await prisma.ingredientAlias.create({
-      data: {
-        storeId: li.invoice.storeId,
-        canonicalIngredientId: canonicalId,
-        canonicalName,
-        rawName: li.productName,
-        fromUnit: normalizedUnit,
-        toUnit: normalizedUnit,
-        conversionFactor: 1,
+  // Seek-paginated scan (id > lastId), NOT prisma cursor/skip: the loop sets
+  // canonicalIngredientId on rows it has already scanned, and a cursor row
+  // that no longer matches the filter would make skip:1 drop a valid row.
+  // The dedup indexes above persist across batches.
+  let lastId: string | undefined
+  while (true) {
+    const lineItems = await prisma.invoiceLineItem.findMany({
+      where: {
+        invoice: { accountId },
+        canonicalIngredientId: null,
+        ...(lastId ? { id: { gt: lastId } } : {}),
+      },
+      orderBy: { id: "asc" },
+      take: SEED_SCAN_BATCH,
+      select: {
+        id: true,
+        sku: true,
+        productName: true,
+        unit: true,
+        category: true,
+        invoice: { select: { vendorName: true, storeId: true } },
       },
     })
-    await prisma.invoiceLineItem.update({
-      where: { id: li.id },
-      data: { canonicalIngredientId: canonicalId, matchSource: "alias", matchedAt: now },
-    })
-    seenAlias.add(aliasKey)
-    aliasesCreated++
+    if (lineItems.length === 0) break
+    lastId = lineItems[lineItems.length - 1].id
+
+    for (const li of lineItems) {
+      const vendor = normalizeVendorName(li.invoice.vendorName)
+      const skuKey = li.sku ? `${vendor}::${li.sku}` : null
+      const canonicalName = normalizeProductName(li.productName)
+      const now = new Date()
+
+      // Path A: SKU-carrying line — identity is (vendor, sku).
+      if (skuKey && li.sku) {
+        let canonicalId = skuIndex.get(skuKey)
+        if (!canonicalId) {
+          // First time seeing this SKU — try name reuse, else create.
+          canonicalId = canonicalByName.get(canonicalName)
+          if (!canonicalId) {
+            const created = await prisma.canonicalIngredient.create({
+              data: {
+                ownerId,
+                accountId,
+                name: canonicalName,
+                defaultUnit: normalizeUnitToken(li.unit),
+                category: li.category ?? null,
+              },
+            })
+            canonicalId = created.id
+            canonicalByName.set(canonicalName, canonicalId)
+            canonicalsCreated++
+          }
+          const normalizedUnit = normalizeUnitToken(li.unit)
+          await prisma.ingredientSkuMatch.upsert({
+            where: {
+              ownerId_vendorName_sku: { ownerId, vendorName: vendor, sku: li.sku },
+            },
+            update: { canonicalIngredientId: canonicalId, confirmedAt: now },
+            create: {
+              ownerId,
+              accountId,
+              vendorName: vendor,
+              sku: li.sku,
+              canonicalIngredientId: canonicalId,
+              conversionFactor: 1,
+              fromUnit: normalizedUnit,
+              toUnit: normalizedUnit,
+              confirmedBy: ownerId,
+            },
+          })
+          skuIndex.set(skuKey, canonicalId)
+          skuMatchesCreated++
+        }
+
+        await prisma.invoiceLineItem.update({
+          where: { id: li.id },
+          data: { canonicalIngredientId: canonicalId, matchSource: "sku", matchedAt: now },
+        })
+        continue
+      }
+
+      // Path B: no SKU — per-store alias by raw productName.
+      if (!li.invoice.storeId) {
+        skipped++
+        continue
+      }
+      const aliasKey = `${li.invoice.storeId}::${li.productName.toLowerCase()}`
+      if (seenAlias.has(aliasKey)) {
+        skipped++
+        continue
+      }
+
+      const normalizedUnit = normalizeUnitToken(li.unit)
+      let canonicalId = canonicalByName.get(canonicalName)
+      if (!canonicalId) {
+        const created = await prisma.canonicalIngredient.create({
+          data: {
+            ownerId,
+            accountId,
+            name: canonicalName,
+            defaultUnit: normalizedUnit,
+            category: li.category ?? null,
+          },
+        })
+        canonicalId = created.id
+        canonicalByName.set(canonicalName, canonicalId)
+        canonicalsCreated++
+      }
+
+      await prisma.ingredientAlias.create({
+        data: {
+          storeId: li.invoice.storeId,
+          canonicalIngredientId: canonicalId,
+          canonicalName,
+          rawName: li.productName,
+          fromUnit: normalizedUnit,
+          toUnit: normalizedUnit,
+          conversionFactor: 1,
+        },
+      })
+      await prisma.invoiceLineItem.update({
+        where: { id: li.id },
+        data: { canonicalIngredientId: canonicalId, matchSource: "alias", matchedAt: now },
+      })
+      seenAlias.add(aliasKey)
+      aliasesCreated++
+    }
+
+    if (lineItems.length < SEED_SCAN_BATCH) break
   }
 
   return { canonicalsCreated, aliasesCreated, skuMatchesCreated, skipped }
