@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { requireAuthScope } from "@/lib/auth-scope"
 
 export interface AccuracyRow {
   target: "REVENUE" | "MENU_ITEM" | "BUSY_HOURS"
@@ -28,6 +29,7 @@ export interface ReconciliationRow {
 }
 
 export async function getAccuracyTable(): Promise<AccuracyRow[]> {
+  const { accountId } = await requireAuthScope()
   // Latest MlForecastEvaluation per (storeId, target).
   const rows = await prisma.$queryRaw<
     {
@@ -51,6 +53,7 @@ export async function getAccuracyTable(): Promise<AccuracyRow[]> {
     FROM "MlForecastEvaluation" e
     JOIN "Store" s ON s.id = e."storeId"
     WHERE s."isActive" = true
+      AND s."accountId" = ${accountId}
     ORDER BY e."storeId", e.target, e."computedAt" DESC
   `
 
@@ -68,11 +71,12 @@ function classifyCoverage(c: number | null): AccuracyRow["coverageVerdict"] {
 }
 
 export async function getReconciliationTable(): Promise<ReconciliationRow[]> {
+  const { accountId } = await requireAuthScope()
   const today = new Date()
   const fourteenDaysAgo = new Date(today)
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
   const rows = await prisma.mlReconciliationDaily.findMany({
-    where: { date: { gte: fourteenDaysAgo } },
+    where: { date: { gte: fourteenDaysAgo }, store: { accountId } },
     orderBy: [{ storeId: "asc" }, { date: "asc" }],
     include: { store: { select: { id: true, name: true } } },
   })

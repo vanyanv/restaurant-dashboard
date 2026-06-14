@@ -46,10 +46,12 @@ export async function getHourlyOrderPatterns(
     const earliestDate = new Date(earliest + "T00:00:00.000Z")
     const latestDate = new Date(latest + "T00:00:00.000Z")
 
-    // Single Prisma query covering the union window.
+    // Single Prisma query covering the union window. Always scope to the
+    // caller's account so a foreign storeId can't read another tenant's sales.
     const rows = await prisma.otterHourlySummary.findMany({
       where: {
         ...(storeId ? { storeId } : {}),
+        store: { accountId: session.user.accountId },
         date: { gte: earliestDate, lte: latestDate },
       },
       select: {

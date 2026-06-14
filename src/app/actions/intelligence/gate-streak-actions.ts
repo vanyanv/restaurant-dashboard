@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { requireAuthScope } from "@/lib/auth-scope"
 
 export interface GateStreak {
   consecutivePass: number
@@ -12,6 +13,9 @@ export interface GateStreak {
 }
 
 export async function getOperatorGateStreak(): Promise<GateStreak> {
+  // OperatorGateDailyVerdict is global (no store/account column), so we can't
+  // tenant-filter it — but it still exposes ML pipeline health, so require auth.
+  await requireAuthScope()
   const fourteenDaysAgo = new Date()
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
   const rows = await prisma.operatorGateDailyVerdict.findMany({
