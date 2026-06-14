@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 // --- Token cache (same pattern as otter.ts) ---
@@ -27,7 +29,7 @@ export async function getGraphAccessToken(): Promise<string> {
     grant_type: "client_credentials",
   })
 
-  const res = await fetch(tokenUrl, {
+  const res = await fetchWithTimeout(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -88,7 +90,7 @@ export async function fetchInvoiceEmails(sinceDate: Date): Promise<GraphMessage[
     `&$top=50`
 
   while (url) {
-    const res: Response = await fetch(url, {
+    const res: Response = await fetchWithTimeout(url, {
       headers: { Authorization: `Bearer ${token}` },
     })
 
@@ -117,7 +119,7 @@ export async function getEmailAttachments(messageId: string): Promise<GraphAttac
   const url =
     `${GRAPH_BASE}/users/${encodeURIComponent(userId)}/messages/${messageId}/attachments`
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: { Authorization: `Bearer ${token}` },
   })
 

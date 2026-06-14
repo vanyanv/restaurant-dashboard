@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
 
 // Yelp API types
 interface YelpBusinessSearchResponse {
@@ -96,7 +97,7 @@ function levenshteinDistance(s1: string, s2: string): number {
   return matrix[s2.length][s1.length]
 }
 
-export class YelpService {
+class YelpService {
   private readonly apiKey: string
   private readonly baseUrl = "https://api.yelp.com/v3"
   
@@ -119,7 +120,7 @@ export class YelpService {
     })
     
     try {
-      const response = await fetch(url.toString(), {
+      const response = await fetchWithTimeout(url.toString(), {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Accept': 'application/json',

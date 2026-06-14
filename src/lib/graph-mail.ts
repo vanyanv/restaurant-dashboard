@@ -1,4 +1,5 @@
 import { getGraphAccessToken, getMailUserId } from "@/lib/microsoft-graph"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -42,7 +43,7 @@ export async function sendGraphMail(args: {
   }
 
   const url = `${GRAPH_BASE}/users/${encodeURIComponent(fromUserId)}/sendMail`
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
