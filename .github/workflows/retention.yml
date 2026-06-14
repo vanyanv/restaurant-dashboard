@@ -1,0 +1,57 @@
+name: Data Retention (daily)
+on:
+  schedule:
+    # 08:30 UTC = 04:30 America/New_York — quiet time, after the COGS refresh
+    # (07:00 UTC) so cleanup never races a fresh write. Trims unbounded audit
+    # and forecast tables (JobRun/ErrorEvent 90d, AiForecastRun 365d).
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: retention
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: POST /api/cron/retention
+        id: cron
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LOG_FILE: logs/retention.log
+          CRON_MAX_TIME: "60"
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            .github/scripts/curl-cron-json.sh POST "$APP_URL/api/cron/retention"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-log-${{ github.run_id }}
+          path: logs/retention.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Data Retention
+          ISSUE_TITLE: "[Auto] Data Retention failing"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/retention.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Data Retention
+          ISSUE_TITLE: "[Auto] Data Retention failing"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

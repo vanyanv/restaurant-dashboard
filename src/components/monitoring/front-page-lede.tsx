@@ -13,11 +13,14 @@ type Summary = {
 }
 
 export function FrontPageLede() {
+  // Share the unscoped ("all") summary cache entry + in-flight request with
+  // the Masthead, which keys on ["monitoring-summary", selected]. On the
+  // default view (selected === "all") this collapses two 60s polls into one.
   const { data } = useQuery<Summary>({
-    queryKey: ["monitoring-summary-lede"],
+    queryKey: ["monitoring-summary", "all"],
     queryFn: async () => {
       const res = await fetch("/api/monitoring/summary", { cache: "no-store" })
-      if (!res.ok) throw new Error("lede fetch failed")
+      if (!res.ok) throw new Error("summary fetch failed")
       return res.json()
     },
     refetchInterval: 60_000,

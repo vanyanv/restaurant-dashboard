@@ -11,6 +11,9 @@
     },
     "src/app/api/cron/otter/hourly/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/cron/retention/route.ts": {
+      "maxDuration": 60
     }
   },
   "env": {
