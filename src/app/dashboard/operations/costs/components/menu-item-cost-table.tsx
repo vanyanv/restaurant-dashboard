@@ -324,7 +324,7 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
               </span>
               {withRecipe} of {data.length} items have recipes configured ({coveragePct}% coverage). Items without recipes show $0 COGS and 100% margin.{" "}
               <Link
-                href="/dashboard/operations/recipes"
+                href="/dashboard/recipes"
                 className="font-medium underline underline-offset-2"
                 style={{ color: "var(--accent)" }}
               >

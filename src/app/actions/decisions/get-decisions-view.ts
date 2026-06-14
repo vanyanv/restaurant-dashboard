@@ -10,7 +10,7 @@ import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
 import { getOpportunities } from "@/app/actions/growth/opportunities-actions"
-import { buildBriefing, type BriefingLine } from "@/app/dashboard/forecasts/lib/build-briefing"
+import { buildBriefing, type BriefingLine } from "@/app/actions/decisions/build-briefing"
 import { bucketByMean, pctVsTrailing, trailingMean, type VolumeBucket } from "@/app/dashboard/decisions/lib/bucket-volume"
 import {
   confidenceFromForecast,

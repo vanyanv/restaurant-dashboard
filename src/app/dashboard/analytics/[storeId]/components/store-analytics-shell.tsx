@@ -1,18 +1,9 @@
 import { Suspense } from "react"
 import Link from "next/link"
-import { ArrowLeft, Store, Receipt } from "lucide-react"
+import { ArrowLeft, Receipt } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import {
   KpiCardsSkeleton,
   ChartSkeleton,
@@ -53,54 +44,29 @@ export function StoreAnalyticsShell({
   return (
     <div>
       <h1 className="sr-only">{store.name} analytics</h1>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/dashboard/analytics">
-                Analytics
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{store.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </header>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5">
-        <div className="flex items-center gap-2">
+      <EditorialTopbar section="§ Analytics" title={store.name}>
+        <Button
+          asChild
+          variant="outline"
+          size="icon"
+          className="toolbar-btn h-9 w-9 p-0"
+        >
           <Link href="/dashboard/analytics" aria-label="Back to analytics">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+            <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div className="flex items-center gap-1.5">
-            <Store className="h-4 w-4 text-muted-foreground" />
-            <StoreSelector currentStoreId={store.id} allStores={allStores} />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <DateRangeUrlControls range={range} basePath={basePath} />
+        </Button>
+        <StoreSelector currentStoreId={store.id} allStores={allStores} />
+        <DateRangeUrlControls range={range} basePath={basePath} />
+        <Button asChild variant="outline" size="sm" className="toolbar-btn h-9">
           <Link href={`/dashboard/pnl/${store.id}`}>
-            <Button variant="outline" size="sm" className="h-8 text-xs">
-              <Receipt className="mr-1 h-3.5 w-3.5" />
-              P&amp;L
-            </Button>
+            <Receipt className="mr-1 h-3.5 w-3.5" />
+            P&amp;L
           </Link>
-          <Suspense fallback={<Skeleton className="h-8 w-20 rounded-md" />}>
-            <StoreSyncButton storeId={store.id} range={range} />
-          </Suspense>
-        </div>
-      </div>
+        </Button>
+        <Suspense fallback={<Skeleton className="h-8 w-20 rounded-sm" />}>
+          <StoreSyncButton storeId={store.id} range={range} />
+        </Suspense>
+      </EditorialTopbar>
 
       <div className="flex flex-col gap-4 p-4">
         <SectionErrorBoundary label="KPIs unavailable">

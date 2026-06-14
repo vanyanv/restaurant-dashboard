@@ -2,6 +2,8 @@
 // rollup, and the command-bridge recent-events feed (syncs + errors + logins).
 
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
+import { windowFromArg, truncLiteral, type TimeWindow } from "../time-range"
 
 export type ActivityRow = {
   id: string
@@ -49,18 +51,19 @@ export async function getRecentActivity(limit = 20): Promise<ActivityRow[]> {
   return merged.slice(0, limit)
 }
 
-/** Hourly login rollup (succeeded vs failed) for the last `hours`. */
-export async function getLoginsByHour(hours = 24) {
-  const since = new Date(Date.now() - hours * 3600_000)
+/** Login rollup (succeeded vs failed) bucketed by hour (legacy `hours` arg) or
+ * by the bucket of a {@link TimeWindow} from the global range control. */
+export async function getLoginsByHour(arg: number | TimeWindow = 24) {
+  const { since, until, bucket } = windowFromArg(arg)
   const rows = await prisma.$queryRaw<
     { bucket: Date; succeeded: bigint; failed: bigint }[]
   >`
     SELECT
-      date_trunc('hour', "createdAt") AS bucket,
+      date_trunc(${Prisma.raw(truncLiteral(bucket))}, "createdAt") AS bucket,
       SUM(CASE WHEN kind = 'SIGN_IN'        THEN 1 ELSE 0 END)::bigint AS succeeded,
       SUM(CASE WHEN kind = 'SIGN_IN_FAILED' THEN 1 ELSE 0 END)::bigint AS failed
     FROM "LoginEvent"
-    WHERE "createdAt" >= ${since}
+    WHERE "createdAt" >= ${since} AND "createdAt" <= ${until}
     GROUP BY 1 ORDER BY 1 ASC
   `
   return rows.map((r) => ({

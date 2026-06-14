@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation"
 import { monoLabel } from "../styles"
 
 const TABS = [
-  { href: "/dashboard/monitoring",                label: "Bridge",   match: (p: string) => p === "/dashboard/monitoring" },
-  { href: "/dashboard/monitoring/infrastructure", label: "Infra",    match: (p: string) => p.startsWith("/dashboard/monitoring/infrastructure") },
-  { href: "/dashboard/monitoring/people",         label: "People",   match: (p: string) => p.startsWith("/dashboard/monitoring/people") },
-  { href: "/dashboard/monitoring/costs",          label: "Costs",    match: (p: string) => p.startsWith("/dashboard/monitoring/costs") },
-  { href: "/dashboard/monitoring/ml",             label: "ML",       match: (p: string) => p.startsWith("/dashboard/monitoring/ml") },
-  { href: "/dashboard/monitoring/ingredient-audit", label: "Ingredients", match: (p: string) => p.startsWith("/dashboard/monitoring/ingredient-audit") },
-  { href: "/dashboard/monitoring/activity",       label: "Activity", match: (p: string) => p.startsWith("/dashboard/monitoring/activity") },
-  { href: "/dashboard/monitoring/cache",          label: "Cache",    match: (p: string) => p.startsWith("/dashboard/monitoring/cache") },
+  { href: "/dashboard/admin/monitoring",                label: "Bridge",   match: (p: string) => p === "/dashboard/admin/monitoring" },
+  { href: "/dashboard/admin/monitoring/infrastructure", label: "Infra",    match: (p: string) => p.startsWith("/dashboard/admin/monitoring/infrastructure") },
+  { href: "/dashboard/admin/monitoring/people",         label: "People",   match: (p: string) => p.startsWith("/dashboard/admin/monitoring/people") },
+  { href: "/dashboard/admin/monitoring/costs",          label: "Costs",    match: (p: string) => p.startsWith("/dashboard/admin/monitoring/costs") },
+  { href: "/dashboard/admin/monitoring/ml",             label: "ML",       match: (p: string) => p.startsWith("/dashboard/admin/monitoring/ml") },
+  { href: "/dashboard/admin/monitoring/ingredient-audit", label: "Ingredients", match: (p: string) => p.startsWith("/dashboard/admin/monitoring/ingredient-audit") },
+  { href: "/dashboard/admin/monitoring/activity",       label: "Activity", match: (p: string) => p.startsWith("/dashboard/admin/monitoring/activity") },
+  { href: "/dashboard/admin/monitoring/cache",          label: "Cache",    match: (p: string) => p.startsWith("/dashboard/admin/monitoring/cache") },
 ] as const
 
 export function TabStrip() {

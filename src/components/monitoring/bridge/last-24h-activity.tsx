@@ -29,7 +29,7 @@ export function Last24hActivity({ errorsByHour, aiCostByHour, loginsByHour }: Pr
       }}
     >
       <Tile
-        href="/dashboard/monitoring/activity"
+        href="/dashboard/admin/monitoring/activity"
         heading="Errors"
         big={`${errorsTotal}`}
         bigTone={errorsTotal > 0 ? "danger" : "ink"}
@@ -44,7 +44,7 @@ export function Last24hActivity({ errorsByHour, aiCostByHour, loginsByHour }: Pr
       />
       <Divider />
       <Tile
-        href="/dashboard/monitoring/costs"
+        href="/dashboard/admin/monitoring/costs"
         heading="AI spend"
         big={`$${aiTotal.toFixed(2)}`}
         sub="last 24 hours"
@@ -58,7 +58,7 @@ export function Last24hActivity({ errorsByHour, aiCostByHour, loginsByHour }: Pr
       />
       <Divider />
       <Tile
-        href="/dashboard/monitoring/people"
+        href="/dashboard/admin/monitoring/people"
         heading="Logins"
         big={`${loginsTotal}`}
         bigTone={failedTotal > 0 ? "danger" : "ink"}
