@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getYelpService } from "@/lib/yelp"
+import { withConcurrency } from "@/lib/otter"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
@@ -85,7 +86,10 @@ export async function POST(request: Request) {
         // Rate limiting: Don't sync stores that were searched in the last 24 hours
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-        for (const store of stores) {
+        // Fan out per-store Yelp lookups with a small concurrency cap instead
+        // of a strictly sequential loop + fixed 100ms sleep. The cap keeps us
+        // polite to the Yelp API while overlapping network round-trips.
+        const tasks = stores.map((store) => async () => {
           try {
             // Skip if recently searched (unless forced)
             if (store.yelpLastSearch && store.yelpLastSearch > twentyFourHoursAgo) {
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
                 reviewCount: null,
                 error: 'Recently searched (within 24 hours)'
               })
-              continue
+              return
             }
 
             // Search Yelp for this store
@@ -132,10 +136,6 @@ export async function POST(request: Request) {
               rating: yelpData?.rating || null,
               reviewCount: yelpData?.reviewCount || null
             })
-
-            // Add small delay to be respectful to Yelp API
-            await new Promise(resolve => setTimeout(resolve, 100))
-
           } catch (error) {
             results.failed++
             results.details.push({
@@ -148,7 +148,9 @@ export async function POST(request: Request) {
             })
             logger.error(`Failed to sync Yelp data for store ${store.name}:`, error)
           }
-        }
+        })
+
+        await withConcurrency(tasks, 4)
 
         addRows(results.synced)
         return {

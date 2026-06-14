@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/generated/prisma/client"
+import { persistOrderItems } from "@/lib/otter-orders-sync"
 
 /** Distinct platforms across an account's orders, cached for an hour.
  * The previous shape was a `distinct: ["platform"]` findMany inside every
@@ -290,30 +291,7 @@ export async function refetchOrderDetail(
     if (!details) return { ok: false, message: "Otter returned no details" }
 
     await prisma.$transaction(async (tx) => {
-      await tx.otterOrderItem.deleteMany({ where: { orderId: order.id } })
-      for (const item of details.items) {
-        const created = await tx.otterOrderItem.create({
-          data: {
-            orderId: order.id,
-            skuId: item.skuId,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-          },
-        })
-        if (item.subItems.length > 0) {
-          await tx.otterOrderSubItem.createMany({
-            data: item.subItems.map((si) => ({
-              orderItemId: created.id,
-              skuId: si.skuId,
-              name: si.name,
-              quantity: si.quantity,
-              price: si.price,
-              subHeader: si.subHeader,
-            })),
-          })
-        }
-      }
+      await persistOrderItems(tx, order.id, details.items)
       await tx.otterOrder.update({
         where: { id: order.id },
         data: {

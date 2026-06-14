@@ -1,11 +1,101 @@
+import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import {
   queryMetrics,
   buildCustomerOrdersBody,
   fetchOrderDetails,
   withConcurrency,
+  type OrderDetailsPayload,
 } from "@/lib/otter"
 import { withJobRun } from "@/lib/monitoring/job-run"
+
+/**
+ * Replace an order's line items + sub-items inside an open transaction.
+ * Pre-generates item ids so the whole set writes as two bulk createMany calls
+ * (items, then sub-items) instead of a create-per-item round-trip. Shared by
+ * the windowed sync, the historical drain, and the manual refetch action.
+ */
+export async function persistOrderItems(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  items: OrderDetailsPayload["items"],
+): Promise<void> {
+  await tx.otterOrderItem.deleteMany({ where: { orderId } })
+  if (items.length === 0) return
+
+  const itemRows = items.map((item) => ({ id: randomUUID(), item }))
+  await tx.otterOrderItem.createMany({
+    data: itemRows.map(({ id, item }) => ({
+      id,
+      orderId,
+      skuId: item.skuId,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+  })
+
+  const subItemData = itemRows.flatMap(({ id, item }) =>
+    item.subItems.map((si) => ({
+      orderItemId: id,
+      skuId: si.skuId,
+      name: si.name,
+      quantity: si.quantity,
+      price: si.price,
+      subHeader: si.subHeader,
+    })),
+  )
+  if (subItemData.length > 0) {
+    await tx.otterOrderSubItem.createMany({ data: subItemData })
+  }
+}
+
+/** Header fields written by Phase 1 of the orders sync. Mirrors the columns
+ * batch-upserted in `runOrdersSyncInner` — deliberately excludes
+ * customerName / detailsFetchedAt, which Phase 2 (details enrichment) owns. */
+type OrderHeaderData = {
+  otterOrderId: string
+  externalDisplayId: string | null
+  storeId: string
+  otterStoreId: string
+  platform: string
+  referenceTimeLocal: Date
+  fulfillmentMode: string | null
+  orderStatus: string | null
+  acceptanceStatus: string | null
+  subtotal: number
+  tax: number
+  tip: number
+  commission: number
+  discount: number
+  total: number
+}
+
+/** One VALUES tuple for the batch order-header upsert. `id` is generated here
+ * because the column's cuid default is applied by Prisma, not the DB, and a
+ * raw INSERT bypasses it. */
+function orderHeaderRowSql(d: OrderHeaderData, syncedAt: Date): Prisma.Sql {
+  return Prisma.sql`(
+    ${randomUUID()},
+    ${d.otterOrderId},
+    ${d.externalDisplayId},
+    ${d.storeId},
+    ${d.otterStoreId},
+    ${d.platform},
+    ${d.referenceTimeLocal},
+    ${d.fulfillmentMode},
+    ${d.orderStatus},
+    ${d.acceptanceStatus},
+    ${d.subtotal},
+    ${d.tax},
+    ${d.tip},
+    ${d.commission},
+    ${d.discount},
+    ${d.total},
+    ${syncedAt}
+  )`
+}
 
 export type OrdersSyncResult = {
   storesProcessed: number
@@ -58,30 +148,7 @@ async function fetchAndPersistDetails(
   if (!details) return false
 
   await prisma.$transaction(async (tx) => {
-    await tx.otterOrderItem.deleteMany({ where: { orderId: internalId } })
-    for (const item of details.items) {
-      const created = await tx.otterOrderItem.create({
-        data: {
-          orderId: internalId,
-          skuId: item.skuId,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-        },
-      })
-      if (item.subItems.length > 0) {
-        await tx.otterOrderSubItem.createMany({
-          data: item.subItems.map((si) => ({
-            orderItemId: created.id,
-            skuId: si.skuId,
-            name: si.name,
-            quantity: si.quantity,
-            price: si.price,
-            subHeader: si.subHeader,
-          })),
-        })
-      }
-    }
+    await persistOrderItems(tx, internalId, details.items)
     await tx.otterOrder.update({
       where: { id: internalId },
       data: {
@@ -153,8 +220,8 @@ async function runOrdersSyncInner(
   const body = buildCustomerOrdersBody(otterStoreIds, startDate, endDate)
   const rows = await queryMetrics(body)
 
-  let ordersCreated = 0
-  let ordersUpdated = 0
+  const syncedAt = new Date()
+  const parsed: OrderHeaderData[] = []
 
   for (const row of rows) {
     const otterStoreId = asString(row["store_id"])
@@ -176,7 +243,7 @@ async function runOrdersSyncInner(
     const restaurantDiscount = asNumber(row["restaurant_funded_discount"])
     const ofoDiscount = asNumber(row["ofo_funded_discount"])
 
-    const data = {
+    parsed.push({
       otterOrderId: orderId,
       externalDisplayId: asString(row["external_order_display_id"]),
       storeId: internalStoreId,
@@ -192,23 +259,57 @@ async function runOrdersSyncInner(
       commission: asNumber(row["adjusted_commission"]),
       discount: restaurantDiscount + ofoDiscount,
       total: asNumber(row["total_with_tip"]),
-    }
-
-    const existing = await prisma.otterOrder.findUnique({
-      where: { otterOrderId: orderId },
-      select: { id: true },
     })
+  }
 
-    if (existing) {
-      await prisma.otterOrder.update({
-        where: { otterOrderId: orderId },
-        data,
-      })
-      ordersUpdated++
-    } else {
-      await prisma.otterOrder.create({ data })
-      ordersCreated++
-    }
+  // Look up which orders already exist so we can report created vs updated
+  // counts — the per-row findUnique this replaces existed only for that split.
+  const existingRows =
+    parsed.length > 0
+      ? await prisma.otterOrder.findMany({
+          where: { otterOrderId: { in: parsed.map((p) => p.otterOrderId) } },
+          select: { otterOrderId: true },
+        })
+      : []
+  const existingIds = new Set(existingRows.map((e) => e.otterOrderId))
+  const ordersUpdated = parsed.reduce(
+    (n, p) => (existingIds.has(p.otterOrderId) ? n + 1 : n),
+    0,
+  )
+  const ordersCreated = parsed.length - ordersUpdated
+
+  // Batch upsert in chunks. One INSERT ... ON CONFLICT statement per chunk
+  // replaces the previous per-order findUnique + update/create (3 sequential
+  // round-trips each). The DO UPDATE set intentionally omits customerName /
+  // detailsFetchedAt so we never clobber Phase-2 enrichment on a re-sync.
+  const UPSERT_CHUNK = 500
+  for (let i = 0; i < parsed.length; i += UPSERT_CHUNK) {
+    const chunk = parsed.slice(i, i + UPSERT_CHUNK)
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "OtterOrder" (
+        "id", "otterOrderId", "externalDisplayId", "storeId", "otterStoreId",
+        "platform", "referenceTimeLocal", "fulfillmentMode", "orderStatus",
+        "acceptanceStatus", "subtotal", "tax", "tip", "commission",
+        "discount", "total", "syncedAt"
+      )
+      VALUES ${Prisma.join(chunk.map((d) => orderHeaderRowSql(d, syncedAt)))}
+      ON CONFLICT ("otterOrderId") DO UPDATE SET
+        "externalDisplayId" = EXCLUDED."externalDisplayId",
+        "storeId" = EXCLUDED."storeId",
+        "otterStoreId" = EXCLUDED."otterStoreId",
+        "platform" = EXCLUDED."platform",
+        "referenceTimeLocal" = EXCLUDED."referenceTimeLocal",
+        "fulfillmentMode" = EXCLUDED."fulfillmentMode",
+        "orderStatus" = EXCLUDED."orderStatus",
+        "acceptanceStatus" = EXCLUDED."acceptanceStatus",
+        "subtotal" = EXCLUDED."subtotal",
+        "tax" = EXCLUDED."tax",
+        "tip" = EXCLUDED."tip",
+        "commission" = EXCLUDED."commission",
+        "discount" = EXCLUDED."discount",
+        "total" = EXCLUDED."total",
+        "syncedAt" = EXCLUDED."syncedAt"
+    `)
   }
 
   // ─── Phase 2: Fetch OrderDetails for any unfetched orders in this window ───

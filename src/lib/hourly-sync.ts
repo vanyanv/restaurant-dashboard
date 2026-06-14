@@ -163,38 +163,51 @@ async function runHourlySyncInner(opts?: {
     byPair.set(pairKey, arr)
   }
 
-  // For every (storeId, date) in the window — even if no rows — run delete to
-  // clear stale data. Only insert when we have buckets.
+  // Clear stale data for every (storeId, date) in the window — even pairs with
+  // no rows — then insert all buckets, in a single transaction. Previously this
+  // ran one delete+insert transaction per (storeId, date) pair sequentially;
+  // collapsing it removes N round-trips that scale with stores × days.
+  const storeIds = [...new Set(active.map((s) => s.storeId))]
+  const dateObjs = datesCovered.map((date) => new Date(date + "T00:00:00.000Z"))
+
   let bucketsWritten = 0
-  for (const storeId of new Set(active.map((s) => s.storeId))) {
+  const allInserts: Array<{
+    storeId: string
+    date: Date
+    hour: number
+    orderCount: number
+    netSales: number
+  }> = []
+  for (const storeId of storeIds) {
     for (const date of datesCovered) {
-      const pairKey = `${storeId}|${date}`
-      const inserts = byPair.get(pairKey) ?? []
+      const inserts = byPair.get(`${storeId}|${date}`) ?? []
       const dateObj = new Date(date + "T00:00:00.000Z")
-
-      await prisma.$transaction([
-        prisma.otterHourlySummary.deleteMany({
-          where: { storeId, date: dateObj },
-        }),
-        ...(inserts.length > 0
-          ? [
-              prisma.otterHourlySummary.createMany({
-                data: inserts.map((b) => ({
-                  storeId: b.storeId,
-                  date: dateObj,
-                  hour: b.hour,
-                  orderCount: b.orderCount,
-                  netSales: Math.round(b.netSales * 100) / 100,
-                })),
-                skipDuplicates: true,
-              }),
-            ]
-          : []),
-      ])
-
+      for (const b of inserts) {
+        allInserts.push({
+          storeId: b.storeId,
+          date: dateObj,
+          hour: b.hour,
+          orderCount: b.orderCount,
+          netSales: Math.round(b.netSales * 100) / 100,
+        })
+      }
       bucketsWritten += inserts.length
     }
   }
+
+  await prisma.$transaction([
+    prisma.otterHourlySummary.deleteMany({
+      where: { storeId: { in: storeIds }, date: { in: dateObjs } },
+    }),
+    ...(allInserts.length > 0
+      ? [
+          prisma.otterHourlySummary.createMany({
+            data: allInserts,
+            skipDuplicates: true,
+          }),
+        ]
+      : []),
+  ])
 
   if (droppedNoStore > 0) {
     console.warn(
