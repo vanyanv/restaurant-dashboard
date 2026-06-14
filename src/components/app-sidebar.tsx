@@ -18,10 +18,12 @@ import {
   Package,
   UtensilsCrossed,
   MessageSquare,
-  TrendingUp,
-  Sparkles,
   CalendarDays,
-  BellRing,
+  LineChart,
+  Wallet,
+  Coins,
+  Users,
+  PieChart,
   type LucideIcon,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
@@ -44,9 +46,6 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { NavFrequent } from "@/components/nav-frequent"
-import { recordNavClick } from "@/lib/nav-frequency"
-import { useChatDrawer } from "@/components/chat/chat-drawer-context"
 
 export type NavItem = {
   title: string
@@ -62,35 +61,40 @@ type NavSection = {
 
 const NAV: NavSection[] = [
   {
-    label: "Front",
+    label: "Daily",
+    items: [
+      { title: "Today", url: "/dashboard", icon: BarChart3 },
+      { title: "Ask", url: "/dashboard/chat", icon: MessageSquare },
+      { title: "Decisions", url: "/dashboard/decisions", icon: CalendarDays },
+      { title: "Orders", url: "/dashboard/orders", icon: Receipt },
+    ],
+  },
+  {
+    label: "Financials",
+    items: [
+      { title: "Analytics", url: "/dashboard/analytics", icon: LineChart },
+      { title: "P&L", url: "/dashboard/pnl", icon: Wallet },
+      { title: "COGS", url: "/dashboard/cogs", icon: Coins },
+      { title: "Labor", url: "/dashboard/labor", icon: Users },
+      { title: "Product Mix", url: "/dashboard/product-mix", icon: PieChart },
+    ],
+  },
+  {
+    label: "Operations",
     items: [
       {
-        title: "Overview",
-        url: "/dashboard",
-        icon: BarChart3,
+        title: "Operations",
+        url: "/dashboard/operations",
+        icon: Activity,
         items: [
-          { title: "Sales Summary", url: "/dashboard" },
-          { title: "Analytics", url: "/dashboard/analytics" },
-          { title: "P&L", url: "/dashboard/pnl" },
-          { title: "COGS", url: "/dashboard/cogs" },
-          { title: "Labor", url: "/dashboard/labor" },
-          { title: "Product Mix", url: "/dashboard/product-mix" },
+          { title: "Overview", url: "/dashboard/operations" },
+          { title: "Inventory", url: "/dashboard/operations/inventory" },
+          { title: "Stock Counts", url: "/dashboard/operations/inventory/counts" },
+          { title: "Product Usage", url: "/dashboard/operations/product-usage" },
+          { title: "Costs", url: "/dashboard/operations/costs" },
+          { title: "Packaging", url: "/dashboard/operations/packaging" },
+          { title: "Vendors", url: "/dashboard/operations/vendors" },
         ],
-      },
-      {
-        title: "Ask",
-        url: "/dashboard/chat",
-        icon: MessageSquare,
-      },
-      {
-        title: "Decisions",
-        url: "/dashboard/decisions",
-        icon: CalendarDays,
-      },
-      {
-        title: "Orders",
-        url: "/dashboard/orders",
-        icon: Receipt,
       },
       {
         title: "Menu",
@@ -121,25 +125,6 @@ const NAV: NavSection[] = [
           { title: "Needs Review", url: "/dashboard/invoices?status=REVIEW" },
         ],
       },
-    ],
-  },
-  {
-    label: "Back of House",
-    items: [
-      {
-        title: "Operations",
-        url: "/dashboard/operations",
-        icon: Activity,
-        items: [
-          { title: "Overview", url: "/dashboard/operations" },
-          { title: "Inventory", url: "/dashboard/operations/inventory" },
-          { title: "Stock Counts", url: "/dashboard/operations/inventory/counts" },
-          { title: "Product Usage", url: "/dashboard/operations/product-usage" },
-          { title: "Costs", url: "/dashboard/operations/costs" },
-          { title: "Packaging", url: "/dashboard/operations/packaging" },
-          { title: "Vendors", url: "/dashboard/operations/vendors" },
-        ],
-      },
       {
         title: "Stores",
         url: "/dashboard/stores",
@@ -149,6 +134,11 @@ const NAV: NavSection[] = [
           { title: "Create Store", url: "/dashboard/stores/new" },
         ],
       },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
       {
         title: "Settings",
         url: "/dashboard/settings",
@@ -193,31 +183,27 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
   const isDev = session?.user.role === "DEVELOPER"
 
-  const nav = React.useMemo(() => {
-    if (!isDev) return NAV
-    return NAV.map((section) =>
-      section.label === "Back of House"
-        ? {
-            ...section,
-            items: [
-              ...section.items,
-              { title: "Monitoring", url: "/dashboard/monitoring", icon: Activity },
-              { title: "Alerts (dev)", url: "/dashboard/alerts", icon: BellRing },
-              { title: "Forecasts (dev)", url: "/dashboard/forecasts", icon: TrendingUp },
-              {
-                title: "Intelligence (dev)",
-                url: "/dashboard/intelligence/opportunities",
-                icon: Sparkles,
-                items: [
-                  { title: "Opportunities", url: "/dashboard/intelligence/opportunities" },
-                  { title: "Quality", url: "/dashboard/intelligence/quality" },
-                ],
-              },
-            ],
-          }
-        : section,
-    )
-  }, [isDev])
+  // Dev-only Admin section. Kept out of the owner's nav entirely; monitoring
+  // lives under /dashboard/admin and is also role-guarded server-side.
+  const nav = React.useMemo(
+    () =>
+      isDev
+        ? [
+            ...NAV,
+            {
+              label: "Admin",
+              items: [
+                {
+                  title: "Monitoring",
+                  url: "/dashboard/admin/monitoring",
+                  icon: Activity,
+                },
+              ],
+            },
+          ]
+        : NAV,
+    [isDev],
+  )
 
   return (
     <Sidebar
@@ -227,11 +213,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     >
       <SidebarHeader className="p-0">
         <EditorialBrand />
-        <ChatTriggerRow />
       </SidebarHeader>
 
       <SidebarContent className="px-0 gap-0">
-        <NavFrequent />
         {nav.map((section) => (
           <div key={section.label} className="editorial-nav-section">
             <div className="editorial-nav-section-label">
@@ -248,30 +232,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarRail />
     </Sidebar>
-  )
-}
-
-/** Sidebar entry point for the owner-analytics chat. Lives directly under
- * the masthead so it reads as a primary affordance, not a secondary nav
- * item. Clicking opens the drawer; the kbd chip echoes the global ⌘K
- * shortcut. */
-function ChatTriggerRow() {
-  const { openDrawer, open } = useChatDrawer()
-  return (
-    <div className="editorial-chat-trigger-row">
-      <button
-        type="button"
-        onClick={openDrawer}
-        aria-pressed={open}
-        aria-label="Open chat"
-        className={
-          "editorial-chat-trigger" + (open ? " is-active" : "")
-        }
-      >
-        <span className="editorial-chat-trigger__label">Ask</span>
-        <span className="editorial-chat-trigger__hint">⌘K</span>
-      </button>
-    </div>
   )
 }
 
@@ -346,7 +306,6 @@ function EditorialNav({ items }: { items: NavItem[] }) {
               key={item.title}
               href={item.url}
               prefetch={false}
-              onClick={() => recordNavClick(item.url)}
               className={`editorial-nav-item ${active ? "is-active" : ""}`}
             >
               {Icon && <Icon className="nav-icon" />}
@@ -388,7 +347,6 @@ function EditorialNav({ items }: { items: NavItem[] }) {
                       key={sub.title}
                       href={sub.url}
                       prefetch={false}
-                      onClick={() => recordNavClick(sub.url)}
                       className={`editorial-nav-subitem ${subActive ? "is-active" : ""}`}
                     >
                       {sub.title}

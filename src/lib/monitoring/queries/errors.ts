@@ -1,6 +1,8 @@
-// ErrorEvent analytics — recent errors, 24h count, hourly histogram.
+// ErrorEvent analytics — recent errors, 24h count, hourly/daily histogram.
 
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
+import { windowFromArg, truncLiteral, type TimeWindow } from "../time-range"
 
 export async function getRecentErrors(limit = 50) {
   return prisma.errorEvent.findMany({
@@ -15,12 +17,14 @@ export async function getErrorCount24h() {
   return prisma.errorEvent.count({ where: { occurredAt: { gte: since } } })
 }
 
-export async function getErrorsByHour(hours = 24) {
-  const since = new Date(Date.now() - hours * 3600_000)
+/** Error counts bucketed by hour (legacy `hours` arg) or by the bucket of a
+ * {@link TimeWindow} from the global range control. */
+export async function getErrorsByHour(arg: number | TimeWindow = 24) {
+  const { since, until, bucket } = windowFromArg(arg)
   const rows = await prisma.$queryRaw<{ bucket: Date; count: bigint }[]>`
-    SELECT date_trunc('hour', "occurredAt") AS bucket, COUNT(*)::bigint AS count
+    SELECT date_trunc(${Prisma.raw(truncLiteral(bucket))}, "occurredAt") AS bucket, COUNT(*)::bigint AS count
     FROM "ErrorEvent"
-    WHERE "occurredAt" >= ${since}
+    WHERE "occurredAt" >= ${since} AND "occurredAt" <= ${until}
     GROUP BY 1 ORDER BY 1 ASC
   `
   return rows.map((r) => ({ bucket: r.bucket, count: Number(r.count) }))

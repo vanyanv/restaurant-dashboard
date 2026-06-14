@@ -1,4 +1,4 @@
-import type { BriefingLine } from "@/app/dashboard/forecasts/lib/build-briefing"
+import type { BriefingLine } from "@/app/actions/decisions/build-briefing"
 
 interface Props {
   lines: BriefingLine[]

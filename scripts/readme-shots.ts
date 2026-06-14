@@ -8,7 +8,7 @@ const OUT_DIR = resolve(process.cwd(), "docs/screenshots")
 
 const SHOTS = [
   { file: "dashboard.png", url: "/dashboard", viewport: { width: 1440, height: 900 } },
-  { file: "forecasts.png", url: "/dashboard/forecasts", viewport: { width: 1440, height: 900 } },
+  { file: "decisions.png", url: "/dashboard/decisions", viewport: { width: 1440, height: 900 } },
   { file: "pnl.png", url: "/dashboard/pnl", viewport: { width: 1440, height: 900 } },
   { file: "labor.png", url: "/dashboard/labor", viewport: { width: 1440, height: 900 } },
   { file: "invoices.png", url: "/dashboard/invoices", viewport: { width: 1440, height: 900 } },

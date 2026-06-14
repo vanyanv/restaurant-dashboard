@@ -1,6 +1,8 @@
 // AI spend + chat-turn analytics (AiUsageEvent, ChatTurn).
 
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
+import { windowFromArg, truncLiteral, type TimeWindow } from "../time-range"
 
 export async function getAiCostByDay(days = 30) {
   const since = new Date(Date.now() - days * 86_400_000)
@@ -67,16 +69,17 @@ export async function getRecentNonOkChatTurns(limit = 20) {
   })
 }
 
-/** Hourly AI cost rollup for the last `hours` (default 24). Used by the
- * command-bridge sparkline. */
-export async function getAiCostByHour(hours = 24) {
-  const since = new Date(Date.now() - hours * 3600_000)
+/** AI cost rollup bucketed by hour (legacy `hours` arg) or by the bucket of a
+ * {@link TimeWindow} from the global range control. Used by the command-bridge
+ * sparkline. */
+export async function getAiCostByHour(arg: number | TimeWindow = 24) {
+  const { since, until, bucket } = windowFromArg(arg)
   const rows = await prisma.$queryRaw<{ bucket: Date; cost: number }[]>`
     SELECT
-      date_trunc('hour', "occurredAt") AS bucket,
+      date_trunc(${Prisma.raw(truncLiteral(bucket))}, "occurredAt") AS bucket,
       SUM("estimatedCostUsd")::float AS cost
     FROM "AiUsageEvent"
-    WHERE "occurredAt" >= ${since}
+    WHERE "occurredAt" >= ${since} AND "occurredAt" <= ${until}
     GROUP BY 1 ORDER BY 1 ASC
   `
   return rows.map((r) => ({ bucket: r.bucket, cost: Number(r.cost ?? 0) }))

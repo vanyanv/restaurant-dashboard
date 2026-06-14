@@ -53,12 +53,12 @@ export default async function StoresPage() {
       >
         {isOwner && stores.length > 0 && <YelpSyncAllButton />}
         {isOwner && (
-          <Link href="/dashboard/stores/new">
-            <Button size="sm">
+          <Button asChild variant="outline" size="sm" className="toolbar-btn h-9">
+            <Link href="/dashboard/stores/new">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add Store
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </EditorialTopbar>
 

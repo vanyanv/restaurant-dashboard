@@ -29,6 +29,7 @@ import {
   getPendingOrderDetails,
   getStaleStores,
 } from "@/lib/monitoring/queries"
+import { resolveWindow } from "@/lib/monitoring/time-range"
 
 const NOW = new Date("2026-06-12T12:00:00Z")
 
@@ -75,6 +76,41 @@ describe("hourly bucket rollups (mobile sparklines)", () => {
       { bucket, succeeded: BigInt(3), failed: BigInt(1) },
     ] as never)
     expect(await getLoginsByHour(24)).toEqual([{ bucket, succeeded: 3, failed: 1 }])
+  })
+})
+
+describe("TimeWindow support (global range control)", () => {
+  // A TimeWindow arg must bound the query on BOTH ends — the legacy numeric
+  // arg only ever bounded `since`. We assert both bounds reach $queryRaw.
+  function datesPassedToQuery(): Date[] {
+    return vi
+      .mocked(prisma.$queryRaw)
+      .mock.calls[0]!.slice(1)
+      .filter((v): v is Date => v instanceof Date)
+  }
+
+  it("getErrorsByHour threads window.since and window.until into the query", async () => {
+    const w = resolveWindow("7d")
+    await getErrorsByHour(w)
+    const dates = datesPassedToQuery()
+    expect(dates).toContainEqual(w.since)
+    expect(dates).toContainEqual(w.until)
+  })
+
+  it("getAiCostByHour threads window.since and window.until into the query", async () => {
+    const w = resolveWindow("7d")
+    await getAiCostByHour(w)
+    const dates = datesPassedToQuery()
+    expect(dates).toContainEqual(w.since)
+    expect(dates).toContainEqual(w.until)
+  })
+
+  it("getLoginsByHour threads window.since and window.until into the query", async () => {
+    const w = resolveWindow("7d")
+    await getLoginsByHour(w)
+    const dates = datesPassedToQuery()
+    expect(dates).toContainEqual(w.since)
+    expect(dates).toContainEqual(w.until)
   })
 })
 

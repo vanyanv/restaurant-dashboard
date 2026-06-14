@@ -32,12 +32,7 @@ const OWNER_TABS: MobileTab[] = [
   { href: "/m/more", label: "More", icon: "more", matches: ["/m/more"] },
 ]
 
-const DEV_MORE: MobileSection[] = [
-  { href: "/m/monitoring", label: "Monitoring", dept: "DEV", group: "Admin" },
-]
-
 const OWNER_MORE: MobileSection[] = [
-  { href: "/m/forecasts", label: "Forecasts", dept: "NEXT", group: "Plan service" },
   { href: "/m/labor", label: "Labor", dept: "STAFF", group: "Plan service" },
   { href: "/m/operations", label: "Operations", dept: "DAILY", group: "Run today" },
   { href: "/m/count", label: "Stock count", dept: "COUNTS", group: "Run today" },
@@ -52,12 +47,16 @@ const OWNER_MORE: MobileSection[] = [
   { href: "/m/settings", label: "Settings", dept: "ACCOUNT", group: "Admin" },
 ]
 
+// Dev-only entries, appended for DEVELOPER accounts only.
+const DEV_MORE: MobileSection[] = [
+  { href: "/m/monitoring", label: "Monitoring", dept: "DEV", group: "Admin" },
+]
+
 export function getTabsForRole(_role?: Role): MobileTab[] {
   return OWNER_TABS
 }
 
 export function getMoreForRole(role?: Role): MobileSection[] {
-  // DEVELOPER is a superset of OWNER and additionally sees the Bridge row.
   if (role === "DEVELOPER") return [...OWNER_MORE, ...DEV_MORE]
   return OWNER_MORE
 }

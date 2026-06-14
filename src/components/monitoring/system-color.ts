@@ -27,12 +27,12 @@ export const SYSTEM_LABEL: Record<System, string> = {
 
 /** Where each pill links on click. */
 export const SYSTEM_HREF: Record<System, string> = {
-  db:     "/dashboard/monitoring/infrastructure#db",
-  r2:     "/dashboard/monitoring/infrastructure#r2",
-  cache:  "/dashboard/monitoring/cache",
-  auth:   "/dashboard/monitoring/people",
-  syncs:  "/dashboard/monitoring/activity#syncs",
-  tokens: "/dashboard/monitoring/infrastructure#tokens",
+  db:     "/dashboard/admin/monitoring/infrastructure#db",
+  r2:     "/dashboard/admin/monitoring/infrastructure#r2",
+  cache:  "/dashboard/admin/monitoring/cache",
+  auth:   "/dashboard/admin/monitoring/people",
+  syncs:  "/dashboard/admin/monitoring/activity#syncs",
+  tokens: "/dashboard/admin/monitoring/infrastructure#tokens",
 }
 
 export type StatusTone = "ok" | "warn" | "danger"
