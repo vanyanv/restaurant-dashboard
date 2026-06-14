@@ -88,12 +88,6 @@ function emptyTotals(platform: string, paymentMethod: string | null): ChannelTot
   }
 }
 
-export function channelKeyFor(row: { platform: string; paymentMethod: string | null }): string {
-  const fp = isFP(row.platform)
-  const pm = fp && row.paymentMethod && row.paymentMethod !== "N/A" ? row.paymentMethod : ""
-  return `${row.platform}|||${pm}`
-}
-
 export function aggregateChannelTotals(
   rows: ChannelSummaryRow[]
 ): Map<string, ChannelTotals> {

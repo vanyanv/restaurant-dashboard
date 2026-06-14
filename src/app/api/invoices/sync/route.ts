@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
 import { fetchInvoiceEmails, getEmailAttachments } from "@/lib/microsoft-graph"
 import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
@@ -510,9 +511,8 @@ async function runSync(
       createdInvoiceIds.push(created.id)
       counts.created++
     } catch (err) {
-      // Unique constraint violation = already processed (race condition safety)
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes("Unique constraint")) {
+      // Unique constraint violation (P2002) = already processed (race condition safety)
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         counts.skipped++
       } else {
         logger.error(`Failed to save invoice ${inv.invoiceNumber}:`, err)

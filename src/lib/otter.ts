@@ -271,11 +271,13 @@ async function getOtterJwt(): Promise<string> {
   // 1. Static env var takes priority (backward-compatible for scripts / CI).
   // If it is already expired, prefer the login path instead of burning a call
   // that will reliably 401.
-  const envJwt = process.env.OTTER_JWT ?? process.env.Bearer
+  const envJwt = process.env.OTTER_JWT
   const now = Math.floor(Date.now() / 1000)
   if (envJwt) {
+    // A malformed/no-exp token decodes to exp=0; don't send it upstream (it
+    // would reliably 401). Fall through to the cache/refresh path instead.
     const exp = decodeJwtExp(envJwt)
-    if (exp === 0 || exp - now > 300) return envJwt
+    if (exp - now > 300) return envJwt
     if (cachedJwt && cachedJwtExp - now > 300) return cachedJwt
     console.warn("OTTER_JWT is expired or near expiry; refreshing via OTTER_EMAIL/OTTER_PASSWORD")
   }

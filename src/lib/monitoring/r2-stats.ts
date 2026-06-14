@@ -82,12 +82,3 @@ export const getLatestR2Snapshot = unstable_cache(
   ["monitoring:r2-latest"],
   { revalidate: 300, tags: ["monitoring:r2"] },
 )
-
-export async function getR2SnapshotHistory(days = 30) {
-  const since = new Date(Date.now() - days * 86_400_000)
-  return prisma.r2BucketSnapshot.findMany({
-    where: { capturedAt: { gte: since } },
-    orderBy: { capturedAt: "asc" },
-    select: { capturedAt: true, totalBytes: true, objectCount: true },
-  })
-}

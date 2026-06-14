@@ -240,28 +240,6 @@ export async function mapOtterItemsBatch(
   return { mapped: filtered.length }
 }
 
-export async function unmapOtterItem(otterItemName: string): Promise<void> {
-  const scope = await requireScope()
-  if (!scope) throw new Error("Not authenticated")
-  const { ownerId, accountId } = scope
-
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
-  await prisma.otterItemMapping.deleteMany({
-    where: {
-      otterItemName,
-      storeId: { in: stores.map((s) => s.id) },
-    },
-  })
-
-  void stores
-  revalidatePath("/dashboard/menu/catalog")
-  revalidatePath("/dashboard/ingredients")
-  revalidatePath("/dashboard/recipes")
-}
-
 /* ─────────────────────────────── sub-items (modifiers) ─────────────────────────────── */
 
 export type OtterSubItemForCatalog = OtterSubItemForCatalogType

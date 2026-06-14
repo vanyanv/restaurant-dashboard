@@ -49,7 +49,3 @@ export const POST = withCronAuth(
   },
   { unauthorized: { status: 403, error: "forbidden" } }
 )
-
-// Aliased to GET so it can be hit ad-hoc from the browser/curl during dev.
-// Cron platforms (Vercel/GH Actions) use POST.
-export const GET = POST

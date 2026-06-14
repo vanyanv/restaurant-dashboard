@@ -1,5 +1,4 @@
 import { todayInLA, startOfDayLA, endOfDayLA, localDateStr } from "@/lib/dashboard-utils"
-import type { HourlyComparisonPeriod } from "@/types/analytics"
 
 export type MobileNamedPeriod = "today" | "yesterday" | "this-week" | "last-week"
 export type MobilePeriod = MobileNamedPeriod | "custom"
@@ -40,18 +39,6 @@ export function parseMobileRange(sp: {
     return { kind: "named", period: raw as MobileNamedPeriod }
   }
   return { kind: "named", period: "today" }
-}
-
-/** Back-compat: old callers that just want a named period. Returns "today" for "custom". */
-export function parsePeriod(raw: string | undefined | null): MobileNamedPeriod {
-  if (raw && NAMED_VALUES.has(raw as MobileNamedPeriod)) return raw as MobileNamedPeriod
-  return "today"
-}
-
-/** Mobile period maps 1:1 to the hourly-pattern enum on the analytics action.
- *  Custom currently isn't supported by that action, so callers must guard. */
-export function toHourlyPeriod(p: MobileNamedPeriod): HourlyComparisonPeriod {
-  return p
 }
 
 function isValidIsoDate(s: string | undefined): s is string {

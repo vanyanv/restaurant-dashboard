@@ -117,10 +117,6 @@ export async function buildSituationSnapshot(accountId: string, now: Date = new 
   return text
 }
 
-export function invalidateSituationSnapshot(accountId: string): void {
-  cache.delete(accountId)
-}
-
 function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
