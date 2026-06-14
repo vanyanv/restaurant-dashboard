@@ -13,6 +13,8 @@
  *   HARRI_COGNITO_USER_POOL_REGION — defaults to us-east-1
  */
 
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+
 const HARRI_BASE = "https://gateway.harri.com"
 
 const HARRI_HEADERS: Record<string, string> = {
@@ -53,7 +55,7 @@ async function refreshAccessToken(): Promise<string> {
     )
   }
 
-  const res = await fetch(COGNITO_ENDPOINT, {
+  const res = await fetchWithTimeout(COGNITO_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-amz-json-1.1",
@@ -140,20 +142,8 @@ export async function getHarriJwt(): Promise<string> {
 // Day boundary
 // ---------------------------------------------------------------------------
 
-/**
- * Harri's business day runs T05:30:00.000Z → T05:30:00.000Z + 1d (≈ 1:30 AM EDT cutoff).
- * Use this for any range-style endpoint to avoid straddling two of Harri's days.
- */
-export function harriDayBounds(date: Date): { from: string; to: string } {
-  const d = new Date(date)
-  d.setUTCHours(5, 30, 0, 0)
-  const next = new Date(d)
-  next.setUTCDate(next.getUTCDate() + 1)
-  return { from: d.toISOString(), to: next.toISOString() }
-}
-
 /** Format a Date as YYYY-MM-DD in UTC (used by alerts + positions/pay_types endpoints). */
-export function harriDateStr(date: Date): string {
+function harriDateStr(date: Date): string {
   const yyyy = date.getUTCFullYear()
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0")
   const dd = String(date.getUTCDate()).padStart(2, "0")
@@ -164,7 +154,7 @@ export function harriDateStr(date: Date): string {
  * Harri's hourly-anchor ISO timestamp. The labor stats endpoints accept any
  * ISO instant; we use 14:00 UTC (mid-business-day) as a stable anchor.
  */
-export function harriDayAnchorISO(date: Date): string {
+function harriDayAnchorISO(date: Date): string {
   const d = new Date(date)
   d.setUTCHours(14, 0, 0, 0)
   return d.toISOString()
