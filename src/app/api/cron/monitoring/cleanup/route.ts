@@ -40,5 +40,3 @@ export const POST = withCronAuth(
   },
   { unauthorized: { status: 403, error: "forbidden" } }
 )
-
-export const GET = POST

@@ -112,7 +112,7 @@ function containerUnitCostMap(
  *     newly-computed set (Otter no longer reports them, or they fell out of
  *     the cutoff). It can never reach across days.
  */
-export async function recomputeDailyCogsForDay(input: {
+async function recomputeDailyCogsForDay(input: {
   storeId: string
   date: Date
   accountId: string
@@ -477,7 +477,7 @@ async function getContainerGroupCosts(
   return Object.fromEntries(entries) as Record<ContainerGroup, ContainerGroupCost>
 }
 
-export async function recomputeDailyPackagingCogsForDay(input: {
+async function recomputeDailyPackagingCogsForDay(input: {
   storeId: string
   date: Date
   accountId: string

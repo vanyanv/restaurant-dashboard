@@ -25,7 +25,7 @@ const ABBREVIATIONS: Record<string, string> = {
 // Words to strip (unit identifiers)
 const STRIP_WORDS = new Set(["ste", "suite", "apt", "unit", "floor", "fl", "#"])
 
-export function normalizeAddress(address: string): string {
+function normalizeAddress(address: string): string {
   let normalized = address.toLowerCase().trim()
 
   // Remove punctuation except hyphens in numbers

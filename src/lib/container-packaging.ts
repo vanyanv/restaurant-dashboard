@@ -636,17 +636,6 @@ export function packBasketCostAware(
   }
 }
 
-export function packOrder(order: OrderPackInput, scenario: PackingScenario = PACKAGING_SCENARIO): {
-  classification: BasketClassification
-  counts: ContainerCounts
-} {
-  const classification = classifyBasket(order)
-  return {
-    classification,
-    counts: packBasket(classification.units, scenario),
-  }
-}
-
 export function packOrderCostAware(
   order: OrderPackInput,
   groupCosts: Record<ContainerGroup, number | null>,

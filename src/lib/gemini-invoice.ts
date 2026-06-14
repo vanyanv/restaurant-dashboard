@@ -143,7 +143,7 @@ function normalizeExtraction(extraction: InvoiceExtraction): InvoiceExtraction {
   )
 }
 
-export function buildExtractionPrompt(): string {
+function buildExtractionPrompt(): string {
   const today = new Date().toISOString().slice(0, 10)
   return `You are an invoice data extraction specialist for restaurant food & beverage suppliers.
 Extract ALL data from this supplier invoice PDF. Common vendors include Sysco, US Foods,

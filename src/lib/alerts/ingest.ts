@@ -35,7 +35,7 @@ interface IngestResult {
 }
 
 // |z| → severity. INFO for noise, WATCH for meaningful, CRITICAL for action-now.
-export function severityFromZScore(z: number | null): AlertSeverity {
+function severityFromZScore(z: number | null): AlertSeverity {
   if (z == null || !Number.isFinite(z)) return "INFO"
   const abs = Math.abs(z)
   if (abs >= 4) return "CRITICAL"
@@ -43,7 +43,7 @@ export function severityFromZScore(z: number | null): AlertSeverity {
   return "INFO"
 }
 
-export function buildDedupeKey(
+function buildDedupeKey(
   source: AlertSource,
   storeId: string,
   target: AlertTarget,
@@ -98,7 +98,7 @@ export interface AlertUpsert {
   occurredOn: Date
 }
 
-export function anomalyEventToAlert(ev: AnomalyEvent): AlertUpsert {
+function anomalyEventToAlert(ev: AnomalyEvent): AlertUpsert {
   const target = mapAnomalyTarget(ev.target)
   return {
     dedupeKey: buildDedupeKey("ANOMALY_EVENT", ev.storeId, target, ev.targetId, ev.occurredOn),

@@ -39,7 +39,7 @@ export const PHASE_WEIGHTS = {
   cogs: 0.05,
 } as const
 
-export function computeTotalProgress(
+function computeTotalProgress(
   dailyPct: number,
   categoryPct: number,
   itemPct: number,
@@ -69,7 +69,7 @@ type DailyRecord = {
 /** Merge duplicate (storeId, date, platform, paymentMethod) records so collisions
  *  on the unique index don't lose fields. For each numeric field, sum non-null
  *  values across the group; keep null only when every duplicate is null. */
-export function mergeDailyRecords(records: DailyRecord[]): DailyRecord[] {
+function mergeDailyRecords(records: DailyRecord[]): DailyRecord[] {
   const byKey = new Map<string, DailyRecord>()
   for (const rec of records) {
     const key = `${rec.storeId}|${rec.date.toISOString()}|${rec.platform}|${rec.paymentMethod}`
