@@ -109,6 +109,35 @@ def test_run_evaluation_pass_skips_target_with_no_reconciled_rows():
     assert upserts == []
 
 
+def test_run_evaluation_pass_returns_count_of_rows_written():
+    # run_evaluation_pass must report how many MlForecastEvaluation rows it wrote
+    # so the nightly orchestrator can tell "wrote 3 rows" from "silently wrote 0"
+    # (the latter previously still printed ok:True).
+    today = dt.date(2026, 5, 12)
+    rev_rows = [
+        (dt.date(2026, 5, d), 1000.0 + d, 950.0 + d, 900.0 + d, 1100.0 + d, "rev-v1", 980.0 + d)
+        for d in range(1, 12)
+    ]
+    hr_rows = [(dt.date(2026, 5, d), 10.0, 9.5, 8.0, 12.0, "hr-v1", 9.0) for d in range(1, 12)]
+    item_rows = [(dt.date(2026, 5, d), 5.0, 4.5, 3.0, 7.0, "mi-v1", 4.0) for d in range(1, 12)]
+    conn = _mk_conn_with_rowsets([rev_rows, hr_rows, item_rows])
+
+    with patch.object(ni, "upsert_evaluation_row", side_effect=lambda *_: None):
+        written = ni.run_evaluation_pass(conn, store_id="s1", today=today)
+
+    assert written == 3
+
+
+def test_run_evaluation_pass_returns_zero_when_no_reconciled_rows():
+    today = dt.date(2026, 5, 12)
+    conn = _mk_conn_with_rowsets([[], [], []])
+
+    with patch.object(ni, "upsert_evaluation_row", side_effect=lambda *_: None):
+        written = ni.run_evaluation_pass(conn, store_id="s1", today=today)
+
+    assert written == 0
+
+
 def test_run_consistency_check_logs_warning_on_large_discrepancy(caplog):
     today = dt.date(2026, 5, 12)
     # Future revenue: large numbers; future items: tiny qty * tiny price => big gap.

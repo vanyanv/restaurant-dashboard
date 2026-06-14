@@ -973,9 +973,18 @@ def _run_full_pipeline_for_store(store_id: str, model_version: str) -> int:
 
     try:
         with connect() as conn:
-            run_evaluation_pass(conn, store_id, dt.date.today())
+            eval_rows = run_evaluation_pass(conn, store_id, dt.date.today())
             run_consistency_check(conn, store_id, dt.date.today())
-        print({"phase": "EVALUATE", "store_id": store_id, "ok": True})
+        # Report the row count so a pass that silently wrote nothing is visible
+        # rather than showing a bare ok:True. Zero is legitimate for warming-up
+        # stores (no reconciled history yet), so we warn instead of failing.
+        print({"phase": "EVALUATE", "store_id": store_id, "ok": True, "rows": eval_rows})
+        if eval_rows == 0:
+            print({
+                "phase": "EVALUATE",
+                "store_id": store_id,
+                "warning": "no MlForecastEvaluation rows written",
+            })
     except Exception as exc:  # pylint: disable=broad-except
         print({"phase": "EVALUATE", "store_id": store_id, "ok": False, "reason": str(exc)})
         failures += 1

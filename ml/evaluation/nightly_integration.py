@@ -271,25 +271,37 @@ def _build_eval_input(
 # ---------------------------------------------------------------------------
 
 
-def run_evaluation_pass(conn, store_id: str, today: dt.date) -> None:
-    """Build + upsert one MlForecastEvaluation row per target for the store."""
+def run_evaluation_pass(conn, store_id: str, today: dt.date) -> int:
+    """Build + upsert one MlForecastEvaluation row per target for the store.
+
+    Returns the number of rows written (0-3). A return of 0 means no target had
+    reconciled rows yet — legitimate for a warming-up store, but the caller
+    surfaces it so a silently-empty pass can't masquerade as a healthy run.
+    """
+    written = 0
+
     rev_rows = _fetch_reconciled_revenue(conn, store_id, today)
     rev_input = _build_eval_input(rev_rows, target="REVENUE", store_id=store_id, today=today)
     if rev_input is not None:
         upsert_evaluation_row(conn, build_evaluation_row(rev_input))
+        written += 1
         _LOG.info("evaluator: wrote REVENUE row for %s (n=%d)", store_id, rev_input.actuals.size)
 
     hr_rows = _fetch_reconciled_hourly_orders(conn, store_id, today)
     hr_input = _build_eval_input(hr_rows, target="BUSY_HOURS", store_id=store_id, today=today)
     if hr_input is not None:
         upsert_evaluation_row(conn, build_evaluation_row(hr_input))
+        written += 1
         _LOG.info("evaluator: wrote BUSY_HOURS row for %s (n=%d)", store_id, hr_input.actuals.size)
 
     item_rows = _fetch_reconciled_menu_item(conn, store_id, today)
     item_input = _build_eval_input(item_rows, target="MENU_ITEM", store_id=store_id, today=today)
     if item_input is not None:
         upsert_evaluation_row(conn, build_evaluation_row(item_input))
+        written += 1
         _LOG.info("evaluator: wrote MENU_ITEM row for %s (n=%d)", store_id, item_input.actuals.size)
+
+    return written
 
 
 def run_consistency_check(conn, store_id: str, today: dt.date) -> None:
