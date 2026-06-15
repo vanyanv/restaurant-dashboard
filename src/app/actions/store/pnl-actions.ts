@@ -8,8 +8,11 @@ import {
   buildPeriods,
   bucketSummariesByPeriod,
   computeStorePnL,
+  consolidateRows,
   channelMix,
-  TOTAL_SALES_CODE,
+  monthlyFromFrequency,
+  CUSTOM_FIXED_CODE_PREFIX,
+  type CustomFixedExpense,
   type Granularity,
   type Period,
 } from "@/lib/pnl"
@@ -22,6 +25,28 @@ import type {
   StorePnLResult,
   AllStoresPnLResult,
 } from "./pnl-types"
+
+type FixedExpenseRow = {
+  id: string
+  label: string
+  amount: number
+  frequency: "WEEKLY" | "MONTHLY" | "YEARLY"
+}
+
+/** Map DB fixed-expense rows to the normalized CustomFixedExpense shape the
+ *  pure P&L computation expects (monthly figure + `FX_<id>` row code). */
+function toCustomFixedExpenses(rows: FixedExpenseRow[]): CustomFixedExpense[] {
+  return rows.map((e) => ({
+    code: `${CUSTOM_FIXED_CODE_PREFIX}${e.id}`,
+    label: e.label,
+    monthlyAmount: monthlyFromFrequency(e.amount, e.frequency),
+  }))
+}
+
+const FIXED_EXPENSE_ORDER = [
+  { sortOrder: "asc" as const },
+  { createdAt: "asc" as const },
+]
 
 type DailyCogsRow = {
   date: Date
@@ -243,6 +268,12 @@ export async function getStorePnL(input: {
     })
 
     const bucketed = bucketSummariesByPeriod(summaries, periods)
+    const fixedExpenseRows = await prisma.storeFixedExpense.findMany({
+      where: { storeId: store.id, isActive: true },
+      orderBy: FIXED_EXPENSE_ORDER,
+      select: { id: true, label: true, amount: true, frequency: true },
+    })
+    const customFixedExpenses = toCustomFixedExpenses(fixedExpenseRows)
     const cogsRows = await prisma.dailyCogsItem.findMany({
       where: {
         storeId: store.id,
@@ -290,6 +321,7 @@ export async function getStorePnL(input: {
       store,
       cogsValues: cogs.cogsValues,
       harriLaborByPeriod,
+      customFixedExpenses,
     })
 
     const refillFailedPeriodIndexes: number[] = []
@@ -323,7 +355,8 @@ export async function getStorePnL(input: {
       sum(computed.laborValues) +
       sum(computed.rentValues) +
       sum(computed.towelsValues) +
-      sum(computed.cleaningValues)
+      sum(computed.cleaningValues) +
+      sum(computed.customFixedValues.flat())
     const bottomLine = sum(computed.bottomLine)
     const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
 
@@ -488,6 +521,18 @@ export async function getAllStoresPnL(input: {
       cogsByStore.set(r.storeId, arr)
     }
 
+    const allFixedExpenses = await prisma.storeFixedExpense.findMany({
+      where: { storeId: { in: storeIds }, isActive: true },
+      orderBy: FIXED_EXPENSE_ORDER,
+      select: { id: true, storeId: true, label: true, amount: true, frequency: true },
+    })
+    const expensesByStore = new Map<string, FixedExpenseRow[]>()
+    for (const e of allFixedExpenses) {
+      const arr = expensesByStore.get(e.storeId) ?? []
+      arr.push(e)
+      expensesByStore.set(e.storeId, arr)
+    }
+
     const perStore = stores.map((store) => {
       const storeSummaries = byStore.get(store.id) ?? []
       const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
@@ -497,6 +542,7 @@ export async function getAllStoresPnL(input: {
         periods,
         store,
         cogsValues: storeCogs.cogsValues,
+        customFixedExpenses: toCustomFixedExpenses(expensesByStore.get(store.id) ?? []),
       })
 
       const grossSales = sum(computed.totalSales)
@@ -508,7 +554,8 @@ export async function getAllStoresPnL(input: {
         laborValue +
         rentValue +
         sum(computed.towelsValues) +
-        sum(computed.cleaningValues)
+        sum(computed.cleaningValues) +
+        sum(computed.customFixedValues.flat())
       const bottomLine = sum(computed.bottomLine)
       const marginPct = grossSales === 0 ? 0 : bottomLine / grossSales
       const ratio = (v: number) => (grossSales === 0 ? 0 : v / grossSales)
@@ -564,36 +611,12 @@ export async function getAllStoresPnL(input: {
     combined.marginPct =
       combined.grossSales === 0 ? 0 : combined.bottomLine / combined.grossSales
 
-    const consolidatedRows = []
-    const firstStoreRows = perStore[0]?.rows ?? []
-    for (let rowIdx = 0; rowIdx < firstStoreRows.length; rowIdx++) {
-      const template = firstStoreRows[rowIdx]
-      const combinedValues = periods.map((_, pi) =>
-        perStore.reduce((acc, s) => acc + (s.rows[rowIdx]?.values[pi] ?? 0), 0)
-      )
-      const combinedGrossPerPeriod = periods.map((_, pi) =>
-        perStore.reduce(
-          (acc, s) =>
-            acc + (s.rows.find((r) => r.code === TOTAL_SALES_CODE)?.values[pi] ?? 0),
-          0
-        )
-      )
-      const combinedUnknown = periods.map((_, pi) =>
-        perStore.every((s) => s.rows[rowIdx]?.isUnknown?.[pi] === true)
-      )
-      const anyUnknown = combinedUnknown.some(Boolean)
-      consolidatedRows.push({
-        code: template.code,
-        label: template.label,
-        values: combinedValues,
-        percents: combinedValues.map((v, i) =>
-          combinedGrossPerPeriod[i] === 0 ? 0 : v / combinedGrossPerPeriod[i]
-        ),
-        isSubtotal: template.isSubtotal,
-        isFixed: template.isFixed,
-        isUnknown: anyUnknown ? combinedUnknown : undefined,
-      })
-    }
+    // Merge by row code (not index): robust to stores having different custom
+    // fixed expenses. Stores lacking a given code contribute 0 to that line.
+    const consolidatedRows = consolidateRows(
+      perStore.map((s) => s.rows),
+      periods
+    )
 
     return {
       storeCount: stores.length,

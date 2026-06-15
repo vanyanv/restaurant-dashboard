@@ -5,6 +5,10 @@ import {
   buildPeriods,
   channelMix,
   computeStorePnL,
+  monthlyFromFrequency,
+  CUSTOM_FIXED_CODE_PREFIX,
+  type CustomFixedExpense,
+  type ExpenseFrequency,
   type Granularity,
   type OtterSummaryRow,
   type Period,
@@ -408,7 +412,7 @@ async function computeWindow(input: {
   const overallStart = periods[0].startDate
   const overallEnd = periods[periods.length - 1].endDate
 
-  const [summaries, cogsRows, harriRows] = await Promise.all([
+  const [summaries, cogsRows, harriRows, fixedExpenseRows] = await Promise.all([
     ctx.prisma.otterDailySummary.findMany({
       where: {
         storeId: { in: storeIds },
@@ -451,6 +455,11 @@ async function computeWindow(input: {
       },
       select: { storeId: true, date: true, actualCost: true },
     }),
+    ctx.prisma.storeFixedExpense.findMany({
+      where: { storeId: { in: storeIds }, isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, storeId: true, label: true, amount: true, frequency: true },
+    }),
   ])
 
   const summariesByStore = new Map<string, SummaryRow[]>()
@@ -470,6 +479,22 @@ async function computeWindow(input: {
     const arr = harriByStore.get(r.storeId) ?? []
     arr.push({ date: r.date, actualCost: r.actualCost })
     harriByStore.set(r.storeId, arr)
+  }
+  const customExpensesByStore = new Map<string, CustomFixedExpense[]>()
+  for (const e of fixedExpenseRows as Array<{
+    id: string
+    storeId: string
+    label: string
+    amount: number
+    frequency: ExpenseFrequency
+  }>) {
+    const arr = customExpensesByStore.get(e.storeId) ?? []
+    arr.push({
+      code: `${CUSTOM_FIXED_CODE_PREFIX}${e.id}`,
+      label: e.label,
+      monthlyAmount: monthlyFromFrequency(e.amount, e.frequency),
+    })
+    customExpensesByStore.set(e.storeId, arr)
   }
 
   const perStore: PnlStoreBlock[] = []
@@ -507,12 +532,14 @@ async function computeWindow(input: {
       hasFixedMonthlyLabor: store.fixedMonthlyLabor != null,
     })
 
+    const customFixedExpenses = customExpensesByStore.get(store.id) ?? []
     const computed = computeStorePnL({
       bucketed,
       periods,
       store,
       cogsValues,
       harriLaborByPeriod,
+      customFixedExpenses,
     })
 
     // Refill-gap detection: any period with sales but no cogs rows.
@@ -528,7 +555,8 @@ async function computeWindow(input: {
       sum(computed.laborValues) +
       sum(computed.rentValues) +
       sum(computed.cleaningValues) +
-      sum(computed.towelsValues)
+      sum(computed.towelsValues) +
+      sum(computed.customFixedValues.flat())
 
     const totalChannelVals = computed.perPeriodSalesValues.reduce<number[]>(
       (acc, periodVals) => {
@@ -627,7 +655,7 @@ async function computeWindow(input: {
 export const getPnlSummary: ChatTool<typeof params, PnlSummaryResult> = {
   name: "getPnlSummary",
   description:
-    "Full P&L for an owner-scoped slice of stores and a date range. Returns the complete row matrix (every GL sales line, commissions, COGS, gross profit, labor, rent, cleaning, towels, bottom line) plus pre-rolled totals (cogsPct, laborPct, marginPct, breakEvenSales, avgTicket, cashSales/cardSales, vsTargetPp), perStore breakdown, channelMix, and an optional comparePrevious window. ONE call answers most P&L questions — pick the right field/row from the result, do not call again per line item. Sign convention: in rows[].values[], sales are positive; commissions/COGS/labor/rent/cleaning/towels are negative. The totals block returns positive magnitudes for cost fields. Labor uses Harri actuals when available with coverage-aware fallback to the fixed monthly budget; read the labor row's `label` ('Labor (actual)' / 'Labor (partial)' / 'Labor (fixed)') and any `caveats[]` entries to know which.",
+    "Full P&L for an owner-scoped slice of stores and a date range. Returns the complete row matrix (every GL sales line, commissions, COGS, gross profit, labor, rent, cleaning, towels, any store-specific custom fixed expenses (rows with code prefix FX_), bottom line) plus pre-rolled totals (cogsPct, laborPct, marginPct, breakEvenSales, avgTicket, cashSales/cardSales, vsTargetPp), perStore breakdown, channelMix, and an optional comparePrevious window. ONE call answers most P&L questions — pick the right field/row from the result, do not call again per line item. Sign convention: in rows[].values[], sales are positive; commissions/COGS/labor/rent/cleaning/towels are negative. The totals block returns positive magnitudes for cost fields. Labor uses Harri actuals when available with coverage-aware fallback to the fixed monthly budget; read the labor row's `label` ('Labor (actual)' / 'Labor (partial)' / 'Labor (fixed)') and any `caveats[]` entries to know which.",
   parameters: params,
   async execute(args: Params, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)

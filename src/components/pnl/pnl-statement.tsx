@@ -60,7 +60,9 @@ const DEDUCTION_CODES = new Set<string>([
 ])
 
 function isDeductionRow(row: PnLRow): boolean {
-  return DEDUCTION_CODES.has(row.code)
+  // Custom owner-managed fixed expenses (code `FX_*`) are stored negative and
+  // flagged isFixed; format them as deductions like Labor/Rent/Towels.
+  return DEDUCTION_CODES.has(row.code) || row.isFixed === true
 }
 
 function formatPercent(p: number): string {

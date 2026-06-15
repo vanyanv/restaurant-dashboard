@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getStores } from "@/app/actions/store-actions"
+import { prisma } from "@/lib/prisma"
 import { Plus, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { YelpSyncAllButton } from "@/components/yelp-sync-button"
@@ -20,6 +21,35 @@ export default async function StoresPage() {
   const stores = await getStores()
   const isOwner = hasOwnerAccess(session.user.role)
 
+  // Custom fixed expenses for the dossier "Fixed expenses" editor, loaded in
+  // one query (getStores is shared by ~24 pages, so we don't add a join there).
+  const expenseRows = stores.length
+    ? await prisma.storeFixedExpense.findMany({
+        where: { storeId: { in: stores.map((s) => s.id) }, isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          storeId: true,
+          label: true,
+          amount: true,
+          frequency: true,
+          sortOrder: true,
+        },
+      })
+    : []
+  const expensesByStore = new Map<string, StoreDossierData["fixedExpenses"]>()
+  for (const e of expenseRows) {
+    const arr = expensesByStore.get(e.storeId) ?? []
+    arr.push({
+      id: e.id,
+      label: e.label,
+      amount: e.amount,
+      frequency: e.frequency,
+      sortOrder: e.sortOrder,
+    })
+    expensesByStore.set(e.storeId, arr)
+  }
+
   const directoryStores: StoreDossierData[] = stores.map((s) => ({
     id: s.id,
     name: s.name,
@@ -33,6 +63,7 @@ export default async function StoresPage() {
     uberCommissionRate: s.uberCommissionRate,
     doordashCommissionRate: s.doordashCommissionRate,
     targetCogsPct: s.targetCogsPct,
+    fixedExpenses: expensesByStore.get(s.id) ?? [],
     yelpRating: s.yelpRating,
     yelpReviewCount: s.yelpReviewCount,
     yelpUrl: s.yelpUrl,
