@@ -15,7 +15,6 @@ import {
   startOfDayLA,
   endOfDayLA,
   todayInLA,
-  localDateStr,
   type DashboardRange,
 } from "@/lib/dashboard-utils"
 
@@ -50,22 +49,34 @@ export type OtterPromise = ReturnType<typeof buildDashboardData>["otter"]
  * shell still gates the render so non-owners never trigger the fetch.
  */
 export function buildPnLSummary(range: DashboardRange) {
-  const { startDate, endDate } =
-    range.kind === "custom"
-      ? {
-          startDate: startOfDayLA(range.startDate),
-          endDate: endOfDayLA(range.endDate),
-        }
-      : (() => {
-          // kind: "days" — N-day window ending today (LA). days=1 → today only.
-          const end = startOfDayLA(todayInLA())
-          const start = new Date(end)
-          start.setDate(start.getDate() - (Math.abs(range.days) - 1))
-          return {
-            startDate: startOfDayLA(localDateStr(start)),
-            endDate: endOfDayLA(todayInLA()),
-          }
-        })()
+  // Resolve the range exactly the way getDashboardAnalytics/getOtterAnalytics do
+  // (see dashboard-analytics-actions.ts) so the P&L window lines up with the
+  // hero figures: days=1 → today, days=-1 → yesterday only, days=N → last N+1
+  // days ending today. Diverging here is what made "Yesterday" show today's
+  // partial data.
+  let startDate: Date
+  let endDate: Date
+
+  if (range.kind === "custom") {
+    startDate = startOfDayLA(range.startDate)
+    endDate = endOfDayLA(range.endDate)
+  } else {
+    const today = todayInLA()
+    endDate = endOfDayLA(today)
+    const days = range.days
+    if (days === 1) {
+      startDate = startOfDayLA(today)
+    } else if (days === -1) {
+      const yday = startOfDayLA(today)
+      yday.setDate(yday.getDate() - 1)
+      startDate = yday
+      endDate = new Date(yday.getTime() + 24 * 60 * 60 * 1000 - 1)
+    } else {
+      const start = startOfDayLA(today)
+      start.setDate(start.getDate() - days)
+      startDate = start
+    }
+  }
 
   return getAllStoresPnL({ startDate, endDate, granularity: "daily" })
 }
