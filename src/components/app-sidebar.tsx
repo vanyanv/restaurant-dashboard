@@ -381,7 +381,7 @@ function EditorialUserCard() {
         side="right"
         align="end"
         sideOffset={8}
-        className="w-56"
+        className="editorial-menu w-56"
       >
         <DropdownMenuItem asChild>
           <Link href="/dashboard/settings/account" prefetch={false}>
@@ -395,8 +395,8 @@ function EditorialUserCard() {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          variant="destructive"
           onSelect={() => signOut({ callbackUrl: "/login" })}
-          className="text-[var(--accent)]"
         >
           Sign out
         </DropdownMenuItem>
