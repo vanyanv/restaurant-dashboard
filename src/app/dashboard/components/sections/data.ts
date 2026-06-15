@@ -2,6 +2,7 @@ import { cache } from "react"
 import {
   getDashboardAnalytics,
   getOtterAnalytics,
+  getAllStoresPnL,
 } from "@/app/actions/store-actions"
 import {
   getInvoiceSummary,
@@ -11,6 +12,10 @@ import {
 import { resolvePeriod } from "@/app/dashboard/invoices/components/sections/data"
 import {
   rangeToActionOptions,
+  startOfDayLA,
+  endOfDayLA,
+  todayInLA,
+  localDateStr,
   type DashboardRange,
 } from "@/lib/dashboard-utils"
 
@@ -36,6 +41,36 @@ export type DashboardPromise = ReturnType<
   typeof buildDashboardData
 >["dashboard"]
 export type OtterPromise = ReturnType<typeof buildDashboardData>["otter"]
+
+/**
+ * Fires the all-stores P&L action for the dashboard's selected range so the
+ * owner-only Profitability section can surface profit/COGS/labor/margin at a
+ * glance. Mirrors the same range the rest of Overview uses (gross/net already
+ * reflect it). `getAllStoresPnL` enforces owner access server-side, but the
+ * shell still gates the render so non-owners never trigger the fetch.
+ */
+export function buildPnLSummary(range: DashboardRange) {
+  const { startDate, endDate } =
+    range.kind === "custom"
+      ? {
+          startDate: startOfDayLA(range.startDate),
+          endDate: endOfDayLA(range.endDate),
+        }
+      : (() => {
+          // kind: "days" — N-day window ending today (LA). days=1 → today only.
+          const end = startOfDayLA(todayInLA())
+          const start = new Date(end)
+          start.setDate(start.getDate() - (Math.abs(range.days) - 1))
+          return {
+            startDate: startOfDayLA(localDateStr(start)),
+            endDate: endOfDayLA(todayInLA()),
+          }
+        })()
+
+  return getAllStoresPnL({ startDate, endDate, granularity: "daily" })
+}
+
+export type PnLSummaryPromise = ReturnType<typeof buildPnLSummary>
 
 export const fetchInvoiceSummary = cache(() =>
   getInvoiceSummary({ days: 30 })
