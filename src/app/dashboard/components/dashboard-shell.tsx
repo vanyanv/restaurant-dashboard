@@ -1,19 +1,21 @@
 import { Suspense } from "react"
 import { ChartSkeleton } from "@/components/skeletons"
+import { hasOwnerAccess } from "@/lib/auth"
+import { Role } from "@/generated/prisma/client"
 import type { DashboardRange } from "@/lib/dashboard-utils"
 import { DashboardTopbar } from "./dashboard-topbar"
 import { SectionHead } from "./section-head"
 import { RevenueTrendChartSlot } from "./revenue-trend-chart-slot"
 import { FinancialSummaryTableSkeleton } from "./financial-summary-table"
 import { HeroKpiSkeleton } from "./skeletons/hero-kpi-skeleton"
-import { DayHighlightsSkeleton } from "./skeletons/day-highlights-skeleton"
 import { InvoiceSnapshotSkeleton } from "./skeletons/invoice-snapshot-skeleton"
+import { PnLSummarySkeleton } from "./skeletons/pnl-summary-skeleton"
 import { HeroKpisSection } from "./sections/hero-kpis-section"
-import { DayHighlightsSection } from "./sections/day-highlights-section"
+import { PnLSummarySection } from "./sections/pnl-summary-section"
 import { HourlyOrdersSection } from "./sections/hourly-orders-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
 import { InvoiceSnapshotSection } from "./sections/invoice-snapshot-section"
-import { buildDashboardData } from "./sections/data"
+import { buildDashboardData, buildPnLSummary } from "./sections/data"
 
 interface DashboardShellProps {
   range: DashboardRange
@@ -23,6 +25,8 @@ interface DashboardShellProps {
 export function DashboardShell({ range, userRole }: DashboardShellProps) {
   const { dashboard: dashboardPromise, otter: otterPromise } =
     buildDashboardData(range)
+  const isOwner = hasOwnerAccess(userRole as Role)
+  const pnlPromise = isOwner ? buildPnLSummary(range) : null
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -44,9 +48,11 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
       </section>
 
       <div className="px-6 py-8 space-y-8">
-        <Suspense fallback={<DayHighlightsSkeleton />}>
-          <DayHighlightsSection otterPromise={otterPromise} />
-        </Suspense>
+        {pnlPromise && (
+          <Suspense fallback={<PnLSummarySkeleton />}>
+            <PnLSummarySection pnlPromise={pnlPromise} range={range} />
+          </Suspense>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-5 dock-in dock-in-4">
           <div className="min-w-0 lg:col-span-3">
