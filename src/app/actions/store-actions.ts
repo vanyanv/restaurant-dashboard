@@ -29,6 +29,14 @@ export {
   recomputeCogsForStore,
 } from "./store/pnl-actions"
 
+export {
+  createStoreFixedExpense,
+  updateStoreFixedExpense,
+  deleteStoreFixedExpense,
+} from "./store/fixed-expense-actions"
+
+export type { StoreFixedExpenseDTO } from "./store/fixed-expense-actions"
+
 export type {
   PnLMover,
   StorePnLResult,

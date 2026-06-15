@@ -150,6 +150,10 @@ model Store {
   fixedMonthlyTowels   Float? // Towels/linen service; entered weekly in UI, stored as monthly equivalent
   fixedMonthlyCleaning Float? // Recurring deep-cleaning service
 
+  // Arbitrary owner-managed fixed expenses (insurance, POS subscription, etc.).
+  // Additive to the four hardcoded fixed costs above; each becomes an FX_<id>
+  // line on the P&L. See StoreFixedExpense.
+
   // Platform commission rates (decimal, e.g. 0.21 = 21%). Applied to tpGrossSales on the P&L.
   uberCommissionRate     Float @default(0.21)
   doordashCommissionRate Float @default(0.25)
@@ -223,10 +227,38 @@ model Store {
   harriTimekeepingAlerts HarriTimekeepingAlert[]
   harriEmployees         HarriEmployee[]
 
+  fixedExpenses StoreFixedExpense[]
+
   @@index([ownerId])
   @@index([accountId])
   @@index([yelpBusinessId])
   @@index([latitude, longitude])
+}
+
+enum ExpenseFrequency {
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+// Owner-managed recurring fixed expense for a store. Normalized to a monthly
+// figure at read time (see monthlyFromFrequency in src/lib/pnl.ts) and prorated
+// per P&L period. Additive to the four hardcoded fixedMonthly* fields on Store.
+model StoreFixedExpense {
+  id        String           @id @default(cuid())
+  storeId   String
+  label     String
+  amount    Float // as entered by the owner, in the chosen cadence
+  frequency ExpenseFrequency @default(MONTHLY)
+  glCode    String? // optional GL code, nullable; hidden in UI for now
+  sortOrder Int              @default(0)
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, isActive])
 }
 
 model OtterStore {

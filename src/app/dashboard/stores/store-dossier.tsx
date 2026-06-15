@@ -8,12 +8,20 @@ import {
   ChevronRight,
   Loader2,
   PencilLine,
+  Plus,
   Power,
   RotateCcw,
   Save,
+  Trash2,
   X,
 } from "lucide-react"
-import { updateStore, deleteStore } from "@/app/actions/store-actions"
+import {
+  updateStore,
+  deleteStore,
+  createStoreFixedExpense,
+  updateStoreFixedExpense,
+  deleteStoreFixedExpense,
+} from "@/app/actions/store-actions"
 import { setStoreTargetCogsPct } from "@/app/actions/cogs-actions"
 import { monthlyFromWeekly, weeklyFromMonthly } from "@/lib/pnl"
 import { StarRatingLarge } from "@/components/ui/star-rating"
@@ -30,6 +38,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+export type ExpenseCadence = "WEEKLY" | "MONTHLY" | "YEARLY"
+
+export interface StoreFixedExpenseItem {
+  id: string
+  label: string
+  amount: number
+  frequency: ExpenseCadence
+  sortOrder: number
+}
+
 export interface StoreDossierData {
   id: string
   name: string
@@ -43,6 +61,7 @@ export interface StoreDossierData {
   uberCommissionRate: number
   doordashCommissionRate: number
   targetCogsPct: number | null
+  fixedExpenses: StoreFixedExpenseItem[]
   yelpRating: number | null
   yelpReviewCount: number | null
   yelpUrl: string | null
@@ -370,6 +389,14 @@ export function StoreDossier({
           ) : (
             <ConfigReadout store={store} />
           )}
+        </section>
+
+        <section className="store-dossier__section store-dossier__section--config">
+          <FixedExpensesEditor
+            storeId={store.id}
+            expenses={store.fixedExpenses}
+            isOwner={isOwner}
+          />
         </section>
       </div>
 
@@ -712,5 +739,300 @@ function PercentInput({
       />
       <span className="editorial-field__suffix">%</span>
     </span>
+  )
+}
+
+const CADENCES: { value: ExpenseCadence; label: string; per: string }[] = [
+  { value: "WEEKLY", label: "Weekly", per: "/ wk" },
+  { value: "MONTHLY", label: "Monthly", per: "/ mo" },
+  { value: "YEARLY", label: "Yearly", per: "/ yr" },
+]
+
+const cadencePer = (f: ExpenseCadence) =>
+  CADENCES.find((c) => c.value === f)?.per ?? "/ mo"
+
+function CadenceSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: ExpenseCadence
+  onChange: (v: ExpenseCadence) => void
+  disabled?: boolean
+}) {
+  return (
+    <select
+      className="editorial-input"
+      value={value}
+      onChange={(e) => onChange(e.target.value as ExpenseCadence)}
+      disabled={disabled}
+      aria-label="Billing cadence"
+    >
+      {CADENCES.map((c) => (
+        <option key={c.value} value={c.value}>
+          {c.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/**
+ * Owner-managed list of arbitrary store-specific fixed expenses (insurance,
+ * POS subscription, etc.). Each row saves immediately via its own server
+ * action — a variable-length list doesn't fit the all-at-once ConfigForm
+ * FormData submit. Renders read-only for non-owners.
+ */
+function FixedExpensesEditor({
+  storeId,
+  expenses,
+  isOwner,
+}: {
+  storeId: string
+  expenses: StoreFixedExpenseItem[]
+  isOwner: boolean
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [adding, setAdding] = useState(false)
+  const [newLabel, setNewLabel] = useState("")
+  const [newAmount, setNewAmount] = useState("")
+  const [newFreq, setNewFreq] = useState<ExpenseCadence>("MONTHLY")
+
+  const resetNew = () => {
+    setNewLabel("")
+    setNewAmount("")
+    setNewFreq("MONTHLY")
+    setAdding(false)
+  }
+
+  const handleAdd = () => {
+    const amount = Number(newAmount)
+    if (!newLabel.trim()) {
+      toast.error("Expense name is required")
+      return
+    }
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Enter a valid amount")
+      return
+    }
+    startTransition(async () => {
+      const res = await createStoreFixedExpense({
+        storeId,
+        label: newLabel.trim(),
+        amount,
+        frequency: newFreq,
+      })
+      if ("error" in res) {
+        toast.error("Could not add expense", { description: res.error })
+        return
+      }
+      toast.success("Expense added")
+      resetNew()
+      router.refresh()
+    })
+  }
+
+  return (
+    <>
+      <div className="store-dossier__dept">
+        <span>Fixed expenses</span>
+        <span>recurring · per period on P&amp;L</span>
+      </div>
+
+      {expenses.length === 0 && !adding ? (
+        <p className="store-dossier__empty-note">
+          {isOwner
+            ? "No custom fixed expenses yet. Add things like insurance, POS fees, or pest control — each shows as a line on the P&L."
+            : "No custom fixed expenses on file."}
+        </p>
+      ) : (
+        <div className="fixed-expense-list">
+          {expenses.map((exp) => (
+            <ExpenseRow
+              key={exp.id}
+              expense={exp}
+              isOwner={isOwner}
+              busy={isPending}
+            />
+          ))}
+        </div>
+      )}
+
+      {isOwner &&
+        (adding ? (
+          <div className="fixed-expense-add">
+            <input
+              type="text"
+              className="editorial-input"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="e.g. Liability insurance"
+              disabled={isPending}
+              aria-label="Expense name"
+            />
+            <MoneyInput
+              value={newAmount}
+              onChange={setNewAmount}
+              placeholder="1200"
+              disabled={isPending}
+            />
+            <CadenceSelect
+              value={newFreq}
+              onChange={setNewFreq}
+              disabled={isPending}
+            />
+            <span className="fixed-expense-add__actions">
+              <button
+                type="button"
+                className="toolbar-btn"
+                onClick={resetNew}
+                disabled={isPending}
+              >
+                <X className="h-3.5 w-3.5" aria-hidden />
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="toolbar-btn active"
+                onClick={handleAdd}
+                disabled={isPending || !newLabel.trim() || newAmount.trim() === ""}
+              >
+                {isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Save className="h-3.5 w-3.5" aria-hidden />
+                )}
+                Save
+              </button>
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={() => setAdding(true)}
+            disabled={isPending}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Add expense
+          </button>
+        ))}
+    </>
+  )
+}
+
+/** A single editable fixed-expense row. Owns its draft state; Save appears once
+ *  the draft diverges from the saved values. */
+function ExpenseRow({
+  expense,
+  isOwner,
+  busy,
+}: {
+  expense: StoreFixedExpenseItem
+  isOwner: boolean
+  busy: boolean
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [label, setLabel] = useState(expense.label)
+  const [amount, setAmount] = useState(String(expense.amount))
+  const [frequency, setFrequency] = useState<ExpenseCadence>(expense.frequency)
+
+  const disabled = busy || isPending
+  const dirty =
+    label.trim() !== expense.label ||
+    Number(amount) !== expense.amount ||
+    frequency !== expense.frequency
+
+  if (!isOwner) {
+    return (
+      <div className="config-ledger__row">
+        <dt className="config-ledger__label">{expense.label}</dt>
+        <dd className="config-ledger__value">
+          {fmtMoney(expense.amount)}
+          <span className="config-ledger__hint">{cadencePer(expense.frequency)}</span>
+        </dd>
+      </div>
+    )
+  }
+
+  const handleSave = () => {
+    const amt = Number(amount)
+    if (!label.trim()) {
+      toast.error("Expense name is required")
+      return
+    }
+    if (!Number.isFinite(amt) || amt < 0) {
+      toast.error("Enter a valid amount")
+      return
+    }
+    startTransition(async () => {
+      const res = await updateStoreFixedExpense({
+        id: expense.id,
+        label: label.trim(),
+        amount: amt,
+        frequency,
+      })
+      if ("error" in res) {
+        toast.error("Could not save", { description: res.error })
+        return
+      }
+      toast.success("Expense updated")
+      router.refresh()
+    })
+  }
+
+  const handleDelete = () => {
+    startTransition(async () => {
+      const res = await deleteStoreFixedExpense({ id: expense.id })
+      if ("error" in res) {
+        toast.error("Could not remove", { description: res.error })
+        return
+      }
+      toast.success(`${expense.label} removed`)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="fixed-expense-row">
+      <input
+        type="text"
+        className="editorial-input"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        disabled={disabled}
+        aria-label="Expense name"
+      />
+      <MoneyInput value={amount} onChange={setAmount} disabled={disabled} />
+      <CadenceSelect value={frequency} onChange={setFrequency} disabled={disabled} />
+      <span className="fixed-expense-row__actions">
+        {dirty && (
+          <button
+            type="button"
+            className="toolbar-btn active"
+            onClick={handleSave}
+            disabled={disabled}
+            aria-label="Save expense"
+          >
+            {isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Save className="h-3.5 w-3.5" aria-hidden />
+            )}
+          </button>
+        )}
+        <button
+          type="button"
+          className="toolbar-btn toolbar-btn--danger"
+          onClick={handleDelete}
+          disabled={disabled}
+          aria-label={`Remove ${expense.label}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </span>
+    </div>
   )
 }

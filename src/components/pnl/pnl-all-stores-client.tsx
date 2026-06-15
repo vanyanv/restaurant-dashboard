@@ -20,6 +20,7 @@ import {
   CLEANING_CODE,
   TOWELS_CODE,
   AFTER_LABOR_RENT_CODE,
+  CUSTOM_FIXED_CODE_PREFIX,
 } from "@/lib/pnl"
 
 export interface PnLAllStoresClientProps {
@@ -104,6 +105,11 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
                 const rent = sumRow(RENT_CODE)
                 const cleaning = sumRow(CLEANING_CODE)
                 const towels = sumRow(TOWELS_CODE)
+                // Owner-managed custom fixed expenses (code FX_*) — stored
+                // negative, same sign convention as rent/cleaning/towels.
+                const customFixed = data.consolidatedRows
+                  .filter((r) => r.code.startsWith(CUSTOM_FIXED_CODE_PREFIX))
+                  .reduce((a, r) => a + r.values.reduce((x, y) => x + (y ?? 0), 0), 0)
                 const bottom = sumRow(AFTER_LABOR_RENT_CODE)
 
                 const steps: WaterfallStep[] = [
@@ -111,7 +117,11 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
                   { kind: "subtract", label: "3P Commissions", value: commissions },
                   { kind: "subtract", label: "COGS", value: cogs },
                   { kind: "subtract", label: "Labor", value: labor },
-                  { kind: "subtract", label: "Rent + Fixed", value: rent + cleaning + towels },
+                  {
+                    kind: "subtract",
+                    label: "Rent + Fixed",
+                    value: rent + cleaning + towels + customFixed,
+                  },
                   { kind: "total", label: "Bottom Line", value: bottom },
                 ]
                 return <PnLWaterfall steps={steps} />

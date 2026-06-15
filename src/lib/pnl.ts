@@ -177,6 +177,30 @@ export function weeklyFromMonthly(monthly: number): number {
   return (monthly * MONTHS_PER_YEAR) / WEEKS_PER_YEAR
 }
 
+export type ExpenseFrequency = "WEEKLY" | "MONTHLY" | "YEARLY"
+
+/**
+ * Normalize an owner-entered fixed-expense amount in its chosen cadence to a
+ * monthly figure, so it can be prorated per P&L period via monthlyCostForDays.
+ */
+export function monthlyFromFrequency(
+  amount: number,
+  frequency: ExpenseFrequency
+): number {
+  switch (frequency) {
+    case "WEEKLY":
+      return monthlyFromWeekly(amount)
+    case "YEARLY":
+      return amount / MONTHS_PER_YEAR
+    case "MONTHLY":
+    default:
+      return amount
+  }
+}
+
+/** Row-code prefix for owner-managed custom fixed expenses (one row per expense). */
+export const CUSTOM_FIXED_CODE_PREFIX = "FX_"
+
 // ─── Sum helpers for Otter rows ───
 
 export type OtterSummaryRow = {
@@ -308,7 +332,19 @@ export interface ComputedPnL {
   rentValues: number[] // positive magnitude
   towelsValues: number[] // positive magnitude
   cleaningValues: number[] // positive magnitude
+  /** Per custom fixed expense, the per-period positive magnitude (one inner
+   *  array per entry in `customFixedExpenses`, in the same order). */
+  customFixedValues: number[][]
   bottomLine: number[]
+}
+
+/** One owner-managed custom fixed expense, already normalized to a monthly figure. */
+export interface CustomFixedExpense {
+  /** Unique row code, e.g. `FX_<id>`. Used as the PnLRow.code. */
+  code: string
+  label: string
+  /** Monthly figure (caller normalizes cadence via monthlyFromFrequency). */
+  monthlyAmount: number
 }
 
 /** Per-period Harri labor actuals. Pass to computeStorePnL to override the
@@ -336,8 +372,12 @@ export function computeStorePnL(input: {
    *  period), the labor row uses real Harri data with coverage-aware fallback
    *  to fixedMonthlyLabor for uncovered days. */
   harriLaborByPeriod?: HarriLaborByPeriod[]
+  /** Optional owner-managed custom fixed expenses. Each becomes one prorated
+   *  `isFixed` row (code `FX_<id>`) after Towels, and reduces the bottom line. */
+  customFixedExpenses?: CustomFixedExpense[]
 }): ComputedPnL {
   const { bucketed, periods, store, cogsValues, harriLaborByPeriod } = input
+  const customFixedExpenses = input.customFixedExpenses ?? []
 
   const perPeriodSalesValues = bucketed.map((rows) => salesRowValues(rows))
   const totalSales = perPeriodSalesValues.map((vals) => vals.reduce((a, b) => a + b, 0))
@@ -497,9 +537,34 @@ export function computeStorePnL(input: {
     isUnknown: towelsUnknown,
   })
 
+  // ─── Custom owner-managed fixed expenses ───
+  // One prorated row per expense (positive magnitude captured for KPI rollups).
+  const customFixedValues = customFixedExpenses.map((exp) =>
+    periods.map((p) => monthlyCostForDays(exp.monthlyAmount, p.days) ?? 0)
+  )
+  customFixedExpenses.forEach((exp, ei) => {
+    const vals = customFixedValues[ei]
+    rows.push({
+      code: exp.code,
+      label: exp.label,
+      values: vals.map((v) => -v),
+      percents: vals.map((v, i) => (totalSales[i] === 0 ? 0 : -v / totalSales[i])),
+      isFixed: true,
+    })
+  })
+  const customFixedByPeriod = periods.map((_, i) =>
+    customFixedValues.reduce((acc, arr) => acc + arr[i], 0)
+  )
+
   const bottomLine = netAfterCommissions.map(
     (n, i) =>
-      n - cogs[i] - laborValues[i] - rentValues[i] - cleaningValues[i] - towelsValues[i]
+      n -
+      cogs[i] -
+      laborValues[i] -
+      rentValues[i] -
+      cleaningValues[i] -
+      towelsValues[i] -
+      customFixedByPeriod[i]
   )
   rows.push({
     code: AFTER_LABOR_RENT_CODE,
@@ -522,8 +587,76 @@ export function computeStorePnL(input: {
     rentValues,
     towelsValues,
     cleaningValues,
+    customFixedValues,
     bottomLine,
   }
+}
+
+/**
+ * Merge per-store PnL row arrays into one consolidated set, keyed by row `code`.
+ *
+ * Unlike a positional merge, this is robust to stores that emit different rows
+ * (e.g. different custom fixed expenses): each unique code appears once, summed
+ * across only the stores that have it. Row order follows first appearance while
+ * scanning stores in order, which preserves the canonical layout (GL → … →
+ * fixed costs → custom expenses → AFTER_FIXED) since every store shares it.
+ */
+export function consolidateRows(
+  perStoreRows: PnLRow[][],
+  periods: Period[]
+): PnLRow[] {
+  // Combined Total Sales per period — denominator for consolidated percents.
+  const combinedGrossPerPeriod = periods.map((_, pi) =>
+    perStoreRows.reduce(
+      (acc, rows) =>
+        acc + (rows.find((r) => r.code === TOTAL_SALES_CODE)?.values[pi] ?? 0),
+      0
+    )
+  )
+
+  // First-seen ordered list of row templates, keyed by code.
+  const order: string[] = []
+  const template = new Map<string, PnLRow>()
+  for (const rows of perStoreRows) {
+    for (const r of rows) {
+      if (!template.has(r.code)) {
+        template.set(r.code, r)
+        order.push(r.code)
+      }
+    }
+  }
+
+  return order.map((code) => {
+    const meta = template.get(code)!
+    const contributing = perStoreRows.filter((rows) =>
+      rows.some((r) => r.code === code)
+    )
+    const values = periods.map((_, pi) =>
+      perStoreRows.reduce(
+        (acc, rows) => acc + (rows.find((r) => r.code === code)?.values[pi] ?? 0),
+        0
+      )
+    )
+    // Unknown only when every store that has this row flags it unknown.
+    const combinedUnknown = periods.map((_, pi) =>
+      contributing.length > 0 &&
+      contributing.every(
+        (rows) => rows.find((r) => r.code === code)?.isUnknown?.[pi] === true
+      )
+    )
+    const anyUnknown = combinedUnknown.some(Boolean)
+    return {
+      code,
+      label: meta.label,
+      values,
+      percents: values.map((v, i) =>
+        combinedGrossPerPeriod[i] === 0 ? 0 : v / combinedGrossPerPeriod[i]
+      ),
+      isSubtotal: meta.isSubtotal,
+      isFixed: meta.isFixed,
+      isUnknown: anyUnknown ? combinedUnknown : undefined,
+    }
+  })
 }
 
 /** Bucket OtterDailySummary rows by period index given already-computed periods. */
