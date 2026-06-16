@@ -533,15 +533,46 @@ export async function getAllStoresPnL(input: {
       expensesByStore.set(e.storeId, arr)
     }
 
+    // Harri labor actuals (LiveWire), batched across stores. Mirrors the
+    // per-store fetch in getStorePnL so the all-stores roll-up reflects actual
+    // labor instead of falling back to the (often unset) fixed-monthly estimate.
+    const allHarriLabor = await prisma.harriDailyLabor.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: overallStart, lte: overallEnd },
+        actualCost: { not: null },
+      },
+      select: { storeId: true, date: true, actualCost: true },
+    })
+    const harriByStore = new Map<string, typeof allHarriLabor>()
+    for (const r of allHarriLabor) {
+      const arr = harriByStore.get(r.storeId) ?? []
+      arr.push(r)
+      harriByStore.set(r.storeId, arr)
+    }
+
     const perStore = stores.map((store) => {
       const storeSummaries = byStore.get(store.id) ?? []
       const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
       const storeCogs = summarizeDailyCogs(cogsByStore.get(store.id) ?? [], periods)
+      const storeHarri = harriByStore.get(store.id) ?? []
+      const harriLaborByPeriod = periods.map((p) => {
+        let actualUsd = 0
+        let coveredDays = 0
+        for (const r of storeHarri) {
+          if (r.date >= p.startDate && r.date <= p.endDate && r.actualCost != null) {
+            actualUsd += r.actualCost
+            coveredDays += 1
+          }
+        }
+        return { actualUsd, coveredDays }
+      })
       const computed = computeStorePnL({
         bucketed,
         periods,
         store,
         cogsValues: storeCogs.cogsValues,
+        harriLaborByPeriod,
         customFixedExpenses: toCustomFixedExpenses(expensesByStore.get(store.id) ?? []),
       })
 
