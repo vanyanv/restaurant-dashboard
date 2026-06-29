@@ -3,9 +3,12 @@
 // `@/lib/invoice-line-shape` so it can be unit-tested without Prisma.
 
 import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/logger"
 import {
+  COST_CANDIDATE_WINDOW,
   deriveCostFromLineItem,
   getLineItemBaseQty,
+  selectNonSpikeCostIndex,
   type IngredientConversion,
   type LineItemForCost,
 } from "@/lib/invoice-line-shape"
@@ -47,11 +50,13 @@ export async function recomputeCanonicalCost(
   if (canonical.costLocked) return { status: "unchanged", reason: "locked" }
   if (!canonical.recipeUnit) return { status: "unchanged", reason: "no-recipe-unit" }
 
-  // Most recent matched line item for this canonical. Returns (negative qty)
-  // are eligible — they still establish a unit price for the ingredient.
-  const line = await prisma.invoiceLineItem.findFirst({
+  // A window of recent matched lines (newest first), not just the latest, so
+  // the spike guard has price history. Returns (negative qty) are eligible —
+  // they still establish a unit price for the ingredient.
+  const lines = await prisma.invoiceLineItem.findMany({
     where: { canonicalIngredientId: canonicalId, quantity: { not: 0 } },
     orderBy: { invoice: { invoiceDate: "desc" } },
+    take: COST_CANDIDATE_WINDOW,
     select: {
       id: true,
       quantity: true,
@@ -64,26 +69,40 @@ export async function recomputeCanonicalCost(
       invoice: { select: { vendorName: true } },
     },
   })
-  if (!line) return { status: "unchanged", reason: "no-match" }
+  if (lines.length === 0) return { status: "unchanged", reason: "no-match" }
 
   // Per-ingredient conversion stored on the SKU match (future use for weird units).
   const vendorMatch = await prisma.ingredientSkuMatch.findFirst({
     where: { canonicalIngredientId: canonicalId },
     select: { conversionFactor: true, fromUnit: true, toUnit: true },
   })
+  const conv = vendorMatch
+    ? {
+        conversionFactor: vendorMatch.conversionFactor,
+        fromUnit: vendorMatch.fromUnit,
+        toUnit: vendorMatch.toUnit,
+      }
+    : undefined
 
-  const derived = deriveCostFromLineItem(
-    line,
-    canonical.recipeUnit,
-    vendorMatch
-      ? {
-          conversionFactor: vendorMatch.conversionFactor,
-          fromUnit: vendorMatch.fromUnit,
-          toUnit: vendorMatch.toUnit,
-        }
-      : undefined
+  const resolved = lines
+    .map((line) => ({
+      line,
+      cost: deriveCostFromLineItem(line, canonical.recipeUnit!, conv),
+    }))
+    .filter((r): r is { line: (typeof lines)[number]; cost: number } => r.cost != null)
+  if (resolved.length === 0) return { status: "unchanged", reason: "no-derive" }
+
+  const { index, rejectedSpike } = selectNonSpikeCostIndex(
+    resolved.map((r) => r.cost)
   )
-  if (derived == null) return { status: "unchanged", reason: "no-derive" }
+  const derived = resolved[index].cost
+  if (rejectedSpike) {
+    logger.warn(
+      `[cost-guard] canonical ${canonicalId}: rejected spiked invoice cost ` +
+        `$${resolved[0].cost.toFixed(2)} (line ${resolved[0].line.id}); ` +
+        `storing $${derived.toFixed(2)} from an earlier in-tolerance line instead`
+    )
+  }
 
   const before = canonical.costPerRecipeUnit
   // Avoid a spurious update when the value rounds to the same dollars.

@@ -24,6 +24,66 @@
 
 import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
 
+/**
+ * How many times above its recent price history a freshly-derived invoice cost
+ * may sit before we treat it as a parse error rather than a real price move.
+ * Real food prices rarely jump more than ~2–3x; the pack-metadata mis-parses
+ * that have repeatedly poisoned COGS land at 10x–200x. 8x leaves a wide margin.
+ */
+export const COST_SPIKE_THRESHOLD = 8
+
+/** How many recent invoice lines to weigh when guarding against price spikes. */
+export const COST_CANDIDATE_WINDOW = 8
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0
+  const sorted = [...xs].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid]
+}
+
+/**
+ * Pick which of several invoice-derived costs to trust, newest-first.
+ *
+ * Each line is judged against the median of its *older* history (the entries
+ * after it). A line whose cost exceeds `threshold ×` that baseline is an
+ * implausible spike — almost always a mis-parsed pack size, not a real price
+ * change — so we skip it and fall back to the newest line that is in tolerance.
+ *
+ * The oldest line (no older history) is always accepted as the baseline of
+ * last resort. Non-finite / non-positive costs are ignored when forming a
+ * baseline so a single garbage value can't mask a real spike.
+ *
+ * @returns the chosen index and whether at least one newer line was rejected.
+ */
+export function selectNonSpikeCostIndex(
+  costsNewestFirst: number[],
+  threshold: number = COST_SPIKE_THRESHOLD
+): { index: number; rejectedSpike: boolean } {
+  let rejectedSpike = false
+  for (let i = 0; i < costsNewestFirst.length; i++) {
+    // A candidate that is itself non-finite / non-positive is bad data, not a
+    // usable price — skip it (without flagging a spike) and keep looking.
+    if (!isFinite(costsNewestFirst[i]) || costsNewestFirst[i] <= 0) continue
+    const older = costsNewestFirst
+      .slice(i + 1)
+      .filter((c) => isFinite(c) && c > 0)
+    if (older.length === 0) {
+      // No older history to compare against — accept as the baseline of last resort.
+      return { index: i, rejectedSpike }
+    }
+    const baseline = median(older)
+    if (baseline > 0 && costsNewestFirst[i] > threshold * baseline) {
+      rejectedSpike = true
+      continue
+    }
+    return { index: i, rejectedSpike }
+  }
+  return { index: 0, rejectedSpike }
+}
+
 export type LineItemForCost = {
   quantity: number
   unit: string | null

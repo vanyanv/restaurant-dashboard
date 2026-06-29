@@ -228,6 +228,12 @@ async function walk(
         continue
       }
 
+      // The cost guard rejected an implausible price spike on the newest
+      // invoice line and fell back to an older one. The cost we used is the
+      // trusted fallback, but flag the recipe so the bad source line surfaces
+      // in the COGS data-quality panel for review.
+      if (cost.costGuardTriggered) partial = true
+
       total += lineCost
       lines.push({
         kind: "ingredient",

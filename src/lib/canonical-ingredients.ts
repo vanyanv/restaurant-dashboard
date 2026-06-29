@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
+import {
+  COST_CANDIDATE_WINDOW,
+  selectNonSpikeCostIndex,
+} from "@/lib/invoice-line-shape"
 import { canonicalizeUnit } from "@/lib/unit-conversion"
+import { logger } from "@/lib/logger"
 
 /**
  * Normalize an invoice-line unit into the canonical token we want stored on
@@ -231,6 +236,13 @@ export type CanonicalIngredientCost = {
   sourceVendor: string | null
   sourceSku: string | null
   sourceProductName: string | null
+  /**
+   * True when the most-recent invoice line derived an implausible price spike
+   * (a likely pack-metadata mis-parse) and we fell back to an older in-tolerance
+   * line. The returned cost is the trusted fallback; this flag asks callers to
+   * surface the bad line for review. See `selectNonSpikeCostIndex`.
+   */
+  costGuardTriggered?: boolean
 }
 
 function shouldSkipRawInvoiceUnitFallback(
@@ -252,6 +264,45 @@ function shouldSkipRawInvoiceUnitFallback(
     hasPackShape &&
     !line.unitSizeUom
   )
+}
+
+type InvoiceLineForCost = {
+  quantity: number
+  unit: string | null
+  packSize: number | null
+  unitSize: number | null
+  unitSizeUom: string | null
+  unitPrice: number
+  extendedPrice: number
+}
+
+/**
+ * Resolve a single invoice line to `{ unitCost, unit }` in the canonical's
+ * recipe unit. Mirrors the original two-path logic: pack-shape derivation
+ * first, then the legacy raw `extendedPrice / quantity` fallback. Returns null
+ * when the line can't yield a usable positive cost (so callers can skip it).
+ */
+function resolveLineUnitCost(
+  line: InvoiceLineForCost,
+  recipeUnit: string | null | undefined,
+  vendorMatch:
+    | { conversionFactor: number; fromUnit: string; toUnit: string }
+    | null
+): { unitCost: number; unit: string } | null {
+  if (recipeUnit) {
+    const derived = deriveCostFromLineItem(
+      line,
+      recipeUnit,
+      vendorMatch ?? undefined
+    )
+    if (derived != null) return { unitCost: derived, unit: recipeUnit }
+    if (shouldSkipRawInvoiceUnitFallback(line, recipeUnit)) return null
+  }
+  // Legacy raw-invoice-unit path (no recipeUnit, or derivation failed).
+  if (!isFinite(line.quantity) || line.quantity === 0) return null
+  const raw = line.extendedPrice / line.quantity
+  if (!isFinite(raw) || raw <= 0) return null
+  return { unitCost: raw, unit: line.unit ?? "unit" }
 }
 
 /**
@@ -345,100 +396,98 @@ export async function getCanonicalIngredientCost(
     return w
   }
 
-  let direct = storeId
-    ? await prisma.invoiceLineItem.findFirst({
+  const lineSelect = {
+    id: true,
+    invoiceId: true,
+    sku: true,
+    productName: true,
+    quantity: true,
+    unit: true,
+    packSize: true,
+    unitSize: true,
+    unitSizeUom: true,
+    unitPrice: true,
+    extendedPrice: true,
+    invoice: { select: { invoiceDate: true, vendorName: true } },
+  } as const
+
+  // Pull a short window of recent lines (newest first) rather than just the
+  // single latest, so the spike guard has price history to judge against.
+  let recentLines = storeId
+    ? await prisma.invoiceLineItem.findMany({
         where: {
           canonicalIngredientId,
           invoice: buildInvoiceWhere(storeId),
           quantity: { not: 0 },
         },
         orderBy: { invoice: { invoiceDate: "desc" } },
-        select: {
-          id: true,
-          invoiceId: true,
-          sku: true,
-          productName: true,
-          quantity: true,
-          unit: true,
-          packSize: true,
-          unitSize: true,
-          unitSizeUom: true,
-          unitPrice: true,
-          extendedPrice: true,
-          invoice: { select: { invoiceDate: true, vendorName: true } },
-        },
+        take: COST_CANDIDATE_WINDOW,
+        select: lineSelect,
       })
-    : null
+    : []
 
-  if (!direct) {
-    direct = await prisma.invoiceLineItem.findFirst({
+  if (recentLines.length === 0) {
+    recentLines = await prisma.invoiceLineItem.findMany({
       where: {
         canonicalIngredientId,
         invoice: asOf ? { invoiceDate: { lte: asOf } } : undefined,
         quantity: { not: 0 },
       },
       orderBy: { invoice: { invoiceDate: "desc" } },
-      select: {
-        id: true,
-        invoiceId: true,
-        sku: true,
-        productName: true,
-        quantity: true,
-        unit: true,
-        packSize: true,
-        unitSize: true,
-        unitSizeUom: true,
-        unitPrice: true,
-        extendedPrice: true,
-        invoice: { select: { invoiceDate: true, vendorName: true } },
-      },
+      take: COST_CANDIDATE_WINDOW,
+      select: lineSelect,
     })
   }
 
-  if (direct && direct.invoice.invoiceDate) {
-    // Prefer the hydration path: derive $/recipeUnit using packSize/unitSize,
-    // matching how `recomputeCanonicalCost` computes the non-asOf value.
-    if (canonical?.recipeUnit) {
-      const vendorMatch = await prisma.ingredientSkuMatch.findFirst({
-        where: { canonicalIngredientId },
-        select: { conversionFactor: true, fromUnit: true, toUnit: true },
-      })
-      const derived = deriveCostFromLineItem(
-        direct,
-        canonical.recipeUnit,
-        vendorMatch
-          ? { conversionFactor: vendorMatch.conversionFactor, fromUnit: vendorMatch.fromUnit, toUnit: vendorMatch.toUnit }
-          : undefined
+  // Need a date for ordering / asOf provenance.
+  const dated = recentLines.filter((c) => c.invoice.invoiceDate)
+
+  if (dated.length > 0) {
+    const vendorMatch = canonical?.recipeUnit
+      ? await prisma.ingredientSkuMatch.findFirst({
+          where: { canonicalIngredientId },
+          select: { conversionFactor: true, fromUnit: true, toUnit: true },
+        })
+      : null
+
+    const resolved = dated
+      .map((line) => ({
+        line,
+        cost: resolveLineUnitCost(line, canonical?.recipeUnit, vendorMatch),
+      }))
+      .filter(
+        (r): r is { line: (typeof dated)[number]; cost: { unitCost: number; unit: string } } =>
+          r.cost !== null
       )
-      if (derived != null) {
-        return {
-          unitCost: derived,
-          unit: canonical.recipeUnit,
-          source: "invoice",
-          asOfDate: direct.invoice.invoiceDate,
-          sourceInvoiceId: direct.invoiceId,
-          sourceLineItemId: direct.id,
-          sourceVendor: direct.invoice.vendorName,
-          sourceSku: direct.sku,
-          sourceProductName: direct.productName,
-        }
+
+    if (resolved.length > 0) {
+      const { index, rejectedSpike } = selectNonSpikeCostIndex(
+        resolved.map((r) => r.cost.unitCost)
+      )
+      const chosen = resolved[index]
+
+      if (rejectedSpike) {
+        const newest = resolved[0]
+        logger.warn(
+          `[cost-guard] canonical ${canonicalIngredientId}: rejected spiked invoice cost ` +
+            `$${newest.cost.unitCost.toFixed(2)}/${newest.cost.unit} (line ${newest.line.id}, ` +
+            `invoice ${newest.line.invoiceId}); using $${chosen.cost.unitCost.toFixed(2)}/${chosen.cost.unit} ` +
+            `from ${chosen.line.invoice.invoiceDate?.toISOString().slice(0, 10)} instead`
+        )
       }
 
-      if (shouldSkipRawInvoiceUnitFallback(direct, canonical.recipeUnit)) {
-        return null
+      return {
+        unitCost: chosen.cost.unitCost,
+        unit: chosen.cost.unit,
+        source: "invoice",
+        asOfDate: chosen.line.invoice.invoiceDate!,
+        sourceInvoiceId: chosen.line.invoiceId,
+        sourceLineItemId: chosen.line.id,
+        sourceVendor: chosen.line.invoice.vendorName,
+        sourceSku: chosen.line.sku,
+        sourceProductName: chosen.line.productName,
+        costGuardTriggered: rejectedSpike,
       }
-    }
-    // Fallback: legacy raw-invoice-unit path (no recipeUnit or derivation failed).
-    return {
-      unitCost: direct.extendedPrice / direct.quantity,
-      unit: direct.unit ?? "unit",
-      source: "invoice",
-      asOfDate: direct.invoice.invoiceDate,
-      sourceInvoiceId: direct.invoiceId,
-      sourceLineItemId: direct.id,
-      sourceVendor: direct.invoice.vendorName,
-      sourceSku: direct.sku,
-      sourceProductName: direct.productName,
     }
   }
 
