@@ -1,10 +1,10 @@
 name: Data Retention (daily)
 on:
-  schedule:
+  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
     # 08:30 UTC = 04:30 America/New_York — quiet time, after the COGS refresh
     # (07:00 UTC) so cleanup never races a fresh write. Trims unbounded audit
     # and forecast tables (JobRun/ErrorEvent 90d, AiForecastRun 365d).
-    - cron: '30 8 * * *'
+    # - cron: '30 8 * * *'
   workflow_dispatch:
 
 concurrency:
