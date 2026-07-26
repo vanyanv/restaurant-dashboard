@@ -12,12 +12,15 @@ export function isoMondayUTC(d: Date): Date {
   return out
 }
 
-export function parseWeekParam(s: string | undefined): Date {
+export function parseWeekParam(
+  s: string | undefined,
+  now: Date = new Date()
+): Date {
   if (s) {
     const d = new Date(`${s}T00:00:00.000Z`)
     if (!Number.isNaN(d.getTime())) return isoMondayUTC(d)
   }
-  return isoMondayUTC(new Date())
+  return isoMondayUTC(now)
 }
 
 export function addDaysUTC(d: Date, n: number): Date {
@@ -49,7 +52,7 @@ export function buildLaborWeekWindow(
   weekParam: string | undefined,
   now: Date = new Date()
 ): LaborWeekWindow {
-  const weekStart = parseWeekParam(weekParam)
+  const weekStart = parseWeekParam(weekParam, now)
   const weekEnd = addDaysUTC(weekStart, 6)
   const priorWeekStart = addDaysUTC(weekStart, -7)
   const priorWeekEnd = addDaysUTC(weekStart, -1)
