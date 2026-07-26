@@ -1,9 +1,9 @@
 name: DB Snapshot
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Daily at 03:40 UTC — captures pg_database_size + top tables so storage
     # growth and cost projections have real history.
-    # - cron: '40 3 * * *'
+    - cron: '40 3 * * *'
   workflow_dispatch:
 
 concurrency:

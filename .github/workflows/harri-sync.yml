@@ -1,10 +1,10 @@
 name: Harri Labor Sync
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Every 4 hours, 15 min past the Otter trio (which all run at :00 of */4).
     # Re-syncs the trailing 3 days for every active HarriBrand — covers
     # retroactive punch edits without re-pulling weeks of data each tick.
-    # - cron: '15 */4 * * *'
+    - cron: '15 */4 * * *'
   workflow_dispatch:
 
 concurrency:

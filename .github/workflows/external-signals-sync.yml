@@ -16,8 +16,8 @@ name: External Signals Sync (weather + events)
 # workflow_dispatch with a wide start-date.
 
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
-    # - cron: '30 5 * * *'
+  schedule:
+    - cron: '30 5 * * *'
   workflow_dispatch:
     inputs:
       provider:

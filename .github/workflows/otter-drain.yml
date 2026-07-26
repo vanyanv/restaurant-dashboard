@@ -1,9 +1,9 @@
 name: Otter Order-Details Drain (weekly, per-store)
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Weekly off-hours at 09:15 UTC on Monday. The historical backlog is now
     # small; manual workflow_dispatch remains available for new-store backfills.
-    # - cron: '15 9 * * 1'
+    - cron: '15 9 * * 1'
   workflow_dispatch:
     inputs:
       limit:

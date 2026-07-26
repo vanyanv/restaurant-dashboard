@@ -1,12 +1,12 @@
 name: Harri JWT Heartbeat
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Daily 08:00 UTC. Runs after the monthly employee cron (07:00) on the
     # 1st so they don't compete. The 4-hour labor sync runs at :15; this
     # heartbeat at :00 of an off-hour avoids overlap. Failure opens a
     # `cron-failure` GH issue so we get warned hours-to-days before the
     # next labor cron would actually break.
-    # - cron: '0 8 * * *'
+    - cron: '0 8 * * *'
   workflow_dispatch:
 
 permissions:
