@@ -30,10 +30,35 @@ function mobilePathFor(desktopPath: string): string | null {
   return null
 }
 
+const shutdownAt = process.env.SERVICE_SHUTDOWN_AT
+
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token
     const path = req.nextUrl.pathname
+
+    if (shutdownAt && token?.role !== "OWNER") {
+      if (
+        path === "/shutdown" ||
+        path === "/login" ||
+        path.startsWith("/api/auth/")
+      ) {
+        return NextResponse.next()
+      }
+      if (path.startsWith("/api/")) {
+        return NextResponse.json(
+          { error: "Service shut down", since: shutdownAt },
+          { status: 503 }
+        )
+      }
+      return NextResponse.rewrite(new URL("/shutdown", req.url))
+    }
+
+    // API routes were never subject to the auth/mobile logic below; the
+    // matcher includes them only so the shutdown gate can cover them.
+    if (path.startsWith("/api/")) {
+      return NextResponse.next()
+    }
 
     if (
       path === "/" ||
@@ -72,6 +97,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/).*)",
   ],
 }
