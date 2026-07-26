@@ -1,9 +1,9 @@
 name: Otter Orders Sync
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Every 4 hours on the hour. Preserves useful same-day order KPIs while
     # cutting repeated 3-day window updates versus the old hourly cadence.
-    # - cron: '0 */4 * * *'
+    - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
       days:

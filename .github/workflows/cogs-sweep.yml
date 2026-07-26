@@ -1,10 +1,10 @@
 name: COGS Sweep (4-hour, 3 days)
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Every 4 hours at :30 — staggered so the :00 Otter orders sync has
     # settled before we recompute COGS off it. Window is the last 3 days;
     # daily 30-day refresh still catches slower corrections overnight.
-    # - cron: '30 */4 * * *'
+    - cron: '30 */4 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:

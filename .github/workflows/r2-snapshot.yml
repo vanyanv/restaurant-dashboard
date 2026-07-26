@@ -1,8 +1,8 @@
 name: R2 Bucket Snapshot
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Daily at 04:00 UTC — feeds the monitoring "R2 bucket" panel.
-    # - cron: '0 4 * * *'
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 concurrency:

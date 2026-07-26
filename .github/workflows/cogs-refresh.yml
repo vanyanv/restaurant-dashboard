@@ -1,11 +1,11 @@
 name: COGS Refresh (daily, 30 days)
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # 07:00 UTC = 03:00 America/New_York — quiet time, after the morning Otter
     # sync window. Catches retroactive invoice corrections within the normal
     # reporting horizon. For full-year rebuilds use the manual "Recompute COGS"
     # button on the dashboard or `pnpm tsx scripts/backfill-daily-cogs.ts`.
-    # - cron: '0 7 * * *'
+    - cron: '0 7 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:

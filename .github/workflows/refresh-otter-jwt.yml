@@ -1,7 +1,7 @@
 name: Refresh Otter JWT
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
-    # - cron: '0 0 * * *' # daily at midnight UTC; Otter tokens can age out before a 2-day cadence catches them
+  schedule:
+    - cron: '0 0 * * *' # daily at midnight UTC; Otter tokens can age out before a 2-day cadence catches them
   workflow_dispatch:
 
 permissions:

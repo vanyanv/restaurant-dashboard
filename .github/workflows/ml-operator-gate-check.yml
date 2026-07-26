@@ -4,8 +4,8 @@ name: ML Operator Gate Check
 # Seven consecutive successful runs unblock Phase 1 Weeks 5-8 scoping.
 
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
-    # - cron: '0 14 * * *'
+  schedule:
+    - cron: '0 14 * * *'
   workflow_dispatch:
 
 concurrency:

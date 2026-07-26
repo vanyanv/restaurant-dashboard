@@ -8,8 +8,8 @@ name: ML Nightly (revenue forecast)
 # workflow which lands the previous day's revenue around 01:00 ET.
 
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
-    # - cron: '0 6 * * *'
+  schedule:
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:

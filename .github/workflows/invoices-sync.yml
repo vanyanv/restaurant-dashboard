@@ -1,10 +1,10 @@
 name: Invoices Sync
 on:
-  # schedule:  # DISABLED — scheduled runs paused to stop Actions/storage spend. Re-enable to resume.
+  schedule:
     # Every 6h, offset by 30 min from the others. Vendors deliver invoices on
     # daily-to-weekly cadences so polling faster gives no benefit. Concurrency
     # lock prevents pile-up if a run drags.
-    # - cron: '30 */6 * * *'
+    - cron: '30 */6 * * *'
   workflow_dispatch:
 
 concurrency:
