@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ChevronDown } from "lucide-react"
-import { StarRatingCompact } from "@/components/ui/star-rating"
 import { StoreDossier, type StoreDossierData } from "./store-dossier"
 
 interface StoresDirectoryProps {
@@ -154,15 +153,6 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
                   </span>
                 </span>
                 <span className="store-row__trail">
-                  {(store.yelpRating || store.yelpReviewCount) && (
-                    <span className="store-row__rating">
-                      <StarRatingCompact
-                        rating={store.yelpRating}
-                        reviewCount={store.yelpReviewCount}
-                        url={store.yelpUrl}
-                      />
-                    </span>
-                  )}
                   <span
                     className="inv-stamp"
                     data-status={store.isActive ? "MATCHED" : "REJECTED"}

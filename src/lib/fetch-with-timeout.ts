@@ -1,5 +1,5 @@
 /**
- * fetch with an AbortController-based timeout. A hung upstream (Yelp, Microsoft
+ * fetch with an AbortController-based timeout. A hung upstream (Microsoft
  * Graph, Harri auth, …) otherwise blocks the calling cron indefinitely. Lifted
  * from the inline pattern in src/lib/otter.ts so every integration shares it.
  *

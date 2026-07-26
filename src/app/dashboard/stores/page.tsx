@@ -6,7 +6,6 @@ import { getStores } from "@/app/actions/store-actions"
 import { prisma } from "@/lib/prisma"
 import { Plus, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { YelpSyncAllButton } from "@/components/yelp-sync-button"
 import { EditorialTopbar } from "../components/editorial-topbar"
 import { StoresDirectory } from "./stores-directory"
 import type { StoreDossierData } from "./store-dossier"
@@ -64,11 +63,6 @@ export default async function StoresPage() {
     doordashCommissionRate: s.doordashCommissionRate,
     targetCogsPct: s.targetCogsPct,
     fixedExpenses: expensesByStore.get(s.id) ?? [],
-    yelpRating: s.yelpRating,
-    yelpReviewCount: s.yelpReviewCount,
-    yelpUrl: s.yelpUrl,
-    yelpUpdatedAt: s.yelpUpdatedAt,
-    yelpLastSearch: s.yelpLastSearch,
   }))
 
   return (
@@ -82,7 +76,6 @@ export default async function StoresPage() {
           </span>
         }
       >
-        {isOwner && stores.length > 0 && <YelpSyncAllButton />}
         {isOwner && (
           <Button asChild variant="outline" size="sm" className="toolbar-btn h-9">
             <Link href="/dashboard/stores/new">
@@ -110,11 +103,12 @@ export default async function StoresPage() {
                   : "You are not assigned to manage any stores yet."}
               </p>
               {isOwner && (
-                <Link href="/dashboard/stores/new" className="mt-2">
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add your first store
-                  </Button>
+                <Link
+                  href="/dashboard/stores/new"
+                  className="toolbar-btn mt-2 inline-flex items-center gap-1.5"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add your first store
                 </Link>
               )}
             </div>
