@@ -23,9 +23,7 @@ import {
   deleteStoreFixedExpense,
 } from "@/app/actions/store-actions"
 import { setStoreTargetCogsPct } from "@/app/actions/cogs-actions"
-import { monthlyFromWeekly, weeklyFromMonthly } from "@/lib/pnl"
-import { StarRatingLarge } from "@/components/ui/star-rating"
-import { YelpSyncButton } from "@/components/yelp-sync-button"
+import { monthlyFromWeekly, weeklyFromMonthly, monthlyFromFrequency } from "@/lib/pnl"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,11 +60,6 @@ export interface StoreDossierData {
   doordashCommissionRate: number
   targetCogsPct: number | null
   fixedExpenses: StoreFixedExpenseItem[]
-  yelpRating: number | null
-  yelpReviewCount: number | null
-  yelpUrl: string | null
-  yelpUpdatedAt: Date | null
-  yelpLastSearch: Date | null
 }
 
 interface StoreDossierProps {
@@ -106,6 +99,17 @@ const fmtMoney = (n: number | null) =>
         currency: "USD",
         maximumFractionDigits: n % 1 === 0 ? 0 : 2,
       })
+
+/** Always two decimals — used in the fixed-expense ledger so a column of
+ *  amounts reconciles to the cent (the whole-dollar shortcut in fmtMoney
+ *  breaks tabular alignment when $208 and $208.50 share a column). */
+const fmtMoneyCents = (n: number) =>
+  n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 
 const fmtPct = (n: number | null, decimals = 1) =>
   n == null ? null : `${n.toFixed(decimals)}%`
@@ -286,23 +290,6 @@ export function StoreDossier({
             <div className="store-dossier__contact">No address on file</div>
           )}
         </div>
-        <div className="store-dossier__yelp">
-          <StarRatingLarge
-            rating={store.yelpRating}
-            reviewCount={store.yelpReviewCount}
-            url={store.yelpUrl}
-            lastUpdated={store.yelpUpdatedAt}
-          />
-          {isOwner && (
-            <YelpSyncButton
-              storeId={store.id}
-              storeName={store.name}
-              hasAddress={!!store.address}
-              lastSync={store.yelpLastSearch}
-              size="sm"
-            />
-          )}
-        </div>
       </header>
 
       <div className="store-dossier__body">
@@ -420,7 +407,7 @@ export function StoreDossier({
                 {store.isActive ? "Deactivate store" : "Reactivate store"}
               </button>
             </AlertDialogTrigger>
-            <AlertDialogContent>
+            <AlertDialogContent className="editorial-dialog">
               <AlertDialogHeader>
                 <AlertDialogTitle>
                   {store.isActive
@@ -685,11 +672,13 @@ function MoneyInput({
   onChange,
   placeholder,
   disabled,
+  invalid,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   disabled?: boolean
+  invalid?: boolean
 }) {
   return (
     <span className="editorial-field">
@@ -699,11 +688,16 @@ function MoneyInput({
         inputMode="decimal"
         step="0.01"
         min="0"
-        className="editorial-input editorial-input--prefix"
+        className={
+          invalid
+            ? "editorial-input editorial-input--prefix editorial-input--invalid"
+            : "editorial-input editorial-input--prefix"
+        }
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
+        aria-invalid={invalid ? true : undefined}
       />
     </span>
   )
@@ -766,7 +760,7 @@ function CadenceSelect({
       value={value}
       onChange={(e) => onChange(e.target.value as ExpenseCadence)}
       disabled={disabled}
-      aria-label="Billing cadence"
+      aria-label="Expense cadence"
     >
       {CADENCES.map((c) => (
         <option key={c.value} value={c.value}>
@@ -798,24 +792,32 @@ function FixedExpensesEditor({
   const [newLabel, setNewLabel] = useState("")
   const [newAmount, setNewAmount] = useState("")
   const [newFreq, setNewFreq] = useState<ExpenseCadence>("MONTHLY")
+  const [errors, setErrors] = useState<{ label?: string; amount?: string }>({})
+
+  const monthlyTotal = expenses.reduce(
+    (sum, e) => sum + monthlyFromFrequency(e.amount, e.frequency),
+    0
+  )
 
   const resetNew = () => {
     setNewLabel("")
     setNewAmount("")
     setNewFreq("MONTHLY")
+    setErrors({})
     setAdding(false)
   }
 
   const handleAdd = () => {
     const amount = Number(newAmount)
-    if (!newLabel.trim()) {
-      toast.error("Expense name is required")
+    const nextErrors: { label?: string; amount?: string } = {}
+    if (!newLabel.trim()) nextErrors.label = "Name is required"
+    if (newAmount.trim() === "" || !Number.isFinite(amount) || amount < 0)
+      nextErrors.amount = "Enter a valid amount"
+    if (nextErrors.label || nextErrors.amount) {
+      setErrors(nextErrors)
       return
     }
-    if (!Number.isFinite(amount) || amount < 0) {
-      toast.error("Enter a valid amount")
-      return
-    }
+    setErrors({})
     startTransition(async () => {
       const res = await createStoreFixedExpense({
         storeId,
@@ -849,33 +851,58 @@ function FixedExpensesEditor({
       ) : (
         <div className="fixed-expense-list">
           {expenses.map((exp) => (
-            <ExpenseRow
-              key={exp.id}
-              expense={exp}
-              isOwner={isOwner}
-              busy={isPending}
-            />
+            <ExpenseRow key={exp.id} expense={exp} isOwner={isOwner} />
           ))}
+        </div>
+      )}
+
+      {expenses.length > 0 && (
+        <div className="fixed-expense-total">
+          <span className="fixed-expense-total__label">
+            Fixed expenses · monthly
+          </span>
+          <span className="fixed-expense-total__value">
+            {fmtMoneyCents(monthlyTotal)}
+            <span className="fixed-expense-total__note">normalized / mo</span>
+          </span>
         </div>
       )}
 
       {isOwner &&
         (adding ? (
-          <div className="fixed-expense-add">
+          <div
+            className="fixed-expense-add"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                handleAdd()
+              }
+            }}
+          >
             <input
               type="text"
-              className="editorial-input"
+              className={
+                errors.label ? "editorial-input editorial-input--invalid" : "editorial-input"
+              }
               value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
+              onChange={(e) => {
+                setNewLabel(e.target.value)
+                if (errors.label) setErrors((x) => ({ ...x, label: undefined }))
+              }}
               placeholder="e.g. Liability insurance"
               disabled={isPending}
               aria-label="Expense name"
+              aria-invalid={errors.label ? true : undefined}
             />
             <MoneyInput
               value={newAmount}
-              onChange={setNewAmount}
+              onChange={(v) => {
+                setNewAmount(v)
+                if (errors.amount) setErrors((x) => ({ ...x, amount: undefined }))
+              }}
               placeholder="1200"
               disabled={isPending}
+              invalid={!!errors.amount}
             />
             <CadenceSelect
               value={newFreq}
@@ -906,6 +933,11 @@ function FixedExpensesEditor({
                 Save
               </button>
             </span>
+            {(errors.label || errors.amount) && (
+              <p className="fixed-expense-error" role="alert">
+                {errors.label ?? errors.amount}
+              </p>
+            )}
           </div>
         ) : (
           <button
@@ -922,36 +954,45 @@ function FixedExpensesEditor({
   )
 }
 
-/** A single editable fixed-expense row. Owns its draft state; Save appears once
- *  the draft diverges from the saved values. */
+/** A single editable fixed-expense row. Owns its own pending state so saving
+ *  one row never freezes the rest of the list. Save appears once the draft
+ *  diverges from the saved values; delete is gated behind a confirmation. */
 function ExpenseRow({
   expense,
   isOwner,
-  busy,
 }: {
   expense: StoreFixedExpenseItem
   isOwner: boolean
-  busy: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [label, setLabel] = useState(expense.label)
   const [amount, setAmount] = useState(String(expense.amount))
   const [frequency, setFrequency] = useState<ExpenseCadence>(expense.frequency)
+  const [errors, setErrors] = useState<{ label?: string; amount?: string }>({})
 
-  const disabled = busy || isPending
+  const disabled = isPending
   const dirty =
     label.trim() !== expense.label ||
     Number(amount) !== expense.amount ||
     frequency !== expense.frequency
+
+  // Monthly-equivalent caption so a weekly $300 and a yearly $300 are no longer
+  // indistinguishable at a glance — the figure that actually hits the P&L.
+  const perMonth = monthlyFromFrequency(expense.amount, expense.frequency)
+  const monthlyHint =
+    expense.frequency === "MONTHLY" ? null : `≈ ${fmtMoneyCents(perMonth)} / mo`
 
   if (!isOwner) {
     return (
       <div className="config-ledger__row">
         <dt className="config-ledger__label">{expense.label}</dt>
         <dd className="config-ledger__value">
-          {fmtMoney(expense.amount)}
-          <span className="config-ledger__hint">{cadencePer(expense.frequency)}</span>
+          {fmtMoneyCents(expense.amount)}
+          <span className="config-ledger__hint">
+            {cadencePer(expense.frequency)}
+            {monthlyHint ? ` · ${monthlyHint}` : ""}
+          </span>
         </dd>
       </div>
     )
@@ -959,14 +1000,15 @@ function ExpenseRow({
 
   const handleSave = () => {
     const amt = Number(amount)
-    if (!label.trim()) {
-      toast.error("Expense name is required")
+    const nextErrors: { label?: string; amount?: string } = {}
+    if (!label.trim()) nextErrors.label = "Name is required"
+    if (!Number.isFinite(amt) || amt < 0)
+      nextErrors.amount = "Enter a valid amount"
+    if (nextErrors.label || nextErrors.amount) {
+      setErrors(nextErrors)
       return
     }
-    if (!Number.isFinite(amt) || amt < 0) {
-      toast.error("Enter a valid amount")
-      return
-    }
+    setErrors({})
     startTransition(async () => {
       const res = await updateStoreFixedExpense({
         id: expense.id,
@@ -999,15 +1041,32 @@ function ExpenseRow({
     <div className="fixed-expense-row">
       <input
         type="text"
-        className="editorial-input"
+        className={
+          errors.label ? "editorial-input editorial-input--invalid" : "editorial-input"
+        }
         value={label}
-        onChange={(e) => setLabel(e.target.value)}
+        onChange={(e) => {
+          setLabel(e.target.value)
+          if (errors.label) setErrors((x) => ({ ...x, label: undefined }))
+        }}
         disabled={disabled}
         aria-label="Expense name"
+        aria-invalid={errors.label ? true : undefined}
       />
-      <MoneyInput value={amount} onChange={setAmount} disabled={disabled} />
+      <MoneyInput
+        value={amount}
+        onChange={(v) => {
+          setAmount(v)
+          if (errors.amount) setErrors((x) => ({ ...x, amount: undefined }))
+        }}
+        disabled={disabled}
+        invalid={!!errors.amount}
+      />
       <CadenceSelect value={frequency} onChange={setFrequency} disabled={disabled} />
       <span className="fixed-expense-row__actions">
+        {monthlyHint && !dirty && (
+          <span className="fixed-expense-row__permonth">{monthlyHint}</span>
+        )}
         {dirty && (
           <button
             type="button"
@@ -1023,16 +1082,44 @@ function ExpenseRow({
             )}
           </button>
         )}
-        <button
-          type="button"
-          className="toolbar-btn toolbar-btn--danger"
-          onClick={handleDelete}
-          disabled={disabled}
-          aria-label={`Remove ${expense.label}`}
-        >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              className="toolbar-btn toolbar-btn--danger"
+              disabled={disabled}
+              aria-label={`Remove ${expense.label}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="editorial-dialog">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove {expense.label}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This recurring expense will stop counting toward every future
+                P&amp;L period. Past statements are unaffected. This can&apos;t be
+                undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                disabled={isPending}
+                className="bg-(--accent) text-(--paper) hover:bg-(--accent-dark)"
+              >
+                {isPending ? "Removing..." : "Remove expense"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </span>
+      {(errors.label || errors.amount) && (
+        <p className="fixed-expense-error" role="alert">
+          {errors.label ?? errors.amount}
+        </p>
+      )}
     </div>
   )
 }

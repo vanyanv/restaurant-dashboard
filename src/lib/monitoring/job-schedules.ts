@@ -14,7 +14,6 @@ export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   "otter.hourly.sync":      { cadenceMinutes: 60 * 4,  description: "every 4h" },
   "otter.stores":           { cadenceMinutes: 60 * 24, description: "daily" },
   "invoices.email.sync":    { cadenceMinutes: 60 * 6,  description: "every 6h" },
-  "yelp.sync":              { cadenceMinutes: 60 * 24, description: "daily" },
   "cogs.sweep":             { cadenceMinutes: 60 * 4,  description: "every 4h" },
   "cogs.stores":            { cadenceMinutes: 60 * 24, description: "daily" },
   "monitoring.cache-flush": { cadenceMinutes: 10,      description: "every 10m" },
