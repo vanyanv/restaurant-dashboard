@@ -66,5 +66,12 @@ export default defineConfig({
     timeout: 180_000,
     stdout: "pipe",
     stderr: "pipe",
+    env: {
+      ...process.env,
+      // The suite verifies the app itself; a SERVICE_SHUTDOWN_AT left active
+      // in .env.local would otherwise blank every page for the e2e user.
+      // Real process env beats .env files in Next, and "" is falsy to the gate.
+      SERVICE_SHUTDOWN_AT: "",
+    },
   },
 })
