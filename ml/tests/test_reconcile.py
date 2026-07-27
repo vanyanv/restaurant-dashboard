@@ -139,6 +139,23 @@ def test_reconcile_falls_back_to_ols_when_y_df_empty(monkeypatch):
     assert result.method == "ols"
 
 
+def test_actuals_backfill_keys_idempotency_on_actual_columns():
+    """Regression (July 2026): the MinTrace writer stamps `reconciledAt` on
+    every horizon row nightly (the dashboard reads it as a freshness marker
+    for reconciledRevenue), so the actuals backfiller must key idempotency on
+    the actual* column it populates. Filtering on `reconciledAt IS NULL`
+    permanently starves ForecastDailyRevenue of actuals — REVENUE evaluations
+    stop, and operator gates 1/3/4 fail daily."""
+    import inspect
+    from ml.evaluation.reconcile import reconcile_past_forecasts
+
+    src = inspect.getsource(reconcile_past_forecasts)
+    assert '"actualRevenue" IS NULL' in src
+    assert '"actualOrders" IS NULL' in src
+    assert '"actualQty" IS NULL' in src
+    assert '"reconciledAt" IS NULL' not in src
+
+
 def test_reconcile_sql_writers_have_idempotent_marker():
     """The three back-write SQL templates are idempotent - by UPDATE keyed on
     the row's natural identity (for ForecastDailyRevenue / ForecastMenuItem,

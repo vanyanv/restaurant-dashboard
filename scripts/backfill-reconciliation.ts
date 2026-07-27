@@ -4,7 +4,9 @@
 //   - ForecastHourlyOrders.actualOrders    <- OtterHourlySummary.orderCount
 //   - ForecastMenuItem.actualQty           <- SUM(OtterMenuItem.fp/tpQuantitySold)
 //
-// Idempotent: filters on `reconciledAt IS NULL` so re-running is safe and
+// Idempotent: filters on the actual* column being null (NOT `reconciledAt`,
+// which the MinTrace hierarchical writer stamps on every horizon row as the
+// dashboard's reconciledRevenue freshness marker) so re-running is safe and
 // only touches rows that still lack actuals. Run with:
 //   pnpm tsx scripts/backfill-reconciliation.ts
 
@@ -55,7 +57,7 @@ function computeErrorPct(predicted: number, actual: number): number | null {
 async function backfillDailyRevenue(): Promise<void> {
   const stale = await prisma.forecastDailyRevenue.findMany({
     where: {
-      reconciledAt: null,
+      actualRevenue: null,
       forecastDate: { lt: new Date() },
       hourBucket: 0,
     },
@@ -101,7 +103,7 @@ async function backfillDailyRevenue(): Promise<void> {
 async function backfillHourlyOrders(): Promise<void> {
   const stale = await prisma.forecastHourlyOrders.findMany({
     where: {
-      reconciledAt: null,
+      actualOrders: null,
       forecastDate: { lt: new Date() },
     },
     select: {
@@ -156,7 +158,7 @@ async function backfillHourlyOrders(): Promise<void> {
 async function backfillMenuItem(): Promise<void> {
   const stale = await prisma.forecastMenuItem.findMany({
     where: {
-      reconciledAt: null,
+      actualQty: null,
       forecastDate: { lt: new Date() },
     },
     select: {
