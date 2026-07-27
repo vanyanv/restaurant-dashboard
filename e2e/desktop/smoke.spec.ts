@@ -25,6 +25,7 @@ test.describe("@smoke desktop", () => {
     const routes = [
       { path: "/dashboard/operations", expect: /operations|orders/i },
       { path: "/dashboard/cogs", expect: /cogs|cost/i },
+      { path: "/dashboard/menu-profit", expect: /menu profit|profit matrix/i },
       { path: "/dashboard/invoices", expect: /invoice/i },
     ]
 
