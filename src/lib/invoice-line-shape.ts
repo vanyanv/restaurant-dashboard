@@ -48,9 +48,12 @@ function median(xs: number[]): number {
  * Pick which of several invoice-derived costs to trust, newest-first.
  *
  * Each line is judged against the median of its *older* history (the entries
- * after it). A line whose cost exceeds `threshold ×` that baseline is an
- * implausible spike — almost always a mis-parsed pack size, not a real price
- * change — so we skip it and fall back to the newest line that is in tolerance.
+ * after it). A line whose cost exceeds `threshold ×` that baseline — or falls
+ * below `baseline ÷ threshold` — is an implausible move — almost always a
+ * mis-parsed pack size (under- or over-applied), not a real price change — so
+ * we skip it and fall back to the newest line that is in tolerance. Real price
+ * moves are ~2–3x at the extreme; the symmetric 8x band leaves wide margin in
+ * both directions.
  *
  * The oldest line (no older history) is always accepted as the baseline of
  * last resort. Non-finite / non-positive costs are ignored when forming a
@@ -75,7 +78,11 @@ export function selectNonSpikeCostIndex(
       return { index: i, rejectedSpike }
     }
     const baseline = median(older)
-    if (baseline > 0 && costsNewestFirst[i] > threshold * baseline) {
+    if (
+      baseline > 0 &&
+      (costsNewestFirst[i] > threshold * baseline ||
+        costsNewestFirst[i] < baseline / threshold)
+    ) {
       rejectedSpike = true
       continue
     }

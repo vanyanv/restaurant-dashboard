@@ -67,4 +67,35 @@ describe("selectNonSpikeCostIndex", () => {
       rejectedSpike: true,
     })
   })
+
+  it("rejects a newest line that collapses far below its older history", () => {
+    // The mirror-image mis-parse: packSize over-applied makes an ingredient
+    // look ~10x cheaper. Older history is a stable 0.40; 0.04 must be
+    // rejected and the next in-tolerance line chosen instead.
+    const result = selectNonSpikeCostIndex([0.04, 0.4, 0.4, 0.4, 0.4])
+    expect(result).toEqual({ index: 1, rejectedSpike: true })
+  })
+
+  it("skips multiple consecutive downward spikes back to the last good line", () => {
+    const result = selectNonSpikeCostIndex([0.01, 0.01, 0.4, 0.4, 0.4])
+    expect(result).toEqual({ index: 2, rejectedSpike: true })
+  })
+
+  it("allows a genuine moderate price decrease (within the threshold)", () => {
+    // A real ~2x price drop (vendor switch, case deal) must NOT be rejected.
+    const result = selectNonSpikeCostIndex([0.45, 0.9, 0.9, 0.9])
+    expect(result).toEqual({ index: 0, rejectedSpike: false })
+  })
+
+  it("applies the same 8x threshold symmetrically on the low side", () => {
+    // Exactly 1/8 of the baseline is allowed; just under is rejected.
+    expect(selectNonSpikeCostIndex([0.125, 1, 1, 1])).toEqual({
+      index: 0,
+      rejectedSpike: false,
+    })
+    expect(selectNonSpikeCostIndex([0.124, 1, 1, 1])).toEqual({
+      index: 1,
+      rejectedSpike: true,
+    })
+  })
 })
