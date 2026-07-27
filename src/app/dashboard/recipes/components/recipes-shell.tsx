@@ -6,6 +6,10 @@ import {
   UnmatchedCountFallback,
   UnmatchedCountSection,
 } from "./sections/unmatched-count-section"
+import {
+  ProposalReviewFallback,
+  ProposalReviewSection,
+} from "./sections/proposal-review-section"
 
 /**
  * Suspense shell for the Recipes page. Renders instantly with a proportional
@@ -31,9 +35,17 @@ export function RecipesShell({
   initialFilter?: RecipesFilter
 }) {
   const unmatchedCountSlot = (
-    <SectionErrorBoundary label="Count unavailable">
+    <SectionErrorBoundary key="unmatched-count" label="Count unavailable">
       <Suspense fallback={<UnmatchedCountFallback />}>
         <UnmatchedCountSection />
+      </Suspense>
+    </SectionErrorBoundary>
+  )
+
+  const proposalSlot = (
+    <SectionErrorBoundary key="proposal-review" label="Proposals unavailable">
+      <Suspense fallback={<ProposalReviewFallback />}>
+        <ProposalReviewSection />
       </Suspense>
     </SectionErrorBoundary>
   )
@@ -43,6 +55,7 @@ export function RecipesShell({
       <Suspense fallback={<RecipesEditorSkeleton />}>
         <RecipeEditorSection
           unmatchedCountSlot={unmatchedCountSlot}
+          proposalSlot={proposalSlot}
           initialFilter={initialFilter}
         />
       </Suspense>

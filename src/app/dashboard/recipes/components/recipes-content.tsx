@@ -63,6 +63,11 @@ type Props = {
    */
   unmatchedCountSlot?: ReactNode
   /**
+   * "AI proposals" launcher (badge + review sheet) streamed independently by
+   * the shell — proposal costing must never block the editor from opening.
+   */
+  proposalSlot?: ReactNode
+  /**
    * Seed value for the menu-list filter chip. The `?filter=unbuilt` deep-link
    * from the P&L unmapped banner lands here; an undefined value falls back to
    * the default ("unbuilt"), so the existing landing behavior is unchanged.
@@ -82,6 +87,7 @@ export function RecipesContent({
   initialRecipes,
   initialCanonicalIngredients,
   unmatchedCountSlot,
+  proposalSlot,
   initialFilter,
   suggestionsByItem,
 }: Props) {
@@ -375,6 +381,7 @@ export function RecipesContent({
           </span>
         )}
         {unmatchedCountSlot}
+        {proposalSlot}
         {highConfidencePairs.length > 0 && (
           <Button
             size="sm"

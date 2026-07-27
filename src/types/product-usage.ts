@@ -115,14 +115,6 @@ export interface OrderAnomaly {
 
 // ─── AI types ───
 
-export interface AiRecipeSuggestion {
-  itemName: string
-  category: string
-  confidence: number
-  ingredients: RecipeIngredientInput[]
-  reasoning: string
-}
-
 export interface DemandForecast {
   ingredientName: string
   predictedUsageNextWeek: number
