@@ -166,12 +166,6 @@ async function recomputeDailyCogsForDay(input: {
     return p
   }
 
-  // ── Modifier usage aggregation ─────────────────────────────────────────
-  // For the day, walk every OtterOrderSubItem and bucket by parent item name.
-  // uses = subItem.quantity × orderItem.quantity (e.g. "2× burger + 1× add cheese"
-  // = 2 cheese uses). Then look up each skuId in OtterSubItemMapping and add
-  // modifierRecipeCost × uses to that item's extra cost.
-  const modifierUsageByItem = new Map<string, ModifierUsage>()
   const [subItems, subMappings] = await Promise.all([
     prisma.otterOrderSubItem.findMany({
       where: {
@@ -198,48 +192,11 @@ async function recomputeDailyCogsForDay(input: {
   ])
   const subRecipeBySku = new Map(subMappings.map((m) => [m.skuId, m.recipeId]))
 
-  for (const s of subItems) {
-    if (!s.orderItem?.name) continue
-    const itemName = s.orderItem.name
-    const uses = (s.quantity ?? 1) * (s.orderItem.quantity ?? 1)
-    if (!isFinite(uses) || uses <= 0) continue
-
-    let bucket = modifierUsageByItem.get(itemName)
-    if (!bucket) {
-      bucket = { extraLineCost: 0, missingMappings: false, breakdown: [] }
-      modifierUsageByItem.set(itemName, bucket)
-    }
-
-    const modRecipeId = s.skuId ? subRecipeBySku.get(s.skuId) : undefined
-    if (!modRecipeId) {
-      bucket.missingMappings = true
-      bucket.breakdown.push({
-        skuId: s.skuId ?? "(no sku)",
-        name: s.name,
-        uses,
-        unitCost: null,
-      })
-      continue
-    }
-    const result = await costFor(modRecipeId)
-    const modCost = result?.totalCost ?? 0
-    // A mapped modifier whose recipe walks to $0 (no costed ingredients,
-    // no foodCostOverride) leaves real dollars unaccounted for. Flag it
-    // alongside unmapped SKUs so the parent item is marked partialCost
-    // and the operator can see the gap. `result?.partial` covers the case
-    // where the recipe has a positive total but some ingredients were
-    // missing cost — propagate that too.
-    if (!result || modCost <= 0 || result.partial) {
-      bucket.missingMappings = true
-    }
-    if (modCost > 0) bucket.extraLineCost += modCost * uses
-    bucket.breakdown.push({
-      skuId: s.skuId ?? "(no sku)",
-      name: s.name,
-      uses,
-      unitCost: modCost,
-    })
-  }
+  const modifierUsageByItem = await buildModifierUsage({
+    subItems,
+    subRecipeBySku,
+    costFor,
+  })
 
   const foodRows = await computeFoodCogsRows({
     storeId,
@@ -274,6 +231,74 @@ async function recomputeDailyCogsForDay(input: {
     rowsUpserted: rows.length,
     rowsDeleted: deleteResult,
   }
+}
+
+/** Shape of one order sub-item row as fetched for modifier bucketing. */
+export type SubItemUsageRow = {
+  skuId: string | null
+  name: string
+  quantity: number | null
+  orderItem: { name: string | null; quantity: number | null } | null
+}
+
+/**
+ * Bucket one day's order sub-items (modifiers) by parent item name.
+ * uses = subItem.quantity × orderItem.quantity ("2× burger + 1× add cheese"
+ * = 2 cheese uses); each mapped SKU adds modifierRecipeCost × uses.
+ *
+ * `missingMappings` flags dollars that are genuinely unaccounted for: an
+ * unmapped SKU, a failed cost walk, or a partial one (some ingredient lines
+ * uncostable — computeRecipeCost sets `partial` for those). A recipe that
+ * walks to a clean $0 — zero ingredient lines, no override, partial=false —
+ * is an INTENTIONAL zero ("Mod: Remove Cheese") and must not flag the
+ * parent, or every slider day would read partialCost forever.
+ */
+export async function buildModifierUsage(input: {
+  subItems: SubItemUsageRow[]
+  subRecipeBySku: Map<string, string>
+  costFor: (recipeId: string) => Promise<RecipeCostResult | null>
+}): Promise<Map<string, ModifierUsage>> {
+  const { subItems, subRecipeBySku, costFor } = input
+  const modifierUsageByItem = new Map<string, ModifierUsage>()
+
+  for (const s of subItems) {
+    if (!s.orderItem?.name) continue
+    const itemName = s.orderItem.name
+    const uses = (s.quantity ?? 1) * (s.orderItem.quantity ?? 1)
+    if (!isFinite(uses) || uses <= 0) continue
+
+    let bucket = modifierUsageByItem.get(itemName)
+    if (!bucket) {
+      bucket = { extraLineCost: 0, missingMappings: false, breakdown: [] }
+      modifierUsageByItem.set(itemName, bucket)
+    }
+
+    const modRecipeId = s.skuId ? subRecipeBySku.get(s.skuId) : undefined
+    if (!modRecipeId) {
+      bucket.missingMappings = true
+      bucket.breakdown.push({
+        skuId: s.skuId ?? "(no sku)",
+        name: s.name,
+        uses,
+        unitCost: null,
+      })
+      continue
+    }
+    const result = await costFor(modRecipeId)
+    const modCost = result?.totalCost ?? 0
+    if (!result || result.partial) {
+      bucket.missingMappings = true
+    }
+    if (modCost > 0) bucket.extraLineCost += modCost * uses
+    bucket.breakdown.push({
+      skuId: s.skuId ?? "(no sku)",
+      name: s.name,
+      uses,
+      unitCost: result ? modCost : null,
+    })
+  }
+
+  return modifierUsageByItem
 }
 
 export async function computeFoodCogsRows(input: {
