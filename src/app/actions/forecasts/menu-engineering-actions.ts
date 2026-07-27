@@ -10,10 +10,12 @@ import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
 //   PUZZLE    — high margin, low volume.   Reposition or rename.
 //   DOG       — low margin,  low volume.   Drop or rework.
 //
-// Pure read over the precomputed DailyCogsItem rollups — items with no
-// costed recipe never appear in DailyCogsItem and so don't appear here.
-// The dashboard surfaces the missing-recipe coverage % separately so the
-// operator knows the classifier's coverage.
+// Pure read over the precomputed DailyCogsItem rollups. The materializer
+// writes diagnostic rows too (UNMAPPED items carry real revenue with $0
+// lineCost, and "Packaging - *" pseudo-rows carry cost with $0 revenue), so
+// classification is restricted to COSTED non-Packaging rows — otherwise
+// unmapped items read as fake 100%-margin STARs. The revenue the classifier
+// could NOT see is reported in `coverage` so callers can qualify the result.
 
 import { prisma } from "@/lib/prisma"
 import { getCachedSession, resolveStoreContext } from "./_shared"
@@ -23,6 +25,8 @@ export type MenuQuadrant = "STAR" | "PLOWHORSE" | "PUZZLE" | "DOG"
 export interface MenuEngineeringRow {
   itemName: string
   category: string
+  /** Recipe backing the costed rows (null only if remapped mid-window). */
+  recipeId: string | null
   soldQty: number
   revenue: number
   cogs: number
@@ -32,6 +36,19 @@ export interface MenuEngineeringRow {
   totalContribution: number
   marginPct: number | null
   quadrant: MenuQuadrant
+}
+
+export interface MenuEngineeringCoverage {
+  /** Revenue the classifier saw (COSTED rows, Packaging excluded). */
+  costedRevenue: number
+  /** Revenue on sold items with no recipe mapping — invisible to the quadrants. */
+  unmappedRevenue: number
+  /** Revenue on mapped items whose recipe walks to $0. */
+  missingCostRevenue: number
+  /** Revenue on COSTED rows whose cost is flagged understated (partialCost). */
+  partialCostRevenue: number
+  /** costed / (costed + unmapped + missingCost), as 0–100. 100 when nothing sold. */
+  coveragePct: number
 }
 
 export interface MenuEngineeringData {
@@ -46,6 +63,7 @@ export interface MenuEngineeringData {
   rows: MenuEngineeringRow[]
   counts: Record<MenuQuadrant, number>
   totalContribution: number
+  coverage: MenuEngineeringCoverage
 }
 
 export type GetMenuEngineeringResult =
@@ -76,23 +94,81 @@ export async function getMenuEngineering(input: {
   const windowStart = new Date(windowEnd)
   windowStart.setUTCDate(windowStart.getUTCDate() - lookbackDays)
 
-  const grouped = await prisma.dailyCogsItem.groupBy({
-    by: ["itemName", "category"],
-    where: {
-      storeId: { in: storeIds },
-      date: { gte: windowStart, lte: windowEnd },
-    },
-    _sum: { qtySold: true, salesRevenue: true, lineCost: true },
-  })
+  const windowWhere = {
+    storeId: { in: storeIds },
+    date: { gte: windowStart, lte: windowEnd },
+    category: { not: "Packaging" },
+  }
 
-  const rowsRaw = grouped
-    .map((row) => {
-      const soldQty = row._sum.qtySold ?? 0
-      const revenue = row._sum.salesRevenue ?? 0
-      const cogs = row._sum.lineCost ?? 0
-      return { itemName: row.itemName, category: row.category, soldQty, revenue, cogs }
-    })
-    .filter((r) => r.soldQty >= minSoldQty)
+  const [grouped, statusRollup, partialAgg] = await Promise.all([
+    prisma.dailyCogsItem.groupBy({
+      by: ["itemName", "category", "recipeId"],
+      where: { ...windowWhere, status: "COSTED" },
+      _sum: { qtySold: true, salesRevenue: true, lineCost: true },
+    }),
+    prisma.dailyCogsItem.groupBy({
+      by: ["status"],
+      where: windowWhere,
+      _sum: { qtySold: true, salesRevenue: true },
+    }),
+    prisma.dailyCogsItem.aggregate({
+      where: { ...windowWhere, status: "COSTED", partialCost: true },
+      _sum: { salesRevenue: true },
+    }),
+  ])
+
+  const revenueByStatus = new Map<string, number>()
+  for (const s of statusRollup) {
+    revenueByStatus.set(String(s.status), s._sum.salesRevenue ?? 0)
+  }
+  const costedRevenue = revenueByStatus.get("COSTED") ?? 0
+  const unmappedRevenue = revenueByStatus.get("UNMAPPED") ?? 0
+  const missingCostRevenue = revenueByStatus.get("MISSING_COST") ?? 0
+  const allRevenue = costedRevenue + unmappedRevenue + missingCostRevenue
+  const coverage: MenuEngineeringCoverage = {
+    costedRevenue,
+    unmappedRevenue,
+    missingCostRevenue,
+    partialCostRevenue: partialAgg._sum.salesRevenue ?? 0,
+    coveragePct: allRevenue > 0 ? (costedRevenue / allRevenue) * 100 : 100,
+  }
+
+  // Re-merge by (itemName, category): grouping by recipeId can split an item
+  // that was remapped mid-window into two rows. Keep the highest-qty recipeId.
+  const mergedByKey = new Map<
+    string,
+    { itemName: string; category: string; recipeId: string | null; recipeQty: number; soldQty: number; revenue: number; cogs: number }
+  >()
+  for (const row of grouped) {
+    const soldQty = row._sum.qtySold ?? 0
+    const revenue = row._sum.salesRevenue ?? 0
+    const cogs = row._sum.lineCost ?? 0
+    const key = `${row.itemName}:::${row.category}`
+    const existing = mergedByKey.get(key)
+    if (!existing) {
+      mergedByKey.set(key, {
+        itemName: row.itemName,
+        category: row.category,
+        recipeId: row.recipeId ?? null,
+        recipeQty: soldQty,
+        soldQty,
+        revenue,
+        cogs,
+      })
+      continue
+    }
+    existing.soldQty += soldQty
+    existing.revenue += revenue
+    existing.cogs += cogs
+    if (soldQty > existing.recipeQty && row.recipeId) {
+      existing.recipeId = row.recipeId
+      existing.recipeQty = soldQty
+    }
+  }
+
+  const rowsRaw = Array.from(mergedByKey.values()).filter(
+    (r) => r.soldQty >= minSoldQty
+  )
 
   if (rowsRaw.length === 0) {
     return {
@@ -107,6 +183,7 @@ export async function getMenuEngineering(input: {
         rows: [],
         counts: { STAR: 0, PLOWHORSE: 0, PUZZLE: 0, DOG: 0 },
         totalContribution: 0,
+        coverage,
       },
     }
   }
@@ -146,6 +223,7 @@ export async function getMenuEngineering(input: {
     return {
       itemName: r.itemName,
       category: r.category,
+      recipeId: r.recipeId,
       soldQty: r.soldQty,
       revenue: r.revenue,
       cogs: r.cogs,
@@ -172,6 +250,7 @@ export async function getMenuEngineering(input: {
       rows,
       counts,
       totalContribution,
+      coverage,
     },
   }
 }
