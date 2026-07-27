@@ -3,8 +3,12 @@ have ground truth to compare against.
 
 Extracted from `ml.run_nightly` so the RECONCILE phase can be
 independently tested and run. The function is idempotent — every
-UPDATE filters on `"reconciledAt" IS NULL`, so re-runs only touch
-rows that still lack actuals.
+UPDATE filters on its actual* column being NULL, so re-runs only touch
+rows that still lack actuals. Do NOT filter on `"reconciledAt" IS NULL`:
+the MinTrace hierarchical writer (ml/reconciliation/reconcile.py) stamps
+`reconciledAt` on every horizon row nightly as the dashboard's
+reconciledRevenue freshness marker, which would starve these rows of
+actuals forever.
 
 Column-mapping mirrors `scripts/backfill-reconciliation.ts`; see that
 script for the rationale on which Otter columns feed which forecast
@@ -18,8 +22,9 @@ from ml.db import connect
 def reconcile_past_forecasts(store_id: str) -> dict:
     """Backfill actuals on past forecast rows for one store.
 
-    Idempotent — `WHERE "reconciledAt" IS NULL` ensures re-runs only touch
-    rows that still lack actuals. Mirrors `scripts/backfill-reconciliation.ts`
+    Idempotent — each UPDATE requires its actual* column to be NULL, so
+    re-runs only touch rows that still lack actuals (`reconciledAt` is not a
+    usable marker here; see module docstring). Mirrors `scripts/backfill-reconciliation.ts`
     so the nightly pipeline keeps reconciliation current after each forecast
     write. See that script for column-mapping rationale.
 
@@ -50,7 +55,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 GROUP BY "storeId", date
             ) agg
             WHERE f."storeId" = %s
-              AND f."reconciledAt" IS NULL
+              AND f."actualRevenue" IS NULL
               AND f."forecastDate" < CURRENT_DATE
               AND f."hourBucket" = 0
               AND f."storeId" = agg."storeId"
@@ -74,7 +79,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 "reconciledAt" = CURRENT_TIMESTAMP
             FROM "OtterHourlySummary" o
             WHERE f."storeId" = %s
-              AND f."reconciledAt" IS NULL
+              AND f."actualOrders" IS NULL
               AND f."forecastDate" < CURRENT_DATE
               AND o."storeId" = f."storeId"
               AND o.date = f."forecastDate"
@@ -90,7 +95,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 "errorPct" = NULL,
                 "reconciledAt" = CURRENT_TIMESTAMP
             WHERE f."storeId" = %s
-              AND f."reconciledAt" IS NULL
+              AND f."actualOrders" IS NULL
               AND f."forecastDate" < CURRENT_DATE
               AND EXISTS (
                   SELECT 1 FROM "OtterHourlySummary" o
@@ -122,7 +127,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 GROUP BY "storeId", date, "itemName"
             ) agg
             WHERE f."storeId" = %s
-              AND f."reconciledAt" IS NULL
+              AND f."actualQty" IS NULL
               AND f."forecastDate" < CURRENT_DATE
               AND f."storeId" = agg."storeId"
               AND f."forecastDate" = agg.date
