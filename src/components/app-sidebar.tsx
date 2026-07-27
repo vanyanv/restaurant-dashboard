@@ -24,6 +24,7 @@ import {
   Coins,
   Users,
   PieChart,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
@@ -75,6 +76,7 @@ const NAV: NavSection[] = [
       { title: "Analytics", url: "/dashboard/analytics", icon: LineChart },
       { title: "P&L", url: "/dashboard/pnl", icon: Wallet },
       { title: "COGS", url: "/dashboard/cogs", icon: Coins },
+      { title: "Menu Profit", url: "/dashboard/menu-profit", icon: TrendingUp },
       { title: "Labor", url: "/dashboard/labor", icon: Users },
       { title: "Product Mix", url: "/dashboard/product-mix", icon: PieChart },
     ],
