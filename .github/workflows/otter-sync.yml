@@ -123,3 +123,19 @@ jobs:
           ISSUE_TITLE: "[Auto] Otter Daily Sync failing"
           ISSUE_LABEL: cron-failure
         run: bash .github/scripts/report-workflow-recovery.sh
+
+  # After fresh sales land, surface any new unmapped POS items as PENDING
+  # proposals so they're waiting in the review sheet by the time anyone looks.
+  # Layer-0 exact-name matching makes routine runs LLM-free; failures here are
+  # non-critical (the next 4-hourly run retries), so no incident issue.
+  generate-proposals:
+    needs: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: GET /api/cron/proposals
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_MAX_TIME: "240"
+        run: .github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/proposals"
