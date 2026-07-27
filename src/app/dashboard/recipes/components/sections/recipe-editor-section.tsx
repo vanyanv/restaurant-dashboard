@@ -21,9 +21,11 @@ type RecipesFilter = "unbuilt" | "all" | "prep" | "confirmed"
  */
 export async function RecipeEditorSection({
   unmatchedCountSlot,
+  proposalSlot,
   initialFilter,
 }: {
   unmatchedCountSlot?: ReactNode
+  proposalSlot?: ReactNode
   initialFilter?: RecipesFilter
 }) {
   const [menuItems, recipes, canonicalIngredients, suggestionsResult] =
@@ -53,6 +55,7 @@ export async function RecipeEditorSection({
       initialRecipes={recipes}
       initialCanonicalIngredients={canonicalIngredients}
       unmatchedCountSlot={unmatchedCountSlot}
+      proposalSlot={proposalSlot}
       initialFilter={initialFilter}
       suggestionsByItem={suggestionsByItem}
     />

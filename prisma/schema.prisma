@@ -60,6 +60,7 @@ model Account {
   invites                       Invite[]
   vendorLeadTimes               VendorLeadTime[]
   alertPreferences              AlertPreference[]
+  recipeMappingProposals        RecipeMappingProposal[]
 }
 
 /// Single-use, time-limited signup token. An OWNER on an account creates
@@ -558,6 +559,7 @@ model Recipe {
   otterItemMappings    OtterItemMapping[]
   otterSubItemMappings OtterSubItemMapping[]
   dailyCogsItems       DailyCogsItem[]
+  mappingProposals     RecipeMappingProposal[] @relation("ProposedRecipe")
 
   @@unique([ownerId, itemName, category])
   @@unique([accountId, itemName, category])
@@ -730,6 +732,49 @@ model OtterSubItemMapping {
   @@unique([storeId, skuId])
   @@index([storeId])
   @@index([recipeId])
+}
+
+/// AI-proposed fix for a sold POS item that has no recipe mapping (a new
+/// combo, a renamed item, …). Proposals are inert until a human accepts:
+/// nothing touches Recipe / OtterItemMapping before that click. REJECTED
+/// rows persist so the generator doesn't re-propose the same item forever.
+/// A partial unique index (manual migration
+/// 2026-07-26_recipe-mapping-proposals.sql) enforces at most one PENDING
+/// proposal per (accountId, otterItemName).
+model RecipeMappingProposal {
+  id            String @id @default(cuid())
+  accountId     String
+  /// The POS item name this proposal would map (exact Otter spelling).
+  otterItemName String
+  category      String
+  /// "MATCH" — map to an existing recipe (proposedRecipeId).
+  /// "COMBO_DECOMPOSITION" — create a recipe composed of existing recipes.
+  /// "NEW_RECIPE" — create a recipe from raw canonical ingredients.
+  kind          String
+
+  /// kind=MATCH only: the existing recipe to map to.
+  proposedRecipeId String?
+
+  /// { suggestedName, suggestedCategory, components: [{ componentRecipeId? |
+  ///   canonicalIngredientId?, name, quantity, unit }], reasoning, confidence }
+  payload    Json
+  confidence Float?
+  /// LLM model id that produced this proposal (provenance).
+  model      String?
+
+  /// PENDING | ACCEPTED | REJECTED | SUPERSEDED
+  status         String    @default("PENDING")
+  /// Recipe created/mapped by acceptance (audit trail).
+  resultRecipeId String?
+  createdAt      DateTime  @default(now())
+  decidedAt      DateTime?
+  decidedById    String?
+
+  account        Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  proposedRecipe Recipe? @relation("ProposedRecipe", fields: [proposedRecipeId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, status])
+  @@index([accountId, otterItemName])
 }
 
 /// Per-(store, date, itemName) COGS row, materialized by
