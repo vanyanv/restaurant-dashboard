@@ -354,6 +354,7 @@ export async function confirmSkuMatch(input: {
   await recomputeCanonicalCost(targetCanonicalId).catch((e) => {
     console.warn("[confirmSkuMatch/alias] recomputeCanonicalCost failed:", e)
   })
+  await syncCanonicalEmbedding(targetCanonicalId)
 
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/menu/catalog")
