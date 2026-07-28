@@ -8,7 +8,6 @@ import {
   useEffect,
   useRef,
 } from "react"
-import { ChevronDown } from "lucide-react"
 import { getProductMixData } from "@/app/actions/store-actions"
 
 import {
@@ -29,7 +28,6 @@ import type { ProductMixData } from "@/types/analytics"
 import { ProductMixTreemap } from "@/components/charts/product-mix-treemap"
 import { QuickInsights } from "@/components/analytics/quick-insights"
 import { ParetoChart } from "@/components/charts/pareto-chart"
-import { MenuEngineeringMatrix } from "@/components/charts/menu-engineering-matrix"
 import { ProductMixTable } from "@/components/analytics/product-mix-table"
 import { TopMovers } from "@/components/analytics/top-movers"
 
@@ -188,9 +186,9 @@ export function ProductMixContent({
           <div>
             {isPending ? (
               <div className="flex gap-2">
-                <Skeleton className="h-8 w-48 rounded-full" />
-                <Skeleton className="h-8 w-56 rounded-full" />
-                <Skeleton className="h-8 w-44 rounded-full" />
+                <Skeleton className="h-8 w-48 rounded-[2px]" />
+                <Skeleton className="h-8 w-56 rounded-[2px]" />
+                <Skeleton className="h-8 w-44 rounded-[2px]" />
               </div>
             ) : hasData ? (
               <QuickInsights insights={data.insights} />
@@ -210,11 +208,6 @@ export function ProductMixContent({
               <ParetoChart data={data.paretoItems} />
             ) : null}
           </LazyDashboardSection>
-        )}
-
-        {/* Menu Engineering Matrix — Collapsible */}
-        {(isPending || hasData) && (
-          <MatrixSection isPending={isPending} hasData={hasData} data={data} />
         )}
 
         {/* Detailed Product Mix Table */}
@@ -279,51 +272,5 @@ function LazyDashboardSection({
         {shouldMount ? children : fallback}
       </DashboardSection>
     </div>
-  )
-}
-
-function MatrixSection({
-  isPending,
-  hasData,
-  data,
-}: {
-  isPending: boolean
-  hasData: boolean | ProductMixData | null
-  data: ProductMixData | null
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-
-  return (
-    <section className="space-y-4">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 group cursor-pointer"
-      >
-        <h2 className="text-base font-semibold tracking-tight text-foreground/80">
-          Menu Engineering Matrix
-        </h2>
-        <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-            isOpen ? "rotate-0" : "-rotate-90"
-          }`}
-        />
-        <span className="text-xs text-muted-foreground">
-          {isOpen ? "Click to collapse" : "Click to expand"}
-        </span>
-      </button>
-      {isOpen && (
-        <>
-          {isPending ? (
-            <ChartSkeleton />
-          ) : hasData && data ? (
-            <MenuEngineeringMatrix
-              items={data.matrixItems}
-              thresholds={data.matrixThresholds}
-            />
-          ) : null}
-        </>
-      )}
-    </section>
   )
 }
