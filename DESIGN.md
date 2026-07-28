@@ -175,13 +175,13 @@ Used strictly on `.platform-stamp` / `.inv-stamp` to label an order's source. Ea
 
 A separate set of seven low-saturation hues exists exclusively for the DEVELOPER-only system command bridge at `/dashboard/admin/monitoring/**` (tokens defined in `src/styles/editorial-tokens.css`, consumed via `src/components/monitoring/system-color.ts`). These are **not** part of the cream-paper palette above and must never appear on an operator-facing route — Chris (OWNER) never sees them; they exist so Vardan (DEVELOPER) can tell subsystems apart on the health strip at a glance.
 
-- **Ink Stamp** (`oklch(38% 0.10 252)`, `#104375`) — DB
-- **Ink Sepia** (`oklch(45% 0.07 65)`, `#704d29`) — Vercel
-- **Ink Terracotta** (`oklch(50% 0.11 40)`, `#964a2f`) — R2
-- **Ink Plum** (`oklch(38% 0.08 350)`, `#612f48`) — Auth
-- **Ink Olive** (`oklch(45% 0.07 110)`, `#585928`) — Syncs
-- **Ink Ledger** (`oklch(45% 0.09 150)`, `#2b6339`) — Cache identity, and doubles as the **status: OK** tone across the monitoring surface
-- **Ink Ochre** (`oklch(60% 0.12 75)`, `#a97416`) — **status: warning** tone across the monitoring surface
+- **Ink Stamp** (`#104375`, `oklch(38% 0.10 252)`) — DB
+- **Ink Sepia** (`#704d29`, `oklch(45% 0.07 65)`) — TOKENS (JWT/token health)
+- **Ink Terracotta** (`#964a2f`, `oklch(50% 0.11 40)`) — R2
+- **Ink Plum** (`#612f48`, `oklch(38% 0.08 350)`) — Auth
+- **Ink Olive** (`#585928`, `oklch(45% 0.07 110)`) — Syncs
+- **Ink Ledger** (`#2b6339`, `oklch(45% 0.09 150)`) — Cache identity, and doubles as the **status: OK** tone across the monitoring surface
+- **Ink Ochre** (`#a97416`, `oklch(60% 0.12 75)`) — **status: warning** tone across the monitoring surface
 
 Rules for this set:
 - **Monitoring-only.** These hues are sanctioned solely for `/dashboard/admin/monitoring/**` (and its `/m/monitoring` mobile mirror) system-identity coding — register marks, panel headers, and each subsystem's own chart line. They are never a substitute for `--accent`, `--ink-good`/`--ink-warn`, or any token in the cream-paper palette elsewhere on `/dashboard/*`.

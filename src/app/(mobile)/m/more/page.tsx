@@ -1,6 +1,5 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getMoreForRole } from "@/lib/mobile/tabs"
 import { PageHead } from "@/components/mobile/page-head"
@@ -33,14 +32,10 @@ export default async function MobileMorePage() {
             Profile, password, and notification preferences are edited on
             desktop. Mobile shows the active values only.
           </p>
-          <Link
-            href="/dashboard/settings"
-            prefetch={false}
-            className="m-toolbar-btn"
-            style={{ display: "inline-block" }}
-          >
-            Open on desktop →
-          </Link>
+          <SwitchToDesktopButton
+            target="/dashboard/settings"
+            label="Open on desktop →"
+          />
         </Panel>
       </div>
 

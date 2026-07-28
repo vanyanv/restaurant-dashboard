@@ -42,7 +42,7 @@
      colors (ledger / ochre / accent) override system color when a status
      is being communicated. --accent stays reserved for danger + masthead. */
   --ink-stamp: oklch(38% 0.10 252);       /* DB                     */
-  --ink-sepia: oklch(45% 0.07 65);        /* Vercel                 */
+  --ink-sepia: oklch(45% 0.07 65);        /* Tokens                 */
   --ink-terracotta: oklch(50% 0.11 40);   /* R2                     */
   --ink-plum: oklch(38% 0.08 350);        /* Auth                   */
   --ink-olive: oklch(45% 0.07 110);       /* Syncs                  */
