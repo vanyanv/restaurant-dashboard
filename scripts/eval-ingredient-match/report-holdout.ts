@@ -1,24 +1,20 @@
 /**
- * Two report sections added in fix-round-2:
- *   1. Tuning/holdout validation — the ship-gate threshold is selected on a
- *      deterministic half of the gold set and verified, unchanged, against
- *      the other half. A "0 wrong" claim ships with its Wilson 95% upper
- *      bound so it reads as a sample-size-bounded estimate, not a guarantee.
- *   2. Duplicate-creation rate — every case an arm decides "new" would, in
- *      production, auto-create a duplicate of a canonical that already
- *      exists (every gold case has one), silently splitting its cost
- *      history. That failure mode is invisible in auto-link precision/
- *      coverage numbers, so it gets its own accounting.
+ * Grouped k-fold validation section (fix-round-3, point 1 — replaces the
+ * round-2 single 50/50 per-case split, which let ~85% of a holdout case's
+ * canonical also sit in tuning). The ship-gate threshold for each fold is
+ * selected on that fold's tuning portion only (no canonical shared with the
+ * held-out portion) and applied unchanged to the held-out canonicals; folds
+ * are then pooled. Every "0 wrong" claim ships with two Wilson 95% upper
+ * bounds — one on case count, one on distinct-canonical count — since cases
+ * sharing a canonical are not independent trials.
  */
 
 import type { GoldCase } from "./gold"
-import type { ArmResult } from "./arms"
 import type { ArmRun } from "./report"
-import { THRESHOLDS } from "../../src/lib/ingredient-match-scoring"
-import { analyzeHoldout } from "./holdout-analysis"
-import { breakdownAtThreshold, breakdownFromResults, wrongCasesAtThreshold, type Breakdown } from "./threshold-eval"
+import { analyzeGroupedKFold, type FrontierProbe } from "./holdout-analysis"
 import { wilsonUpper95, pct } from "./sweep-analysis"
-import { writeWrongCase, formatScore } from "./report-case-detail"
+import { weightedCount } from "./weighting"
+import { writeWrongCase } from "./report-case-detail"
 
 export function writeHoldoutSection(
   lines: string[],
@@ -26,143 +22,133 @@ export function writeHoldoutSection(
   gold: { cases: GoldCase[] },
   caseIndex: Map<string, GoldCase>,
 ): void {
-  const a = analyzeHoldout(gold.cases, run.results)
+  const a = analyzeGroupedKFold(gold.cases, run.results)
 
-  lines.push("### Tuning/holdout validation (ship-gate selection)")
+  lines.push("### Grouped k-fold validation (ship-gate selection)")
   lines.push("")
   lines.push(
-    "Gold cases are split 50/50, deterministically, by `stableHash(case.id) % 2` (FNV-1a; no `Math.random()`, " +
-      "identical every run). The ship-gate threshold is selected **only** on the tuning half's sweep, then applied " +
-      "unchanged to the holdout half — a threshold chosen because it's exactly where the last tuning-half error " +
-      "disappears is a point estimate at that half's boundary, not a property of the strategy, until it's checked " +
-      "against cases it wasn't chosen from.",
+    `${a.totalDistinctCanonicals} distinct canonicals are split into ${a.k} folds, deterministically, by ` +
+      "`(stableHash(canonicalId) >>> 16) % 5` (FNV-1a; upper bits only — the low bits are provably low-entropy, see " +
+      "holdout-analysis.ts). **No canonical appears in both the tuning and held-out portion of the same fold** — " +
+      "the round-2 split was per-case, so ~85% of a holdout case's canonical also sat in tuning, meaning \"generalizes\" " +
+      "mostly meant \"transfers to another spelling of the same ingredient.\" Each fold selects its ship-gate threshold " +
+      "from its own tuning portion only, applies it unchanged to that fold's held-out canonicals, and folds are pooled below.",
   )
   lines.push("")
-  lines.push(`Tuning half: ${a.tuningCount} cases. Holdout half: ${a.holdoutCount} cases.`)
-  lines.push("")
 
-  if (a.shipGateIsZeroError) {
+  lines.push("#### Per-fold results")
+  lines.push("")
+  lines.push(
+    `| Fold | Held-out canonicals | Ship gate | Zero-error on tuning? | Holdout auto-linked | Holdout wrong | Holdout coverage | Holdout precision |`,
+  )
+  lines.push(`|---|---|---|---|---|---|---|---|`)
+  for (const f of a.folds) {
     lines.push(
-      `**Ship gate (selected on tuning half only): HIGH=${a.shipGate.high.toFixed(2)}, MARGIN=${a.shipGate.margin.toFixed(2)}** — ` +
-        `zero-error on tuning (${a.shipGate.autoLinked} auto-linked, ${a.shipGate.correct} correct, 0 wrong).`,
-    )
-  } else {
-    lines.push(
-      `**No zero-error row exists on the tuning half.** Reporting the fewest-wrong row instead: ` +
-        `HIGH=${a.shipGate.high.toFixed(2)}, MARGIN=${a.shipGate.margin.toFixed(2)} — ${a.shipGate.wrong} wrong ` +
-        `out of ${a.shipGate.autoLinked} auto-linked.`,
+      `| ${f.index} | ${f.holdoutCanonicalCount} | HIGH=${f.shipGate.high.toFixed(2)}, MARGIN=${f.shipGate.margin.toFixed(2)} | ` +
+        `${f.shipGateIsZeroError ? "yes" : "no (fewest-wrong)"} | ${f.holdoutAtShipGate.autoLinked} | ${f.holdoutAtShipGate.wrong} | ` +
+        `${f.holdoutAtShipGate.coveragePct.toFixed(1)}% | ${f.holdoutAtShipGate.precisionPct.toFixed(1)}% |`,
     )
   }
   lines.push("")
 
-  lines.push(`| | Tuning (n=${a.tuningCount}) | Holdout (n=${a.holdoutCount}, same thresholds) |`)
+  const caseWilson = wilsonUpper95(a.pooled.wrong, a.pooled.autoLinked)
+  const canonWilson = wilsonUpper95(a.pooledWrongDistinctCanonicals, a.pooledAutoLinkedDistinctCanonicals)
+  const totalWeighted = weightedCount(run.results, caseIndex)
+  const autoLinkedWeighted = weightedCount(a.pooledAutoLinkedCases, caseIndex)
+  const correctWeighted = weightedCount(a.pooledCorrectCases, caseIndex)
+  const wrongWeighted = autoLinkedWeighted - correctWeighted
+  const coverageWeightedPct = pct(autoLinkedWeighted, totalWeighted)
+  const precisionWeightedPct = autoLinkedWeighted > 0 ? pct(correctWeighted, autoLinkedWeighted) : "0.0"
+  lines.push("#### Pooled (all folds' holdout evaluations combined)")
+  lines.push("")
+  lines.push("Unweighted = per distinct product name. Weighted = by `occurrences` (per invoice line) — see \"How to read these numbers.\"")
+  lines.push("")
+  lines.push(`| | Unweighted | Weighted (occurrences) |`)
   lines.push(`|---|---|---|`)
-  lines.push(`| Auto-linked | ${a.shipGate.autoLinked} | ${a.holdoutAtShipGate.autoLinked} |`)
-  lines.push(`| Correct | ${a.shipGate.correct} | ${a.holdoutAtShipGate.correct} |`)
-  lines.push(`| Wrong | ${a.shipGate.wrong} | ${a.holdoutAtShipGate.wrong} |`)
-  lines.push(`| Coverage | ${a.shipGate.coveragePct.toFixed(1)}% | ${a.holdoutAtShipGate.coveragePct.toFixed(1)}% |`)
-  lines.push(`| Precision | ${a.shipGate.precisionPct.toFixed(1)}% | ${a.holdoutAtShipGate.precisionPct.toFixed(1)}% |`)
+  lines.push(`| Auto-linked | ${a.pooled.autoLinked} | ${autoLinkedWeighted} |`)
+  lines.push(`| Correct | ${a.pooled.correct} | ${correctWeighted} |`)
+  lines.push(`| Wrong | ${a.pooled.wrong} | ${wrongWeighted} |`)
+  lines.push(`| Coverage | ${a.pooled.coveragePct.toFixed(1)}% | ${coverageWeightedPct}% |`)
+  lines.push(`| Precision | ${a.pooled.precisionPct.toFixed(1)}% | ${precisionWeightedPct}% |`)
+  lines.push(`| Auto-linked, distinct canonicals | ${a.pooledAutoLinkedDistinctCanonicals} | n/a |`)
+  lines.push(`| Wrong, distinct canonicals | ${a.pooledWrongDistinctCanonicals} | n/a |`)
   lines.push(
-    `| Wilson 95% upper bound on true error rate | ${(wilsonUpper95(a.shipGate.wrong, a.shipGate.autoLinked) * 100).toFixed(1)}% | ` +
-      `${(wilsonUpper95(a.holdoutAtShipGate.wrong, a.holdoutAtShipGate.autoLinked) * 100).toFixed(1)}% |`,
+    `| Wilson 95% upper bound (denominator = auto-linked **cases**, n=${a.pooled.autoLinked}) | ${(caseWilson * 100).toFixed(1)}% |`,
+  )
+  lines.push(
+    `| **Wilson 95% upper bound (denominator = distinct **canonicals**, n=${a.pooledAutoLinkedDistinctCanonicals}) — the honest one** | **${(canonWilson * 100).toFixed(1)}%** |`,
+  )
+  lines.push("")
+  lines.push(
+    "The case-count bound treats every one of the ~3.8 spelling variants per canonical as an independent trial. " +
+      "They aren't: if the embedding gets one ingredient family wrong, it's likely to get every spelling of that " +
+      "same family wrong together, not independently. The distinct-canonical bound is the honest denominator for " +
+      "\"how many genuinely different things has this been tested against.\"",
   )
   lines.push("")
 
-  if (a.holdoutAtShipGate.wrong > 0) {
+  if (a.pooled.wrong > 0) {
     lines.push(
-      `**The holdout half shows ${a.holdoutAtShipGate.wrong} wrong auto-link(s) at the tuning-selected thresholds ` +
-        "that the tuning half's own \"zero errors\" claim did not predict.** This is the single most important " +
-        "finding for this arm: the zero-error result does not generalize past the sample it was selected on. Full " +
-        "detail below, not retuned away.",
+      `**${a.pooled.wrong} wrong auto-link(s) across all folds' holdout evaluations, pooled** — every one printed in full:`,
     )
     lines.push("")
-    const holdoutResults = run.results.filter((r) => a.split.holdoutIds.has(r.caseId))
-    for (const w of wrongCasesAtThreshold(holdoutResults, a.shipGate.high, a.shipGate.margin)) {
+    for (const w of a.pooledWrongCases) {
       writeWrongCase(lines, w.result, w.chosenId, w.result.margin, caseIndex, w.isTie)
     }
+  } else {
+    lines.push("No wrong auto-links in any fold's holdout evaluation.")
+    lines.push("")
   }
 
-  lines.push("#### The decisive case (frontier detail)")
+  lines.push("#### Frontier detail, per fold")
   lines.push("")
-  if (a.frontier) {
-    lines.push(
-      `At MARGIN=${a.frontier.row.margin.toFixed(2)} (one step looser than the ship gate's ` +
-        `MARGIN=${a.shipGate.margin.toFixed(2)}, same HIGH=${a.shipGate.high.toFixed(2)}), the tuning half has ` +
-        `${a.frontier.row.wrong} wrong out of ${a.frontier.row.autoLinked} auto-linked (${a.frontier.row.coveragePct.toFixed(1)}% coverage) — ` +
-        "this is the exact case (or cases) that keep the threshold from being one notch looser. Printed in full " +
-        "because a zero-error row's own wrong-case list is trivially empty and would otherwise hide it.",
-    )
-    lines.push("")
-    for (const w of a.frontier.wrongCases) {
-      writeWrongCase(lines, w.result, w.chosenId, w.result.margin, caseIndex, w.isTie)
+  lines.push(
+    "For each fold whose tuning-selected ship gate was zero-error, both adjacent directions are probed — " +
+      "`HIGH - 0.01` and `MARGIN - 0.01` — since for some arms/folds the binding constraint is HIGH, not MARGIN, and " +
+      "probing only MARGIN would silently miss the case that actually bounds the zero-error region.",
+  )
+  lines.push("")
+  for (const f of a.folds) {
+    if (!f.shipGateIsZeroError) {
+      lines.push(`**Fold ${f.index}:** ship gate was fewest-wrong, not zero-error — its own wrong cases (table above) are the decisive detail; no frontier probe applies.`)
+      lines.push("")
+      continue
     }
-  } else if (a.shipGateIsZeroError) {
-    lines.push(
-      "No adjacent looser-MARGIN row (or it has 0 wrong too) — the zero-error region extends at least one step " +
-        "looser than the ship gate on the tuning half.",
-    )
+    lines.push(`**Fold ${f.index}** (ship gate HIGH=${f.shipGate.high.toFixed(2)}, MARGIN=${f.shipGate.margin.toFixed(2)}):`)
     lines.push("")
-  } else {
-    lines.push("No zero-error row exists, so the ship-gate row's own wrong cases above (default-policy section or holdout list) are the decisive detail; no separate frontier applies.")
-    lines.push("")
+    for (const probe of f.frontier) {
+      writeFrontierProbe(lines, probe, caseIndex)
+    }
   }
 }
 
-export function writeDuplicateCreationSection(
-  lines: string[],
-  run: ArmRun,
-  gold: { cases: GoldCase[] },
-  caseIndex: Map<string, GoldCase>,
-): void {
-  const { arm, results } = run
-  let breakdown: Breakdown
-  let policyLabel: string
-
-  if (arm.name === "token-overlap") {
-    breakdown = breakdownFromResults(results)
-    policyLabel = "default policy (0.25 Jaccard cutoff) — its own honest baseline; the cosine-calibrated sweep doesn't transfer to Jaccard scores (see arms.ts)"
-  } else {
-    const a = analyzeHoldout(gold.cases, results)
-    breakdown = breakdownAtThreshold(results, a.shipGate.high, a.shipGate.margin)
-    policyLabel = `ship-gate thresholds selected on the tuning half (HIGH=${a.shipGate.high.toFixed(2)}, MARGIN=${a.shipGate.margin.toFixed(2)}), applied to all ${results.length} cases`
+function writeFrontierProbe(lines: string[], probe: FrontierProbe, caseIndex: Map<string, GoldCase>): void {
+  if (probe.outOfRangeReason) {
+    lines.push(`- **${probe.direction}** direction: ${probe.outOfRangeReason}`)
+    lines.push("")
+    return
   }
-
-  const total = results.length
-  lines.push("### Duplicate-creation rate")
-  lines.push("")
+  if (!probe.row) {
+    lines.push(`- **${probe.direction}** direction: no adjacent row found in the tuning sweep.`)
+    lines.push("")
+    return
+  }
+  if (probe.row.wrong === 0) {
+    lines.push(
+      `- **${probe.direction}** direction: also zero-error at HIGH=${probe.row.high.toFixed(2)}, MARGIN=${probe.row.margin.toFixed(2)} ` +
+        `(${probe.row.autoLinked} auto-linked) — the zero-error region extends at least one more step in this direction ` +
+        "on the tuning half. This does not mean it extends indefinitely, only that this specific adjacent row has 0 wrong too.",
+    )
+    lines.push("")
+    return
+  }
   lines.push(
-    "Every one of these 260 gold cases has a real, existing correct canonical ingredient. So any case a strategy " +
-      "decides `new` for would, in production, auto-create a **duplicate** of something already in the pantry — " +
-      "silently splitting that ingredient's cost history. This is demonstrated, not hypothetical: the pantry " +
-      "already contains 3 such near-duplicate conflicts (Task 3's gold-set build had to drop 3 ids for exactly " +
-      "this reason). `ambiguous` is safe — it goes to human review, not auto-create.",
+    `- **${probe.direction}** direction: ${probe.row.wrong} wrong out of ${probe.row.autoLinked} auto-linked at ` +
+      `HIGH=${probe.row.high.toFixed(2)}, MARGIN=${probe.row.margin.toFixed(2)} — the decisive case(s) that keep ` +
+      `this fold's ship gate from being one step looser in the ${probe.direction} direction:`,
   )
   lines.push("")
-  lines.push(`Breakdown at: ${policyLabel}.`)
-  lines.push("")
-  lines.push(`| Decision | Count | % of ${total} |`)
-  lines.push(`|---|---|---|`)
-  lines.push(`| Auto-linked, correct | ${breakdown.autoCorrect} | ${pct(breakdown.autoCorrect, total)}% |`)
-  lines.push(`| Auto-linked, wrong | ${breakdown.autoWrong} | ${pct(breakdown.autoWrong, total)}% |`)
-  lines.push(`| Ambiguous (safe — human review) | ${breakdown.ambiguous} | ${pct(breakdown.ambiguous, total)}% |`)
-  lines.push(`| **New (= duplicate-create if wired live)** | **${breakdown.newCount}** | **${pct(breakdown.newCount, total)}%** |`)
-  lines.push("")
-
-  if (breakdown.newCount === 0) {
-    lines.push("No `new` decisions at this policy — 0 duplicate-creates.")
-  } else {
-    lines.push(`<details><summary>All ${breakdown.newCount} "new" cases (click to expand)</summary>`)
-    lines.push("")
-    lines.push(`| Case | Top score | Expected canonical (would be duplicated) |`)
-    lines.push(`|---|---|---|`)
-    for (const r of breakdown.newCases) {
-      const goldCase = caseIndex.get(r.caseId)
-      lines.push(
-        `| ${r.caseId} | ${formatScore(r.topScore)} | ${goldCase?.expectedCanonicalName ?? "?"} (\`${r.expectedCanonicalId}\`) |`,
-      )
-    }
-    lines.push("")
-    lines.push("</details>")
+  for (const w of probe.wrongCases) {
+    writeWrongCase(lines, w.result, w.chosenId, w.result.margin, caseIndex, w.isTie)
   }
-  lines.push("")
 }
