@@ -1,7 +1,7 @@
 import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { PageHead } from "@/components/mobile/page-head"
 import {
   MastheadFigures,
@@ -85,6 +85,9 @@ export default async function MobileHomePage({
   const totalOrders = snapshot?.totalOrders ?? 0
   const netGrowth = snapshot?.netGrowth ?? null
   const previousNet = snapshot?.previousNet ?? 0
+  const pendingInvoiceCount = snapshot?.pendingInvoiceCount ?? 0
+  const laborGlance = snapshot?.laborGlance ?? null
+  const canSeeLabor = hasOwnerAccess(session.user.role)
 
   const periodLabel =
     range.kind === "named"
@@ -105,7 +108,28 @@ export default async function MobileHomePage({
       value: fmtCount(totalOrders),
       sub: activeStoreName ?? `${stores.length} stores`,
     },
+    {
+      label: "PENDING INV",
+      value: fmtCount(pendingInvoiceCount),
+      sub: "awaiting review",
+      href: "/m/invoices?status=REVIEW",
+    },
   ]
+
+  // Labor is owner-only (mirrors the /m/labor route's own gate) and only
+  // shown once Harri has a forecast to compare against — no fake zero.
+  if (canSeeLabor && laborGlance) {
+    cells.push({
+      label: "LABOR ±",
+      value: (
+        <span style={{ color: laborGlance.overbudget ? "var(--accent)" : "var(--ink)" }}>
+          {`${laborGlance.variancePct >= 0 ? "+" : ""}${(laborGlance.variancePct * 100).toFixed(1)}%`}
+        </span>
+      ),
+      sub: `${laborGlance.variance >= 0 ? "+" : "-"}${fmtMoney(Math.abs(laborGlance.variance))} vs forecast`,
+      href: "/m/labor",
+    })
+  }
 
   const trendIsTrailing = trendEnd === todayInLA()
   const trendLabel = trendIsTrailing
