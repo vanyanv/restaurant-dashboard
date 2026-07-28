@@ -18,14 +18,12 @@ const ROUTES = [
   "/dashboard/menu",
   "/dashboard/menu/catalog",
   "/dashboard/operations",
-  "/dashboard/operations/costs",
   "/dashboard/operations/inventory",
   "/dashboard/operations/inventory/count/new",
   "/dashboard/operations/inventory/counts",
   "/dashboard/operations/packaging",
   "/dashboard/operations/product-usage",
   "/dashboard/operations/recipes",
-  "/dashboard/operations/vendors",
   "/dashboard/orders",
   "/dashboard/pnl",
   "/dashboard/product-mix",
@@ -37,9 +35,7 @@ const ROUTES = [
   "/dashboard/stores",
   "/dashboard/stores/new",
   "/m",
-  "/m/analytics",
   "/m/chat",
-  "/m/cogs",
   "/m/count",
   "/m/ingredients",
   "/m/invoices",
@@ -51,8 +47,6 @@ const ROUTES = [
   "/m/pnl",
   "/m/product-mix",
   "/m/recipes",
-  "/m/settings",
-  "/m/stores",
 ] as const
 
 const VIEWPORTS = [
