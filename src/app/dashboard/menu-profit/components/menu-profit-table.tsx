@@ -128,7 +128,7 @@ export function MenuProfitTable({ rows }: { rows: MenuEngineeringRow[] }) {
                 <td className={NUM_CLASS}>{money(r.totalContribution, 0)}</td>
                 <td className="py-1.5 pl-2 text-right">
                   <span
-                    className="text-[9.5px] uppercase tracking-[0.14em]"
+                    className="font-mono text-[9.5px] uppercase tracking-[0.14em]"
                     style={{
                       color: r.quadrant === "DOG" ? "var(--subtract)" : "var(--ink-muted)",
                     }}
