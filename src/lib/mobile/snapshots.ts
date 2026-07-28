@@ -9,6 +9,7 @@ import {
   derivePeriodSpec,
   type AggregateHourlyRow,
 } from "@/lib/hourly-orders"
+import { buildLaborWeekWindow, aggregateLaborWeek } from "@/lib/labor-week"
 import {
   buildPeriods,
   bucketSummariesByPeriod,
@@ -26,6 +27,16 @@ import type {
 
 type MobileStore = { id: string; name: string }
 
+/** This week's actual-vs-forecast labor variance for a single store. Null
+ * when Harri has no forecast to compare against (unmapped store, no data
+ * yet) or the lookup fails — callers must omit the masthead cell, never
+ * render a fake zero. */
+export type MobileLaborGlance = {
+  variancePct: number
+  variance: number
+  overbudget: boolean
+} | null
+
 export type MobileHomeSnapshot =
   | {
       stores: MobileStore[]
@@ -37,6 +48,8 @@ export type MobileHomeSnapshot =
       previousNet: number
       hourly: HourlyOrderPoint[] | null
       dailyTrends: DailyTrend[]
+      pendingInvoiceCount: number
+      laborGlance: MobileLaborGlance
     }
   | null
 
@@ -56,13 +69,16 @@ export async function getMobileHomeSnapshot(input: {
   return cached(
     `mobile:home:${accountId}:${stableKey(input)}`,
     ttl,
-    ["mobile", "otter", `account:${accountId}`],
+    ["mobile", "otter", "invoices", "harri", `account:${accountId}`],
     async () => {
-      const stores = await prisma.store.findMany({
-        where: { accountId, isActive: true },
-        select: { id: true, name: true },
-        orderBy: { createdAt: "desc" },
-      })
+      const [stores, pendingInvoiceCount] = await Promise.all([
+        prisma.store.findMany({
+          where: { accountId, isActive: true },
+          select: { id: true, name: true },
+          orderBy: { createdAt: "desc" },
+        }),
+        getPendingInvoiceReviewCount(accountId),
+      ])
       if (stores.length === 0) {
         return {
           stores,
@@ -74,6 +90,8 @@ export async function getMobileHomeSnapshot(input: {
           previousNet: 0,
           hourly: null,
           dailyTrends: [],
+          pendingInvoiceCount,
+          laborGlance: null,
         }
       }
 
@@ -111,7 +129,12 @@ export async function getMobileHomeSnapshot(input: {
         Math.max(trendEnd.getTime(), periodEnd.getTime()),
       )
 
-      const [summaries, hourly] = await Promise.all([
+      // Labor is single-store (Harri brand mapping is per-store); default to
+      // the first store when the toolbar has "All stores" selected, mirroring
+      // /m/labor's own default so the masthead cell and its link target agree.
+      const laborStoreId = validStoreId ?? stores[0]?.id ?? null
+
+      const [summaries, hourly, laborGlance] = await Promise.all([
         prisma.otterDailySummary.findMany({
           where: {
             storeId: { in: storeIds },
@@ -132,6 +155,9 @@ export async function getMobileHomeSnapshot(input: {
         }),
         input.hourlyPeriod
           ? getMobileHourly(validStoreId, input.hourlyPeriod)
+          : Promise.resolve(null),
+        laborStoreId
+          ? getMobileLaborGlance(laborStoreId, accountId)
           : Promise.resolve(null),
       ])
 
@@ -203,9 +229,66 @@ export async function getMobileHomeSnapshot(input: {
         dailyTrends: [...byDate.entries()]
           .map(([date, vals]) => ({ date, ...vals }))
           .sort((a, b) => a.date.localeCompare(b.date)),
+        pendingInvoiceCount,
+        laborGlance,
       }
     },
   )
+}
+
+/**
+ * Count of invoices awaiting review, scoped to the same trailing-30-day
+ * window and `accountId` filter the `/m/invoices` masthead PENDING figure
+ * uses. Shared here so the home glance cell and the invoices page can never
+ * drift onto different query shapes.
+ */
+async function getPendingInvoiceReviewCount(accountId: string): Promise<number> {
+  const end = new Date()
+  end.setHours(23, 59, 59, 999)
+  const start = new Date(end)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - 29)
+  return prisma.invoice.count({
+    where: {
+      accountId,
+      invoiceDate: { gte: start, lte: end },
+      status: "REVIEW",
+    },
+  })
+}
+
+/**
+ * This week's Harri actual-vs-forecast labor variance for one store, reusing
+ * the same `harriDailyLabor` aggregate `/m/labor` builds its VARIANCE cell
+ * from (see `aggregateLaborWeek` in `@/lib/labor-week`). Only the fields the
+ * aggregate needs are selected — no alerts/positions queries — so this stays
+ * cheap enough to run alongside the home page's other queries. Returns null
+ * (never a fake zero) when the store isn't found, Harri has no forecast to
+ * compare against, or the lookup throws.
+ */
+async function getMobileLaborGlance(
+  storeId: string,
+  accountId: string,
+): Promise<MobileLaborGlance> {
+  try {
+    const store = await prisma.store.findFirst({
+      where: { id: storeId, accountId },
+      select: { id: true },
+    })
+    if (!store) return null
+
+    const { weekStart, weekEnd } = buildLaborWeekWindow(undefined)
+    const rows = await prisma.harriDailyLabor.findMany({
+      where: { storeId, date: { gte: weekStart, lte: weekEnd } },
+      select: { actualCost: true, forecastCost: true },
+    })
+    const { variancePct, variance, overbudget } = aggregateLaborWeek(rows, [])
+    if (variancePct == null) return null
+    return { variancePct, variance, overbudget }
+  } catch (error) {
+    console.error("getMobileLaborGlance error:", error)
+    return null
+  }
 }
 
 async function getMobileHourly(
@@ -332,9 +415,7 @@ export async function getMobileInvoiceSnapshot(input: {
             _sum: { totalAmount: true },
             _count: { _all: true },
           }),
-          prisma.invoice.count({
-            where: { ...summaryWhere, status: "REVIEW" },
-          }),
+          getPendingInvoiceReviewCount(accountId),
           prisma.invoice.findMany({
             where: listWhere,
             select: {
