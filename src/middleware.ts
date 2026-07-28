@@ -20,9 +20,26 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/stores": "/m/stores",
 }
 
+// Desktop routes with a dynamic sub-path that has a matching mobile page
+// (e.g. `/dashboard/orders/[id]` -> `/m/orders/[id]`). Only bases listed
+// here get their sub-path carried over; every other desktop route maps
+// 1:1 via DESKTOP_TO_MOBILE with no further nesting.
+//
+// This is deliberately an allowlist, not a generic "any desktop base is a
+// prefix" match: several mobile pages (cogs, analytics, stores, settings,
+// ingredients, menu, operations, ...) are flat and have no `[id]`-style
+// route at all, so blindly carrying over a sub-path 404s (e.g.
+// `/dashboard/cogs/<storeId>` has no `/m/cogs/<storeId>` page). For those,
+// mobilePathFor returns null and the request is left on desktop.
+const DYNAMIC_SUBROUTES: Array<[string, string]> = [
+  ["/dashboard/invoices", "/m/invoices"],
+  ["/dashboard/orders", "/m/orders"],
+  ["/dashboard/pnl", "/m/pnl"],
+]
+
 function mobilePathFor(desktopPath: string): string | null {
   if (DESKTOP_TO_MOBILE[desktopPath]) return DESKTOP_TO_MOBILE[desktopPath]
-  for (const [base, mobileBase] of Object.entries(DESKTOP_TO_MOBILE)) {
+  for (const [base, mobileBase] of DYNAMIC_SUBROUTES) {
     if (desktopPath.startsWith(base + "/")) {
       return mobileBase + desktopPath.slice(base.length)
     }
