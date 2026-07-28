@@ -14,7 +14,6 @@ const ROUTES = [
   "/dashboard/cogs",
   "/dashboard/ingredients",
   "/dashboard/ingredients/prices",
-  "/dashboard/invites",
   "/dashboard/invoices",
   "/dashboard/menu",
   "/dashboard/menu/catalog",
