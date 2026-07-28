@@ -8,18 +8,20 @@
  * Usage:
  *   npm run eval:ingredient-match
  *   npm run eval:ingredient-match -- --arms token-overlap,vector-only
- *   npm run eval:ingredient-match -- --arms vector-only
+ *   npm run eval:ingredient-match -- --arms vector-only,vector-productname-only
  */
 
 import { resolve } from "node:path"
 
 import { buildGoldSet, loadEnvLocal } from "./gold"
-import { tokenOverlapArm, vectorOnlyArm, sweepThresholds, type Arm, type ArmContext, type ArmResult } from "./arms"
+import { vectorOnlyArm, vectorProductNameOnlyArm, sweepThresholds, type Arm, type ArmContext, type ArmResult } from "./arms"
+import { tokenOverlapArm } from "./token-overlap-arm"
 import { writeReport, timestampForFilename, type ArmRun } from "./report"
 
 const ARMS: Record<string, Arm> = {
   "token-overlap": tokenOverlapArm,
   "vector-only": vectorOnlyArm,
+  "vector-productname-only": vectorProductNameOnlyArm,
 }
 
 async function main() {
@@ -49,17 +51,30 @@ async function main() {
   // time, so it must load after loadEnvLocal() has populated process.env.
   const { prisma } = await import("../../src/lib/prisma")
 
-  const accountRow = await prisma.canonicalIngredientEmbedding.findFirst({
+  // Assert single-tenant, not just "a row exists": findFirst() alone would
+  // silently pick an arbitrary account if the table ever holds more than
+  // one, and every arm in this harness assumes a single accountId scopes
+  // the whole pantry.
+  const distinctAccounts = await prisma.canonicalIngredientEmbedding.findMany({
+    distinct: ["accountId"],
     select: { accountId: true },
   })
-  if (!accountRow) {
+  if (distinctAccounts.length === 0) {
     console.error(
       "No CanonicalIngredientEmbedding rows found — cannot resolve accountId for the vector search. " +
         "Run the ingredient embedding sync first.",
     )
     process.exit(1)
   }
-  const ctx: ArmContext = { prisma, accountId: accountRow.accountId }
+  if (distinctAccounts.length > 1) {
+    console.error(
+      `Expected exactly one account in CanonicalIngredientEmbedding, found ${distinctAccounts.length}: ` +
+        `${distinctAccounts.map((a) => a.accountId).join(", ")}. This harness assumes single-tenant scope — ` +
+        "extend it to take --account before running against multi-account data.",
+    )
+    process.exit(1)
+  }
+  const ctx: ArmContext = { prisma, accountId: distinctAccounts[0].accountId }
 
   const startedAt = new Date()
   const startMs = Date.now()

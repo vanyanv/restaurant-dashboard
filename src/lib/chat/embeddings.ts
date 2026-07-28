@@ -61,13 +61,28 @@ export async function embedBatch(inputs: string[]): Promise<number[][]> {
         `Batch embedding length mismatch: ${chunk.length} in, ${res.data.length} out`,
       )
     }
+    // Index by row.index, not by iteration order. The API does not document
+    // response ordering as guaranteed to match request order, and silently
+    // trusting positional order would misalign every vector to the wrong
+    // input string on any reordering — with no error, just quietly wrong
+    // (depressed-looking) downstream similarity scores.
+    const chunkVectors: number[][] = new Array(chunk.length)
     for (const row of res.data) {
       if (row.embedding.length !== CHAT_EMBEDDING_DIMS) {
         throw new Error(
           `Embedding row has wrong dim: ${row.embedding.length}`,
         )
       }
-      out.push(row.embedding)
+      if (!Number.isInteger(row.index) || row.index < 0 || row.index >= chunk.length) {
+        throw new Error(`Embedding row has out-of-range index: ${row.index}`)
+      }
+      chunkVectors[row.index] = row.embedding
+    }
+    for (const vec of chunkVectors) {
+      if (!vec) {
+        throw new Error("Batch embedding response is missing an index — cannot align vectors to inputs")
+      }
+      out.push(vec)
     }
   }
   return out
