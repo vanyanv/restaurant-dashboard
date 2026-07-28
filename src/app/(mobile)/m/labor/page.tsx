@@ -2,7 +2,6 @@ import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getStores } from "@/app/actions/store/crud-actions"
 import {
   getHarriDailyLabor,
@@ -11,7 +10,6 @@ import {
   type HarriAlertRow,
 } from "@/app/actions/harri-actions"
 import {
-  isoDate,
   buildLaborWeekWindow,
   aggregateLaborWeek,
   groupAlertsByDate,
@@ -23,10 +21,9 @@ import {
 } from "@/components/mobile/masthead-figures"
 import { MobileStoreSelect } from "@/components/mobile/m-store-select"
 import { Panel } from "@/components/mobile/panel"
-import { LaborWeekStrip } from "@/components/mobile/labor-week-strip"
-import { LaborPositionList } from "@/components/mobile/labor-position-list"
 import { MLaborWeekNav } from "@/components/mobile/m-labor-week-nav"
 import { MLaborDayRows } from "@/components/mobile/m-labor-day-rows"
+import { SwitchToDesktopButton } from "@/app/(mobile)/m/more/switch-to-desktop"
 
 export const dynamic = "force-dynamic"
 
@@ -34,19 +31,6 @@ const fmtPct = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n)
     ? "—"
     : `${n >= 0 ? "+" : ""}${(n * 100).toFixed(1)}%`
-
-const fmtRangeShort = (weekStartIso: string): string => {
-  const start = new Date(`${weekStartIso}T00:00:00.000Z`)
-  const end = new Date(start)
-  end.setUTCDate(end.getUTCDate() + 6)
-  const f = (d: Date) =>
-    d.toLocaleDateString("en-US", {
-      month: "numeric",
-      day: "numeric",
-      timeZone: "UTC",
-    })
-  return `${f(start)}–${f(end)}`
-}
 
 export default async function MobileLaborPage({
   searchParams,
@@ -86,50 +70,14 @@ export default async function MobileLaborPage({
   const { weekStart, weekEnd, priorWeekStart, priorWeekEnd, weekIso, thisWeekIso, isCurrentWeek } =
     buildLaborWeekWindow(sp.week)
 
-  // Harri's positions endpoint 500s on most dates (gateway-side issue, see
-  // JobRun.metadata.positionsFailures). Show the most-recent date we have
-  // any rows for instead of strictly today, so the panel isn't usually empty.
-  const latestPositionsRow = await prisma.harriPositionDaily.findFirst({
-    where: { storeId },
-    orderBy: { date: "desc" },
-    select: { date: true },
-  })
-  const positionsDate = latestPositionsRow?.date ?? null
-
-  const [weekRows, alerts, priorRows, positions]: [
+  const [weekRows, alerts, priorRows]: [
     HarriDailyRow[],
     HarriAlertRow[],
     HarriDailyRow[],
-    Array<{
-      id: string
-      categoryName: string | null
-      categoryCode: string
-      positionName: string | null
-      positionCode: string
-      totalLabor: number | null
-      overtimeAmount: number | null
-      actualSeconds: number | null
-    }>,
   ] = await Promise.all([
     getHarriDailyLabor(storeId, weekStart, weekEnd),
     getHarriAlerts(storeId, weekStart, weekEnd),
     getHarriDailyLabor(storeId, priorWeekStart, priorWeekEnd),
-    positionsDate
-      ? prisma.harriPositionDaily.findMany({
-          where: { storeId, date: positionsDate },
-          select: {
-            id: true,
-            categoryName: true,
-            categoryCode: true,
-            positionName: true,
-            positionCode: true,
-            totalLabor: true,
-            overtimeAmount: true,
-            actualSeconds: true,
-          },
-          orderBy: [{ totalLabor: "desc" }],
-        })
-      : Promise.resolve([]),
   ])
 
   const {
@@ -182,24 +130,6 @@ export default async function MobileLaborPage({
     },
   ]
 
-  const positionRows = positions.map((p) => ({
-    id: p.id,
-    category: p.categoryName ?? p.categoryCode,
-    position: p.positionName ?? p.positionCode,
-    hours: p.actualSeconds != null ? p.actualSeconds / 3600 : null,
-    totalLabor: p.totalLabor,
-    overtimeAmount: p.overtimeAmount,
-  }))
-  const positionsDateKey = positionsDate ? isoDate(positionsDate) : null
-  const todayKey = isoDate(new Date())
-  const positionsHeader = positionsDateKey
-    ? positionsDateKey === todayKey
-      ? `POSITIONS · ${positionsDateKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
-      : `POSITIONS · LATEST AVAILABLE · ${positionsDateKey} · ${positionRows.length} ROW${positionRows.length === 1 ? "" : "S"}`
-    : `POSITIONS · UNAVAILABLE`
-
-  const weekRangeShort = fmtRangeShort(weekIso)
-
   return (
     <div data-perf-ready="/m/labor">
       <div
@@ -238,15 +168,6 @@ export default async function MobileLaborPage({
       />
 
       <div style={{ marginTop: 14 }}>
-        <Panel dept={`ACTUAL VS FORECAST · ${weekRangeShort}`}>
-          <LaborWeekStrip
-            rows={weekRows}
-            label={`ACTUAL VS FORECAST · ${weekRangeShort}`}
-          />
-        </Panel>
-      </div>
-
-      <div style={{ marginTop: 14 }}>
         <Panel
           dept={`DAY-BY-DAY · ${alerts.length} ALERT${alerts.length === 1 ? "" : "S"}`}
         >
@@ -259,8 +180,22 @@ export default async function MobileLaborPage({
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <Panel dept={positionsHeader}>
-          <LaborPositionList rows={positionRows} />
+        <Panel dept="INTELLIGENCE" title="Positions & trend">
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--ink-muted)",
+              lineHeight: 1.6,
+              margin: "0 0 12px",
+            }}
+          >
+            Per-position breakdowns and the actual-vs-forecast trend chart
+            are a desktop view.
+          </p>
+          <SwitchToDesktopButton
+            target="/dashboard/labor"
+            label="Full labor detail on desktop →"
+          />
         </Panel>
       </div>
     </div>
