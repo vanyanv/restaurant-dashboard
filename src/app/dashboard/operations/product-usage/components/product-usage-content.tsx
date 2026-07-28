@@ -2,7 +2,7 @@
 
 import { useTransition, useState, useCallback, useEffect } from "react"
 import dynamic from "next/dynamic"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { getProductUsageData } from "@/app/actions/product-usage-actions"
 
 import {
@@ -72,28 +72,40 @@ export function ProductUsageContent({
   stores,
   userRole,
 }: ProductUsageContentProps) {
-  const router = useRouter()
-  const pathname = usePathname()
+  // Seed the active tab from the URL once at mount so ?view=costs / ?view=vendors
+  // deep-link correctly and the default (no param) lands on "usage". After
+  // mount, `view` is owned entirely by local state and synced back to the URL
+  // via history.replaceState — deliberately NOT router.push/replace, which
+  // would re-render the product-usage Page RSC on every tab click, re-firing
+  // getProductUsageData({days:30}) + getStores() and clobbering any client-side
+  // date-range/store filter through the initialData-sync effect below. This
+  // keeps tab switching on the single shared payload (one fetch, three views).
   const searchParams = useSearchParams()
-  const view = parseView(searchParams.get("view"))
-
-  const setView = useCallback(
-    (next: OperationsView) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (next === "usage") {
-        params.delete("view")
-      } else {
-        params.set("view", next)
-      }
-      const qs = params.toString()
-      router.push(qs ? `${pathname}?${qs}` : pathname)
-    },
-    [router, pathname, searchParams]
+  const [view, setViewState] = useState<OperationsView>(() =>
+    parseView(searchParams.get("view"))
   )
+
+  const setView = useCallback((next: OperationsView) => {
+    setViewState(next)
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (next === "usage") {
+      params.delete("view")
+    } else {
+      params.set("view", next)
+    }
+    const qs = params.toString()
+    const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+    window.history.replaceState(null, "", url)
+  }, [])
 
   const [data, setData] = useState(initialData)
   const [isPending, startTransition] = useTransition()
 
+  // Resyncs `data` when this route gets a genuine new server render (hard
+  // navigation/reload) and initialData changes. Tab clicks no longer trigger
+  // one — see setView above — so this can no longer clobber an in-progress
+  // client-side date-range/store filter mid-session.
   useEffect(() => {
     setData(initialData)
   }, [initialData])
