@@ -8,7 +8,7 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch } from "@/lib/invoice-sanity"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
@@ -405,8 +405,18 @@ async function runSync(
       )
     }
 
+    const totalMismatch = findTotalReconciliationMismatch(inv.extraction)
+    if (totalMismatch) {
+      logger.warn(
+        `[invoice-sync] total mismatch on ${contextLabel}: lines sum to ` +
+        `$${totalMismatch.lineSum.toFixed(2)} but closest printed total is ` +
+        `$${totalMismatch.closestReference.toFixed(2)} (gap $${totalMismatch.gap.toFixed(2)}, ` +
+        `tolerance $${totalMismatch.tolerance.toFixed(2)}) — lines were likely dropped or corrupted`
+      )
+    }
+
     let status: "MATCHED" | "REVIEW" | "PENDING"
-    if (dateSuspect || mathMismatches.length > 0 || packAnomalies.length > 0) {
+    if (dateSuspect || mathMismatches.length > 0 || packAnomalies.length > 0 || totalMismatch) {
       status = "REVIEW"
     } else if (match) {
       status = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
