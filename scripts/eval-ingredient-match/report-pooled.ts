@@ -73,13 +73,24 @@ export function writePooledTables(
   }
   lines.push("")
   lines.push(
-    "**The `median` rule is a stability diagnostic, not a second independent cross-validated estimate.** Its shared " +
-      "gate is derived from all five folds' tuning selections, and every fold's held-out canonicals sit inside the " +
-      "other four folds' tuning portions — so unlike `permissive`, it is not leakage-free. It answers one specific " +
-      "question: does the pooled error survive when no single fold gets to set the operating point by itself? Read " +
-      "it as that and nothing more. (\"Tightest zero-error row\" was the other candidate rule and was rejected as " +
-      "degenerate: coverage falls monotonically in HIGH, so rows near HIGH=0.99 auto-link almost nothing and are " +
-      "zero-error trivially — the tightest zero-error gate is an empty gate.)",
+    "> **Read the `median` rows as the full-sample curve at a single gate — they are not a cross-validated result, " +
+      "despite sitting under this heading.** Under `median` every fold is scored at the same gate, and every case is " +
+      "held out in exactly one fold, so pooling sums disjoint subsets that together are the entire gold set at one " +
+      "fixed threshold. That is arithmetically identical to scoring all cases at that threshold in a single pass — " +
+      "you can check it directly: each `median` row reproduces the matching row of this arm's own full-sample " +
+      "precision/coverage curve above. It is not a weakened cross-validated number; it is a different quantity. " +
+      "**The cross-validated estimate in this report is the `permissive` rows and only those.** The `median` rows " +
+      "answer a narrower question: where does the whole gold set sit at one shared threshold, instead of at " +
+      "whichever threshold each fold happened to pick for itself?",
+  )
+  lines.push("")
+  lines.push(
+    "`median` is also **not** reliably the tighter or safer of the two, so it is described here rather than " +
+      "characterized: on this data it selects MARGIN=0.01 for `vector-only` excluding disputed labels, and " +
+      "MARGIN=0.15 — the edge of the swept grid — for `token-overlap`, both looser than most folds' own picks. " +
+      "(\"Tightest zero-error row\" was the other candidate rule and was rejected as degenerate: coverage falls " +
+      "monotonically in HIGH, so rows near HIGH=0.99 auto-link almost nothing and are zero-error trivially — the " +
+      "tightest zero-error gate is an empty gate.)",
   )
   lines.push("")
 

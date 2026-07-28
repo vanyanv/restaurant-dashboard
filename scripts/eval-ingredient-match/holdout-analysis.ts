@@ -86,21 +86,33 @@ export type FrontierProbe = {
  * therefore zero-error trivially — "tightest zero-error" selects an empty
  * gate that abstains on everything and measures nothing.
  *
- * The honest caveat, stated in the report too: the median is computed across
- * all five folds' tuning selections, and every fold's held-out canonicals sit
- * in the other four folds' tuning portions. So `median` is NOT a clean
- * leakage-free cross-validated estimate the way `permissive` is — it is a
- * *stability* diagnostic answering "does the pooled error survive when no
- * single fold gets to pick the gate alone?" Both are reported side by side
- * for that reason, and neither is presented as the single true number.
+ * WHAT `median` ACTUALLY IS (round-5 correction — the earlier wording here
+ * called it "not leakage-free", which understated it). Under `median` every
+ * fold is scored at the *same* gate, and every case is held out in exactly
+ * one fold. Pooling therefore sums disjoint subsets that together are the
+ * whole gold set, evaluated at one fixed threshold — which is arithmetically
+ * identical to scoring all 260 cases at that threshold in one pass. It is
+ * **the full-sample curve read at a single gate**, not a cross-validated
+ * number that happens to leak a little. (Confirmed on the committed run:
+ * `vector-only` median/as-is is 147/147/0, 56.5%, 100.0% — the same row as
+ * HIGH=0.72/MARGIN=0.10 in that arm's full-sample curve.) Its only honest use
+ * is to answer "where does the whole gold set sit at one shared threshold,
+ * rather than at whichever threshold each fold picked for itself." The
+ * cross-validated estimate is `permissive` and only `permissive`.
+ *
+ * `median` is also NOT reliably "conservative" in the sense of tighter: on
+ * this data it selects MARGIN=0.01 for `vector-only` excluding disputed
+ * labels, and MARGIN=0.15 (the grid edge) for `token-overlap` — looser than
+ * most folds' own picks in several cells. It is named and described
+ * factually for that reason, never characterized as the safe option.
  */
 export type GateRule = "permissive" | "median"
 
 export const GATE_RULES: readonly GateRule[] = ["permissive", "median"] as const
 
 export const GATE_RULE_LABELS: Record<GateRule, string> = {
-  permissive: "permissive (highest-coverage zero-error row, per fold)",
-  median: "conservative (cross-fold median HIGH/MARGIN, shared by all folds)",
+  permissive: "per-fold gate (highest-coverage zero-error row, selected on each fold's own tuning portion)",
+  median: "cross-fold median gate (one shared HIGH/MARGIN applied to all folds)",
 }
 
 export type Fold = {
@@ -186,7 +198,16 @@ function probeDirection(
   return { direction, row, outOfRangeReason: null, wrongCases: wrongCasesAtThreshold(tuningResults, row.high, row.margin) }
 }
 
-type Partition = {
+/** canonicalId -> fold index, for every canonical in the gold set. Exported
+ * so tests feed `partitionFolds` the exact same map the analysis builds,
+ * rather than a re-derived one. */
+export function buildFoldMap(cases: GoldCase[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const id of new Set(cases.map((c) => c.expectedCanonicalId))) map.set(id, foldOf(id))
+  return map
+}
+
+export type Partition = {
   index: number
   tuningResults: ArmResult[]
   holdoutResults: ArmResult[]
@@ -196,8 +217,14 @@ type Partition = {
 }
 
 /** Split into folds and run each fold's own tuning-only selection. This is
- * the `permissive` rule; `median` is a second pass over these selections. */
-function partitionFolds(results: ArmResult[], foldByCanonical: Map<string, number>): Partition[] {
+ * the `permissive` rule; `median` is a second pass over these selections.
+ *
+ * Exported so tests can assert the disjointness property against *this*
+ * function rather than re-deriving the split in the test body — a test that
+ * re-filters `results` itself proves only that `Array.prototype.filter`
+ * works, and would stay green if this function leaked every held-out
+ * canonical into `tuningResults`. */
+export function partitionFolds(results: ArmResult[], foldByCanonical: Map<string, number>): Partition[] {
   const partitions: Partition[] = []
   for (let i = 0; i < K; i++) {
     const tuningResults = results.filter((r) => foldByCanonical.get(r.expectedCanonicalId) !== i)
@@ -233,8 +260,7 @@ export function analyzeGroupedKFold(
   rule: GateRule = "permissive",
 ): GroupedKFoldAnalysis {
   const allCanonicals = new Set(cases.map((c) => c.expectedCanonicalId))
-  const foldByCanonical = new Map<string, number>()
-  for (const id of allCanonicals) foldByCanonical.set(id, foldOf(id))
+  const foldByCanonical = buildFoldMap(cases)
 
   const partitions = partitionFolds(results, foldByCanonical)
 
