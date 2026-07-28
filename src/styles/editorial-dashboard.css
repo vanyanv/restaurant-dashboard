@@ -5400,8 +5400,33 @@
    tracks behind the entering content.
    ============================================================ */
 
+/* Same portal-escape fix as .editorial-dialog / .editorial-menu / .drp-popover.
+   Sheet content portals to <body>, OUTSIDE .editorial-surface, so the
+   primitive's bg-(--paper) / border-(--hairline-bold) and every consumer's
+   text-(--ink) resolve to nothing and the panel paints fully transparent —
+   the operator sees only the blurred overlay. Redeclare the editorial vars on
+   the panel itself.
+
+   Deliberately does NOT set `position`. The ::after proofmark bar below needs
+   a containing block, but the primitive's own `fixed` already establishes one;
+   an explicit `position: relative` here ties Tailwind's `.fixed` on
+   specificity (both 0,1,0), wins on source order, and drops the panel into
+   normal document flow at the end of <body> — offscreen below the fold.
+   Covered by e2e/desktop/sheet-overlay.spec.ts. */
 [data-slot="sheet-content"] {
-  position: relative;
+  --ink: #1a1613;
+  --ink-muted: #6b625a;
+  --ink-faint: #a69d92;
+  --paper: #fbf6ee;
+  --paper-deep: #f4ecdf;
+  --paper-soft: #fff9ef;
+  --hairline: #e8dfd3;
+  --hairline-bold: #c9beaf;
+  --accent: #dc2626;
+  --accent-dark: #7c1515;
+  --accent-bg: #fcecec;
+  --row-hover-bg: rgba(220, 38, 38, 0.045);
+  color: var(--ink);
 }
 
 [data-slot="sheet-content"]::after {
