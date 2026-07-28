@@ -4,7 +4,7 @@ import { useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { motion, AnimatePresence, useAnimation } from "framer-motion"
+import { motion, AnimatePresence, MotionConfig, useAnimation } from "framer-motion"
 import { Loader2, Check, Eye, EyeOff, ArrowRight } from "lucide-react"
 import logo from "../../../../public/logo.png"
 
@@ -39,7 +39,7 @@ export function LoginForm({
 
     try {
       const minLoadingTime = new Promise((resolve) =>
-        setTimeout(resolve, 600)
+        setTimeout(resolve, 300)
       )
 
       const [result] = await Promise.all([
@@ -53,7 +53,7 @@ export function LoginForm({
 
       if (result?.error) {
         setFormState("error")
-        setErrorMessage("Invalid email or password")
+        setErrorMessage("That email and password don't match our records.")
         void shakeControls.start({
           x: [0, -8, 8, -6, 6, -3, 3, 0],
           transition: { duration: 0.4, ease: "easeOut" },
@@ -67,14 +67,14 @@ export function LoginForm({
         setFormState("success")
         setTimeout(() => {
           router.push("/dashboard")
-        }, 1200)
+        }, 400)
       } else {
         setFormState("error")
-        setErrorMessage("An error occurred. Please try again.")
+        setErrorMessage("Something went wrong on our end. Try again in a moment.")
       }
     } catch {
       setFormState("error")
-      setErrorMessage("An error occurred. Please try again.")
+      setErrorMessage("Something went wrong on our end. Try again in a moment.")
       void shakeControls.start({
         x: [0, -8, 8, -6, 6, -3, 3, 0],
         transition: { duration: 0.4, ease: "easeOut" },
@@ -83,6 +83,7 @@ export function LoginForm({
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <motion.div animate={shakeControls} className="login-shell dock-in dock-in-1">
       <span className="brand-seal" aria-hidden="true">
         <span className="brand-seal__mark">C·N</span>
@@ -91,46 +92,46 @@ export function LoginForm({
         {(formState === "loading" || formState === "success") && (
           <motion.div
             className="login-progress"
-            initial={{ width: "0%", opacity: 0 }}
+            initial={{ scaleX: 0, opacity: 0 }}
             animate={{
-              width: formState === "success" ? "100%" : "85%",
+              scaleX: formState === "success" ? 1 : 0.85,
               opacity: 1,
             }}
             exit={{ opacity: 0, transition: { duration: 0.2 } }}
             transition={
               formState === "success"
                 ? { duration: 0.3, ease: "easeOut" }
-                : { width: { duration: 20, ease: [0.1, 0.2, 0.3, 1] } }
+                : { scaleX: { duration: 20, ease: [0.1, 0.2, 0.3, 1] } }
             }
           />
         )}
       </AnimatePresence>
 
       <div className="dock-in dock-in-2 login-issue-line">
-        Vol. 01 · Staff Entrance · 2026
+        Vol. 01 · Staff Entrance<span className="issue-year"> · 2026</span>
       </div>
 
       <div className="dock-in dock-in-3 mt-5 flex justify-center">
         <Image
           src={logo}
           alt="ChrisNEddys"
-          width={200}
-          height={113}
+          width={140}
+          height={79}
           className="object-contain"
           priority
         />
       </div>
 
-      <h1 className="dock-in dock-in-4 login-headline mt-5">
+      <h1 className="dock-in dock-in-4 login-headline mt-6">
         Welcome <em>back</em>
         {initialFirstName ? <>, <em>{initialFirstName}</em></> : null}.
       </h1>
 
-      <p className="dock-in dock-in-5 login-subtitle mt-3">
+      <p className="dock-in dock-in-5 login-subtitle mt-2">
         Sign in to manage your restaurant locations.
       </p>
 
-      <div className="dock-in dock-in-6 perforation mt-7">
+      <div className="dock-in dock-in-6 perforation mt-6">
         <span className="font-mono text-[9px] tracking-[0.22em] uppercase">
           Credentials
         </span>
@@ -147,7 +148,7 @@ export function LoginForm({
               className="overflow-hidden"
             >
               <div className="login-error" role="alert">
-                <span className="error-label">Access denied</span>
+                <span className="error-label">Sign-in failed</span>
                 {errorMessage}
               </div>
             </motion.div>
@@ -159,7 +160,7 @@ export function LoginForm({
             opacity: isDisabled ? 0.55 : 1,
           }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="flex flex-col gap-4"
+          className="flex flex-col gap-5"
         >
           <div className="flex flex-col gap-2">
             <label htmlFor="email" className="font-label">
@@ -169,7 +170,6 @@ export function LoginForm({
               <input
                 id="email"
                 type="email"
-                placeholder="manager@chrisneddys.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)
@@ -201,7 +201,6 @@ export function LoginForm({
               />
               <button
                 type="button"
-                tabIndex={-1}
                 onClick={() => setShowPassword((prev) => !prev)}
                 disabled={isDisabled}
                 className="field-toggle"
@@ -219,7 +218,9 @@ export function LoginForm({
 
         <button
           type="submit"
-          className="login-submit mt-2"
+          className={`login-submit mt-2${
+            formState === "success" ? " login-submit--success" : ""
+          }`}
           disabled={formState !== "idle"}
         >
           <AnimatePresence mode="wait" initial={false}>
@@ -245,7 +246,7 @@ export function LoginForm({
                 transition={{ type: "spring", stiffness: 300, damping: 25 }}
               >
                 <Check className="h-3.5 w-3.5" />
-                Welcome back
+                Opening dashboard
               </motion.span>
             ) : (
               <motion.span
@@ -268,5 +269,6 @@ export function LoginForm({
         ChrisnEddys · Management Console
       </div>
     </motion.div>
+    </MotionConfig>
   )
 }

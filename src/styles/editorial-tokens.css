@@ -173,6 +173,13 @@
 .dock-in-11 { animation-delay: 600ms; }
 .dock-in-12 { animation-delay: 660ms; }
 
+@media (prefers-reduced-motion: reduce) {
+  .dock-in {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* ─── Row styling ─── */
 
 /* Editorial table row — applies the inv-row hover doctrine to <tr> elements
