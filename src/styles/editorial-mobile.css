@@ -283,8 +283,9 @@
 }
 
 /* Mobile masthead — Pattern C "totals tray" used by analytics, P&L, COGS,
-   product-mix and the Home page. Hairline-ruled tray with two or three
-   tabular figures lined up. */
+   product-mix and the Home page. Hairline-ruled tray with two, three, or
+   (Home, when the labor glance cell is present) four tabular figures lined
+   up. Four cells reuse the two-column grid and wrap into a 2x2 layout. */
 .m-masthead {
   display: grid;
   gap: 14px;
@@ -306,6 +307,15 @@
 }
 
 .m-masthead__cell:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+/* In the two-column (2x2, four-cell) layout, the right-hand cell of each
+   row has no visual neighbor to its right — :last-child only catches the
+   final cell (bottom-right), so without this the top-right cell would keep
+   a dangling hairline. */
+.m-masthead--two .m-masthead__cell:nth-child(2n) {
   border-right: 0;
   padding-right: 0;
 }

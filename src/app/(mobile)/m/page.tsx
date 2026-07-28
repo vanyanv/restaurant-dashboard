@@ -85,7 +85,7 @@ export default async function MobileHomePage({
   const totalOrders = snapshot?.totalOrders ?? 0
   const netGrowth = snapshot?.netGrowth ?? null
   const previousNet = snapshot?.previousNet ?? 0
-  const pendingInvoiceCount = snapshot?.pendingInvoiceCount ?? 0
+  const pendingInvoiceCount = snapshot?.pendingInvoiceCount ?? null
   const laborGlance = snapshot?.laborGlance ?? null
   const canSeeLabor = hasOwnerAccess(session.user.role)
 
@@ -108,16 +108,27 @@ export default async function MobileHomePage({
       value: fmtCount(totalOrders),
       sub: activeStoreName ?? `${stores.length} stores`,
     },
-    {
+  ]
+
+  // Invoice-count lookup is contained (getPendingInvoiceCountSafe never
+  // throws) — a failure yields null and the cell is omitted, never a fake
+  // zero, same contract as labor below.
+  if (pendingInvoiceCount != null) {
+    cells.push({
       label: "PENDING INV",
       value: fmtCount(pendingInvoiceCount),
       sub: "awaiting review",
       href: "/m/invoices?status=REVIEW",
-    },
-  ]
+    })
+  }
 
   // Labor is owner-only (mirrors the /m/labor route's own gate) and only
-  // shown once Harri has a forecast to compare against — no fake zero.
+  // shown once Harri has a forecast to compare against — no fake zero. The
+  // link carries the selected store explicitly: the figure is computed for
+  // validStoreId (falling back to the account's first store only when no
+  // store is selected), but /m/labor applies that same fallback on its own
+  // arrival, so an explicit non-default selection would otherwise silently
+  // flip to a different store's data after the tap.
   if (canSeeLabor && laborGlance) {
     cells.push({
       label: "LABOR ±",
@@ -127,7 +138,7 @@ export default async function MobileHomePage({
         </span>
       ),
       sub: `${laborGlance.variance >= 0 ? "+" : "-"}${fmtMoney(Math.abs(laborGlance.variance))} vs forecast`,
-      href: "/m/labor",
+      href: `/m/labor${validStoreId ? `?store=${validStoreId}` : ""}`,
     })
   }
 
