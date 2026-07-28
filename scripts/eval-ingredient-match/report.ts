@@ -4,12 +4,15 @@
  *
  * The report is the deliverable — it must let a reader decide "can I trust
  * this?" without rerunning anything. So every wrong auto-link is printed in
- * full (default policy, the holdout half at the tuning-selected threshold,
- * and the single decisive "frontier" case that determines where the
- * zero-error boundary sits), the gold-set provenance and its measurement
- * caveats are stated up front, and the ship-gate threshold is selected on a
- * tuning half and verified against a holdout half it was never selected on
- * (report-holdout.ts) rather than quoted straight off the full-sample curve.
+ * full (default policy, every fold's pooled holdout evaluation, and the
+ * "frontier" case(s) that determine where each fold's zero-error boundary
+ * sits in both the HIGH and MARGIN directions), the gold-set provenance and
+ * its measurement caveats are stated up front, ship-gate thresholds are
+ * selected by grouped k-fold cross-validation on canonical ingredient — never
+ * on the same canonicals they're then scored on (report-holdout.ts) — and
+ * every headline figure (coverage, precision, wrong-create) is shown both
+ * unweighted (per distinct product name) and weighted by `occurrences` (per
+ * invoice line), since money is lost per invoice line, not per product name.
  */
 
 import { mkdir, writeFile } from "node:fs/promises"
@@ -19,8 +22,14 @@ import type { BuildGoldSetResult, GoldCase } from "./gold"
 import type { Arm, ArmResult, ThresholdRow } from "./arms"
 import { THRESHOLDS } from "../../src/lib/ingredient-match-scoring"
 import { computeDiagnostics, pct, wilsonUpper95 } from "./sweep-analysis"
+import { weightedCount } from "./weighting"
 import { writeWrongCase } from "./report-case-detail"
-import { writeHoldoutSection, writeDuplicateCreationSection } from "./report-holdout"
+import { writeHoldoutSection } from "./report-holdout"
+import {
+  writeLikeForLikeWrongCreateSection,
+  writeSecondaryDuplicateCreateSection,
+  writeFloorSweepSection,
+} from "./report-duplicate-create"
 
 export type ArmRun = {
   arm: Arm
@@ -50,6 +59,7 @@ export async function writeReport(outPath: string, input: ReportInput): Promise<
 
   writeProvenanceSection(lines, input.gold)
   writeHowToReadSection(lines)
+  writeLikeForLikeWrongCreateSection(lines, input.armRuns, caseIndex)
 
   for (const run of input.armRuns) {
     writeArmSection(lines, run, input.gold, caseIndex)
@@ -141,6 +151,13 @@ function writeArmSection(
   const coveragePct = total > 0 ? (autoResults.length / total) * 100 : 0
   const precisionPct = autoResults.length > 0 ? (correctResults.length / autoResults.length) * 100 : 0
 
+  const totalWeighted = weightedCount(results, caseIndex)
+  const autoWeighted = weightedCount(autoResults, caseIndex)
+  const correctWeighted = weightedCount(correctResults, caseIndex)
+  const wrongWeighted = weightedCount(wrongResults, caseIndex)
+  const coverageWeightedPct = pct(autoWeighted, totalWeighted)
+  const precisionWeightedPct = autoWeighted > 0 ? pct(correctWeighted, autoWeighted) : "0.0"
+
   lines.push(`## Arm: ${arm.name}`)
   lines.push("")
   lines.push(defaultPolicyLine(arm.name))
@@ -151,21 +168,31 @@ function writeArmSection(
     )
   }
   lines.push("")
+  lines.push(
+    `**FLOOR context:** classifyCandidates rejects anything scoring under FLOOR=${THRESHOLDS.FLOOR.toFixed(2)} as ` +
+      "\"new\" before HIGH or MARGIN are ever consulted. Ship gates in this report frequently land with HIGH exactly " +
+      "at FLOOR — when that happens, the HIGH gate is effectively inert and safety rests entirely on MARGIN plus " +
+      "FLOOR itself, which this report never sweeps except in the dedicated \"FLOOR sweep\" section below, because " +
+      "FLOOR is the only lever that moves the duplicate-create count at all (see \"Wrong-create rate\" near the top).",
+  )
+  lines.push("")
   lines.push("### Default-policy result")
   lines.push("")
-  lines.push(`| Metric | Value |`)
-  lines.push(`|---|---|`)
-  lines.push(`| Cases | ${total} |`)
-  lines.push(`| Auto-linked | ${autoResults.length} |`)
-  lines.push(`| Ambiguous (abstained) | ${ambiguousCount} |`)
-  lines.push(`| New / no candidate cleared floor (abstained) | ${newCount} |`)
-  lines.push(`| Correct auto-links | ${correctResults.length} |`)
-  lines.push(`| **Wrong auto-links** | **${wrongResults.length}** |`)
-  lines.push(`| Coverage | ${coveragePct.toFixed(1)}% |`)
-  lines.push(`| Precision (of auto-linked) | ${precisionPct.toFixed(1)}% |`)
+  lines.push("Unweighted = per distinct product name. Weighted = by `occurrences` (per invoice line).")
+  lines.push("")
+  lines.push(`| Metric | Unweighted | Weighted (occurrences) |`)
+  lines.push(`|---|---|---|`)
+  lines.push(`| Cases | ${total} | ${totalWeighted} |`)
+  lines.push(`| Auto-linked | ${autoResults.length} | ${autoWeighted} |`)
+  lines.push(`| Ambiguous (abstained) | ${ambiguousCount} | ${weightedCount(results.filter((r) => r.decision === "ambiguous"), caseIndex)} |`)
+  lines.push(`| New / no candidate cleared floor (abstained) | ${newCount} | ${weightedCount(results.filter((r) => r.decision === "new"), caseIndex)} |`)
+  lines.push(`| Correct auto-links | ${correctResults.length} | ${correctWeighted} |`)
+  lines.push(`| **Wrong auto-links** | **${wrongResults.length}** | **${wrongWeighted}** |`)
+  lines.push(`| Coverage | ${coveragePct.toFixed(1)}% | ${coverageWeightedPct}% |`)
+  lines.push(`| Precision (of auto-linked) | ${precisionPct.toFixed(1)}% | ${precisionWeightedPct}% |`)
   const n1 = wilsonUpper95(wrongResults.length, autoResults.length)
   lines.push(
-    `| Wilson 95% upper bound on true error rate | ${(n1 * 100).toFixed(1)}% (n=${autoResults.length} auto-linked) |`,
+    `| Wilson 95% upper bound on true error rate | ${(n1 * 100).toFixed(1)}% (n=${autoResults.length} auto-linked) | n/a |`,
   )
   lines.push("")
 
@@ -173,7 +200,8 @@ function writeArmSection(
   writeFullSampleCurveSection(lines, sweep, total)
   writeWrongCasesSection(lines, "Wrong auto-links (default policy) — full detail", wrongResults, caseIndex)
   writeHoldoutSection(lines, run, gold, caseIndex)
-  writeDuplicateCreationSection(lines, run, gold, caseIndex)
+  writeSecondaryDuplicateCreateSection(lines, run, caseIndex)
+  writeFloorSweepSection(lines, run, caseIndex)
 }
 
 /** Threshold-free diagnostics (point 4): distinguish "the embedding signal
@@ -227,9 +255,9 @@ function writeFullSampleCurveSection(lines: string[], sweep: ThresholdRow[], tot
   lines.push("")
   lines.push(
     `Swept HIGH ${minHigh.toFixed(2)}–${maxHigh.toFixed(2)} (step 0.01) × MARGIN ${minMargin.toFixed(2)}–${maxMargin.toFixed(2)} ` +
-      `(step 0.01) = ${sweep.length} threshold pairs, over all ${total} cases combined (tuning + holdout). ` +
-      "**Not used to select any threshold** — see \"Tuning/holdout validation\" below for how the ship-gate " +
-      "threshold is actually chosen and verified. Shown here only so the overall shape of the curve is visible.",
+      `(step 0.01) = ${sweep.length} threshold pairs, over all ${total} cases. ` +
+      "**Not used to select any threshold** — see \"Grouped k-fold validation\" below for how ship-gate thresholds " +
+      "are actually chosen and cross-validated. Shown here only so the overall shape of the curve is visible.",
   )
   lines.push("")
 

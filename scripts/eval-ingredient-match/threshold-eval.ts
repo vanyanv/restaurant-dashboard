@@ -3,8 +3,9 @@
  * already-captured candidate list, via the real `classifyCandidates` — never
  * a hand-rolled reimplementation of its logic. Used by:
  *   - arms.ts#sweepThresholds (every grid point)
- *   - holdout-analysis.ts (apply tuning-selected thresholds to the holdout half)
- *   - report-holdout.ts (frontier wrong-case detail, duplicate-creation breakdown)
+ *   - holdout-analysis.ts (apply tuning-selected thresholds to held-out folds)
+ *   - report-holdout.ts / report-duplicate-create.ts (frontier detail,
+ *     wrong-create breakdowns, the FLOOR sweep)
  *
  * No I/O.
  */
@@ -59,25 +60,25 @@ export function wrongCasesAtThreshold(results: ArmResult[], high: number, margin
   return out
 }
 
+/**
+ * Case lists per decision bucket (not just counts) — callers derive counts
+ * via `.length` and occurrence-weighted sums by looking each case up in
+ * GoldCase. `newCases` (= "new") is the duplicate-create bucket: every gold
+ * case has a real existing correct canonical, so every "new" decision here
+ * would, in production, auto-create a duplicate of something already in the
+ * pantry rather than abstaining safely (unlike `ambiguousCases`, which is
+ * safe — it goes to human review).
+ */
 export type Breakdown = {
-  autoCorrect: number
-  autoWrong: number
-  ambiguous: number
-  newCount: number
-  /** Every case classified "new" — in this gold set, every case has a real
-   * existing correct canonical, so a "new" decision means auto-creating a
-   * duplicate of something already in the pantry. Not itself "wrong" in the
-   * auto-link sense (it's an abstention from linking), but 100% of it is a
-   * wrong *create* decision if auto-create is ever wired to "new". */
+  autoCorrectCases: ArmResult[]
+  autoWrongCases: ArmResult[]
+  ambiguousCases: ArmResult[]
   newCases: ArmResult[]
 }
 
 /** Breakdown at an arbitrary (HIGH, MARGIN) pair, via the real classifier. */
 export function breakdownAtThreshold(results: ArmResult[], high: number, margin: number): Breakdown {
-  let autoCorrect = 0
-  let autoWrong = 0
-  let ambiguous = 0
-  const newCases: ArmResult[] = []
+  const b: Breakdown = { autoCorrectCases: [], autoWrongCases: [], ambiguousCases: [], newCases: [] }
   for (const r of results) {
     const classification = classifyCandidates(r.candidates, {
       HIGH: high,
@@ -86,15 +87,15 @@ export function breakdownAtThreshold(results: ArmResult[], high: number, margin:
       LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT,
     })
     if (classification.kind === "auto") {
-      if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) autoCorrect++
-      else autoWrong++
+      if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) b.autoCorrectCases.push(r)
+      else b.autoWrongCases.push(r)
     } else if (classification.kind === "ambiguous") {
-      ambiguous++
+      b.ambiguousCases.push(r)
     } else {
-      newCases.push(r)
+      b.newCases.push(r)
     }
   }
-  return { autoCorrect, autoWrong, ambiguous, newCount: newCases.length, newCases }
+  return b
 }
 
 /** Same breakdown, but from each result's own already-computed `decision`
@@ -102,19 +103,31 @@ export function breakdownAtThreshold(results: ArmResult[], high: number, margin:
  * *default* policy (THRESHOLDS defaults for vector arms; the 0.25 Jaccard
  * cutoff for token-overlap, which has no HIGH/MARGIN concept at all). */
 export function breakdownFromResults(results: ArmResult[]): Breakdown {
-  let autoCorrect = 0
-  let autoWrong = 0
-  let ambiguous = 0
-  const newCases: ArmResult[] = []
+  const b: Breakdown = { autoCorrectCases: [], autoWrongCases: [], ambiguousCases: [], newCases: [] }
   for (const r of results) {
     if (r.decision === "auto") {
-      if (r.correct) autoCorrect++
-      else autoWrong++
+      if (r.correct) b.autoCorrectCases.push(r)
+      else b.autoWrongCases.push(r)
     } else if (r.decision === "ambiguous") {
-      ambiguous++
+      b.ambiguousCases.push(r)
     } else {
-      newCases.push(r)
+      b.newCases.push(r)
     }
   }
-  return { autoCorrect, autoWrong, ambiguous, newCount: newCases.length, newCases }
+  return b
+}
+
+/**
+ * The cases that would classify as "new" at a given FLOOR value, computed
+ * directly from stored `topScore` — no HIGH/MARGIN needed, and deliberately
+ * not routed through `classifyCandidates`. This is not a shortcut: reading
+ * `classifyCandidates`'s own source shows "new" fires purely from
+ * `top.score < FLOOR`, checked *before* HIGH or MARGIN are ever consulted.
+ * So the duplicate-create count is a function of FLOOR alone — HIGH and
+ * MARGIN cannot move it at all, at any value. That structural fact is why a
+ * FLOOR sweep (report-duplicate-create.ts) is the only sweep that actually
+ * answers "what would it take to bring duplicate-creates to zero."
+ */
+export function newCasesAtFloor(results: ArmResult[], floor: number): ArmResult[] {
+  return results.filter((r) => r.topScore < floor)
 }
