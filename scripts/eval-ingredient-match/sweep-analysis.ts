@@ -57,3 +57,27 @@ export function computeDiagnostics(results: ArmResult[]): Diagnostics {
 export function pct(n: number, total: number): string {
   return total > 0 ? ((n / total) * 100).toFixed(1) : "0.0"
 }
+
+const Z_95 = 1.959964
+
+/**
+ * Wilson score interval upper bound (95% confidence) on the true error rate,
+ * given `wrong` observed errors out of `n` trials. Standard closed-form
+ * Wilson formula (no continuity correction) — well-defined at wrong=0 with
+ * no special-casing needed (the sqrt term never goes negative there).
+ *
+ * This exists because "0 wrong out of 147" is a point estimate at a sample
+ * boundary, not a proof of zero error rate — rule of three approximates the
+ * same thing as ~3/n. At n=1 (e.g. vector-only's own default policy, which
+ * auto-links exactly 1 case) this upper bound is close to 80%, which is the
+ * point: a "0 wrong" claim on a tiny sample asserts almost nothing.
+ */
+export function wilsonUpper95(wrong: number, n: number): number {
+  if (n <= 0) return 1
+  const z2 = Z_95 * Z_95
+  const phat = wrong / n
+  const denom = 1 + z2 / n
+  const center = phat + z2 / (2 * n)
+  const halfWidth = Z_95 * Math.sqrt(phat * (1 - phat) / n + z2 / (4 * n * n))
+  return Math.min(1, (center + halfWidth) / denom)
+}

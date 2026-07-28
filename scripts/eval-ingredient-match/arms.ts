@@ -19,6 +19,7 @@ import {
   type MatchCandidate,
 } from "../../src/lib/ingredient-match-scoring"
 import { embedBatch, toVectorLiteral } from "../../src/lib/chat/embeddings"
+import { evaluateAtThreshold } from "./threshold-eval"
 
 export type ArmResult = {
   caseId: string
@@ -227,25 +228,7 @@ export function sweepThresholds(results: ArmResult[]): ThresholdRow[] {
     const high = round2(hi / 100)
     for (let mi = 0; mi <= 15; mi++) {
       const margin = round2(mi / 100)
-      let autoLinked = 0
-      let correct = 0
-      let wrong = 0
-      for (const r of results) {
-        const classification = classifyCandidates(r.candidates, {
-          HIGH: high,
-          MARGIN: margin,
-          FLOOR: THRESHOLDS.FLOOR,
-          LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT,
-        })
-        if (classification.kind === "auto") {
-          autoLinked++
-          if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) correct++
-          else wrong++
-        }
-      }
-      const coveragePct = results.length > 0 ? (autoLinked / results.length) * 100 : 0
-      const precisionPct = autoLinked > 0 ? (correct / autoLinked) * 100 : 0
-      rows.push({ high, margin, autoLinked, correct, wrong, coveragePct, precisionPct })
+      rows.push(evaluateAtThreshold(results, high, margin))
     }
   }
   return rows
@@ -253,7 +236,8 @@ export function sweepThresholds(results: ArmResult[]): ThresholdRow[] {
 
 /** Threshold grid values are generated from integer cents (hi/100, mi/100)
  * but binary floating point still leaves artifacts like 0.9500000000000001 —
- * round to 2dp so report output and row lookups are exact. */
-function round2(n: number): number {
+ * round to 2dp so report output, row lookups, and the tuning/holdout split's
+ * "adjacent looser row" lookup are exact. Exported for holdout-analysis.ts. */
+export function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
