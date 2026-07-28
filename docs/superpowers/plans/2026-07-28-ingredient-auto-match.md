@@ -2,7 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Auto-link new invoice line items to canonical ingredients (and auto-create genuinely new ones) with zero errors against the 486 human-confirmed matches already in the database, deferring to human review whenever certainty is not reached.
+**Goal:** Auto-link new invoice line items to canonical ingredients with zero errors against the human-confirmed matches already in the database, deferring to human review whenever certainty is not reached.
+
+> **Superseded by measurement (2026-07-28).** Two things in this plan turned out wrong and the tasks below still carry the original wording:
+> - **Gold set is 260 cases, not 486.** 486 counted distinct `(vendor, sku, productName)` triples; keyed on what the matcher actually consumes — the product name — there are 260 distinct decisions, covering 68 of the 75 canonicals that matched lines touch. Read "486" below as "the gold set".
+> - **Auto-create is cancelled.** At `FLOOR=0.72`, 88 of 260 cases that *have* a correct existing ingredient classify as `new` and would create duplicates (33.8%). Lowering FLOOR to 0.44 routes all 88 to human review and costs nothing — auto-link coverage is flat at 147 across that whole range. Tasks 8-13 must not wire `new` to creation.
 
 **Architecture:** A layered resolution ladder runs after the existing deterministic matcher: cross-store exact name (free) → pgvector similarity with a runner-up margin guard → an LLM adjudicator over only the ambiguous band → auto-create gated on a low-similarity floor. Every auto-action writes an `IngredientMatchDecision` audit row that is reversible in one click, and an undo permanently suppresses that pairing. Thresholds are not guessed — they are selected by an offline bake-off against existing confirmed matches, which is built and run **before** any feature code depends on it.
 
@@ -22,11 +26,22 @@
 
 Tasks 1–7 exist to answer one question before any feature code is written:
 
-> Of everything this ladder chooses to auto-link, does it disagree with the 486 human-confirmed matches even once?
+> Of everything this ladder chooses to auto-link, does it disagree with the human-confirmed matches even once?
 
-**The gate passes** when some (arm, threshold set) achieves **zero errors on the full 486-case gold set**, with coverage high enough to be worth building. Coverage at the zero-error point is the headline number.
+**The gate passes** when some (arm, threshold set) achieves **zero errors on the full gold set**, with coverage high enough to be worth building. Coverage at the zero-error point is the headline number.
 
 **If no arm passes**, stop. Do not implement Tasks 8–13 as specified. The documented fallback is the pre-filled one-click proposal — the runner-up design option, which needs no accuracy guarantee. Report the numbers and re-decide.
+
+### Gate result (Tasks 1-4, 2026-07-28)
+
+**Passed for auto-link, on vector similarity alone.** At HIGH=0.72 / MARGIN=0.10, under grouped k-fold by `expectedCanonicalId`: **147/147 correct, 0 wrong, 56.5% coverage** (64.6% excluding two provably mislabeled gold cases, since corrected in production by `c5550a0`). Token overlap — the heuristic shipping today — is **disqualified**: its zero-error tuning threshold produced 2 wrong on held-out ingredients.
+
+Qualifications that belong with that number:
+- Safety sits in the **gate, not the matcher**. The top pick is wrong on 11 of 260 cases; all 11 are abstained. Two wrong picks are excluded by a margin under 0.01, and embedding scores drift up to 0.0017 between identical runs — the buffer is thin relative to measurement noise.
+- 260 cases cover 68 ingredient families, so the honest 95% bound on the true error rate is ~6%, not 0%.
+- Every gold case is one the deterministic SKU layer already resolves, so these are upper bounds.
+
+Tasks 5-7 proceed for **coverage**, not safety. An LLM arm earns its place only by resolving abstentions correctly; buying coverage with any wrong link fails.
 
 Tasks 8–13 are intentionally specified at interface level rather than full code, because the gate's outcome (which model, which thresholds, or fallback) materially changes them. Expand them into full bite-sized steps once Task 7 reports.
 
@@ -101,12 +116,13 @@ Read the current implementation at `scripts/backfill-embeddings.ts` (search `bui
 
 ```ts
 import { prisma } from "@/lib/prisma"
-import { embed, toVectorLiteral } from "@/lib/chat/embeddings"
-import { createHash } from "node:crypto"
+import { embed, toVectorLiteral, snapshotHash } from "@/lib/chat/embeddings"
 
-export function snapshotHash(text: string): string {
-  return createHash("sha256").update(text).digest("hex")
-}
+// snapshotHash MUST be the shared one from chat/embeddings.ts — it normalizes
+// (lowercase + whitespace collapse) before hashing. Defining a local raw-text
+// hash here makes this path and scripts/backfill-embeddings.ts disagree about
+// whether a row changed, so each would spuriously re-embed the other's rows —
+// the exact drift this task exists to remove.
 
 /**
  * Write or refresh one canonical's embedding row. Idempotent: re-running with
@@ -453,13 +469,14 @@ Report `excluded = rows.length - kept.length` so the report can state it plainly
 
 - [ ] **Step 3: Normalize vendor and build stable ids**
 
-Use `normalizeVendorName` from `../../src/lib/vendor-normalize` so ids match the review inbox's grouping key:
+Use `normalizeVendorName` from `../../src/lib/vendor-normalize`, and key **unconditionally on the product name** — never on sku:
 
 ```ts
 const vendor = normalizeVendorName(r.vendorName)
-const id = r.sku ? `${vendor}::sku::${r.sku}`
-                 : `${vendor}::name::${r.productName.toLowerCase()}`
+const id = `${vendor}::name::${r.productName.trim().toLowerCase()}`
 ```
+
+Do **not** reuse the review inbox's `vendor::sku::X` key here. That key groups lines for a human to triage; this key identifies a distinct matcher input. The matcher under test consumes a product name, and the sku path is a separate deterministic layer the eval suppresses — so two name spellings of one sku are two real test cases. Keying on sku collapses them and discards the hard ones: measured on live data, `(vendor, sku)` yields 126 keys where `(vendor, lower(name))` yields 323. Keep `sku` as a field on the case for reporting and stratification, just not as its identity.
 
 Collapse duplicate ids by summing `occurrences`, keeping the most frequent `expectedCanonicalId`. If one id maps to two different canonicals, **drop it and warn** — the human data itself is ambiguous there and it cannot fairly be scored.
 
