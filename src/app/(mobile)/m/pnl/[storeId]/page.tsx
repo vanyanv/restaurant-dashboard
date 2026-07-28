@@ -12,6 +12,7 @@ import {
 } from "@/components/mobile/masthead-figures"
 import { Panel } from "@/components/mobile/panel"
 import { MPnLToolbar } from "@/components/mobile/m-pnl-toolbar"
+import { SwitchToDesktopButton } from "@/app/(mobile)/m/more/switch-to-desktop"
 
 export const dynamic = "force-dynamic"
 
@@ -90,13 +91,6 @@ export default async function MobileStorePnLPage({
     },
   ]
 
-  // Show only meaningful rows: any row with non-zero values across periods,
-  // or the labeled subtotals (which are always informative).
-  const meaningfulRows = result.rows.filter((r) => {
-    if (r.isSubtotal) return true
-    return r.values.some((v) => v !== 0)
-  })
-
   return (
     <>
       <BackLink href="/m/pnl" label="All stores" />
@@ -151,62 +145,22 @@ export default async function MobileStorePnLPage({
       </div>
 
       <div className="dock-in dock-in-4" style={{ marginTop: 14 }}>
-        <Panel
-          dept={`${meaningfulRows.length} ROWS`}
-          title="Statement"
-          flush
-        >
-          {meaningfulRows.map((row) => {
-            const total = row.values.reduce((s, v) => s + v, 0)
-            return (
-              <div
-                key={row.code}
-                className="inv-row"
-                style={{
-                  cursor: "default",
-                  gridTemplateColumns: "auto 1fr auto",
-                  gap: 12,
-                  padding: "12px 18px",
-                  background: row.isSubtotal
-                    ? "rgba(255, 253, 247, 0.55)"
-                    : undefined,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily:
-                      "var(--font-jetbrains-mono), ui-monospace, monospace",
-                    fontSize: 9.5,
-                    letterSpacing: "0.16em",
-                    color: "var(--ink-faint)",
-                    minWidth: 56,
-                  }}
-                >
-                  {row.code}
-                </span>
-                <span
-                  style={{
-                    fontFamily:
-                      "var(--font-dm-sans), ui-sans-serif, sans-serif",
-                    fontSize: 13,
-                    fontWeight: row.isSubtotal ? 600 : 400,
-                    color: "var(--ink)",
-                  }}
-                >
-                  {row.label}
-                </span>
-                <span
-                  className="inv-row__total"
-                  style={{
-                    color: total < 0 ? "var(--subtract)" : undefined,
-                    fontWeight: row.isSubtotal ? 600 : undefined,
-                  }}
-                >
-                  {fmtSigned(total)}
-                </span>
-              </div>
-            )
-          })}
+        <Panel dept="STATEMENT" title="Full breakdown">
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--ink-muted)",
+              lineHeight: 1.6,
+              margin: "0 0 12px",
+            }}
+          >
+            The line-by-line statement is a desktop view — every P&L row,
+            expanded and exportable.
+          </p>
+          <SwitchToDesktopButton
+            target={`/dashboard/pnl/${storeId}`}
+            label="Full statement on desktop →"
+          />
         </Panel>
       </div>
 
