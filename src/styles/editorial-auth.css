@@ -28,17 +28,18 @@
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  text-align: center;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
+  white-space: nowrap;
+  /* stop the trailing rule before the brand seal (38px + shell inset) */
+  margin-right: 32px;
 }
 
-.login-issue-line::before,
 .login-issue-line::after {
   content: "";
-  flex: 0 1 40px;
+  flex: 1 1 auto;
   border-top: 1px solid var(--hairline-bold);
 }
 
@@ -50,7 +51,7 @@
   line-height: 0.98;
   letter-spacing: -0.03em;
   color: var(--ink);
-  text-align: center;
+  text-align: left;
 }
 
 .login-headline em {
@@ -63,9 +64,8 @@
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--ink-muted);
-  text-align: center;
-  max-width: 280px;
-  margin: 0 auto;
+  text-align: left;
+  max-width: 300px;
 }
 
 .editorial-field {
@@ -106,9 +106,11 @@
 .editorial-field .field-toggle {
   background: transparent;
   border: none;
-  color: var(--ink-faint);
+  color: var(--ink-muted);
   cursor: pointer;
-  padding: 2px 0 2px 8px;
+  align-self: stretch;
+  padding: 0 14px 0 10px;
+  margin: -10px -12px -10px 0;
   display: flex;
   align-items: center;
   transition: color 120ms ease;
@@ -118,20 +120,26 @@
   color: var(--ink);
 }
 
+.editorial-field .field-toggle:focus-visible {
+  outline: 2px solid var(--accent-dark);
+  outline-offset: -2px;
+  color: var(--ink);
+}
+
 .editorial-field .field-toggle:disabled {
   cursor: not-allowed;
 }
 
 .login-submit {
   width: 100%;
-  background: var(--accent);
+  background: var(--ink);
   color: var(--paper);
-  border: 1px solid var(--accent);
-  padding: 13px 16px;
+  border: 1px solid var(--ink);
+  padding: 12px 16px;
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease;
@@ -139,7 +147,8 @@
   overflow: hidden;
 }
 
-.login-submit:hover:not(:disabled) {
+.login-submit:hover:not(:disabled),
+.login-submit:active:not(:disabled) {
   background: var(--accent-dark);
   border-color: var(--accent-dark);
 }
@@ -147,6 +156,13 @@
 .login-submit:disabled {
   cursor: not-allowed;
   opacity: 0.85;
+}
+
+.login-submit--success,
+.login-submit--success:disabled {
+  background: var(--accent);
+  border-color: var(--accent);
+  opacity: 1;
 }
 
 .login-submit:focus-visible {
@@ -188,9 +204,11 @@
   position: absolute;
   top: 3px;
   left: 0;
+  width: 100%;
   height: 2px;
   background: var(--accent);
   opacity: 0.8;
+  transform-origin: left;
 }
 
 @media (max-width: 480px) {
@@ -199,6 +217,9 @@
   }
   .login-headline {
     font-size: 34px;
+  }
+  .login-issue-line .issue-year {
+    display: none;
   }
 }
 
