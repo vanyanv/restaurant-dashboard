@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { InvoiceExtraction } from "@/types/invoice"
 import {
   findPackShapeAnomalies,
+  findTotalReconciliationMismatch,
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
   parsePerCaseWeights,
@@ -349,5 +350,112 @@ describe("normalizeCountPackLines", () => {
       unitSize: 540,
       unitSizeUom: "CT",
     })
+  })
+})
+
+describe("findTotalReconciliationMismatch", () => {
+  const li = (lineNumber: number, extendedPrice: number) => ({
+    lineNumber,
+    sku: null,
+    productName: `Line ${lineNumber}`,
+    description: null,
+    category: null,
+    quantity: 1,
+    unit: "CS",
+    packSize: null,
+    unitSize: null,
+    unitSizeUom: null,
+    unitPrice: extendedPrice,
+    extendedPrice,
+  })
+
+  it("passes when lines sum to the subtotal (fee rows not extracted as lines)", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 100), li(2, 52.8)],
+        subtotal: 152.8,
+        taxAmount: 12.2,
+        totalAmount: 172.75, // subtotal + tax + $7.75 fuel charge in header only
+      })
+    )
+    expect(result).toBeNull()
+  })
+
+  it("passes when lines sum to totalAmount minus tax (fee row extracted as a line)", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 100), li(2, 52.8), li(3, 7.75)],
+        subtotal: 152.8,
+        taxAmount: 12.2,
+        totalAmount: 172.75,
+      })
+    )
+    expect(result).toBeNull()
+  })
+
+  it("flags the IFS I28402-00 shape: correct header, ~$120 of lines dropped", () => {
+    // Extraction dropped the Coke quantity ($94) and halved the ketchup line
+    // ($26) while capturing the printed totals correctly.
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 37.31), li(2, 43.01), li(3, 43.01), li(4, 917.23), li(5, 7.75)],
+        subtotal: 1152.8,
+        taxAmount: 32.2,
+        totalAmount: 1192.75,
+      })
+    )
+    expect(result).not.toBeNull()
+    expect(result!.lineSum).toBeCloseTo(1048.31, 2)
+    expect(result!.gap).toBeGreaterThan(100)
+  })
+
+  it("tolerates small rounding drift within 2% of the total", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 99.5)],
+        subtotal: 100,
+        taxAmount: null,
+        totalAmount: 100,
+      })
+    )
+    expect(result).toBeNull()
+  })
+
+  it("uses the $1 floor for small invoices instead of a sub-dollar 2% band", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 19.2)],
+        subtotal: 20,
+        taxAmount: null,
+        totalAmount: 20,
+      })
+    )
+    expect(result).toBeNull() // gap $0.80 ≤ $1 floor even though 2% would be $0.40
+  })
+
+  it("handles credit memos with negative totals", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, -43.01)],
+        subtotal: -43.01,
+        taxAmount: null,
+        totalAmount: -43.01,
+        isReturn: true,
+      })
+    )
+    expect(result).toBeNull()
+  })
+
+  it("skips invoices with no priced lines or a zero total", () => {
+    expect(
+      findTotalReconciliationMismatch(
+        extraction({ lineItems: [], subtotal: null, taxAmount: null, totalAmount: 100 })
+      )
+    ).toBeNull()
+    expect(
+      findTotalReconciliationMismatch(
+        extraction({ lineItems: [li(1, 50)], subtotal: null, taxAmount: null, totalAmount: 0 })
+      )
+    ).toBeNull()
   })
 })

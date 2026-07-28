@@ -100,6 +100,77 @@ export function findLineMathMismatches(
   return mismatches
 }
 
+// Maximum allowed relative drift between the sum of line extendedPrice and the
+// invoice's own printed totals before the whole extraction is considered
+// unreliable. Sized (with a $1 floor) to absorb rounding and per-line CRV noise
+// while still catching dropped/duplicated/shifted lines — e.g. IFS #I28402-00,
+// where a fused-column misread dropped ~$120 of lines yet stored a correct
+// header total.
+export const TOTAL_RECONCILIATION_TOLERANCE = 0.02
+export const TOTAL_RECONCILIATION_MIN_GAP_DOLLARS = 1
+
+export interface TotalReconciliationMismatch {
+  /** Sum of every finite line extendedPrice. */
+  lineSum: number
+  subtotal: number | null
+  taxAmount: number | null
+  totalAmount: number
+  /** The printed reference the lineSum came closest to. */
+  closestReference: number
+  /** |lineSum − closestReference|. */
+  gap: number
+  tolerance: number
+}
+
+/**
+ * Cross-check the extracted line items against the invoice's own printed
+ * totals. Vendors differ on whether fee rows (fuel surcharge, pallet charge)
+ * are printed as line items and whether the subtotal includes them, so the
+ * line sum passes if it lands near ANY of: subtotal, totalAmount − tax, or
+ * totalAmount. A sum that matches none of them means lines were dropped,
+ * duplicated, or had quantities corrupted — the extraction can't be trusted
+ * even when each surviving line looks internally consistent.
+ */
+export function findTotalReconciliationMismatch(
+  extraction: Pick<
+    InvoiceExtraction,
+    "lineItems" | "subtotal" | "taxAmount" | "totalAmount"
+  >
+): TotalReconciliationMismatch | null {
+  const totalAmount = Number(extraction.totalAmount)
+  if (!Number.isFinite(totalAmount) || Math.abs(totalAmount) < 0.01) return null
+
+  const pricedLines = extraction.lineItems.filter((li) =>
+    Number.isFinite(Number(li.extendedPrice))
+  )
+  if (pricedLines.length === 0) return null
+  const lineSum = pricedLines.reduce((sum, li) => sum + Number(li.extendedPrice), 0)
+
+  const subtotal = extraction.subtotal != null ? Number(extraction.subtotal) : null
+  const taxAmount = extraction.taxAmount != null ? Number(extraction.taxAmount) : null
+
+  const references: number[] = [totalAmount, totalAmount - (taxAmount ?? 0)]
+  if (subtotal != null && Number.isFinite(subtotal)) references.push(subtotal)
+
+  let closestReference = references[0]
+  let gap = Math.abs(lineSum - references[0])
+  for (const ref of references) {
+    const refGap = Math.abs(lineSum - ref)
+    if (refGap < gap) {
+      gap = refGap
+      closestReference = ref
+    }
+  }
+
+  const tolerance = Math.max(
+    TOTAL_RECONCILIATION_MIN_GAP_DOLLARS,
+    TOTAL_RECONCILIATION_TOLERANCE * Math.abs(totalAmount)
+  )
+  if (gap <= tolerance) return null
+
+  return { lineSum, subtotal, taxAmount, totalAmount, closestReference, gap, tolerance }
+}
+
 function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000
 }
