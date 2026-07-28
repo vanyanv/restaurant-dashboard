@@ -36,7 +36,7 @@ export type GoldCase = {
   unit: string | null
   expectedCanonicalId: string
   expectedCanonicalName: string
-  source: "sku" | "alias"
+  source: "sku" | "alias" | "manual"
   occurrences: number
 }
 
@@ -68,13 +68,20 @@ function compareNullsLast(a: string | null, b: string | null): number {
 }
 
 /**
- * Deterministic mode: most-frequent unit, ties broken by lexicographically
- * smallest unit (null last). Replaces Postgres MODE() WITHIN GROUP, which
- * picks an arbitrary tied value — not safe for a reproducible answer key.
+ * Deterministic mode: most-frequent *non-null* unit, ties broken by
+ * lexicographically smallest unit. Replaces Postgres MODE() WITHIN GROUP,
+ * which picks an arbitrary tied value — not safe for a reproducible answer
+ * key. Matches MODE()'s null handling: nulls are ignored as candidates and
+ * are excluded from the count entirely; the result is null only when every
+ * input was null. (An earlier version of this function counted null as an
+ * ordinary candidate, which could resolve a group to null even when a real
+ * unit had plurality — filtering nulls first fixes that.)
  */
 function pickModalUnit(units: Array<string | null>): string | null {
-  const counts = new Map<string | null, number>()
-  for (const u of units) counts.set(u, (counts.get(u) ?? 0) + 1)
+  const nonNull = units.filter((u): u is string => u !== null)
+  if (nonNull.length === 0) return null
+  const counts = new Map<string, number>()
+  for (const u of nonNull) counts.set(u, (counts.get(u) ?? 0) + 1)
   let best: string | null = null
   let bestCount = -1
   for (const [u, count] of counts) {
@@ -145,6 +152,11 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
   // ORDER BY here uses the raw (non-normalized) vendor string only to pin
   // down row order deterministically — vendor normalization for grouping
   // purposes still happens in JS via normalizeVendorName further down.
+  //
+  // ORDER BY covers every GROUP BY column except ci.name, which is safe to
+  // omit — it's functionally determined by canonicalIngredientId, which IS
+  // ordered, so it can't introduce an unordered tie on its own. matchSource
+  // is nullable, so it needs NULLS LAST like sku.
   const sqlRows = await prisma.$queryRawUnsafe<RawSqlRow[]>(`
     SELECT i."vendorName", li.sku, li."productName",
            array_agg(li.unit) AS units,
@@ -156,7 +168,8 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
      WHERE li."canonicalIngredientId" IS NOT NULL
      GROUP BY i."vendorName", li.sku, li."productName",
               li."canonicalIngredientId", ci.name, li."matchSource"
-     ORDER BY i."vendorName", li.sku NULLS LAST, li."productName", li."canonicalIngredientId"
+     ORDER BY i."vendorName", li.sku NULLS LAST, li."productName",
+              li."canonicalIngredientId", li."matchSource" NULLS LAST
   `)
 
   const rows: RawRow[] = sqlRows.map((r) => ({
@@ -226,8 +239,13 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
     // occurrences and use the most-frequent row as the representative for
     // descriptive fields (including which sku to report on the case).
     //
-    // Tie-break (equal occurrences) is a deterministic total order — smaller
-    // sku, then smaller productName — never array/row order. Name-keying
+    // Tie-break (equal occurrences) is a deterministic TOTAL order — smaller
+    // sku, then smaller productName, then smaller matchSource — never
+    // array/row order. Every field consulted uses compareNullsLast so no
+    // step can return "equal" without falling through to the next one;
+    // matchSource is included because it feeds the emitted `source` field
+    // and can co-vary with the resolved `unit`, so it must be covered too,
+    // not just the fields used to pick a winner on typical data. Name-keying
     // merges rows across genuinely different skus (unlike the old sku-keyed
     // id, which only ever merged spelling variants of one sku), so a tie now
     // picks between materially different rows; this answer key must be
@@ -238,13 +256,20 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
       if (r.occurrences !== best.occurrences) return r.occurrences > best.occurrences ? r : best
       const skuCmp = compareNullsLast(r.sku, best.sku)
       if (skuCmp !== 0) return skuCmp < 0 ? r : best
-      return r.productName < best.productName ? r : best
+      const nameCmp = compareNullsLast(r.productName, best.productName)
+      if (nameCmp !== 0) return nameCmp < 0 ? r : best
+      const matchSourceCmp = compareNullsLast(r.matchSource, best.matchSource)
+      return matchSourceCmp < 0 ? r : best
     })
 
+    // "manual" is a valid matchSource per schema (InvoiceLineItem.matchSource
+    // comment) even though today's live data has none (sku=1155, alias=133,
+    // null=47, as of the 2026-07-28 measurement) — map it through rather
+    // than throwing, so a single manual confirm doesn't crash this builder.
     const matchSource = representative.matchSource
-    if (matchSource !== "sku" && matchSource !== "alias") {
+    if (matchSource !== "sku" && matchSource !== "alias" && matchSource !== "manual") {
       throw new Error(
-        `Unexpected matchSource "${matchSource}" for gold id "${id}" — expected "sku" or "alias".`,
+        `Unexpected matchSource "${matchSource}" for gold id "${id}" — expected "sku", "alias", or "manual".`,
       )
     }
 
