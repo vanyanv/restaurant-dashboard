@@ -51,6 +51,41 @@ type RawRow = {
   occurrences: number
 }
 
+/** Raw SQL result before unit is resolved to a single deterministic value. */
+type RawSqlRow = Omit<RawRow, "unit"> & { units: Array<string | null> }
+
+/**
+ * Lexicographic string compare where null sorts after every non-null value.
+ * Shared tie-break rule for both the modal-unit picker and the representative
+ * row picker below — reproducibility of the answer key depends on a single,
+ * consistent, total order that never falls back to array/row order.
+ */
+function compareNullsLast(a: string | null, b: string | null): number {
+  if (a === b) return 0
+  if (a === null) return 1
+  if (b === null) return -1
+  return a < b ? -1 : 1
+}
+
+/**
+ * Deterministic mode: most-frequent unit, ties broken by lexicographically
+ * smallest unit (null last). Replaces Postgres MODE() WITHIN GROUP, which
+ * picks an arbitrary tied value — not safe for a reproducible answer key.
+ */
+function pickModalUnit(units: Array<string | null>): string | null {
+  const counts = new Map<string | null, number>()
+  for (const u of units) counts.set(u, (counts.get(u) ?? 0) + 1)
+  let best: string | null = null
+  let bestCount = -1
+  for (const [u, count] of counts) {
+    if (count > bestCount || (count === bestCount && compareNullsLast(u, best) < 0)) {
+      best = u
+      bestCount = count
+    }
+  }
+  return best
+}
+
 /** Copied verbatim from scripts/eval-chat/run.ts:253-274 (.env.local is not auto-loaded outside Next). */
 export async function loadEnvLocal(): Promise<void> {
   try {
@@ -99,12 +134,20 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
   // the same (vendor, sku, productName) occasionally carries a differently
   // recorded unit across invoices (e.g. "CS" vs "SCS"), and grouping on it
   // too inflates the distinct-pair count (486 -> 490, verified against the
-  // 2026-07-28 measurement). MODE() picks the most-frequent unit per group
-  // as the representative, consistent with how duplicate ids are collapsed
-  // in the id-grouping step below.
-  const rows = await prisma.$queryRawUnsafe<RawRow[]>(`
+  // 2026-07-28 measurement).
+  //
+  // `units` collects every raw unit value for the group; `pickModalUnit`
+  // below resolves it to one deterministic value. `ORDER BY` is added even
+  // though the query is aggregated — Postgres gives no stable row order for
+  // an un-ordered GROUP BY (hash aggregation, parallel workers can reorder
+  // between runs), and this row order is what the representative-row picker
+  // in the id-collapse step below would otherwise depend on for ties. The
+  // ORDER BY here uses the raw (non-normalized) vendor string only to pin
+  // down row order deterministically — vendor normalization for grouping
+  // purposes still happens in JS via normalizeVendorName further down.
+  const sqlRows = await prisma.$queryRawUnsafe<RawSqlRow[]>(`
     SELECT i."vendorName", li.sku, li."productName",
-           MODE() WITHIN GROUP (ORDER BY li.unit) AS unit,
+           array_agg(li.unit) AS units,
            li."canonicalIngredientId", ci.name AS "canonicalName",
            li."matchSource", COUNT(*)::int AS occurrences
       FROM "InvoiceLineItem" li
@@ -113,7 +156,19 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
      WHERE li."canonicalIngredientId" IS NOT NULL
      GROUP BY i."vendorName", li.sku, li."productName",
               li."canonicalIngredientId", ci.name, li."matchSource"
+     ORDER BY i."vendorName", li.sku NULLS LAST, li."productName", li."canonicalIngredientId"
   `)
+
+  const rows: RawRow[] = sqlRows.map((r) => ({
+    vendorName: r.vendorName,
+    sku: r.sku,
+    productName: r.productName,
+    unit: pickModalUnit(r.units),
+    canonicalIngredientId: r.canonicalIngredientId,
+    canonicalName: r.canonicalName,
+    matchSource: r.matchSource,
+    occurrences: r.occurrences,
+  }))
 
   const totalPairsBeforeExclusion = rows.length
 
@@ -170,10 +225,21 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
     // same name reused under a different sku/unit/matchSource) — sum
     // occurrences and use the most-frequent row as the representative for
     // descriptive fields (including which sku to report on the case).
+    //
+    // Tie-break (equal occurrences) is a deterministic total order — smaller
+    // sku, then smaller productName — never array/row order. Name-keying
+    // merges rows across genuinely different skus (unlike the old sku-keyed
+    // id, which only ever merged spelling variants of one sku), so a tie now
+    // picks between materially different rows; this answer key must be
+    // reproducible run-to-run since a zero-error accuracy gate is measured
+    // against it.
     const occurrences = group.rows.reduce((sum, r) => sum + r.occurrences, 0)
-    const representative = group.rows.reduce((best, r) =>
-      r.occurrences > best.occurrences ? r : best,
-    )
+    const representative = group.rows.reduce((best, r) => {
+      if (r.occurrences !== best.occurrences) return r.occurrences > best.occurrences ? r : best
+      const skuCmp = compareNullsLast(r.sku, best.sku)
+      if (skuCmp !== 0) return skuCmp < 0 ? r : best
+      return r.productName < best.productName ? r : best
+    })
 
     const matchSource = representative.matchSource
     if (matchSource !== "sku" && matchSource !== "alias") {
