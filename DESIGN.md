@@ -171,6 +171,23 @@ Used strictly on `.platform-stamp` / `.inv-stamp` to label an order's source. Ea
 - **ChowNow** (`#16a085`)
 - **Neutral / In-house** (`#4a4541`) — for `bnm-web`, `css-pos`.
 
+### Monitoring-Only Palette (developer-facing)
+
+A separate set of seven low-saturation hues exists exclusively for the DEVELOPER-only system command bridge at `/dashboard/admin/monitoring/**` (tokens defined in `src/styles/editorial-tokens.css`, consumed via `src/components/monitoring/system-color.ts`). These are **not** part of the cream-paper palette above and must never appear on an operator-facing route — Chris (OWNER) never sees them; they exist so Vardan (DEVELOPER) can tell subsystems apart on the health strip at a glance.
+
+- **Ink Stamp** (`oklch(38% 0.10 252)`, `#104375`) — DB
+- **Ink Sepia** (`oklch(45% 0.07 65)`, `#704d29`) — Vercel
+- **Ink Terracotta** (`oklch(50% 0.11 40)`, `#964a2f`) — R2
+- **Ink Plum** (`oklch(38% 0.08 350)`, `#612f48`) — Auth
+- **Ink Olive** (`oklch(45% 0.07 110)`, `#585928`) — Syncs
+- **Ink Ledger** (`oklch(45% 0.09 150)`, `#2b6339`) — Cache identity, and doubles as the **status: OK** tone across the monitoring surface
+- **Ink Ochre** (`oklch(60% 0.12 75)`, `#a97416`) — **status: warning** tone across the monitoring surface
+
+Rules for this set:
+- **Monitoring-only.** These hues are sanctioned solely for `/dashboard/admin/monitoring/**` (and its `/m/monitoring` mobile mirror) system-identity coding — register marks, panel headers, and each subsystem's own chart line. They are never a substitute for `--accent`, `--ink-good`/`--ink-warn`, or any token in the cream-paper palette elsewhere on `/dashboard/*`.
+- **Identity, not status.** Each hue names a subsystem (db / r2 / cache / auth / syncs / tokens). When a status is being communicated instead of an identity, `--ink-ledger` (ok), `--ink-ochre` (warn), or `--accent` (danger) take over regardless of which subsystem is involved — see `STATUS_COLOR` in `system-color.ts`.
+- **Color-Plus-Label applies here too.** Every use pairs the hue with a text label (`SYSTEM_LABEL` — DB, R2, CACHE, AUTH, SYNCS, TOKENS). No color-only signaling.
+
 ### Named Rules
 
 **The Earn-the-Red Rule.** Red is reserved for state changes. If `--accent` appears at rest on more than one element on a screen — outside an `.is-active` nav item or an inv-stamp — something is wrong. The proofmark works because it's rare.
