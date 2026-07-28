@@ -4,10 +4,8 @@
 // buildCanonicalIngredientText is the single shared source for that text so
 // the backfill script and the live write path can never drift.
 
-import { createHash } from "node:crypto"
-
 import { prisma } from "@/lib/prisma"
-import { embed, toVectorLiteral } from "@/lib/chat/embeddings"
+import { embed, snapshotHash, toVectorLiteral } from "@/lib/chat/embeddings"
 
 export function buildCanonicalIngredientText(
   name: string,
@@ -26,10 +24,6 @@ export function buildCanonicalIngredientText(
     ? ` · aliases: ${cleanedAliases.join(", ")}`
     : ""
   return `${name}${cat}${ali}`
-}
-
-export function snapshotHash(text: string): string {
-  return createHash("sha256").update(text).digest("hex")
 }
 
 /**
