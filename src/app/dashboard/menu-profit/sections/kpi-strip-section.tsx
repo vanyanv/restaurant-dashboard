@@ -17,7 +17,22 @@ export async function KpiStripSection({
   days: number
 }) {
   const result = await loadMenuEngineering(storeId, days)
-  if (!result?.ok) return null
+  if (!result?.ok) {
+    return (
+      <section className="inv-panel dock-in dock-in-1">
+        <div className="inv-panel__head">
+          <div>
+            <span className="inv-panel__dept">§ 14 Menu</span>
+            <h2 className="inv-panel__title">Menu KPIs</h2>
+          </div>
+        </div>
+        <p className="pt-2 text-[13px] text-[var(--ink-muted)]">
+          We couldn&apos;t load this section right now. Try refreshing in a
+          moment.
+        </p>
+      </section>
+    )
+  }
   const { rows, coverage } = result.data
 
   const revenue = rows.reduce((s, r) => s + r.revenue, 0)
@@ -28,11 +43,7 @@ export async function KpiStripSection({
     { label: `Revenue · ${days}d`, value: money(revenue) },
     { label: "Food cost", value: money(cogs) },
     { label: "Blended margin", value: `${marginPct.toFixed(1)}%` },
-    {
-      label: "Costed coverage",
-      value: `${coverage.coveragePct.toFixed(1)}%`,
-      muted: coverage.coveragePct >= 98,
-    },
+    { label: "Costed coverage", value: `${coverage.coveragePct.toFixed(1)}%` },
   ]
 
   return (

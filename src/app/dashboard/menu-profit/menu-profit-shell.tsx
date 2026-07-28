@@ -36,11 +36,7 @@ export function MenuProfitShell({
               key={d}
               href={hrefFor(d)}
               aria-current={days === d ? "true" : undefined}
-              className={`inline-flex h-8 items-center border px-2.5 font-mono text-[10px] uppercase tracking-[0.12em] transition ${
-                days === d
-                  ? "border-[var(--ink)] bg-[var(--ink)] text-[var(--paper)]"
-                  : "border-[var(--hairline-bold)] bg-[var(--paper)] text-[var(--ink-muted)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
-              }`}
+              className={`toolbar-btn ${days === d ? "active" : ""}`}
             >
               {d}d
             </Link>
