@@ -48,7 +48,10 @@ export type MobileHomeSnapshot =
       previousNet: number
       hourly: HourlyOrderPoint[] | null
       dailyTrends: DailyTrend[]
-      pendingInvoiceCount: number
+      /** Null when the invoice-count lookup fails — callers must omit the
+       * masthead cell, never render a fake zero (same contract as
+       * `laborGlance`). */
+      pendingInvoiceCount: number | null
       laborGlance: MobileLaborGlance
     }
   | null
@@ -77,7 +80,7 @@ export async function getMobileHomeSnapshot(input: {
           select: { id: true, name: true },
           orderBy: { createdAt: "desc" },
         }),
-        getPendingInvoiceReviewCount(accountId),
+        getPendingInvoiceCountSafe(accountId),
       ])
       if (stores.length === 0) {
         return {
@@ -131,7 +134,9 @@ export async function getMobileHomeSnapshot(input: {
 
       // Labor is single-store (Harri brand mapping is per-store); default to
       // the first store when the toolbar has "All stores" selected, mirroring
-      // /m/labor's own default so the masthead cell and its link target agree.
+      // /m/labor's own default. When a specific store IS selected, the page
+      // carries validStoreId through to the masthead link as a ?store= param
+      // so an explicit selection isn't silently dropped by /m/labor's default.
       const laborStoreId = validStoreId ?? stores[0]?.id ?? null
 
       const [summaries, hourly, laborGlance] = await Promise.all([
@@ -255,6 +260,22 @@ async function getPendingInvoiceReviewCount(accountId: string): Promise<number> 
       status: "REVIEW",
     },
   })
+}
+
+/**
+ * Home-page variant of `getPendingInvoiceReviewCount` that never throws.
+ * The home masthead is a critical render path — an Invoice-table failure
+ * must not crash the whole /m page the way an unguarded count would, so
+ * this mirrors `getMobileLaborGlance`'s containment: failure → null →
+ * caller omits the PENDING INV cell instead of rendering a fake zero.
+ */
+async function getPendingInvoiceCountSafe(accountId: string): Promise<number | null> {
+  try {
+    return await getPendingInvoiceReviewCount(accountId)
+  } catch (error) {
+    console.error("getPendingInvoiceCountSafe error:", error)
+    return null
+  }
 }
 
 /**
