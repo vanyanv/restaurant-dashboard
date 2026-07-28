@@ -59,6 +59,65 @@ describe("classifyCandidates", () => {
     const strict = { ...THRESHOLDS, HIGH: 0.99 }
     expect(classifyCandidates([c("Kosher Salt", 0.95)], strict).kind).toBe("ambiguous")
   })
+
+  describe("threshold boundary pins (explicit literals to catch regressions)", () => {
+    it("auto-links at exactly HIGH (0.9) with sufficient margin", () => {
+      // Pins `top.score >= HIGH` (not `>`). Literal 0.9, not computed from THRESHOLDS.
+      const r = classifyCandidates([c("candidate", 0.9), c("runner-up", 0.80)])
+      expect(r.kind).toBe("auto")
+    })
+
+    it("rejects just below HIGH (0.8999) even with sufficient margin", () => {
+      // Pins `>= HIGH` boundary. Literal 0.8999.
+      const r = classifyCandidates([c("candidate", 0.8999), c("runner-up", 0.80)])
+      expect(r.kind).toBe("ambiguous")
+    })
+
+    it("auto-links with margin exactly at MARGIN threshold (0.05)", () => {
+      // Pins `margin >= MARGIN` (not `>`). Use 0.91 - 0.86 to avoid floating-point
+      // precision issues (0.95 - 0.90 actually equals 0.049999...).
+      const r = classifyCandidates([c("candidate", 0.91), c("runner-up", 0.86)])
+      expect(r.kind).toBe("auto")
+      if (r.kind === "auto") expect(r.margin).toBeCloseTo(0.05)
+    })
+
+    it("rejects margin just below MARGIN threshold (0.0499)", () => {
+      // Pins `>= MARGIN` boundary. Literal 0.0499.
+      const r = classifyCandidates([c("candidate", 0.95), c("runner-up", 0.9001)])
+      expect(r.kind).toBe("ambiguous")
+    })
+
+    it("does not treat exactly FLOOR (0.72) as 'new'", () => {
+      // Pins `top.score < FLOOR` (not `<=`). Literal 0.72. Must not be new,
+      // goes to ambiguous since no strong runner-up margin.
+      const r = classifyCandidates([c("candidate", 0.72)])
+      expect(r.kind).toBe("ambiguous")
+    })
+
+    it("treats just below FLOOR (0.7199) as 'new'", () => {
+      // Pins `< FLOOR` boundary. Literal 0.7199.
+      const r = classifyCandidates([c("candidate", 0.7199)])
+      expect(r.kind).toBe("new")
+    })
+  })
+
+  describe("immutability: input array is never mutated", () => {
+    it("preserves input array order after sorting internally", () => {
+      // Snapshot input order by id. If classifyCandidates does candidates.sort()
+      // in place rather than [...candidates].sort(), this test fails loudly.
+      const input = [
+        c("zebra", 0.60),
+        c("alpha", 0.95),
+        c("beta", 0.85),
+      ]
+      const originalOrder = input.map(x => x.canonicalIngredientId)
+
+      classifyCandidates(input)
+
+      const afterOrder = input.map(x => x.canonicalIngredientId)
+      expect(afterOrder).toEqual(originalOrder)
+    })
+  })
 })
 
 describe("buildMatchQueryText", () => {
