@@ -1,6 +1,6 @@
 import type { Role } from "@/generated/prisma/client"
 
-export type MobileTabIcon = "home" | "pnl" | "invoices" | "chat" | "more"
+export type MobileTabIcon = "home" | "count" | "invoices" | "orders" | "more"
 
 export type MobileTab = {
   href: string
@@ -21,30 +21,26 @@ export type MobileSection = {
 
 const OWNER_TABS: MobileTab[] = [
   { href: "/m", label: "Home", icon: "home", matches: ["/m"] },
-  { href: "/m/pnl", label: "P&L", icon: "pnl", matches: ["/m/pnl"] },
+  { href: "/m/count", label: "Count", icon: "count", matches: ["/m/count"] },
   {
     href: "/m/invoices",
     label: "Invoices",
     icon: "invoices",
     matches: ["/m/invoices"],
   },
-  { href: "/m/chat", label: "Chat", icon: "chat", matches: ["/m/chat"] },
+  { href: "/m/orders", label: "Orders", icon: "orders", matches: ["/m/orders"] },
   { href: "/m/more", label: "More", icon: "more", matches: ["/m/more"] },
 ]
 
 const OWNER_MORE: MobileSection[] = [
   { href: "/m/labor", label: "Labor", dept: "STAFF", group: "Plan service" },
   { href: "/m/operations", label: "Operations", dept: "DAILY", group: "Run today" },
-  { href: "/m/count", label: "Stock count", dept: "COUNTS", group: "Run today" },
-  { href: "/m/orders", label: "Orders", dept: "LEDGER", group: "Find records" },
-  { href: "/m/analytics", label: "Analytics", dept: "SALES", group: "Read performance" },
-  { href: "/m/cogs", label: "COGS", dept: "COSTS", group: "Read performance" },
+  { href: "/m/chat", label: "Chat", dept: "ASK", group: "Run today" },
+  { href: "/m/pnl", label: "P&L", dept: "STATEMENT", group: "Read performance" },
   { href: "/m/product-mix", label: "Product Mix", dept: "MIX", group: "Read performance" },
   { href: "/m/menu", label: "Menu", dept: "ITEMS", group: "Catalog" },
   { href: "/m/recipes", label: "Recipes", dept: "BUILD", group: "Catalog" },
   { href: "/m/ingredients", label: "Ingredients", dept: "COSTS", group: "Catalog" },
-  { href: "/m/stores", label: "Stores", dept: "PORTFOLIO", group: "Admin" },
-  { href: "/m/settings", label: "Settings", dept: "ACCOUNT", group: "Admin" },
 ]
 
 // Dev-only entries, appended for DEVELOPER accounts only.

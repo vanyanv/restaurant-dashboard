@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
+import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { getMoreForRole } from "@/lib/mobile/tabs"
 import { PageHead } from "@/components/mobile/page-head"
@@ -17,15 +18,54 @@ export default async function MobileMorePage() {
 
   return (
     <div data-perf-ready="/m/more">
-      <PageHead dept="MORE" title="All sections" />
+      <PageHead dept="MORE" title="All sections" sub={session.user.email ?? undefined} />
 
       <div className="dock-in dock-in-2">
+        <Panel dept="PROFILE" title={session.user.name ?? "Operator"}>
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--ink-muted)",
+              lineHeight: 1.6,
+              margin: "0 0 12px",
+            }}
+          >
+            Profile, password, and notification preferences are edited on
+            desktop. Mobile shows the active values only.
+          </p>
+          <Link
+            href="/dashboard/settings"
+            prefetch={false}
+            className="m-toolbar-btn"
+            style={{ display: "inline-block" }}
+          >
+            Open on desktop →
+          </Link>
+        </Panel>
+      </div>
+
+      <div className="dock-in dock-in-3" style={{ marginTop: 14 }}>
         <Panel flush>
           <SectionList sections={sections} />
         </Panel>
       </div>
 
-      <div className="dock-in dock-in-3" style={{ marginTop: 14 }}>
+      <div className="dock-in dock-in-4" style={{ marginTop: 14 }}>
+        <Panel flush>
+          <SectionList
+            sections={[
+              {
+                href: "/api/auth/signout",
+                label: "Sign out",
+                dept: "SESSION",
+                group: "Account",
+              },
+            ]}
+          />
+        </Panel>
+      </div>
+
+      <div className="dock-in dock-in-5" style={{ marginTop: 14 }}>
         <Panel dept="VIEW" title="Switch surface">
           <p
             style={{

@@ -4,20 +4,20 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
 import {
+  ClipboardList,
   FileText,
   Home,
   Menu,
-  MessageSquareText,
-  TrendingUp,
+  Receipt,
   type LucideIcon,
 } from "lucide-react"
 import { isTabActive, type MobileTab } from "@/lib/mobile/tabs"
 
 const TAB_ICONS: Record<MobileTab["icon"], LucideIcon> = {
   home: Home,
-  pnl: TrendingUp,
+  count: ClipboardList,
   invoices: FileText,
-  chat: MessageSquareText,
+  orders: Receipt,
   more: Menu,
 }
 

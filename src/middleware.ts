@@ -5,9 +5,7 @@ const PHONE_UA = /iPhone|iPod|Android.*Mobile/i
 
 const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard": "/m",
-  "/dashboard/analytics": "/m/analytics",
   "/dashboard/chat": "/m/chat",
-  "/dashboard/cogs": "/m/cogs",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
   "/dashboard/menu": "/m/menu",
@@ -16,8 +14,13 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/pnl": "/m/pnl",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
-  "/dashboard/settings": "/m/settings",
-  "/dashboard/stores": "/m/stores",
+  // Analytics, COGS, Stores had no mobile equivalent left after the mobile
+  // bloat deletion — leave those desktop paths unmapped (mobilePathFor
+  // returns null and the request stays on desktop).
+  // Settings folded into /m/more (profile + sign-out) — map straight there
+  // instead of through /m/settings (which itself now just redirects to
+  // /m/more) to avoid an unnecessary extra hop.
+  "/dashboard/settings": "/m/more",
 }
 
 // Desktop routes with a dynamic sub-path that has a matching mobile page
@@ -26,11 +29,11 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
 // 1:1 via DESKTOP_TO_MOBILE with no further nesting.
 //
 // This is deliberately an allowlist, not a generic "any desktop base is a
-// prefix" match: several mobile pages (cogs, analytics, stores, settings,
-// ingredients, menu, operations, ...) are flat and have no `[id]`-style
-// route at all, so blindly carrying over a sub-path 404s (e.g.
-// `/dashboard/cogs/<storeId>` has no `/m/cogs/<storeId>` page). For those,
-// mobilePathFor returns null and the request is left on desktop.
+// prefix" match: several mobile pages (ingredients, menu, operations, ...)
+// are flat and have no `[id]`-style route at all, so blindly carrying over
+// a sub-path 404s. For those, mobilePathFor returns null and the request is
+// left on desktop. (Analytics, COGS, and Stores were deleted from mobile
+// entirely — see DESKTOP_TO_MOBILE above.)
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   ["/dashboard/invoices", "/m/invoices"],
   ["/dashboard/orders", "/m/orders"],

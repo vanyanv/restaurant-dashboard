@@ -10,7 +10,7 @@ import { CustomPillTrigger } from "./date-sheet/custom-pill-trigger"
 export type { ToolbarStore }
 
 type Props = {
-  /** Current pathname (e.g. "/m" or "/m/analytics") — used to keep the
+  /** Current pathname (e.g. "/m" or "/m/operations") — used to keep the
    *  period segments routing back to the same page. */
   pathname: string
   /** All search params currently on the URL. Preserved when the toolbar
