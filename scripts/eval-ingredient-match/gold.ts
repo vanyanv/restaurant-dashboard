@@ -1,11 +1,20 @@
 /**
  * Gold-set builder for the ingredient auto-match evaluation.
  *
- * Builds an answer key of (vendor, sku-or-name) -> canonical ingredient from
+ * Builds an answer key of (vendor, product name) -> canonical ingredient from
  * invoice line items a human already confirmed (via sku match or a manual
  * alias). A later eval harness (scripts/eval-ingredient-match/run.ts) runs
  * candidate matching strategies against this set and reports precision and
  * coverage.
+ *
+ * The matcher under test resolves a *product name* (plus vendor and unit) to
+ * a canonical ingredient — sku matching is a separate deterministic layer
+ * this evaluation deliberately does not exercise. So gold cases are keyed on
+ * (vendor, normalized product name), NOT (vendor, sku): two differently
+ * spelled names for the same sku are two genuinely different test inputs,
+ * and collapsing them by sku would throw away exactly the harder cases that
+ * decide whether name-based matching is safe to automate. `sku` is still
+ * carried as a field for reporting/stratification, just not part of the id.
  *
  * Read-only. Never writes, never migrates.
  *
@@ -19,7 +28,7 @@ import { resolve } from "node:path"
 import { normalizeVendorName } from "../../src/lib/vendor-normalize"
 
 export type GoldCase = {
-  /** Stable across runs: normalized vendor + sku-or-name. */
+  /** Stable across runs: normalized vendor + normalized product name. */
   id: string
   vendorName: string
   sku: string | null
@@ -122,13 +131,18 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
   const pantrySize = await prisma.canonicalIngredient.count()
 
   // Normalize vendor, build stable ids, collapse duplicates.
+  //
+  // Keyed on (vendor, normalized product name) UNCONDITIONALLY — never on
+  // sku. The matcher under test resolves a name to a canonical; sku match is
+  // a separate deterministic layer this evaluation does not exercise. Two
+  // spelling variants of the same sku are two distinct test inputs and must
+  // not collapse into one gold case. `sku` is still carried on the case for
+  // reporting, just not part of the identity.
   type Group = { rows: RawRow[]; vendor: string }
   const groups = new Map<string, Group>()
   for (const r of kept) {
     const vendor = normalizeVendorName(r.vendorName)
-    const id = r.sku
-      ? `${vendor}::sku::${r.sku}`
-      : `${vendor}::name::${r.productName.toLowerCase()}`
+    const id = `${vendor}::name::${r.productName.trim().toLowerCase()}`
     const group = groups.get(id)
     if (group) group.rows.push(r)
     else groups.set(id, { rows: [r], vendor })
@@ -140,8 +154,8 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
   for (const [id, group] of groups) {
     const distinctCanonicals = new Set(group.rows.map((r) => r.canonicalIngredientId))
     if (distinctCanonicals.size > 1) {
-      // Ambiguous human data for this vendor+sku-or-name: cannot be fairly
-      // scored against a single answer. Drop the whole id and warn.
+      // Ambiguous human data for this vendor+name: cannot be fairly scored
+      // against a single answer. Drop the whole id and warn.
       const names = [...new Set(group.rows.map((r) => r.canonicalName))]
       conflicts.push({
         id,
@@ -152,9 +166,10 @@ export async function buildGoldSet(): Promise<BuildGoldSetResult> {
     }
 
     // Single canonical for this id. Multiple raw rows can still collapse
-    // here (e.g. same sku with a productName/unit/matchSource variant) —
-    // sum occurrences and use the most-frequent row as the representative
-    // for descriptive fields.
+    // here (e.g. exact-cased vs. differently-cased productName text, or the
+    // same name reused under a different sku/unit/matchSource) — sum
+    // occurrences and use the most-frequent row as the representative for
+    // descriptive fields (including which sku to report on the case).
     const occurrences = group.rows.reduce((sum, r) => sum + r.occurrences, 0)
     const representative = group.rows.reduce((best, r) =>
       r.occurrences > best.occurrences ? r : best,
