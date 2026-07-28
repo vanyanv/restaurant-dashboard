@@ -13,18 +13,31 @@
 import type { ArmResult, ThresholdRow } from "./arms"
 import { classifyCandidates, THRESHOLDS } from "../../src/lib/ingredient-match-scoring"
 
-/** Aggregate counts for one (HIGH, MARGIN) pair over a set of results. */
-export function evaluateAtThreshold(results: ArmResult[], high: number, margin: number): ThresholdRow {
+/**
+ * FLOOR is a *swept* parameter here, not a constant (round-4, point 5). It
+ * used to be hardcoded to `THRESHOLDS.FLOOR` in every classification path,
+ * which meant the FLOOR sweep could only ever report the duplicate-create
+ * count (derivable from `topScore` alone) and never the auto-link
+ * precision/coverage that changing FLOOR actually buys or costs. Every
+ * function below now takes it explicitly, defaulting to production's value so
+ * existing call sites keep their old meaning.
+ */
+function thresholdSet(high: number, margin: number, floor: number) {
+  return { HIGH: high, MARGIN: margin, FLOOR: floor, LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT }
+}
+
+/** Aggregate counts for one (HIGH, MARGIN, FLOOR) triple over a set of results. */
+export function evaluateAtThreshold(
+  results: ArmResult[],
+  high: number,
+  margin: number,
+  floor: number = THRESHOLDS.FLOOR,
+): ThresholdRow {
   let autoLinked = 0
   let correct = 0
   let wrong = 0
   for (const r of results) {
-    const classification = classifyCandidates(r.candidates, {
-      HIGH: high,
-      MARGIN: margin,
-      FLOOR: THRESHOLDS.FLOOR,
-      LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT,
-    })
+    const classification = classifyCandidates(r.candidates, thresholdSet(high, margin, floor))
     if (classification.kind === "auto") {
       autoLinked++
       if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) correct++
@@ -42,15 +55,15 @@ export type WrongCaseAtThreshold = { result: ArmResult; chosenId: string; isTie:
  * threshold pair, with whether the wrong pick was a score tie against the
  * expected canonical (i.e. decided only by the deterministic secondary
  * sort, not by the embedding/heuristic actually preferring it). */
-export function wrongCasesAtThreshold(results: ArmResult[], high: number, margin: number): WrongCaseAtThreshold[] {
+export function wrongCasesAtThreshold(
+  results: ArmResult[],
+  high: number,
+  margin: number,
+  floor: number = THRESHOLDS.FLOOR,
+): WrongCaseAtThreshold[] {
   const out: WrongCaseAtThreshold[] = []
   for (const r of results) {
-    const classification = classifyCandidates(r.candidates, {
-      HIGH: high,
-      MARGIN: margin,
-      FLOOR: THRESHOLDS.FLOOR,
-      LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT,
-    })
+    const classification = classifyCandidates(r.candidates, thresholdSet(high, margin, floor))
     if (classification.kind !== "auto") continue
     if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) continue
     const expectedCandidate = r.candidates.find((c) => c.canonicalIngredientId === r.expectedCanonicalId)
@@ -76,16 +89,16 @@ export type Breakdown = {
   newCases: ArmResult[]
 }
 
-/** Breakdown at an arbitrary (HIGH, MARGIN) pair, via the real classifier. */
-export function breakdownAtThreshold(results: ArmResult[], high: number, margin: number): Breakdown {
+/** Breakdown at an arbitrary (HIGH, MARGIN, FLOOR) triple, via the real classifier. */
+export function breakdownAtThreshold(
+  results: ArmResult[],
+  high: number,
+  margin: number,
+  floor: number = THRESHOLDS.FLOOR,
+): Breakdown {
   const b: Breakdown = { autoCorrectCases: [], autoWrongCases: [], ambiguousCases: [], newCases: [] }
   for (const r of results) {
-    const classification = classifyCandidates(r.candidates, {
-      HIGH: high,
-      MARGIN: margin,
-      FLOOR: THRESHOLDS.FLOOR,
-      LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT,
-    })
+    const classification = classifyCandidates(r.candidates, thresholdSet(high, margin, floor))
     if (classification.kind === "auto") {
       if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) b.autoCorrectCases.push(r)
       else b.autoWrongCases.push(r)

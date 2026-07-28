@@ -239,9 +239,10 @@ function writeDiagnosticsSection(lines: string[], results: ArmResult[]): void {
  * Full-260 precision/coverage curve — reference only. Fix-round-2, point 1:
  * a threshold cannot be *selected* from this curve — that would be picking a
  * threshold using the same cases it's then reported as error-free on. Actual
- * threshold selection happens on the tuning half only, in the "Tuning/holdout
- * validation" section below (report-holdout.ts). This table exists so a
- * reader can see the overall shape of the curve, not to justify a threshold.
+ * threshold selection happens on each fold's tuning portion only, in the
+ * "Grouped k-fold validation" section below (report-holdout.ts). This table
+ * exists so a reader can see the overall shape of the curve, not to justify a
+ * threshold.
  */
 function writeFullSampleCurveSection(lines: string[], sweep: ThresholdRow[], total: number): void {
   const highs = sweep.map((r) => r.high)

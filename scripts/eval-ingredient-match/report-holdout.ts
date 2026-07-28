@@ -1,20 +1,21 @@
 /**
- * Grouped k-fold validation section (fix-round-3, point 1 — replaces the
- * round-2 single 50/50 per-case split, which let ~85% of a holdout case's
- * canonical also sit in tuning). The ship-gate threshold for each fold is
- * selected on that fold's tuning portion only (no canonical shared with the
- * held-out portion) and applied unchanged to the held-out canonicals; folds
- * are then pooled. Every "0 wrong" claim ships with two Wilson 95% upper
- * bounds — one on case count, one on distinct-canonical count — since cases
- * sharing a canonical are not independent trials.
+ * Grouped k-fold validation section. Ship-gate thresholds are selected on a
+ * fold's tuning portion only (no canonical shared with the held-out portion)
+ * and applied unchanged to the held-out canonicals; folds are then pooled.
+ *
+ * Round-4 changes: the pooled table moved to report-pooled.ts and is now
+ * rendered under two gate-selection rules and two case sets rather than one
+ * of each; the per-fold table shows each fold's own selection so the reader
+ * can see directly which fold is the outlier; and gates sitting on the edge
+ * of the swept MARGIN grid are flagged as unconverged rather than silently
+ * reported as if the grid had bracketed them.
  */
 
 import type { GoldCase } from "./gold"
 import type { ArmRun } from "./report"
-import { analyzeGroupedKFold, type FrontierProbe } from "./holdout-analysis"
-import { wilsonUpper95, pct } from "./sweep-analysis"
-import { weightedCount } from "./weighting"
+import { type FrontierProbe, type GroupedKFoldAnalysis } from "./holdout-analysis"
 import { writeWrongCase } from "./report-case-detail"
+import { buildPooledVariants, writePooledTables, writeDisputedSection, type PooledVariant } from "./report-pooled"
 
 export function writeHoldoutSection(
   lines: string[],
@@ -22,95 +23,117 @@ export function writeHoldoutSection(
   gold: { cases: GoldCase[] },
   caseIndex: Map<string, GoldCase>,
 ): void {
-  const a = analyzeGroupedKFold(gold.cases, run.results)
+  const variants = buildPooledVariants(gold.cases, run.results)
+  const primary = variants.find((v) => v.rule === "permissive" && v.caseSet === "as-is")
+  if (!primary) return
 
   lines.push("### Grouped k-fold validation (ship-gate selection)")
   lines.push("")
   lines.push(
-    `${a.totalDistinctCanonicals} distinct canonicals are split into ${a.k} folds, deterministically, by ` +
-      "`(stableHash(canonicalId) >>> 16) % 5` (FNV-1a; upper bits only — the low bits are provably low-entropy, see " +
-      "holdout-analysis.ts). **No canonical appears in both the tuning and held-out portion of the same fold** — " +
-      "the round-2 split was per-case, so ~85% of a holdout case's canonical also sat in tuning, meaning \"generalizes\" " +
-      "mostly meant \"transfers to another spelling of the same ingredient.\" Each fold selects its ship-gate threshold " +
-      "from its own tuning portion only, applies it unchanged to that fold's held-out canonicals, and folds are pooled below.",
+    `${primary.analysis.totalDistinctCanonicals} distinct canonicals are split into ${primary.analysis.k} folds, ` +
+      "deterministically, by `(stableHash(canonicalId) >>> 16) % 5` (FNV-1a; upper bits only — the low bits are " +
+      "provably low-entropy, see holdout-analysis.ts). **No canonical appears in both the tuning and held-out " +
+      "portion of the same fold.** Each fold selects its ship-gate threshold from its own tuning portion only, " +
+      "applies it unchanged to that fold's held-out canonicals, and the folds are pooled.",
   )
   lines.push("")
 
-  lines.push("#### Per-fold results")
+  writePerFoldTable(lines, primary.analysis)
+  writeGridEdgeWarning(lines, primary.analysis)
+  writePooledTables(lines, variants, caseIndex)
+  writeDisputedSection(lines)
+  writePooledWrongCases(lines, variants, caseIndex)
+  writeFrontierDetail(lines, primary.analysis, caseIndex)
+}
+
+function writePerFoldTable(lines: string[], a: GroupedKFoldAnalysis): void {
+  lines.push("#### Per-fold selections (permissive rule)")
   lines.push("")
   lines.push(
-    `| Fold | Held-out canonicals | Ship gate | Zero-error on tuning? | Holdout auto-linked | Holdout wrong | Holdout coverage | Holdout precision |`,
+    "`Own selection` is the gate that fold's tuning half picked on its own. Where one fold's selection differs " +
+      "from the rest, the pooled result under the permissive rule is partly that fold's choice rather than a " +
+      "property of the matcher — which is exactly why the conservative rule below is reported alongside it.",
   )
-  lines.push(`|---|---|---|---|---|---|---|---|`)
+  lines.push("")
+  lines.push(
+    "| Fold | Held-out canonicals | Own selection | Zero-error on tuning? | Holdout auto-linked | Holdout wrong | Holdout coverage | Holdout precision |",
+  )
+  lines.push("|---|---|---|---|---|---|---|---|")
   for (const f of a.folds) {
     lines.push(
-      `| ${f.index} | ${f.holdoutCanonicalCount} | HIGH=${f.shipGate.high.toFixed(2)}, MARGIN=${f.shipGate.margin.toFixed(2)} | ` +
+      `| ${f.index} | ${f.holdoutCanonicalCount} | HIGH=${f.ownSelection.high.toFixed(2)}, MARGIN=${f.ownSelection.margin.toFixed(2)} | ` +
         `${f.shipGateIsZeroError ? "yes" : "no (fewest-wrong)"} | ${f.holdoutAtShipGate.autoLinked} | ${f.holdoutAtShipGate.wrong} | ` +
         `${f.holdoutAtShipGate.coveragePct.toFixed(1)}% | ${f.holdoutAtShipGate.precisionPct.toFixed(1)}% |`,
     )
   }
   lines.push("")
+}
 
-  const caseWilson = wilsonUpper95(a.pooled.wrong, a.pooled.autoLinked)
-  const canonWilson = wilsonUpper95(a.pooledWrongDistinctCanonicals, a.pooledAutoLinkedDistinctCanonicals)
-  const totalWeighted = weightedCount(run.results, caseIndex)
-  const autoLinkedWeighted = weightedCount(a.pooledAutoLinkedCases, caseIndex)
-  const correctWeighted = weightedCount(a.pooledCorrectCases, caseIndex)
-  const wrongWeighted = autoLinkedWeighted - correctWeighted
-  const coverageWeightedPct = pct(autoLinkedWeighted, totalWeighted)
-  const precisionWeightedPct = autoLinkedWeighted > 0 ? pct(correctWeighted, autoLinkedWeighted) : "0.0"
-  lines.push("#### Pooled (all folds' holdout evaluations combined)")
-  lines.push("")
-  lines.push("Unweighted = per distinct product name. Weighted = by `occurrences` (per invoice line) — see \"How to read these numbers.\"")
-  lines.push("")
-  lines.push(`| | Unweighted | Weighted (occurrences) |`)
-  lines.push(`|---|---|---|`)
-  lines.push(`| Auto-linked | ${a.pooled.autoLinked} | ${autoLinkedWeighted} |`)
-  lines.push(`| Correct | ${a.pooled.correct} | ${correctWeighted} |`)
-  lines.push(`| Wrong | ${a.pooled.wrong} | ${wrongWeighted} |`)
-  lines.push(`| Coverage | ${a.pooled.coveragePct.toFixed(1)}% | ${coverageWeightedPct}% |`)
-  lines.push(`| Precision | ${a.pooled.precisionPct.toFixed(1)}% | ${precisionWeightedPct}% |`)
-  lines.push(`| Auto-linked, distinct canonicals | ${a.pooledAutoLinkedDistinctCanonicals} | n/a |`)
-  lines.push(`| Wrong, distinct canonicals | ${a.pooledWrongDistinctCanonicals} | n/a |`)
+/**
+ * A gate that lands on the last value of the swept MARGIN grid has not been
+ * bracketed by the sweep — the true optimum may lie beyond it, and the
+ * reported coverage/precision at that point is a grid artifact rather than a
+ * measured optimum. Flagged rather than fixed by widening the grid: widening
+ * it to chase a gate is threshold-shopping, and the honest statement is that
+ * this arm's operating point is unconverged.
+ */
+function writeGridEdgeWarning(lines: string[], a: GroupedKFoldAnalysis): void {
+  const maxMargin = Math.max(...a.folds.flatMap((f) => f.tuningSweep.map((r) => r.margin)))
+  const atEdge = a.folds.filter((f) => f.ownSelection.margin === maxMargin)
+  if (atEdge.length === 0) return
   lines.push(
-    `| Wilson 95% upper bound (denominator = auto-linked **cases**, n=${a.pooled.autoLinked}) | ${(caseWilson * 100).toFixed(1)}% |`,
-  )
-  lines.push(
-    `| **Wilson 95% upper bound (denominator = distinct **canonicals**, n=${a.pooledAutoLinkedDistinctCanonicals}) — the honest one** | **${(canonWilson * 100).toFixed(1)}%** |`,
+    `> **Unconverged: ${atEdge.length} of ${a.folds.length} folds selected MARGIN=${maxMargin.toFixed(2)}, which is the ` +
+      "maximum value in the swept grid.** The sweep therefore never bracketed this arm's optimum — the zero-error " +
+      "region may continue past the edge, so the coverage reported for those folds is a property of where the grid " +
+      "stops, not of where the arm's safe operating point actually is. The grid was deliberately *not* widened to " +
+      "chase it: extending a sweep until a gate stops moving is threshold-shopping against the same data, and the " +
+      "decision-relevant statement is simply that this arm's operating point is not converged and its numbers " +
+      "should not be compared like-for-like against an arm whose gate sits in the grid's interior.",
   )
   lines.push("")
-  lines.push(
-    "The case-count bound treats every one of the ~3.8 spelling variants per canonical as an independent trial. " +
-      "They aren't: if the embedding gets one ingredient family wrong, it's likely to get every spelling of that " +
-      "same family wrong together, not independently. The distinct-canonical bound is the honest denominator for " +
-      "\"how many genuinely different things has this been tested against.\"",
-  )
-  lines.push("")
+}
 
-  if (a.pooled.wrong > 0) {
-    lines.push(
-      `**${a.pooled.wrong} wrong auto-link(s) across all folds' holdout evaluations, pooled** — every one printed in full:`,
-    )
+function writePooledWrongCases(
+  lines: string[],
+  variants: PooledVariant[],
+  caseIndex: Map<string, GoldCase>,
+): void {
+  lines.push("#### Pooled wrong auto-links, in full")
+  lines.push("")
+  for (const v of variants) {
+    lines.push(`**Rule \`${v.rule}\`, case set "${v.caseSet}" — ${v.analysis.pooled.wrong} wrong:**`)
     lines.push("")
-    for (const w of a.pooledWrongCases) {
+    if (v.analysis.pooled.wrong === 0) {
+      lines.push("None — no wrong auto-link in any fold's held-out evaluation.")
+      lines.push("")
+      continue
+    }
+    for (const w of v.analysis.pooledWrongCases) {
       writeWrongCase(lines, w.result, w.chosenId, w.result.margin, caseIndex, w.isTie)
     }
-  } else {
-    lines.push("No wrong auto-links in any fold's holdout evaluation.")
-    lines.push("")
   }
+}
 
-  lines.push("#### Frontier detail, per fold")
+function writeFrontierDetail(
+  lines: string[],
+  a: GroupedKFoldAnalysis,
+  caseIndex: Map<string, GoldCase>,
+): void {
+  lines.push("#### Frontier detail, per fold (permissive rule)")
   lines.push("")
   lines.push(
     "For each fold whose tuning-selected ship gate was zero-error, both adjacent directions are probed — " +
-      "`HIGH - 0.01` and `MARGIN - 0.01` — since for some arms/folds the binding constraint is HIGH, not MARGIN, and " +
-      "probing only MARGIN would silently miss the case that actually bounds the zero-error region.",
+      "`HIGH - 0.01` and `MARGIN - 0.01` — since for some arms/folds the binding constraint is HIGH, not MARGIN, " +
+      "and probing only MARGIN would silently miss the case that actually bounds the zero-error region. These are " +
+      "**tuning-side** probes: they show what keeps a fold's gate from being one step looser, not held-out errors.",
   )
   lines.push("")
   for (const f of a.folds) {
     if (!f.shipGateIsZeroError) {
-      lines.push(`**Fold ${f.index}:** ship gate was fewest-wrong, not zero-error — its own wrong cases (table above) are the decisive detail; no frontier probe applies.`)
+      lines.push(
+        `**Fold ${f.index}:** ship gate was fewest-wrong, not zero-error — its own wrong cases are the decisive ` +
+          "detail; no frontier probe applies.",
+      )
       lines.push("")
       continue
     }
@@ -144,7 +167,7 @@ function writeFrontierProbe(lines: string[], probe: FrontierProbe, caseIndex: Ma
   }
   lines.push(
     `- **${probe.direction}** direction: ${probe.row.wrong} wrong out of ${probe.row.autoLinked} auto-linked at ` +
-      `HIGH=${probe.row.high.toFixed(2)}, MARGIN=${probe.row.margin.toFixed(2)} — the decisive case(s) that keep ` +
+      `HIGH=${probe.row.high.toFixed(2)}, MARGIN=${probe.row.margin.toFixed(2)} — the decisive **tuning-side** case(s) that keep ` +
       `this fold's ship gate from being one step looser in the ${probe.direction} direction:`,
   )
   lines.push("")

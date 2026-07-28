@@ -27,7 +27,10 @@ import {
 } from "./threshold-eval"
 import { THRESHOLDS } from "../../src/lib/ingredient-match-scoring"
 
-const K = 5
+/** Exported so the fold-partition properties (disjointness, exhaustiveness)
+ * can be asserted directly in tests against the same assignment the analysis
+ * uses, rather than re-derived from a copy that could drift. */
+export const K = 5
 const FLOOR_2DP = round2(THRESHOLDS.FLOOR)
 
 /**
@@ -48,7 +51,7 @@ function stableHash(s: string): number {
   return h >>> 0
 }
 
-function foldOf(canonicalId: string): number {
+export function foldOf(canonicalId: string): number {
   return (stableHash(canonicalId) >>> 16) % K
 }
 
@@ -62,10 +65,54 @@ export type FrontierProbe = {
   wrongCases: WrongCaseAtThreshold[]
 }
 
+/**
+ * How each fold's ship gate is chosen (round-4, point 2). The original
+ * harness only ever used `permissive`, and that choice was doing real work in
+ * the headline: `bestZeroErrorRow` maximises coverage subject to zero error,
+ * i.e. it deliberately lands on the *loosest* threshold that still has no
+ * errors on tuning — sitting exactly on the empirical error boundary with no
+ * buffer. On this data fold 3 selected MARGIN=0.08 where the other four all
+ * selected 0.10, and the single pooled `vector-only` error has margin 0.0971 —
+ * so it is admitted by fold 3's gate and by no other fold's. Reporting only
+ * that rule reports one arbitrary tie-break as if it were the result.
+ *
+ * `median` takes the per-fold selections from `permissive` and applies the
+ * cross-fold median (HIGH, MARGIN) to every fold instead, so one fold's
+ * idiosyncratically loose pick cannot set the operating point on its own.
+ *
+ * Why the median and not "the tightest zero-error row" (the other option
+ * considered): tightest is degenerate here. Coverage falls monotonically as
+ * HIGH rises, so rows near HIGH=0.99 auto-link (almost) nothing and are
+ * therefore zero-error trivially — "tightest zero-error" selects an empty
+ * gate that abstains on everything and measures nothing.
+ *
+ * The honest caveat, stated in the report too: the median is computed across
+ * all five folds' tuning selections, and every fold's held-out canonicals sit
+ * in the other four folds' tuning portions. So `median` is NOT a clean
+ * leakage-free cross-validated estimate the way `permissive` is — it is a
+ * *stability* diagnostic answering "does the pooled error survive when no
+ * single fold gets to pick the gate alone?" Both are reported side by side
+ * for that reason, and neither is presented as the single true number.
+ */
+export type GateRule = "permissive" | "median"
+
+export const GATE_RULES: readonly GateRule[] = ["permissive", "median"] as const
+
+export const GATE_RULE_LABELS: Record<GateRule, string> = {
+  permissive: "permissive (highest-coverage zero-error row, per fold)",
+  median: "conservative (cross-fold median HIGH/MARGIN, shared by all folds)",
+}
+
 export type Fold = {
   index: number
   holdoutCanonicalCount: number
   tuningSweep: ThresholdRow[]
+  /** The row this fold's own tuning half selected under `permissive`. Kept
+   * even under the median rule so the report can show what each fold *would*
+   * have picked alone, which is the evidence that fold 3 is the outlier. */
+  ownSelection: ThresholdRow
+  /** The gate actually applied to this fold's held-out canonicals. Equals
+   * `ownSelection` under `permissive`; the shared median row under `median`. */
   shipGate: ThresholdRow
   shipGateIsZeroError: boolean
   holdoutAtShipGate: ThresholdRow
@@ -79,7 +126,11 @@ export type Fold = {
 
 export type GroupedKFoldAnalysis = {
   k: number
+  rule: GateRule
+  /** Populated only for `median` — the shared gate every fold was scored at. */
+  sharedGate: { high: number; margin: number } | null
   totalDistinctCanonicals: number
+  totalCases: number
   folds: Fold[]
   pooled: ThresholdRow
   pooledAutoLinkedDistinctCanonicals: number
@@ -89,6 +140,10 @@ export type GroupedKFoldAnalysis = {
    * occurrence-weighted coverage/precision (fix-round-3, point 2). */
   pooledAutoLinkedCases: ArmResult[]
   pooledCorrectCases: ArmResult[]
+  /** Every held-out case across all folds — the correct denominator for
+   * occurrence-weighted pooled coverage. (Each case is held out exactly once,
+   * so this is a partition of `results`, not a multiset.) */
+  pooledAllCases: ArmResult[]
 }
 
 function distinctCanonicalCount(results: ArmResult[]): number {
@@ -131,10 +186,67 @@ function probeDirection(
   return { direction, row, outOfRangeReason: null, wrongCases: wrongCasesAtThreshold(tuningResults, row.high, row.margin) }
 }
 
-export function analyzeGroupedKFold(cases: GoldCase[], results: ArmResult[]): GroupedKFoldAnalysis {
+type Partition = {
+  index: number
+  tuningResults: ArmResult[]
+  holdoutResults: ArmResult[]
+  tuningSweep: ThresholdRow[]
+  ownSelection: ThresholdRow
+  ownSelectionIsZeroError: boolean
+}
+
+/** Split into folds and run each fold's own tuning-only selection. This is
+ * the `permissive` rule; `median` is a second pass over these selections. */
+function partitionFolds(results: ArmResult[], foldByCanonical: Map<string, number>): Partition[] {
+  const partitions: Partition[] = []
+  for (let i = 0; i < K; i++) {
+    const tuningResults = results.filter((r) => foldByCanonical.get(r.expectedCanonicalId) !== i)
+    const holdoutResults = results.filter((r) => foldByCanonical.get(r.expectedCanonicalId) === i)
+    if (holdoutResults.length === 0) continue
+    const tuningSweep = sweepThresholds(tuningResults)
+    const zeroErrorRow = bestZeroErrorRow(tuningSweep)
+    partitions.push({
+      index: i,
+      tuningResults,
+      holdoutResults,
+      tuningSweep,
+      ownSelection: zeroErrorRow ?? minWrongRow(tuningSweep),
+      ownSelectionIsZeroError: zeroErrorRow !== null,
+    })
+  }
+  return partitions
+}
+
+/** Median of an odd/even-length numeric list. Even length takes the lower of
+ * the two middle values — the more conservative choice is context-dependent,
+ * so this picks deterministically rather than averaging into a value that is
+ * not on the swept grid and therefore has no row to look up. */
+export function medianOf(values: number[]): number {
+  if (values.length === 0) return NaN
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.floor((sorted.length - 1) / 2)]
+}
+
+export function analyzeGroupedKFold(
+  cases: GoldCase[],
+  results: ArmResult[],
+  rule: GateRule = "permissive",
+): GroupedKFoldAnalysis {
   const allCanonicals = new Set(cases.map((c) => c.expectedCanonicalId))
   const foldByCanonical = new Map<string, number>()
   for (const id of allCanonicals) foldByCanonical.set(id, foldOf(id))
+
+  const partitions = partitionFolds(results, foldByCanonical)
+
+  // Under `median`, every fold is scored at one shared gate derived from the
+  // five per-fold selections, instead of at its own.
+  const sharedGate =
+    rule === "median" && partitions.length > 0
+      ? {
+          high: round2(medianOf(partitions.map((p) => p.ownSelection.high))),
+          margin: round2(medianOf(partitions.map((p) => p.ownSelection.margin))),
+        }
+      : null
 
   const folds: Fold[] = []
   let pooledAutoLinked = 0
@@ -146,16 +258,20 @@ export function analyzeGroupedKFold(cases: GoldCase[], results: ArmResult[]): Gr
   const pooledWrongCanonicals = new Set<string>()
   const pooledAutoLinkedCases: ArmResult[] = []
   const pooledCorrectCases: ArmResult[] = []
+  const pooledAllCases: ArmResult[] = []
 
-  for (let i = 0; i < K; i++) {
-    const tuningResults = results.filter((r) => foldByCanonical.get(r.expectedCanonicalId) !== i)
-    const holdoutResults = results.filter((r) => foldByCanonical.get(r.expectedCanonicalId) === i)
-    if (holdoutResults.length === 0) continue
+  for (const p of partitions) {
+    const { index: i, tuningResults, holdoutResults, tuningSweep, ownSelection } = p
 
-    const tuningSweep = sweepThresholds(tuningResults)
-    const zeroErrorRow = bestZeroErrorRow(tuningSweep)
-    const shipGate = zeroErrorRow ?? minWrongRow(tuningSweep)
-    const shipGateIsZeroError = zeroErrorRow !== null
+    // Under `median` the applied gate is the shared row, looked up in this
+    // fold's own tuning sweep so `shipGateIsZeroError` still reports whether
+    // that gate was error-free on the data it may legitimately be judged on.
+    const shipGate =
+      sharedGate === null
+        ? ownSelection
+        : (tuningSweep.find((r) => r.high === sharedGate.high && r.margin === sharedGate.margin) ??
+          evaluateAtThreshold(tuningResults, sharedGate.high, sharedGate.margin))
+    const shipGateIsZeroError = sharedGate === null ? p.ownSelectionIsZeroError : shipGate.wrong === 0
 
     const holdoutAtShipGate = evaluateAtThreshold(holdoutResults, shipGate.high, shipGate.margin)
     const holdoutWrong = wrongCasesAtThreshold(holdoutResults, shipGate.high, shipGate.margin)
@@ -173,6 +289,7 @@ export function analyzeGroupedKFold(cases: GoldCase[], results: ArmResult[]): Gr
       index: i,
       holdoutCanonicalCount: distinctCanonicalCount(holdoutResults),
       tuningSweep,
+      ownSelection,
       shipGate,
       shipGateIsZeroError,
       holdoutAtShipGate,
@@ -185,6 +302,7 @@ export function analyzeGroupedKFold(cases: GoldCase[], results: ArmResult[]): Gr
     pooledCorrect += holdoutAtShipGate.correct
     pooledWrong += holdoutAtShipGate.wrong
     pooledCases += holdoutResults.length
+    pooledAllCases.push(...holdoutResults)
     pooledWrongCases.push(...holdoutWrong)
     pooledAutoLinkedCases.push(...autoLinkedHoldout)
     pooledCorrectCases.push(...holdoutBreakdown.autoCorrectCases)
@@ -197,7 +315,10 @@ export function analyzeGroupedKFold(cases: GoldCase[], results: ArmResult[]): Gr
 
   return {
     k: K,
+    rule,
+    sharedGate,
     totalDistinctCanonicals: allCanonicals.size,
+    totalCases: pooledCases,
     folds,
     pooled: {
       high: NaN,
@@ -213,5 +334,6 @@ export function analyzeGroupedKFold(cases: GoldCase[], results: ArmResult[]): Gr
     pooledWrongCases,
     pooledAutoLinkedCases,
     pooledCorrectCases,
+    pooledAllCases,
   }
 }
