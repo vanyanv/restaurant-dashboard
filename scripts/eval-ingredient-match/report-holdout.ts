@@ -52,7 +52,7 @@ function writePerFoldTable(lines: string[], a: GroupedKFoldAnalysis): void {
   lines.push(
     "`Own selection` is the gate that fold's tuning half picked on its own. Where one fold's selection differs " +
       "from the rest, the pooled result under the permissive rule is partly that fold's choice rather than a " +
-      "property of the matcher — which is exactly why the conservative rule below is reported alongside it.",
+      "property of the matcher — which is exactly why the cross-fold median gate is reported alongside it below.",
   )
   lines.push("")
   lines.push(

@@ -16,8 +16,10 @@ import { describe, it, expect } from "vitest"
 import { wilsonUpper95 } from "../../scripts/eval-ingredient-match/sweep-analysis"
 import {
   analyzeGroupedKFold,
+  buildFoldMap,
   foldOf,
   medianOf,
+  partitionFolds,
   K,
 } from "../../scripts/eval-ingredient-match/holdout-analysis"
 import { newCasesAtFloor } from "../../scripts/eval-ingredient-match/threshold-eval"
@@ -148,14 +150,75 @@ describe("grouped k-fold fold assignment", () => {
     }
   })
 
-  it("keeps tuning and held-out canonicals disjoint within every fold", () => {
-    const canonicals = Array.from({ length: 20 }, (_, c) => `canon-${c}`)
-    for (let i = 0; i < K; i++) {
-      const holdout = new Set(canonicals.filter((id) => foldOf(id) === i))
-      const tuning = new Set(canonicals.filter((id) => foldOf(id) !== i))
-      for (const id of holdout) expect(tuning.has(id)).toBe(false)
-      for (const id of tuning) expect(holdout.has(id)).toBe(false)
-      expect(holdout.size + tuning.size).toBe(canonicals.length)
+})
+
+describe("partitionFolds (the real split, not a re-derivation)", () => {
+  // These call the implementation and assert on what it returned. An earlier
+  // version of this suite re-filtered the canonical list inside the test body
+  // and asserted the two halves were disjoint — which tests
+  // Array.prototype.filter, not the harness. Proven by mutation: replacing
+  // `tuningResults` with `results.slice()` (total leakage — every held-out
+  // canonical also in tuning) left that version fully green.
+
+  it("never puts a canonical in both the tuning and held-out side of a fold", () => {
+    const { cases, results } = buildFixture()
+    const partitions = partitionFolds(results, buildFoldMap(cases))
+
+    expect(partitions.length).toBeGreaterThan(0)
+    for (const p of partitions) {
+      const tuningCanonicals = new Set(p.tuningResults.map((r) => r.expectedCanonicalId))
+      const holdoutCanonicals = new Set(p.holdoutResults.map((r) => r.expectedCanonicalId))
+
+      expect(holdoutCanonicals.size).toBeGreaterThan(0)
+      for (const id of holdoutCanonicals) {
+        expect(tuningCanonicals.has(id)).toBe(false)
+      }
+      for (const id of tuningCanonicals) {
+        expect(holdoutCanonicals.has(id)).toBe(false)
+      }
+    }
+  })
+
+  it("splits every case into exactly one side of each fold, losing none", () => {
+    const { cases, results } = buildFixture()
+    const partitions = partitionFolds(results, buildFoldMap(cases))
+
+    for (const p of partitions) {
+      expect(p.tuningResults.length + p.holdoutResults.length).toBe(results.length)
+      const ids = new Set([...p.tuningResults, ...p.holdoutResults].map((r) => r.caseId))
+      expect(ids.size).toBe(results.length)
+    }
+  })
+
+  it("holds every canonical out in exactly one fold across the whole run", () => {
+    const { cases, results } = buildFixture()
+    const partitions = partitionFolds(results, buildFoldMap(cases))
+
+    const heldOutIn = new Map<string, number>()
+    for (const p of partitions) {
+      for (const id of new Set(p.holdoutResults.map((r) => r.expectedCanonicalId))) {
+        heldOutIn.set(id, (heldOutIn.get(id) ?? 0) + 1)
+      }
+    }
+    const allCanonicals = new Set(cases.map((c) => c.expectedCanonicalId))
+    expect(heldOutIn.size).toBe(allCanonicals.size)
+    for (const id of allCanonicals) expect(heldOutIn.get(id)).toBe(1)
+  })
+
+  it("selects each fold's gate from tuning data only", () => {
+    const { cases, results } = buildFixture()
+    const partitions = partitionFolds(results, buildFoldMap(cases))
+
+    for (const p of partitions) {
+      // The selected row must be reproducible from the tuning half alone.
+      const row = p.tuningSweep.find(
+        (r) => r.high === p.ownSelection.high && r.margin === p.ownSelection.margin,
+      )
+      expect(row).toBeDefined()
+      expect(row!.autoLinked).toBe(p.ownSelection.autoLinked)
+      expect(row!.wrong).toBe(p.ownSelection.wrong)
+      // ...and the sweep it came from must be the tuning half's, not everything.
+      expect(p.tuningResults.length).toBeLessThan(results.length)
     }
   })
 })

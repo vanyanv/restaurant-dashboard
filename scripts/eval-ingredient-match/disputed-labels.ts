@@ -48,8 +48,8 @@ export const DISPUTED_LABELS: DisputedLabel[] = [
     evidence:
       "Invoice 12840200 (2026-07-27), line 2. Its sku reads G7234 (= coke), but G7234 has billed at $46.57/case on " +
       "all 34 prior lines and this line billed at $43.01 — the sprite/fanta price. Line 1 of the same invoice also " +
-      "carries G7234, and no line carries G7246 at all: the sku column is shifted down one row across lines 1-3 " +
-      "(line 2 inherited line 1's sku, line 3 inherited line 2's). Product name and unit price agree with each " +
+      "carries G7234, and no line carries G7246 at all: the sku column is shifted down one row across lines 2-3 " +
+      "(line 2 inherited line 1's sku, line 3 inherited line 2's; line 1's own sku is correct). Product name and unit price agree with each " +
       "other and disagree with the sku, so the sku — and therefore the canonical derived from it — is the wrong " +
       "column. Real answer: sprite.",
   },
