@@ -1,5 +1,10 @@
+import type { Metadata } from "next"
 import { LoginForm } from "./components/login-form"
 import { getFirstNameByKid } from "@/lib/welcome"
+
+export const metadata: Metadata = {
+  title: "Sign in — Chris N Eddy's",
+}
 
 export default async function LoginPage() {
   const initialFirstName = await getFirstNameByKid()
