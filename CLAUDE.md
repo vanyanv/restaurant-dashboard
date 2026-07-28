@@ -6,7 +6,7 @@ Multi-store restaurant analytics dashboard. Next.js 15 (App Router), React 19, P
 
 ## Before touching any `/dashboard/**` UI, read this
 
-**Read [`docs/frontend-patterns.md`](docs/frontend-patterns.md) before styling or composing any dashboard page.** The dashboard runs on an "editorial docket" design system — cream paper, Fraunces serif, JetBrains Mono tabular, hairline frames, red proofmark accent. Generic Tailwind/shadcn output will look wrong and will need to be redone.
+**Read [`DESIGN.md`](DESIGN.md) before styling or composing any dashboard page.** The dashboard runs on an "editorial docket" design system — cream paper, Fraunces serif, JetBrains Mono tabular, hairline frames, red proofmark accent. Generic Tailwind/shadcn output will look wrong and will need to be redone.
 
 ## The five tripwires Claude keeps hitting
 
@@ -22,8 +22,6 @@ Multi-store restaurant analytics dashboard. Next.js 15 (App Router), React 19, P
 
 ## Other references
 
-- Backend / architecture / data-fetching: [`docs/architecture-cheat-sheet.md`](docs/architecture-cheat-sheet.md)
-- Deep-dive: [`docs/architecture-interview-guide.md`](docs/architecture-interview-guide.md)
 - Refactor playbook (split big files safely): [`docs/refactor-playbook.md`](docs/refactor-playbook.md)
 
 ## graphify
