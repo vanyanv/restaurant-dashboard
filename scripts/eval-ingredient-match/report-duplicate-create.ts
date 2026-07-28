@@ -162,36 +162,119 @@ const FLOOR_MIN_CENTS = 40
 const FLOOR_MAX_CENTS = 72
 const FLOOR_STEP_CENTS = 2
 
+/**
+ * FLOOR sweep (round-4, point 5). The previous version reported only the
+ * benefit column — duplicate-creates falling as FLOOR drops — and none of the
+ * cost, which made "FLOOR <= 0.44 gives zero duplicate-creates" look like a
+ * free win. It is not: FLOOR was hardcoded to `THRESHOLDS.FLOOR` in every
+ * classification path, so no precision or coverage figure in the report ever
+ * moved with it. FLOOR is now a real swept parameter through
+ * `classifyCandidates`, and both regimes are shown.
+ */
 export function writeFloorSweepSection(lines: string[], run: ArmRun, caseIndex: Map<string, GoldCase>): void {
-  const { results } = run
+  const { results, sweep } = run
   const total = results.length
   const totalWeighted = weightedCount(results, caseIndex)
   const currentFloorCents = Math.round(THRESHOLDS.FLOOR * 100)
+  const gate = bestZeroErrorRow(sweep) ?? minWrongRow(sweep)
 
-  lines.push("### FLOOR sweep — what it would take to bring duplicate-create to zero")
+  lines.push("### FLOOR sweep — duplicate-creates, auto-link precision, and coverage")
   lines.push("")
   lines.push(
-    "The duplicate-create count depends on FLOOR alone (see above) — HIGH and MARGIN never move it. Swept here " +
-      `from ${(FLOOR_MIN_CENTS / 100).toFixed(2)} to ${(FLOOR_MAX_CENTS / 100).toFixed(2)} (production's current value) ` +
-      `in steps of ${(FLOOR_STEP_CENTS / 100).toFixed(2)}, so the actual cost of the current FLOOR — and of any change to it — is visible directly.`,
+    `FLOOR is swept from ${(FLOOR_MIN_CENTS / 100).toFixed(2)} to ${(FLOOR_MAX_CENTS / 100).toFixed(2)} ` +
+      `(production's current value) in steps of ${(FLOOR_STEP_CENTS / 100).toFixed(2)}, **through the real ` +
+      "`classifyCandidates`**, so the cost of each value is visible next to its benefit. Two regimes, because they " +
+      "answer different questions and only one of them is the regime the ship gates in this report actually land in.",
   )
   lines.push("")
-  lines.push(`| FLOOR | New (duplicate-create) | Weighted |`)
-  lines.push(`|---|---|---|`)
+  lines.push(
+    "**Both tables are full-sample, not cross-validated.** Every row is scored on all " +
+      `${total} cases at a fixed gate, the same caveat that applies to the reference precision/coverage curve above: ` +
+      "a 100% precision cell here means \"no error at this point on data that was also used to find the point,\" " +
+      "not a generalisation estimate. Use the grouped k-fold section for that. What these tables are for is the " +
+      "*shape* of the FLOOR tradeoff, which was previously invisible because FLOOR never reached the classifier " +
+      "as a variable at all.",
+  )
+  lines.push("")
+
+  // Regime A: HIGH fixed. FLOOR below HIGH can only relabel new -> ambiguous.
+  lines.push(`**Regime A — HIGH held fixed at ${gate.high.toFixed(2)}, MARGIN at ${gate.margin.toFixed(2)}.**`)
+  lines.push("")
+  writeFloorTable(lines, run, caseIndex, total, totalWeighted, currentFloorCents, () => gate.high, gate.margin)
+  lines.push(
+    "Auto-link precision and coverage are **completely flat** across this whole sweep, and that is not a bug — it " +
+      "is the structural fact the previous version of this table obscured. `classifyCandidates` returns `new` when " +
+      "`top.score < FLOOR`, and `auto` only when `top.score >= HIGH`. So whenever FLOOR <= HIGH, every case FLOOR " +
+      "moves is a case scoring below HIGH, which could never have auto-linked anyway. Lowering FLOOR under a fixed " +
+      "HIGH does not buy a single extra auto-link — it only **relabels `new` as `ambiguous`**, moving cases from " +
+      "\"silently create a duplicate\" to \"send to human review.\" That is a genuine safety improvement, but it is " +
+      "a routing change, not a coverage change, and it hands every one of those cases to a human.",
+  )
+  lines.push("")
+
+  // Regime B: HIGH tracks FLOOR — the regime every ship gate in this report lands in.
+  lines.push(`**Regime B — HIGH tracks FLOOR (HIGH = FLOOR at every step), MARGIN at ${gate.margin.toFixed(2)}.**`)
+  lines.push("")
+  writeFloorTable(lines, run, caseIndex, total, totalWeighted, currentFloorCents, (f) => f, gate.margin)
+  lines.push(
+    "This is the regime that matters: every zero-error ship gate found anywhere in this report lands with HIGH " +
+      "exactly at FLOOR, so in practice lowering FLOOR lowers HIGH with it and genuinely admits new auto-links — " +
+      "at whatever precision those newly-admitted, lower-scoring cases happen to have. That precision is measured " +
+      "here for the first time; it was previously unmeasured because FLOOR never reached the classifier as a variable.",
+  )
+  lines.push("")
+
+  writeFloorZeroClaim(lines, run, total)
+}
+
+/** One FLOOR sweep table. `highFor` decides the regime: a constant HIGH, or
+ * HIGH tracking FLOOR. */
+function writeFloorTable(
+  lines: string[],
+  run: ArmRun,
+  caseIndex: Map<string, GoldCase>,
+  total: number,
+  totalWeighted: number,
+  currentFloorCents: number,
+  highFor: (floor: number) => number,
+  margin: number,
+): void {
+  lines.push(`| FLOOR | HIGH | New (duplicate-create) | Weighted | Ambiguous | Auto-linked | Wrong | Coverage | Precision |`)
+  lines.push(`|---|---|---|---|---|---|---|---|---|`)
   for (let f = FLOOR_MIN_CENTS; f <= FLOOR_MAX_CENTS; f += FLOOR_STEP_CENTS) {
     const floor = f / 100
-    const newCases = newCasesAtFloor(results, floor)
-    const weighted = weightedCount(newCases, caseIndex)
+    const high = highFor(floor)
+    const b = breakdownAtThreshold(run.results, high, margin, floor)
+    const autoLinked = b.autoCorrectCases.length + b.autoWrongCases.length
+    const weighted = weightedCount(b.newCases, caseIndex)
     lines.push(
-      `| ${floor.toFixed(2)}${f === currentFloorCents ? " (current)" : ""} | ${newCases.length} (${pct(newCases.length, total)}%) | ` +
-        `${weighted} (${pct(weighted, totalWeighted)}%) |`,
+      `| ${floor.toFixed(2)}${f === currentFloorCents ? " (current)" : ""} | ${high.toFixed(2)} | ` +
+        `${b.newCases.length} (${pct(b.newCases.length, total)}%) | ${weighted} (${pct(weighted, totalWeighted)}%) | ` +
+        `${b.ambiguousCases.length} | ${autoLinked} | **${b.autoWrongCases.length}** | ` +
+        `${pct(autoLinked, total)}% | ${autoLinked > 0 ? pct(b.autoCorrectCases.length, autoLinked) : "n/a"}% |`,
     )
   }
   lines.push("")
+}
+
+/** State plainly what a "zero duplicate-creates" FLOOR value actually means. */
+function writeFloorZeroClaim(lines: string[], run: ArmRun, total: number): void {
+  let highestZero: number | null = null
+  for (let f = FLOOR_MIN_CENTS; f <= FLOOR_MAX_CENTS; f += FLOOR_STEP_CENTS) {
+    if (newCasesAtFloor(run.results, f / 100).length === 0) highestZero = f / 100
+  }
+  const minTop = Math.min(...run.results.map((r) => r.topScore))
+  if (highestZero === null) return
   lines.push(
-    "Lowering FLOOR reduces duplicate-creates but increases how often a genuinely novel product gets forced into a " +
-      "match against something in the pantry that isn't actually it — FLOOR exists specifically to prevent that. " +
-      "This sweep does not recommend a value; it makes the tradeoff visible.",
+    `> **What "zero duplicate-creates at FLOOR <= ${highestZero.toFixed(2)}" actually means.** It does not mean the ` +
+      "matcher got better. The lowest top-score anywhere in this arm's " +
+      `${total} cases is ${minTop.toFixed(4)}, so at any FLOOR at or below that value **no case can ever be classified ` +
+      "`new`** — the bucket is empty because the rule that fills it can no longer fire. In production terms, setting " +
+      "FLOOR there switches off new-ingredient onboarding entirely: every invoice line, including a genuinely novel " +
+      "product this pantry has never seen, is forced to either auto-link to or be reviewed against an existing " +
+      "canonical, and can never open a new one. Zero duplicate-creates is bought by making creation impossible, not " +
+      "by making matching safer. Whether that is the right trade is a product decision; it is not a free win, and " +
+      "the number should never be quoted without this sentence attached.",
   )
   lines.push("")
 }
