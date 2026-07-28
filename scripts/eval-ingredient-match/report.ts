@@ -4,12 +4,12 @@
  *
  * The report is the deliverable — it must let a reader decide "can I trust
  * this?" without rerunning anything. So every wrong auto-link is printed in
- * full (both at default policy AND at the sweep's ship-gate row — the single
- * error that actually decides a verdict can live anywhere in the grid, not
- * just at the defaults), the gold-set provenance and its measurement
- * caveats are stated up front, and the zero-error threshold row (or its
- * absence, or its position on a structural boundary) is called out
- * explicitly per arm.
+ * full (default policy, the holdout half at the tuning-selected threshold,
+ * and the single decisive "frontier" case that determines where the
+ * zero-error boundary sits), the gold-set provenance and its measurement
+ * caveats are stated up front, and the ship-gate threshold is selected on a
+ * tuning half and verified against a holdout half it was never selected on
+ * (report-holdout.ts) rather than quoted straight off the full-sample curve.
  */
 
 import { mkdir, writeFile } from "node:fs/promises"
@@ -17,8 +17,10 @@ import { dirname } from "node:path"
 
 import type { BuildGoldSetResult, GoldCase } from "./gold"
 import type { Arm, ArmResult, ThresholdRow } from "./arms"
-import { classifyCandidates, THRESHOLDS } from "../../src/lib/ingredient-match-scoring"
-import { bestZeroErrorRow, minWrongRow, computeDiagnostics, pct } from "./sweep-analysis"
+import { THRESHOLDS } from "../../src/lib/ingredient-match-scoring"
+import { computeDiagnostics, pct, wilsonUpper95 } from "./sweep-analysis"
+import { writeWrongCase } from "./report-case-detail"
+import { writeHoldoutSection, writeDuplicateCreationSection } from "./report-holdout"
 
 export type ArmRun = {
   arm: Arm
@@ -50,7 +52,7 @@ export async function writeReport(outPath: string, input: ReportInput): Promise<
   writeHowToReadSection(lines)
 
   for (const run of input.armRuns) {
-    writeArmSection(lines, run, caseIndex)
+    writeArmSection(lines, run, input.gold, caseIndex)
   }
 
   await writeFile(outPath, lines.join("\n"), "utf-8")
@@ -103,9 +105,31 @@ function writeHowToReadSection(lines: string[]): void {
       "could run lower than what's measured here.",
   )
   lines.push("")
+  lines.push(
+    "**Correction to a fix-round-1 claim: the stored pantry embeddings were NOT built via `embed()` only — most " +
+      "came from `embedBatch()`, the same function this round's `embedBatch` misalignment fix touched.** " +
+      "`CanonicalIngredientEmbedding.createdAt` clusters into exactly 3 timestamps (72 rows / 3 rows / 1 row). " +
+      "Rows sharing an identical timestamp were written inside one Postgres transaction (`NOW()` is transaction-start " +
+      "time), which matches `scripts/backfill-embeddings.ts`'s chunked `BEGIN`/`COMMIT` loop (uses `embedBatch`) — " +
+      "not the live per-canonical `syncCanonicalEmbedding()` path (uses single `embed()` calls, which would produce " +
+      "76 distinct timestamps, not 3). So **75 of 76 pantry rows (98.7%) were written via `embedBatch`**, and only " +
+      "the single most recent row came from `embed()`. This eval's own `embedBatch` fix therefore does not fully " +
+      "close off batch-misalignment as an alternative explanation for low cosine scores — the pantry side could " +
+      "theoretically have been affected too, pre-fix. What argues against that having actually happened: 95% top-1 " +
+      "accuracy and 100% recall@10 (see diagnostics below) are inconsistent with any meaningful fraction of pantry " +
+      "rows holding embeddings unrelated to their own name text, and every individual wrong case traced in this " +
+      "report has an explainable score-based cause, not a nonsensical top candidate. To close this out formally, " +
+      "re-run `backfill-embeddings.ts` (now carrying the `row.index` fix) and confirm no ranking in this eval changes.",
+  )
+  lines.push("")
 }
 
-function writeArmSection(lines: string[], run: ArmRun, caseIndex: Map<string, GoldCase>): void {
+function writeArmSection(
+  lines: string[],
+  run: ArmRun,
+  gold: BuildGoldSetResult,
+  caseIndex: Map<string, GoldCase>,
+): void {
   const { arm, results, sweep } = run
   const total = results.length
   const autoResults = results.filter((r) => r.decision === "auto")
@@ -139,12 +163,17 @@ function writeArmSection(lines: string[], run: ArmRun, caseIndex: Map<string, Go
   lines.push(`| **Wrong auto-links** | **${wrongResults.length}** |`)
   lines.push(`| Coverage | ${coveragePct.toFixed(1)}% |`)
   lines.push(`| Precision (of auto-linked) | ${precisionPct.toFixed(1)}% |`)
+  const n1 = wilsonUpper95(wrongResults.length, autoResults.length)
+  lines.push(
+    `| Wilson 95% upper bound on true error rate | ${(n1 * 100).toFixed(1)}% (n=${autoResults.length} auto-linked) |`,
+  )
   lines.push("")
 
   writeDiagnosticsSection(lines, results)
-  const shipGate = writeSweepSection(lines, sweep)
+  writeFullSampleCurveSection(lines, sweep, total)
   writeWrongCasesSection(lines, "Wrong auto-links (default policy) — full detail", wrongResults, caseIndex)
-  writeShipGateWrongCasesSection(lines, run, shipGate, caseIndex)
+  writeHoldoutSection(lines, run, gold, caseIndex)
+  writeDuplicateCreationSection(lines, run, gold, caseIndex)
 }
 
 /** Threshold-free diagnostics (point 4): distinguish "the embedding signal
@@ -178,11 +207,15 @@ function writeDiagnosticsSection(lines: string[], results: ArmResult[]): void {
   lines.push("")
 }
 
-/** Writes the zero-error sweep summary + full curve. Returns the "ship-gate
- * row" — the best zero-error row, or (when none exists) the row with the
- * fewest wrong auto-links — so the caller can print its wrong-case detail
- * separately. */
-function writeSweepSection(lines: string[], sweep: ThresholdRow[]): ThresholdRow {
+/**
+ * Full-260 precision/coverage curve — reference only. Fix-round-2, point 1:
+ * a threshold cannot be *selected* from this curve — that would be picking a
+ * threshold using the same cases it's then reported as error-free on. Actual
+ * threshold selection happens on the tuning half only, in the "Tuning/holdout
+ * validation" section below (report-holdout.ts). This table exists so a
+ * reader can see the overall shape of the curve, not to justify a threshold.
+ */
+function writeFullSampleCurveSection(lines: string[], sweep: ThresholdRow[], total: number): void {
   const highs = sweep.map((r) => r.high)
   const margins = sweep.map((r) => r.margin)
   const minHigh = Math.min(...highs)
@@ -190,42 +223,14 @@ function writeSweepSection(lines: string[], sweep: ThresholdRow[]): ThresholdRow
   const minMargin = Math.min(...margins)
   const maxMargin = Math.max(...margins)
 
-  lines.push("### Zero-error threshold sweep")
+  lines.push("### Full-sample precision/coverage curve (reference only)")
   lines.push("")
   lines.push(
     `Swept HIGH ${minHigh.toFixed(2)}–${maxHigh.toFixed(2)} (step 0.01) × MARGIN ${minMargin.toFixed(2)}–${maxMargin.toFixed(2)} ` +
-      `(step 0.01) = ${sweep.length} threshold pairs, recomputed from each case's stored candidate list ` +
-      `(FLOOR=${THRESHOLDS.FLOOR}, LLM_ACCEPT=${THRESHOLDS.LLM_ACCEPT} held fixed). The HIGH lower bound is FLOOR itself — ` +
-      `classifyCandidates rejects anything scoring below FLOOR regardless of HIGH, so this is the entire reachable range, not an arbitrary cutoff.`,
+      `(step 0.01) = ${sweep.length} threshold pairs, over all ${total} cases combined (tuning + holdout). ` +
+      "**Not used to select any threshold** — see \"Tuning/holdout validation\" below for how the ship-gate " +
+      "threshold is actually chosen and verified. Shown here only so the overall shape of the curve is visible.",
   )
-  lines.push("")
-
-  const zeroErrorBest = bestZeroErrorRow(sweep)
-  const shipGate = zeroErrorBest ?? minWrongRow(sweep)
-
-  if (zeroErrorBest) {
-    lines.push(
-      `**Ship gate: HIGH=${zeroErrorBest.high.toFixed(2)}, MARGIN=${zeroErrorBest.margin.toFixed(2)} — ` +
-        `${zeroErrorBest.coveragePct.toFixed(1)}% coverage, 0 wrong auto-links (${zeroErrorBest.autoLinked} auto-linked, ${zeroErrorBest.correct} correct).**`,
-    )
-    if (zeroErrorBest.high === minHigh) {
-      lines.push("")
-      lines.push(
-        `This sits at HIGH=${minHigh.toFixed(2)}, the lower edge of the swept range — but that edge is FLOOR, a structural ` +
-          "boundary of `classifyCandidates`, not an artifact of where the sweep happened to stop. Nothing scoring below " +
-          "FLOOR is ever a candidate for auto-linking, so this coverage figure is the true ceiling reachable by tuning " +
-          "HIGH/MARGIN alone, given the current FLOOR value. Coverage could only go higher than this by lowering FLOOR itself, " +
-          "which is a separate, out-of-scope change to the production classifier.",
-      )
-    }
-  } else {
-    lines.push(
-      "**No zero-error threshold pair exists for this arm anywhere in the swept grid.** " +
-        "Every (HIGH, MARGIN) combination in range produced at least one wrong auto-link. " +
-        `Closest: HIGH=${shipGate.high.toFixed(2)}, MARGIN=${shipGate.margin.toFixed(2)} — ${shipGate.wrong} wrong ` +
-        `out of ${shipGate.autoLinked} auto-linked (${shipGate.coveragePct.toFixed(1)}% coverage).`,
-    )
-  }
   lines.push("")
 
   lines.push("<details><summary>Full precision/coverage curve (click to expand)</summary>")
@@ -241,8 +246,6 @@ function writeSweepSection(lines: string[], sweep: ThresholdRow[]): ThresholdRow
   lines.push("")
   lines.push("</details>")
   lines.push("")
-
-  return shipGate
 }
 
 function writeWrongCasesSection(
@@ -263,60 +266,6 @@ function writeWrongCasesSection(
   lines.push("")
 }
 
-/** Prints wrong-case detail at the sweep's ship-gate row — the threshold
- * point that actually decides "zero-error pair exists or not" — separately
- * from the default-policy list. At a zero-error gate, the single decisive
- * error can live anywhere in the grid, not just at THRESHOLDS defaults. */
-function writeShipGateWrongCasesSection(
-  lines: string[],
-  run: ArmRun,
-  shipGate: ThresholdRow,
-  caseIndex: Map<string, GoldCase>,
-): void {
-  const isDefaultRow = shipGate.high === THRESHOLDS.HIGH && shipGate.margin === THRESHOLDS.MARGIN
-  lines.push(
-    `### Wrong auto-links at the ship-gate row (HIGH=${shipGate.high.toFixed(2)}, MARGIN=${shipGate.margin.toFixed(2)}) — full detail`,
-  )
-  lines.push("")
-  if (isDefaultRow) {
-    lines.push("Ship-gate row is identical to the default-policy row above — see that section.")
-    lines.push("")
-    return
-  }
-  if (shipGate.wrong === 0) {
-    lines.push("None — this is the zero-error row.")
-    lines.push("")
-    return
-  }
-
-  const wrongAtGate: Array<{ result: ArmResult; chosenId: string; isTie: boolean }> = []
-  for (const r of run.results) {
-    const classification = classifyCandidates(r.candidates, {
-      HIGH: shipGate.high,
-      MARGIN: shipGate.margin,
-      FLOOR: THRESHOLDS.FLOOR,
-      LLM_ACCEPT: THRESHOLDS.LLM_ACCEPT,
-    })
-    if (classification.kind !== "auto") continue
-    if (classification.candidate.canonicalIngredientId === r.expectedCanonicalId) continue
-    const expectedCandidate = r.candidates.find((c) => c.canonicalIngredientId === r.expectedCanonicalId)
-    const isTie = expectedCandidate !== undefined && expectedCandidate.score === classification.candidate.score
-    wrongAtGate.push({ result: r, chosenId: classification.candidate.canonicalIngredientId, isTie })
-  }
-
-  const tieCount = wrongAtGate.filter((w) => w.isTie).length
-  lines.push(
-    `${wrongAtGate.length} wrong auto-link(s) at this row. ${tieCount} of ${wrongAtGate.length} are score ties ` +
-      "with the expected canonical (i.e. the wrong pick and the correct pick had identical scores, and the " +
-      "deterministic secondary sort — canonicalIngredientId ascending — is what decided the winner).",
-  )
-  lines.push("")
-  for (const w of wrongAtGate) {
-    writeWrongCase(lines, w.result, w.chosenId, w.result.margin, caseIndex, w.isTie)
-  }
-  lines.push("")
-}
-
 function defaultPolicyLine(armName: string): string {
   if (armName === "token-overlap") {
     return (
@@ -328,39 +277,6 @@ function defaultPolicyLine(armName: string): string {
     `Default policy: THRESHOLDS defaults — HIGH=${THRESHOLDS.HIGH}, MARGIN=${THRESHOLDS.MARGIN}, ` +
     `FLOOR=${THRESHOLDS.FLOOR} (\`classifyCandidates\` with no override).`
   )
-}
-
-function writeWrongCase(
-  lines: string[],
-  r: ArmResult,
-  chosenCanonicalId: string | null,
-  margin: number,
-  caseIndex: Map<string, GoldCase>,
-  isTie?: boolean,
-): void {
-  const goldCase = caseIndex.get(r.caseId)
-  const chosen = r.candidates.find((c) => c.canonicalIngredientId === chosenCanonicalId)
-  const runnerUp = r.candidates[1]
-
-  lines.push(`#### ${r.caseId}`)
-  lines.push("")
-  lines.push(`- Product name: \`${goldCase?.productName ?? "(unknown — not found in gold set)"}\``)
-  lines.push(`- Vendor: \`${goldCase?.vendorName ?? "?"}\` · Unit: \`${goldCase?.unit ?? "(none)"}\``)
-  lines.push(`- Expected canonical: **${goldCase?.expectedCanonicalName ?? "?"}** (\`${r.expectedCanonicalId}\`)`)
-  lines.push(`- Chosen canonical: **${chosen?.name ?? "?"}** (\`${chosenCanonicalId}\`), score ${formatScore(chosen?.score)}`)
-  lines.push(
-    `- Runner-up: ${runnerUp ? `${runnerUp.name} (\`${runnerUp.canonicalIngredientId}\`), score ${formatScore(runnerUp.score)}` : "(none — only one candidate returned)"}`,
-  )
-  lines.push(`- Margin: ${margin.toFixed(4)}`)
-  if (isTie !== undefined) {
-    lines.push(`- Score tie with expected canonical: ${isTie ? "**yes**" : "no"}`)
-  }
-  lines.push(`- Reasoning: ${r.reasoning ?? "n/a — free arm, no LLM adjudication involved"}`)
-  lines.push("")
-}
-
-function formatScore(score: number | undefined): string {
-  return score === undefined ? "?" : score.toFixed(4)
 }
 
 function formatTimestamp(d: Date): string {
