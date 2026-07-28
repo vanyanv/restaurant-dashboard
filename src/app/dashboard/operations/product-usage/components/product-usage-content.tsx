@@ -2,6 +2,7 @@
 
 import { useTransition, useState, useCallback, useEffect } from "react"
 import dynamic from "next/dynamic"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { getProductUsageData } from "@/app/actions/product-usage-actions"
 
 import {
@@ -26,6 +27,9 @@ import { ProductUsageKpiCards } from "./product-usage-kpi-cards"
 import { AlertsBanner } from "./alerts-banner"
 import { IngredientVarianceTable } from "./ingredient-variance-table"
 import { IngredientDrilldownSheet } from "./ingredient-drilldown-sheet"
+import { MenuItemCostTable } from "./menu-item-cost-table"
+import { PriceChangesTable } from "./price-changes-table"
+import { VendorPriceChart } from "./vendor-price-chart-slot"
 import type { ProductUsageData, IngredientUsageRow } from "@/types/product-usage"
 const IngredientEfficiencyChart = dynamic(
   () =>
@@ -39,6 +43,24 @@ const CategorySpendChart = dynamic(
   { ssr: false, loading: () => <ChartSkeleton /> }
 )
 
+type OperationsView = "usage" | "costs" | "vendors"
+
+const VIEW_TABS: { key: OperationsView; label: string }[] = [
+  { key: "usage", label: "Usage" },
+  { key: "costs", label: "Costs" },
+  { key: "vendors", label: "Vendors" },
+]
+
+const VIEW_TITLES: Record<OperationsView, string> = {
+  usage: "Product Usage",
+  costs: "Menu Item Costs",
+  vendors: "Vendors",
+}
+
+function parseView(value: string | null): OperationsView {
+  return value === "costs" || value === "vendors" ? value : "usage"
+}
+
 interface ProductUsageContentProps {
   initialData: ProductUsageData | null
   stores: { id: string; name: string }[]
@@ -50,6 +72,25 @@ export function ProductUsageContent({
   stores,
   userRole,
 }: ProductUsageContentProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const view = parseView(searchParams.get("view"))
+
+  const setView = useCallback(
+    (next: OperationsView) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (next === "usage") {
+        params.delete("view")
+      } else {
+        params.set("view", next)
+      }
+      const qs = params.toString()
+      router.push(qs ? `${pathname}?${qs}` : pathname)
+    },
+    [router, pathname, searchParams]
+  )
+
   const [data, setData] = useState(initialData)
   const [isPending, startTransition] = useTransition()
 
@@ -132,7 +173,7 @@ export function ProductUsageContent({
     <div className="flex flex-col h-full">
       <EditorialTopbar
         section="§ 04"
-        title="Product Usage"
+        title={VIEW_TITLES[view]}
         stamps={
           data?.dateRange ? (
             <span>
@@ -167,35 +208,79 @@ export function ProductUsageContent({
 
       {/* Content */}
       <div className="flex-1 p-4 sm:p-6 space-y-8">
-        {hasData && (data.priceAlerts.length > 0 || data.orderAnomalies.length > 0) && (
-          <AlertsBanner priceAlerts={data.priceAlerts} orderAnomalies={data.orderAnomalies} />
+        <div className="flex gap-2">
+          {VIEW_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              aria-pressed={view === tab.key}
+              onClick={() => setView(tab.key)}
+              className={`toolbar-btn ${view === tab.key ? "active" : ""}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {view === "usage" && (
+          <>
+            {hasData && (data.priceAlerts.length > 0 || data.orderAnomalies.length > 0) && (
+              <AlertsBanner priceAlerts={data.priceAlerts} orderAnomalies={data.orderAnomalies} />
+            )}
+
+            <DashboardSection title="Key Metrics">
+              {hasData ? <ProductUsageKpiCards kpis={data.kpis} /> : <KpiCardsSkeleton />}
+            </DashboardSection>
+
+            <CollapsibleSection title="Ingredient Efficiency" defaultOpen>
+              {hasData ? <IngredientEfficiencyChart data={data.ingredientUsage} /> : <ChartSkeleton />}
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Category Breakdown" defaultOpen>
+              {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Ingredient Variance" defaultOpen>
+              {hasData ? (
+                <IngredientVarianceTable
+                  data={data.ingredientUsage}
+                  onRowClick={(name) => {
+                    const row = data.ingredientUsage.find((i) => i.canonicalName === name)
+                    if (row) setSelectedIngredient(row)
+                  }}
+                />
+              ) : (
+                <DataTableSkeleton columns={7} rows={8} />
+              )}
+            </CollapsibleSection>
+          </>
         )}
 
-        <DashboardSection title="Key Metrics">
-          {hasData ? <ProductUsageKpiCards kpis={data.kpis} /> : <KpiCardsSkeleton />}
-        </DashboardSection>
+        {view === "costs" && (
+          <DashboardSection title="Menu Item Costs">
+            {hasData ? (
+              <MenuItemCostTable data={data.menuItemCosts} />
+            ) : (
+              <DataTableSkeleton columns={8} rows={10} />
+            )}
+          </DashboardSection>
+        )}
 
-        <CollapsibleSection title="Ingredient Efficiency" defaultOpen>
-          {hasData ? <IngredientEfficiencyChart data={data.ingredientUsage} /> : <ChartSkeleton />}
-        </CollapsibleSection>
+        {view === "vendors" && (
+          <>
+            <CollapsibleSection title="Price Changes" defaultOpen>
+              {hasData ? (
+                <PriceChangesTable data={data.priceAlerts} />
+              ) : (
+                <DataTableSkeleton columns={6} rows={8} />
+              )}
+            </CollapsibleSection>
 
-        <CollapsibleSection title="Category Breakdown" defaultOpen>
-          {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
-        </CollapsibleSection>
-
-        <CollapsibleSection title="Ingredient Variance" defaultOpen>
-          {hasData ? (
-            <IngredientVarianceTable
-              data={data.ingredientUsage}
-              onRowClick={(name) => {
-                const row = data.ingredientUsage.find((i) => i.canonicalName === name)
-                if (row) setSelectedIngredient(row)
-              }}
-            />
-          ) : (
-            <DataTableSkeleton columns={7} rows={8} />
-          )}
-        </CollapsibleSection>
+            <CollapsibleSection title="Vendor Price Trends" defaultOpen>
+              {hasData ? <VendorPriceChart data={data.vendorPriceTrends} /> : <ChartSkeleton />}
+            </CollapsibleSection>
+          </>
+        )}
       </div>
 
       <IngredientDrilldownSheet
