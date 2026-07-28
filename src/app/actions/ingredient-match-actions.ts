@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { recomputeCanonicalCost, getLineItemBaseQty } from "@/lib/ingredient-cost"
+import { syncCanonicalEmbedding } from "@/lib/ingredient-embedding-sync"
 import { revalidatePath } from "next/cache"
 
 export type UnmatchedLineItemGroup = {
@@ -261,6 +262,7 @@ export async function confirmSkuMatch(input: {
       },
     })
     canonicalId = created.id
+    await syncCanonicalEmbedding(created.id)
   }
   if (!canonicalId) throw new Error("canonicalIngredientId or newCanonical required")
   const targetCanonicalId: string = canonicalId

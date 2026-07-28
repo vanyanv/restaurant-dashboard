@@ -37,6 +37,7 @@ import {
   type Period,
 } from "../src/lib/pnl"
 import { CogsStatus } from "../src/generated/prisma/client"
+import { buildCanonicalIngredientText } from "../src/lib/ingredient-embedding-sync"
 
 interface Args {
   limit: number | null
@@ -126,25 +127,6 @@ function buildRecipeText(
   const top = ingredientNames.filter((n) => n && n.trim()).slice(0, 5)
   const tail = top.length > 0 ? ` — ingredients: ${top.join(", ")}` : ""
   return `${itemName} (${category})${tail}`
-}
-
-function buildCanonicalIngredientText(
-  name: string,
-  category: string | null,
-  aliases: string[],
-): string {
-  const cleanedAliases = Array.from(
-    new Set(
-      aliases
-        .map((a) => a?.trim())
-        .filter((a): a is string => !!a && a.toLowerCase() !== name.toLowerCase()),
-    ),
-  ).slice(0, 12)
-  const cat = category ? ` [${category.trim()}]` : ""
-  const ali = cleanedAliases.length > 0
-    ? ` · aliases: ${cleanedAliases.join(", ")}`
-    : ""
-  return `${name}${cat}${ali}`
 }
 
 async function backfillInvoices(c: Client, limit: number | null) {
