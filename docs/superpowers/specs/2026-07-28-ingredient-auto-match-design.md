@@ -47,9 +47,15 @@ Two consequences:
 - **Clearly-new products auto-create their `CanonicalIngredient`**, gated on a
   low-similarity floor against the entire pantry (the duplication guardrail).
 - **Oversight is an on-page activity strip**, not email, not a silent log.
-- **Auto-link precision target: ≥95%, measured on held-out gold data** — not
-  self-reported model confidence, which is calibrated as part of the bake-off before
-  being trusted for anything.
+- **Auto-link precision gate: 100% on the gold set.** Of everything the ladder chooses
+  to auto-link, zero may disagree with the 486 human-confirmed matches. The ladder
+  abstains (defers to review) whenever it is not certain; the coverage this costs is
+  measured and reported, not assumed. Measured on held-out gold data — never on
+  self-reported model confidence, which is calibrated during the bake-off before being
+  trusted for anything.
+
+  This gate is achievable precisely because abstention is allowed. Auto-linking all 486
+  *and* being right on all 486 is not achievable by any matcher, and is not the target.
 
 ## Architecture — the resolution ladder
 
@@ -163,8 +169,10 @@ OpenAI only — the project's existing provider. No second provider is introduce
 
 Per arm, per candidate threshold:
 
-- **Precision** of auto-linked decisions (the ≥95% target)
+- **Precision** of auto-linked decisions (gate: 100%)
 - **Coverage** — share of gold lines auto-linked at that precision
+- **Error list** — every disagreement printed in full with scores and reasoning, since
+  at the zero-error gate a single error is decisive and must be diagnosable
 - **Wrong-link rate**
 - **Wrong-create rate** — auto-creating a duplicate when a correct pantry match existed;
   the worst failure mode, tracked separately
@@ -177,17 +185,32 @@ self-report becomes a tiebreak only.
 
 ### Operating point
 
-The report prints coverage at 95% / 97% / 99% precision. The operating point is chosen
-from that table, not from the guessed constants. At 95% precision and ~40 auto-links per
-week, roughly 2 per week will be wrong; the activity strip is what catches them. 99% is
-available at lower coverage.
+The report prints the precision/coverage curve, and the operating point is chosen from
+that table rather than from the guessed constants.
+
+**The ship gate is the highest-coverage threshold set that yields zero errors on the
+gold set.** If no threshold achieves zero errors for a given arm, that arm is
+disqualified. If *no* arm achieves it, the feature does not ship in auto-link form —
+the fallback is the pre-filled one-click proposal, which was the runner-up option
+during design and requires no new accuracy guarantee.
+
+Coverage at the zero-error point is the headline number: it says what fraction of
+future invoice lines stop needing a human. A low number is a legitimate reason to
+reconsider the whole approach, and the eval is deliberately built to surface that
+before any feature code depends on it.
 
 ### Budget
 
-Bake-off runs on a **stratified ~150-case sample** — across vendors, easy/hard bands by
-vector margin, and the hard classes (grade/cut variants like 73/27 vs 80/20, size
-variants, catch-weight). Only the winning model runs the full 486. Estimated total
-well under $1.
+Two rounds:
+
+1. **Shortlist** — all arms on a **stratified ~150-case sample** across vendors,
+   easy/hard bands by vector margin, and the hard classes (grade/cut variants like
+   73/27 vs 80/20, size variants, catch-weight). Cheap, eliminates weak arms.
+2. **Certify** — the top two arms on the **full 486**. A 150-case sample cannot
+   certify a zero-error gate over 486; only the full set can.
+
+The free arms (token overlap, vector-only) run on the full set in both rounds at no
+cost. Estimated LLM total well under $1.
 
 ## Data model
 
