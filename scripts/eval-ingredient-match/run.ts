@@ -89,7 +89,7 @@ async function main() {
 
     const sweep = sweepThresholds(results)
     const autoCount = results.filter((r) => r.decision === "auto").length
-    const wrongCount = results.filter((r) => r.decision === "auto" && r.correct === false).length
+    const wrongCount = results.filter((r) => r.decision === "auto" && r.correctAtDefaultThresholds === false).length
     console.log(
       `  default policy: ${autoCount}/${results.length} auto-linked, ${wrongCount} wrong`,
     )

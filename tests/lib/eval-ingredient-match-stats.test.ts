@@ -49,7 +49,7 @@ function makeResult(
     expectedCanonicalId,
     decision: "auto",
     chosenCanonicalId: topId,
-    correct: topIsCorrect,
+    correctAtDefaultThresholds: topIsCorrect,
     topScore,
     margin: topScore - runnerUpScore,
     candidates,

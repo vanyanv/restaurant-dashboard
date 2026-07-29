@@ -119,7 +119,7 @@ export function breakdownFromResults(results: ArmResult[]): Breakdown {
   const b: Breakdown = { autoCorrectCases: [], autoWrongCases: [], ambiguousCases: [], newCases: [] }
   for (const r of results) {
     if (r.decision === "auto") {
-      if (r.correct) b.autoCorrectCases.push(r)
+      if (r.correctAtDefaultThresholds) b.autoCorrectCases.push(r)
       else b.autoWrongCases.push(r)
     } else if (r.decision === "ambiguous") {
       b.ambiguousCases.push(r)

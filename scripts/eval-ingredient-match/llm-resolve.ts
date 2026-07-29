@@ -33,6 +33,39 @@ export type LlmResult = {
   missingDraft: boolean
 }
 
+/**
+ * Number of drafts beyond one-per-caseId (fix round 1, point 8). `Map`
+ * construction below keeps the LAST draft for a repeated caseId, which is
+ * conservative (never invents a case that wasn't already going to be
+ * evaluated) but was previously silent — a repeated id is evidence the model
+ * lost track of the pool's shape (e.g. gpt-5.4-nano returned 89 drafts for
+ * an 88-case pool, one id duplicated with disagreeing confidences, and never
+ * answered a different case at all). Counted, not corrected.
+ */
+/**
+ * Every pool case the model resolved to a real (non-hallucinated) candidate
+ * that turned out wrong — regardless of confidence and regardless of whether
+ * that confidence would clear any fold's acceptance threshold (fix round 1,
+ * point 3). The "accepted and wrong" figures elsewhere in this bake-off only
+ * count what a threshold let through; this counts every wrong call the model
+ * actually made, which is what "the model's raw error rate on this pool" and
+ * "the safety comes from the gate, not from clean inputs" need to be backed
+ * by real numbers rather than asserted.
+ */
+export function poolLevelWrongResolutions(results: LlmResult[]): LlmResult[] {
+  return results.filter((r) => r.resolvedCanonicalId !== null && r.correct === false)
+}
+
+export function countDuplicateDraftIds(drafts: AdjudicatorDraft[]): number {
+  const seen = new Set<string>()
+  let duplicates = 0
+  for (const d of drafts) {
+    if (seen.has(d.caseId)) duplicates++
+    else seen.add(d.caseId)
+  }
+  return duplicates
+}
+
 export function resolveLlmResults(
   poolResults: ArmResult[],
   drafts: AdjudicatorDraft[],

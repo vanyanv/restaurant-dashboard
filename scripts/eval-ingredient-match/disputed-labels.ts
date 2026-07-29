@@ -34,9 +34,10 @@ export type DisputedLabel = {
 }
 
 /**
- * All three entries were established by direct read-only query against the
- * live database (invoice 12840200 and the full price history of skus
- * G7234/G7244/G7246), not inferred from the eval output.
+ * Every entry was established by direct read-only query against the live
+ * database (invoice 12840200 and the full price history of skus
+ * G7234/G7244/G7246 for the first three; sku 15725's full line history for
+ * the fourth, added in task 6 fix round 1), not inferred from the eval output.
  */
 export const DISPUTED_LABELS: DisputedLabel[] = [
   {
@@ -78,6 +79,28 @@ export const DISPUTED_LABELS: DisputedLabel[] = [
       "against the duplicate versus 0.6667 against the correct row, so token-overlap is forced into the wrong one. " +
       "The gold label is right; there is no signal in the product name that could distinguish the two, so scoring " +
       "any matcher on it measures the pantry's duplicate, not the matcher.",
+  },
+  {
+    caseId: "Vitco Foodservice::name::chris & eddy's house sce",
+    kind: "mislabeled-gold",
+    productName: "Chris & Eddy's House Sce",
+    goldSays: "chris & eddy's house sauce cup 1.5 oz",
+    shouldBe: "chris & eddy's house sauce (tentative — see the honesty note below)",
+    evidence:
+      "sku 15725, all 16 invoice lines: same unit (CS), same price, same product text ('Chris & Eddy's House Sce' " +
+      "case-insensitively). 4 lines (2026-04-23 through 2026-05-30) carry vendorName 'Vitco Foodservice' and map to " +
+      "`house sauce cup 1.5 oz`; 12 lines (2026-06-01 onward, ongoing through 2026-07-25) carry vendorName " +
+      "'VITCO FOODSERVICE' and map to `house sauce`. `normalizeVendorName` (src/lib/vendor-normalize.ts) returns " +
+      "`raw.trim()` for any vendor outside its small alias list — Vitco is not in that list — so the two castings " +
+      "of the identical vendor name become two different gold-case ids for the identical product name and sku, " +
+      "with opposite canonical labels. Any matcher is structurally guaranteed to be wrong on whichever of the two " +
+      "it is scored against; gpt-5.5 was in fact scored wrong on both. This is the same defect class as the two " +
+      "soda entries above — a corrupted label, not a hard case — not a genuine size-variant judgment call. " +
+      "HONESTY NOTE: unlike the soda entries, this was not independently corroborated against a source document " +
+      "(e.g. an invoice PDF). The direction chosen here (majority — 12 of 16 lines — and the more recent, ongoing " +
+      "mapping) is the best available read of which label is more likely to be the account's actual current intent, " +
+      "not a certainty. `normalizeVendorName`'s case-sensitivity is a live production bug independent of this eval " +
+      "— flagged separately, not fixed here.",
   },
 ]
 

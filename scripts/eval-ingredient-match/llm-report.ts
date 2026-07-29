@@ -13,17 +13,30 @@ import type { GoldCase } from "./gold"
 import type { ArmResult } from "./arms"
 import type { LlmCallResult } from "./llm-call"
 import type { LlmResult } from "./llm-resolve"
+import { poolLevelWrongResolutions } from "./llm-resolve"
 import type { CalibrationSummary } from "./llm-calibration"
 import type { LlmGroupedKFoldAnalysis } from "./llm-kfold"
-import { wilsonUpper95 } from "./sweep-analysis"
-import { writeCalibrationTable, writePerFoldTable, writeAllWrongCases } from "./llm-report-detail"
+import {
+  writeCalibrationTable,
+  writePerFoldTable,
+  writeAllWrongCases,
+  writePoolLevelWrongSection,
+  writePooledCombinedTable,
+} from "./llm-report-detail"
+import { writeDisputedSection } from "./report-pooled"
 
 export type LlmArmRun = {
   model: string
   callResult: LlmCallResult
   poolResults: LlmResult[]
   calibration: CalibrationSummary
+  duplicateDraftCount: number
+  /** Cross-validated on the full (as-is) gold set. */
   kfold: LlmGroupedKFoldAnalysis | null
+  /** Same analysis with the disputed gold labels (disputed-labels.ts) excluded
+   * from both the pool and the fixed vector contribution — reported
+   * side-by-side with `kfold`, never in place of it (fix round 1, point 2). */
+  kfoldExcludingDisputed: LlmGroupedKFoldAnalysis | null
   estimatedCostUsd: number
 }
 
@@ -35,6 +48,8 @@ export type LlmReportInput = {
   vectorFixedCorrect: number
   vectorFixedWrong: number
   vectorFixedWrongCases: ArmResult[]
+  totalGoldCasesExcludingDisputed: number
+  vectorFixedAutoCountExcludingDisputed: number
   armRuns: LlmArmRun[]
   caseIndex: Map<string, GoldCase>
   startedAt: Date
@@ -69,7 +84,21 @@ export async function writeLlmReport(outPath: string, input: LlmReportInput): Pr
       "the model per threshold.",
   )
   lines.push("")
+  lines.push(
+    "> **The comparison below is asymmetric, and that matters for how confidently the headline can be stated.** " +
+      "Vector's fixed contribution in every combined table is the cross-fold **median** gate scored once on the " +
+      "full 255-case gold set — `runs/2026-07-28-1634.md` itself flags this rule in bold as *not* a cross-validated " +
+      "result (it is the full-sample curve read at a single shared threshold). The LLM half of every combined " +
+      "number, by contrast, genuinely is cross-validated: each fold's confidence threshold is selected on that " +
+      "fold's own tuning pool and applied only to its held-out canonicals. So the LLM side of this comparison " +
+      "carries a real generalization penalty the vector side does not. This does not appear to change the " +
+      "direction of the conclusion — vector-only's zero-error result also holds under the fully cross-validated " +
+      "`permissive` rule (166/166/0, 65.1%, from `runs/2026-07-28-1634.md`), not just under `median` — but it means " +
+      "the vector baseline in this report's tables is measured more leniently than every LLM arm is.",
+  )
+  lines.push("")
 
+  writeDisputedSection(lines)
   writeSpendSummary(lines, input.armRuns)
 
   for (const run of input.armRuns) {
@@ -114,7 +143,10 @@ function writeArmSection(lines: string[], run: LlmArmRun, input: LlmReportInput)
   )
   lines.push("")
 
-  writeCalibrationTable(lines, run.calibration)
+  writeCalibrationTable(lines, run.calibration, run.duplicateDraftCount)
+
+  const poolWrong = poolLevelWrongResolutions(run.poolResults)
+  writePoolLevelWrongSection(lines, poolWrong, input.caseIndex)
 
   if (!run.kfold) {
     lines.push("No grouped k-fold analysis available (empty pool or all folds degenerate).")
@@ -124,40 +156,39 @@ function writeArmSection(lines: string[], run: LlmArmRun, input: LlmReportInput)
 
   writePerFoldTable(lines, run.kfold)
 
-  const a = run.kfold
-  const caseWilson = wilsonUpper95(a.pooledCombined.wrong, a.pooledCombined.autoLinked)
-  const canonAuto = a.pooledCombinedAcceptedCanonicals.size
-  const canonWrong = a.pooledCombinedWrongCanonicals.size
-  const canonWilson = wilsonUpper95(canonWrong, canonAuto)
+  writePooledCombinedTable(
+    lines,
+    run.kfold,
+    "Pooled combined result — as-is (vector fixed auto-links + LLM cross-validated accepts)",
+    input.vectorFixedAutoCount,
+    input.totalGoldCases,
+    poolWrong.length,
+  )
+  writeAllWrongCases(lines, run.kfold.pooledWrongLlmCases, run.kfold.pooledWrongVectorCases, input.caseIndex, "the as-is pooled combined result")
 
-  lines.push("#### Pooled combined result (vector fixed auto-links + LLM cross-validated accepts)")
-  lines.push("")
-  lines.push(
-    "Columns are split so the combined figures (vector + LLM together) are never confused with the LLM's own " +
-      "contribution alone — `LLM-added correct`/`LLM-added wrong`/`LLM share of auto-links` isolate what this " +
-      "arm actually added on top of the fixed vector baseline; `Combined *` columns are the true totals.",
-  )
-  lines.push("")
-  lines.push(
-    "| Total cases | Combined auto | Combined correct | Combined wrong | Combined coverage | Combined precision | " +
-      "LLM-added correct | LLM-added wrong | LLM share of auto-links | Wilson 95% (cases) | Wilson 95% (canonicals) |",
-  )
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|")
-  const llmSharePct = a.pooledCombined.autoLinked > 0 ? (a.pooledLlmOnly.accepted / a.pooledCombined.autoLinked) * 100 : 0
-  lines.push(
-    `| ${a.pooledCombined.total} | ${a.pooledCombined.autoLinked} | ${a.pooledCombined.correct} | **${a.pooledCombined.wrong}** | ` +
-      `${a.pooledCombined.coveragePct.toFixed(1)}% | ${a.pooledCombined.precisionPct.toFixed(1)}% | ` +
-      `${a.pooledLlmOnly.correct} | **${a.pooledLlmOnly.wrong}** | ${llmSharePct.toFixed(1)}% | ` +
-      `${(caseWilson * 100).toFixed(1)}% (n=${a.pooledCombined.autoLinked}) | ${(canonWilson * 100).toFixed(1)}% (n=${canonAuto}) |`,
-  )
-  lines.push("")
-  lines.push(
-    `Versus the vector-only-alone baseline: ${input.vectorFixedAutoCount}/${input.totalGoldCases} auto-linked ` +
-      `(${((input.vectorFixedAutoCount / input.totalGoldCases) * 100).toFixed(1)}% coverage, ${input.vectorFixedWrong} wrong).`,
-  )
-  lines.push("")
-
-  writeAllWrongCases(lines, a.pooledWrongLlmCases, a.pooledWrongVectorCases, input.caseIndex)
+  if (run.kfoldExcludingDisputed) {
+    lines.push(
+      "> The table below re-runs the same analysis with `disputed-labels.ts`'s entries excluded from both the " +
+        "pool and the fixed vector contribution (see the disputed-labels section near the top of this report for " +
+        "the audit evidence). Nothing is dropped silently — the as-is table above is always shown first.",
+    )
+    lines.push("")
+    writePooledCombinedTable(
+      lines,
+      run.kfoldExcludingDisputed,
+      "Pooled combined result — excluding disputed gold labels",
+      input.vectorFixedAutoCountExcludingDisputed,
+      input.totalGoldCasesExcludingDisputed,
+      poolWrong.length,
+    )
+    writeAllWrongCases(
+      lines,
+      run.kfoldExcludingDisputed.pooledWrongLlmCases,
+      run.kfoldExcludingDisputed.pooledWrongVectorCases,
+      input.caseIndex,
+      "the excluding-disputed pooled combined result",
+    )
+  }
 }
 
 function formatTimestamp(d: Date): string {
