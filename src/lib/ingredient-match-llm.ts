@@ -28,8 +28,9 @@ import { logger } from "@/lib/logger"
 // clean zero-error coverage gain over vector-only alone; gpt-5.4-nano was
 // chosen as the best available tradeoff — the highest-coverage arm at a
 // narrow, disclosed knife-edge (cross-validated, excl. known-corrupted gold
-// labels: 234/253 auto-linked, 1 wrong, 92.5% coverage vs. vector-only's
-// 167/255, 0 wrong, 65.5% — see ingredient-match-scoring.ts
+// labels, same 253-case denominator both sides: 234/253 auto-linked,
+// 1 wrong, 92.5% coverage vs. vector-only-alone's 167/253, 0 wrong, 66.0%
+// — runs/2026-07-28-1646-llm.md:547; see ingredient-match-scoring.ts
 // THRESHOLDS.LLM_ACCEPT for the exact figures and the fixed-threshold
 // reading) — and it was also the cheapest arm run of the five ($0.0143,
 // vs. $0.0145-$0.2836 for the others). Do not swap this without a new
@@ -49,6 +50,32 @@ export const ADJUDICATOR_MODEL = "gpt-5.4-nano"
  * cost/latency control, not a default left unexamined.
  */
 const REASONING_MODELS = new Set(["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5", "o4-mini"])
+
+/**
+ * Ceiling, not a reservation — there is no cost argument for setting this
+ * below what the bake-off measured. The eval's own budgeting
+ * (scripts/eval-ingredient-match/llm-call.ts) computes ~11k tokens for the
+ * *visible* completion alone at ~90 drafts and sets 32,000 specifically
+ * because reasoning models bill hidden reasoning tokens against this same
+ * cap. Measured for gpt-5.4-nano on the certified run
+ * (scripts/eval-ingredient-match/runs/2026-07-28-1646-llm.md): 9,474 output
+ * tokens for 88 cases. A prior version of this file set this to 12,000
+ * (79% consumed already, before any pool growth) — corrected to match the
+ * eval's own value exactly, so this module is never running a
+ * configuration smaller than what was actually validated.
+ */
+const MAX_COMPLETION_TOKENS = 32_000
+
+/**
+ * Max ambiguous cases sent in a single adjudicator request. THRESHOLDS.FLOOR
+ * (ingredient-match-scoring.ts) folds the entire former `new` bucket into
+ * `ambiguous`, so a real invoice sync can hand this module more cases than
+ * the 88-case pool the bake-off validated an unchunked request against.
+ * Chunking keeps every individual request inside the shape the bake-off
+ * actually measured (88 cases, 9,474 output tokens, 54.3s for gpt-5.4-nano)
+ * instead of extrapolating a single giant request past it.
+ */
+const MAX_CASES_PER_REQUEST = 80
 
 export type AdjudicatorDraft = {
   caseId: string
@@ -161,11 +188,80 @@ export function parseAdjudicatorDrafts(content: string): AdjudicatorDraft[] {
 }
 
 /**
- * One OpenAI round-trip: all ambiguous cases batched into a single request,
- * each shipping only its own shortlist as vocabulary. Records the spend to
- * AiUsageEvent. Never throws — a missing key, a rejected call, or a bad
- * response all resolve to `{ drafts: [], model }` so an invoice sync never
- * fails because a model call did.
+ * One OpenAI round-trip for a single chunk (at most MAX_CASES_PER_REQUEST
+ * cases), each case shipping only its own shortlist as vocabulary. Records
+ * the spend to AiUsageEvent regardless of what the response contains — the
+ * call still cost money even if the content is truncated. Never throws: a
+ * rejected call, a bad response, or a truncated (finish_reason==="length")
+ * response all resolve to `[]` so a batch failure never fails the whole
+ * invoice sync, and never gets silently misread as "the model abstained."
+ */
+async function adjudicateOneRequest(input: {
+  client: OpenAI
+  cases: AdjudicatorCase[]
+  model: string
+  storeId: string | null
+  userId: string | null
+}): Promise<AdjudicatorDraft[]> {
+  const { client, cases, model, storeId, userId } = input
+  const prompt = buildAdjudicatorPrompt({ cases })
+  const started = Date.now()
+
+  try {
+    const params: Record<string, unknown> = {
+      model,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }],
+    }
+    if (REASONING_MODELS.has(model)) {
+      params.max_completion_tokens = MAX_COMPLETION_TOKENS
+      params.reasoning_effort = "low"
+    } else {
+      params.max_tokens = 4000
+      params.temperature = 0.2
+    }
+
+    const response = await client.chat.completions.create(params as never)
+
+    await recordAiUsage({
+      feature: "ingredient-match-adjudicator",
+      provider: "openai",
+      model,
+      inputTokens: response.usage?.prompt_tokens ?? 0,
+      outputTokens: response.usage?.completion_tokens ?? 0,
+      cachedTokens: response.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      storeId,
+      userId,
+      durationMs: Date.now() - started,
+    })
+
+    // finish_reason==="length" means the response was cut off mid-JSON.
+    // parseAdjudicatorDrafts would throw inside its own try and quietly
+    // return [] anyway — but silently, indistinguishable from ordinary
+    // abstention, and it's all-or-nothing: 79 good drafts plus one
+    // truncated one still yields zero. Surface it instead.
+    const choice = response.choices[0]
+    if (choice?.finish_reason === "length") {
+      logger.error(
+        `[ingredient-match-llm] adjudicate response truncated (finish_reason=length) for ${cases.length} cases — drafts for this batch discarded, not partially trusted`
+      )
+      return []
+    }
+
+    const content = choice?.message?.content
+    return content ? parseAdjudicatorDrafts(content) : []
+  } catch (err) {
+    logger.error("[ingredient-match-llm] adjudicate LLM call failed:", err)
+    return []
+  }
+}
+
+/**
+ * Adjudicates every ambiguous case, chunking into batches of at most
+ * MAX_CASES_PER_REQUEST so no single request runs past the shape the
+ * bake-off validated. Chunks are sent sequentially and their drafts merged;
+ * one chunk's failure (rejected call, truncation) does not stop the others.
+ * Never throws — see adjudicateOneRequest.
  */
 export async function adjudicate(input: {
   cases: AdjudicatorCase[]
@@ -183,42 +279,16 @@ export async function adjudicate(input: {
 
   if (input.cases.length === 0) return { drafts: [], model }
 
-  const client = new OpenAI({ apiKey, timeout: 60_000 })
-  const prompt = buildAdjudicatorPrompt({ cases: input.cases })
-  const started = Date.now()
+  const client = new OpenAI({ apiKey, timeout: 300_000 })
+  const storeId = input.storeId ?? null
+  const userId = input.userId ?? null
 
-  try {
-    const params: Record<string, unknown> = {
-      model,
-      response_format: { type: "json_object" },
-      messages: [{ role: "user", content: prompt }],
-    }
-    if (REASONING_MODELS.has(model)) {
-      params.max_completion_tokens = 12_000
-      params.reasoning_effort = "low"
-    } else {
-      params.max_tokens = 4000
-      params.temperature = 0.2
-    }
-
-    const response = await client.chat.completions.create(params as never)
-
-    await recordAiUsage({
-      feature: "ingredient-match-adjudicator",
-      provider: "openai",
-      model,
-      inputTokens: response.usage?.prompt_tokens ?? 0,
-      outputTokens: response.usage?.completion_tokens ?? 0,
-      cachedTokens: response.usage?.prompt_tokens_details?.cached_tokens ?? 0,
-      storeId: input.storeId ?? null,
-      userId: input.userId ?? null,
-      durationMs: Date.now() - started,
-    })
-
-    const content = response.choices[0]?.message?.content
-    return { drafts: content ? parseAdjudicatorDrafts(content) : [], model }
-  } catch (err) {
-    logger.error("[ingredient-match-llm] adjudicate LLM call failed:", err)
-    return { drafts: [], model }
+  const drafts: AdjudicatorDraft[] = []
+  for (let i = 0; i < input.cases.length; i += MAX_CASES_PER_REQUEST) {
+    const chunk = input.cases.slice(i, i + MAX_CASES_PER_REQUEST)
+    const chunkDrafts = await adjudicateOneRequest({ client, cases: chunk, model, storeId, userId })
+    drafts.push(...chunkDrafts)
   }
+
+  return { drafts, model }
 }

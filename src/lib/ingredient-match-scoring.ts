@@ -49,13 +49,12 @@ export type Classification =
  *
  * - FLOOR = 0.48 — the value scripts/eval-ingredient-match/runs/2026-07-28-1748.md's
  *   FLOOR sweep established as the point where the duplicate-creation
- *   ("new") count goes to zero on the 255-case gold set (New=0 for
- *   FLOOR<=0.48, New=1 at FLOOR=0.50; the lowest top score anywhere in the
- *   gold set is 0.4931). This is what disables auto-create per the owner's
- *   decision. It does not mean matching got safer at low scores — it means
- *   nothing can ever be classified `new` at this gate, so a genuinely novel
- *   product is routed to the `ambiguous` human-review queue instead of
- *   silently spawning a duplicate pantry row.
+ *   ("new") count goes to zero *on the 255-case gold set* (New=0 for
+ *   FLOOR<=0.48, New=1 at FLOOR=0.50; the lowest top score anywhere in that
+ *   gold set is 0.4931). This lowers auto-create exposure at the scores this
+ *   evaluation measured, but it does NOT make `new` unreachable in general —
+ *   see AUTO_CREATE_ENABLED below for why FLOOR alone is not the safety
+ *   mechanism.
  *
  * Three caveats that must travel with these numbers wherever cited:
  * 1. Cross-validated and fixed-threshold figures differ (one carries a
@@ -76,6 +75,33 @@ export const THRESHOLDS = {
   FLOOR: 0.48,
   LLM_ACCEPT: 0.78,
 } as const
+
+/**
+ * Explicit, not emergent. Auto-create is disabled by this flag — NOT by
+ * FLOOR's relationship to any sample's minimum score, which is incidental.
+ *
+ * `classifyCandidates` returns `{ kind: "new" }` from two places: the
+ * `candidates.length === 0` guard below (before FLOOR is ever consulted),
+ * and `top.score < FLOOR`. Setting FLOOR under the gold set's lowest
+ * observed score only closes the second path. The first fires whenever
+ * vector retrieval returns zero candidates — a real, live scenario:
+ * `CanonicalIngredientEmbedding` coverage has no cron and nothing writes an
+ * embedding on canonical creation outside the one path Task 1 added, and
+ * GLN/VNYS will open with empty pantries. At an empty pantry, EVERY
+ * invoice line hits the empty-candidates path regardless of FLOOR. Any
+ * caller wiring up L4 (auto-create) MUST check this flag before creating a
+ * `CanonicalIngredient` from a `{ kind: "new" }` decision — checking FLOOR
+ * or `candidates.length` is not sufficient on its own.
+ *
+ * Measured reason (owner's decision, 2026-07-28): at vector-only's own
+ * zero-error ship gate (FLOOR=0.72, the pre-certification production
+ * default), 33.3% of the 255-case gold set (85/255) — cases that have a
+ * correct, already-existing canonical — score below FLOOR and would
+ * auto-create a duplicate (scripts/eval-ingredient-match/runs/2026-07-28-1748.md,
+ * vector-only "FLOOR sweep" section, FLOOR=0.72 row). That is the exposure
+ * this flag exists to prevent, independent of whatever FLOOR is set to.
+ */
+export const AUTO_CREATE_ENABLED = false
 
 const SHORTLIST = 5
 
