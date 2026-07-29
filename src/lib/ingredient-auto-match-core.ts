@@ -86,6 +86,28 @@ export function suppressionKey(groupKey: string, canonicalIngredientId: string):
   return `${groupKey}::${canonicalIngredientId}`
 }
 
+export type AutoMatchMode = "off" | "shadow" | "on"
+
+/**
+ * Read the `INGREDIENT_AUTO_MATCH` rollout gate.
+ *
+ * Fails safe in both directions: unset, blank, or ANY unrecognised value is
+ * `off`. That matters more than it looks — the plausible operator typos
+ * ("true", "1", "yes", "enabled") are exactly the strings a truthiness check
+ * would read as consent to start writing canonical links on every invoice
+ * sync. Only the two documented words turn anything on, and only `on` writes.
+ */
+export function resolveAutoMatchMode(raw: string | undefined): AutoMatchMode {
+  switch (raw?.trim().toLowerCase()) {
+    case "on":
+      return "on"
+    case "shadow":
+      return "shadow"
+    default:
+      return "off"
+  }
+}
+
 export type Layer = "auto-exact" | "auto-vector" | "auto-llm"
 
 /** One group the ladder decided to link, before write-back. Shared between
