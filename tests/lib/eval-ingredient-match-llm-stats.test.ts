@@ -20,8 +20,9 @@
 
 import { describe, it, expect } from "vitest"
 
-import { analyzeLlmGroupedKFold } from "../../scripts/eval-ingredient-match/llm-kfold"
+import { analyzeLlmGroupedKFold, partitionPoolByFold } from "../../scripts/eval-ingredient-match/llm-kfold"
 import { poolLevelWrongResolutions, countDuplicateDraftIds } from "../../scripts/eval-ingredient-match/llm-resolve"
+import { buildFoldMap } from "../../scripts/eval-ingredient-match/holdout-analysis"
 import type { LlmResult } from "../../scripts/eval-ingredient-match/llm-resolve"
 import type { ArmResult } from "../../scripts/eval-ingredient-match/arms"
 import type { GoldCase } from "../../scripts/eval-ingredient-match/gold"
@@ -136,6 +137,54 @@ describe("analyzeLlmGroupedKFold", () => {
     expect(a.pooledLlmOnly.correct).toBe(1)
     // The combined total must never be attributed entirely to the LLM.
     expect(a.pooledLlmOnly.accepted).toBeLessThan(a.pooledCombined.autoLinked)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// partitionPoolByFold (fix round 2, point 2)
+//
+// analyzeLlmGroupedKFold's own tests above lock down the stale-field bug but
+// were shown (by the reviewer's mutation) to be blind to a different, more
+// fundamental property: that tuning and held-out data never overlap. Every
+// cross-validated number in this report depends on that disjointness holding.
+// These tests call the real partitioning function directly, not a re-derived
+// copy — a test that re-filters the pool itself would only prove
+// Array.prototype.filter works, exactly the failure mode
+// holdout-analysis.ts's own header comment warns about.
+// ---------------------------------------------------------------------------
+
+describe("partitionPoolByFold", () => {
+  const canonicalIds = Array.from({ length: 20 }, (_, i) => `canon-${i}`)
+  const goldCases = canonicalIds.map((id) => makeGoldCase(`case-${id}`, id))
+  const poolResults = canonicalIds.map((id) => makeLlmResult({ caseId: `case-${id}`, expectedCanonicalId: id }))
+  const foldByCanonical = buildFoldMap(goldCases)
+
+  it("never puts a canonical's cases in both the tuning and held-out side of the same fold", () => {
+    const partitions = partitionPoolByFold(poolResults, foldByCanonical)
+    for (const p of partitions) {
+      const tuningCanonicals = new Set(p.tuningPool.map((r) => r.expectedCanonicalId))
+      const holdoutCanonicals = new Set(p.holdoutPool.map((r) => r.expectedCanonicalId))
+      const overlap = [...holdoutCanonicals].filter((c) => tuningCanonicals.has(c))
+      expect(overlap).toEqual([])
+    }
+  })
+
+  it("holds out every pool case in exactly one fold, losing none", () => {
+    const partitions = partitionPoolByFold(poolResults, foldByCanonical)
+    const allHeldOut = partitions.flatMap((p) => p.holdoutPool.map((r) => r.caseId))
+    expect(allHeldOut.length).toBe(poolResults.length)
+    expect(new Set(allHeldOut).size).toBe(poolResults.length)
+    expect(new Set(allHeldOut)).toEqual(new Set(poolResults.map((r) => r.caseId)))
+  })
+
+  it("selects each fold's tuning pool strictly from cases outside that fold", () => {
+    const partitions = partitionPoolByFold(poolResults, foldByCanonical)
+    for (const p of partitions) {
+      expect(p.tuningPool.length).toBeLessThan(poolResults.length)
+      for (const r of p.tuningPool) {
+        expect(foldByCanonical.get(r.expectedCanonicalId)).not.toBe(p.index)
+      }
+    }
   })
 })
 

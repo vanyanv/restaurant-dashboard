@@ -25,7 +25,7 @@ import { analyzeGroupedKFold } from "./holdout-analysis"
 import { splitPool, buildAdjudicatorCases } from "./llm-pool"
 import { resolveLlmResults, countDuplicateDraftIds } from "./llm-resolve"
 import { computeCalibration } from "./llm-calibration"
-import { analyzeLlmGroupedKFold } from "./llm-kfold"
+import { analyzeLlmGroupedKFold, computeFixedTauSensitivity } from "./llm-kfold"
 import { writeLlmReport, type LlmArmRun } from "./llm-report"
 import { excludeDisputed, excludeDisputedCases } from "./disputed-labels"
 import type { LlmCallResult } from "./llm-call"
@@ -131,6 +131,13 @@ async function main() {
     const kfoldExcludingDisputed =
       poolResultsExcl.length > 0 ? analyzeLlmGroupedKFold(casesExcl, vectorCorrectExcl, vectorWrongExcl, poolResultsExcl) : null
 
+    const fixedTauSensitivity = kfold
+      ? computeFixedTauSensitivity(split.vectorAutoCorrect, split.vectorAutoWrong, poolResults, kfold.folds)
+      : null
+    const fixedTauSensitivityExcludingDisputed = kfoldExcludingDisputed
+      ? computeFixedTauSensitivity(vectorCorrectExcl, vectorWrongExcl, poolResultsExcl, kfoldExcludingDisputed.folds)
+      : null
+
     armRuns.push({
       model: raw.model,
       callResult,
@@ -139,6 +146,8 @@ async function main() {
       duplicateDraftCount,
       kfold,
       kfoldExcludingDisputed,
+      fixedTauSensitivity,
+      fixedTauSensitivityExcludingDisputed,
       estimatedCostUsd: raw.costUsd,
     })
     console.log(
