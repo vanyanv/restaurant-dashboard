@@ -15,13 +15,14 @@ import type { LlmCallResult } from "./llm-call"
 import type { LlmResult } from "./llm-resolve"
 import { poolLevelWrongResolutions } from "./llm-resolve"
 import type { CalibrationSummary } from "./llm-calibration"
-import type { LlmGroupedKFoldAnalysis } from "./llm-kfold"
+import type { LlmGroupedKFoldAnalysis, FixedTauSensitivity } from "./llm-kfold"
 import {
   writeCalibrationTable,
   writePerFoldTable,
   writeAllWrongCases,
   writePoolLevelWrongSection,
   writePooledCombinedTable,
+  writeFixedTauSensitivity,
 } from "./llm-report-detail"
 import { writeDisputedSection } from "./report-pooled"
 
@@ -37,6 +38,11 @@ export type LlmArmRun = {
    * from both the pool and the fixed vector contribution — reported
    * side-by-side with `kfold`, never in place of it (fix round 1, point 2). */
   kfoldExcludingDisputed: LlmGroupedKFoldAnalysis | null
+  /** Fixed-threshold sensitivity checks (fix round 2, point 1) — see
+   * llm-kfold.ts#computeFixedTauSensitivity. Reported alongside, never in
+   * place of, the cross-validated kfold/kfoldExcludingDisputed rows. */
+  fixedTauSensitivity: FixedTauSensitivity | null
+  fixedTauSensitivityExcludingDisputed: FixedTauSensitivity | null
   estimatedCostUsd: number
 }
 
@@ -154,7 +160,7 @@ function writeArmSection(lines: string[], run: LlmArmRun, input: LlmReportInput)
     return
   }
 
-  writePerFoldTable(lines, run.kfold)
+  writePerFoldTable(lines, run.kfold, "Per-fold selections — as-is (LLM confidence threshold, tuned on that fold's own tuning pool)")
 
   writePooledCombinedTable(
     lines,
@@ -165,14 +171,20 @@ function writeArmSection(lines: string[], run: LlmArmRun, input: LlmReportInput)
     poolWrong.length,
   )
   writeAllWrongCases(lines, run.kfold.pooledWrongLlmCases, run.kfold.pooledWrongVectorCases, input.caseIndex, "the as-is pooled combined result")
+  writeFixedTauSensitivity(lines, run.fixedTauSensitivity)
 
   if (run.kfoldExcludingDisputed) {
     lines.push(
-      "> The table below re-runs the same analysis with `disputed-labels.ts`'s entries excluded from both the " +
+      "> The tables below re-run the same analysis with `disputed-labels.ts`'s entries excluded from both the " +
         "pool and the fixed vector contribution (see the disputed-labels section near the top of this report for " +
-        "the audit evidence). Nothing is dropped silently — the as-is table above is always shown first.",
+        "the audit evidence). Nothing is dropped silently — the as-is tables above are always shown first.",
     )
     lines.push("")
+    writePerFoldTable(
+      lines,
+      run.kfoldExcludingDisputed,
+      "Per-fold selections — excluding disputed gold labels (LLM confidence threshold, tuned on that fold's own tuning pool)",
+    )
     writePooledCombinedTable(
       lines,
       run.kfoldExcludingDisputed,
@@ -188,6 +200,7 @@ function writeArmSection(lines: string[], run: LlmArmRun, input: LlmReportInput)
       input.caseIndex,
       "the excluding-disputed pooled combined result",
     )
+    writeFixedTauSensitivity(lines, run.fixedTauSensitivityExcludingDisputed)
   }
 }
 

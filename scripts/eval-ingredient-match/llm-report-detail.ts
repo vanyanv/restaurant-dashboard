@@ -9,7 +9,7 @@ import type { GoldCase } from "./gold"
 import type { ArmResult } from "./arms"
 import type { LlmResult } from "./llm-resolve"
 import type { CalibrationSummary } from "./llm-calibration"
-import type { LlmGroupedKFoldAnalysis } from "./llm-kfold"
+import type { LlmGroupedKFoldAnalysis, FixedTauSensitivity } from "./llm-kfold"
 import type { WrongAtConfidence } from "./llm-threshold-eval"
 import { wilsonUpper95 } from "./sweep-analysis"
 import { formatScore } from "./report-case-detail"
@@ -35,8 +35,8 @@ export function writeCalibrationTable(lines: string[], cal: CalibrationSummary, 
   lines.push("")
 }
 
-export function writePerFoldTable(lines: string[], a: LlmGroupedKFoldAnalysis): void {
-  lines.push("#### Per-fold selections (LLM confidence threshold, tuned on that fold's own tuning pool)")
+export function writePerFoldTable(lines: string[], a: LlmGroupedKFoldAnalysis, heading: string): void {
+  lines.push(`#### ${heading}`)
   lines.push("")
   lines.push(
     "| Fold | Held-out canonicals | Tuning pool | Holdout pool | Own tau | Zero-error on tuning? | Combined holdout auto | Combined wrong | Combined coverage | Combined precision |",
@@ -50,6 +50,49 @@ export function writePerFoldTable(lines: string[], a: LlmGroupedKFoldAnalysis): 
     )
   }
   lines.push("")
+}
+
+/**
+ * Fixed-tau sensitivity check (fix round 2, point 1) — NOT a cross-validated
+ * estimate, see the doc comment on `computeFixedTauSensitivity`. Exists
+ * specifically to make a knife-edge visible: gpt-5.4-nano's excluding-disputed
+ * cross-validated result is 1 wrong at 92.5% coverage, but at a single fixed
+ * tau=0.78 (the value 4 of 5 folds independently picked), the same arm reads
+ * 0 wrong at 91.7% — a difference driven entirely by one fold picking 0.72
+ * instead of 0.78, a 0.06 gap that ~70 tuning points cannot resolve either
+ * way. A reader who only sees the cross-validated row cannot see this.
+ */
+export function writeFixedTauSensitivity(lines: string[], s: FixedTauSensitivity | null): void {
+  lines.push("#### Fixed-threshold sensitivity check (NOT a cross-validated estimate)")
+  lines.push("")
+  if (!s) {
+    lines.push("No folds available.")
+    lines.push("")
+    return
+  }
+  lines.push(
+    `Applies tau=${s.tau.toFixed(2)} — the value ${s.majorityFoldCount} of ${s.totalFolds} folds independently ` +
+      "selected — as ONE shared threshold to the whole pool in a single pass, with no tuning/holdout split. This " +
+      "double-counts: some folds' own tuning data helped select this tau, so it is not a generalization estimate. " +
+      "It exists only to show how sensitive the cross-validated row above is to a single fold's threshold pick.",
+  )
+  lines.push("")
+  lines.push("| tau | Auto-linked | Correct | Wrong | Coverage | Precision | Max fold deviation from this tau |")
+  lines.push("|---|---|---|---|---|---|---|")
+  lines.push(
+    `| ${s.tau.toFixed(2)} | ${s.combined.autoLinked} | ${s.combined.correct} | **${s.combined.wrong}** | ` +
+      `${s.combined.coveragePct.toFixed(1)}% | ${s.combined.precisionPct.toFixed(1)}% | ${s.maxDeviation.toFixed(2)} |`,
+  )
+  lines.push("")
+  if (s.maxDeviation > 0) {
+    lines.push(
+      `At least one fold's own independent tau selection differs from this majority value by ${s.maxDeviation.toFixed(2)} — ` +
+        "if that gap is what separates a wrong-count of 0 from 1 (or vice versa) between this row and the " +
+        "cross-validated row above, that is the knife-edge: a threshold difference this small, chosen from ~70 " +
+        "tuning points, is not a distinction the data can reliably support either way.",
+    )
+    lines.push("")
+  }
 }
 
 /**

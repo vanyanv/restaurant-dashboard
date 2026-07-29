@@ -25,7 +25,7 @@ import { splitPool, buildAdjudicatorCases } from "./llm-pool"
 import { callAdjudicatorModelOnce } from "./llm-call"
 import { resolveLlmResults, countDuplicateDraftIds } from "./llm-resolve"
 import { computeCalibration } from "./llm-calibration"
-import { analyzeLlmGroupedKFold } from "./llm-kfold"
+import { analyzeLlmGroupedKFold, computeFixedTauSensitivity } from "./llm-kfold"
 import { estimateCostUsd } from "./llm-pricing"
 import { writeLlmReport, timestampForFilename, type LlmArmRun } from "./llm-report"
 import { excludeDisputed, excludeDisputedCases } from "./disputed-labels"
@@ -158,6 +158,13 @@ async function main() {
     const kfoldExcludingDisputed =
       poolResultsExcl.length > 0 ? analyzeLlmGroupedKFold(casesExcl, vectorCorrectExcl, vectorWrongExcl, poolResultsExcl) : null
 
+    const fixedTauSensitivity = kfold
+      ? computeFixedTauSensitivity(split.vectorAutoCorrect, split.vectorAutoWrong, poolResults, kfold.folds)
+      : null
+    const fixedTauSensitivityExcludingDisputed = kfoldExcludingDisputed
+      ? computeFixedTauSensitivity(vectorCorrectExcl, vectorWrongExcl, poolResultsExcl, kfoldExcludingDisputed.folds)
+      : null
+
     armRuns.push({
       model,
       callResult,
@@ -166,6 +173,8 @@ async function main() {
       duplicateDraftCount,
       kfold,
       kfoldExcludingDisputed,
+      fixedTauSensitivity,
+      fixedTauSensitivityExcludingDisputed,
       estimatedCostUsd,
     })
   }
