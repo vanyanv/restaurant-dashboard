@@ -20,17 +20,20 @@ describe("classifyCandidates", () => {
 
   it("refuses to auto-link a near-tie even when both score very high", () => {
     // The load-bearing guard: "GRND BEEF 73/27" must not silently pick a grade.
-    const r = classifyCandidates([c("Ground Beef 73/27", 0.93), c("Ground Beef 80/20", 0.92)])
+    // Margin (0.005) is deliberately well under MARGIN (0.01), not sitting on
+    // the boundary — the boundary itself is pinned separately below.
+    const r = classifyCandidates([c("Ground Beef 73/27", 0.85), c("Ground Beef 80/20", 0.845)])
     expect(r.kind).toBe("ambiguous")
   })
 
   it("sends the mid band to the adjudicator", () => {
-    const r = classifyCandidates([c("Ground Beef 73/27", 0.80), c("Chuck Roll", 0.60)])
+    // Below HIGH (0.72) but above FLOOR (0.48) — the real ambiguous band.
+    const r = classifyCandidates([c("Ground Beef 73/27", 0.60), c("Chuck Roll", 0.50)])
     expect(r.kind).toBe("ambiguous")
   })
 
   it("reports 'new' when every candidate is below FLOOR", () => {
-    const r = classifyCandidates([c("Ground Beef 73/27", 0.51), c("Chuck Roll", 0.40)])
+    const r = classifyCandidates([c("Ground Beef 73/27", 0.40), c("Chuck Roll", 0.30)])
     expect(r.kind).toBe("new")
   })
 
@@ -61,42 +64,45 @@ describe("classifyCandidates", () => {
   })
 
   describe("threshold boundary pins (explicit literals to catch regressions)", () => {
-    it("auto-links at exactly HIGH (0.9) with sufficient margin", () => {
-      // Pins `top.score >= HIGH` (not `>`). Literal 0.9, not computed from THRESHOLDS.
-      const r = classifyCandidates([c("candidate", 0.9), c("runner-up", 0.80)])
+    it("auto-links at exactly HIGH (0.72) with sufficient margin", () => {
+      // Pins `top.score >= HIGH` (not `>`). Literal 0.72, not computed from THRESHOLDS.
+      const r = classifyCandidates([c("candidate", 0.72), c("runner-up", 0.70)])
       expect(r.kind).toBe("auto")
     })
 
-    it("rejects just below HIGH (0.8999) even with sufficient margin", () => {
-      // Pins `>= HIGH` boundary. Literal 0.8999.
-      const r = classifyCandidates([c("candidate", 0.8999), c("runner-up", 0.80)])
+    it("rejects just below HIGH (0.7199) even with sufficient margin", () => {
+      // Pins `>= HIGH` boundary. Literal 0.7199.
+      const r = classifyCandidates([c("candidate", 0.7199), c("runner-up", 0.60)])
       expect(r.kind).toBe("ambiguous")
     })
 
-    it("auto-links with margin exactly at MARGIN threshold (0.05)", () => {
-      // Pins `margin >= MARGIN` (not `>`). Use 0.91 - 0.86 to avoid floating-point
-      // precision issues (0.95 - 0.90 actually equals 0.049999...).
-      const r = classifyCandidates([c("candidate", 0.91), c("runner-up", 0.86)])
+    it("auto-links with margin exactly at MARGIN threshold (0.01)", () => {
+      // Pins `margin >= MARGIN` (not `>`). Use 0.73 - 0.72: verified in Node
+      // this evaluates to 0.010000000000000009 (>= 0.01), not the kind of
+      // float pair (like 0.95 - 0.90) that lands a hair under the literal.
+      const r = classifyCandidates([c("candidate", 0.73), c("runner-up", 0.72)])
       expect(r.kind).toBe("auto")
-      if (r.kind === "auto") expect(r.margin).toBeCloseTo(0.05)
+      if (r.kind === "auto") expect(r.margin).toBeCloseTo(0.01)
     })
 
-    it("rejects margin just below MARGIN threshold (0.0499)", () => {
-      // Pins `>= MARGIN` boundary. Literal 0.0499.
-      const r = classifyCandidates([c("candidate", 0.95), c("runner-up", 0.9001)])
+    it("rejects margin just below MARGIN threshold (0.0099)", () => {
+      // Pins `>= MARGIN` boundary. 0.75 - 0.7401 verified in Node as
+      // 0.00990000000000002, strictly below 0.01. Both scores stay above
+      // HIGH so the rejection is attributable to MARGIN alone.
+      const r = classifyCandidates([c("candidate", 0.75), c("runner-up", 0.7401)])
       expect(r.kind).toBe("ambiguous")
     })
 
-    it("does not treat exactly FLOOR (0.72) as 'new'", () => {
-      // Pins `top.score < FLOOR` (not `<=`). Literal 0.72. Must not be new,
-      // goes to ambiguous since no strong runner-up margin.
-      const r = classifyCandidates([c("candidate", 0.72)])
+    it("does not treat exactly FLOOR (0.48) as 'new'", () => {
+      // Pins `top.score < FLOOR` (not `<=`). Literal 0.48. Must not be new,
+      // goes to ambiguous since it's also below HIGH with no runner-up margin.
+      const r = classifyCandidates([c("candidate", 0.48)])
       expect(r.kind).toBe("ambiguous")
     })
 
-    it("treats just below FLOOR (0.7199) as 'new'", () => {
-      // Pins `< FLOOR` boundary. Literal 0.7199.
-      const r = classifyCandidates([c("candidate", 0.7199)])
+    it("treats just below FLOOR (0.4799) as 'new'", () => {
+      // Pins `< FLOOR` boundary. Literal 0.4799.
+      const r = classifyCandidates([c("candidate", 0.4799)])
       expect(r.kind).toBe("new")
     })
   })

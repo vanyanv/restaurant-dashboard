@@ -22,7 +22,33 @@ import OpenAI from "openai"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { logger } from "@/lib/logger"
 
-export const ADJUDICATOR_MODEL = "gpt-4.1-mini"
+// Certified 2026-07-28 by the 5-model bake-off in
+// scripts/eval-ingredient-match/runs/2026-07-28-1646-llm.md (gpt-5.4-nano
+// vs. gpt-4.1-mini, gpt-5.4-mini, o4-mini, gpt-5.5). No arm demonstrated a
+// clean zero-error coverage gain over vector-only alone; gpt-5.4-nano was
+// chosen as the best available tradeoff — the highest-coverage arm at a
+// narrow, disclosed knife-edge (cross-validated, excl. known-corrupted gold
+// labels: 234/253 auto-linked, 1 wrong, 92.5% coverage vs. vector-only's
+// 167/255, 0 wrong, 65.5% — see ingredient-match-scoring.ts
+// THRESHOLDS.LLM_ACCEPT for the exact figures and the fixed-threshold
+// reading) — and it was also the cheapest arm run of the five ($0.0143,
+// vs. $0.0145-$0.2836 for the others). Do not swap this without a new
+// certified bake-off.
+export const ADJUDICATOR_MODEL = "gpt-5.4-nano"
+
+/**
+ * Reasoning-capable OpenAI models reject `temperature`/`max_tokens` on Chat
+ * Completions and require `max_completion_tokens` (+ optional
+ * `reasoning_effort`) instead. `ADJUDICATOR_MODEL` (gpt-5.4-nano) is one of
+ * these — same set the bake-off's harness used
+ * (scripts/eval-ingredient-match/llm-pricing.ts#REASONING_MODELS, not
+ * imported here since that module is eval-only). Getting this branch wrong
+ * doesn't error loudly: `adjudicate()` below never throws, so a rejected
+ * reasoning-model call would silently resolve to zero drafts on every
+ * invoice sync. `reasoning_effort: "low"` mirrors the eval's own deliberate
+ * cost/latency control, not a default left unexamined.
+ */
+const REASONING_MODELS = new Set(["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5", "o4-mini"])
 
 export type AdjudicatorDraft = {
   caseId: string
@@ -162,13 +188,20 @@ export async function adjudicate(input: {
   const started = Date.now()
 
   try {
-    const response = await client.chat.completions.create({
+    const params: Record<string, unknown> = {
       model,
       response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-      max_tokens: 4000,
-    })
+    }
+    if (REASONING_MODELS.has(model)) {
+      params.max_completion_tokens = 12_000
+      params.reasoning_effort = "low"
+    } else {
+      params.max_tokens = 4000
+      params.temperature = 0.2
+    }
+
+    const response = await client.chat.completions.create(params as never)
 
     await recordAiUsage({
       feature: "ingredient-match-adjudicator",

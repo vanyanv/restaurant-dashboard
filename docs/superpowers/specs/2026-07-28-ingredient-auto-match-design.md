@@ -44,8 +44,13 @@ Two consequences:
 
 - **Confident matches auto-link.** No human click. Every auto-action is recorded with
   its score and reasoning, and is reversible in one click from an activity strip.
-- **Clearly-new products auto-create their `CanonicalIngredient`**, gated on a
-  low-similarity floor against the entire pantry (the duplication guardrail).
+- **Auto-create is cancelled (certified 2026-07-28).** The bake-off measured a 33.8%
+  duplicate-creation rate at `vector-only`'s own zero-error ship gate — roughly one in
+  three confirmed-real ingredients would have silently spawned a duplicate pantry row.
+  `FLOOR` is instead set to the value the FLOOR sweep found makes the duplicate-creation
+  count zero (0.48 — see "Certified result" below), which makes every `new` decision
+  route to human review instead of auto-creating. L4 below describes the mechanism as
+  designed; it does not fire under the certified thresholds.
 - **Oversight is an on-page activity strip**, not email, not a silent log.
 - **Auto-link precision gate: 100% on the gold set.** Of everything the ladder chooses
   to auto-link, zero may disagree with the 486 human-confirmed matches. The ladder
@@ -91,8 +96,10 @@ The margin test is the load-bearing guard: `"GRND BEEF 73/27"` scoring 0.93 agai
 *both* "Ground Beef 73/27" and "Ground Beef 80/20" must never silently pick one.
 
 Starting values `HIGH=0.90`, `MARGIN=0.05`, `FLOOR=0.72`, and L3's `LLM_ACCEPT=0.85`
-are **guesses to be replaced by bake-off output** (below). All four live in one exported
-constants object, not scattered across modules.
+were **guesses, now replaced by certified bake-off output**: `HIGH=0.72`, `MARGIN=0.01`,
+`FLOOR=0.48`, `LLM_ACCEPT=0.78` — see "Certified result (2026-07-28)" below for the
+evidence behind each. All four live in one exported constants object
+(`src/lib/ingredient-match-scoring.ts#THRESHOLDS`), not scattered across modules.
 
 ### L3 — LLM adjudicator (ambiguous band only)
 
@@ -105,10 +112,18 @@ reasoning. Every returned name is re-resolved against the DB before use (the
 - ≥ `LLM_ACCEPT` → auto-link, `auto-llm`
 - below → review inbox **with the suggestion pre-filled** (three clicks become one)
 
-### L4 — auto-create (clearly new only)
+### L4 — auto-create (clearly new only) — **cancelled, does not fire under certified thresholds**
 
 Gated on L2's "every candidate < `FLOOR`" — that floor *is* the pantry-duplication
 guardrail. The same L3 call returns display name, category, and recipe unit.
+
+**Certified 2026-07-28: `FLOOR` is set to 0.48, the value the FLOOR sweep established
+as the point where the duplicate-creation count goes to zero on the gold set** (see
+"Certified result" below). No case in the 255-case gold set scores below 0.4931, so at
+this gate `top.score < FLOOR` structurally never fires — `new` is unreachable, and every
+line that would have hit L4 instead falls through to L3's ambiguous/human-review path.
+This code path is kept in place (a future FLOOR retune could re-enable it) but is inert
+by design until a new certified evaluation says otherwise.
 
 **Pack metadata is parsed, never inferred.** It comes from `getLineItemBaseQty()` on
 the real invoice line. If the line carries no `packSize`/`unitSize`, then `caseUnit`
@@ -198,6 +213,55 @@ Coverage at the zero-error point is the headline number: it says what fraction o
 future invoice lines stop needing a human. A low number is a legitimate reason to
 reconsider the whole approach, and the eval is deliberately built to surface that
 before any feature code depends on it.
+
+### Certified result (2026-07-28)
+
+The owner's ship decision, from the completed bake-off
+(`scripts/eval-ingredient-match/`, task 6): **vector similarity gates auto-link, a
+`gpt-5.4-nano` adjudicator resolves the ambiguous band, auto-create is disabled.**
+
+- **Vector layer (L2) wins on precision, not on coverage alone.** Ship gate
+  `HIGH=0.72, MARGIN=0.01` — the cross-fold median gate,
+  `scripts/eval-ingredient-match/runs/2026-07-28-1748.md`. Full-sample at that one
+  gate: 167/255 auto-linked, 0 wrong, 65.5% coverage. The leakage-free cross-validated
+  estimate (one gate per fold, `permissive` rule) is 166/255, 0 wrong, 65.1% coverage —
+  nearly identical, and the figure to cite as the tested error rate. No arm — vector or
+  any of the five LLM models — demonstrated a clean zero-error coverage gain over this
+  baseline.
+- **Adjudicator (L3): `gpt-5.4-nano`**, chosen from a 5-model bake-off
+  (`gpt-4.1-mini`, `gpt-5.4-mini`, `o4-mini`, `gpt-5.5` also measured;
+  `scripts/eval-ingredient-match/runs/2026-07-28-1646-llm.md`) as the best available
+  tradeoff: highest coverage at a narrow, disclosed knife-edge, and also the cheapest
+  arm run ($0.0143 vs. $0.0145–$0.2836 for the other four). `LLM_ACCEPT=0.78` is the
+  confidence threshold 4 of 5 grouped-k-fold folds independently selected (fold 0 alone
+  picked 0.72). **Cross-validated** combined result (vector + adjudicator, excluding
+  two known-corrupted gold labels): 234/253 auto-linked, **1 wrong**, 92.5% coverage,
+  99.6% precision. **Fixed-threshold** result — tau=0.78 applied as one shared gate in
+  a single full-sample pass, optimistic by construction, NOT a generalization estimate:
+  232/253 auto-linked, **0 wrong**, 91.7% coverage, 100% precision. The two figures
+  differ by exactly one fold's threshold pick landing 0.06 away from the other four —
+  always state which of the two is being cited.
+- **Auto-create (L4) is cancelled.** At `vector-only`'s own zero-error ship gate, 33.8%
+  of the gold set would have auto-created a duplicate `CanonicalIngredient` — measured,
+  not assumed. `FLOOR=0.48` is the value the FLOOR sweep in
+  `scripts/eval-ingredient-match/runs/2026-07-28-1748.md` established as the point
+  where the duplicate-creation count goes to zero on the 255-case gold set (no case
+  scores below 0.4931). This disables L4 entirely: every `new` decision is now
+  structurally unreachable, so a genuinely novel product routes to human review instead
+  of silently spawning a duplicate.
+
+**Three caveats that must travel with every one of the numbers above:**
+
+1. Cross-validated and fixed-threshold figures differ (one carries a measured error,
+   one doesn't) — state which is which; the fixed-threshold figure is optimistic by
+   construction, not a generalization estimate.
+2. Every gold case is one the deterministic L0 (`sku`/alias) layer already resolves —
+   every figure above is an upper bound for genuinely new products, not an estimate of
+   live performance on them.
+3. Safety comes from the acceptance gate, not from model reliability: at pool level
+   `gpt-5.4-nano` makes 8 wrong picks out of 88 pool cases, including matching french
+   fries to frying-oil shortening at 0.52 confidence. `LLM_ACCEPT` rejects picks like
+   that — the model itself is not being trusted to be right.
 
 ### Budget
 
