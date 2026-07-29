@@ -1,0 +1,640 @@
+{
+  "model": "gpt-5.4-mini",
+  "poolCaseIds": [
+    "Individual FoodService::name::mustard packets 5.5 gram",
+    "Individual FoodService::name::mustard packets 5.5 gram ppi",
+    "Individual FoodService::name::soda sprite mexican glass",
+    "Individual FoodService::name::wrap bulk 4-cup carrier 8-32oz",
+    "Individual FoodService::name::container foam 9x9 large hinged 1-compartment",
+    "Individual FoodService::name::cont bagasse pf 9x9x3 1-comp",
+    "Individual FoodService::name::napkin disp 2ply white",
+    "Individual FoodService::name::emboss bath tissue 2ply recy ind wrp",
+    "Individual FoodService::name::emboss bath tissue",
+    "Individual FoodService::name::ppr roll thermal bpa/bps free",
+    "Individual FoodService::name::can liner black roll",
+    "Individual FoodService::name::cup portion plast 2 oz clear",
+    "Individual FoodService::name::cup portion plast clear",
+    "Individual FoodService::name::cup portion plastic",
+    "Individual FoodService::name::cup portion plastic clear",
+    "Individual FoodService::name::lid portion plast",
+    "Individual FoodService::name::lid portion plastic",
+    "Individual FoodService::name::cont foam hingd wht 9x6.5x2.5",
+    "Individual FoodService::name::cont foam hngd wht",
+    "Individual FoodService::name::cont foam hngd white",
+    "Individual FoodService::name::container foam hinged white",
+    "Individual FoodService::name::continental foam hinged white",
+    "Individual FoodService::name::foam hngd wht 9x6.5x2.5",
+    "Individual FoodService::name::foam hinged container white",
+    "Individual FoodService::name::ppr patty dry wax",
+    "Individual FoodService::name::mustard pkts",
+    "Individual FoodService::name::mustard pkts 5.5gr ppi",
+    "Individual FoodService::name::mustard pkts ssgr ppi",
+    "Individual FoodService::name::mustard packets",
+    "Individual FoodService::name::relish sweet",
+    "Individual FoodService::name::peppers whole yellow 5 gal",
+    "Individual FoodService::name::soap hand liquid lemon yellow",
+    "Individual FoodService::name::foam 9x9 1-comp bagge",
+    "Individual FoodService::name::foam container bagged",
+    "Individual FoodService::name::ppr patty 5.5x5.5 dry wax (24)",
+    "Individual FoodService::name::tray food ppr wht/red check",
+    "Individual FoodService::name::tray food paper",
+    "Individual FoodService::name::tray food ppr #50",
+    "Individual FoodService::name::cont foam 6x6x3 med hngd sqr",
+    "Individual FoodService::name::foam container medium hinged square",
+    "Individual FoodService::name::cont foam med wht bagged",
+    "Premier Deli Services, Inc.::name::pickle chips sandwich cut",
+    "Premier Meats & Crystal Bay::name::ground beef fine grnd",
+    "Sysco::name::martins bread potato roll sndw",
+    "Sysco::name::martins bread potato roll sndw 3.51",
+    "Sysco::name::martins bread potato roll sndw 3.5i",
+    "Sysco::name::implot potato fry 1/4 clr ss",
+    "Sysco::name::simplot potato fry 1/4 clr ss",
+    "Sysco::name::propack lettuce boston /butter fresh",
+    "Sysco::name::whlfcls ice cream mix sftsr van 5%",
+    "Sysco::name::whlflcs ice cream mix sftsr van 5%",
+    "Sysco::name::whlfimp butter solid usda aa unsltd",
+    "Sysco::name::tomato bulk fresh",
+    "Sysco::name::sys cls glove nitrile fdsrv pf blk",
+    "Sysco::name::martins bread potato roll sandwich",
+    "Sysco::name::onion sweet fresh",
+    "Sysco::name::sys rel shortening fry liq clr ztf",
+    "Sysco::name::erthpls lid plas clr dome f/burr",
+    "Sysco::name::sys cls salt kosher flake coarse",
+    "Sysco::name::greeno lid flat w/hole 20oz pe petccfl-1220",
+    "Sysco::name::lid flat w/hole 20oz pe petccfl",
+    "Sysco::name::chris n eddy's logo tshirt bag plastic",
+    "Sysco::name::chrsned bag plastic tshirt logo ptsbchrisneddy",
+    "Sysco::name::t-shirt plastic bag with logo",
+    "Sysco::name::earthplus bowl pulp oval 16 oz",
+    "Sysco::name::implot potato fry 1/4 clr ss 10071179054696",
+    "Sysco::name::whlfimp butter solid usda aa unslt",
+    "Sysco::name::keystone sanitizer multi quat liquid",
+    "Sysco::name::propack lettuce boston butter fresh",
+    "Sysco::name::beef ground bulk 75/25 chub",
+    "Sysco::name::potato fry stealth 1/4",
+    "Sysco::name::sys cls sugar packet",
+    "Sysco::name::heinz relish sweet green",
+    "Sysco::name::sys glove nitrile fdsrv pf blk",
+    "Sysco::name::sys cls glove nitrile fdsrv pf black",
+    "Sysco::name::greno cup pet 20 oz c&d pet",
+    "Sysco::name::bag plastic tshirt logo ptsbchrisneddy",
+    "Sysco::name::chris n eddy t-shirt logo bag plastic",
+    "Sysco::name::chris n eddy's plastic t-shirt bags with logo",
+    "Sysco::name::chrsned bag plas tshirt logo",
+    "Sysco::name::whlfimp butter solid usda aa unsalted",
+    "VITCO FOODSERVICE::name::fries 1/4\" ss clr ct xlf beef",
+    "VITCO FOODSERVICE::name::chris & eddy's house",
+    "VITCO FOODSERVICE::name::chris & eddy's house sce",
+    "VITCO FOODSERVICE::name::chris & eddy's house sce 180c",
+    "Vitco Foodservice::name::fries",
+    "Vitco Foodservice::name::fries 1/4\" ss clr ct xlf beef",
+    "Vitco Foodservice::name::chris & eddy's house sce"
+  ],
+  "rawContent": "{\n  \"drafts\": [\n    {\n      \"caseId\": \"Individual FoodService::name::mustard packets 5.5 gram\",\n      \"matchName\": \"mustard packets 5.5gr\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact mustard packet size match with only a minor unit formatting variation.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::mustard packets 5.5 gram ppi\",\n      \"matchName\": \"mustard packets 5.5 g\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"The candidate is the same mustard packet product, with PPI likely indicating packaging/price detail rather than a different ingredient.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::soda sprite mexican glass\",\n      \"matchName\": \"soda sprite mexican glass crv inc\",\n      \"confidence\": 0.97,\n      \"reasoning\": \"This is clearly Sprite in Mexican glass bottle form; the candidate adds only an invoice suffix.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::wrap bulk 4-cup carrier 8-32oz\",\n      \"matchName\": \"tray pulp 4-cup carrier 8-32 oz\",\n      \"confidence\": 0.78,\n      \"reasoning\": \"The candidate is the same 4-cup carrier item, with 'wrap bulk' appearing to be a naming distortion.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::container foam 9x9 large hinged 1-compartment\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.71,\n      \"reasoning\": \"This is a foam hinged container, but the dimensions do not line up perfectly, so it's a reasonable but imperfect match.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cont bagasse pf 9x9x3 1-comp\",\n      \"matchName\": \"container bagasse pf 9x9x3 1-comp\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match of the bagasse 9x9x3 1-comp container.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::napkin disp 2ply white\",\n      \"matchName\": \"napkin dispenser 2-ply 8.5 x 6.5 white\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"The abbreviated invoice line clearly refers to the same white 2-ply napkin dispenser item.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::emboss bath tissue 2ply recy ind wrp\",\n      \"matchName\": \"embossed bath tissue 2-ply recycled individually wrapped\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"This is a direct abbreviation of the same embossed bath tissue product.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::emboss bath tissue\",\n      \"matchName\": \"embossed bath tissue 2-ply recycled individually wrapped\",\n      \"confidence\": 0.92,\n      \"reasoning\": \"The candidate is the only bath tissue match and is consistent with the shortened invoice description.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::ppr roll thermal bpa/bps free\",\n      \"matchName\": \"paper roll thermal 3-1/8 x 220 ft bpa/bps free\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact thermal paper roll match, with BPA/BPS free specified.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::can liner black roll\",\n      \"matchName\": \"can liner 40 x 46 1.5 mil black roll\",\n      \"confidence\": 0.97,\n      \"reasoning\": \"This is clearly the black can liner roll item, with dimensions omitted in the invoice line.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cup portion plast 2 oz clear\",\n      \"matchName\": \"cup portion plastic 2 oz clear\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match of the 2 oz clear portion cup.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cup portion plast clear\",\n      \"matchName\": \"cup portion plastic 2 oz clear\",\n      \"confidence\": 0.86,\n      \"reasoning\": \"The invoice line is missing size, but the clear portion cup candidate is the best fit.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cup portion plastic\",\n      \"matchName\": \"cup portion plastic 2 oz clear\",\n      \"confidence\": 0.84,\n      \"reasoning\": \"Generic portion cup wording aligns best with the 2 oz clear portion cup candidate.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cup portion plastic clear\",\n      \"matchName\": \"cup portion plastic 2 oz clear\",\n      \"confidence\": 0.89,\n      \"reasoning\": \"Clear portion cup with no size stated most likely refers to the 2 oz clear item.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::lid portion plast\",\n      \"matchName\": \"lid portion plastic 1.5, 2, 2.5 oz\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"The line item is a portion lid and the candidate is the exact matching portion lid product.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::lid portion plastic\",\n      \"matchName\": \"lid portion plastic 1.5, 2, 2.5 oz\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match of the portion lid product.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cont foam hingd wht 9x6.5x2.5\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct abbreviation match for the hinged white foam container.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cont foam hngd wht\",\n      \"matchName\": \"cont foam hing lrg wht hoagie\",\n      \"confidence\": 0.7,\n      \"reasoning\": \"The line clearly refers to a hinged white foam container, but the exact size/type is ambiguous.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cont foam hngd white\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.82,\n      \"reasoning\": \"A generic hinged white foam container best matches the main foam hinged white candidate.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::container foam hinged white\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact product family match with the best available size-specific candidate.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::continental foam hinged white\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.88,\n      \"reasoning\": \"The spelling variation still points to the same hinged white foam container.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::foam hngd wht 9x6.5x2.5\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact size and product type alignment.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::foam hinged container white\",\n      \"matchName\": \"container foam hinged white 9x6.5x2.5\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"This is the same foam hinged white container, just worded differently.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::ppr patty dry wax\",\n      \"matchName\": \"paper patty 5.5 x 5.5 dry wax\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Direct match to the dry wax patty paper.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::mustard pkts\",\n      \"matchName\": \"mustard packets 5.5gr\",\n      \"confidence\": 0.94,\n      \"reasoning\": \"Plural shorthand for mustard packets best matches the 5.5g mustard packet item.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::mustard pkts 5.5gr ppi\",\n      \"matchName\": \"mustard packets 5.5gr\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact mustard packet match with size specified.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::mustard pkts ssgr ppi\",\n      \"matchName\": \"mustard packets 5.5gr\",\n      \"confidence\": 0.78,\n      \"reasoning\": \"Likely the same mustard packet item, though 'ssgr' is less explicit than the other variants.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::mustard packets\",\n      \"matchName\": \"mustard packets 5.5gr\",\n      \"confidence\": 0.96,\n      \"reasoning\": \"Generic mustard packets aligns with the only mustard packet product candidate.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::relish sweet\",\n      \"matchName\": \"relish sweet\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::peppers whole yellow 5 gal\",\n      \"matchName\": \"peppers whole yellow\",\n      \"confidence\": 0.88,\n      \"reasoning\": \"The candidate matches the ingredient type and color, with the 5-gallon pack detail omitted.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::soap hand liquid lemon yellow\",\n      \"matchName\": null,\n      \"confidence\": 0.62,\n      \"reasoning\": \"None of the candidates clearly match hand soap; the closest options are different cleaning or food items.\",\n      \"newIngredient\": {\n        \"name\": \"soap hand liquid lemon yellow\",\n        \"category\": \"cleaning supplies\",\n        \"recipeUnit\": \"each\"\n      }\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::foam 9x9 1-comp bagge\",\n      \"matchName\": \"container foam 1-compartment bagged\",\n      \"confidence\": 0.93,\n      \"reasoning\": \"The invoice line is a 9x9 one-compartment foam bagged container, matching the candidate well.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::foam container bagged\",\n      \"matchName\": \"container foam 1-compartment bagged\",\n      \"confidence\": 0.96,\n      \"reasoning\": \"Direct match to a bagged foam container.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::ppr patty 5.5x5.5 dry wax (24)\",\n      \"matchName\": \"paper patty 5.5 x 5.5 dry wax\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact patty paper match with pack count added on the invoice line.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::tray food ppr wht/red check\",\n      \"matchName\": \"tray food paper #50 1/2 lb white red check\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to the white/red check tray food paper.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::tray food paper\",\n      \"matchName\": \"tray food paper #50 1/2 lb white red check\",\n      \"confidence\": 0.95,\n      \"reasoning\": \"Generic tray food paper best matches the specific white/red check tray paper candidate.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::tray food ppr #50\",\n      \"matchName\": \"tray food paper #50 1/2 lb white red check\",\n      \"confidence\": 0.97,\n      \"reasoning\": \"The #50 tray paper is an obvious match to the specific tray food paper candidate.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cont foam 6x6x3 med hngd sqr\",\n      \"matchName\": \"container foam 6x6x3 medium hinged square\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to the medium hinged square foam container.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::foam container medium hinged square\",\n      \"matchName\": \"container foam 6x6x3 medium hinged square\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact product match.\"\n    },\n    {\n      \"caseId\": \"Individual FoodService::name::cont foam med wht bagged\",\n      \"matchName\": \"container foam 6x6x3 medium white bagged\",\n      \"confidence\": 0.92,\n      \"reasoning\": \"This is a medium white bagged foam container, which matches the candidate closely.\"\n    },\n    {\n      \"caseId\": \"Premier Deli Services, Inc.::name::pickle chips sandwich cut\",\n      \"matchName\": \"pickle chips sandwich cut 1/8\\\"\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact pickle chips sandwich cut product match.\"\n    },\n    {\n      \"caseId\": \"Premier Meats & Crystal Bay::name::ground beef fine grnd\",\n      \"matchName\": \"ground beef fine grnd 73/27 creekstone\",\n      \"confidence\": 0.97,\n      \"reasoning\": \"The invoice line is clearly ground beef fine grind, and the Creekstone 73/27 candidate is the direct match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::martins bread potato roll sndw\",\n      \"matchName\": \"martins bread potato roll sandwich 3.5 inch\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Exact Martin's potato roll sandwich item, with size abbreviated on the invoice.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::martins bread potato roll sndw 3.51\",\n      \"matchName\": \"martins bread potato roll sandwich 3.5 inch\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"The size notation is a near-exact match to the 3.5 inch Martin's potato roll sandwich item.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::martins bread potato roll sndw 3.5i\",\n      \"matchName\": \"martins bread potato roll sandwich 3.5 inch\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact Martin's potato roll sandwich item, with inch abbreviated.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::implot potato fry 1/4 clr ss\",\n      \"matchName\": \"lamb potato fry ss 1/4 stealth\",\n      \"confidence\": 0.78,\n      \"reasoning\": \"The candidate is the same 1/4-inch fry product, though the brand text is imperfect.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::simplot potato fry 1/4 clr ss\",\n      \"matchName\": \"lamb potato fry ss 1/4 stealth\",\n      \"confidence\": 0.76,\n      \"reasoning\": \"This appears to be the same 1/4-inch fry item despite a noisy candidate brand string.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::propack lettuce boston /butter fresh\",\n      \"matchName\": \"packer lettuce boston hydroponic\",\n      \"confidence\": 0.76,\n      \"reasoning\": \"The line is Boston/butter lettuce, and the Boston hydroponic lettuce candidate is the closest canonical match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::whlfcls ice cream mix sftsr van 5%\",\n      \"matchName\": \"whole class ice cream mix soft serve vanilla 5%\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact soft-serve vanilla 5% mix match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::whlflcs ice cream mix sftsr van 5%\",\n      \"matchName\": \"whole class ice cream mix soft serve vanilla 5%\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact soft-serve vanilla 5% mix match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::whlfimp butter solid usda aa unsltd\",\n      \"matchName\": \"whole frozen butter solid usda aa unsalted\",\n      \"confidence\": 0.97,\n      \"reasoning\": \"Direct unsalted butter solid match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::tomato bulk fresh\",\n      \"matchName\": \"imported fresh tomato bulk 5x6 fresh\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"The candidate is the specific bulk fresh tomato product corresponding to the generic line.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::sys cls glove nitrile fdsrv pf blk\",\n      \"matchName\": \"sysco classic gloves nitrile foodservice powder free black\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match to black nitrile foodservice gloves.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::martins bread potato roll sandwich\",\n      \"matchName\": \"martins bread potato roll sandwich 3.5 inch\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact Martin's potato roll sandwich match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::onion sweet fresh\",\n      \"matchName\": \"packer onion sweet fresh\",\n      \"confidence\": 0.96,\n      \"reasoning\": \"The candidate is the same sweet fresh onion product.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::sys rel shortening fry liq clr ztf\",\n      \"matchName\": \"sysco reliable shortening fry liquid clear ztf\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to Sysco reliable shortening fry liquid clear.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::erthpls lid plas clr dome f/burr\",\n      \"matchName\": \"erthpls lid plastic clear dome for burrito\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Exact EarthPlus clear dome burrito lid match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::sys cls salt kosher flake coarse\",\n      \"matchName\": \"kosher flake coarse salt\",\n      \"confidence\": 0.95,\n      \"reasoning\": \"The candidate is the kosher flake coarse salt item, though the invoice abbreviates it as Sys CLS.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::greeno lid flat w/hole 20oz pe petccfl-1220\",\n      \"matchName\": \"greeno lid flat with hole 20 oz pe pet\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to the Greeno flat lid with hole for 20 oz cups.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::lid flat w/hole 20oz pe petccfl\",\n      \"matchName\": \"greeno lid flat with hole 20 oz pe pet\",\n      \"confidence\": 0.95,\n      \"reasoning\": \"This is the same flat lid with hole for 20 oz PET, minus brand detail.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::chris n eddy's logo tshirt bag plastic\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Exact branded t-shirt bag match for Chris N Eddy's.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::chrsned bag plastic tshirt logo ptsbchrisneddy\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match to the Chris N Eddy's logo t-shirt bag item.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::t-shirt plastic bag with logo\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.79,\n      \"reasoning\": \"The branded t-shirt bag candidate is the closest match, though the invoice line is less specific.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::earthplus bowl pulp oval 16 oz\",\n      \"matchName\": \"erthpls bowl pulp oval\",\n      \"confidence\": 0.97,\n      \"reasoning\": \"Direct EarthPlus oval pulp bowl match, with size omitted.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::implot potato fry 1/4 clr ss 10071179054696\",\n      \"matchName\": \"lamb potato fry ss 1/4 stealth\",\n      \"confidence\": 0.77,\n      \"reasoning\": \"The line is clearly the same 1/4-inch fry product, despite the noisy item code.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::whlfimp butter solid usda aa unslt\",\n      \"matchName\": \"whole frozen butter solid usda aa unsalted\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct unsalted butter match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::keystone sanitizer multi quat liquid\",\n      \"matchName\": \"keyston sanitizer multi quat liq\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact sanitizer match with abbreviated spelling.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::propack lettuce boston butter fresh\",\n      \"matchName\": \"packer lettuce boston hydroponic\",\n      \"confidence\": 0.8,\n      \"reasoning\": \"Boston butter lettuce aligns best with the Boston hydroponic lettuce candidate.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::beef ground bulk 75/25 chub\",\n      \"matchName\": \"ground beef fine grnd 73/27 creekstone\",\n      \"confidence\": 0.74,\n      \"reasoning\": \"This is a bulk ground beef chub, but the available candidate is a very close ground beef product rather than an exact 75/25 match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::potato fry stealth 1/4\",\n      \"matchName\": \"lamb potato fry ss 1/4 stealth\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Exact 1/4 stealth fry match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::sys cls sugar packet\",\n      \"matchName\": \"sugar packet\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Direct sugar packet match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::heinz relish sweet green\",\n      \"matchName\": \"relish sweet\",\n      \"confidence\": 0.82,\n      \"reasoning\": \"The line indicates sweet relish, but no exact Heinz relish candidate exists.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::sys glove nitrile fdsrv pf blk\",\n      \"matchName\": \"sysco classic gloves nitrile foodservice powder free black\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to black nitrile foodservice gloves.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::sys cls glove nitrile fdsrv pf black\",\n      \"matchName\": \"sysco classic gloves nitrile foodservice powder free black\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to the same glove item.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::greno cup pet 20 oz c&d pet\",\n      \"matchName\": \"greeno cup pet 20 oz c&d pet\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Exact match to the Greeno 20 oz PET cup.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::bag plastic tshirt logo ptsbchrisneddy\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Direct branded t-shirt bag match.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::chris n eddy t-shirt logo bag plastic\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.92,\n      \"reasoning\": \"The invoice line is the Chris N Eddy's logo t-shirt bag, matching the branded candidate.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::chris n eddy's plastic t-shirt bags with logo\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.92,\n      \"reasoning\": \"This is the same branded plastic t-shirt bag product.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::chrsned bag plas tshirt logo\",\n      \"matchName\": \"chrsned bag plas tshirt logo ptsbchrisneddy\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"Exact branded bag match, with the suffix omitted.\"\n    },\n    {\n      \"caseId\": \"Sysco::name::whlfimp butter solid usda aa unsalted\",\n      \"matchName\": \"whole frozen butter solid usda aa unsalted\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct unsalted butter match.\"\n    },\n    {\n      \"caseId\": \"VITCO FOODSERVICE::name::fries 1/4\\\" ss clr ct xlf beef\",\n      \"matchName\": \"lamb potato fry ss 1/4 stealth\",\n      \"confidence\": 0.84,\n      \"reasoning\": \"The line is a 1/4-inch fries item, and the lamb potato fry candidate is the closest fit.\"\n    },\n    {\n      \"caseId\": \"VITCO FOODSERVICE::name::chris & eddy's house\",\n      \"matchName\": \"chris & eddy's house sauce\",\n      \"confidence\": 0.98,\n      \"reasoning\": \"The house item clearly refers to Chris & Eddy's house sauce.\"\n    },\n    {\n      \"caseId\": \"VITCO FOODSERVICE::name::chris & eddy's house sce\",\n      \"matchName\": \"chris & eddy's house sauce\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct abbreviated match for house sauce.\"\n    },\n    {\n      \"caseId\": \"VITCO FOODSERVICE::name::chris & eddy's house sce 180c\",\n      \"matchName\": \"chris & eddy's house sauce\",\n      \"confidence\": 0.96,\n      \"reasoning\": \"The 180 count house sauce is the same sauce item with pack count noted.\"\n    },\n    {\n      \"caseId\": \"Vitco Foodservice::name::fries\",\n      \"matchName\": null,\n      \"confidence\": 0.58,\n      \"reasoning\": \"The candidates are too generic and none clearly identify a standalone fries product.\",\n      \"newIngredient\": {\n        \"name\": \"fries\",\n        \"category\": \"frozen food\",\n        \"recipeUnit\": \"each\"\n      }\n    },\n    {\n      \"caseId\": \"Vitco Foodservice::name::fries 1/4\\\" ss clr ct xlf beef\",\n      \"matchName\": \"lamb potato fry ss 1/4 stealth\",\n      \"confidence\": 0.83,\n      \"reasoning\": \"The candidate is the closest match to a 1/4-inch fry item.\"\n    },\n    {\n      \"caseId\": \"Vitco Foodservice::name::chris & eddy's house sce\",\n      \"matchName\": \"chris & eddy's house sauce\",\n      \"confidence\": 0.99,\n      \"reasoning\": \"Direct match to the house sauce.\"\n    }\n  ]\n}",
+  "drafts": [
+    {
+      "caseId": "Individual FoodService::name::mustard packets 5.5 gram",
+      "matchName": "mustard packets 5.5gr",
+      "confidence": 0.99,
+      "reasoning": "Exact mustard packet size match with only a minor unit formatting variation."
+    },
+    {
+      "caseId": "Individual FoodService::name::mustard packets 5.5 gram ppi",
+      "matchName": "mustard packets 5.5 g",
+      "confidence": 0.98,
+      "reasoning": "The candidate is the same mustard packet product, with PPI likely indicating packaging/price detail rather than a different ingredient."
+    },
+    {
+      "caseId": "Individual FoodService::name::soda sprite mexican glass",
+      "matchName": "soda sprite mexican glass crv inc",
+      "confidence": 0.97,
+      "reasoning": "This is clearly Sprite in Mexican glass bottle form; the candidate adds only an invoice suffix."
+    },
+    {
+      "caseId": "Individual FoodService::name::wrap bulk 4-cup carrier 8-32oz",
+      "matchName": "tray pulp 4-cup carrier 8-32 oz",
+      "confidence": 0.78,
+      "reasoning": "The candidate is the same 4-cup carrier item, with 'wrap bulk' appearing to be a naming distortion."
+    },
+    {
+      "caseId": "Individual FoodService::name::container foam 9x9 large hinged 1-compartment",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.71,
+      "reasoning": "This is a foam hinged container, but the dimensions do not line up perfectly, so it's a reasonable but imperfect match."
+    },
+    {
+      "caseId": "Individual FoodService::name::cont bagasse pf 9x9x3 1-comp",
+      "matchName": "container bagasse pf 9x9x3 1-comp",
+      "confidence": 0.99,
+      "reasoning": "Exact match of the bagasse 9x9x3 1-comp container."
+    },
+    {
+      "caseId": "Individual FoodService::name::napkin disp 2ply white",
+      "matchName": "napkin dispenser 2-ply 8.5 x 6.5 white",
+      "confidence": 0.98,
+      "reasoning": "The abbreviated invoice line clearly refers to the same white 2-ply napkin dispenser item."
+    },
+    {
+      "caseId": "Individual FoodService::name::emboss bath tissue 2ply recy ind wrp",
+      "matchName": "embossed bath tissue 2-ply recycled individually wrapped",
+      "confidence": 0.99,
+      "reasoning": "This is a direct abbreviation of the same embossed bath tissue product."
+    },
+    {
+      "caseId": "Individual FoodService::name::emboss bath tissue",
+      "matchName": "embossed bath tissue 2-ply recycled individually wrapped",
+      "confidence": 0.92,
+      "reasoning": "The candidate is the only bath tissue match and is consistent with the shortened invoice description."
+    },
+    {
+      "caseId": "Individual FoodService::name::ppr roll thermal bpa/bps free",
+      "matchName": "paper roll thermal 3-1/8 x 220 ft bpa/bps free",
+      "confidence": 0.99,
+      "reasoning": "Exact thermal paper roll match, with BPA/BPS free specified."
+    },
+    {
+      "caseId": "Individual FoodService::name::can liner black roll",
+      "matchName": "can liner 40 x 46 1.5 mil black roll",
+      "confidence": 0.97,
+      "reasoning": "This is clearly the black can liner roll item, with dimensions omitted in the invoice line."
+    },
+    {
+      "caseId": "Individual FoodService::name::cup portion plast 2 oz clear",
+      "matchName": "cup portion plastic 2 oz clear",
+      "confidence": 0.99,
+      "reasoning": "Exact match of the 2 oz clear portion cup."
+    },
+    {
+      "caseId": "Individual FoodService::name::cup portion plast clear",
+      "matchName": "cup portion plastic 2 oz clear",
+      "confidence": 0.86,
+      "reasoning": "The invoice line is missing size, but the clear portion cup candidate is the best fit."
+    },
+    {
+      "caseId": "Individual FoodService::name::cup portion plastic",
+      "matchName": "cup portion plastic 2 oz clear",
+      "confidence": 0.84,
+      "reasoning": "Generic portion cup wording aligns best with the 2 oz clear portion cup candidate."
+    },
+    {
+      "caseId": "Individual FoodService::name::cup portion plastic clear",
+      "matchName": "cup portion plastic 2 oz clear",
+      "confidence": 0.89,
+      "reasoning": "Clear portion cup with no size stated most likely refers to the 2 oz clear item."
+    },
+    {
+      "caseId": "Individual FoodService::name::lid portion plast",
+      "matchName": "lid portion plastic 1.5, 2, 2.5 oz",
+      "confidence": 0.98,
+      "reasoning": "The line item is a portion lid and the candidate is the exact matching portion lid product."
+    },
+    {
+      "caseId": "Individual FoodService::name::lid portion plastic",
+      "matchName": "lid portion plastic 1.5, 2, 2.5 oz",
+      "confidence": 0.99,
+      "reasoning": "Exact match of the portion lid product."
+    },
+    {
+      "caseId": "Individual FoodService::name::cont foam hingd wht 9x6.5x2.5",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.99,
+      "reasoning": "Direct abbreviation match for the hinged white foam container."
+    },
+    {
+      "caseId": "Individual FoodService::name::cont foam hngd wht",
+      "matchName": "cont foam hing lrg wht hoagie",
+      "confidence": 0.7,
+      "reasoning": "The line clearly refers to a hinged white foam container, but the exact size/type is ambiguous."
+    },
+    {
+      "caseId": "Individual FoodService::name::cont foam hngd white",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.82,
+      "reasoning": "A generic hinged white foam container best matches the main foam hinged white candidate."
+    },
+    {
+      "caseId": "Individual FoodService::name::container foam hinged white",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.99,
+      "reasoning": "Exact product family match with the best available size-specific candidate."
+    },
+    {
+      "caseId": "Individual FoodService::name::continental foam hinged white",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.88,
+      "reasoning": "The spelling variation still points to the same hinged white foam container."
+    },
+    {
+      "caseId": "Individual FoodService::name::foam hngd wht 9x6.5x2.5",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.99,
+      "reasoning": "Exact size and product type alignment."
+    },
+    {
+      "caseId": "Individual FoodService::name::foam hinged container white",
+      "matchName": "container foam hinged white 9x6.5x2.5",
+      "confidence": 0.98,
+      "reasoning": "This is the same foam hinged white container, just worded differently."
+    },
+    {
+      "caseId": "Individual FoodService::name::ppr patty dry wax",
+      "matchName": "paper patty 5.5 x 5.5 dry wax",
+      "confidence": 0.98,
+      "reasoning": "Direct match to the dry wax patty paper."
+    },
+    {
+      "caseId": "Individual FoodService::name::mustard pkts",
+      "matchName": "mustard packets 5.5gr",
+      "confidence": 0.94,
+      "reasoning": "Plural shorthand for mustard packets best matches the 5.5g mustard packet item."
+    },
+    {
+      "caseId": "Individual FoodService::name::mustard pkts 5.5gr ppi",
+      "matchName": "mustard packets 5.5gr",
+      "confidence": 0.99,
+      "reasoning": "Exact mustard packet match with size specified."
+    },
+    {
+      "caseId": "Individual FoodService::name::mustard pkts ssgr ppi",
+      "matchName": "mustard packets 5.5gr",
+      "confidence": 0.78,
+      "reasoning": "Likely the same mustard packet item, though 'ssgr' is less explicit than the other variants."
+    },
+    {
+      "caseId": "Individual FoodService::name::mustard packets",
+      "matchName": "mustard packets 5.5gr",
+      "confidence": 0.96,
+      "reasoning": "Generic mustard packets aligns with the only mustard packet product candidate."
+    },
+    {
+      "caseId": "Individual FoodService::name::relish sweet",
+      "matchName": "relish sweet",
+      "confidence": 0.99,
+      "reasoning": "Exact match."
+    },
+    {
+      "caseId": "Individual FoodService::name::peppers whole yellow 5 gal",
+      "matchName": "peppers whole yellow",
+      "confidence": 0.88,
+      "reasoning": "The candidate matches the ingredient type and color, with the 5-gallon pack detail omitted."
+    },
+    {
+      "caseId": "Individual FoodService::name::soap hand liquid lemon yellow",
+      "matchName": null,
+      "confidence": 0.62,
+      "reasoning": "None of the candidates clearly match hand soap; the closest options are different cleaning or food items.",
+      "newIngredient": {
+        "name": "soap hand liquid lemon yellow",
+        "category": "cleaning supplies",
+        "recipeUnit": "each"
+      }
+    },
+    {
+      "caseId": "Individual FoodService::name::foam 9x9 1-comp bagge",
+      "matchName": "container foam 1-compartment bagged",
+      "confidence": 0.93,
+      "reasoning": "The invoice line is a 9x9 one-compartment foam bagged container, matching the candidate well."
+    },
+    {
+      "caseId": "Individual FoodService::name::foam container bagged",
+      "matchName": "container foam 1-compartment bagged",
+      "confidence": 0.96,
+      "reasoning": "Direct match to a bagged foam container."
+    },
+    {
+      "caseId": "Individual FoodService::name::ppr patty 5.5x5.5 dry wax (24)",
+      "matchName": "paper patty 5.5 x 5.5 dry wax",
+      "confidence": 0.99,
+      "reasoning": "Exact patty paper match with pack count added on the invoice line."
+    },
+    {
+      "caseId": "Individual FoodService::name::tray food ppr wht/red check",
+      "matchName": "tray food paper #50 1/2 lb white red check",
+      "confidence": 0.99,
+      "reasoning": "Direct match to the white/red check tray food paper."
+    },
+    {
+      "caseId": "Individual FoodService::name::tray food paper",
+      "matchName": "tray food paper #50 1/2 lb white red check",
+      "confidence": 0.95,
+      "reasoning": "Generic tray food paper best matches the specific white/red check tray paper candidate."
+    },
+    {
+      "caseId": "Individual FoodService::name::tray food ppr #50",
+      "matchName": "tray food paper #50 1/2 lb white red check",
+      "confidence": 0.97,
+      "reasoning": "The #50 tray paper is an obvious match to the specific tray food paper candidate."
+    },
+    {
+      "caseId": "Individual FoodService::name::cont foam 6x6x3 med hngd sqr",
+      "matchName": "container foam 6x6x3 medium hinged square",
+      "confidence": 0.99,
+      "reasoning": "Direct match to the medium hinged square foam container."
+    },
+    {
+      "caseId": "Individual FoodService::name::foam container medium hinged square",
+      "matchName": "container foam 6x6x3 medium hinged square",
+      "confidence": 0.99,
+      "reasoning": "Exact product match."
+    },
+    {
+      "caseId": "Individual FoodService::name::cont foam med wht bagged",
+      "matchName": "container foam 6x6x3 medium white bagged",
+      "confidence": 0.92,
+      "reasoning": "This is a medium white bagged foam container, which matches the candidate closely."
+    },
+    {
+      "caseId": "Premier Deli Services, Inc.::name::pickle chips sandwich cut",
+      "matchName": "pickle chips sandwich cut 1/8\"",
+      "confidence": 0.99,
+      "reasoning": "Exact pickle chips sandwich cut product match."
+    },
+    {
+      "caseId": "Premier Meats & Crystal Bay::name::ground beef fine grnd",
+      "matchName": "ground beef fine grnd 73/27 creekstone",
+      "confidence": 0.97,
+      "reasoning": "The invoice line is clearly ground beef fine grind, and the Creekstone 73/27 candidate is the direct match."
+    },
+    {
+      "caseId": "Sysco::name::martins bread potato roll sndw",
+      "matchName": "martins bread potato roll sandwich 3.5 inch",
+      "confidence": 0.98,
+      "reasoning": "Exact Martin's potato roll sandwich item, with size abbreviated on the invoice."
+    },
+    {
+      "caseId": "Sysco::name::martins bread potato roll sndw 3.51",
+      "matchName": "martins bread potato roll sandwich 3.5 inch",
+      "confidence": 0.99,
+      "reasoning": "The size notation is a near-exact match to the 3.5 inch Martin's potato roll sandwich item."
+    },
+    {
+      "caseId": "Sysco::name::martins bread potato roll sndw 3.5i",
+      "matchName": "martins bread potato roll sandwich 3.5 inch",
+      "confidence": 0.99,
+      "reasoning": "Exact Martin's potato roll sandwich item, with inch abbreviated."
+    },
+    {
+      "caseId": "Sysco::name::implot potato fry 1/4 clr ss",
+      "matchName": "lamb potato fry ss 1/4 stealth",
+      "confidence": 0.78,
+      "reasoning": "The candidate is the same 1/4-inch fry product, though the brand text is imperfect."
+    },
+    {
+      "caseId": "Sysco::name::simplot potato fry 1/4 clr ss",
+      "matchName": "lamb potato fry ss 1/4 stealth",
+      "confidence": 0.76,
+      "reasoning": "This appears to be the same 1/4-inch fry item despite a noisy candidate brand string."
+    },
+    {
+      "caseId": "Sysco::name::propack lettuce boston /butter fresh",
+      "matchName": "packer lettuce boston hydroponic",
+      "confidence": 0.76,
+      "reasoning": "The line is Boston/butter lettuce, and the Boston hydroponic lettuce candidate is the closest canonical match."
+    },
+    {
+      "caseId": "Sysco::name::whlfcls ice cream mix sftsr van 5%",
+      "matchName": "whole class ice cream mix soft serve vanilla 5%",
+      "confidence": 0.99,
+      "reasoning": "Exact soft-serve vanilla 5% mix match."
+    },
+    {
+      "caseId": "Sysco::name::whlflcs ice cream mix sftsr van 5%",
+      "matchName": "whole class ice cream mix soft serve vanilla 5%",
+      "confidence": 0.99,
+      "reasoning": "Exact soft-serve vanilla 5% mix match."
+    },
+    {
+      "caseId": "Sysco::name::whlfimp butter solid usda aa unsltd",
+      "matchName": "whole frozen butter solid usda aa unsalted",
+      "confidence": 0.97,
+      "reasoning": "Direct unsalted butter solid match."
+    },
+    {
+      "caseId": "Sysco::name::tomato bulk fresh",
+      "matchName": "imported fresh tomato bulk 5x6 fresh",
+      "confidence": 0.98,
+      "reasoning": "The candidate is the specific bulk fresh tomato product corresponding to the generic line."
+    },
+    {
+      "caseId": "Sysco::name::sys cls glove nitrile fdsrv pf blk",
+      "matchName": "sysco classic gloves nitrile foodservice powder free black",
+      "confidence": 0.99,
+      "reasoning": "Exact match to black nitrile foodservice gloves."
+    },
+    {
+      "caseId": "Sysco::name::martins bread potato roll sandwich",
+      "matchName": "martins bread potato roll sandwich 3.5 inch",
+      "confidence": 0.99,
+      "reasoning": "Exact Martin's potato roll sandwich match."
+    },
+    {
+      "caseId": "Sysco::name::onion sweet fresh",
+      "matchName": "packer onion sweet fresh",
+      "confidence": 0.96,
+      "reasoning": "The candidate is the same sweet fresh onion product."
+    },
+    {
+      "caseId": "Sysco::name::sys rel shortening fry liq clr ztf",
+      "matchName": "sysco reliable shortening fry liquid clear ztf",
+      "confidence": 0.99,
+      "reasoning": "Direct match to Sysco reliable shortening fry liquid clear."
+    },
+    {
+      "caseId": "Sysco::name::erthpls lid plas clr dome f/burr",
+      "matchName": "erthpls lid plastic clear dome for burrito",
+      "confidence": 0.98,
+      "reasoning": "Exact EarthPlus clear dome burrito lid match."
+    },
+    {
+      "caseId": "Sysco::name::sys cls salt kosher flake coarse",
+      "matchName": "kosher flake coarse salt",
+      "confidence": 0.95,
+      "reasoning": "The candidate is the kosher flake coarse salt item, though the invoice abbreviates it as Sys CLS."
+    },
+    {
+      "caseId": "Sysco::name::greeno lid flat w/hole 20oz pe petccfl-1220",
+      "matchName": "greeno lid flat with hole 20 oz pe pet",
+      "confidence": 0.99,
+      "reasoning": "Direct match to the Greeno flat lid with hole for 20 oz cups."
+    },
+    {
+      "caseId": "Sysco::name::lid flat w/hole 20oz pe petccfl",
+      "matchName": "greeno lid flat with hole 20 oz pe pet",
+      "confidence": 0.95,
+      "reasoning": "This is the same flat lid with hole for 20 oz PET, minus brand detail."
+    },
+    {
+      "caseId": "Sysco::name::chris n eddy's logo tshirt bag plastic",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.98,
+      "reasoning": "Exact branded t-shirt bag match for Chris N Eddy's."
+    },
+    {
+      "caseId": "Sysco::name::chrsned bag plastic tshirt logo ptsbchrisneddy",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.99,
+      "reasoning": "Exact match to the Chris N Eddy's logo t-shirt bag item."
+    },
+    {
+      "caseId": "Sysco::name::t-shirt plastic bag with logo",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.79,
+      "reasoning": "The branded t-shirt bag candidate is the closest match, though the invoice line is less specific."
+    },
+    {
+      "caseId": "Sysco::name::earthplus bowl pulp oval 16 oz",
+      "matchName": "erthpls bowl pulp oval",
+      "confidence": 0.97,
+      "reasoning": "Direct EarthPlus oval pulp bowl match, with size omitted."
+    },
+    {
+      "caseId": "Sysco::name::implot potato fry 1/4 clr ss 10071179054696",
+      "matchName": "lamb potato fry ss 1/4 stealth",
+      "confidence": 0.77,
+      "reasoning": "The line is clearly the same 1/4-inch fry product, despite the noisy item code."
+    },
+    {
+      "caseId": "Sysco::name::whlfimp butter solid usda aa unslt",
+      "matchName": "whole frozen butter solid usda aa unsalted",
+      "confidence": 0.99,
+      "reasoning": "Direct unsalted butter match."
+    },
+    {
+      "caseId": "Sysco::name::keystone sanitizer multi quat liquid",
+      "matchName": "keyston sanitizer multi quat liq",
+      "confidence": 0.99,
+      "reasoning": "Exact sanitizer match with abbreviated spelling."
+    },
+    {
+      "caseId": "Sysco::name::propack lettuce boston butter fresh",
+      "matchName": "packer lettuce boston hydroponic",
+      "confidence": 0.8,
+      "reasoning": "Boston butter lettuce aligns best with the Boston hydroponic lettuce candidate."
+    },
+    {
+      "caseId": "Sysco::name::beef ground bulk 75/25 chub",
+      "matchName": "ground beef fine grnd 73/27 creekstone",
+      "confidence": 0.74,
+      "reasoning": "This is a bulk ground beef chub, but the available candidate is a very close ground beef product rather than an exact 75/25 match."
+    },
+    {
+      "caseId": "Sysco::name::potato fry stealth 1/4",
+      "matchName": "lamb potato fry ss 1/4 stealth",
+      "confidence": 0.98,
+      "reasoning": "Exact 1/4 stealth fry match."
+    },
+    {
+      "caseId": "Sysco::name::sys cls sugar packet",
+      "matchName": "sugar packet",
+      "confidence": 0.98,
+      "reasoning": "Direct sugar packet match."
+    },
+    {
+      "caseId": "Sysco::name::heinz relish sweet green",
+      "matchName": "relish sweet",
+      "confidence": 0.82,
+      "reasoning": "The line indicates sweet relish, but no exact Heinz relish candidate exists."
+    },
+    {
+      "caseId": "Sysco::name::sys glove nitrile fdsrv pf blk",
+      "matchName": "sysco classic gloves nitrile foodservice powder free black",
+      "confidence": 0.99,
+      "reasoning": "Direct match to black nitrile foodservice gloves."
+    },
+    {
+      "caseId": "Sysco::name::sys cls glove nitrile fdsrv pf black",
+      "matchName": "sysco classic gloves nitrile foodservice powder free black",
+      "confidence": 0.99,
+      "reasoning": "Direct match to the same glove item."
+    },
+    {
+      "caseId": "Sysco::name::greno cup pet 20 oz c&d pet",
+      "matchName": "greeno cup pet 20 oz c&d pet",
+      "confidence": 0.99,
+      "reasoning": "Exact match to the Greeno 20 oz PET cup."
+    },
+    {
+      "caseId": "Sysco::name::bag plastic tshirt logo ptsbchrisneddy",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.98,
+      "reasoning": "Direct branded t-shirt bag match."
+    },
+    {
+      "caseId": "Sysco::name::chris n eddy t-shirt logo bag plastic",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.92,
+      "reasoning": "The invoice line is the Chris N Eddy's logo t-shirt bag, matching the branded candidate."
+    },
+    {
+      "caseId": "Sysco::name::chris n eddy's plastic t-shirt bags with logo",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.92,
+      "reasoning": "This is the same branded plastic t-shirt bag product."
+    },
+    {
+      "caseId": "Sysco::name::chrsned bag plas tshirt logo",
+      "matchName": "chrsned bag plas tshirt logo ptsbchrisneddy",
+      "confidence": 0.98,
+      "reasoning": "Exact branded bag match, with the suffix omitted."
+    },
+    {
+      "caseId": "Sysco::name::whlfimp butter solid usda aa unsalted",
+      "matchName": "whole frozen butter solid usda aa unsalted",
+      "confidence": 0.99,
+      "reasoning": "Direct unsalted butter match."
+    },
+    {
+      "caseId": "VITCO FOODSERVICE::name::fries 1/4\" ss clr ct xlf beef",
+      "matchName": "lamb potato fry ss 1/4 stealth",
+      "confidence": 0.84,
+      "reasoning": "The line is a 1/4-inch fries item, and the lamb potato fry candidate is the closest fit."
+    },
+    {
+      "caseId": "VITCO FOODSERVICE::name::chris & eddy's house",
+      "matchName": "chris & eddy's house sauce",
+      "confidence": 0.98,
+      "reasoning": "The house item clearly refers to Chris & Eddy's house sauce."
+    },
+    {
+      "caseId": "VITCO FOODSERVICE::name::chris & eddy's house sce",
+      "matchName": "chris & eddy's house sauce",
+      "confidence": 0.99,
+      "reasoning": "Direct abbreviated match for house sauce."
+    },
+    {
+      "caseId": "VITCO FOODSERVICE::name::chris & eddy's house sce 180c",
+      "matchName": "chris & eddy's house sauce",
+      "confidence": 0.96,
+      "reasoning": "The 180 count house sauce is the same sauce item with pack count noted."
+    },
+    {
+      "caseId": "Vitco Foodservice::name::fries",
+      "matchName": null,
+      "confidence": 0.58,
+      "reasoning": "The candidates are too generic and none clearly identify a standalone fries product.",
+      "newIngredient": {
+        "name": "fries",
+        "category": "frozen food",
+        "recipeUnit": "each"
+      }
+    },
+    {
+      "caseId": "Vitco Foodservice::name::fries 1/4\" ss clr ct xlf beef",
+      "matchName": "lamb potato fry ss 1/4 stealth",
+      "confidence": 0.83,
+      "reasoning": "The candidate is the closest match to a 1/4-inch fry item."
+    },
+    {
+      "caseId": "Vitco Foodservice::name::chris & eddy's house sce",
+      "matchName": "chris & eddy's house sauce",
+      "confidence": 0.99,
+      "reasoning": "Direct match to the house sauce."
+    }
+  ],
+  "inputTokens": 12210,
+  "outputTokens": 6406,
+  "cachedTokens": 0,
+  "costUsd": 0.0379845,
+  "durationMs": 30490,
+  "error": null
+}
