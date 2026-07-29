@@ -55,6 +55,7 @@ model Account {
   vendorLeadTimes               VendorLeadTime[]
   alertPreferences              AlertPreference[]
   recipeMappingProposals        RecipeMappingProposal[]
+  ingredientMatchDecisions      IngredientMatchDecision[]
 }
 
 /// Single-use, time-limited signup token. An OWNER on an account creates
@@ -614,6 +615,7 @@ model CanonicalIngredient {
   stockCountLines      StockCountLine[]
   inventoryAdjustments InventoryAdjustment[]
   modelStates          IngredientModelState[]
+  matchDecisions       IngredientMatchDecision[]
 
   @@unique([ownerId, name])
   @@unique([accountId, name])
@@ -751,6 +753,49 @@ model RecipeMappingProposal {
 
   @@index([accountId, status])
   @@index([accountId, otterItemName])
+}
+
+/// Audit + undo record for one automatic ingredient match. Written by
+/// `src/lib/ingredient-auto-match.ts`; reversed by `undoAutoMatch`. An UNDONE
+/// row is also a permanent suppression — see Task 10.
+model IngredientMatchDecision {
+  id          String  @id @default(cuid())
+  accountId   String
+  /// `${normalizedVendor}::name::${lowercased productName}` — the same key the
+  /// evaluation used, NOT the review inbox's sku-based key.
+  groupKey    String
+  vendorName  String
+  sku         String?
+  productName String
+
+  /// auto-exact | auto-vector | auto-llm
+  layer       String
+  confidence  Float
+  topScore    Float?
+  margin      Float?
+  reasoning   String?
+  model       String?
+  /// Runner-ups considered: [{ id, name, score }] — shown in the undo UI.
+  candidates  Json?
+
+  canonicalIngredientId String
+  /// Always false while AUTO_CREATE_ENABLED is off. Retained so undo stays
+  /// correct if creation is ever enabled behind a future decision.
+  createdCanonical      Boolean  @default(false)
+  linkedLineItemIds     String[]
+  linkedLineItemCount   Int      @default(0)
+
+  /// APPLIED | UNDONE | SHADOW
+  status     String    @default("APPLIED")
+  createdAt  DateTime  @default(now())
+  undoneAt   DateTime?
+  undoneById String?
+
+  account             Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, status, createdAt])
+  @@index([accountId, groupKey])
 }
 
 /// Per-(store, date, itemName) COGS row, materialized by
