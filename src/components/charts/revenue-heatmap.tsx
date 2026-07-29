@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { formatCurrency } from "@/lib/format"
+import { formatCompact, formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { DailyTrend } from "@/types/analytics"
 
@@ -90,13 +90,15 @@ export function RevenueHeatmap({
     return { weeks, monthLabels, minVal, maxVal }
   }, [data])
 
+  // Chart vocabulary: revenue is money IN — an ink ramp, not a red one.
+  // Red on this surface means "flagged", and a good Saturday isn't a flag.
   const getIntensity = (value: number): string => {
-    if (maxVal === minVal) return "bg-(--accent)/55"
+    if (maxVal === minVal) return "bg-(--ink)/50"
     const ratio = (value - minVal) / (maxVal - minVal)
-    if (ratio < 0.25) return "bg-(--accent)/15"
-    if (ratio < 0.5) return "bg-(--accent)/35"
-    if (ratio < 0.75) return "bg-(--accent)/60"
-    return "bg-(--accent)/90"
+    if (ratio < 0.25) return "bg-(--ink)/12"
+    if (ratio < 0.5) return "bg-(--ink)/30"
+    if (ratio < 0.75) return "bg-(--ink)/55"
+    return "bg-(--ink)/85"
   }
 
   if (data.length === 0) return null
@@ -114,15 +116,16 @@ export function RevenueHeatmap({
       <div>
         <div className="overflow-x-auto">
           <div className="relative min-w-fit">
-            {/* Month labels */}
+            {/* Month labels — the 24px step must match cell size (22) + gap (2),
+                or the labels drift and collide ("JunJul"). */}
             <div className="flex ml-8 mb-1">
               {monthLabels.map((m, i) => (
                 <div
                   key={i}
-                  className="text-xs text-(--ink-muted)"
+                  className="font-mono text-[10px] uppercase tracking-[0.12em] text-(--ink-muted)"
                   style={{
                     position: "absolute",
-                    left: `${m.weekIndex * 16 + 32}px`,
+                    left: `${m.weekIndex * 24 + 36}px`,
                   }}
                 >
                   {m.label}
@@ -130,13 +133,13 @@ export function RevenueHeatmap({
               ))}
             </div>
 
-            <div className="flex gap-px mt-5">
+            <div className="flex gap-0.5 mt-5">
               {/* Day-of-week labels */}
-              <div className="flex flex-col gap-px mr-1">
+              <div className="flex flex-col gap-0.5 mr-1.5">
                 {DAY_LABELS.map((label, i) => (
                   <div
                     key={i}
-                    className="h-3 w-6 text-[10px] text-(--ink-muted) flex items-center justify-end pr-1"
+                    className="h-[22px] w-6 font-mono text-[10px] text-(--ink-muted) flex items-center justify-end pr-1"
                   >
                     {label}
                   </div>
@@ -145,11 +148,11 @@ export function RevenueHeatmap({
 
               {/* Weeks grid */}
               {weeks.map((week, wi) => (
-                <div key={wi} className="flex flex-col gap-px">
+                <div key={wi} className="flex flex-col gap-0.5">
                   {week.map((cell, di) => (
                     <div
                       key={di}
-                      className={`h-3 w-3 rounded-xs ${
+                      className={`h-[22px] w-[22px] rounded-xs ${
                         cell.value !== null
                           ? getIntensity(cell.value)
                           : "bg-(--paper-warm)"
@@ -173,6 +176,19 @@ export function RevenueHeatmap({
             </div>
           </div>
         </div>
+
+        {/* Intensity legend — the ramp was previously judging against
+            invisible bounds. */}
+        {maxVal > minVal ? (
+          <div className="mt-3 ml-8 flex items-center gap-1.5 font-mono text-[10px] text-(--ink-faint)">
+            <span className="mr-0.5 tabular-nums">{formatCompact(minVal)}</span>
+            <span className="h-2.5 w-2.5 rounded-xs bg-(--ink)/12" />
+            <span className="h-2.5 w-2.5 rounded-xs bg-(--ink)/30" />
+            <span className="h-2.5 w-2.5 rounded-xs bg-(--ink)/55" />
+            <span className="h-2.5 w-2.5 rounded-xs bg-(--ink)/85" />
+            <span className="ml-0.5 tabular-nums">{formatCompact(maxVal)}</span>
+          </div>
+        ) : null}
 
         {/* Tooltip */}
         {hoveredCell && (

@@ -585,7 +585,7 @@
   margin-top: 4px;
 }
 
-.editorial-kpi .kpi-delta.up { color: #1a7a4a; }
+.editorial-kpi .kpi-delta.up { color: var(--ink-good); }
 .editorial-kpi .kpi-delta.down { color: var(--accent); }
 
 .editorial-section-label {
@@ -2051,9 +2051,9 @@
 }
 
 .delta-stamp--up {
-  color: #1a7a4a;
-  border-color: rgba(26, 122, 74, 0.35);
-  background: rgba(26, 122, 74, 0.05);
+  color: var(--ink-good);
+  border-color: color-mix(in oklab, var(--ink-good) 35%, transparent);
+  background: color-mix(in oklab, var(--ink-good) 5%, transparent);
 }
 
 .delta-stamp--down {
@@ -2120,7 +2120,7 @@
   left: 0;
   bottom: 0;
   width: 100%;
-  background: #1a7a4a;
+  background: var(--ink-good);
   border-radius: 1px 0 0 1px;
   transform-origin: left center;
   transform: scaleX(var(--bullet-fill, 0));
@@ -2548,7 +2548,7 @@
 }
 
 .pnl-what-moved__row--up {
-  --mover-tone: #1a7a4a;
+  --mover-tone: var(--ink-good);
 }
 .pnl-what-moved__row--down {
   --mover-tone: var(--accent-dark);
@@ -2713,7 +2713,7 @@
   top: 6px;
   bottom: 6px;
   width: 2px;
-  background: #1a7a4a;
+  background: var(--ink-good);
 }
 
 .pnl-league__row--worst::before {
@@ -2780,9 +2780,9 @@
 }
 
 .pnl-league__stamp--best {
-  color: #1a7a4a;
-  border-color: rgba(26, 122, 74, 0.4);
-  background: rgba(26, 122, 74, 0.06);
+  color: var(--ink-good);
+  border-color: color-mix(in oklab, var(--ink-good) 40%, transparent);
+  background: color-mix(in oklab, var(--ink-good) 6%, transparent);
 }
 
 .pnl-league__stamp--worst {

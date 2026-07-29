@@ -12,7 +12,7 @@ import {
   ChartLegendContent,
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
-import { formatCurrency, formatDate } from "@/lib/format"
+import { formatCompact, formatCurrency, formatDate } from "@/lib/format"
 import type { PlatformTrendPoint } from "@/types/analytics"
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -100,14 +100,17 @@ export function PlatformTrendChart({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
+              tick={{ fontSize: 10 }}
+              minTickGap={28}
               tickFormatter={formatDate}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tickFormatter={(v) => formatCurrency(v)}
-              width={isMobile ? 55 : 80}
+              tick={{ fontSize: 10 }}
+              tickFormatter={formatCompact}
+              width={isMobile ? 44 : 52}
             />
             <ChartTooltip
               content={

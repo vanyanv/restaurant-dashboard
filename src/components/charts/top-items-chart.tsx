@@ -41,14 +41,16 @@ export function TopItemsChart({
 
   const isMobile = useIsMobile()
 
+  // Editorial tones, not the stock shadcn chart palette: first-party in
+  // solid ink, third-party in muted ink — labeled via the tooltip.
   const chartConfig = {
     fpQty: {
       label: "First Party",
-      color: "hsl(var(--chart-1))",
+      color: "var(--ink)",
     },
     tpQty: {
       label: "Third Party",
-      color: "hsl(var(--chart-5))",
+      color: "var(--ink-muted)",
     },
   }
 
@@ -77,15 +79,24 @@ export function TopItemsChart({
             layout="vertical"
             margin={{ left: 12, right: 12 }}
           >
-            <XAxis type="number" tickLine={false} axisLine={false} tickMargin={8} />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tick={{ fontSize: 10 }}
+            />
             <YAxis
               type="category"
               dataKey="name"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              width={isMobile ? 80 : 120}
-              tick={{ fontSize: isMobile ? 11 : 12 }}
+              width={isMobile ? 96 : 190}
+              tick={{ fontSize: isMobile ? 10 : 11 }}
+              tickFormatter={(name: string) =>
+                name.length > 26 ? `${name.slice(0, 25)}…` : name
+              }
             />
             <ChartTooltip
               cursor={false}

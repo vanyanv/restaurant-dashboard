@@ -27,14 +27,16 @@ export function PaymentSplitChart({
   const total = data.cashSales + data.cardSales
   if (total === 0) return null
 
+  // Chart vocabulary: tender types are routine facts, not alarms — ink for
+  // the dominant slice, muted ink for the rest. No red.
   const chartConfig = {
     cash: {
       label: "Cash",
-      color: "var(--ink)",
+      color: "var(--ink-muted)",
     },
     card: {
       label: "Card",
-      color: "var(--accent)",
+      color: "var(--ink)",
     },
   }
 
