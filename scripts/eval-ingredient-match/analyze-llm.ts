@@ -23,10 +23,11 @@ import { buildGoldSet, loadEnvLocal, type GoldCase } from "./gold"
 import { vectorOnlyArm } from "./arms"
 import { analyzeGroupedKFold } from "./holdout-analysis"
 import { splitPool, buildAdjudicatorCases } from "./llm-pool"
-import { resolveLlmResults } from "./llm-resolve"
+import { resolveLlmResults, countDuplicateDraftIds } from "./llm-resolve"
 import { computeCalibration } from "./llm-calibration"
 import { analyzeLlmGroupedKFold } from "./llm-kfold"
 import { writeLlmReport, type LlmArmRun } from "./llm-report"
+import { excludeDisputed, excludeDisputedCases } from "./disputed-labels"
 import type { LlmCallResult } from "./llm-call"
 import type { AdjudicatorDraft } from "../../src/lib/ingredient-match-llm"
 
@@ -116,19 +117,42 @@ async function main() {
     }
 
     const poolResults = resolveLlmResults(poolForThisArm, raw.drafts, caseIndex, 5)
+    const duplicateDraftCount = countDuplicateDraftIds(raw.drafts)
     const calibration = computeCalibration(poolResults)
     const kfold =
       poolResults.length > 0
         ? analyzeLlmGroupedKFold(gold.cases, split.vectorAutoCorrect, split.vectorAutoWrong, poolResults)
         : null
 
-    armRuns.push({ model: raw.model, callResult, poolResults, calibration, kfold, estimatedCostUsd: raw.costUsd })
-    console.log(`  ${raw.model}: ${raw.drafts.length} drafts, cost $${raw.costUsd.toFixed(4)} (from disk, not re-spent)`)
+    const casesExcl = excludeDisputedCases(gold.cases)
+    const vectorCorrectExcl = excludeDisputed(split.vectorAutoCorrect)
+    const vectorWrongExcl = excludeDisputed(split.vectorAutoWrong)
+    const poolResultsExcl = excludeDisputed(poolResults)
+    const kfoldExcludingDisputed =
+      poolResultsExcl.length > 0 ? analyzeLlmGroupedKFold(casesExcl, vectorCorrectExcl, vectorWrongExcl, poolResultsExcl) : null
+
+    armRuns.push({
+      model: raw.model,
+      callResult,
+      poolResults,
+      calibration,
+      duplicateDraftCount,
+      kfold,
+      kfoldExcludingDisputed,
+      estimatedCostUsd: raw.costUsd,
+    })
+    console.log(
+      `  ${raw.model}: ${raw.drafts.length} drafts (${duplicateDraftCount} duplicate ids), ` +
+        `cost $${raw.costUsd.toFixed(4)} (from disk, not re-spent)`,
+    )
   }
 
   if (anyMismatch) {
     console.log("\nNote: pool mismatches were detected and handled per-arm using stored ids — see warnings above.")
   }
+
+  const casesExclTop = excludeDisputedCases(gold.cases)
+  const vectorFixedExclTop = excludeDisputed([...split.vectorAutoCorrect, ...split.vectorAutoWrong])
 
   const outPath = resolve(process.cwd(), "scripts/eval-ingredient-match/runs", `${prefix}-llm.md`)
   await writeLlmReport(outPath, {
@@ -139,6 +163,8 @@ async function main() {
     vectorFixedCorrect: split.vectorAutoCorrect.length,
     vectorFixedWrong: split.vectorAutoWrong.length,
     vectorFixedWrongCases: split.vectorAutoWrong,
+    totalGoldCasesExcludingDisputed: casesExclTop.length,
+    vectorFixedAutoCountExcludingDisputed: vectorFixedExclTop.length,
     armRuns,
     caseIndex,
     startedAt: new Date(),

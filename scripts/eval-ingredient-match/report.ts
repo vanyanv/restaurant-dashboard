@@ -143,8 +143,8 @@ function writeArmSection(
   const { arm, results, sweep } = run
   const total = results.length
   const autoResults = results.filter((r) => r.decision === "auto")
-  const correctResults = autoResults.filter((r) => r.correct === true)
-  const wrongResults = autoResults.filter((r) => r.correct === false)
+  const correctResults = autoResults.filter((r) => r.correctAtDefaultThresholds === true)
+  const wrongResults = autoResults.filter((r) => r.correctAtDefaultThresholds === false)
   const ambiguousCount = results.filter((r) => r.decision === "ambiguous").length
   const newCount = results.filter((r) => r.decision === "new").length
 

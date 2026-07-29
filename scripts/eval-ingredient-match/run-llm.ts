@@ -23,11 +23,12 @@ import { vectorOnlyArm } from "./arms"
 import { analyzeGroupedKFold } from "./holdout-analysis"
 import { splitPool, buildAdjudicatorCases } from "./llm-pool"
 import { callAdjudicatorModelOnce } from "./llm-call"
-import { resolveLlmResults } from "./llm-resolve"
+import { resolveLlmResults, countDuplicateDraftIds } from "./llm-resolve"
 import { computeCalibration } from "./llm-calibration"
 import { analyzeLlmGroupedKFold } from "./llm-kfold"
 import { estimateCostUsd } from "./llm-pricing"
 import { writeLlmReport, timestampForFilename, type LlmArmRun } from "./llm-report"
+import { excludeDisputed, excludeDisputedCases } from "./disputed-labels"
 
 const ARM_ORDER = ["gpt-5.4-nano", "gpt-4.1-mini", "gpt-5.4-mini", "o4-mini", "gpt-5.5"]
 const PER_ARM_CAP_USD = 0.5
@@ -143,14 +144,34 @@ async function main() {
     }
 
     const poolResults = resolveLlmResults(split.poolResults, callResult.drafts, caseIndex, SHORTLIST_FOR_LLM)
+    const duplicateDraftCount = countDuplicateDraftIds(callResult.drafts)
     const calibration = computeCalibration(poolResults)
     const kfold =
       poolResults.length > 0
         ? analyzeLlmGroupedKFold(gold.cases, split.vectorAutoCorrect, split.vectorAutoWrong, poolResults)
         : null
 
-    armRuns.push({ model, callResult, poolResults, calibration, kfold, estimatedCostUsd })
+    const casesExcl = excludeDisputedCases(gold.cases)
+    const vectorCorrectExcl = excludeDisputed(split.vectorAutoCorrect)
+    const vectorWrongExcl = excludeDisputed(split.vectorAutoWrong)
+    const poolResultsExcl = excludeDisputed(poolResults)
+    const kfoldExcludingDisputed =
+      poolResultsExcl.length > 0 ? analyzeLlmGroupedKFold(casesExcl, vectorCorrectExcl, vectorWrongExcl, poolResultsExcl) : null
+
+    armRuns.push({
+      model,
+      callResult,
+      poolResults,
+      calibration,
+      duplicateDraftCount,
+      kfold,
+      kfoldExcludingDisputed,
+      estimatedCostUsd,
+    })
   }
+
+  const casesExclTop = excludeDisputedCases(gold.cases)
+  const vectorFixedExclTop = excludeDisputed(vectorFixedAuto)
 
   const outPath = resolve(process.cwd(), "scripts/eval-ingredient-match/runs", `${timestampForFilename(startedAt)}-llm.md`)
   await writeLlmReport(outPath, {
@@ -161,6 +182,8 @@ async function main() {
     vectorFixedCorrect: split.vectorAutoCorrect.length,
     vectorFixedWrong: split.vectorAutoWrong.length,
     vectorFixedWrongCases: split.vectorAutoWrong,
+    totalGoldCasesExcludingDisputed: casesExclTop.length,
+    vectorFixedAutoCountExcludingDisputed: vectorFixedExclTop.length,
     armRuns,
     caseIndex,
     startedAt,

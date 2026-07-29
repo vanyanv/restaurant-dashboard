@@ -28,8 +28,23 @@ export type ArmResult = {
   expectedCanonicalId: string
   decision: "auto" | "ambiguous" | "new"
   chosenCanonicalId: string | null
-  /** null means "abstained" (ambiguous or new) — not scored as an error. */
-  correct: boolean | null
+  /**
+   * null means "abstained" (ambiguous or new) — not scored as an error.
+   *
+   * NAMED DELIBERATELY VERBOSE (task 6, fix round 1) after this field's
+   * generic name caused a real bug: `decision`/`correct` here reflect
+   * classification at the DEFAULT thresholds this arm resolved with
+   * (`THRESHOLDS` for vector arms, the 0.25 Jaccard cutoff for
+   * token-overlap) — NOT at any other (HIGH, MARGIN) pair a caller might
+   * reclassify `candidates` against later (e.g. a swept threshold, or this
+   * task's ship gate). `llm-kfold.ts` briefly read this field expecting it
+   * to mean "correct at the ship gate" and silently dropped almost the
+   * entire vector contribution from a pooled precision figure as a result
+   * (10.7% shown instead of 99.5%). Anyone re-classifying `candidates` at a
+   * different threshold must compute correctness fresh from `candidates`
+   * and `expectedCanonicalId` — never read this field for that purpose.
+   */
+  correctAtDefaultThresholds: boolean | null
   topScore: number
   /** top score minus runner-up score, over the *stored* candidate list. */
   margin: number
@@ -144,7 +159,7 @@ async function resolveViaVectorSearch(
         expectedCanonicalId: c.expectedCanonicalId,
         decision: "auto",
         chosenCanonicalId: classification.candidate.canonicalIngredientId,
-        correct: classification.candidate.canonicalIngredientId === c.expectedCanonicalId,
+        correctAtDefaultThresholds: classification.candidate.canonicalIngredientId === c.expectedCanonicalId,
         topScore,
         margin,
         candidates: sorted,
@@ -155,7 +170,7 @@ async function resolveViaVectorSearch(
         expectedCanonicalId: c.expectedCanonicalId,
         decision: classification.kind,
         chosenCanonicalId: null,
-        correct: null,
+        correctAtDefaultThresholds: null,
         topScore,
         margin,
         candidates: sorted,
