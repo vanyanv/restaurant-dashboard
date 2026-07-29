@@ -103,7 +103,11 @@ export const THRESHOLDS = {
  */
 export const AUTO_CREATE_ENABLED = false
 
-const SHORTLIST = 5
+/** Also used by ingredient-auto-match.ts to cap the raw-candidate shortlist
+ * it builds for a "new"-classified group (which carries no `candidates` of
+ * its own on the Classification type) — kept as one shared constant so the
+ * two shortlists (ambiguous's and new's) can never silently drift apart. */
+export const SHORTLIST = 5
 
 export function classifyCandidates(
   candidates: MatchCandidate[],

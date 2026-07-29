@@ -74,8 +74,13 @@ const MAX_COMPLETION_TOKENS = 32_000
  * Chunking keeps every individual request inside the shape the bake-off
  * actually measured (88 cases, 9,474 output tokens, 54.3s for gpt-5.4-nano)
  * instead of extrapolating a single giant request past it.
+ *
+ * Exported so callers (ingredient-auto-match.ts) can compute how many
+ * requests a given batch of cases will actually cost, instead of hardcoding
+ * an assumed request count that silently drifts from this module's real
+ * chunking behavior.
  */
-const MAX_CASES_PER_REQUEST = 80
+export const MAX_CASES_PER_REQUEST = 80
 
 export type AdjudicatorDraft = {
   caseId: string
