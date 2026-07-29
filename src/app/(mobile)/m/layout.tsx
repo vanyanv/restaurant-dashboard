@@ -3,7 +3,7 @@ import { Fraunces } from "next/font/google"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { MobileTabBar } from "@/components/mobile/mobile-tab-bar"
-import { getTabsForRole } from "@/lib/mobile/tabs"
+import { getTabs } from "@/lib/mobile/tabs"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
 import { consumePendingWelcome } from "@/lib/welcome"
 import "@/styles/editorial-tokens.css"
@@ -48,7 +48,7 @@ export default async function MobileLayout({
   children: React.ReactNode
 }) {
   const session = await getServerSession(authOptions)
-  const tabs = getTabsForRole(session?.user?.role)
+  const tabs = getTabs()
   const firstName = session?.user?.firstName ?? null
   const showWelcome =
     session?.user?.id != null &&

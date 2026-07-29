@@ -81,7 +81,9 @@ describe("requireOwnerStore", () => {
   })
 
   it("throws Forbidden when the role lacks owner access", async () => {
-    mockedSession.mockResolvedValue({ user: { ...user, role: "MANAGER" } })
+    // Every current Role value has owner access; a roleless session is the
+    // remaining way a caller can fail this gate.
+    mockedSession.mockResolvedValue({ user: { ...user, role: null } })
     await expect(requireOwnerStore("s1")).rejects.toThrow("Forbidden")
     expect(findFirst).not.toHaveBeenCalled()
   })

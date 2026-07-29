@@ -98,7 +98,7 @@ describe("withCronAuth", () => {
   })
 
   it("ownerFallback: 403 with the route's message for a non-owner session", async () => {
-    mockedSession.mockResolvedValue({ user: { id: "u1", role: "MANAGER" } })
+    mockedSession.mockResolvedValue({ user: { id: "u1", role: null } })
     const route = withCronAuth(async () => Response.json({ ok: true }), {
       ownerFallback: { forbiddenMessage: "Only owners can run the Harri sync" },
     })

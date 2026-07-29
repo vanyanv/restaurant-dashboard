@@ -48,7 +48,7 @@ const DEV_MORE: MobileSection[] = [
   { href: "/m/monitoring", label: "Monitoring", dept: "DEV", group: "Admin" },
 ]
 
-export function getTabsForRole(_role?: Role): MobileTab[] {
+export function getTabs(): MobileTab[] {
   return OWNER_TABS
 }
 
