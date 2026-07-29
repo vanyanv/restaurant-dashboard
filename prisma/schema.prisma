@@ -433,6 +433,11 @@ model Invoice {
   matchConfidence Float?
   matchedAt       DateTime?
 
+  // Why the sync routed this invoice to REVIEW — ReviewReason[] from
+  // src/lib/invoice-sanity.ts. Null for pre-existing rows and for invoices
+  // that never needed review.
+  reviewReasons Json?
+
   // Gemini extraction metadata
   rawExtractionJson String?
   extractionModel   String?

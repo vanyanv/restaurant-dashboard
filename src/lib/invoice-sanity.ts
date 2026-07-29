@@ -171,6 +171,102 @@ export function findTotalReconciliationMismatch(
   return { lineSum, subtotal, taxAmount, totalAmount, closestReference, gap, tolerance }
 }
 
+// ─── Review reasons ───
+
+/**
+ * The owner-facing record of WHY an invoice landed in REVIEW. Persisted on the
+ * Invoice row at sync time and rendered on the detail page — a bare REVIEW
+ * badge with no explanation turns a 30-second confirm into archaeology
+ * against the PDF.
+ */
+export interface ReviewReason {
+  kind:
+    | "date_suspect"
+    | "line_math"
+    | "pack_shape"
+    | "total_reconciliation"
+    | "low_match_confidence"
+    | "no_store_match"
+    | "unknown"
+  /** Owner-facing sentence. Amounts pre-formatted; no jargon. */
+  message: string
+  /** Invoice line numbers this reason points at, for row-level flagging. */
+  lineNumbers?: number[]
+}
+
+const fmt = (n: number) =>
+  `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+export function composeReviewReasons(input: {
+  dateSuspect: boolean
+  mathMismatches: LineMathMismatch[]
+  packAnomalies: PackShapeAnomaly[]
+  totalMismatch: TotalReconciliationMismatch | null
+  /** Store auto-match confidence 0..1, or null when no store matched. */
+  matchConfidence: number | null
+  matched: boolean
+}): ReviewReason[] {
+  const reasons: ReviewReason[] = []
+
+  if (input.dateSuspect) {
+    reasons.push({
+      kind: "date_suspect",
+      message:
+        "The printed invoice date is implausible next to the email's arrival date — the date was cleared and needs a manual check against the PDF.",
+    })
+  }
+
+  for (const m of input.mathMismatches) {
+    reasons.push({
+      kind: "line_math",
+      message:
+        `Line ${m.lineNumber} "${m.productName}": ${m.quantity} ${m.unit ?? "×"} at ${fmt(m.unitPrice)} ` +
+        `computes to ${fmt(m.computed)}, but the invoice prints ${fmt(m.extendedPrice)}` +
+        (m.impliedQuantity != null
+          ? ` — quantity was probably misread (implied ≈ ${m.impliedQuantity.toFixed(2)}).`
+          : " — quantity or price was misread."),
+      lineNumbers: [m.lineNumber],
+    })
+  }
+
+  for (const a of input.packAnomalies) {
+    reasons.push({
+      kind: "pack_shape",
+      message: `Line ${a.lineNumber} "${a.productName}": pack shape looks wrong (${a.reasons.join("; ")}) — this distorts the ingredient's $/unit if approved as-is.`,
+      lineNumbers: [a.lineNumber],
+    })
+  }
+
+  if (input.totalMismatch) {
+    const t = input.totalMismatch
+    reasons.push({
+      kind: "total_reconciliation",
+      message:
+        `The ${fmt(t.lineSum)} sum of extracted lines doesn't reconcile with the invoice's printed total ` +
+        `${fmt(t.closestReference)} (gap ${fmt(t.gap)}) — lines were likely dropped or corrupted during extraction. ` +
+        "Compare the line list against the PDF before approving.",
+    })
+  }
+
+  // Sanity issues above already force REVIEW; the match-quality reasons only
+  // matter when they are what put the invoice here.
+  if (reasons.length === 0) {
+    if (!input.matched) {
+      reasons.push({
+        kind: "no_store_match",
+        message: "No store matched the delivery address — assign one before approving.",
+      })
+    } else if (input.matchConfidence != null && input.matchConfidence < 0.85) {
+      reasons.push({
+        kind: "low_match_confidence",
+        message: `Store auto-match confidence is ${(input.matchConfidence * 100).toFixed(0)}% — confirm the assignment is right.`,
+      })
+    }
+  }
+
+  return reasons
+}
+
 function roundQuantity(value: number): number {
   return Math.round(value * 1000) / 1000
 }

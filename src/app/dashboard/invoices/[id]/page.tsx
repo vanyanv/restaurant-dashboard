@@ -2,7 +2,45 @@ import { redirect, notFound } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  composeReviewReasons,
+  findLineMathMismatches,
+  findPackShapeAnomalies,
+  findTotalReconciliationMismatch,
+  type ReviewReason,
+} from "@/lib/invoice-sanity"
+import type { InvoiceExtraction } from "@/types/invoice"
 import { InvoiceDetailContent } from "./components/invoice-detail"
+
+/**
+ * Invoices flagged before reviewReasons existed have nothing stored — but the
+ * raw extraction is on the row, so the same checks the sync ran can be replayed
+ * at read time. Best-effort: a parse failure just means no reasons shown.
+ */
+function recomputeLegacyReasons(input: {
+  rawExtractionJson: string | null
+  invoiceDate: Date | null
+  matchConfidence: number | null
+  storeId: string | null
+}): ReviewReason[] {
+  if (!input.rawExtractionJson) return []
+  try {
+    const extraction = JSON.parse(input.rawExtractionJson) as InvoiceExtraction
+    if (!Array.isArray(extraction.lineItems)) return []
+    return composeReviewReasons({
+      // The sync nulls a suspect date; extraction still carrying one while the
+      // row has none is the recorded symptom.
+      dateSuspect: Boolean(extraction.invoiceDate) && input.invoiceDate == null,
+      mathMismatches: findLineMathMismatches(extraction.lineItems),
+      packAnomalies: findPackShapeAnomalies(extraction.lineItems),
+      totalMismatch: findTotalReconciliationMismatch(extraction),
+      matchConfidence: input.matchConfidence,
+      matched: input.storeId != null,
+    })
+  } catch {
+    return []
+  }
+}
 
 export default async function InvoiceDetailPage({
   params,
@@ -30,6 +68,8 @@ export default async function InvoiceDetailPage({
       isReturn: true,
       storeId: true,
       matchConfidence: true,
+      reviewReasons: true,
+      rawExtractionJson: true,
       emailSubject: true,
       emailReceivedAt: true,
       attachmentName: true,
@@ -64,6 +104,30 @@ export default async function InvoiceDetailPage({
     select: { id: true, name: true },
   })
 
+  const storedReasons = invoice.reviewReasons as ReviewReason[] | null
+  let reviewReasons: ReviewReason[] =
+    invoice.status !== "REVIEW"
+      ? []
+      : storedReasons && storedReasons.length > 0
+        ? storedReasons
+        : recomputeLegacyReasons({
+            rawExtractionJson: invoice.rawExtractionJson,
+            invoiceDate: invoice.invoiceDate,
+            matchConfidence: invoice.matchConfidence,
+            storeId: invoice.storeId,
+          })
+  // Still in REVIEW but today's checks come back clean: an older sync flagged
+  // it under rules that have since changed. Say so instead of showing nothing.
+  if (invoice.status === "REVIEW" && reviewReasons.length === 0) {
+    reviewReasons = [
+      {
+        kind: "unknown",
+        message:
+          "Flagged by an earlier sync whose reason wasn't recorded. Today's checks find nothing wrong — spot-check the totals against the PDF, then approve or reject.",
+      },
+    ]
+  }
+
   return (
     <InvoiceDetailContent
       invoice={{
@@ -87,6 +151,7 @@ export default async function InvoiceDetailPage({
         hasPdf: Boolean(invoice.pdfBlobPathname),
         lineItemCount: invoice.lineItems.length,
         createdAt: invoice.createdAt.toISOString(),
+        reviewReasons,
         lineItems: invoice.lineItems.map((li) => ({
           id: li.id,
           lineNumber: li.lineNumber,
