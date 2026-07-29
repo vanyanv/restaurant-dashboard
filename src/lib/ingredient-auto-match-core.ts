@@ -86,6 +86,39 @@ export function suppressionKey(groupKey: string, canonicalIngredientId: string):
   return `${groupKey}::${canonicalIngredientId}`
 }
 
+export type Layer = "auto-exact" | "auto-vector" | "auto-llm"
+
+/** One group the ladder decided to link, before write-back. Shared between
+ * the retrieval phase (ingredient-auto-match-ladder.ts, which produces
+ * these) and the persistence phase (ingredient-auto-match-persist.ts, which
+ * consumes them). */
+export type ResolvedGroup = {
+  group: LineGroup
+  canonicalIngredientId: string
+  layer: Layer
+  confidence: number
+  /** Best vector similarity seen for this group, regardless of which
+   * candidate was ultimately accepted — null at L1 (no vector score
+   * exists). At L2 this is necessarily the accepted candidate's own score
+   * (it won by being the top). At L3 it's the shortlist's own top score,
+   * which may differ from the accepted candidate's score since the LLM can
+   * pick a lower-ranked shortlist member. */
+  topScore: number | null
+  margin: number | null
+  candidates: Array<{ id: string; name: string; score: number }> | null
+  model: string | null
+  reasoning: string | null
+}
+
+/** Format raw vector candidates for the `IngredientMatchDecision.candidates`
+ * Json column (the undo UI's "here's what else it considered" list). */
+export function candidateJson(
+  candidates: MatchCandidate[] | null
+): Array<{ id: string; name: string; score: number }> | null {
+  if (!candidates) return null
+  return candidates.map((c) => ({ id: c.canonicalIngredientId, name: c.name, score: c.score }))
+}
+
 export type AcceptedLlmMatch = {
   canonicalIngredientId: string
   name: string
@@ -108,8 +141,42 @@ export function resolveLlmDraft(input: {
   const { shortlist, draft, llmAccept } = input
   if (!draft) return null
   if (draft.matchName === null) return null
-  if (draft.confidence < llmAccept) return null
+  // `!(confidence >= llmAccept)` rather than `confidence < llmAccept`: this
+  // is the gate on untrusted model output, and `NaN < llmAccept` is `false`
+  // — a `<` comparison fails OPEN on a NaN confidence, silently accepting
+  // it. The parser already filters non-finite values before a draft ever
+  // reaches here, but that's the parser's contract, not this gate's; this
+  // gate must hold on its own.
+  if (!(draft.confidence >= llmAccept)) return null
   const hit = shortlist.find((c) => c.name === draft.matchName)
   if (!hit) return null
   return { canonicalIngredientId: hit.canonicalIngredientId, name: hit.name, score: hit.score }
+}
+
+/**
+ * The L1 cross-scope exact-name lookup, decided from two pre-built indexes
+ * (canonical name -> set of canonical ids sharing that lowercased name, and
+ * alias rawName -> set of canonical ids sharing that lowercased rawName —
+ * see the caller for why these must be *sets*, not single ids).
+ *
+ * Canonical direct-name hits take priority over alias hits (an ingredient's
+ * own name is stronger evidence than a learned alias), but either kind of
+ * hit is only usable when it names exactly one canonical: `size > 1` means
+ * this normalized name is genuinely ambiguous at this account and must be
+ * scored (L2), not guessed.
+ */
+export function resolveExactMatch(
+  normalizedName: string,
+  canonicalByName: Map<string, Set<string>>,
+  aliasByName: Map<string, Set<string>>
+): { canonicalIngredientId: string } | { ambiguous: true } | null {
+  const canonicalHit = canonicalByName.get(normalizedName)
+  if (canonicalHit) {
+    return canonicalHit.size === 1 ? { canonicalIngredientId: [...canonicalHit][0] } : { ambiguous: true }
+  }
+  const aliasHit = aliasByName.get(normalizedName)
+  if (aliasHit) {
+    return aliasHit.size === 1 ? { canonicalIngredientId: [...aliasHit][0] } : { ambiguous: true }
+  }
+  return null
 }
