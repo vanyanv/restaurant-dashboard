@@ -434,8 +434,10 @@ export async function runCanonicalIngredientSeed(): Promise<SeedResult> {
 /**
  * Merge `sourceId` into `targetId`. Re-parents every table that FK's onto
  * CanonicalIngredient, then deletes the source. Target wins on unique-key
- * collisions (SKU match rules, per-store aliases). RecipeIngredient must be
- * re-parented before delete because its FK is `onDelete: Restrict`.
+ * collisions (SKU match rules, per-store aliases). RecipeIngredient and
+ * IngredientMatchDecision must both be re-parented before delete because
+ * their FKs are `onDelete: Restrict` — the latter also carries the
+ * match/undo audit trail, which must survive the merge intact.
  */
 export async function mergeCanonicalIngredients(input: {
   sourceId: string
@@ -445,6 +447,7 @@ export async function mergeCanonicalIngredients(input: {
   aliases: number
   skuMatches: number
   recipeUses: number
+  matchDecisions: number
 }> {
   const scope = await requireScope()
   if (!scope) throw new Error("Not authenticated")
@@ -524,6 +527,15 @@ export async function mergeCanonicalIngredients(input: {
       data: { canonicalIngredientId: input.targetId },
     })
 
+    // Re-parent the audit/undo trail too, or `canonicalIngredient.delete`
+    // below fails against its `onDelete: Restrict` FK — and, worse, if it
+    // didn't fail, the source's decision rows (including any UNDONE
+    // suppression records) would be silently lost on cascade.
+    const matchDecisions = await tx.ingredientMatchDecision.updateMany({
+      where: { canonicalIngredientId: input.sourceId },
+      data: { canonicalIngredientId: input.targetId },
+    })
+
     await tx.canonicalIngredient.delete({ where: { id: input.sourceId } })
 
     return {
@@ -531,6 +543,7 @@ export async function mergeCanonicalIngredients(input: {
       aliases: aliases.count,
       skuMatches: skuMatches.count,
       recipeUses: recipeUses.count,
+      matchDecisions: matchDecisions.count,
     }
   })
 

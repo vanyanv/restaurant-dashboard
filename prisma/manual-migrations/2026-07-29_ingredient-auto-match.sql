@@ -3,9 +3,15 @@
 -- src/lib/ingredient-auto-match.ts; reversed by undoAutoMatch. An UNDONE row
 -- is also a permanent suppression (Task 10).
 --
--- Applied via `prisma db push` on 2026-07-29; this file is the record, per
--- the manual-migrations convention (db push + hand-written SQL, never
--- `prisma migrate dev` — that would reset the production Neon database).
+-- canonicalIngredientId FK is ON DELETE RESTRICT, not CASCADE: this is
+-- audit/history, matching the StockCountLine / InventoryAdjustment
+-- convention. mergeCanonicalIngredients re-parents this table before
+-- deleting a merged-away canonical, so the audit trail (and any UNDONE
+-- suppression rows Task 10 relies on) can't be silently lost to a cascade.
+--
+-- Applied via `prisma db push` on 2026-07-29 (initial CASCADE version),
+-- corrected to RESTRICT the same day per fix-round-1 review; this file
+-- reflects the final, currently-applied production schema.
 
 CREATE TABLE "IngredientMatchDecision" (
     "id" TEXT NOT NULL,
@@ -39,4 +45,4 @@ CREATE INDEX "IngredientMatchDecision_accountId_groupKey_idx" ON "IngredientMatc
 
 ALTER TABLE "IngredientMatchDecision" ADD CONSTRAINT "IngredientMatchDecision_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "IngredientMatchDecision" ADD CONSTRAINT "IngredientMatchDecision_canonicalIngredientId_fkey" FOREIGN KEY ("canonicalIngredientId") REFERENCES "CanonicalIngredient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "IngredientMatchDecision" ADD CONSTRAINT "IngredientMatchDecision_canonicalIngredientId_fkey" FOREIGN KEY ("canonicalIngredientId") REFERENCES "CanonicalIngredient"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
