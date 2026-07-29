@@ -453,7 +453,11 @@ export function normalizeCatchWeightMeatLines(
   return changed ? { ...extraction, lineItems } : extraction
 }
 
-function looksLikePaperCountPack(line: InvoiceExtraction["lineItems"][number]): boolean {
+export function looksLikePaperCountPack(line: {
+  productName: string
+  description?: string | null
+  category: string | null
+}): boolean {
   const category = line.category?.trim().toLowerCase() ?? ""
   const productText = `${line.productName} ${line.description ?? ""}`
   return (

@@ -106,6 +106,28 @@ const KNOWN_SKU_PACK_PROFILES: KnownSkuPackProfile[] = [
     unitSizeUom: "GAL",
     label: "Sysco Lyon strawberry syrup, 4x1-gal case",
   },
+  // The model repeatedly promotes the "20 OZ" cup volume from the product
+  // name into the pack fields (9 distinct shapes extracted across 14
+  // invoices). Canonical shape confirmed by extraction-history majority and
+  // $/cup plausibility ($96.55 / 1000 ≈ 9.7¢ per 20-oz PET cup).
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "7370699",
+    unit: "CS",
+    packSize: 1,
+    unitSize: 1000,
+    unitSizeUom: "CT",
+    label: "Sysco Greeno PET cup 20 oz, 1000-count case",
+  },
+  {
+    vendorMatch: /\bsysco\b/i,
+    sku: "7190716",
+    unit: "CS",
+    packSize: 1,
+    unitSize: 1000,
+    unitSizeUom: "CT",
+    label: "Sysco Greeno flat lid w/hole 20 oz, 1000-count case",
+  },
 ]
 
 /**
@@ -220,15 +242,32 @@ smushed together. Common patterns:
     "500 CT"   (1 case × 500)
               → packSize=1,   unitSize=500,  unitSizeUom="CT"
 
-HARD GUARDRAIL — packSize MUST NOT exceed 100. If your initial split would produce
-packSize > 100 (e.g. you were about to write packSize=10100 or packSize=540), STOP
-and re-split: take the leading 1–2 digits as packSize and the remaining digits as
-unitSize. Examples of forbidden outputs and their corrections:
+HARD GUARDRAIL — for unit="CS", packSize MUST NOT exceed 50. The single exception:
+individually-portioned condiment packets (ketchup, mustard, sauce), where a large
+packSize with a small gram unitSize is real — e.g. 200 × 5.5 G mustard packets.
+If your initial split would produce packSize > 50 (e.g. you were about to write
+packSize=10100, packSize=540, or packSize=100), STOP and re-split: take the
+leading 1–2 digits as packSize and the remaining digits as unitSize. If the
+number is a single bulk count (500, 1000), the case IS one bulk pack: packSize=1.
+Examples of forbidden outputs and their corrections:
     ❌ packSize=10100, unitSize=1   →   ✅ packSize=10, unitSize=100
     ❌ packSize=11000, unitSize=1   →   ✅ packSize=1,  unitSize=1000
     ❌ packSize=81000, unitSize=1   →   ✅ packSize=8,  unitSize=1000
     ❌ packSize=540,   unitSize=1   →   ✅ packSize=5,  unitSize=40
     ❌ packSize=124,   unitSize=1   →   ✅ packSize=1,  unitSize=24
+    ❌ packSize=100,   unitSize=20  →   ✅ packSize=1,  unitSize=1000, unitSizeUom="CT"
+       (a 1000-count cup case — see the next guardrail)
+
+HARD GUARDRAIL — NEVER build pack fields from the product NAME. A size printed in
+the product name ("CUP PET 20 OZ", "CONT FOAM 9X6.5X2.5", "LINER 40X46") describes
+ONE item — it is NOT packSize, unitSize, or unitSizeUom. Pack fields come ONLY from
+the Pack/Size column. Cups, lids, gloves, bags, trays, and containers are packed by
+COUNT: when the size column reads "<N> CT", the pack fields are counts
+(unitSizeUom="CT") — never OZ, even when the name contains an OZ size.
+    ❌ "GREENO CUP PET 20 OZ", size column "1000 CT"
+        → packSize=100, unitSize=20, unitSizeUom="OZ"     (volume leaked from the name)
+    ✅ "GREENO CUP PET 20 OZ", size column "1000 CT"
+        → packSize=1, unitSize=1000, unitSizeUom="CT"     (one case of 1000 cups)
 
 HARD GUARDRAIL FOR LB — for unitSizeUom="LB", unitSize > 50 is essentially always a
 fused PACK/SIZE mis-split. Common produce/case-goods LB sizes are 5, 10, 25, 30, 35,
