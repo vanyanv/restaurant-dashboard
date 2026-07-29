@@ -7,6 +7,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
+import { formatCompact } from "@/lib/format"
 
 const PLATFORM_LABELS: Record<string, string> = {
   "css-pos": "Otter POS",
@@ -37,6 +38,8 @@ export function PlatformBreakdownChart({
   description = "Gross and net sales breakdown by ordering platform",
   className,
 }: PlatformBreakdownChartProps) {
+  // Chart vocabulary: solid ink = gross, muted ink = net. Red is reserved
+  // for flagged/over-target state — never a routine data series.
   const chartConfig = {
     grossSales: {
       label: "Gross Sales",
@@ -44,7 +47,7 @@ export function PlatformBreakdownChart({
     },
     netSales: {
       label: "Net Sales",
-      color: "var(--accent)",
+      color: "var(--ink-muted)",
     },
   }
 
@@ -77,12 +80,22 @@ export function PlatformBreakdownChart({
           data={chartData}
           margin={{ left: 12, right: 12 }}
         >
-          <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
+          <XAxis
+            dataKey="name"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tick={{ fontSize: 10 }}
+          />
+          {/* Fixed width + compact ticks — the default 60px clipped
+              "$105,000.00" down to "05,000.00". */}
           <YAxis
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={(value) => formatCurrency(value)}
+            width={52}
+            tick={{ fontSize: 10 }}
+            tickFormatter={formatCompact}
           />
           <ChartTooltip
             cursor={false}
