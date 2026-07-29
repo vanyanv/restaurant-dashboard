@@ -219,7 +219,10 @@ async function getHourlyOrderDistributionWithComparison(
   const comparisonByHour = Array.from({ length: 24 }, () => ({ count: 0, sales: 0 }))
 
   const groupTotals = spec.comparisonGroups.map(() => 0)
+  const groupSalesTotals = spec.comparisonGroups.map(() => 0)
   let currentTotal = 0
+  let currentSalesTotal = 0
+  let lastDataHour: number | null = null
 
   const lastCurrentDate = spec.currentDates[spec.currentDates.length - 1]
   const comparisonLastDayPerGroup = spec.comparisonGroups.map(
@@ -241,12 +244,17 @@ async function getHourlyOrderDistributionWithComparison(
       currentByHour[hour].count += 1
       currentByHour[hour].sales += sales
 
+      if (dateStr === lastCurrentDate) {
+        lastDataHour = lastDataHour == null ? hour : Math.max(lastDataHour, hour)
+      }
+
       if (
         spec.hourCutoff == null ||
         dateStr !== lastCurrentDate ||
         hour <= spec.hourCutoff
       ) {
         currentTotal += 1
+        currentSalesTotal += sales
       }
     } else if (comparisonDateSet.has(dateStr)) {
       comparisonByHour[hour].count += 1
@@ -258,7 +266,10 @@ async function getHourlyOrderDistributionWithComparison(
         hour <= spec.hourCutoff
       ) {
         const gi = comparisonDateToGroup.get(dateStr)
-        if (gi != null) groupTotals[gi] += 1
+        if (gi != null) {
+          groupTotals[gi] += 1
+          groupSalesTotals[gi] += sales
+        }
       }
     }
   }
@@ -300,6 +311,16 @@ async function getHourlyOrderDistributionWithComparison(
   const pacePct =
     baselineTotal > 0 ? ((currentTotal - baselineTotal) / baselineTotal) * 100 : null
 
+  const salesBaselineWeeks = groupSalesTotals.filter((t) => t > 0).length
+  const salesBaselineTotal =
+    salesBaselineWeeks > 0
+      ? groupSalesTotals.reduce((a, b) => a + b, 0) / spec.comparisonGroups.length
+      : 0
+  const salesPacePct =
+    salesBaselineTotal > 0
+      ? ((currentSalesTotal - salesBaselineTotal) / salesBaselineTotal) * 100
+      : null
+
   return {
     hourly,
     hourlyComparison: {
@@ -309,6 +330,11 @@ async function getHourlyOrderDistributionWithComparison(
       pacePct: pacePct == null ? null : Math.round(pacePct * 10) / 10,
       baselineWeeks,
       weekdayLabel: spec.weekdayLabel,
+      salesCurrentTotal: Math.round(currentSalesTotal * 100) / 100,
+      salesBaselineTotal: Math.round(salesBaselineTotal * 100) / 100,
+      salesPacePct:
+        salesPacePct == null ? null : Math.round(salesPacePct * 10) / 10,
+      lastDataHour,
     },
   }
 }

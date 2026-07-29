@@ -37,8 +37,10 @@ export function HeroKpi({
 }
 
 export function formatMoneyLarge(n: number): string {
+  // Abbreviate only at 7 figures — "$253,412" reads fine at KPI size, and
+  // mixing "$37.2k" with full-precision dollars on one strip was flagged in
+  // the overview audit as formatting inconsistency.
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 10_000) return `$${(n / 1000).toFixed(1)}k`
   return `$${Math.round(n).toLocaleString()}`
 }
 

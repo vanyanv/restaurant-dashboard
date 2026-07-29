@@ -21,10 +21,14 @@ export async function PnLSummarySection({
 }) {
   const result = await pnlPromise
   const stamp = getRangeStamp(range)
+  const isToday = range.kind === "days" && range.days === 1
 
   const header = (
     <div className="flex items-center gap-3 pb-3 mb-4 border-b border-(--hairline)">
-      <span className="editorial-section-label">Profit &amp; loss · {stamp}</span>
+      <span className="editorial-section-label">
+        Profit &amp; loss · {stamp}
+        {isToday ? " · day in progress" : ""}
+      </span>
       <div className="flex-1 h-px border-t border-dotted border-(--hairline-bold)" />
       <Link
         href="/dashboard/pnl"
@@ -63,10 +67,10 @@ export async function PnLSummarySection({
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
             Net profit
           </div>
-          <div className="mt-1 flex items-baseline gap-3">
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span
               className={cn(
-                "font-(family-name:--font-dm-sans) text-[40px] leading-none font-semibold [font-variant-numeric:tabular-nums_lining-nums]",
+                "whitespace-nowrap font-(family-name:--font-dm-sans) text-[40px] leading-none font-semibold [font-variant-numeric:tabular-nums_lining-nums]",
                 profitNegative ? "text-(--subtract)" : "text-(--ink)"
               )}
             >
@@ -75,13 +79,21 @@ export async function PnLSummarySection({
             <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-(--ink-muted) [font-variant-numeric:tabular-nums]">
               {hasData ? `${fmtPctFromRatio(c.marginPct)} margin` : "no data"}
             </span>
+            {isToday && hasData && profitNegative ? (
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-(--ink-faint)">
+                costs post in lumps — judge after close
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
 
       <PnLKpiStrip
         kpis={[
-          { label: "Total sales", value: c.grossSales },
+          // "(ex-tax)" reconciles this figure against the hero strip's Net
+          // sales — they differ by exactly the collected tax, which the
+          // overview audit flagged as an unexplained third "sales" number.
+          { label: "Sales (ex-tax)", value: c.grossSales },
           {
             label: "COGS",
             value: c.cogsValue,

@@ -160,7 +160,10 @@ export function bucketHourlyRows(args: {
   const comparisonByHour = Array.from({ length: 24 }, () => ({ count: 0, sales: 0 }))
 
   const groupTotals = spec.comparisonGroups.map(() => 0)
+  const groupSalesTotals = spec.comparisonGroups.map(() => 0)
   let currentTotal = 0
+  let currentSalesTotal = 0
+  let lastDataHour: number | null = null
 
   const lastCurrentDate = spec.currentDates[spec.currentDates.length - 1]
   const comparisonLastDayPerGroup = spec.comparisonGroups.map(
@@ -177,12 +180,17 @@ export function bucketHourlyRows(args: {
       currentByHour[hour].count += orderCount
       currentByHour[hour].sales += netSales
 
+      if (date === lastCurrentDate && orderCount > 0) {
+        lastDataHour = lastDataHour == null ? hour : Math.max(lastDataHour, hour)
+      }
+
       if (
         spec.hourCutoff == null ||
         date !== lastCurrentDate ||
         hour <= spec.hourCutoff
       ) {
         currentTotal += orderCount
+        currentSalesTotal += netSales
       }
     } else if (comparisonDateSet.has(date)) {
       comparisonByHour[hour].count += orderCount
@@ -194,7 +202,10 @@ export function bucketHourlyRows(args: {
         hour <= spec.hourCutoff
       ) {
         const gi = comparisonDateToGroup.get(date)
-        if (gi != null) groupTotals[gi] += orderCount
+        if (gi != null) {
+          groupTotals[gi] += orderCount
+          groupSalesTotals[gi] += netSales
+        }
       }
     }
   }
@@ -235,6 +246,16 @@ export function bucketHourlyRows(args: {
   const pacePct =
     baselineTotal > 0 ? ((currentTotal - baselineTotal) / baselineTotal) * 100 : null
 
+  const salesBaselineWeeks = groupSalesTotals.filter((t) => t > 0).length
+  const salesBaselineTotal =
+    salesBaselineWeeks > 0
+      ? groupSalesTotals.reduce((a, b) => a + b, 0) / spec.comparisonGroups.length
+      : 0
+  const salesPacePct =
+    salesBaselineTotal > 0
+      ? ((currentSalesTotal - salesBaselineTotal) / salesBaselineTotal) * 100
+      : null
+
   return {
     hourly,
     hourlyComparison: {
@@ -244,6 +265,11 @@ export function bucketHourlyRows(args: {
       pacePct: pacePct == null ? null : Math.round(pacePct * 10) / 10,
       baselineWeeks,
       weekdayLabel: spec.weekdayLabel,
+      salesCurrentTotal: Math.round(currentSalesTotal * 100) / 100,
+      salesBaselineTotal: Math.round(salesBaselineTotal * 100) / 100,
+      salesPacePct:
+        salesPacePct == null ? null : Math.round(salesPacePct * 10) / 10,
+      lastDataHour,
     },
   }
 }

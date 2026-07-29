@@ -119,15 +119,23 @@ interface FinancialSummaryTableProps {
   rows: StoreSummaryRow[]
   totals: StoreSummaryRow
   channelRows: StoreSummaryRow[]
+  /** Stores in lifecycle pre_open — rendered as one "opening soon" line, not 15 zero cells. */
+  preOpenStoreIds?: string[]
+}
+
+function isDormant(row: StoreSummaryRow): boolean {
+  return (row.grossSales ?? 0) === 0 && (row.fulfilledOrders ?? 0) === 0
 }
 
 export function FinancialSummaryTable({
   rows,
   totals,
   channelRows,
+  preOpenStoreIds = [],
 }: FinancialSummaryTableProps) {
   const [search, setSearch] = useState("")
   const [viewBy, setViewBy] = useState<"location" | "channel">("location")
+  const preOpenSet = new Set(preOpenStoreIds)
 
   const displayedRows = viewBy === "location" ? rows : channelRows
   const filteredRows = search
@@ -208,6 +216,11 @@ export function FinancialSummaryTable({
                 key={row.storeId}
                 row={row}
                 linkable={viewBy === "location"}
+                preOpen={
+                  viewBy === "location" &&
+                  preOpenSet.has(row.storeId) &&
+                  isDormant(row)
+                }
               />
             ))}
             <MobileSummaryCard row={totals} linkable={false} isTotal />
@@ -235,45 +248,65 @@ export function FinancialSummaryTable({
           </thead>
 
           <tbody>
-            {filteredRows.map((row) => (
-              <tr
-                key={row.storeId}
-                className="group border-b border-[color:var(--hairline)] transition-colors hover:bg-[var(--row-hover-bg-soft)]"
-              >
-                <td className="sticky left-0 z-10 bg-[rgba(255,253,248,0.98)] px-3 py-2 transition-colors group-hover:bg-[rgba(250,232,232,0.98)]">
-                  <div className="relative flex items-center gap-1">
-                    <span
-                      aria-hidden
-                      className="absolute -left-3 top-[10%] bottom-[10%] w-[3px] origin-center scale-y-0 bg-[color:var(--accent)] transition-transform duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] group-hover:scale-y-100"
-                    />
-                    {viewBy === "location" ? (
-                      <>
-                        <Link
-                          href={`/dashboard/analytics/${row.storeId}`}
-                          className="font-medium text-[color:var(--ink)] underline-offset-2 transition-colors hover:text-[color:var(--accent)] hover:underline"
-                        >
+            {filteredRows.map((row) => {
+              const preOpen =
+                viewBy === "location" &&
+                preOpenSet.has(row.storeId) &&
+                isDormant(row)
+              return (
+                <tr
+                  key={row.storeId}
+                  className="group border-b border-[color:var(--hairline)] transition-colors hover:bg-[var(--row-hover-bg-soft)]"
+                >
+                  <td className="sticky left-0 z-10 bg-[rgba(255,253,248,0.98)] px-3 py-2 transition-colors group-hover:bg-[rgba(250,232,232,0.98)]">
+                    <div className="relative flex items-center gap-1">
+                      <span
+                        aria-hidden
+                        className="absolute -left-3 top-[10%] bottom-[10%] w-[3px] origin-center scale-y-0 bg-[color:var(--accent)] transition-transform duration-200 ease-[cubic-bezier(0.2,0.7,0.2,1)] group-hover:scale-y-100"
+                      />
+                      {viewBy === "location" ? (
+                        <>
+                          <Link
+                            href={`/dashboard/analytics/${row.storeId}`}
+                            className={cn(
+                              "font-medium underline-offset-2 transition-colors hover:text-[color:var(--accent)] hover:underline",
+                              preOpen
+                                ? "text-[color:var(--ink-muted)]"
+                                : "text-[color:var(--ink)]"
+                            )}
+                          >
+                            {row.storeName}
+                          </Link>
+                          <ChevronRight className="h-3.5 w-3.5 text-[color:var(--ink-faint)] opacity-0 transition-opacity group-hover:opacity-100" />
+                        </>
+                      ) : (
+                        <span className="font-medium text-[color:var(--ink)]">
                           {row.storeName}
-                        </Link>
-                        <ChevronRight className="h-3.5 w-3.5 text-[color:var(--ink-faint)] opacity-0 transition-opacity group-hover:opacity-100" />
-                      </>
-                    ) : (
-                      <span className="font-medium text-[color:var(--ink)]">
-                        {row.storeName}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                {COLUMNS.map((col) => (
-                  <td key={col.key} className="px-3 py-2 text-right">
-                    <CellValue
-                      value={row[col.key] as number | null}
-                      negative={col.negative}
-                      format={col.format}
-                    />
+                        </span>
+                      )}
+                    </div>
                   </td>
-                ))}
-              </tr>
-            ))}
+                  {preOpen ? (
+                    <td
+                      colSpan={COLUMNS.length}
+                      className="px-3 py-2 text-left font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-[color:var(--ink-faint)]"
+                    >
+                      Pre-open · no service yet
+                    </td>
+                  ) : (
+                    COLUMNS.map((col) => (
+                      <td key={col.key} className="px-3 py-2 text-right">
+                        <CellValue
+                          value={row[col.key] as number | null}
+                          negative={col.negative}
+                          format={col.format}
+                        />
+                      </td>
+                    ))
+                  )}
+                </tr>
+              )
+            })}
             {filteredRows.length === 0 && (
               <tr>
                 <td
@@ -325,10 +358,12 @@ function MobileSummaryCard({
   row,
   linkable,
   isTotal = false,
+  preOpen = false,
 }: {
   row: StoreSummaryRow
   linkable: boolean
   isTotal?: boolean
+  preOpen?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const gross = row.grossSales ?? 0
@@ -355,6 +390,21 @@ function MobileSummaryCard({
       {isTotal ? "Total" : row.storeName}
     </span>
   )
+
+  if (preOpen) {
+    return (
+      <li>
+        <div className="flex w-full items-center gap-3 px-4 py-3">
+          <span className="flex flex-1 min-w-0 flex-col gap-0.5">
+            <span className="truncate text-[color:var(--ink-muted)]">{nameEl}</span>
+            <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-[color:var(--ink-faint)]">
+              Pre-open · no service yet
+            </span>
+          </span>
+        </div>
+      </li>
+    )
+  }
 
   return (
     <li className={cn(isTotal && "bg-[rgba(244,236,223,0.55)]")}>

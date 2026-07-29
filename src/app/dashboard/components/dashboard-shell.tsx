@@ -11,6 +11,7 @@ import { HeroKpiSkeleton } from "./skeletons/hero-kpi-skeleton"
 import { InvoiceSnapshotSkeleton } from "./skeletons/invoice-snapshot-skeleton"
 import { PnLSummarySkeleton } from "./skeletons/pnl-summary-skeleton"
 import { HeroKpisSection } from "./sections/hero-kpis-section"
+import { DispatchesStrip } from "./sections/dispatches-strip"
 import { PnLSummarySection } from "./sections/pnl-summary-section"
 import { HourlyOrdersSection } from "./sections/hourly-orders-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
@@ -37,10 +38,13 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
       />
 
       <section className="editorial-masthead-slim dock-in dock-in-1">
-        <div className="flex items-baseline justify-between gap-4 mb-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 mb-5">
           <div className="editorial-section-label">
             The daily report · Vol. 04
           </div>
+          <Suspense fallback={null}>
+            <DispatchesStrip otterPromise={otterPromise} />
+          </Suspense>
         </div>
         <Suspense fallback={<HeroKpiSkeleton />}>
           <HeroKpisSection range={range} otterPromise={otterPromise} />
