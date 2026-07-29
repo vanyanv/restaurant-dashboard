@@ -680,27 +680,223 @@ git commit -m "feat(eval): certify ingredient auto-match thresholds on full gold
 
 ---
 
-## Tasks 8–13 (post-gate)
+## Tasks 8–13 (post-gate build)
 
-Specified at interface level. Expand into bite-sized steps once Task 7 reports, because the winning arm and thresholds change their content.
+Expanded 2026-07-29, after Tasks 1-7 certified the configuration. **Two things the gate changed, which govern everything below:**
+
+- **Auto-create is off.** `AUTO_CREATE_ENABLED = false` in `ingredient-match-scoring.ts`. A `new` classification means "no confident match — send to a human", never "create an ingredient". Task 9 must not contain a creation path at all; do not write one behind the flag.
+- **The ladder now has an LLM rung.** `gpt-5.4-nano` at `LLM_ACCEPT = 0.78` adjudicates the ambiguous band. It must fail safe: any error, truncation, or low-confidence answer leaves the case for a human.
+
+Certified constants (do not re-derive; import from `THRESHOLDS`): `HIGH=0.72`, `MARGIN=0.01`, `FLOOR=0.48`, `LLM_ACCEPT=0.78`.
+
+---
 
 ### Task 8: `IngredientMatchDecision` model
-Schema per the spec's Data model section. `prisma db push` + `prisma/manual-migrations/2026-07-28_ingredient-auto-match.sql`. Never `migrate dev`.
+
+**Files:**
+- Modify: `prisma/schema.prisma`
+- Create: `prisma/manual-migrations/2026-07-29_ingredient-auto-match.sql`
+
+**Interfaces:**
+- Produces: the `IngredientMatchDecision` model consumed by Tasks 9, 10, 12.
+
+- [ ] **Step 1: Add the model to `prisma/schema.prisma`**
+
+```prisma
+/// Audit + undo record for one automatic ingredient match. Written by
+/// `src/lib/ingredient-auto-match.ts`; reversed by `undoAutoMatch`. An UNDONE
+/// row is also a permanent suppression — see Task 10.
+model IngredientMatchDecision {
+  id          String  @id @default(cuid())
+  accountId   String
+  /// `${normalizedVendor}::name::${lowercased productName}` — the same key the
+  /// evaluation used, NOT the review inbox's sku-based key.
+  groupKey    String
+  vendorName  String
+  sku         String?
+  productName String
+
+  /// auto-exact | auto-vector | auto-llm
+  layer       String
+  confidence  Float
+  topScore    Float?
+  margin      Float?
+  reasoning   String?
+  model       String?
+  /// Runner-ups considered: [{ id, name, score }] — shown in the undo UI.
+  candidates  Json?
+
+  canonicalIngredientId String
+  /// Always false while AUTO_CREATE_ENABLED is off. Retained so undo stays
+  /// correct if creation is ever enabled behind a future decision.
+  createdCanonical      Boolean  @default(false)
+  linkedLineItemIds     String[]
+  linkedLineItemCount   Int      @default(0)
+
+  /// APPLIED | UNDONE | SHADOW
+  status     String    @default("APPLIED")
+  createdAt  DateTime  @default(now())
+  undoneAt   DateTime?
+  undoneById String?
+
+  account             Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, status, createdAt])
+  @@index([accountId, groupKey])
+}
+```
+
+Add the back-relations on `Account` and `CanonicalIngredient`.
+
+- [ ] **Step 2: Push and hand-write the migration**
+
+Run: `npx prisma db push` then `npx prisma generate`.
+**Never `prisma migrate dev`** — it would reset the production Neon database.
+
+Write the equivalent SQL to `prisma/manual-migrations/2026-07-29_ingredient-auto-match.sql` (`CREATE TABLE` plus both indexes plus the two foreign keys), following the shape of `prisma/manual-migrations/2026-07-26_recipe-mapping-proposals.sql`.
+
+- [ ] **Step 3: Verify**
+
+Run: `npx tsc --noEmit` and confirm the generated client exposes `prisma.ingredientMatchDecision`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add prisma/schema.prisma prisma/manual-migrations/2026-07-29_ingredient-auto-match.sql
+git commit -m "feat(ingredients): IngredientMatchDecision audit model"
+```
+
+---
 
 ### Task 9: Orchestration core — `src/lib/ingredient-auto-match.ts`
-`autoResolveUnmatchedLines(scope, invoiceIds)` running L1→L5. Contract tests with mocked Prisma asserting: nothing auto-links below threshold; a near-tie never auto-links; auto-create fires only when every candidate is below `FLOOR`; pack metadata from `getLineItemBaseQty` stays null when the line lacks it; an `UNDONE` pairing is never re-linked.
+
+**Files:**
+- Create: `src/lib/ingredient-auto-match.ts`
+- Test: `tests/lib/ingredient-auto-match.test.ts`
+
+**Interfaces:**
+- Consumes: `classifyCandidates`, `buildMatchQueryText`, `THRESHOLDS`, `AUTO_CREATE_ENABLED` (Task 2/7); `adjudicate` (Task 5/7); `embed`, `toVectorLiteral`; `normalizeVendorName`; `recomputeCanonicalCost`; `syncCanonicalEmbedding` (Task 1)
+- Produces: `autoResolveUnmatchedLines(scope: { accountId: string; ownerId: string | null }, invoiceIds: string[], opts?: { mode?: "shadow" | "on" }): Promise<AutoMatchResult>`
+
+```ts
+export type AutoMatchResult = {
+  scanned: number
+  autoExact: number
+  autoVector: number
+  autoLlm: number
+  leftForReview: number
+  costsUpdated: number
+  llmCalls: number
+}
+```
+
+**The ladder, in order. Each group exits at the first rung that resolves it.**
+
+Operate on *groups*, not raw lines: group unmatched line items by `${normalizeVendorName(vendor)}::name::${productName.trim().toLowerCase()}` — the same key the evaluation measured. One decision links every line in its group.
+
+- **L1 — cross-scope exact name.** Normalized product name equal to a canonical's name, or to an `IngredientAlias.rawName` **at any store** (today's matcher only reads aliases for the invoice's own store). Free. → `layer: "auto-exact"`, confidence 0.99.
+- **L2 — vector.** `embedBatch` the group query texts; cosine against `CanonicalIngredientEmbedding` scoped to `accountId`, `LIMIT 10`. Feed the ranked candidates to `classifyCandidates`. `kind: "auto"` → `layer: "auto-vector"`.
+- **L3 — LLM adjudication.** Every group `classifyCandidates` returned `ambiguous` **or** `new` for goes into one `adjudicate()` call with its own top-5 candidates. Accept a draft only when **all** hold: `confidence >= THRESHOLDS.LLM_ACCEPT`; `matchName` resolves to a canonical **that was in that group's own shortlist**; the pairing is not suppressed (below). → `layer: "auto-llm"`. Anything else is left for review.
+- **No L4.** `AUTO_CREATE_ENABLED` is `false`. A `new` classification routes to review exactly like `ambiguous`. Assert the flag at the top of the function and leave a comment; do not branch on it.
+- **L5 — write-back.** After linking, call `recomputeCanonicalCost` once per touched canonical (respects `costLocked` and the existing spike guard).
+
+**Suppression, checked before any auto-link:** load `IngredientMatchDecision` rows for this account with `status: "UNDONE"`. Never re-link a `(groupKey, canonicalIngredientId)` pair that appears among them.
+
+**Shadow mode:** when `opts.mode === "shadow"`, write decisions with `status: "SHADOW"` and **make no other write** — no line-item updates, no `IngredientSkuMatch`/`IngredientAlias` upserts, no cost recompute.
+
+**Per resolved group, in one transaction:** update the group's line items (`canonicalIngredientId`, `matchSource: layer`, `matchedAt`); upsert the learned `IngredientSkuMatch` (when the sample line has a sku) or `IngredientAlias` (when it doesn't and the invoice has a `storeId`), mirroring `confirmSkuMatch`; create the `IngredientMatchDecision` with `linkedLineItemIds` populated.
+
+- [ ] **Step 1: Write the failing contract tests**
+
+`vi.mock("@/lib/prisma", ...)` per house style, plus mocks for `@/lib/chat/embeddings` and `@/lib/ingredient-match-llm`. Assert:
+
+1. a group whose top score clears `HIGH` with margin ≥ `MARGIN` links with `matchSource: "auto-vector"`
+2. a near-tie (margin below `MARGIN`) never auto-links, at any score
+3. every candidate below `FLOOR` leaves the group for review and **creates no `CanonicalIngredient`** — assert `prisma.canonicalIngredient.create` was never called
+4. an LLM draft at confidence ≥ `LLM_ACCEPT` naming a canonical **in that group's shortlist** links with `matchSource: "auto-llm"`
+5. an LLM draft naming a canonical **not** in that group's shortlist is rejected and left for review
+6. an LLM draft below `LLM_ACCEPT` is left for review
+7. `adjudicate` returning `[]` (its failure mode) leaves every ambiguous group for review and throws nothing
+8. a `(groupKey, canonicalIngredientId)` pair with an `UNDONE` decision is never re-linked
+9. `mode: "shadow"` writes `status: "SHADOW"` decisions and performs no line-item update, no sku/alias upsert, and no cost recompute
+10. one decision's `linkedLineItemIds` covers every line in its group
+
+- [ ] **Step 2: Run, confirm failure. Step 3: Implement. Step 4: Run, confirm pass.**
+
+Run: `npm test -- ingredient-auto-match`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/lib/ingredient-auto-match.ts tests/lib/ingredient-auto-match.test.ts
+git commit -m "feat(ingredients): auto-match ladder orchestration, auto-create disabled"
+```
+
+---
 
 ### Task 10: Undo — `src/app/actions/ingredient-auto-match-actions.ts`
-`undoAutoMatch` per the spec's five ordered steps, ending in permanent suppression. Test the full link → undo → re-run cycle, asserting COGS reverts and the suppression holds.
+
+**Files:**
+- Create: `src/app/actions/ingredient-auto-match-actions.ts`
+- Test: add to `tests/lib/ingredient-auto-match.test.ts`
+
+**Interfaces:**
+- Produces: `listRecentAutoMatches(days?: number)`, `undoAutoMatch(decisionId: string)`
+
+`undoAutoMatch`, in this order:
+
+1. Unlink exactly `linkedLineItemIds`, **only** rows still carrying an `auto-*` `matchSource` — so a manual confirm made afterwards is never clobbered.
+2. Delete the `IngredientSkuMatch` / `IngredientAlias` this decision learned.
+3. `createdCanonical` is always false today; if true, delete the canonical and its embedding only when nothing else references it (no `RecipeIngredient`, no `StockCountLine`, no line items from other decisions) — otherwise keep it, unlink only, and report why.
+4. `recomputeCanonicalCost` on the affected canonical so COGS reverts.
+5. Set `status: "UNDONE"`, `undoneAt`, `undoneById`. **This row is now a permanent suppression** — Task 9 reads it and never re-links that pairing.
+
+- [ ] **Step 1: Write the failing tests** — a full link → undo → re-run cycle asserting: line items unlinked; the learned sku/alias row gone; `recomputeCanonicalCost` called; status `UNDONE`; and a second `autoResolveUnmatchedLines` run does **not** re-link. Plus: a line manually re-confirmed after the auto-link is left untouched by undo.
+- [ ] **Step 2: Run, confirm failure. Step 3: Implement. Step 4: Run, confirm pass. Step 5: Commit.**
+
+---
 
 ### Task 11: Sync integration
-Phase 5b in `src/app/api/invoices/sync/route.ts:531`, own try/catch, same `emit()` contract. Behind `INGREDIENT_AUTO_MATCH=off|shadow|on`, defaulting to `off`.
+
+**Files:**
+- Modify: `src/app/api/invoices/sync/route.ts` (Phase 5, around line 531)
+
+Add **Phase 5b** immediately after `matchNewLineItems`, inside its own `try/catch` — auto-matching must never fail an invoice sync. Use the same `emit()` progress contract as the surrounding phases.
+
+Gate on `INGREDIENT_AUTO_MATCH`: `off` (default) → skip entirely; `shadow` → `mode: "shadow"`; `on` → live. Log the returned counts the way Phase 5 logs its own.
+
+- [ ] **Step 1: Implement.** - [ ] **Step 2:** `npx tsc --noEmit` and `npm test`. - [ ] **Step 3: Commit.**
+
+---
 
 ### Task 12: Activity strip
-`auto-match-activity.tsx` above `<ReviewInbox>`, editorial system per Global Constraints. Expandable rows showing reasoning and scored runner-ups.
+
+**Files:**
+- Create: `src/app/dashboard/ingredients/components/auto-match-activity.tsx`
+- Modify: `src/app/dashboard/ingredients/components/ingredients-shell.tsx` (render above `<ReviewInbox>`)
+
+**Read `docs/frontend-patterns.md` first.** Editorial tokens only — `--ink`, `--ink-muted`, `--ink-faint`, `--paper`, `--hairline`, `--hairline-bold`, `--accent`. No generic Tailwind palette colours anywhere on this route.
+
+- `.inv-panel` frame; rows use the `.inv-row` hover pattern (red 4px `scaleY(0→1)` accent bar from the left, `rgba(220,38,38,0.045)` wash)
+- Product name in Fraunces italic; vendor · SKU · spend in JetBrains Mono caption; **confidence in DM Sans 500 with `tabular-nums lining-nums`**
+- Layer badge distinguishes `auto-llm` from `auto-vector`/`auto-exact`
+- Expanding a row reveals the reasoning and the scored runner-ups, so a wrong pick is diagnosable rather than merely reversible
+- 7-day window, first 5 rows, then the same `Show N more` control `review-inbox.tsx` already uses
+- Undo button per row, calling `undoAutoMatch`
+
+- [ ] **Step 1: Implement.** - [ ] **Step 2:** verify against the patterns doc. - [ ] **Step 3: Commit.**
+
+---
 
 ### Task 13: Review-inbox pre-fill
-Sub-threshold suggestions pre-filled into the existing `MatchPickerSheet`, turning three clicks into one.
+
+**Files:**
+- Modify: `src/app/actions/ingredient-match-actions.ts` (extend `UnmatchedLineItemGroup` with an optional suggestion), `src/app/dashboard/ingredients/components/review-inbox.tsx`, `match-picker-sheet.tsx`
+
+Carry the best sub-threshold candidate (name, id, score, and the adjudicator's reasoning when there was one) onto each review card, and pre-select it in `MatchPickerSheet` so confirming is one click instead of three. The existing token-overlap suggestions stay as the fallback when no vector candidate exists.
+
+- [ ] **Step 1: Implement.** - [ ] **Step 2:** `npm test` + `npx tsc --noEmit`. - [ ] **Step 3: Commit.**
 
 ---
 
