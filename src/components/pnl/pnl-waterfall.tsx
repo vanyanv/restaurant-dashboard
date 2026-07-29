@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { DeltaStamp } from "./delta-stamp"
 
 /**
  * Horizontal waterfall: "where the money goes" from Gross Sales down to
@@ -14,6 +15,11 @@ export interface PnLWaterfallProps {
   /** Oldest → newest. First step should be `total` (e.g. Gross), last step
    *  should also be `total` (e.g. Bottom Line). Middle steps are `subtract`. */
   steps: WaterfallStep[]
+  /** Same six steps computed for the previous equal-length window — when
+   *  present, each column shows a small Δ stamp under its amount. */
+  priorSteps?: WaterfallStep[]
+  /** Caption for the prior window, e.g. "vs prior 56 days". */
+  priorNote?: string
   className?: string
 }
 
@@ -24,7 +30,7 @@ function formatDollar(v: number): string {
   return v < 0 ? `−$${str}` : `$${str}`
 }
 
-export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
+export function PnLWaterfall({ steps, priorSteps, priorNote, className }: PnLWaterfallProps) {
   if (!steps.length) return null
 
   // Running total as each step lands. For `total` kind, the value IS the
@@ -64,6 +70,9 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
     <section className={cn("pnl-waterfall", className)} aria-label="P&L waterfall">
       <div className="pnl-waterfall__header">
         <span className="editorial-section-label">Where the money goes</span>
+        {priorSteps && priorNote ? (
+          <span className="pnl-waterfall__priorNote font-mono">{priorNote}</span>
+        ) : null}
         <span className="pnl-waterfall__summary font-mono">
           {formatDollar(grossValue)} <span className="pnl-waterfall__summaryArrow">→</span>{" "}
           <strong>{formatDollar(bottomValue)}</strong>
@@ -120,6 +129,21 @@ export function PnLWaterfall({ steps, className }: PnLWaterfallProps) {
                 {s.kind === "subtract" ? "−" : ""}
                 {formatDollar(Math.abs(s.value)).replace(/^−/, "")}
               </div>
+              {priorSteps?.[i] ? (
+                <div className="pnl-waterfall__delta">
+                  <DeltaStamp
+                    current={s.kind === "subtract" ? Math.abs(s.value) : s.value}
+                    prior={
+                      priorSteps[i].kind === "subtract"
+                        ? Math.abs(priorSteps[i].value)
+                        : priorSteps[i].value
+                    }
+                    format="dollars"
+                    costSemantics={s.kind === "subtract"}
+                    size="sm"
+                  />
+                </div>
+              ) : null}
               <div className="pnl-waterfall__plot" aria-hidden>
                 {rawFloor < 0 ? (
                   <div

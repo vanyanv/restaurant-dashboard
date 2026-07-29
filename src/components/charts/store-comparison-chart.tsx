@@ -8,6 +8,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
+import { formatCompact } from "@/lib/format"
 
 interface StoreComparisonChartProps {
   data: Array<{
@@ -28,6 +29,8 @@ export function StoreComparisonChart({
 }: StoreComparisonChartProps) {
   const isMobile = useIsMobile()
 
+  // Chart vocabulary: solid ink = gross, muted ink = net. Red is reserved
+  // for flagged/over-target state — never a routine data series.
   const chartConfig = {
     grossSales: {
       label: "Gross Sales",
@@ -35,7 +38,7 @@ export function StoreComparisonChart({
     },
     netSales: {
       label: "Net Sales",
-      color: "var(--accent)",
+      color: "var(--ink-muted)",
     },
   }
 
@@ -77,7 +80,8 @@ export function StoreComparisonChart({
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={(value) => formatCurrency(value)}
+            tick={{ fontSize: 10 }}
+            tickFormatter={formatCompact}
           />
           <YAxis
             type="category"
@@ -85,8 +89,8 @@ export function StoreComparisonChart({
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            width={isMobile ? 80 : 120}
-            tick={{ fontSize: isMobile ? 11 : 14 }}
+            width={isMobile ? 90 : 150}
+            tick={{ fontSize: isMobile ? 10 : 12 }}
           />
           <ChartTooltip
             cursor={false}

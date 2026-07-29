@@ -21,6 +21,9 @@ export interface PnLLeagueTableProps {
   className?: string
   /** Target thresholds for the bullet meters. Tuned for a QSR / slider shop. */
   targets?: { cogs: number; labor: number; rent: number }
+  /** Stores still in build-out — rendered as one muted line, never ranked,
+   *  never stamped Watch, never nagged about fixed costs. */
+  preOpenStoreIds?: string[]
 }
 
 function formatDollar(v: number): string {
@@ -39,25 +42,38 @@ export function PnLLeagueTable({
   rows,
   className,
   targets = { cogs: 0.22, labor: 0.28, rent: 0.12 },
+  preOpenStoreIds = [],
 }: PnLLeagueTableProps) {
   if (rows.length === 0) {
     return null
   }
 
-  // Rank by margin to stamp best/worst (only meaningful with 2+ rows)
-  const ranked = [...rows]
-    .map((r, originalIndex) => ({ ...r, originalIndex }))
-    .sort((a, b) => b.marginPct - a.marginPct)
-  const best = rows.length >= 2 ? ranked[0].storeId : null
-  const worst = rows.length >= 2 ? ranked[ranked.length - 1].storeId : null
+  const preOpenSet = new Set(preOpenStoreIds)
+  const operational = rows.filter((r) => !preOpenSet.has(r.storeId))
+  const preOpen = rows.filter((r) => preOpenSet.has(r.storeId))
+
+  // Rank by margin to stamp best/worst — only among operational stores that
+  // actually traded. A store with no service yet is not "Watch" material.
+  const rankable = operational.filter((r) => r.grossSales > 0)
+  const ranked = [...rankable].sort((a, b) => b.marginPct - a.marginPct)
+  const best = rankable.length >= 2 ? ranked[0].storeId : null
+  const worst = rankable.length >= 2 ? ranked[ranked.length - 1].storeId : null
+
+  const scopeParts = [
+    `${operational.length} operational`,
+    preOpen.length > 0 ? `${preOpen.length} pre-open` : null,
+    rankable.length >= 2 ? "ranked by margin" : null,
+  ].filter(Boolean)
 
   return (
     <section className={cn("pnl-league", className)} aria-label="Store league">
       <div className="pnl-league__header">
         <span className="editorial-section-label">Store League</span>
-        <span className="pnl-league__scope">
-          {rows.length} location{rows.length === 1 ? "" : "s"} · ranked by margin
+        <span className="pnl-league__legend font-mono">
+          targets · food {Math.round(targets.cogs * 100)}% · labor{" "}
+          {Math.round(targets.labor * 100)}% · rent {Math.round(targets.rent * 100)}%
         </span>
+        <span className="pnl-league__scope">{scopeParts.join(" · ")}</span>
       </div>
 
       <div className="pnl-league__grid" role="table">
@@ -85,7 +101,7 @@ export function PnLLeagueTable({
           </div>
         </div>
 
-        {rows.map((r) => {
+        {operational.map((r) => {
           const stamp =
             r.storeId === best ? "best" : r.storeId === worst ? "worst" : null
           return (
@@ -161,6 +177,23 @@ export function PnLLeagueTable({
             </Link>
           )
         })}
+
+        {preOpen.map((r) => (
+          <div
+            key={r.storeId}
+            className="pnl-league__row pnl-league__row--preopen"
+            role="row"
+          >
+            <div className="pnl-league__cell pnl-league__cell--name" role="cell">
+              <span className="pnl-league__name pnl-league__name--preopen font-display">
+                {r.storeName}
+              </span>
+            </div>
+            <div className="pnl-league__cell pnl-league__preopenNote" role="cell">
+              <span className="font-mono">Pre-open · no service yet</span>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   )

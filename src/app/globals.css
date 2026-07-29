@@ -60,11 +60,14 @@
   --muted: 220 14% 96%;               /* Light gray: #F9FAFB */
   --muted-foreground: 220 9% 46%;     /* Medium gray: #6B7280 */
   
-  /* Accent - Proofmark red (matches editorial --accent / shadcn --primary).
-     Was orange; orange was leaking into Toggle / DropdownMenu / Select active
-     states and breaking the "earn the red" rule. State is red, period. */
-  --accent: 0 72% 51%;                /* Proofmark red: #DC2626 */
-  --accent-foreground: 0 0% 100%;     /* White text on red */
+  /* Accent — the shadcn INTERACTION WASH (outline/ghost button hover, select
+     focus, command selection, calendar range-middle). Was proofmark red,
+     which made every outline button flash solid red+white on hover — the
+     loudest possible violation of "earn the red" on a non-state. A hover is
+     not an alarm: warm paper wash + ink. Red stays with --primary and the
+     editorial var(--accent), which deliberate state styling uses directly. */
+  --accent: 36 40% 90%;               /* Warm paper wash: ~#F2E9DA */
+  --accent-foreground: 24 12% 9%;     /* Ink */
   
   /* Destructive */
   --destructive: 0 84% 60%;           /* Bright red: #EF4444 */
@@ -124,9 +127,9 @@
   --muted: 0 0% 12%;                   /* Dark muted: #1F1F1F */
   --muted-foreground: 0 0% 63%;        /* Medium gray text: #A1A1A1 */
   
-  /* Accent - Brighter orange for dark mode */
-  --accent: 0 76% 60%;                 /* Bright red: #E53E3E (matches dark --primary) */
-  --accent-foreground: 0 0% 100%;      /* White text */
+  /* Accent — interaction wash, dark: subtle warm lift, not red (see light). */
+  --accent: 24 8% 18%;                 /* Warm dark wash: ~#332e2a */
+  --accent-foreground: 40 30% 92%;     /* Warm off-white */
   
   /* Destructive */
   --destructive: 0 88% 65%;            /* Bright red: #F87171 */
