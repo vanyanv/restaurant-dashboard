@@ -2,9 +2,8 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { RefreshCw } from "lucide-react"
-import { toast } from "sonner"
+import { useQuery } from "@tanstack/react-query"
+import { addDays, differenceInCalendarDays, format } from "date-fns"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
@@ -12,20 +11,10 @@ import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
 import { PnLKpiStrip } from "./pnl-kpi-strip"
 import { PnLStatement } from "./pnl-statement"
-import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
-import {
-  TOTAL_SALES_CODE,
-  UBER_COMMISSION_CODE,
-  DOORDASH_COMMISSION_CODE,
-  COGS_CODE,
-  LABOR_CODE,
-  RENT_CODE,
-  CLEANING_CODE,
-  TOWELS_CODE,
-  AFTER_LABOR_RENT_CODE,
-  CUSTOM_FIXED_CODE_PREFIX,
-} from "@/lib/pnl"
-import { getStorePnL, recomputeCogsForStore } from "@/app/actions/store-actions"
+import { PnLWaterfall } from "./pnl-waterfall"
+import { buildWaterfallSteps } from "./waterfall-steps"
+import type { Period, PnLRow } from "@/lib/pnl"
+import { getStorePnL } from "@/app/actions/store-actions"
 
 export interface PnLPageClientProps {
   storeId: string
@@ -33,9 +22,37 @@ export interface PnLPageClientProps {
   allStores: Array<{ id: string; name: string }>
 }
 
+/** Serialize the statement exactly as displayed: accounts down, periods
+ *  across, plus a range-total column. Raw numbers, no formatting — this is
+ *  for the accountant's spreadsheet, not for reading. */
+function exportStatementCsv(storeName: string, periods: Period[], rows: PnLRow[]) {
+  const quote = (s: string) => `"${s.replace(/"/g, '""')}"`
+  const header = ["Account", ...periods.map((p) => p.label), "Total"]
+  const lines = [header.map(quote).join(",")]
+  for (const row of rows) {
+    const total = row.values.reduce((a, b) => a + (b ?? 0), 0)
+    lines.push(
+      [
+        quote(row.label),
+        ...row.values.map((v) => (v == null ? "" : v.toFixed(2))),
+        total.toFixed(2),
+      ].join(",")
+    )
+  }
+  const start = periods[0]?.startDate.toISOString().slice(0, 10) ?? "start"
+  const end = periods[periods.length - 1]?.endDate.toISOString().slice(0, 10) ?? "end"
+  const slug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `pnl-${slug}-${start}-${end}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientProps) {
   const [state, setState] = useState<PnLRangeState>(defaultPnLRangeState)
-  const queryClient = useQueryClient()
 
   const query = useQuery({
     queryKey: [
@@ -57,26 +74,37 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
     },
   })
 
-  const recomputeMutation = useMutation({
-    mutationFn: async () => {
-      const result = await recomputeCogsForStore({ storeId, lookbackDays: 90 })
+  // Previous equal-length window — feeds the waterfall and KPI Δ stamps.
+  const rangeDays = differenceInCalendarDays(state.endDate, state.startDate) + 1
+  const priorEnd = addDays(state.startDate, -1)
+  const priorStart = addDays(priorEnd, -(rangeDays - 1))
+  const priorQuery = useQuery({
+    queryKey: [
+      "pnl",
+      storeId,
+      priorStart.toISOString(),
+      priorEnd.toISOString(),
+      state.granularity,
+    ],
+    queryFn: async () => {
+      const result = await getStorePnL({
+        storeId,
+        startDate: priorStart,
+        endDate: priorEnd,
+        granularity: state.granularity,
+      })
       if ("error" in result) throw new Error(result.error)
       return result
-    },
-    onSuccess: (result) => {
-      toast.success(
-        `Recomputed COGS: ${result.daysProcessed} day(s), ` +
-          `${result.rowsUpserted} upserted, ${result.rowsDeleted} cleaned`
-      )
-      void queryClient.invalidateQueries({ queryKey: ["pnl", storeId] })
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to recompute COGS")
     },
   })
 
   const configureHref = `/dashboard/stores/${storeId}/edit`
   const data = query.data
+  // A prior window with no trade would render every Δ as a giant gain —
+  // suppress the stamps until the comparison means something.
+  const prior = priorQuery.data
+  const priorHasTrade = (prior?.kpis.grossSales ?? 0) > 0
+  const priorNote = `Δ vs ${format(priorStart, "MMM d")} – ${format(priorEnd, "MMM d")}`
 
   return (
     <div className="flex flex-col h-full">
@@ -133,46 +161,25 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
               // Show the full selected range — sum across all periods, not just
               // the latest one. Matches the KPI strip below and the Statement
               // totals on the right-most column.
-              const sumRow = (code: string) => {
-                const row = data.rows.find((r) => r.code === code)
-                if (!row) return 0
-                return row.values.reduce((a, b) => a + (b ?? 0), 0)
-              }
-              const gross = sumRow(TOTAL_SALES_CODE)
-              // Commissions stored as negatives — convert to positive amounts here.
-              const commissions = Math.abs(
-                sumRow(UBER_COMMISSION_CODE) + sumRow(DOORDASH_COMMISSION_CODE)
+              const steps = buildWaterfallSteps(data.rows)
+              const priorSteps =
+                priorHasTrade && prior ? buildWaterfallSteps(prior.rows) : undefined
+              return (
+                <PnLWaterfall
+                  steps={steps}
+                  priorSteps={priorSteps}
+                  priorNote={priorSteps ? priorNote : undefined}
+                />
               )
-              const cogs = sumRow(COGS_CODE)
-              const labor = sumRow(LABOR_CODE)
-              const rent = sumRow(RENT_CODE)
-              const cleaning = sumRow(CLEANING_CODE)
-              const towels = sumRow(TOWELS_CODE)
-              // Owner-managed custom fixed expenses (code FX_*) — stored negative,
-              // same sign convention as rent/cleaning/towels.
-              const customFixed = data.rows
-                .filter((r) => r.code.startsWith(CUSTOM_FIXED_CODE_PREFIX))
-                .reduce((a, r) => a + r.values.reduce((x, y) => x + (y ?? 0), 0), 0)
-              const bottom = sumRow(AFTER_LABOR_RENT_CODE)
-
-              const steps: WaterfallStep[] = [
-                { kind: "total", label: "Gross Sales", value: gross },
-                { kind: "subtract", label: "3P Commissions", value: commissions },
-                { kind: "subtract", label: "COGS", value: cogs },
-                { kind: "subtract", label: "Labor", value: labor },
-                {
-                  kind: "subtract",
-                  label: "Rent + Fixed",
-                  value: rent + cleaning + towels + customFixed,
-                },
-                { kind: "total", label: "Bottom Line", value: bottom },
-              ]
-              return <PnLWaterfall steps={steps} />
             })()}
 
             <PnLKpiStrip
               kpis={[
-                { label: "Gross Sales", value: data.kpis.grossSales },
+                {
+                  label: "Gross Sales",
+                  value: data.kpis.grossSales,
+                  prior: priorHasTrade ? prior?.kpis.grossSales : null,
+                },
                 {
                   label: "Net After Commissions",
                   value: data.kpis.netAfterCommissions,
@@ -180,6 +187,7 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                     data.kpis.grossSales === 0
                       ? 0
                       : data.kpis.netAfterCommissions / data.kpis.grossSales,
+                  prior: priorHasTrade ? prior?.kpis.netAfterCommissions : null,
                 },
                 {
                   label: "Fixed Costs",
@@ -189,35 +197,24 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
                       ? 0
                       : data.kpis.fixedCosts / data.kpis.grossSales,
                   costStyle: true,
+                  prior: priorHasTrade ? prior?.kpis.fixedCosts : null,
                 },
                 {
                   label: "Bottom Line",
                   value: data.kpis.bottomLine,
                   percentOfSales: data.kpis.marginPct,
+                  prior: priorHasTrade ? prior?.kpis.bottomLine : null,
                 },
               ]}
             />
 
             {data.cogs.refillFailedPeriodIndexes.length > 0 && (
               <div className="rounded-xs border border-(--hairline-bold) bg-(--accent-bg) px-4 py-3 text-sm text-(--accent-dark)">
-                <div className="flex items-baseline justify-between gap-4">
-                  <div>
-                    <strong>COGS not yet computed for {data.cogs.refillFailedPeriodIndexes.length} period{data.cogs.refillFailedPeriodIndexes.length === 1 ? "" : "s"}.</strong>{" "}
-                    Sales exist but DailyCogsItem is empty — the scheduled
-                    refresh hasn&apos;t caught up since the last data change.
-                    Click Recompute to fill now, or wait up to 15 min for the
-                    next sweep.
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 shrink-0 rounded-xs border-(--hairline-bold) bg-(--paper) text-xs text-(--accent-dark) hover:bg-(--accent-bg)"
-                    onClick={() => recomputeMutation.mutate()}
-                    disabled={recomputeMutation.isPending}
-                  >
-                    {recomputeMutation.isPending ? "Recomputing…" : "Recompute now"}
-                  </Button>
-                </div>
+                <strong>COGS not yet computed for {data.cogs.refillFailedPeriodIndexes.length} period{data.cogs.refillFailedPeriodIndexes.length === 1 ? "" : "s"}.</strong>{" "}
+                Sales exist but the cost rows haven&apos;t landed — the
+                scheduled refresh fills this automatically within ~15 minutes
+                of a data change. Margins for those periods read high until
+                then.
               </div>
             )}
 
@@ -272,32 +269,29 @@ export function PnLPageClient({ storeId, storeName, allStores }: PnLPageClientPr
               rows={data.rows}
               periods={data.periods}
               title="The Statement"
+              actions={
+                <div className="flex items-center gap-2">
+                  <Link href={`/dashboard/analytics/${storeId}`}>
+                    <Button variant="outline" size="sm" className="h-8 text-xs">
+                      View analytics
+                    </Button>
+                  </Link>
+                  <Link href={configureHref}>
+                    <Button variant="outline" size="sm" className="h-8 text-xs">
+                      Edit fixed costs
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => exportStatementCsv(storeName, data.periods, data.rows)}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
+              }
             />
-
-            <div className="flex items-center gap-2">
-              <Link href={`/dashboard/analytics/${storeId}`}>
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  View analytics
-                </Button>
-              </Link>
-              <Link href={configureHref}>
-                <Button variant="outline" size="sm" className="h-8 text-xs">
-                  Edit fixed costs
-                </Button>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => recomputeMutation.mutate()}
-                disabled={recomputeMutation.isPending}
-              >
-                <RefreshCw
-                  className={`mr-1 h-3 w-3 ${recomputeMutation.isPending ? "animate-spin" : ""}`}
-                />
-                {recomputeMutation.isPending ? "Recomputing…" : "Recompute COGS"}
-              </Button>
-            </div>
           </>
         ) : null}
       </div>

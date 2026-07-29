@@ -15,7 +15,7 @@ export default async function AllStoresPnLPage() {
 
   const stores = await prisma.store.findMany({
     where: { accountId: session.user.accountId, isActive: true },
-    select: { id: true, name: true },
+    select: { id: true, name: true, lifecycleStage: true },
     orderBy: { name: "asc" },
   })
 

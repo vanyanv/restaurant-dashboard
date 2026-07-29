@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { DeltaStamp } from "./delta-stamp"
 
 function formatDollar(v: number): string {
   const abs = Math.abs(v)
@@ -18,6 +19,10 @@ export interface PnLKpi {
   value: number
   percentOfSales?: number
   costStyle?: boolean
+  /** Same figure over the previous equal-length window — renders a Δ stamp. */
+  prior?: number | null
+  /** Caption after the Δ stamp, e.g. "vs prior". */
+  priorSuffix?: string
 }
 
 export interface PnLKpiStripProps {
@@ -29,14 +34,11 @@ export function PnLKpiStrip({ kpis, className }: PnLKpiStripProps) {
   return (
     <div className={cn("grid gap-3 grid-cols-2 lg:grid-cols-4", className)}>
       {kpis.map((k) => {
-        const positive = k.value >= 0
-        const toneClass = k.costStyle
-          ? positive
-            ? "text-(--subtract)"
-            : "text-(--ink)"
-          : positive
-          ? "text-(--ink)"
-          : "text-(--subtract)"
+        // Red is earned: a cost being a cost is not an alarm. Only a
+        // NEGATIVE headline figure (losing bottom line) reads red — costStyle
+        // now only flips the Δ stamp's good/bad direction.
+        const toneClass =
+          !k.costStyle && k.value < 0 ? "text-(--subtract)" : "text-(--ink)"
 
         return (
           <section key={k.label} className="inv-panel inv-panel--flush">
@@ -50,6 +52,18 @@ export function PnLKpiStrip({ kpis, className }: PnLKpiStripProps) {
               {k.percentOfSales != null && (
                 <div className="mt-0.5 text-xs text-(--ink-muted) tabular-nums">
                   {formatPercent(k.percentOfSales)} of sales
+                </div>
+              )}
+              {k.prior != null && (
+                <div className="mt-1.5">
+                  <DeltaStamp
+                    current={k.value}
+                    prior={k.prior}
+                    format="dollars"
+                    costSemantics={k.costStyle}
+                    suffix={k.priorSuffix ?? "vs prior"}
+                    size="sm"
+                  />
                 </div>
               )}
             </div>
