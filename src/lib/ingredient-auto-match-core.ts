@@ -132,6 +132,29 @@ export type ResolvedGroup = {
   reasoning: string | null
 }
 
+/**
+ * A group the ladder DECLINED to link, plus the best candidate it saw. Not a
+ * match — a note for the human who will decide, recorded so the review inbox
+ * can pre-fill the pick instead of making them search for it again.
+ *
+ * `layer` says which rung produced the candidate: `suggest-vector` when the
+ * similarity search's top pick simply didn't clear the gate, `suggest-llm`
+ * when the adjudicator named it but below `LLM_ACCEPT`. Keeping them distinct
+ * matters — a rejected LLM pick carries reasoning worth reading, and it is
+ * also the weaker of the two signals.
+ */
+export type SuggestedGroup = {
+  group: LineGroup
+  canonicalIngredientId: string
+  layer: "suggest-vector" | "suggest-llm"
+  /** The candidate's own similarity score, not a model confidence. */
+  score: number
+  /** The adjudicator's reasoning when it looked at this group at all. */
+  reasoning: string | null
+  model: string | null
+  candidates: MatchCandidate[]
+}
+
 /** Format raw vector candidates for the `IngredientMatchDecision.candidates`
  * Json column (the undo UI's "here's what else it considered" list). */
 export function candidateJson(

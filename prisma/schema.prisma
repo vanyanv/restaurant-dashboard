@@ -785,7 +785,11 @@ model IngredientMatchDecision {
   linkedLineItemIds     String[]
   linkedLineItemCount   Int      @default(0)
 
-  /// APPLIED | UNDONE | SHADOW
+  /// APPLIED | UNDONE | SHADOW | SUGGESTED
+  /// SUGGESTED is not a match — it is the ladder's best guess for a group it
+  /// DECLINED to link, kept so the review inbox can pre-fill the pick. Those
+  /// rows carry empty `linkedLineItemIds`, are excluded from the activity
+  /// strip, and suppress nothing.
   status     String    @default("APPLIED")
   createdAt  DateTime  @default(now())
   undoneAt   DateTime?

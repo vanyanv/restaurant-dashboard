@@ -6,6 +6,7 @@ import { Prisma } from "@/generated/prisma/client"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { recomputeCanonicalCost, getLineItemBaseQty } from "@/lib/ingredient-cost"
 import { syncCanonicalEmbedding } from "@/lib/ingredient-embedding-sync"
+import { buildGroupKey } from "@/lib/ingredient-auto-match-core"
 import { revalidatePath } from "next/cache"
 
 export type UnmatchedLineItemGroup = {
@@ -21,6 +22,25 @@ export type UnmatchedLineItemGroup = {
   lastSeen: Date | null
   /** Normalized preview cost derived from the sample line: "$3.30/lb" or null. */
   derivedCostPreview: { costPerBase: number; baseUnit: string } | null
+  /**
+   * The auto-match ladder's best guess for this group, when it had one but
+   * declined to link it (a SUGGESTED IngredientMatchDecision). Pre-fills the
+   * picker so confirming is one click. Null when auto-matching has never run
+   * on this group, or ran and had nothing plausible to offer — in which case
+   * the picker falls back to its own token-overlap suggestions.
+   */
+  suggestion: UnmatchedSuggestion | null
+}
+
+export type UnmatchedSuggestion = {
+  canonicalIngredientId: string
+  canonicalName: string
+  /** Cosine similarity of the suggested candidate, 0..1. */
+  score: number
+  /** "suggest-vector" | "suggest-llm" — which rung produced it. */
+  layer: string
+  /** The adjudicator's one-line reasoning, when an LLM looked at this group. */
+  reasoning: string | null
 }
 
 /**
@@ -137,11 +157,75 @@ export async function listUnmatchedLineItems(): Promise<UnmatchedLineItemGroup[]
         lastSeen: r.lastSeen,
         derivedCostPreview:
           previewBySample.get(r.sampleLineItemId) ?? null,
+        suggestion: null,
       })
     }
   }
 
-  return [...merged.values()].sort((a, b) => b.totalSpend - a.totalSpend)
+  const groups = [...merged.values()].sort((a, b) => b.totalSpend - a.totalSpend)
+  await attachSuggestions(accountId, groups)
+  return groups
+}
+
+/**
+ * Fold the auto-match ladder's SUGGESTED decisions onto the review groups,
+ * in place.
+ *
+ * The join is on the LADDER's group key (normalized vendor + lowercased
+ * product name), not the review inbox's own `key`, which is sku-based when a
+ * sku exists — see `buildGroupKey`'s note on the two keys being deliberately
+ * different. Recomputing it here is what keeps them talking to each other.
+ *
+ * Degrades to "no suggestions" on any error rather than propagating: a
+ * pre-filled pick is a convenience, and the pantry must not fail to render
+ * because the decision log is unavailable (it does not exist at all until
+ * the auto-match migration is applied).
+ */
+async function attachSuggestions(
+  accountId: string,
+  groups: UnmatchedLineItemGroup[]
+): Promise<void> {
+  if (groups.length === 0) return
+  const wanted = new Set(
+    groups.map((g) => buildGroupKey(g.vendorName, g.productName))
+  )
+
+  try {
+    const rows = await prisma.ingredientMatchDecision.findMany({
+      where: { accountId, status: "SUGGESTED", groupKey: { in: [...wanted] } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        groupKey: true,
+        canonicalIngredientId: true,
+        layer: true,
+        topScore: true,
+        confidence: true,
+        reasoning: true,
+        canonicalIngredient: { select: { name: true } },
+      },
+    })
+
+    // Newest wins: persistSuggestions clears stale rows per group, but a
+    // partial failure there must not turn into an outdated pick here.
+    const byKey = new Map<string, (typeof rows)[number]>()
+    for (const r of rows) if (!byKey.has(r.groupKey)) byKey.set(r.groupKey, r)
+
+    for (const g of groups) {
+      const hit = byKey.get(buildGroupKey(g.vendorName, g.productName))
+      g.suggestion = hit
+        ? {
+            canonicalIngredientId: hit.canonicalIngredientId,
+            canonicalName: hit.canonicalIngredient?.name ?? "",
+            score: hit.topScore ?? hit.confidence,
+            layer: hit.layer,
+            reasoning: hit.reasoning,
+          }
+        : null
+    }
+  } catch (e) {
+    console.warn("[listUnmatchedLineItems] suggestion lookup unavailable:", e)
+    for (const g of groups) g.suggestion = null
+  }
 }
 
 export type UnmatchedLineItemHit = {

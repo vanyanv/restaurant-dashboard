@@ -111,7 +111,19 @@ export function MatchPickerSheet({
     }
   }, [open, onOpenChange])
 
+  // The auto-match ladder's own pick, resolved against the canonicals this
+  // sheet actually has. Resolved by id (not name) so a rename can't silently
+  // redirect the pre-fill, and dropped entirely if the canonical is gone.
+  const laddersPick = useMemo(() => {
+    const id = group?.suggestion?.canonicalIngredientId
+    if (!id) return null
+    return canonicals.find((c) => c.id === id) ?? null
+  }, [group, canonicals])
+
   // Smart-suggest: rank canonicals by token overlap with the raw product name.
+  // This is the fallback — it only reads the name, where the ladder's pick
+  // comes from an embedding of name + vendor + unit and, sometimes, a model
+  // that looked at the shortlist. When both exist the ladder's pick leads.
   const suggestions = useMemo(() => {
     if (!group) return []
     const productTokens = tokenSet(prettifyIngredientName(group.productName))
@@ -129,12 +141,19 @@ export function MatchPickerSheet({
       .filter((x) => x.score > 0.25)
       .sort((a, b) => b.score - a.score)
       .slice(0, 4)
-    return scored.map((x) => x.c)
-  }, [canonicals, group])
+    return scored
+      .map((x) => x.c)
+      // Never list the ladder's pick twice — it has its own banner above.
+      .filter((c) => c.id !== laddersPick?.id)
+  }, [canonicals, group, laddersPick])
 
   const suggestionIds = useMemo(
-    () => new Set(suggestions.map((c) => c.id)),
-    [suggestions]
+    () =>
+      new Set([
+        ...suggestions.map((c) => c.id),
+        ...(laddersPick ? [laddersPick.id] : []),
+      ]),
+    [suggestions, laddersPick]
   )
 
   const bucketCounts = useMemo(() => {
@@ -382,6 +401,45 @@ export function MatchPickerSheet({
 
           {/* Match surface */}
           <div className="flex-1 overflow-y-auto">
+            {/* The ladder's own pick, pre-filled. Sits above everything and
+                states its score and reasoning, because a one-click confirm
+                is only safe if the thing being confirmed is legible. */}
+            {laddersPick && !query && bucket === "All" && group?.suggestion && (
+              <section className="border-b border-dashed border-[var(--accent-dark)]/30 bg-[var(--accent-bg)]/45 px-6 pb-5 pt-5">
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--accent-dark)]">
+                    <Sparkles className="h-3 w-3" />
+                    Auto-match&rsquo;s pick
+                  </div>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                    {group.suggestion.layer === "suggest-llm"
+                      ? "name + vendor + AI review"
+                      : "name + vendor similarity"}
+                    {" · "}
+                    <span className="[font-feature-settings:'tnum','lnum'] [font-variant-numeric:tabular-nums_lining-nums]">
+                      {group.suggestion.score.toFixed(2)}
+                    </span>
+                  </span>
+                </div>
+                <ul className="grid grid-cols-1 gap-2">
+                  <SuggestionCard
+                    ingredient={laddersPick}
+                    busy={linking === laddersPick.id}
+                    onPick={() => pickExisting(laddersPick)}
+                  />
+                </ul>
+                {group.suggestion.reasoning && (
+                  <p className="mt-2.5 font-display text-[13px] italic leading-relaxed text-[var(--ink-muted)]">
+                    &ldquo;{group.suggestion.reasoning}&rdquo;
+                  </p>
+                )}
+                <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+                  It wasn&rsquo;t confident enough to link this on its own —
+                  you decide.
+                </p>
+              </section>
+            )}
+
             {/* Smart suggestions — only when no search/filter */}
             {suggestions.length > 0 && !query && bucket === "All" && (
               <section className="border-b border-dashed border-[var(--hairline-bold)] px-6 pb-5 pt-5">
@@ -409,7 +467,7 @@ export function MatchPickerSheet({
 
             {/* Main list */}
             <section className="px-6 py-5">
-              {filtered.length === 0 && suggestions.length === 0 ? (
+              {filtered.length === 0 && suggestions.length === 0 && !laddersPick ? (
                 <div className="mx-auto max-w-sm border border-dashed border-[var(--hairline)] px-6 py-12 text-center">
                   <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-faint)]">
                     § nothing here
@@ -430,7 +488,7 @@ export function MatchPickerSheet({
                 </p>
               ) : (
                 <>
-                  {suggestions.length > 0 && !query && bucket === "All" && (
+                  {(suggestions.length > 0 || laddersPick) && !query && bucket === "All" && (
                     <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
                       Or pick another
                     </div>

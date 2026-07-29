@@ -329,7 +329,12 @@ model IngredientMatchDecision {
   linkedLineItemIds     String[]
   linkedLineItemCount   Int      @default(0)
 
-  /// APPLIED | UNDONE | SHADOW
+  /// APPLIED | UNDONE | SHADOW | SUGGESTED
+  ///
+  /// SUGGESTED (Task 13) is not a match: it is the ladder's best guess for a
+  /// group it DECLINED to link, recorded so the review inbox can pre-fill the
+  /// pick. Such rows carry empty `linkedLineItemIds`, never appear in the
+  /// activity strip, and never suppress anything.
   status     String    @default("APPLIED")
   createdAt  DateTime  @default(now())
   undoneAt   DateTime?
@@ -383,6 +388,15 @@ built in the editorial docket system per `docs/frontend-patterns.md`:
 
 The review inbox remains, thinner. Its cards now carry the pre-filled sub-threshold
 suggestion so those become one click instead of three.
+
+The suggestion's source is a `SUGGESTED` `IngredientMatchDecision` written during sync
+by the same ladder pass that declined to link it — `suggest-vector` when the similarity
+top pick simply missed the gate, `suggest-llm` when the adjudicator named a shortlist
+member below `LLM_ACCEPT` (its reasoning rides along). A hallucinated name is rejected
+by the same shortlist-membership rule as the acceptance gate, and a suppressed
+(undone) candidate is never suggested. Repeat syncs replace a group's suggestion
+rather than accumulating rows. The picker's existing token-overlap suggestions stay
+as the fallback when no such row exists.
 
 ## Sync integration and rollout
 

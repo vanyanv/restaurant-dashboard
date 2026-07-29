@@ -576,7 +576,8 @@ async function runSync(
       logger.info(
         `[invoice-sync] auto-match (${autoMatchMode}): scanned ${auto.scanned}, ` +
         `${auto.autoExact} exact, ${auto.autoVector} vector, ${auto.autoLlm} llm, ` +
-        `${auto.leftForReview} left for review (${auto.failed} from errors), ` +
+        `${auto.leftForReview} left for review (${auto.suggested} pre-filled, ` +
+        `${auto.failed} from errors), ` +
         `${auto.llmCalls} LLM calls, ${auto.costsUpdated} canonical costs refreshed`
       )
     } catch (err) {

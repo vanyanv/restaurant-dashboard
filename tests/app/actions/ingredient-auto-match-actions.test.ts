@@ -300,9 +300,13 @@ describe("listRecentAutoMatches", () => {
         }),
       })
     )
+    // SUGGESTED is excluded unconditionally: those rows linked nothing, so
+    // listing them as activity would report work the ladder declined to do.
+    // SHADOW is still included by default — during a shadow trial it is the
+    // whole point of the surface.
     const call = vi.mocked(prisma.ingredientMatchDecision.findMany).mock
       .calls[0][0] as { where: Record<string, unknown> }
-    expect(call.where.status).toBeUndefined()
+    expect(call.where.status).toEqual({ not: "SUGGESTED" })
 
     vi.useRealTimers()
   })
@@ -312,7 +316,9 @@ describe("listRecentAutoMatches", () => {
 
     expect(prisma.ingredientMatchDecision.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ status: { not: "SHADOW" } }),
+        where: expect.objectContaining({
+          status: { notIn: ["SHADOW", "SUGGESTED"] },
+        }),
       })
     )
   })
