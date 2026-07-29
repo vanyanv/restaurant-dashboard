@@ -19,16 +19,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 const txMocks = vi.hoisted(() => ({
-  invoiceLineItem: { updateMany: vi.fn() },
-  ingredientSkuMatch: { upsert: vi.fn() },
-  ingredientAlias: { upsert: vi.fn() },
-  ingredientMatchDecision: { create: vi.fn() },
+  invoiceLineItem: { updateMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+  ingredientSkuMatch: { upsert: vi.fn(), deleteMany: vi.fn() },
+  ingredientAlias: { upsert: vi.fn(), deleteMany: vi.fn() },
+  ingredientMatchDecision: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  recipeIngredient: { count: vi.fn() },
+  stockCountLine: { count: vi.fn() },
+  canonicalIngredient: { delete: vi.fn() },
+  canonicalIngredientEmbedding: { deleteMany: vi.fn() },
 }))
 
 vi.mock("@/lib/prisma", () => {
   const prisma: Record<string, unknown> = {
     invoice: { findMany: vi.fn() },
-    ingredientMatchDecision: { findMany: vi.fn(), create: vi.fn() },
+    ingredientMatchDecision: { findMany: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     canonicalIngredient: { findMany: vi.fn(), create: vi.fn() },
     ingredientAlias: { findMany: vi.fn(), upsert: vi.fn() },
     ingredientSkuMatch: { upsert: vi.fn() },
@@ -59,13 +63,18 @@ vi.mock("@/lib/ingredient-cost", () => ({
   recomputeCanonicalCost: vi.fn(),
 }))
 
+vi.mock("@/lib/auth-scope", () => ({ getAuthScope: vi.fn() }))
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+
 import { prisma } from "@/lib/prisma"
 import { embedBatch } from "@/lib/chat/embeddings"
 import { adjudicate, MAX_CASES_PER_REQUEST } from "@/lib/ingredient-match-llm"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
+import { getAuthScope } from "@/lib/auth-scope"
 import { autoResolveUnmatchedLines } from "@/lib/ingredient-auto-match"
 import { buildGroupKey } from "@/lib/ingredient-auto-match-core"
 import { THRESHOLDS } from "@/lib/ingredient-match-scoring"
+import { undoAutoMatch } from "@/app/actions/ingredient-auto-match-actions"
 
 const SCOPE = { accountId: "acct-1", ownerId: "owner-1" }
 
@@ -106,6 +115,7 @@ beforeEach(() => {
   vi.mocked(prisma.invoice.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.ingredientMatchDecision.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.ingredientMatchDecision.create).mockResolvedValue({} as never)
+  vi.mocked(prisma.ingredientMatchDecision.findFirst).mockResolvedValue(null as never)
   vi.mocked(prisma.canonicalIngredient.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.canonicalIngredient.create).mockResolvedValue({} as never)
   vi.mocked(prisma.ingredientAlias.findMany).mockResolvedValue([] as never)
@@ -121,11 +131,22 @@ beforeEach(() => {
     status: "unchanged",
     reason: "no-recipe-unit",
   } as never)
+  vi.mocked(getAuthScope).mockResolvedValue(SCOPE as never)
 
   vi.mocked(txMocks.invoiceLineItem.updateMany).mockResolvedValue({ count: 0 } as never)
+  vi.mocked(txMocks.invoiceLineItem.findMany).mockResolvedValue([] as never)
+  vi.mocked(txMocks.invoiceLineItem.count).mockResolvedValue(0 as never)
   vi.mocked(txMocks.ingredientSkuMatch.upsert).mockResolvedValue({} as never)
+  vi.mocked(txMocks.ingredientSkuMatch.deleteMany).mockResolvedValue({ count: 0 } as never)
   vi.mocked(txMocks.ingredientAlias.upsert).mockResolvedValue({} as never)
+  vi.mocked(txMocks.ingredientAlias.deleteMany).mockResolvedValue({ count: 0 } as never)
   vi.mocked(txMocks.ingredientMatchDecision.create).mockResolvedValue({} as never)
+  vi.mocked(txMocks.ingredientMatchDecision.update).mockResolvedValue({} as never)
+  vi.mocked(txMocks.ingredientMatchDecision.delete).mockResolvedValue({} as never)
+  vi.mocked(txMocks.recipeIngredient.count).mockResolvedValue(0 as never)
+  vi.mocked(txMocks.stockCountLine.count).mockResolvedValue(0 as never)
+  vi.mocked(txMocks.canonicalIngredient.delete).mockResolvedValue({} as never)
+  vi.mocked(txMocks.canonicalIngredientEmbedding.deleteMany).mockResolvedValue({ count: 0 } as never)
 })
 
 // Global, not per-test: proves the no-auto-create property holds across
@@ -549,5 +570,160 @@ describe("autoResolveUnmatchedLines", () => {
         }),
       })
     )
+  })
+})
+
+// undoAutoMatch is the reverse of this file's write side (Task 10). These
+// tests exercise it against the SAME mocked prisma module autoResolveUnmatchedLines
+// uses, so the "full cycle" test below is a real end-to-end proof: what the
+// ladder linked and learned is exactly what undo unlinks and un-teaches, and
+// the resulting UNDONE row is what the ladder's own suppression check (8a/8b/8c
+// above) reads on the very next run.
+describe("undoAutoMatch — reverses what autoResolveUnmatchedLines did", () => {
+  it("full cycle: link -> undo -> re-run does not re-link; lines unlinked, learned sku match gone, cost recomputed, status UNDONE", async () => {
+    // --- Step A: the ladder auto-links li-1 via L2 vector match. --------
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-1", sku: "SKU1", productName: "Ground Beef 73/27" }] }),
+    ] as never)
+    const candidates: Candidate[] = [
+      { canonicalIngredientId: "canon-1", name: "Ground Beef 73/27", score: 0.95 },
+      { canonicalIngredientId: "canon-2", name: "Ground Beef 80/20", score: 0.8 },
+    ]
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(candidates as never)
+
+    const linkResult = await autoResolveUnmatchedLines(SCOPE, ["inv-1"])
+    expect(linkResult.autoVector).toBe(1)
+
+    expect(txMocks.ingredientSkuMatch.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          vendorName: "Sysco",
+          sku: "SKU1",
+          canonicalIngredientId: "canon-1",
+        }),
+      })
+    )
+    const createdDecision = vi.mocked(txMocks.ingredientMatchDecision.create).mock
+      .calls[0][0].data as Record<string, unknown>
+    expect(createdDecision.linkedLineItemIds).toEqual(["li-1"])
+
+    // --- Step B: undo it. ------------------------------------------------
+    const decisionRow = {
+      id: "dec-1",
+      accountId: SCOPE.accountId,
+      status: "APPLIED",
+      ...createdDecision,
+    }
+    vi.mocked(prisma.ingredientMatchDecision.findFirst).mockResolvedValue(
+      decisionRow as never
+    )
+    // Simulate the DB post-link state: li-1 is now linked with matchSource
+    // "auto-vector" — undo's own findMany (not the ladder's) reads this.
+    vi.mocked(txMocks.invoiceLineItem.findMany).mockResolvedValue([
+      { id: "li-1", matchSource: "auto-vector", invoice: { storeId: "store-1" } },
+    ] as never)
+    vi.mocked(txMocks.invoiceLineItem.updateMany).mockResolvedValue({ count: 1 } as never)
+    vi.mocked(txMocks.ingredientSkuMatch.deleteMany).mockResolvedValue({ count: 1 } as never)
+
+    const undoResult = await undoAutoMatch("dec-1")
+
+    expect(undoResult.unlinkedCount).toBe(1)
+    expect(undoResult.learnedMatchRemoved).toBe(true)
+    expect(undoResult.canonicalDeleted).toBe(false)
+    expect(txMocks.invoiceLineItem.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["li-1"] } },
+      data: { canonicalIngredientId: null, matchSource: null, matchedAt: null },
+    })
+    expect(txMocks.ingredientSkuMatch.deleteMany).toHaveBeenCalledWith({
+      where: {
+        accountId: SCOPE.accountId,
+        vendorName: "Sysco",
+        sku: "SKU1",
+        canonicalIngredientId: "canon-1",
+      },
+    })
+    expect(recomputeCanonicalCost).toHaveBeenCalledWith("canon-1")
+    expect(txMocks.ingredientMatchDecision.update).toHaveBeenCalledWith({
+      where: { id: "dec-1" },
+      data: expect.objectContaining({ status: "UNDONE", undoneById: SCOPE.ownerId }),
+    })
+
+    // --- Step C: re-run the ladder against a fresh line for the same
+    // (vendor, product) group — the UNDONE row must suppress it. ----------
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-2", sku: "SKU1", productName: "Ground Beef 73/27" }] }),
+    ] as never)
+    vi.mocked(prisma.ingredientMatchDecision.findMany).mockResolvedValue([
+      { groupKey: createdDecision.groupKey, canonicalIngredientId: "canon-1" },
+    ] as never)
+    // canon-1 is still the only vector hit — suppression must filter it out
+    // before scoring (leaving an empty candidate pool), not merely block it
+    // after it wins. With undo history on this group, L3 is also skipped
+    // entirely, so the line has nowhere left to land but review.
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([candidates[0]] as never)
+
+    const rerun = await autoResolveUnmatchedLines(SCOPE, ["inv-2"])
+
+    expect(rerun.autoVector).toBe(0)
+    expect(rerun.autoLlm).toBe(0)
+    expect(rerun.leftForReview).toBe(1)
+    expect(adjudicate).not.toHaveBeenCalled()
+    expect(txMocks.invoiceLineItem.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ["li-2"] } } })
+    )
+  })
+
+  it("leaves a line a human manually re-confirmed after the auto-link untouched", async () => {
+    const decisionRow = {
+      id: "dec-2",
+      accountId: SCOPE.accountId,
+      status: "APPLIED",
+      groupKey: buildGroupKey("Sysco", "Ground Beef 73/27"),
+      vendorName: "Sysco",
+      sku: "SKU1",
+      productName: "Ground Beef 73/27",
+      canonicalIngredientId: "canon-1",
+      createdCanonical: false,
+      linkedLineItemIds: ["li-1", "li-2"],
+    }
+    vi.mocked(prisma.ingredientMatchDecision.findFirst).mockResolvedValue(
+      decisionRow as never
+    )
+    // li-1 is still exactly as the ladder left it; li-2 was manually
+    // re-confirmed afterward (matchSource is no longer auto-*).
+    vi.mocked(txMocks.invoiceLineItem.findMany).mockResolvedValue([
+      { id: "li-1", matchSource: "auto-vector", invoice: { storeId: "store-1" } },
+      { id: "li-2", matchSource: "sku", invoice: { storeId: "store-1" } },
+    ] as never)
+    vi.mocked(txMocks.invoiceLineItem.updateMany).mockResolvedValue({ count: 1 } as never)
+
+    const result = await undoAutoMatch("dec-2")
+
+    expect(txMocks.invoiceLineItem.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["li-1"] } },
+      data: { canonicalIngredientId: null, matchSource: null, matchedAt: null },
+    })
+    expect(result.unlinkedCount).toBe(1)
+  })
+
+  it("undoing an already-UNDONE decision is a safe no-op, not a double-unlink", async () => {
+    vi.mocked(prisma.ingredientMatchDecision.findFirst).mockResolvedValue({
+      id: "dec-3",
+      accountId: SCOPE.accountId,
+      status: "UNDONE",
+      groupKey: buildGroupKey("Sysco", "Ground Beef 73/27"),
+      vendorName: "Sysco",
+      sku: "SKU1",
+      productName: "Ground Beef 73/27",
+      canonicalIngredientId: "canon-1",
+      createdCanonical: false,
+      linkedLineItemIds: ["li-1"],
+    } as never)
+
+    const result = await undoAutoMatch("dec-3")
+
+    expect(result.alreadyUndone).toBe(true)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(txMocks.invoiceLineItem.updateMany).not.toHaveBeenCalled()
   })
 })
