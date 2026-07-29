@@ -1,11 +1,25 @@
 import { describe, it, expect } from "vitest"
 import {
-  classifyCandidates, buildMatchQueryText, THRESHOLDS,
+  classifyCandidates, buildMatchQueryText, THRESHOLDS, AUTO_CREATE_ENABLED,
   type MatchCandidate,
 } from "@/lib/ingredient-match-scoring"
 
 const c = (name: string, score: number): MatchCandidate => ({
   canonicalIngredientId: `id-${name}`, name, score,
+})
+
+describe("AUTO_CREATE_ENABLED", () => {
+  it("is false — the owner's certified decision, not a FLOOR side-effect", () => {
+    expect(AUTO_CREATE_ENABLED).toBe(false)
+  })
+
+  it("classifyCandidates still returns 'new' on an empty candidate list regardless of FLOOR — the path AUTO_CREATE_ENABLED exists to guard, since FLOOR alone cannot close it", () => {
+    // This is the load-bearing fact behind the flag: an empty pantry (or
+    // any retrieval miss) hits this branch before FLOOR is ever consulted,
+    // so no FLOOR value makes 'new' unreachable on its own.
+    expect(classifyCandidates([]).kind).toBe("new")
+    expect(classifyCandidates([], { ...THRESHOLDS, FLOOR: 0 }).kind).toBe("new")
+  })
 })
 
 describe("classifyCandidates", () => {
@@ -76,13 +90,20 @@ describe("classifyCandidates", () => {
       expect(r.kind).toBe("ambiguous")
     })
 
-    it("auto-links with margin exactly at MARGIN threshold (0.01)", () => {
-      // Pins `margin >= MARGIN` (not `>`). Use 0.73 - 0.72: verified in Node
-      // this evaluates to 0.010000000000000009 (>= 0.01), not the kind of
-      // float pair (like 0.95 - 0.90) that lands a hair under the literal.
-      const r = classifyCandidates([c("candidate", 0.73), c("runner-up", 0.72)])
+    it("auto-links with margin exactly at MARGIN threshold (exact float equality, injected)", () => {
+      // Pins `margin >= MARGIN` (not `>`). Two independent decimal literals
+      // (e.g. 0.73/0.72 scored against a literal MARGIN of 0.01) do NOT pin
+      // this: 0.73 - 0.72 === 0.010000000000000009, which is strictly
+      // GREATER than the literal 0.01, so a `>` mutation would pass
+      // undetected (mutation-verified — see task-7 fix-round-1 report). The
+      // only way to make `>=` vs `>` observable is to inject MARGIN as the
+      // exact same computed value as the candidate margin, so they are
+      // float-identical and only `>=` can accept it.
+      const margin = 0.73 - 0.72
+      const strict = { ...THRESHOLDS, MARGIN: margin }
+      const r = classifyCandidates([c("candidate", 0.73), c("runner-up", 0.72)], strict)
       expect(r.kind).toBe("auto")
-      if (r.kind === "auto") expect(r.margin).toBeCloseTo(0.01)
+      if (r.kind === "auto") expect(r.margin).toBe(margin)
     })
 
     it("rejects margin just below MARGIN threshold (0.0099)", () => {
