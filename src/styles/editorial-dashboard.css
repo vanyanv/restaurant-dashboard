@@ -603,10 +603,12 @@
   position: sticky;
   top: 0;
   z-index: 40;
+  /* Near-opaque: at 0.92/0.88 the scrolled content's column headers read
+     as ghost text through the bar. The blur keeps a whisper of depth. */
   background: linear-gradient(
     180deg,
-    rgba(251, 246, 238, 0.92) 0%,
-    rgba(244, 236, 223, 0.88) 100%
+    rgba(251, 246, 238, 0.985) 0%,
+    rgba(244, 236, 223, 0.97) 100%
   );
   backdrop-filter: blur(6px) saturate(1.03);
   -webkit-backdrop-filter: blur(6px) saturate(1.03);

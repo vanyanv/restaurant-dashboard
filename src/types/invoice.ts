@@ -150,6 +150,9 @@ export interface InvoiceDetail extends InvoiceListItem {
   attachmentName: string | null
   hasPdf: boolean
   lineItems: InvoiceDetailLineItem[]
+  /** Why the sync flagged this invoice for review (empty when not flagged).
+   *  See ReviewReason in src/lib/invoice-sanity.ts. */
+  reviewReasons: Array<{ kind: string; message: string; lineNumbers?: number[] }>
 }
 
 export interface InvoiceListResponse {

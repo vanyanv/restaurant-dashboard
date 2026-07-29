@@ -8,7 +8,7 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, composeReviewReasons, type ReviewReason } from "@/lib/invoice-sanity"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
@@ -424,7 +424,22 @@ async function runSync(
       status = "PENDING"
     }
 
+    // Persist WHY it needs review — the detail page renders these so the
+    // owner isn't left staring at a bare badge.
+    const reviewReasons: ReviewReason[] =
+      status === "REVIEW"
+        ? composeReviewReasons({
+            dateSuspect,
+            mathMismatches,
+            packAnomalies,
+            totalMismatch,
+            matchConfidence: match?.confidence ?? null,
+            matched: Boolean(match),
+          })
+        : []
+
     return {
+      reviewReasons,
       ownerId: userId,
       accountId,
       storeId: match?.storeId ?? null,
@@ -486,6 +501,9 @@ async function runSync(
           status: inv.status,
           matchConfidence: inv.matchConfidence,
           matchedAt: inv.matchedAt,
+          reviewReasons: inv.reviewReasons.length > 0
+            ? (inv.reviewReasons as unknown as Prisma.InputJsonValue)
+            : undefined,
           rawExtractionJson: inv.rawExtractionJson,
           extractionModel: inv.extractionModel,
           pdfBlobPathname: inv.pdfBlobPathname,
