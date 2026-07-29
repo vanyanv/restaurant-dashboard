@@ -12,6 +12,7 @@ import {
 import { batchCanonicalCosts } from "@/lib/canonical-cost-batch"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { syncCanonicalEmbedding } from "@/lib/ingredient-embedding-sync"
 import type {
   CanonicalIngredientSummary,
   IngredientTrend,
@@ -358,6 +359,12 @@ export async function createCanonicalIngredient(input: {
       notes: input.notes ?? null,
     },
   })
+  // Without this the new ingredient has no CanonicalIngredientEmbedding row,
+  // and nothing back-fills those on a schedule — so it would be permanently
+  // invisible to the auto-match ladder's similarity rung (and to the
+  // adjudicator's shortlist, which is drawn from it). Never throws.
+  await syncCanonicalEmbedding(created.id)
+
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
   return created
@@ -546,6 +553,15 @@ export async function mergeCanonicalIngredients(input: {
       matchDecisions: matchDecisions.count,
     }
   })
+
+  // The target just absorbed the source's aliases, and
+  // buildCanonicalIngredientText folds alias rawNames into the embedded text
+  // — so the target's existing vector now describes a narrower ingredient
+  // than the one that exists. Refresh it outside the transaction: a stale
+  // vector is a degraded match, but a failed embed must not roll back a
+  // completed merge. (The source's own embedding row goes with it via the
+  // CanonicalIngredientEmbedding cascade.)
+  await syncCanonicalEmbedding(input.targetId)
 
   revalidatePath("/dashboard/ingredients")
   revalidatePath("/dashboard/recipes")
