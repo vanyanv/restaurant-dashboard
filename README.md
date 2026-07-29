@@ -17,7 +17,7 @@ This is a real operating system for a real restaurant business, and the source i
 - **Forecasts** — nightly ML revenue / hourly-order / menu-item forecasts with confidence bands (details below).
 - **Alerts** — anomaly events from the nightly pipeline land in a contextual inbox.
 - **AI chat** — tool-calling assistant over the business data (OpenAI), with evals (`npm run eval:chat`).
-- **Mobile** — a parallel `(mobile)/m/**` route tree for managers checking prep status and numbers from a phone.
+- **Mobile** — a parallel `(mobile)/m/**` route tree for checking the numbers from a phone: a lean glance-and-do companion to the desktop dashboard.
 
 | Forecasts | P&L |
 | --- | --- |
@@ -64,7 +64,7 @@ flowchart LR
 Key decisions:
 
 - **Everything is precomputed.** Cron routes (secured by a shared `withCronAuth()` wrapper and `CRON_SECRET`) sync external sources into Postgres; the ML pipeline writes forecast rows back. Request-time work is reads and light aggregation — no third-party API calls or model inference on the hot path.
-- **One tenant boundary.** Every query is scoped through the `Account` model; owner and manager roles get separate route trees (`/dashboard` vs `/manager`).
+- **One tenant boundary.** Every query is scoped through the `Account` model. The dashboard is owner-facing only (`OWNER`, plus `DEVELOPER` as a strict superset); there is no store-manager surface.
 - **Per-store fan-out.** Heavy syncs (Otter, Harri, COGS) run as GitHub Actions matrix jobs — a `*/stores` cron route enumerates active stores, the matrix runs one job per store.
 - **Operational self-monitoring.** The dashboard monitors itself: job runs, AI token spend, error events, cache hit rates, database and R2 storage snapshots all land in the same Postgres and surface on `/dashboard/monitoring`.
 
@@ -132,7 +132,6 @@ src/
   app/
     dashboard/        # Owner dashboard (~20 sections: pnl, forecasts, cogs, labor, ...)
     (mobile)/m/       # Mobile-first route tree for the same domains
-    manager/          # Manager-scoped pages
     api/cron/         # 13 authenticated sync/maintenance jobs
     actions/          # Server actions
   lib/                # Domain logic (otter, harri, chat tools, labor math, formatters)

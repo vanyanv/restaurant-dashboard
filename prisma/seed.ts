@@ -84,36 +84,6 @@ async function main() {
     }
 
     console.log(`  ✅ Created ${ownerStores.length} stores for ${owner.name}`)
-
-    const prepTasks = [
-      { taskName: 'Prep pizza dough', description: 'Prepare fresh dough for the day', shift: 'MORNING' },
-      { taskName: 'Slice vegetables', description: 'Cut tomatoes, onions, peppers', shift: 'MORNING' },
-      { taskName: 'Prepare sauce', description: 'Make fresh marinara and alfredo sauce', shift: 'MORNING' },
-      { taskName: 'Stock beverages', description: 'Restock all drink coolers', shift: 'MORNING' },
-      { taskName: 'Clean ovens', description: 'Deep clean pizza ovens', shift: 'EVENING' },
-      { taskName: 'Inventory check', description: 'Count remaining ingredients', shift: 'EVENING' },
-      { taskName: 'Prep for tomorrow', description: 'Setup for next day service', shift: 'EVENING' }
-    ]
-
-    for (const store of ownerStores) {
-      for (let i = 0; i < prepTasks.length; i++) {
-        const task = prepTasks[i]
-        await prisma.prepTask.upsert({
-          where: { id: `${store.id}-task-${i}` },
-          update: {},
-          create: {
-            id: `${store.id}-task-${i}`,
-            storeId: store.id,
-            taskName: task.taskName,
-            description: task.description,
-            shift: task.shift as 'MORNING' | 'EVENING',
-            orderIndex: i
-          }
-        })
-      }
-    }
-
-    console.log(`  ✅ Created prep tasks for ${owner.name}'s stores`)
   }
 
   console.log('\n🎉 Database seeding completed!')

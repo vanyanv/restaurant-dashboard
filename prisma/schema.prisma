@@ -14,12 +14,6 @@ enum Role {
   DEVELOPER
 }
 
-enum Shift {
-  MORNING
-  EVENING
-  BOTH
-}
-
 enum InvoiceStatus {
   PENDING
   MATCHED
@@ -187,7 +181,6 @@ model Store {
   // Relations
   owner                 User                     @relation("StoreOwner", fields: [ownerId], references: [id])
   account               Account                  @relation(fields: [accountId], references: [id])
-  prepTasks             PrepTask[]
   otterStores           OtterStore[]
   otterSummaries        OtterDailySummary[]
   otterHourlySummaries  OtterHourlySummary[]
@@ -404,23 +397,6 @@ model OtterRating {
   @@index([storeId])
   @@index([reviewedAt])
   @@index([platform])
-}
-
-model PrepTask {
-  id          String   @id @default(cuid())
-  storeId     String
-  taskName    String
-  description String?
-  shift       Shift
-  isActive    Boolean  @default(true)
-  orderIndex  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@index([storeId])
 }
 
 model Invoice {

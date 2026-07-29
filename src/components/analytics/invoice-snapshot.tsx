@@ -127,8 +127,50 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="relative overflow-x-auto">
+      {/* Mobile card list (≤640w) — the 6-column ledger clips off-canvas on
+          phones; mirror the Sales Breakdown card treatment instead. */}
+      <div className="sm:hidden">
+        {filteredRows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-(--ink-muted)">
+            No {viewBy === "store" ? "stores" : "vendors"} match
+            &ldquo;{search}&rdquo;
+          </div>
+        ) : (
+          <ul className="divide-y divide-[color:var(--hairline)]">
+            {filteredRows.map((row) => {
+              const isStore = viewBy === "store"
+              const r = row as unknown as Record<string, number>
+              const name = isStore
+                ? (row as InvoiceStoreRow).storeName
+                : (row as InvoiceVendorRow).vendorName
+              const rowKey = isStore
+                ? ((row as InvoiceStoreRow).storeId ?? "unassigned")
+                : (row as InvoiceVendorRow).vendorName
+              return (
+                <MobileInvoiceCard
+                  key={rowKey}
+                  name={name}
+                  invoiceCount={r.invoiceCount}
+                  avgInvoice={r.avgInvoice}
+                  totalSpend={r.totalSpend}
+                  needsReview={r.needsReview}
+                />
+              )
+            })}
+            <MobileInvoiceCard
+              name="Total"
+              invoiceCount={(totals as Record<string, number>).invoiceCount}
+              avgInvoice={(totals as Record<string, number>).avgInvoice}
+              totalSpend={(totals as Record<string, number>).totalSpend}
+              needsReview={(totals as Record<string, number>).needsReview}
+              isTotal
+            />
+          </ul>
+        )}
+      </div>
+
+      {/* Table (≥640w) */}
+      <div className="relative hidden overflow-x-auto sm:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-(--hairline-bold) bg-[rgba(0,0,0,0.02)]">
@@ -261,5 +303,60 @@ export function InvoiceSnapshot({ breakdown }: InvoiceSnapshotProps) {
         </span>
       </div>
     </div>
+  )
+}
+
+function MobileInvoiceCard({
+  name,
+  invoiceCount,
+  avgInvoice,
+  totalSpend,
+  needsReview,
+  isTotal = false,
+}: {
+  name: string
+  invoiceCount: number
+  avgInvoice: number
+  totalSpend: number
+  needsReview: number
+  isTotal?: boolean
+}) {
+  return (
+    <li className={cn(isTotal && "bg-[rgba(244,236,223,0.55)]")}>
+      <div className="flex w-full items-center gap-3 px-4 py-3">
+        <span className="flex flex-1 min-w-0 flex-col gap-0.5">
+          <span
+            className={cn(
+              "truncate text-(--ink)",
+              isTotal
+                ? "font-[family-name:var(--font-dm-sans)] text-[11px] font-bold uppercase tracking-[0.22em]"
+                : "font-medium"
+            )}
+          >
+            {name}
+          </span>
+          <span className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.18em] text-(--ink-faint)">
+            {invoiceCount.toLocaleString()} invoice
+            {invoiceCount === 1 ? "" : "s"}
+            {" · "}avg {formatCurrency(avgInvoice)}
+            {needsReview > 0 ? (
+              <span className="text-(--subtract)">
+                {" · "}
+                {needsReview.toLocaleString()} need
+                {needsReview === 1 ? "s" : ""} review
+              </span>
+            ) : null}
+          </span>
+        </span>
+        <span
+          className={cn(
+            "text-[20px] leading-none tabular-nums text-(--ink)",
+            isTotal ? "font-bold" : "font-semibold"
+          )}
+        >
+          {formatCurrency(totalSpend)}
+        </span>
+      </div>
+    </li>
   )
 }
