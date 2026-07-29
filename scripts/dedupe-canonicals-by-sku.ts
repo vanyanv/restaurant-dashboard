@@ -484,6 +484,16 @@ async function main() {
           data: { canonicalIngredientId: winnerId },
         })
 
+        // Re-parent the match/undo audit trail too, or the delete below
+        // throws — its FK is `onDelete: Restrict`, deliberately, so a
+        // merge can't silently destroy IngredientMatchDecision rows
+        // (including UNDONE suppression records). Mirrors
+        // mergeCanonicalIngredients in canonical-ingredient-actions.ts.
+        await tx.ingredientMatchDecision.updateMany({
+          where: { canonicalIngredientId: loserId },
+          data: { canonicalIngredientId: winnerId },
+        })
+
         await tx.canonicalIngredient.delete({ where: { id: loserId } })
         mergedInto.set(loserId, winnerId!)
         mergedCanonicals++
