@@ -39,7 +39,10 @@ export default async function DashboardLayout({
       <ChatDrawerProvider>
         <SidebarProvider defaultOpen={defaultPinned}>
           <AppSidebarClient />
-          <SidebarInset>
+          {/* min-w-0 lets the inset shrink beside the fixed rail — without it the
+              non-wrapping topbar sets min-content width and the whole page
+              overflows the viewport by the rail's 48px */}
+          <SidebarInset className="min-w-0">
             {showWelcome && firstName ? (
               <WelcomeMarquee firstName={firstName} />
             ) : null}

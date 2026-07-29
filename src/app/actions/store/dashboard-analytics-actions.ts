@@ -255,8 +255,12 @@ export async function getRevenueTrendData(
     const storeIds = stores.map((s) => s.id)
     const days = options?.days ?? 7
 
+    // Trend over the last N COMPLETE days. Including today mid-service drew a
+    // partial-day cliff at the right edge that read as a sales collapse; the
+    // hero strip and Busiest Hours already cover today-in-progress.
     const today = todayInLA()
     const rangeEnd = endOfDayLA(today)
+    rangeEnd.setDate(rangeEnd.getDate() - 1)
     const rangeStart = startOfDayLA(today)
     rangeStart.setDate(rangeStart.getDate() - days)
 
@@ -304,7 +308,7 @@ export async function getRevenueTrendData(
 
     const dailyTrends = Object.entries(byDate)
       .map(([date, vals]) => ({ date, ...vals }))
-      .sort((a, b) => b.date.localeCompare(a.date))
+      .sort((a, b) => a.date.localeCompare(b.date))
 
     return { dailyTrends }
   } catch (error) {

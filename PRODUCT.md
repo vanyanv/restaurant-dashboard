@@ -4,12 +4,11 @@
 product
 
 ## Users
-Two roles operating Chris Neddy's multi-store restaurant business:
-- **Owner** — multi-store oversight; lives in P&L, COGS, ingredient pricing, cross-store comparisons, end-of-day reconciliation. Reads numbers in a back office, often after service has closed.
-- **Store managers** — single-store, daily operations: prep tasks, daily reports, fast operational calls during or right after service. Mobile-capable.
+One audience operating Chris Neddy's multi-store restaurant business:
+- **Owner** — multi-store oversight; lives in P&L, COGS, ingredient pricing, cross-store comparisons, end-of-day reconciliation. Reads numbers in a back office, often after service has closed; checks pace and alerts from a phone between stores. (A `DEVELOPER` role exists as a strict superset for operating the system itself; there is no store-manager role.)
 
 ## Product Purpose
-Replace platform-hopping (Otter, Yelp, POS exports, spreadsheets) with one reconciled, truthful view of every store's sales, costs, and operations. The dashboard exists so a 30-second financial answer is possible without opening five tabs. Success looks like the owner closing the books at 11pm with numbers that tie, and a manager checking prep status from their phone in under 10 seconds.
+Replace platform-hopping (Otter, POS exports, spreadsheets) with one reconciled, truthful view of every store's sales, costs, and operations. The dashboard exists so a 30-second financial answer is possible without opening five tabs. Success looks like the owner closing the books at 11pm with numbers that tie, and getting the same answer from their phone in under 10 seconds.
 
 ## Brand Personality
 **Rigorous, editorial, plainspoken.**

@@ -307,6 +307,12 @@ export interface OrderPatternsHourlyComparison {
   pacePct: number | null
   baselineWeeks: number
   weekdayLabel: string
+  /** Net-sales twins of the order-count pace, same cutoff rules. */
+  salesCurrentTotal: number
+  salesBaselineTotal: number
+  salesPacePct: number | null
+  /** Latest hour (0–23) with data on the last current day, for "thru H PM" folios. */
+  lastDataHour: number | null
 }
 
 export interface DayOfWeekOrderPoint {
