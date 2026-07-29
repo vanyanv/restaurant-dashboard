@@ -791,8 +791,16 @@ model IngredientMatchDecision {
   undoneAt   DateTime?
   undoneById String?
 
-  account             Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Restrict, not Cascade: this is audit/history, not derived state — same
+  /// convention as StockCountLine and InventoryAdjustment. A canonical must
+  /// be re-parented (see `mergeCanonicalIngredients`) before it can be
+  /// deleted, so a merge/delete never silently destroys decision rows or
+  /// the UNDONE suppression records Task 10 depends on. NOTE for Task 10:
+  /// if `createdCanonical` deletion is ever wired up (it can't run today —
+  /// `AUTO_CREATE_ENABLED` is false), undo must repoint or remove this row
+  /// before deleting its canonical, or the delete will fail loudly here.
+  canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Restrict)
 
   @@index([accountId, status, createdAt])
   @@index([accountId, groupKey])
