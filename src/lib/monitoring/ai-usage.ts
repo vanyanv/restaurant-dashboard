@@ -3,11 +3,22 @@ import { prisma } from "@/lib/prisma"
 /**
  * USD per 1M tokens. Update when providers change pricing.
  * Last verified: 2026-04-30.
+ *
+ * gpt-5.4-nano added 2026-07-29: THRESHOLDS-certified ADJUDICATOR_MODEL
+ * (src/lib/ingredient-match-llm.ts) — without a pricing row here,
+ * recordAiUsage's pricing-miss fallback (see computeCostUsd below) would
+ * silently persist $0 for every production adjudicator call, making the
+ * feature's real spend invisible in AiUsageEvent from day one. Rate taken
+ * from scripts/eval-ingredient-match/llm-pricing.ts#LLM_PRICING_PER_MTOK
+ * (verified there against https://developers.openai.com/api/docs/pricing
+ * on 2026-07-28, cross-checked against this table's own gpt-4.1-mini row),
+ * not re-derived from memory.
  */
 export const PRICING_PER_MTOK = {
   "gpt-4.1-mini":     { in: 0.40, cachedIn: 0.10,  out: 1.60 },
   "gpt-4o-mini":      { in: 0.15, cachedIn: 0.075, out: 0.60 },
   "gemini-2.5-flash": { in: 0.30, cachedIn: 0.075, out: 2.50 },
+  "gpt-5.4-nano":     { in: 0.20, cachedIn: 0.02,  out: 1.25 },
 } as const
 
 export type AiUsageInput = {
