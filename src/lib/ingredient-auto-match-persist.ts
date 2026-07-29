@@ -9,7 +9,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
-import type { ResolvedGroup } from "@/lib/ingredient-auto-match-core"
+import type { ResolvedGroup, SuggestedGroup } from "@/lib/ingredient-auto-match-core"
 
 export type PersistResult = {
   /** Groups whose write actually committed — the source of truth for the
@@ -18,17 +18,84 @@ export type PersistResult = {
   applied: ResolvedGroup[]
   costsUpdated: number
   failed: number
+  /** SUGGESTED rows actually written — review-inbox pre-fill material. */
+  suggested: number
+}
+
+/**
+ * Record the ladder's declined-but-plausible picks as SUGGESTED decisions.
+ *
+ * These write NOTHING except the decision row: no line-item link, no learned
+ * sku/alias, no cost recompute. A stale suggestion for the same group is
+ * cleared first so repeat syncs replace rather than accumulate — the review
+ * inbox wants the current best guess, not every guess ever made.
+ *
+ * Runs in shadow mode too: a suggestion is already only a proposal, so there
+ * is no live/shadow distinction to draw.
+ *
+ * Never throws. A suggestion is a convenience; failing to record one must not
+ * cost the caller a sync.
+ */
+async function persistSuggestions(
+  accountId: string,
+  suggestions: SuggestedGroup[]
+): Promise<number> {
+  let written = 0
+  for (const s of suggestions) {
+    try {
+      await prisma.ingredientMatchDecision.deleteMany({
+        where: { accountId, groupKey: s.group.groupKey, status: "SUGGESTED" },
+      })
+      await prisma.ingredientMatchDecision.create({
+        data: {
+          accountId,
+          groupKey: s.group.groupKey,
+          vendorName: s.group.vendorName,
+          sku: s.group.sku,
+          productName: s.group.productName,
+          layer: s.layer,
+          // A similarity score, not a model confidence — the column is
+          // shared, and the `layer` prefix is what tells them apart.
+          confidence: s.score,
+          topScore: s.score,
+          margin: null,
+          reasoning: s.reasoning,
+          model: s.model,
+          candidates: s.candidates.map((c) => ({
+            id: c.canonicalIngredientId,
+            name: c.name,
+            score: c.score,
+          })),
+          canonicalIngredientId: s.canonicalIngredientId,
+          createdCanonical: false,
+          linkedLineItemIds: [],
+          linkedLineItemCount: 0,
+          status: "SUGGESTED",
+        },
+      })
+      written++
+    } catch (e) {
+      console.warn(
+        `[ingredient-auto-match] suggestion write failed for group ${s.group.groupKey}:`,
+        e
+      )
+    }
+  }
+  return written
 }
 
 export async function persistResolvedGroups(input: {
   accountId: string
   ownerId: string
   resolved: ResolvedGroup[]
+  suggestions?: SuggestedGroup[]
   shadow: boolean
 }): Promise<PersistResult> {
   const { accountId, ownerId, resolved, shadow } = input
   const applied: ResolvedGroup[] = []
   let failed = 0
+
+  const suggested = await persistSuggestions(accountId, input.suggestions ?? [])
 
   if (shadow) {
     for (const r of resolved) {
@@ -40,7 +107,7 @@ export async function persistResolvedGroups(input: {
         failed += r.group.lineItemIds.length
       }
     }
-    return { applied, costsUpdated: 0, failed }
+    return { applied, costsUpdated: 0, failed, suggested }
   }
 
   const touchedCanonicals = new Set<string>()
@@ -110,7 +177,7 @@ export async function persistResolvedGroups(input: {
     }
   }
 
-  return { applied, costsUpdated, failed }
+  return { applied, costsUpdated, failed, suggested }
 }
 
 function decisionData(accountId: string, r: ResolvedGroup, status: "APPLIED" | "SHADOW") {

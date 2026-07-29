@@ -47,12 +47,19 @@ import {
   candidateJson,
   type LineGroup,
   type ResolvedGroup,
+  type SuggestedGroup,
 } from "@/lib/ingredient-auto-match-core"
 
 const VECTOR_CANDIDATE_LIMIT = 10
 
 export type LadderResult = {
   resolved: ResolvedGroup[]
+  /** Groups the ladder declined to link but had a best candidate for. These
+   * link nothing — they exist so the review inbox can pre-fill the pick. A
+   * group whose only candidates are suppressed produces no suggestion: an
+   * undo means "no", and re-suggesting it would just make the human say no
+   * again. */
+  suggestions: SuggestedGroup[]
   llmCalls: number
   /** Line items whose group hit a real retrieval error (embedding call or
    * vector query), not a genuine "no confident match". */
@@ -66,6 +73,7 @@ export async function runLadder(input: {
 }): Promise<LadderResult> {
   const { accountId, ownerId, groups } = input
   const resolved: ResolvedGroup[] = []
+  const suggestions: SuggestedGroup[] = []
   let failed = 0
 
   // Suppression: never re-propose a (groupKey, canonicalIngredientId) pair a
@@ -139,6 +147,24 @@ export async function runLadder(input: {
   // ---- L2: vector ---------------------------------------------------------
   const llmQueue: Array<{ group: LineGroup; shortlist: MatchCandidate[] }> = []
 
+  // Best-candidate notes for groups the ladder declines, keyed by groupKey so
+  // L3 can upgrade a group's vector suggestion to an LLM one in place rather
+  // than recording both. Candidates here are already suppression-filtered.
+  const suggestionByGroup = new Map<string, SuggestedGroup>()
+  const noteSuggestion = (g: LineGroup, candidates: MatchCandidate[]) => {
+    const top = [...candidates].sort((a, b) => b.score - a.score)[0]
+    if (!top) return
+    suggestionByGroup.set(g.groupKey, {
+      group: g,
+      canonicalIngredientId: top.canonicalIngredientId,
+      layer: "suggest-vector",
+      score: top.score,
+      reasoning: null,
+      model: null,
+      candidates: candidates.slice(0, SHORTLIST),
+    })
+  }
+
   if (afterL1.length > 0) {
     let vectors: number[][] | null = null
     try {
@@ -201,9 +227,16 @@ export async function runLadder(input: {
             continue
           }
 
+          // Declined. Whatever happens at L3, there is a best candidate worth
+          // putting in front of the human — recorded now so the note survives
+          // even if the adjudicator abstains or errors.
+          noteSuggestion(g, candidates)
+
           // A group the automation has already been told "no" about (on any
           // canonical, not just one appearing in today's candidates) does
-          // not get a second silent LLM swing.
+          // not get a second silent LLM swing. It keeps its vector
+          // suggestion: suggesting links nothing, and the suppressed
+          // canonical is already filtered out of `candidates` above.
           if (groupKeysWithUndoHistory.has(g.groupKey)) continue
 
           const shortlist =
@@ -244,7 +277,32 @@ export async function runLadder(input: {
         draft: draftByCase.get(group.groupKey),
         llmAccept: THRESHOLDS.LLM_ACCEPT,
       })
-      if (!accepted) continue
+      if (!accepted) {
+        // Rejected, but a rejected draft is not a worthless one: if the model
+        // named a real shortlist member, its pick and its reasoning are the
+        // best note this group has. Upgrade the vector suggestion in place.
+        // A hallucinated name is NOT allowed to become a suggestion — the
+        // same shortlist-membership rule as the acceptance gate.
+        const draft = draftByCase.get(group.groupKey)
+        const named = draft?.matchName
+          ? shortlist.find((c) => c.name === draft.matchName)
+          : undefined
+        if (named) {
+          suggestionByGroup.set(group.groupKey, {
+            group,
+            canonicalIngredientId: named.canonicalIngredientId,
+            layer: "suggest-llm",
+            score: named.score,
+            reasoning: draft?.reasoning || null,
+            model,
+            candidates: shortlist,
+          })
+        }
+        continue
+      }
+
+      // Accepted — it is a link now, not a suggestion.
+      suggestionByGroup.delete(group.groupKey)
 
       const draft = draftByCase.get(group.groupKey)!
       const shortlistTop = shortlist.length > 0 ? Math.max(...shortlist.map((c) => c.score)) : null
@@ -262,5 +320,5 @@ export async function runLadder(input: {
     }
   }
 
-  return { resolved, llmCalls, failed }
+  return { resolved, suggestions: [...suggestionByGroup.values()], llmCalls, failed }
 }

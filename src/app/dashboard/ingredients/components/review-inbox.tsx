@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, ChevronDown, Receipt } from "lucide-react"
+import { ArrowRight, ChevronDown, Receipt, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { prettifyIngredientName } from "../../recipes/components/ingredient-picker-utils"
 import { MatchPickerSheet } from "./match-picker-sheet"
@@ -141,6 +141,18 @@ function ReviewCard({
               ${group.totalSpend.toFixed(0)} · {group.occurrences}×
             </span>
           </div>
+
+          {/* What auto-matching would have picked, if it had one. Shown on the
+              card so the owner can triage the queue without opening every
+              sheet — the pick itself is pre-selected inside. */}
+          {group.suggestion && (
+            <div className="mt-1 flex items-center gap-1.5 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--accent-dark)]">
+              <Sparkles className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">
+                {prettifyIngredientName(group.suggestion.canonicalName)}
+              </span>
+            </div>
+          )}
         </div>
 
         <span className="inline-flex h-9 shrink-0 items-center gap-1.5 border-2 border-[var(--ink)] bg-[var(--ink)] px-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--paper)] transition group-hover:bg-[var(--accent-dark)]">

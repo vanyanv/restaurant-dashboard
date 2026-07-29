@@ -38,6 +38,10 @@ export type AutoMatchResult = {
   autoVector: number
   autoLlm: number
   leftForReview: number
+  /** Groups left for review that got a recorded best-guess (SUGGESTED
+   * decision) for the review inbox to pre-fill. A subset of the groups
+   * behind `leftForReview` — these link nothing. */
+  suggested: number
   costsUpdated: number
   llmCalls: number
   /** Line items whose group hit a real error (embedding call, vector
@@ -69,6 +73,7 @@ export async function autoResolveUnmatchedLines(
     autoVector: 0,
     autoLlm: 0,
     leftForReview: 0,
+    suggested: 0,
     costsUpdated: 0,
     llmCalls: 0,
     failed: 0,
@@ -101,10 +106,12 @@ export async function autoResolveUnmatchedLines(
     accountId,
     ownerId,
     resolved: ladder.resolved,
+    suggestions: ladder.suggestions,
     shadow,
   })
   result.failed += persisted.failed
   result.costsUpdated = persisted.costsUpdated
+  result.suggested = persisted.suggested
 
   // Only groups that actually finished their write count toward these
   // summaries — a write-back failure correctly falls out of

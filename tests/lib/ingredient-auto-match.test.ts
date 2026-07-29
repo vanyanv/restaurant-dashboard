@@ -32,7 +32,12 @@ const txMocks = vi.hoisted(() => ({
 vi.mock("@/lib/prisma", () => {
   const prisma: Record<string, unknown> = {
     invoice: { findMany: vi.fn() },
-    ingredientMatchDecision: { findMany: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
+    ingredientMatchDecision: {
+      findMany: vi.fn(),
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     canonicalIngredient: { findMany: vi.fn(), create: vi.fn() },
     ingredientAlias: { findMany: vi.fn(), upsert: vi.fn() },
     ingredientSkuMatch: { upsert: vi.fn() },
@@ -116,6 +121,7 @@ beforeEach(() => {
   vi.mocked(prisma.ingredientMatchDecision.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.ingredientMatchDecision.create).mockResolvedValue({} as never)
   vi.mocked(prisma.ingredientMatchDecision.findFirst).mockResolvedValue(null as never)
+  vi.mocked(prisma.ingredientMatchDecision.deleteMany).mockResolvedValue({ count: 0 } as never)
   vi.mocked(prisma.canonicalIngredient.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.canonicalIngredient.create).mockResolvedValue({} as never)
   vi.mocked(prisma.ingredientAlias.findMany).mockResolvedValue([] as never)
@@ -576,6 +582,116 @@ describe("autoResolveUnmatchedLines", () => {
 // undoAutoMatch is the reverse of this file's write side (Task 10). These
 // tests exercise it against the SAME mocked prisma module autoResolveUnmatchedLines
 // uses, so the "full cycle" test below is a real end-to-end proof: what the
+describe("sub-threshold suggestions (Task 13 pre-fill source)", () => {
+  it("17. a group left for review records a SUGGESTED decision naming the top candidate and links nothing", async () => {
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-1", productName: "CONT FOAM HNGD WHT" }] }),
+    ] as never)
+    // Top score under HIGH — declined by L2, and adjudicate() abstains.
+    const candidates: Candidate[] = [
+      { canonicalIngredientId: "canon-1", name: "Container Foam Hinged Large White", score: 0.61 },
+      { canonicalIngredientId: "canon-2", name: "Container Foam 1-Compartment", score: 0.55 },
+    ]
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(candidates as never)
+
+    const result = await autoResolveUnmatchedLines(SCOPE, ["inv-1"])
+
+    expect(result.leftForReview).toBe(1)
+    expect(result.suggested).toBe(1)
+    // The whole safety point: a suggestion is a note for a human, not a link.
+    expect(txMocks.invoiceLineItem.updateMany).not.toHaveBeenCalled()
+    expect(prisma.invoiceLineItem.updateMany).not.toHaveBeenCalled()
+    expect(prisma.ingredientMatchDecision.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUGGESTED",
+          canonicalIngredientId: "canon-1",
+          layer: "suggest-vector",
+          linkedLineItemIds: [],
+          linkedLineItemCount: 0,
+        }),
+      })
+    )
+  })
+
+  it("18. a stale SUGGESTED row for the same group is cleared first, so repeat syncs don't pile up duplicates", async () => {
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-1", productName: "CONT FOAM HNGD WHT" }] }),
+    ] as never)
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+      { canonicalIngredientId: "canon-1", name: "Container Foam Hinged Large White", score: 0.61 },
+    ] as never)
+
+    await autoResolveUnmatchedLines(SCOPE, ["inv-1"])
+
+    expect(prisma.ingredientMatchDecision.deleteMany).toHaveBeenCalledWith({
+      where: {
+        accountId: SCOPE.accountId,
+        groupKey: buildGroupKey("Sysco", "CONT FOAM HNGD WHT"),
+        status: "SUGGESTED",
+      },
+    })
+  })
+
+  it("19. a rejected LLM draft still carries its reasoning onto the suggestion", async () => {
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-1", productName: "CONT FOAM HNGD WHT" }] }),
+    ] as never)
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+      { canonicalIngredientId: "canon-1", name: "Container Foam Hinged Large White", score: 0.61 },
+    ] as never)
+    // Below LLM_ACCEPT, so it is NOT accepted — but the model's reasoning is
+    // exactly what makes the review card worth reading.
+    vi.mocked(adjudicate).mockImplementation(
+      echoAdjudicate(THRESHOLDS.LLM_ACCEPT - 0.1) as never
+    )
+
+    await autoResolveUnmatchedLines(SCOPE, ["inv-1"])
+
+    expect(prisma.ingredientMatchDecision.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUGGESTED",
+          layer: "suggest-llm",
+          reasoning: "test draft",
+          canonicalIngredientId: "canon-1",
+        }),
+      })
+    )
+  })
+
+  it("20. a group with no candidates at all records no suggestion (nothing to suggest)", async () => {
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-1", productName: "Pallet Charge" }] }),
+    ] as never)
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([] as never)
+
+    const result = await autoResolveUnmatchedLines(SCOPE, ["inv-1"])
+
+    expect(result.leftForReview).toBe(1)
+    expect(result.suggested).toBe(0)
+    expect(prisma.ingredientMatchDecision.create).not.toHaveBeenCalled()
+  })
+
+  it("21. a suppressed candidate is never suggested either — undo means no, at every rung", async () => {
+    const groupKey = buildGroupKey("Sysco", "CONT FOAM HNGD WHT")
+    vi.mocked(prisma.ingredientMatchDecision.findMany).mockResolvedValue([
+      { groupKey, canonicalIngredientId: "canon-1" },
+    ] as never)
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      invoiceWith({ lineItems: [{ id: "li-1", productName: "CONT FOAM HNGD WHT" }] }),
+    ] as never)
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+      { canonicalIngredientId: "canon-1", name: "Container Foam Hinged Large White", score: 0.61 },
+    ] as never)
+
+    const result = await autoResolveUnmatchedLines(SCOPE, ["inv-1"])
+
+    expect(result.suggested).toBe(0)
+    expect(prisma.ingredientMatchDecision.create).not.toHaveBeenCalled()
+  })
+})
+
 // ladder linked and learned is exactly what undo unlinks and un-teaches, and
 // the resulting UNDONE row is what the ladder's own suppression check (8a/8b/8c
 // above) reads on the very next run.

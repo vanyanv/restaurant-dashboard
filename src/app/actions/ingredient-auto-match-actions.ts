@@ -70,7 +70,12 @@ export async function listRecentAutoMatches(
     where: {
       accountId,
       createdAt: { gte: since },
-      ...(opts?.excludeShadow ? { status: { not: "SHADOW" } } : {}),
+      // SUGGESTED rows are never activity: they linked nothing. They belong
+      // to the review inbox's pre-fill, and listing them here would report
+      // work the automation explicitly declined to do as work it did.
+      status: opts?.excludeShadow
+        ? { notIn: ["SHADOW", "SUGGESTED"] }
+        : { not: "SUGGESTED" },
     },
     orderBy: { createdAt: "desc" },
     include: { canonicalIngredient: { select: { name: true } } },
