@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { InvoiceExtraction } from "@/types/invoice"
 import {
+  composeReviewReasons,
+  findLineMathMismatches,
   findPackShapeAnomalies,
   findTotalReconciliationMismatch,
   normalizeCatchWeightMeatLines,
@@ -457,5 +459,79 @@ describe("findTotalReconciliationMismatch", () => {
         extraction({ lineItems: [li(1, 50)], subtotal: null, taxAmount: null, totalAmount: 0 })
       )
     ).toBeNull()
+  })
+})
+
+describe("composeReviewReasons", () => {
+  const base = {
+    dateSuspect: false,
+    mathMismatches: [] as ReturnType<typeof findLineMathMismatches>,
+    packAnomalies: [] as ReturnType<typeof findPackShapeAnomalies>,
+    totalMismatch: null,
+    matchConfidence: 1,
+    matched: true,
+  }
+
+  it("returns nothing for a clean, confidently matched invoice", () => {
+    expect(composeReviewReasons(base)).toEqual([])
+  })
+
+  it("carries line numbers on line-math reasons so rows can be flagged", () => {
+    const mismatches = findLineMathMismatches([
+      {
+        lineNumber: 7,
+        sku: null,
+        productName: "GREENO CUP",
+        description: null,
+        category: null,
+        quantity: 1,
+        unit: "CS",
+        packSize: null,
+        unitSize: null,
+        unitSizeUom: null,
+        unitPrice: 96.55,
+        extendedPrice: 66.55,
+      },
+    ])
+    const reasons = composeReviewReasons({ ...base, mathMismatches: mismatches })
+    expect(reasons).toHaveLength(1)
+    expect(reasons[0].kind).toBe("line_math")
+    expect(reasons[0].lineNumbers).toEqual([7])
+    expect(reasons[0].message).toContain("Line 7")
+    expect(reasons[0].message).toContain("$66.55")
+  })
+
+  it("explains a total-reconciliation gap in dollars", () => {
+    const mismatch = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [
+          { ...extraction().lineItems[0], extendedPrice: 1000, unitPrice: 1000, quantity: 1 },
+        ],
+        subtotal: 1851.01,
+        totalAmount: 1851.01,
+      })
+    )
+    expect(mismatch).not.toBeNull()
+    const reasons = composeReviewReasons({ ...base, totalMismatch: mismatch })
+    expect(reasons).toHaveLength(1)
+    expect(reasons[0].kind).toBe("total_reconciliation")
+    expect(reasons[0].message).toContain("$1,000.00")
+    expect(reasons[0].message).toContain("$1,851.01")
+  })
+
+  it("falls back to match-quality reasons only when no sanity issue exists", () => {
+    const unmatched = composeReviewReasons({ ...base, matched: false, matchConfidence: null })
+    expect(unmatched.map((r) => r.kind)).toEqual(["no_store_match"])
+
+    const lowConf = composeReviewReasons({ ...base, matchConfidence: 0.6 })
+    expect(lowConf.map((r) => r.kind)).toEqual(["low_match_confidence"])
+    expect(lowConf[0].message).toContain("60%")
+
+    const withSanity = composeReviewReasons({
+      ...base,
+      dateSuspect: true,
+      matchConfidence: 0.6,
+    })
+    expect(withSanity.map((r) => r.kind)).toEqual(["date_suspect"])
   })
 })

@@ -2,29 +2,21 @@
 
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { addDays, differenceInCalendarDays, format } from "date-fns"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
 import { PnLHeader } from "./pnl-header"
 import { defaultPnLRangeState, type PnLRangeState } from "./pnl-date-controls"
-import { PnLWaterfall, type WaterfallStep } from "./pnl-waterfall"
+import { PnLWaterfall } from "./pnl-waterfall"
+import { PnLPeriodStrip } from "./pnl-period-strip"
 import { PnLLeagueTable } from "./pnl-league-table"
 import { PnLStoreComparison } from "./pnl-store-comparison"
+import { buildWaterfallSteps } from "./waterfall-steps"
+import { TOTAL_SALES_CODE, AFTER_LABOR_RENT_CODE } from "@/lib/pnl"
 import { getAllStoresPnL } from "@/app/actions/store-actions"
-import {
-  TOTAL_SALES_CODE,
-  UBER_COMMISSION_CODE,
-  DOORDASH_COMMISSION_CODE,
-  COGS_CODE,
-  LABOR_CODE,
-  RENT_CODE,
-  CLEANING_CODE,
-  TOWELS_CODE,
-  AFTER_LABOR_RENT_CODE,
-  CUSTOM_FIXED_CODE_PREFIX,
-} from "@/lib/pnl"
 
 export interface PnLAllStoresClientProps {
-  stores: Array<{ id: string; name: string }>
+  stores: Array<{ id: string; name: string; lifecycleStage?: string }>
   initialState?: PnLRangeState
 }
 
@@ -51,7 +43,33 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
     },
   })
 
+  // Previous equal-length window, for the waterfall's Δ stamps.
+  const rangeDays = differenceInCalendarDays(state.endDate, state.startDate) + 1
+  const priorEnd = addDays(state.startDate, -1)
+  const priorStart = addDays(priorEnd, -(rangeDays - 1))
+  const priorQuery = useQuery({
+    queryKey: [
+      "pnl-all",
+      priorStart.toISOString(),
+      priorEnd.toISOString(),
+      state.granularity,
+    ],
+    queryFn: async () => {
+      const result = await getAllStoresPnL({
+        startDate: priorStart,
+        endDate: priorEnd,
+        granularity: state.granularity,
+      })
+      if ("error" in result) throw new Error(result.error)
+      return result
+    },
+  })
+
   const data = query.data
+  const preOpenStoreIds = stores
+    .filter((s) => s.lifecycleStage === "pre_open")
+    .map((s) => s.id)
+  const preOpenSet = new Set(preOpenStoreIds)
 
   return (
     <div className="flex flex-col h-full">
@@ -91,44 +109,46 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
             {/* Combined waterfall for the full selected range */}
             {data.periods.length > 0 && data.consolidatedRows.length > 0 ? (
               (() => {
-                const sumRow = (code: string) => {
-                  const row = data.consolidatedRows.find((r) => r.code === code)
-                  if (!row) return 0
-                  return row.values.reduce((a, b) => a + (b ?? 0), 0)
-                }
-                const gross = sumRow(TOTAL_SALES_CODE)
-                const commissions = Math.abs(
-                  sumRow(UBER_COMMISSION_CODE) + sumRow(DOORDASH_COMMISSION_CODE)
+                const steps = buildWaterfallSteps(data.consolidatedRows)
+                const priorRows = priorQuery.data?.consolidatedRows
+                const priorSteps =
+                  priorRows && priorRows.length > 0 ? buildWaterfallSteps(priorRows) : undefined
+                // A prior window with no trade (pre-launch) would render every
+                // Δ as a giant gain — suppress until there is something real.
+                const priorHasTrade = priorSteps?.[0] != null && priorSteps[0].value > 0
+                return (
+                  <PnLWaterfall
+                    steps={steps}
+                    priorSteps={priorHasTrade ? priorSteps : undefined}
+                    priorNote={
+                      priorHasTrade
+                        ? `Δ vs ${format(priorStart, "MMM d")} – ${format(priorEnd, "MMM d")}`
+                        : undefined
+                    }
+                  />
                 )
-                const cogs = sumRow(COGS_CODE)
-                const labor = sumRow(LABOR_CODE)
-                const rent = sumRow(RENT_CODE)
-                const cleaning = sumRow(CLEANING_CODE)
-                const towels = sumRow(TOWELS_CODE)
-                // Owner-managed custom fixed expenses (code FX_*) — stored
-                // negative, same sign convention as rent/cleaning/towels.
-                const customFixed = data.consolidatedRows
-                  .filter((r) => r.code.startsWith(CUSTOM_FIXED_CODE_PREFIX))
-                  .reduce((a, r) => a + r.values.reduce((x, y) => x + (y ?? 0), 0), 0)
-                const bottom = sumRow(AFTER_LABOR_RENT_CODE)
-
-                const steps: WaterfallStep[] = [
-                  { kind: "total", label: "Gross Sales", value: gross },
-                  { kind: "subtract", label: "3P Commissions", value: commissions },
-                  { kind: "subtract", label: "COGS", value: cogs },
-                  { kind: "subtract", label: "Labor", value: labor },
-                  {
-                    kind: "subtract",
-                    label: "Rent + Fixed",
-                    value: rent + cleaning + towels + customFixed,
-                  },
-                  { kind: "total", label: "Bottom Line", value: bottom },
-                ]
-                return <PnLWaterfall steps={steps} />
               })()
             ) : null}
 
-            {/* League table — compare across stores for the latest period */}
+            {/* Per-period read — the section the granularity control drives */}
+            {data.periods.length > 1 ? (
+              (() => {
+                const salesRow = data.consolidatedRows.find((r) => r.code === TOTAL_SALES_CODE)
+                const bottomRow = data.consolidatedRows.find(
+                  (r) => r.code === AFTER_LABOR_RENT_CODE
+                )
+                if (!salesRow || !bottomRow) return null
+                return (
+                  <PnLPeriodStrip
+                    periods={data.periods}
+                    sales={salesRow.values}
+                    bottomLine={bottomRow.values}
+                  />
+                )
+              })()
+            ) : null}
+
+            {/* League table — compare across stores for the selected range */}
             {data.perStore.length > 0 ? (
               <PnLLeagueTable
                 rows={data.perStore.map((s) => ({
@@ -142,6 +162,7 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
                   marginPct: s.marginPct,
                   fixedCostsConfigured: s.fixedCostsConfigured,
                 }))}
+                preOpenStoreIds={preOpenStoreIds}
               />
             ) : (
               <div className="inv-panel inv-panel--empty p-6 text-sm">
@@ -153,38 +174,46 @@ export function PnLAllStoresClient({ stores, initialState }: PnLAllStoresClientP
               </div>
             )}
 
-            {/* Stores side by side — full P&L with stores as columns */}
-            {data.perStore.length > 0 ? (
-              <PnLStoreComparison
-                stores={data.perStore.map((s) => ({
-                  storeId: s.storeId,
-                  storeName: s.storeName,
-                  grossSales: s.grossSales,
-                  cogsValue: s.cogsValue,
-                  laborValue: s.laborValue,
-                  rentValue:
-                    s.rentValue + (s.fixedCosts - s.laborValue - s.rentValue),
-                  bottomLine: s.bottomLine,
-                  marginPct: s.marginPct,
-                  fixedCostsConfigured: s.fixedCostsConfigured,
-                }))}
-                total={{
-                  storeId: null,
-                  storeName: "Total",
-                  grossSales: data.combined.grossSales,
-                  cogsValue: data.combined.cogsValue,
-                  laborValue: data.combined.laborValue,
-                  rentValue:
-                    data.combined.rentValue +
-                    (data.combined.fixedCosts -
-                      data.combined.laborValue -
-                      data.combined.rentValue),
-                  bottomLine: data.combined.bottomLine,
-                  marginPct: data.combined.marginPct,
-                  fixedCostsConfigured: true,
-                }}
-              />
-            ) : null}
+            {/* Stores side by side — earns its place once 2+ stores trade.
+                With a single operational store it repeats the waterfall and
+                league verbatim, so it stays collapsed until then. */}
+            {(() => {
+              const trading = data.perStore.filter(
+                (s) => !preOpenSet.has(s.storeId) && s.grossSales > 0
+              )
+              if (trading.length < 2) return null
+              return (
+                <PnLStoreComparison
+                  stores={trading.map((s) => ({
+                    storeId: s.storeId,
+                    storeName: s.storeName,
+                    grossSales: s.grossSales,
+                    cogsValue: s.cogsValue,
+                    laborValue: s.laborValue,
+                    rentValue:
+                      s.rentValue + (s.fixedCosts - s.laborValue - s.rentValue),
+                    bottomLine: s.bottomLine,
+                    marginPct: s.marginPct,
+                    fixedCostsConfigured: s.fixedCostsConfigured,
+                  }))}
+                  total={{
+                    storeId: null,
+                    storeName: "Total",
+                    grossSales: data.combined.grossSales,
+                    cogsValue: data.combined.cogsValue,
+                    laborValue: data.combined.laborValue,
+                    rentValue:
+                      data.combined.rentValue +
+                      (data.combined.fixedCosts -
+                        data.combined.laborValue -
+                        data.combined.rentValue),
+                    bottomLine: data.combined.bottomLine,
+                    marginPct: data.combined.marginPct,
+                    fixedCostsConfigured: true,
+                  }}
+                />
+              )
+            })()}
 
           </>
         ) : null}

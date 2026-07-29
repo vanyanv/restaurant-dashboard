@@ -8,7 +8,8 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, composeReviewReasons, type ReviewReason } from "@/lib/invoice-sanity"
+import { applyPackShapePriors, buildPackShapePriors, type PackShapePrior } from "@/lib/invoice-pack-prior"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
@@ -367,6 +368,67 @@ async function runSync(
 
   const validExtractions = extracted.filter((e): e is ExtractedInvoice => e !== null)
 
+  // ─── Phase 2.5: Historical pack-shape priors ───
+  // The same (vendor, sku) ships the same physical case every week, but the
+  // LLM re-derives the PACK/SIZE split per invoice and is nondeterministic
+  // about it. Vote over the shapes already accepted for this account and
+  // override fresh lines that disagree with a stable majority, BEFORE the
+  // sanity checks run — a corrected line doesn't need REVIEW.
+  const priorSkus = [
+    ...new Set(
+      validExtractions.flatMap((inv) =>
+        inv.extraction.lineItems.map((li) => li.sku).filter((s): s is string => Boolean(s))
+      )
+    ),
+  ]
+  let packPriors = new Map<string, PackShapePrior>()
+  if (priorSkus.length > 0) {
+    try {
+      const priorRows = await prisma.invoiceLineItem.findMany({
+        where: {
+          sku: { in: priorSkus },
+          invoice: { accountId, status: { in: ["MATCHED", "APPROVED"] } },
+        },
+        select: {
+          sku: true,
+          productName: true,
+          category: true,
+          unit: true,
+          packSize: true,
+          unitSize: true,
+          unitSizeUom: true,
+          invoice: { select: { vendorName: true } },
+        },
+      })
+      packPriors = buildPackShapePriors(
+        priorRows.map((r) => ({
+          vendorName: r.invoice.vendorName,
+          sku: r.sku,
+          productName: r.productName,
+          category: r.category,
+          unit: r.unit,
+          packSize: r.packSize,
+          unitSize: r.unitSize,
+          unitSizeUom: r.unitSizeUom,
+        }))
+      )
+    } catch (err) {
+      logger.error("[invoice-sync] pack-shape prior lookup failed — continuing without priors:", err)
+    }
+  }
+  for (const inv of validExtractions) {
+    const { extraction: corrected, corrections } = applyPackShapePriors(inv.extraction, packPriors)
+    for (const c of corrections) {
+      logger.warn(
+        `[invoice-sync] pack prior override on ${inv.extraction.vendorName} line ${c.lineNumber} ` +
+        `"${c.productName}" (sku ${c.sku}): ${c.from.packSize ?? "-"}×${c.from.unitSize ?? "-"} ` +
+        `${c.from.unitSizeUom ?? "-"} → ${c.to.packSize}×${c.to.unitSize} ${c.to.unitSizeUom} ` +
+        `(${c.support}/${c.eligible} prior lines agree)`
+      )
+    }
+    inv.extraction = corrected
+  }
+
   emit({
     phase: "matching", status: "processing",
     totalProgress: computeProgress(100, 100, 0, 0),
@@ -426,7 +488,22 @@ async function runSync(
       status = "PENDING"
     }
 
+    // Persist WHY it needs review — the detail page renders these so the
+    // owner isn't left staring at a bare badge.
+    const reviewReasons: ReviewReason[] =
+      status === "REVIEW"
+        ? composeReviewReasons({
+            dateSuspect,
+            mathMismatches,
+            packAnomalies,
+            totalMismatch,
+            matchConfidence: match?.confidence ?? null,
+            matched: Boolean(match),
+          })
+        : []
+
     return {
+      reviewReasons,
       ownerId: userId,
       accountId,
       storeId: match?.storeId ?? null,
@@ -488,6 +565,9 @@ async function runSync(
           status: inv.status,
           matchConfidence: inv.matchConfidence,
           matchedAt: inv.matchedAt,
+          reviewReasons: inv.reviewReasons.length > 0
+            ? (inv.reviewReasons as unknown as Prisma.InputJsonValue)
+            : undefined,
           rawExtractionJson: inv.rawExtractionJson,
           extractionModel: inv.extractionModel,
           pdfBlobPathname: inv.pdfBlobPathname,

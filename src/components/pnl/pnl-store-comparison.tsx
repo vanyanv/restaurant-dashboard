@@ -128,8 +128,11 @@ export function PnLStoreComparison({
                 {name}
               </span>
               {!c.fixedCostsConfigured && !isTotal ? (
-                <span className="pnl-comparison__warn" title="Fixed costs not configured">
-                  incomplete
+                <span
+                  className="pnl-comparison__warn"
+                  title="Labor/rent not configured — bottom line is missing those costs"
+                >
+                  fixed costs not set
                 </span>
               ) : null}
             </>

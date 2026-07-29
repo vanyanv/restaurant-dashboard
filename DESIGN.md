@@ -292,7 +292,41 @@ Interactive surfaces signal state through:
 ### Perforation (`.perforation`)
 - A horizontal `1px dashed var(--hairline-bold)` rule with optional `var(--ink-faint)` inline label at `font-size: 10px`. Used to break ledger groups by date or store, like the perforated tear-line on a printed report.
 
-## 6. Do's and Don'ts
+## 6. Chart Vocabulary
+
+Every chart on `/dashboard/*` speaks one dialect. A chart that invents its own
+colors reads as a different product.
+
+**Fills & strokes**
+- **Solid ink (`--ink`)** — money in, totals, the primary series. The revenue
+  heatmap ramps ink opacity (`12% / 30% / 55% / 85%`), never red.
+- **Muted ink (`--ink-muted`)** — the secondary series of a pair (net beside
+  gross, third-party beside first-party, the smaller tender slice).
+- **Red crosshatch** — money OUT. The `.pnl-waterfall` subtraction texture is
+  the only sanctioned use of red as a fill family.
+- **`--accent` / `--accent-dark`** — flagged, over-target, losing, anomalous.
+  Never a routine data series, never a tender type, never "the second color".
+- **`--ink-good`** — confirmed good against a benchmark (delta stamps, Best
+  rows, positive movers). The only green; never decorative. No hardcoded
+  `#1a7a4a` — always the token.
+- **Platform series** (multi-line/stacked by ordering platform) use the
+  platform stamp colors (`--platform-*`) and MUST carry a text legend —
+  the Color-Plus-Label rule applies to charts too.
+
+**Axes & furniture**
+- Ticks: 10px, mono-adjacent, compact dollars via `formatCompact` (`$75K`,
+  not `$75,000.00`). Category axes get an explicit `width` wide enough for
+  the longest label — a clipped "05,000.00" is a bug, truncate with `…` +
+  tooltip instead.
+- Gridlines: none, or `1px dotted var(--hairline-bold)`. Axis lines off;
+  the panel hairline frames the plot.
+- Sparklines are neutral ink — judgment belongs to the Δ stamp next to
+  them, not the trace color.
+- Every intensity ramp gets a min→max legend; every partial bucket is
+  visually marked (reduced opacity + `*`), never silently mixed with
+  complete ones.
+
+## 7. Do's and Don'ts
 
 ### Do
 - **Do** use the editorial tokens — `--ink`, `--ink-muted`, `--ink-faint`, `--paper`, `--paper-deep`, `--hairline`, `--hairline-bold`, `--accent` — for every color decision on `/dashboard/*`.

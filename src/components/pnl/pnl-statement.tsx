@@ -1,5 +1,9 @@
+"use client"
+
+import { useState } from "react"
 import { cn } from "@/lib/utils"
 import type { Period, PnLRow } from "@/lib/pnl"
+import { COGS_CODE, LABOR_CODE, AFTER_LABOR_RENT_CODE, GROSS_PROFIT_CODE } from "@/lib/pnl"
 import { Sparkline } from "./sparkline"
 import { DeltaStamp } from "./delta-stamp"
 
@@ -7,7 +11,9 @@ import { DeltaStamp } from "./delta-stamp"
  * Full P&L statement as an N-column matrix. Rows = GL lines, columns = periods
  * (oldest leftmost, most-recent rightmost, highlighted). Trailing columns:
  *  - Trend: sparkline across all N periods
- *  - Δ: change from first period to last (or latest-vs-prior when only 2)
+ *  - Δ: change between the first and last COMPLETE periods — partial buckets
+ *    at the range edges are never used as delta endpoints (comparing a 4-day
+ *    fragment to a 3-day fragment reads as decline when nothing declined).
  *
  * Intentionally dense. The typography does the heavy lifting: Fraunces italic
  * subtotals with a top hairline, DM Sans uppercase labels, JetBrains Mono
@@ -19,12 +25,24 @@ export interface PnLStatementProps {
   periods: Period[]
   /** Section title rendered above the table (Fraunces display). Optional. */
   title?: string
+  /** Rendered right of the title, on the same baseline — page verbs live here. */
+  actions?: React.ReactNode
   /** Extra classname on the outer container. */
   className?: string
   /** When true (default), show the Trend sparkline column. */
   showTrend?: boolean
   /** When true (default), show the Δ column. */
   showDelta?: boolean
+}
+
+/** % of sales sub-lines + over-target detection, keyed by row code.
+ *  A cost row only earns red when it exceeds its target — at rest, costs
+ *  are ink like everything else ("earn the red"). */
+const PCT_ROWS: Record<string, { target?: number }> = {
+  [COGS_CODE]: { target: 0.22 },
+  [LABOR_CODE]: { target: 0.28 },
+  [GROSS_PROFIT_CODE]: {},
+  [AFTER_LABOR_RENT_CODE]: {},
 }
 
 function formatDollar(v: number, { parens = true } = {}): string {
@@ -47,7 +65,7 @@ function formatDeduction(v: number): string {
 
 /** Row codes where the semantic meaning is a DEDUCTION regardless of how
  *  the value is stored (some are stored as negatives, some as positive
- *  magnitudes). Used to render those cells in red with parens formatting. */
+ *  magnitudes). Used for parens formatting and delta cost-semantics. */
 const DEDUCTION_CODES = new Set<string>([
   "COM_UBER", // 3P commissions
   "COM_DD",
@@ -63,11 +81,6 @@ function isDeductionRow(row: PnLRow): boolean {
   // Custom owner-managed fixed expenses (code `FX_*`) are stored negative and
   // flagged isFixed; format them as deductions like Labor/Rent/Towels.
   return DEDUCTION_CODES.has(row.code) || row.isFixed === true
-}
-
-function formatPercent(p: number): string {
-  if (!Number.isFinite(p) || p === 0) return "—"
-  return `${(p * 100).toFixed(1)}%`
 }
 
 function formatPeriodLabel(p: Period): { primary: string; secondary: string } {
@@ -86,31 +99,64 @@ function formatPeriodLabel(p: Period): { primary: string; secondary: string } {
   return { primary: p.label, secondary: "" }
 }
 
+/** A period is a valid delta endpoint only when it covers its full bucket AND
+ *  has fully elapsed. Daily buckets are built with isPartial=false even for
+ *  today-in-progress, so the elapsed check matters for all granularities. */
+function isCompletePeriod(p: Period, todayYMD: string): boolean {
+  if (p.isPartial) return false
+  return p.endDate.toISOString().slice(0, 10) < todayYMD
+}
+
+/** A row is inactive when it will never say anything for this range: not a
+ *  subtotal, not "unknown / needs configuring", and zero in every period. */
+function isInactiveRow(row: PnLRow): boolean {
+  if (row.isSubtotal) return false
+  if (row.isUnknown?.some(Boolean)) return false
+  return row.values.every((v) => !Number.isFinite(v) || v === 0)
+}
+
 export function PnLStatement({
   rows,
   periods,
   title,
+  actions,
   className,
   showTrend = true,
   showDelta = true,
 }: PnLStatementProps) {
+  const [showInactive, setShowInactive] = useState(false)
+
   if (periods.length === 0 || rows.length === 0) {
     return (
       <section className={cn("financial-statement financial-statement--empty", className)}>
-        {title ? <h2 className="financial-statement__title">{title}</h2> : null}
+        {title ? (
+          <div className="financial-statement__head">
+            <h2 className="financial-statement__title">{title}</h2>
+            {actions ? <div className="financial-statement__actions">{actions}</div> : null}
+          </div>
+        ) : null}
         <p className="financial-statement__empty">No data for the selected period.</p>
       </section>
     )
   }
 
   const latestIdx = periods.length - 1
-  const priorIdx = periods.length >= 2 ? periods.length - 2 : null
-  const firstIdx = 0
 
-  // For the Δ column: when there are many periods (3+), show first → last.
-  // When there are exactly 2, prior → latest. When there's 1, suppress.
-  const deltaFrom = periods.length >= 3 ? firstIdx : priorIdx
-  const canShowDelta = showDelta && deltaFrom != null
+  // Δ endpoints: first and last COMPLETE periods. With fewer than two complete
+  // periods there is nothing honest to compare, so the column disappears.
+  const todayYMD = new Date().toLocaleDateString("en-CA")
+  const completeIdxs = periods
+    .map((p, i) => (isCompletePeriod(p, todayYMD) ? i : null))
+    .filter((i): i is number => i != null)
+  const deltaFrom = completeIdxs.length >= 2 ? completeIdxs[0] : null
+  const deltaTo = completeIdxs.length >= 2 ? completeIdxs[completeIdxs.length - 1] : null
+  const canShowDelta = showDelta && deltaFrom != null && deltaTo != null && deltaFrom !== deltaTo
+  const deltaSkipsPartials = canShowDelta && (deltaFrom !== 0 || deltaTo !== latestIdx)
+
+  const inactiveRows = rows.filter(isInactiveRow)
+  const collapsing = !showInactive && inactiveRows.length >= 2
+  const inactiveSet = collapsing ? new Set(inactiveRows.map((r) => r.code)) : null
+  const firstInactiveCode = inactiveRows[0]?.code
 
   const templateCols = [
     "minmax(240px, 1.4fr)",
@@ -119,11 +165,26 @@ export function PnLStatement({
     canShowDelta ? "minmax(100px, 0.9fr)" : null,
   ].filter(Boolean).join(" ")
 
-  const totalCols = 1 + periods.length + (showTrend ? 1 : 0) + (canShowDelta ? 1 : 0)
+  const isDailyFirehose = periods.length > 35 && periods[0]?.days === 1
+
+  // Rhythm rule: a slightly bolder hairline every 4th data row (resets at each
+  // subtotal) so the eye can track a row across all N columns without a hover.
+  let sinceRule = 0
 
   return (
     <section className={cn("financial-statement", className)}>
-      {title ? <h2 className="financial-statement__title font-display">{title}</h2> : null}
+      {title || actions ? (
+        <div className="financial-statement__head">
+          {title ? <h2 className="financial-statement__title font-display">{title}</h2> : null}
+          {actions ? <div className="financial-statement__actions">{actions}</div> : null}
+        </div>
+      ) : null}
+
+      {isDailyFirehose ? (
+        <p className="statement-note">
+          {periods.length} daily columns — Week granularity reads tighter over a range this long.
+        </p>
+      ) : null}
 
       <div className="financial-statement__scroll">
         <div
@@ -158,25 +219,59 @@ export function PnLStatement({
             </div>
           ) : null}
           {canShowDelta ? (
-            <div className="statement-cell statement-cell--head statement-cell--num" role="columnheader">
+            <div
+              className="statement-cell statement-cell--head statement-cell--num"
+              role="columnheader"
+              title={
+                deltaSkipsPartials
+                  ? `Partial buckets excluded — compares ${periods[deltaFrom!].label} to ${periods[deltaTo!].label}`
+                  : undefined
+              }
+            >
               <span className="statement-head-kicker">
-                {periods.length >= 3 ? "Δ First → Latest" : "Δ vs Prior"}
+                Δ full periods{deltaSkipsPartials ? " *" : ""}
               </span>
             </div>
           ) : null}
 
           {rows.flatMap((row) => {
-            const cells: React.ReactNode[] = []
+            // Collapsed inactive rows: one toggle line where the first one sat.
+            if (inactiveSet?.has(row.code)) {
+              if (row.code !== firstInactiveCode) return []
+              return [
+                <div key="inactive-toggle" className="statement-collapse" role="row">
+                  <button
+                    type="button"
+                    className="statement-collapse__btn"
+                    onClick={() => setShowInactive(true)}
+                  >
+                    {inactiveRows.length} inactive accounts — show
+                  </button>
+                </div>,
+              ]
+            }
+
+            const cells: React.ReactElement[] = []
             const isCostRow = isDeductionRow(row)
+            const pctSpec = PCT_ROWS[row.code]
+
+            if (row.isSubtotal) {
+              sinceRule = 0
+            } else {
+              sinceRule += 1
+            }
+            const ruled = !row.isSubtotal && sinceRule > 0 && sinceRule % 4 === 0
+
+            const rowClasses = cn(
+              row.isSubtotal && "statement-cell--subtotal",
+              isCostRow && "statement-cell--cost",
+              ruled && "statement-cell--rule"
+            )
 
             cells.push(
               <div
                 key={`${row.code}-label`}
-                className={cn(
-                  "statement-cell statement-cell--label",
-                  row.isSubtotal && "statement-cell--subtotal",
-                  isCostRow && "statement-cell--cost"
-                )}
+                className={cn("statement-cell statement-cell--label", rowClasses)}
                 role="rowheader"
               >
                 <span className={cn("statement-label", row.isSubtotal && "font-display-tight")}>
@@ -188,27 +283,45 @@ export function PnLStatement({
             for (let i = 0; i < periods.length; i++) {
               const v = row.values[i] ?? 0
               const unknown = row.isUnknown?.[i] === true
-              // A cell should read red when the ROW is a deduction (always),
-              // OR when the stored value is negative (e.g., a losing
-              // Bottom Line subtotal or a negative discount aggregate).
+              // Red is earned, not categorical: a losing subtotal reads red,
+              // and a % row over its target reads red. A cost being a cost
+              // does not.
               const isNegativeValue = Number.isFinite(v) && v < 0
-              const showRed = !unknown && v !== 0 && (isCostRow || isNegativeValue)
+              const losingSubtotal = row.isSubtotal && isNegativeValue
+              const pct = pctSpec ? Math.abs(row.percents[i] ?? 0) : null
+              const overTarget =
+                pctSpec?.target != null && pct != null && pct > pctSpec.target + 0.0005
               const display = isCostRow ? formatDeduction(v) : formatDollar(v)
               cells.push(
                 <div
                   key={`${row.code}-${i}`}
                   className={cn(
                     "statement-cell statement-cell--num",
-                    row.isSubtotal && "statement-cell--subtotal",
+                    rowClasses,
                     i === latestIdx && "statement-cell--latest",
-                    showRed && "statement-cell--deduction"
+                    losingSubtotal && "statement-cell--deduction",
+                    overTarget && "statement-cell--over"
                   )}
                   role="cell"
                 >
                   {unknown ? (
                     <span className="statement-unknown" title="Not configured">—</span>
                   ) : (
-                    <span className="font-mono">{display}</span>
+                    <>
+                      <span className="font-mono">{display}</span>
+                      {pctSpec && pct != null && pct !== 0 && v !== 0 ? (
+                        <span
+                          className="statement-pct font-mono"
+                          title={
+                            pctSpec.target != null
+                              ? `${(pct * 100).toFixed(1)}% of sales · target ${(pctSpec.target * 100).toFixed(0)}%`
+                              : `${(pct * 100).toFixed(1)}% of sales`
+                          }
+                        >
+                          {(pct * 100).toFixed(1)}%
+                        </span>
+                      ) : null}
+                    </>
                   )}
                 </div>
               )
@@ -219,10 +332,7 @@ export function PnLStatement({
               cells.push(
                 <div
                   key={`${row.code}-trend`}
-                  className={cn(
-                    "statement-cell statement-cell--num statement-cell--trend",
-                    row.isSubtotal && "statement-cell--subtotal"
-                  )}
+                  className={cn("statement-cell statement-cell--num statement-cell--trend", rowClasses)}
                   role="cell"
                 >
                   {hasData ? (
@@ -241,15 +351,12 @@ export function PnLStatement({
             }
 
             if (canShowDelta) {
-              const current = row.values[latestIdx] ?? 0
+              const current = row.values[deltaTo!] ?? 0
               const prior = row.values[deltaFrom!] ?? null
               cells.push(
                 <div
                   key={`${row.code}-delta`}
-                  className={cn(
-                    "statement-cell statement-cell--num statement-cell--delta",
-                    row.isSubtotal && "statement-cell--subtotal"
-                  )}
+                  className={cn("statement-cell statement-cell--num statement-cell--delta", rowClasses)}
                   role="cell"
                 >
                   <DeltaStamp
@@ -265,6 +372,18 @@ export function PnLStatement({
 
             return cells
           })}
+
+          {showInactive && inactiveRows.length >= 2 ? (
+            <div className="statement-collapse" role="row">
+              <button
+                type="button"
+                className="statement-collapse__btn"
+                onClick={() => setShowInactive(false)}
+              >
+                hide {inactiveRows.length} inactive accounts
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
