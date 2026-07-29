@@ -863,6 +863,18 @@
   font-weight: 500;
 }
 
+/* The day-count chip is the lowest-value token in the dateline; dropping it
+   (and the desktop min-width) on phone widths is what keeps the topbar
+   cluster inside the viewport. */
+@media (max-width: 480px) {
+  .drp-dateline-span {
+    display: none;
+  }
+  .drp-dateline {
+    min-width: 0;
+  }
+}
+
 /* Preset strip — joined tab-pills that speak the same editorial dialect as the
    dateline group. Sharp corners, hairline-bold frame, warm translucent wash,
    DM Sans uppercase small caps, red "stamp" active state.

@@ -7,9 +7,7 @@ import {
 import {
   getInvoiceSummary,
   getInvoiceStoreBreakdown,
-  getInvoiceSpendTimeline,
 } from "@/app/actions/invoice-actions"
-import { resolvePeriod } from "@/app/dashboard/invoices/components/sections/data"
 import {
   rangeToActionOptions,
   startOfDayLA,
@@ -91,11 +89,3 @@ export const fetchInvoiceBreakdown = cache(() =>
   getInvoiceStoreBreakdown({ days: 30 })
 )
 
-export const fetchInvoiceSpend30d = cache(async () => {
-  const p = resolvePeriod("month")
-  return getInvoiceSpendTimeline({
-    startDate: p.startDate,
-    endDate: p.endDate,
-    granularity: p.granularity,
-  })
-})

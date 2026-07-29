@@ -113,6 +113,16 @@ async function runHourlySyncInner(opts?: {
   for (const row of rows) {
     const epochMs = row.reference_time_local_without_tz as number | null
     if (epochMs == null) continue
+    // The daily rollup (order_count metric) excludes canceled orders; skip
+    // them here too so completed days reconcile exactly between the two
+    // tables instead of drifting by the day's cancellation count.
+    const orderStatus = row.order_status as string | null | undefined
+    if (
+      orderStatus &&
+      (orderStatus.includes("CANCELED") || orderStatus.includes("REJECTED"))
+    ) {
+      continue
+    }
     const otterStoreId = row.store_id as string | null | undefined
     if (!otterStoreId) {
       droppedNoStore++

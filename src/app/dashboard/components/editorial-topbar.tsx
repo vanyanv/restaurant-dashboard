@@ -26,13 +26,13 @@ export function EditorialTopbar({
           {title}
         </h1>
         {stamps ? (
-          <span className="ml-3 hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] sm:flex">
-            <span className="inline-block h-[3px] w-[3px] rotate-45 bg-[var(--ink-faint)]" />
+          <span className="ml-3 hidden min-w-0 shrink items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-faint)] sm:flex">
+            <span className="inline-block h-[3px] w-[3px] shrink-0 rotate-45 bg-[var(--ink-faint)]" />
             {stamps}
           </span>
         ) : null}
         {children ? (
-          <div className="ml-auto flex items-center gap-2">{children}</div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
         ) : null}
       </div>
     </header>
