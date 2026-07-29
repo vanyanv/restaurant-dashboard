@@ -14,6 +14,8 @@ import { sendGraphMail } from "@/lib/graph-mail"
 import { buildPriceAlertEmail, type PriceHike } from "@/lib/price-alert-email"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { matchNewLineItems } from "@/lib/ingredient-matching"
+import { autoResolveUnmatchedLines } from "@/lib/ingredient-auto-match"
+import { resolveAutoMatchMode } from "@/lib/ingredient-auto-match-core"
 import { bustTags } from "@/lib/cache/cached"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
@@ -549,6 +551,36 @@ async function runSync(
       )
     } catch (err) {
       logger.error("Ingredient matching failed:", err)
+    }
+  }
+
+  // ─── Phase 5b: AI auto-match whatever Phase 5 left unmatched ───
+  // Off by default. `shadow` records what the ladder WOULD have linked
+  // (IngredientMatchDecision rows, status SHADOW) without touching a single
+  // line item; `on` links for real. Its own try/catch because auto-matching
+  // is an enhancement — a provider outage or a bad embedding must never turn
+  // a successful invoice sync into a failed one.
+  const autoMatchMode = resolveAutoMatchMode(process.env.INGREDIENT_AUTO_MATCH)
+  if (createdInvoiceIds.length > 0 && autoMatchMode !== "off") {
+    try {
+      emit({
+        phase: "matching", status: "processing",
+        totalProgress: computeProgress(100, 100, 100, 100),
+        detail: `AI auto-matching remaining line items (${autoMatchMode})...`, counts,
+      })
+      const auto = await autoResolveUnmatchedLines(
+        { accountId, ownerId: userId },
+        createdInvoiceIds,
+        { mode: autoMatchMode === "shadow" ? "shadow" : "on" }
+      )
+      logger.info(
+        `[invoice-sync] auto-match (${autoMatchMode}): scanned ${auto.scanned}, ` +
+        `${auto.autoExact} exact, ${auto.autoVector} vector, ${auto.autoLlm} llm, ` +
+        `${auto.leftForReview} left for review (${auto.failed} from errors), ` +
+        `${auto.llmCalls} LLM calls, ${auto.costsUpdated} canonical costs refreshed`
+      )
+    } catch (err) {
+      logger.error("Ingredient auto-match failed:", err)
     }
   }
 

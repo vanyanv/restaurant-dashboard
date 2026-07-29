@@ -4,7 +4,11 @@
 // (tests/lib/ingredient-auto-match.test.ts).
 
 import { describe, it, expect } from "vitest"
-import { resolveLlmDraft, resolveExactMatch } from "@/lib/ingredient-auto-match-core"
+import {
+  resolveLlmDraft,
+  resolveExactMatch,
+  resolveAutoMatchMode,
+} from "@/lib/ingredient-auto-match-core"
 import type { MatchCandidate } from "@/lib/ingredient-match-scoring"
 import type { AdjudicatorDraft } from "@/lib/ingredient-match-llm"
 
@@ -115,5 +119,35 @@ describe("resolveExactMatch", () => {
     const aliasByName = new Map([["kosher salt", new Set(["canon-2"])]])
     const result = resolveExactMatch("kosher salt", canonicalByName, aliasByName)
     expect(result).toEqual({ canonicalIngredientId: "canon-1" })
+  })
+})
+
+describe("resolveAutoMatchMode", () => {
+  it("defaults to off when the variable is unset", () => {
+    expect(resolveAutoMatchMode(undefined)).toBe("off")
+  })
+
+  it("defaults to off for an empty or whitespace-only value", () => {
+    expect(resolveAutoMatchMode("")).toBe("off")
+    expect(resolveAutoMatchMode("   ")).toBe("off")
+  })
+
+  it("reads the two enabling values", () => {
+    expect(resolveAutoMatchMode("shadow")).toBe("shadow")
+    expect(resolveAutoMatchMode("on")).toBe("on")
+  })
+
+  it("is case- and whitespace-insensitive", () => {
+    expect(resolveAutoMatchMode("  ON  ")).toBe("on")
+    expect(resolveAutoMatchMode("Shadow")).toBe("shadow")
+  })
+
+  it("fails safe to off on anything unrecognised", () => {
+    // A typo must never be read as consent to write. "true"/"1"/"yes" are
+    // the plausible near-misses an operator would reach for, and none of
+    // them are the documented vocabulary.
+    for (const raw of ["true", "1", "yes", "enabled", "live", "of", "shadowed"]) {
+      expect(resolveAutoMatchMode(raw)).toBe("off")
+    }
   })
 })
