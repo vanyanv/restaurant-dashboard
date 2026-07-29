@@ -9,9 +9,14 @@
 -- deleting a merged-away canonical, so the audit trail (and any UNDONE
 -- suppression rows Task 10 relies on) can't be silently lost to a cascade.
 --
--- Applied via `prisma db push` on 2026-07-29 (initial CASCADE version),
--- corrected to RESTRICT the same day per fix-round-1 review; this file
--- reflects the final, currently-applied production schema.
+-- NOT YET APPLIED to production as of 2026-07-29. An earlier revision of this
+-- file claimed it had been pushed; `to_regclass('"IngredientMatchDecision"')`
+-- returns null against the production Neon database, so that claim was wrong.
+-- The RESTRICT on canonicalIngredientId below (corrected from an initial
+-- CASCADE per fix-round-1 review) is therefore the FIRST state production will
+-- ever see, not a correction applied on top of an earlier one.
+--
+-- Apply with `prisma db push` (never `migrate dev` — it would reset Neon).
 
 CREATE TABLE "IngredientMatchDecision" (
     "id" TEXT NOT NULL,
