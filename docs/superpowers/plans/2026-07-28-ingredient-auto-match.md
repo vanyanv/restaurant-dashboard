@@ -900,6 +900,49 @@ Carry the best sub-threshold candidate (name, id, score, and the adjudicator's r
 
 ---
 
+## Shipped (2026-07-29)
+
+Tasks 1-13 are implemented and merged to `main`. Deployed with
+`INGREDIENT_AUTO_MATCH=shadow` in Vercel **production only**;
+`IngredientMatchDecision` applied to Neon via `prisma db push` (the diff was
+purely additive - one table, two indexes, two FKs, `RESTRICT` on the canonical
+FK as intended).
+
+Two deviations from the plan as written, both deliberate:
+
+- **Task 13 needed a data source the plan didn't specify.** The ladder
+  previously discarded groups it declined, so there was nothing to pre-fill
+  from. It now records them as `SUGGESTED` decisions (a new `status` value; no
+  DDL change, the column is a free-form String). Those rows link nothing, are
+  excluded from the activity strip, and suppress nothing. See the spec's data
+  model section.
+
+- **Task 1 was incomplete.** It wired `syncCanonicalEmbedding` into
+  `confirmSkuMatch`'s newCanonical path only. Two other paths create or
+  invalidate an embedding and were silently skipping it:
+  `createCanonicalIngredient` (the pantry UI's own create - an ingredient added
+  by hand had no embedding at all, so it was permanently invisible to L2 and to
+  the adjudicator's shortlist) and `mergeCanonicalIngredients` (the target
+  absorbs the source's aliases, and alias rawNames are folded into the embedded
+  text, so the target's vector went stale). Both fixed with tests. The general
+  rule now lives in the code comments: **there is no embedding cron, so any path
+  that creates a canonical or changes its name/category/aliases must refresh
+  inline.**
+
+Known, accepted at ship time:
+
+- Phase 5b adds latency to the invoice sync (one `embedBatch`, one vector query
+  per unmatched group, one adjudicator request). The route budget is
+  `maxDuration = 120`; a 38-group backlog is far larger than a typical 6-hourly
+  sync's handful of new groups. Shadow mode is where this gets measured.
+- Coverage on genuinely-new products is ~55%, not the gate's 92.5% - every gold
+  case was one the deterministic SKU layer already resolved. See the threshold
+  block in `src/lib/ingredient-match-scoring.ts`.
+- The activity strip and the pre-fill banner have not been visually reviewed in
+  a browser; they are type-checked, unit-tested and build-clean only.
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage:** ladder L1–L5 → Tasks 2/4/5/9 and Task 1 (L5); bake-off → Tasks 3–7; data model → Task 8; undo + suppression → Task 10; UI → Tasks 12–13; sync + rollout → Task 11; testing → folded into each task. The spec's fallback path is covered by Task 7 Step 3b.
