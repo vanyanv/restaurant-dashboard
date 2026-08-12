@@ -10,9 +10,13 @@
 // a real human-driven Chromium with mouse/keyboard activity.
 //
 // What this script does:
-//   1. Opens HEADED Chromium against https://harri.com/user/login
-//   2. Auto-fills HARRI_EMAIL / HARRI_PASSWORD; you click "Log in" yourself
-//      (so reCAPTCHA sees real interaction)
+//   1. Opens HEADED Chromium against https://harri.com/user/login, reusing a
+//      persistent profile so reCAPTCHA reputation accrues across runs instead
+//      of resetting to "first-time visitor" every week
+//   2. Types the credentials with human-ish timing and pointer movement, then
+//      either clicks for you (--auto) or waits for you to click
+//   2b. Retries a refused login with spacing — a rejection is a dice roll on a
+//      score, not a deterministic failure (see BACKOFF_MS)
 //   3. Scrapes the rotated Cognito refresh token from localStorage
 //   4. Pushes it to .env.local + Vercel + GitHub Actions secrets, reads each
 //      one back to confirm it landed, and exits non-zero if any leg didn't.
@@ -37,8 +41,9 @@
 //   GH_TOKEN                          — push to GitHub Actions secrets (repo scope)
 
 import fs from "fs"
+import os from "os"
 import path from "path"
-import { chromium } from "playwright"
+import { chromium, type BrowserContext, type Locator, type Page } from "playwright"
 import sodium from "libsodium-wrappers"
 
 import {
@@ -50,6 +55,13 @@ import {
 const ENV_PATH = path.resolve(process.cwd(), ".env.local")
 const LOGIN_URL = "https://harri.com/user/login"
 const GH_REPO = "vanyanv/restaurant-dashboard"
+
+// Kept outside the repo so it can never be committed and survives `git clean`.
+const PROFILE_DIR =
+  process.env.HARRI_PROFILE_DIR || path.resolve(os.homedir(), ".cache/harri-rotation/profile")
+
+/** Gaps between retries. Spaced, not tight — rapid retries score worse. */
+const BACKOFF_MS = [60_000, 180_000]
 
 /** A write "landed" if the store's own timestamp moved into the last 10 min. */
 const RECENT_WINDOW_MS = 10 * 60_000
@@ -408,6 +420,150 @@ async function readCognitoFromStorage(page: import("playwright").Page): Promise<
   })
 }
 
+// --- human-ish interaction ---------------------------------------------------
+//
+// reCAPTCHA v3 scores a *session*, not a click. `fill()` sets a value with no
+// keystroke timing and an instant programmatic click arrives with no pointer
+// history, which reads as a session with zero human signal. None of this is
+// evasion — it's supplying the interaction evidence a real login actually
+// produces, which the old fill-then-click path threw away.
+
+function jitter(min: number, max: number): number {
+  return min + Math.random() * (max - min)
+}
+
+async function humanType(page: Page, locator: Locator, text: string): Promise<void> {
+  await locator.click()
+  await page.waitForTimeout(jitter(120, 320))
+  await locator.pressSequentially(text, { delay: jitter(45, 95) })
+}
+
+async function humanClick(page: Page, locator: Locator): Promise<void> {
+  const box = await locator.boundingBox().catch(() => null)
+  if (box) {
+    const tx = box.x + box.width / 2
+    const ty = box.y + box.height / 2
+    // Approach in a couple of hops so the pointer has a path, not a teleport.
+    await page.mouse.move(tx - jitter(90, 170), ty - jitter(60, 130), { steps: 8 })
+    await page.waitForTimeout(jitter(80, 200))
+    await page.mouse.move(tx, ty, { steps: Math.round(jitter(12, 22)) })
+    await page.waitForTimeout(jitter(90, 240))
+  }
+  await locator.click()
+}
+
+/**
+ * Drop Harri's own session so each attempt is a genuine fresh login.
+ *
+ * This is load-bearing for the persistent profile: without a clean slate the
+ * previous run's refreshToken is still sitting in localStorage, the poll below
+ * would find it immediately, and we'd bank a stale token as a successful
+ * rotation — silently re-saving a value that's already counting down.
+ *
+ * Deliberately scoped to harri.com. Google's reCAPTCHA reputation cookies live
+ * on google.com / recaptcha.net, and those are exactly what we want to keep
+ * accumulating week over week.
+ */
+async function shedHarriSession(context: BrowserContext, page: Page): Promise<void> {
+  await page
+    .evaluate(() => {
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+      } catch {
+        /* origin may not be accessible yet */
+      }
+    })
+    .catch(() => {})
+  for (const domain of ["harri.com", ".harri.com", "www.harri.com"]) {
+    await context.clearCookies({ domain }).catch(() => {})
+  }
+}
+
+type LoginAttempt =
+  | { ok: true; cognito: CognitoStorage }
+  | { ok: false; reason: string; rejected: boolean }
+
+/**
+ * One full login attempt against a clean Harri session. Returns instead of
+ * throwing so the caller can decide whether to retry.
+ *
+ * `rejected: true` means Harri actively refused us (the "Something went wrong"
+ * banner — reCAPTCHA scored the session too low). That's the retryable case.
+ */
+async function attemptLogin(
+  context: BrowserContext,
+  page: Page,
+  opts: { email: string; password: string; autoClick: boolean; pollMs: number }
+): Promise<LoginAttempt> {
+  await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45_000 })
+  await shedHarriSession(context, page)
+  await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45_000 })
+
+  // Harri's email field accepts email OR phone — `type="text"` not `email`,
+  // and the input has no `name` attribute. Anchor on the visible placeholder
+  // ("Email address or phone number") instead. Same for the password field.
+  const emailLoc = page
+    .locator('input[placeholder*="Email" i], input[placeholder*="phone" i]')
+    .first()
+  const passwordLoc = page
+    .locator('input[type="password"], input[placeholder*="Password" i]')
+    .first()
+  await emailLoc.waitFor({ state: "visible", timeout: 25_000 })
+
+  await humanType(page, emailLoc, opts.email)
+  await page.waitForTimeout(jitter(200, 500))
+  await humanType(page, passwordLoc, opts.password)
+  await page.waitForTimeout(jitter(250, 600))
+
+  if (opts.autoClick) {
+    const submit = page
+      .locator('button:has-text("Log in"), button:has-text("Sign in"), button[type="submit"]')
+      .first()
+    if (await submit.count()) await humanClick(page, submit)
+    else await passwordLoc.press("Enter")
+  } else {
+    console.log(
+      "\n  >>> The Chromium window has email/password pre-filled.\n" +
+        "  >>> Click the green 'Log in' button yourself, then watch the redirect.\n" +
+        "  >>> The script will continue automatically once Harri sets a refresh token.\n"
+    )
+  }
+
+  // Poll for the token, but also watch for Harri's rejection banner so a
+  // refused attempt fails in seconds instead of burning the whole budget
+  // waiting for something that is never going to arrive.
+  const banner = page.getByText(/something went wrong/i).first()
+  const deadline = Date.now() + opts.pollMs
+  while (Date.now() < deadline) {
+    const hasToken = await page
+      .evaluate(() => {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i)
+          if (k?.startsWith("CognitoIdentityServiceProvider.") && k.endsWith(".refreshToken"))
+            return true
+        }
+        return false
+      })
+      .catch(() => false)
+    if (hasToken) return { ok: true, cognito: await readCognitoFromStorage(page) }
+
+    if (await banner.isVisible().catch(() => false)) {
+      return {
+        ok: false,
+        rejected: true,
+        reason: 'Harri rejected the login ("Something went wrong") — reCAPTCHA scored this session too low',
+      }
+    }
+    await page.waitForTimeout(1_000)
+  }
+  return {
+    ok: false,
+    rejected: false,
+    reason: `timed out waiting ${Math.round(opts.pollMs / 1000)}s for a Cognito refreshToken in localStorage`,
+  }
+}
+
 async function main() {
   const env = loadEnvLocal()
   const email = process.env.HARRI_EMAIL ?? env["HARRI_EMAIL"]
@@ -436,103 +592,113 @@ async function main() {
           : "headed — click Log in yourself"
     })...`
   )
-  const browser = await chromium.launch({
+  // Persistent profile. A fresh cookieless context every week meant reCAPTCHA
+  // saw a first-time-ever visitor on every run, with no accumulated reputation
+  // — which is the likeliest reason a hand-driven login in a real browser
+  // succeeds where the script sits right on the threshold. Reusing one profile
+  // lets Google's reputation cookies build up across runs.
+  //
+  // Reputation is sticky in both directions: if this profile ever gets marked
+  // bad, every run inherits it. --reset-profile is the escape hatch.
+  if (process.argv.includes("--reset-profile") && fs.existsSync(PROFILE_DIR)) {
+    fs.rmSync(PROFILE_DIR, { recursive: true, force: true })
+    console.log(`Reset browser profile at ${PROFILE_DIR}`)
+  }
+  fs.mkdirSync(PROFILE_DIR, { recursive: true })
+  console.log(`Browser profile: ${PROFILE_DIR}`)
+
+  const context = await chromium.launchPersistentContext(PROFILE_DIR, {
     headless,
     args: ["--disable-blink-features=AutomationControlled"],
-  })
-  const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
   })
-  const page = await context.newPage()
-  await page.addInitScript(() => {
+  await context.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => false })
   })
+  const page = context.pages()[0] ?? (await context.newPage())
+
+  // Retry, because a refused attempt is a dice roll on a score, not a
+  // deterministic failure — the same code path succeeded and then failed three
+  // minutes apart on 2026-08-12. Spacing matters more than count: back-to-back
+  // attempts look worse to reCAPTCHA, not better.
+  const attemptArg = process.argv.find((a) => a.startsWith("--attempts="))
+  const maxAttempts = attemptArg
+    ? Math.max(1, Number(attemptArg.split("=")[1]) || 1)
+    : autoClick
+      ? 3
+      : 1
+  // Auto mode knows within seconds; the long budget only exists so a human has
+  // time to click.
+  const pollMs = autoClick ? 60_000 : 180_000
+
+  // Guard against the persistent profile handing us back the previous run's
+  // token instead of a freshly minted one (see shedHarriSession).
+  const previousToken = process.env.HARRI_REFRESH_TOKEN || env["HARRI_REFRESH_TOKEN"] || null
 
   let refreshToken: string | null = null
   let cognito: CognitoStorage | null = null
+  let lastReason = "no attempt ran"
 
-  try {
-    await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45_000 })
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt > 1) {
+      const waitMs = BACKOFF_MS[Math.min(attempt - 2, BACKOFF_MS.length - 1)]
+      console.log(`  Waiting ${Math.round(waitMs / 1000)}s before retry (letting the score settle)...`)
+      await page.waitForTimeout(waitMs)
+    }
+    console.log(`Login attempt ${attempt}/${maxAttempts}...`)
 
-    // Harri's email field accepts email OR phone — `type="text"` not `email`,
-    // and the input has no `name` attribute. Anchor on the visible placeholder
-    // ("Email address or phone number") instead. Same for the password field.
-    const emailLoc = page.locator('input[placeholder*="Email" i], input[placeholder*="phone" i]').first()
-    const passwordLoc = page.locator('input[type="password"], input[placeholder*="Password" i]').first()
-    await emailLoc.waitFor({ state: "visible", timeout: 25_000 })
-    await emailLoc.fill(email)
-    await passwordLoc.fill(password)
-
-    if (autoClick) {
-      // Submit programmatically. In headed mode on a residential IP this passes
-      // reCAPTCHA v3; in headless mode it will likely trip the Lambda gate.
-      const submit = page
-        .locator('button:has-text("Log in"), button:has-text("Sign in"), button[type="submit"]')
-        .first()
-      if (await submit.count()) await submit.click()
-      else await passwordLoc.press("Enter")
-    } else {
-      // Headed manual path: prompt the operator to click "Log in" themselves
-      // so reCAPTCHA v3 scores a real human interaction. Don't auto-click.
-      console.log(
-        "\n  >>> The Chromium window has email/password pre-filled.\n" +
-          "  >>> Click the green 'Log in' button yourself, then watch the redirect.\n" +
-          "  >>> The script will continue automatically once Harri sets a refresh token.\n"
-      )
+    let result: LoginAttempt
+    try {
+      result = await attemptLogin(context, page, { email, password, autoClick, pollMs })
+    } catch (err) {
+      result = {
+        ok: false,
+        rejected: false,
+        reason: err instanceof Error ? err.message : String(err),
+      }
     }
 
-    // After login Harri redirects off /user/login. Poll localStorage until
-    // a Cognito refreshToken appears — generous 3-min budget so the operator
-    // has time to click. Manual loop because Playwright's waitForFunction
-    // overload can swallow the timeout option when the page function takes
-    // no args.
-    const deadline = Date.now() + 180_000
-    let found = false
-    while (Date.now() < deadline) {
-      const ok = await page
-        .evaluate(() => {
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i)
-            if (
-              k &&
-              k.startsWith("CognitoIdentityServiceProvider.") &&
-              k.endsWith(".refreshToken")
-            )
-              return true
-          }
-          return false
-        })
-        .catch(() => false)
-      if (ok) {
-        found = true
+    if (result.ok) {
+      cognito = result.cognito
+      const scraped = cognito.refreshToken
+      if (!scraped) {
+        lastReason = "login completed but no refreshToken appeared in localStorage"
+      } else if (scraped === previousToken) {
+        // Cognito mints a new refresh token per authentication, so an identical
+        // value means we never actually re-authenticated — we read the previous
+        // run's token straight back out of the persistent profile. Banking that
+        // would "succeed" while silently re-saving a token already counting down.
+        lastReason =
+          "scraped token is identical to the current one — the Harri session was not shed, so this was not a real login"
+        cognito = null
+      } else {
+        refreshToken = scraped
+        console.log(`  Attempt ${attempt} succeeded.`)
         break
       }
-      await page.waitForTimeout(1_500)
+    } else {
+      lastReason = result.reason
     }
-    if (!found) throw new Error("timed out waiting 3 min for Cognito refreshToken in localStorage")
 
-    cognito = await readCognitoFromStorage(page)
-    refreshToken = cognito.refreshToken
-  } catch (err) {
-    const screenshotPath = path.resolve(process.cwd(), "debug-harri-login.png")
-    await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
-    console.error(`  Login failed: ${err instanceof Error ? err.message : String(err)}`)
-    console.error(`  Current URL: ${page.url()}`)
-    console.error(`  Screenshot: ${screenshotPath}`)
-    if (cognito) {
-      console.error(`  localStorage keys seen: ${JSON.stringify(cognito.allKeys)}`)
+    console.error(`  Attempt ${attempt} failed: ${lastReason}`)
+    if (attempt === maxAttempts) {
+      const screenshotPath = path.resolve(process.cwd(), "debug-harri-login.png")
+      await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {})
+      console.error(`  Current URL: ${page.url()}`)
+      console.error(`  Screenshot: ${screenshotPath}`)
+      if (cognito) console.error(`  localStorage keys seen: ${JSON.stringify(cognito.allKeys)}`)
     }
-    await browser.close()
-    process.exit(1)
   }
 
-  await browser.close()
+  await context.close()
 
   if (!refreshToken) {
     console.error(
-      "Login completed but no Cognito refreshToken found in localStorage. Keys observed:",
-      cognito?.allKeys ?? []
+      `\nLogin failed after ${maxAttempts} attempt(s). Last reason: ${lastReason}\n` +
+        "If every attempt was refused, this profile's reCAPTCHA reputation may be\n" +
+        "poisoned — re-run with --reset-profile, or run without --auto and click\n" +
+        "Log in by hand once to re-seed it."
     )
     process.exit(1)
   }
