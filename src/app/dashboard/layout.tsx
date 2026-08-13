@@ -6,6 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ChatDrawerProvider } from "@/components/chat/chat-drawer-context"
 import { ChatDrawerClient } from "@/components/chat/chat-drawer-client"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
+import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
 import { authOptions } from "@/lib/auth"
 import { consumePendingWelcome } from "@/lib/welcome"
 import "@/styles/editorial-tokens.css"
@@ -28,6 +29,10 @@ export default async function DashboardLayout({
   const defaultPinned = cookieStore.get("sidebar_state")?.value === "true"
 
   const session = await getServerSession(authOptions)
+  const trackViews =
+    session?.user?.id != null &&
+    (session.user.role !== "DEVELOPER" ||
+      process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1")
   const firstName = session?.user?.firstName ?? null
   const showWelcome =
     session?.user?.id != null &&
@@ -37,6 +42,7 @@ export default async function DashboardLayout({
   return (
     <div className={`${fraunces.variable} editorial-surface`}>
       <ChatDrawerProvider>
+        <PageViewTracker enabled={trackViews} />
         <SidebarProvider defaultOpen={defaultPinned}>
           <AppSidebarClient />
           {/* min-w-0 lets the inset shrink beside the fixed rail — without it the
