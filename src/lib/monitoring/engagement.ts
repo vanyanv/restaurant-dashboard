@@ -7,8 +7,26 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { todayInLA, startOfDayLA } from "@/lib/dashboard-utils"
 
 export const SESSION_GAP_MS = 30 * 60 * 1000
+
+/** The restaurant is in Los Angeles and the monitoring masthead is labelled PT,
+ * but Vercel's Node runtime is UTC. Bucketing by server-local time would file
+ * every evening after ~5pm PT under the next day. */
+const LA_TZ = "America/Los_Angeles"
+
+/** The sessions panel is a client component, so every session it receives —
+ * and every view nested inside — is serialized into the RSC payload on each
+ * load of this force-dynamic page. A 90-day window is 20–30k view objects,
+ * megabytes, for a table whose rows are collapsed by default. Fifty is well
+ * past what anyone scrolls. */
+const MAX_SESSIONS_PER_USER = 50
+
+/** Hard ceiling on the windowed read. There is no rate limit on the sink, so a
+ * runaway client (or a hostile one) could otherwise make this query exhaust the
+ * function's memory. Failing loudly with truncated data beats a 500 loop. */
+const MAX_VIEW_ROWS = 200_000
 
 export type ViewRow = {
   path: string
@@ -68,17 +86,21 @@ export function groupIntoSessions(
   })
 }
 
-/** Local-time YYYY-MM-DD. Days are what a human means by "was he here". */
+/** Los-Angeles-local YYYY-MM-DD. Days are what a human means by "was he here",
+ * and the human in question is in Los Angeles — not on the UTC server. */
 export function dayKey(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${y}-${m}-${day}`
+  return d.toLocaleDateString("en-CA", { timeZone: LA_TZ })
 }
 
+/** Pure calendar arithmetic on the key itself. Deliberately NOT via `dayKey`:
+ * round-tripping through a Date would re-apply a timezone shift and could
+ * land a day off on a UTC server. */
 function shiftDay(key: string, deltaDays: number): string {
   const [y, m, d] = key.split("-").map(Number) as [number, number, number]
-  return dayKey(new Date(y, m - 1, d + deltaDays))
+  const shifted = new Date(Date.UTC(y, m - 1, d + deltaDays))
+  const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(shifted.getUTCDate()).padStart(2, "0")
+  return `${shifted.getUTCFullYear()}-${mm}-${dd}`
 }
 
 /** Consecutive active days ending today or yesterday. Yesterday still counts
@@ -139,6 +161,7 @@ export async function getEngagementData(days = 30): Promise<EngagementData> {
   const rows = await prisma.pageView.findMany({
     where: { enteredAt: { gte: cutoff } },
     orderBy: { enteredAt: "asc" },
+    take: MAX_VIEW_ROWS,
     select: {
       userId: true,
       path: true,
@@ -179,13 +202,15 @@ export async function getEngagementData(days = 30): Promise<EngagementData> {
   })
   const userById = new Map(users.map((u) => [u.id, u]))
 
-  const today = dayKey(new Date())
+  const today = todayInLA()
   const sessionsByUser: Record<string, Session[]> = {}
   const summary: EngagementSummaryRow[] = []
 
   for (const [userId, views] of byUser) {
     const sessions = groupIntoSessions(views)
-    sessionsByUser[userId] = [...sessions].reverse() // newest first for display
+    // Newest first for display, then capped — see MAX_SESSIONS_PER_USER.
+    // `sessionCount` below stays honest: it counts every session in the window.
+    sessionsByUser[userId] = [...sessions].reverse().slice(0, MAX_SESSIONS_PER_USER)
     const activeDayKeys = [...new Set(views.map((v) => dayKey(v.enteredAt)))]
     const last = views[views.length - 1]
     const u = userById.get(userId)
@@ -239,8 +264,7 @@ export async function getEngagementHeadline(): Promise<{
   })
   if (!latest) return null
 
-  const startOfToday = new Date()
-  startOfToday.setHours(0, 0, 0, 0)
+  const startOfToday = startOfDayLA()
   // Look back one session gap before midnight: any session straddling midnight
   // must have a view in that window, because a longer quiet period would have
   // split it into two sessions anyway. Without this, a session that began
@@ -262,7 +286,7 @@ export async function getEngagementHeadline(): Promise<{
 
   // sessionsToday shares one definition with getEngagementData above: a
   // session counts toward today iff its startedAt falls today.
-  const todayKey = dayKey(new Date())
+  const todayKey = todayInLA()
   const sessionsToday = groupIntoSessions(recentViews).filter(
     (s) => dayKey(s.startedAt) === todayKey,
   ).length

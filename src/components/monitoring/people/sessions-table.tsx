@@ -10,9 +10,14 @@ import { fmtDuration } from "./engagement-summary"
 export function SessionsTable({
   sessions,
   userName,
+  totalCount,
 }: {
   sessions: Session[]
   userName: string
+  /** How many sessions exist in the window, when `sessions` is a capped slice
+   * of them. Without it the header would quietly under-report and disagree
+   * with the summary row directly above. */
+  totalCount?: number
 }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null)
 
@@ -31,7 +36,9 @@ export function SessionsTable({
             marginLeft: "auto",
           }}
         >
-          {sessions.length} sessions
+          {totalCount != null && totalCount > sessions.length
+            ? `${sessions.length} of ${totalCount} sessions`
+            : `${sessions.length} sessions`}
         </span>
       </div>
 
@@ -126,15 +133,31 @@ export function SessionsTable({
   )
 }
 
+// Both the timezone and the locale are pinned. This component renders on the
+// server (UTC, server locale) and again in the browser (PT, user locale); any
+// implicit default would differ between the two and every timestamp here would
+// trip a hydration mismatch — on the page whose job is surfacing errors. PT
+// also matches the masthead label and the LA day bucketing in engagement.ts.
+const LA_TZ = "America/Los_Angeles"
+
+const DAY_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: LA_TZ,
+  month: "short",
+  day: "2-digit",
+})
+
+const CLOCK_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: LA_TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+})
+
 function fmtStamp(d: Date): string {
   const date = new Date(d)
-  const month = date.toLocaleString(undefined, { month: "short" })
-  return `${month} ${String(date.getDate()).padStart(2, "0")} · ${fmtClock(date)}`
+  return `${DAY_FMT.format(date)} · ${CLOCK_FMT.format(date)}`
 }
 
 function fmtClock(d: Date): string {
-  const date = new Date(d)
-  return `${String(date.getHours()).padStart(2, "0")}:${String(
-    date.getMinutes(),
-  ).padStart(2, "0")}`
+  return CLOCK_FMT.format(new Date(d))
 }

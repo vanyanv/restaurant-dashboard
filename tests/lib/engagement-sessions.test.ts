@@ -102,7 +102,37 @@ describe("countStreak", () => {
 })
 
 describe("dayKey", () => {
-  it("formats a local date as YYYY-MM-DD", () => {
-    expect(dayKey(new Date(2026, 7, 3))).toBe("2026-08-03")
+  it("formats as YYYY-MM-DD", () => {
+    expect(dayKey(new Date("2026-08-03T19:00:00.000Z"))).toBe("2026-08-03")
+  })
+
+  it("buckets by Los Angeles time, not the UTC the server runs in", () => {
+    // 7pm PT on the 12th. UTC has already rolled over to the 13th, so a
+    // server-local (UTC) bucket would file the owner's evening under tomorrow.
+    expect(dayKey(new Date("2026-08-13T02:00:00.000Z"))).toBe("2026-08-12")
+    // And the reverse edge: just past LA midnight is still the new day.
+    expect(dayKey(new Date("2026-08-13T07:30:00.000Z"))).toBe("2026-08-13")
+  })
+
+  it("uses PST, not a fixed offset, in winter", () => {
+    // 5pm PST on Jan 2; UTC is already Jan 3.
+    expect(dayKey(new Date("2026-01-03T01:00:00.000Z"))).toBe("2026-01-02")
+  })
+})
+
+describe("countStreak day arithmetic", () => {
+  // shiftDay walks backwards from the today key. It must stay pure string
+  // arithmetic — a round trip through a local-time Date would drift a day on
+  // a UTC server and silently truncate every streak that crosses a month end.
+  it("crosses a month boundary", () => {
+    expect(countStreak(["2026-08-01", "2026-07-31", "2026-07-30"], "2026-08-01")).toBe(3)
+  })
+
+  it("crosses a year boundary", () => {
+    expect(countStreak(["2026-01-01", "2025-12-31"], "2026-01-01")).toBe(2)
+  })
+
+  it("crosses a leap day", () => {
+    expect(countStreak(["2028-03-01", "2028-02-29", "2028-02-28"], "2028-03-01")).toBe(3)
   })
 })
