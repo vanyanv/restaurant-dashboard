@@ -1276,6 +1276,26 @@ model LoginEvent {
   @@index([createdAt(sort: Desc)])
 }
 
+/// One page view by an authenticated non-DEVELOPER user, written best-effort
+/// from the client on navigation and on page hide. `path` is what was visited;
+/// `route` is that path with dynamic segments collapsed, so visit counts group
+/// across detail pages instead of fragmenting one-per-record. `dwellMs` is null
+/// when the flush never landed (tab killed, beacon dropped) — query code treats
+/// null as unknown, not zero. No FK on userId: audit history outlives users,
+/// matching LoginEvent / ErrorEvent / AiUsageEvent.
+model PageView {
+  id        String   @id @default(cuid())
+  userId    String
+  path      String
+  route     String
+  enteredAt DateTime
+  dwellMs   Int?
+
+  @@index([userId, enteredAt(sort: Desc)])
+  @@index([route, enteredAt(sort: Desc)])
+  @@index([enteredAt(sort: Desc)])
+}
+
 /// Daily R2 bucket size snapshot, written by the
 /// `/api/cron/r2-snapshot` route via `ListObjectsV2` against the configured
 /// R2 bucket. `byPrefix` rolls up `{ bytes, count }` per top-level prefix
