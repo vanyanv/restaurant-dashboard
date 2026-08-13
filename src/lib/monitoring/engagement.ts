@@ -196,6 +196,8 @@ export async function getEngagementData(days = 30): Promise<EngagementData> {
       lastSeenAt: last?.enteredAt ?? null,
       lastPath: last?.path ?? null,
       sessionCount: sessions.length,
+      // sessionsToday shares one definition with getEngagementHeadline below:
+      // a session counts toward today iff its startedAt falls today.
       sessionsToday: sessions.filter((s) => dayKey(s.startedAt) === today).length,
       totalMs: sessions.reduce((sum, s) => sum + s.durationMs, 0),
       activeDays: activeDayKeys.length,
@@ -239,23 +241,36 @@ export async function getEngagementHeadline(): Promise<{
 
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
+  // Look back one session gap before midnight: any session straddling midnight
+  // must have a view in that window, because a longer quiet period would have
+  // split it into two sessions anyway. Without this, a session that began
+  // yesterday would be regrouped as if it started today, and the Bridge tile
+  // would disagree with the People page about the same session.
+  const groupFrom = new Date(startOfToday.getTime() - SESSION_GAP_MS)
 
-  const [user, todayViews] = await Promise.all([
+  const [user, recentViews] = await Promise.all([
     prisma.user.findUnique({
       where: { id: latest.userId },
       select: { name: true },
     }),
     prisma.pageView.findMany({
-      where: { userId: latest.userId, enteredAt: { gte: startOfToday } },
+      where: { userId: latest.userId, enteredAt: { gte: groupFrom } },
       orderBy: { enteredAt: "asc" },
       select: { path: true, route: true, enteredAt: true, dwellMs: true },
     }),
   ])
 
+  // sessionsToday shares one definition with getEngagementData above: a
+  // session counts toward today iff its startedAt falls today.
+  const todayKey = dayKey(new Date())
+  const sessionsToday = groupIntoSessions(recentViews).filter(
+    (s) => dayKey(s.startedAt) === todayKey,
+  ).length
+
   return {
     name: user?.name ?? "Unknown user",
     lastSeenAt: latest.enteredAt,
     lastPath: latest.path,
-    sessionsToday: groupIntoSessions(todayViews).length,
+    sessionsToday,
   }
 }
