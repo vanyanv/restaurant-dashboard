@@ -49,7 +49,7 @@ export function SessionsTable({
       ) : (
         <ul style={{ margin: "12px 0 0 0", padding: 0, listStyle: "none" }}>
           {sessions.map((s, i) => (
-            <li key={s.startedAt.toISOString()}>
+            <li key={new Date(s.startedAt).toISOString()}>
               <button
                 type="button"
                 className="inv-row"
@@ -93,7 +93,7 @@ export function SessionsTable({
                 >
                   {s.views.map((v, vi) => (
                     <li
-                      key={`${v.enteredAt.toISOString()}-${vi}`}
+                      key={`${new Date(v.enteredAt).toISOString()}-${vi}`}
                       style={{
                         display: "grid",
                         gridTemplateColumns: "70px 1fr 70px",

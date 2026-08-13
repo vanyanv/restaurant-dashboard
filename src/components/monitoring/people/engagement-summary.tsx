@@ -35,7 +35,7 @@ export function EngagementSummary({ rows }: { rows: EngagementSummaryRow[] }) {
             marginLeft: "auto",
           }}
         >
-          last 30 days
+          last 90 days
         </span>
       </div>
 
