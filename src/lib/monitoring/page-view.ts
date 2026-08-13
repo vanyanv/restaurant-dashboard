@@ -15,10 +15,10 @@ const PAST_SKEW_MS = 24 * 60 * 60 * 1000
 const DYNAMIC_BASES: ReadonlyArray<readonly [string, string]> = [
   ["/dashboard/orders", "[id]"],
   ["/dashboard/invoices", "[id]"],
-  ["/dashboard/pnl", "[period]"],
+  ["/dashboard/pnl", "[storeId]"],
   ["/m/orders", "[id]"],
   ["/m/invoices", "[id]"],
-  ["/m/pnl", "[period]"],
+  ["/m/pnl", "[storeId]"],
 ]
 
 /** cuid, uuid, or a bare integer. */
@@ -42,6 +42,12 @@ export function normalizeRoute(path: string): string {
     if (clean.startsWith(base + "/")) {
       const rest = clean.slice(base.length + 1).split("/")
       rest[0] = placeholder
+      // Also collapse nested id segments under known bases
+      for (let i = 1; i < rest.length; i++) {
+        if (ID_SEGMENT.test(rest[i])) {
+          rest[i] = "[id]"
+        }
+      }
       return [base, ...rest].join("/").slice(0, MAX_PATH_LEN)
     }
   }
