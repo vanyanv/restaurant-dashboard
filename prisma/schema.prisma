@@ -1279,9 +1279,12 @@ model LoginEvent {
 /// One page view by an authenticated non-DEVELOPER user, written best-effort
 /// from the client on navigation and on page hide. `path` is what was visited;
 /// `route` is that path with dynamic segments collapsed, so visit counts group
-/// across detail pages instead of fragmenting one-per-record. `dwellMs` is null
-/// when the flush never landed (tab killed, beacon dropped) — query code treats
-/// null as unknown, not zero. No FK on userId: audit history outlives users,
+/// across detail pages instead of fragmenting one-per-record. `dwellMs` is
+/// nullable for forward compatibility only: the row is written AT flush time
+/// and the payload always carries a finite dwell, so in the current write path
+/// every row has one. If a flush never lands there is no row at all, not a row
+/// with a null dwell. Query code still treats null as unknown, not zero.
+/// No FK on userId: audit history outlives users,
 /// matching LoginEvent / ErrorEvent / AiUsageEvent.
 model PageView {
   id        String   @id @default(cuid())
