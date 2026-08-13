@@ -14,6 +14,9 @@ const POLICIES = [
   { table: "JobRun", dateColumn: "startedAt", retentionDays: 90 },
   { table: "ErrorEvent", dateColumn: "occurredAt", retentionDays: 90 },
   { table: "AiForecastRun", dateColumn: "generatedAt", retentionDays: 365 },
+  // Highest-volume writer here: one row per page view, written from the client
+  // on every navigation. 90 days is what the engagement surfaces actually read.
+  { table: "PageView", dateColumn: "enteredAt", retentionDays: 90 },
 ] as const
 
 const BATCH_SIZE = 5000
