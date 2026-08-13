@@ -1,6 +1,7 @@
 import { SystemHealthStrip } from "@/components/monitoring/bridge/system-health-strip"
 import { Last24hActivity } from "@/components/monitoring/bridge/last-24h-activity"
 import { RecentEventsFeed } from "@/components/monitoring/bridge/recent-events-feed"
+import { EngagementTile } from "@/components/monitoring/bridge/engagement-tile"
 import { getAllSystemStatus } from "@/lib/monitoring/system-status"
 import {
   getAiCostByHour,
@@ -8,22 +9,25 @@ import {
   getErrorsByHour,
   getLoginsByHour,
 } from "@/lib/monitoring/queries"
+import { getEngagementHeadline } from "@/lib/monitoring/engagement"
 
 export const revalidate = 30
 
 export default async function MonitoringBridgePage() {
-  const [statuses, errorsByHour, aiByHour, loginsByHour, events] =
+  const [statuses, errorsByHour, aiByHour, loginsByHour, events, headline] =
     await Promise.all([
       getAllSystemStatus(),
       getErrorsByHour(24),
       getAiCostByHour(24),
       getLoginsByHour(24),
       getBridgeEvents(10),
+      getEngagementHeadline(),
     ])
 
   return (
     <div className="flex flex-col gap-3">
       <SystemHealthStrip statuses={statuses} />
+      <EngagementTile headline={headline} />
       <Last24hActivity
         errorsByHour={errorsByHour}
         aiCostByHour={aiByHour}
