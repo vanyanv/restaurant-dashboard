@@ -21,14 +21,25 @@ describe("normalizeRoute", () => {
     expect(normalizeRoute("/m/invoices/inv-not-a-cuid")).toBe("/m/invoices/[id]")
   })
 
-  it("uses a period placeholder for pnl", () => {
-    expect(normalizeRoute("/dashboard/pnl/2026-08")).toBe("/dashboard/pnl/[period]")
+  it("labels the pnl store segment by its real route name", () => {
+    expect(normalizeRoute("/dashboard/pnl/clx8f2abcdefghijklmnopq")).toBe(
+      "/dashboard/pnl/[storeId]",
+    )
+    expect(normalizeRoute("/m/pnl/clx8f2abcdefghijklmnopq")).toBe(
+      "/m/pnl/[storeId]",
+    )
   })
 
   it("keeps sub-paths after the collapsed segment", () => {
     expect(normalizeRoute("/dashboard/orders/clx8f2abcdefghijklmnopq/items")).toBe(
       "/dashboard/orders/[id]/items",
     )
+  })
+
+  it("collapses nested id segments under a known base", () => {
+    expect(
+      normalizeRoute("/dashboard/orders/clx8f2abcdefghijklmnopq/refunds/12345"),
+    ).toBe("/dashboard/orders/[id]/refunds/[id]")
   })
 
   it("strips query string, hash and trailing slash", () => {
@@ -48,6 +59,12 @@ describe("normalizeRoute", () => {
 
   it("is idempotent on already-normalized input", () => {
     expect(normalizeRoute("/dashboard/orders/[id]")).toBe("/dashboard/orders/[id]")
+  })
+
+  it("truncates paths longer than MAX_PATH_LEN to at most 200 chars", () => {
+    const longPath = "/dashboard/orders/" + "a".repeat(300)
+    const normalized = normalizeRoute(longPath)
+    expect(normalized.length).toBeLessThanOrEqual(200)
   })
 })
 
