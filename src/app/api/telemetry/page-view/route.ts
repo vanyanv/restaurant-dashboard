@@ -31,11 +31,16 @@ export async function POST(req: Request): Promise<NextResponse> {
     const userId = session?.user?.id
     if (!userId) return NO_CONTENT()
 
-    // Developer browsing is excluded by decision. The local escape hatch
-    // exists because the developer otherwise cannot exercise this path.
+    // Developer browsing is excluded by decision. The escape hatch exists
+    // because the developer otherwise cannot exercise this path — and it is
+    // pinned to non-production so one stray Vercel env var cannot quietly
+    // start polluting the owner's engagement data forever.
     if (
       session.user.role === "DEVELOPER" &&
-      process.env.TRACK_DEVELOPER_PAGE_VIEWS !== "1"
+      !(
+        process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1" &&
+        process.env.NODE_ENV !== "production"
+      )
     ) {
       return NO_CONTENT()
     }

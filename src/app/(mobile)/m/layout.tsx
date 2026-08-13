@@ -52,7 +52,9 @@ export default async function MobileLayout({
   const trackViews =
     session?.user?.id != null &&
     (session.user.role !== "DEVELOPER" ||
-      process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1")
+      // Local-only escape hatch; never honoured in production.
+      (process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1" &&
+        process.env.NODE_ENV !== "production"))
   const tabs = getTabs()
   const firstName = session?.user?.firstName ?? null
   const showWelcome =

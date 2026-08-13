@@ -19,7 +19,7 @@ import { MAX_DWELL_MS } from "@/lib/monitoring/page-view"
 const mockedSession = vi.mocked(getServerSession)
 const create = vi.mocked(prisma.pageView.create)
 
-const session = (role: "OWNER" | "DEVELOPER" | "MANAGER" = "OWNER") => ({
+const session = (role: "OWNER" | "DEVELOPER" = "OWNER") => ({
   user: { id: "u1", accountId: "acct-A", role },
 })
 
@@ -39,6 +39,7 @@ const validBody = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllEnvs()
   delete process.env.TRACK_DEVELOPER_PAGE_VIEWS
   create.mockResolvedValue({} as never)
 })
@@ -144,5 +145,16 @@ describe("POST /api/telemetry/page-view — accepted writes", () => {
     const res = await POST(req(validBody))
     expect(res.status).toBe(204)
     expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it("ignores the escape hatch in production", async () => {
+    // One stray Vercel env var must not start recording developer browsing
+    // into the owner's engagement data.
+    vi.stubEnv("NODE_ENV", "production")
+    process.env.TRACK_DEVELOPER_PAGE_VIEWS = "1"
+    mockedSession.mockResolvedValue(session("DEVELOPER") as never)
+    const res = await POST(req(validBody))
+    expect(res.status).toBe(204)
+    expect(create).not.toHaveBeenCalled()
   })
 })
