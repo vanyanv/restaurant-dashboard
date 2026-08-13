@@ -85,3 +85,65 @@ export function resolveEnteredAt(clientEpochMs: number, nowMs: number): Date {
   if (clientEpochMs < nowMs - PAST_SKEW_MS) return new Date(nowMs)
   return new Date(clientEpochMs)
 }
+
+// ---------------------------------------------------------------------------
+// Tracker lifecycle
+// ---------------------------------------------------------------------------
+
+/** The one page view the tracker is currently measuring. `flushed` means its
+ * dwell has already been written; it must never be written twice. */
+export type TrackerEntry = { path: string; enteredAt: number; flushed: boolean }
+
+/** `navigate` = the pathname changed (or the tracker mounted); `hide`/`show` =
+ * the tab was backgrounded/foregrounded (visibilitychange, pagehide, pageshow);
+ * `unmount` = the effect is tearing down. */
+export type TrackerEvent = "navigate" | "hide" | "show" | "unmount"
+
+export type TrackerStep = {
+  next: TrackerEntry | null
+  emit: { path: string; enteredAt: number; dwellMs: number } | null
+}
+
+/**
+ * The whole entry lifecycle as a pure reducer, so it can be tested without a
+ * DOM. The effect in `PageViewTracker` owns nothing but listeners and a ref.
+ *
+ * The rule that matters: a `hide` retires the entry it flushed, so the matching
+ * `show` must START A NEW ONE. Resuming the retired entry instead loses every
+ * minute after the tab came back — and, because the recorded end then sits far
+ * before the next view's start, splits one continuous visit into two sessions.
+ */
+export function stepTracker(
+  entry: TrackerEntry | null,
+  event: TrackerEvent,
+  path: string | null,
+  now: number,
+): TrackerStep {
+  // Emitting is always the same question: is there an entry nobody has written
+  // yet? Idempotency lives here, so pagehide + visibilitychange for one
+  // dismissal — and strict mode's doubled effect — write once.
+  const pending: TrackerStep["emit"] =
+    entry && !entry.flushed
+      ? { path: entry.path, enteredAt: entry.enteredAt, dwellMs: now - entry.enteredAt }
+      : null
+
+  const fresh: TrackerEntry | null = path
+    ? { path, enteredAt: now, flushed: false }
+    : null
+
+  switch (event) {
+    case "navigate":
+      return { next: fresh, emit: pending }
+    case "hide":
+      // Keep the entry (flushed) rather than nulling it: `show` is free to
+      // start over either way, but a retained entry keeps a second `hide`
+      // provably silent instead of relying on the caller not to fire one.
+      return { next: entry ? { ...entry, flushed: true } : null, emit: pending }
+    case "show":
+      // No emit: `pageshow` also fires on the initial load, and emitting there
+      // would write a 0ms row for a view that has not happened yet.
+      return { next: fresh, emit: null }
+    case "unmount":
+      return { next: null, emit: pending }
+  }
+}

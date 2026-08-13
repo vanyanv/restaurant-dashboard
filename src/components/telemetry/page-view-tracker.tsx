@@ -2,10 +2,13 @@
 
 import { useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
+import {
+  stepTracker,
+  type TrackerEntry,
+  type TrackerEvent,
+} from "@/lib/monitoring/page-view"
 
 const ENDPOINT = "/api/telemetry/page-view"
-
-type Entry = { path: string; enteredAt: number; flushed: boolean }
 
 /**
  * Records what the user actually looked at, and for how long.
@@ -15,59 +18,72 @@ type Entry = { path: string; enteredAt: number; flushed: boolean }
  * opened, and it could not measure dwell at all. Dwell is the whole point —
  * "opened /pnl 40 times" and "opened /pnl 40 times and bounced in 2s" are
  * opposite findings.
+ *
+ * All the lifecycle rules live in `stepTracker`, which is pure and tested.
+ * What remains here is listeners, a ref, and a fire-and-forget POST.
  */
 export function PageViewTracker({ enabled }: { enabled: boolean }) {
   const pathname = usePathname()
-  const current = useRef<Entry | null>(null)
+  const current = useRef<TrackerEntry | null>(null)
 
   useEffect(() => {
     if (!enabled || !pathname) return
 
-    flush(current.current)
-    current.current = { path: pathname, enteredAt: Date.now(), flushed: false }
-
-    const onHide = () => {
-      if (document.visibilityState === "hidden") flush(current.current)
+    const step = (event: TrackerEvent) => {
+      const { next, emit } = stepTracker(
+        current.current,
+        event,
+        pathname,
+        Date.now(),
+      )
+      current.current = next
+      if (emit) send(emit)
     }
-    const onPageHide = () => flush(current.current)
 
-    document.addEventListener("visibilitychange", onHide)
+    step("navigate")
+
+    const onVisibility = () =>
+      step(document.visibilityState === "hidden" ? "hide" : "show")
+    const onPageHide = () => step("hide")
+    // A bfcache restore fires pageshow without a visibilitychange, and the page
+    // may have sat in the cache for hours — start a fresh measured view.
+    const onPageShow = () => step("show")
+
+    document.addEventListener("visibilitychange", onVisibility)
     window.addEventListener("pagehide", onPageHide)
+    window.addEventListener("pageshow", onPageShow)
     return () => {
-      flush(current.current)
-      document.removeEventListener("visibilitychange", onHide)
+      step("unmount")
+      document.removeEventListener("visibilitychange", onVisibility)
       window.removeEventListener("pagehide", onPageHide)
+      window.removeEventListener("pageshow", onPageShow)
     }
   }, [pathname, enabled])
 
   return null
 }
 
-/** Idempotent per entry: pagehide followed by unmount must write once, and
- * React strict-mode's double effect must not double-count. */
-function flush(entry: Entry | null): void {
-  if (!entry || entry.flushed) return
-  entry.flushed = true
-
-  const payload = JSON.stringify({
-    path: entry.path,
-    enteredAt: entry.enteredAt,
-    dwellMs: Date.now() - entry.enteredAt,
-  })
-
+/** Best effort in every direction: tracking must never break navigation, and
+ * a dropped beacon is an acceptable loss. */
+function send(payload: {
+  path: string
+  enteredAt: number
+  dwellMs: number
+}): void {
+  const body = JSON.stringify(payload)
   try {
     // sendBeacon survives unload; fetch+keepalive is the fallback.
     if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-      navigator.sendBeacon(ENDPOINT, new Blob([payload], { type: "application/json" }))
+      navigator.sendBeacon(ENDPOINT, new Blob([body], { type: "application/json" }))
       return
     }
     void fetch(ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: payload,
+      body,
       keepalive: true,
     }).catch(() => {})
   } catch {
-    // Tracking must never break navigation.
+    // Swallowed on purpose.
   }
 }
