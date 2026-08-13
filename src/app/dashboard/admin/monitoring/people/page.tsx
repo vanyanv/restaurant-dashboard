@@ -29,6 +29,7 @@ export default async function PeoplePage() {
         <SessionsTable
           sessions={engagement.sessionsByUser[primary.userId] ?? []}
           userName={primary.name}
+          totalCount={primary.sessionCount}
         />
       )}
       <TopRoutesPanel routes={engagement.topRoutes} />
