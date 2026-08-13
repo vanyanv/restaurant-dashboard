@@ -4,7 +4,10 @@ import {
   isTrackablePath,
   clampDwell,
   resolveEnteredAt,
+  stepTracker,
   MAX_DWELL_MS,
+  type TrackerEntry,
+  type TrackerEvent,
 } from "@/lib/monitoring/page-view"
 
 describe("normalizeRoute", () => {
@@ -126,5 +129,149 @@ describe("resolveEnteredAt", () => {
 
   it("falls back to now for non-finite input", () => {
     expect(resolveEnteredAt(NaN, now).getTime()).toBe(now)
+  })
+})
+
+describe("stepTracker", () => {
+  type Emitted = NonNullable<ReturnType<typeof stepTracker>["emit"]>
+
+  /** Drive the reducer the way the effect does: one ref, one emit sink. */
+  function run(steps: Array<[TrackerEvent, string | null, number]>): {
+    emitted: Emitted[]
+    entry: TrackerEntry | null
+  } {
+    let entry: TrackerEntry | null = null
+    const emitted: Emitted[] = []
+    for (const [event, path, now] of steps) {
+      const step = stepTracker(entry, event, path, now)
+      entry = step.next
+      if (step.emit) emitted.push(step.emit)
+    }
+    return { emitted, entry }
+  }
+
+  it("emits nothing for a null entry, whatever the event", () => {
+    for (const event of ["navigate", "hide", "show", "unmount"] as TrackerEvent[]) {
+      expect(stepTracker(null, event, "/dashboard", 1000).emit).toBeNull()
+    }
+  })
+
+  it("records the whole visit across a tab switch", () => {
+    // The bug this exists for: open /pnl, switch tabs at 10s, come back at
+    // 60s, read for 25 minutes, then navigate away. The 25 minutes must land.
+    const mount = 1_000_000
+    const hide = mount + 10_000
+    const show = mount + 60_000
+    const navigate = show + 25 * 60_000
+
+    const { emitted } = run([
+      ["navigate", "/dashboard/pnl", mount],
+      ["hide", "/dashboard/pnl", hide],
+      ["show", "/dashboard/pnl", show],
+      ["navigate", "/dashboard/orders", navigate],
+    ])
+
+    expect(emitted).toHaveLength(2)
+    expect(emitted[0]).toEqual({
+      path: "/dashboard/pnl",
+      enteredAt: mount,
+      dwellMs: 10_000,
+    })
+    expect(emitted[1]).toEqual({
+      path: "/dashboard/pnl",
+      enteredAt: show,
+      dwellMs: 25 * 60_000,
+    })
+    // The two dwells cover every visible millisecond; only the backgrounded
+    // stretch is excluded, which is the point of measuring dwell at all.
+    const totalDwell = emitted.reduce((n, e) => n + e.dwellMs, 0)
+    expect(totalDwell).toBe(navigate - mount - (show - hide))
+  })
+
+  it("keeps the resumed view in the same session as the next page", () => {
+    // Regression guard for the session-inflation half of the bug: the gap
+    // between the resumed view's end and the next view's start is zero, not
+    // the 25 minutes the old code would have left behind.
+    const mount = 0
+    const { emitted } = run([
+      ["navigate", "/dashboard/pnl", mount],
+      ["hide", "/dashboard/pnl", 10_000],
+      ["show", "/dashboard/pnl", 60_000],
+      ["navigate", "/dashboard/orders", 60_000 + 25 * 60_000],
+    ])
+    const resumed = emitted[1]!
+    expect(resumed.enteredAt + resumed.dwellMs).toBe(60_000 + 25 * 60_000)
+  })
+
+  it("emits once when hide fires twice", () => {
+    const { emitted } = run([
+      ["navigate", "/dashboard", 0],
+      ["hide", "/dashboard", 5_000],
+      ["hide", "/dashboard", 6_000],
+    ])
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]!.dwellMs).toBe(5_000)
+  })
+
+  it("keeps the flushed entry after hide so a later hide is provably silent", () => {
+    const step = stepTracker(
+      { path: "/dashboard", enteredAt: 0, flushed: false },
+      "hide",
+      "/dashboard",
+      5_000,
+    )
+    expect(step.next).toEqual({ path: "/dashboard", enteredAt: 0, flushed: true })
+  })
+
+  it("emits once per page across navigate then unmount", () => {
+    const { emitted, entry } = run([
+      ["navigate", "/dashboard", 0],
+      ["navigate", "/dashboard/pnl", 4_000],
+      ["unmount", "/dashboard/pnl", 9_000],
+    ])
+    expect(emitted).toEqual([
+      { path: "/dashboard", enteredAt: 0, dwellMs: 4_000 },
+      { path: "/dashboard/pnl", enteredAt: 4_000, dwellMs: 5_000 },
+    ])
+    expect(entry).toBeNull()
+  })
+
+  it("does not double-write when unmount follows a flush", () => {
+    // pagehide then teardown — one dismissal, one row.
+    const { emitted } = run([
+      ["navigate", "/dashboard", 0],
+      ["hide", "/dashboard", 3_000],
+      ["unmount", "/dashboard", 3_100],
+    ])
+    expect(emitted).toHaveLength(1)
+  })
+
+  it("survives strict mode's doubled effect without double-counting", () => {
+    const { emitted } = run([
+      ["navigate", "/dashboard", 0],
+      ["unmount", "/dashboard", 0],
+      ["navigate", "/dashboard", 0],
+    ])
+    expect(emitted).toEqual([{ path: "/dashboard", enteredAt: 0, dwellMs: 0 }])
+  })
+
+  it("starts a fresh measured view on show", () => {
+    const step = stepTracker(
+      { path: "/dashboard", enteredAt: 0, flushed: true },
+      "show",
+      "/dashboard",
+      90_000,
+    )
+    expect(step.emit).toBeNull()
+    expect(step.next).toEqual({
+      path: "/dashboard",
+      enteredAt: 90_000,
+      flushed: false,
+    })
+  })
+
+  it("tracks nothing when there is no path to attribute the view to", () => {
+    expect(stepTracker(null, "navigate", null, 0).next).toBeNull()
+    expect(stepTracker(null, "show", null, 0).next).toBeNull()
   })
 })
