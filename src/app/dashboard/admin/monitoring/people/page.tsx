@@ -13,7 +13,7 @@ export default async function PeoplePage() {
   const [presence, history, engagement] = await Promise.all([
     getLivePresence(),
     getLoginHistory(100),
-    getEngagementData(30),
+    getEngagementData(90),
   ])
 
   // Sessions are shown for the most recently active user — with one operator
