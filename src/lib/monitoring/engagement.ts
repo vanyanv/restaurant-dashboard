@@ -6,6 +6,8 @@
  * source of truth that drifts from the views it summarizes.
  */
 
+import { prisma } from "@/lib/prisma"
+
 export const SESSION_GAP_MS = 30 * 60 * 1000
 
 export type ViewRow = {
@@ -95,4 +97,165 @@ export function countStreak(days: string[], todayKey: string): number {
     cursor = shiftDay(cursor, -1)
   }
   return streak
+}
+
+export type EngagementSummaryRow = {
+  userId: string
+  name: string
+  email: string
+  lastSeenAt: Date | null
+  lastPath: string | null
+  sessionCount: number
+  sessionsToday: number
+  totalMs: number
+  activeDays: number
+  currentStreak: number
+}
+
+export type ActiveDay = { date: string; views: number }
+
+export type TopRoute = { route: string; visits: number; medianDwellMs: number | null }
+
+export type EngagementData = {
+  summary: EngagementSummaryRow[]
+  sessionsByUser: Record<string, Session[]>
+  activeDays: ActiveDay[]
+  topRoutes: TopRoute[]
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[mid - 1]! + sorted[mid]!) / 2)
+    : sorted[mid]!
+}
+
+/** One windowed read; everything below is derived in memory. At a few hundred
+ * views a day this window is a few thousand rows. */
+export async function getEngagementData(days = 30): Promise<EngagementData> {
+  const cutoff = new Date(Date.now() - days * 86_400_000)
+  const rows = await prisma.pageView.findMany({
+    where: { enteredAt: { gte: cutoff } },
+    orderBy: { enteredAt: "asc" },
+    select: {
+      userId: true,
+      path: true,
+      route: true,
+      enteredAt: true,
+      dwellMs: true,
+    },
+  })
+
+  if (rows.length === 0) {
+    return { summary: [], sessionsByUser: {}, activeDays: [], topRoutes: [] }
+  }
+
+  const byUser = new Map<string, ViewRow[]>()
+  const dayCounts = new Map<string, number>()
+  const routeDwells = new Map<string, number[]>()
+  const routeVisits = new Map<string, number>()
+
+  for (const r of rows) {
+    const list = byUser.get(r.userId)
+    if (list) list.push(r)
+    else byUser.set(r.userId, [r])
+
+    const key = dayKey(r.enteredAt)
+    dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1)
+
+    routeVisits.set(r.route, (routeVisits.get(r.route) ?? 0) + 1)
+    if (r.dwellMs != null) {
+      const dwells = routeDwells.get(r.route)
+      if (dwells) dwells.push(r.dwellMs)
+      else routeDwells.set(r.route, [r.dwellMs])
+    }
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: [...byUser.keys()] } },
+    select: { id: true, name: true, email: true },
+  })
+  const userById = new Map(users.map((u) => [u.id, u]))
+
+  const today = dayKey(new Date())
+  const sessionsByUser: Record<string, Session[]> = {}
+  const summary: EngagementSummaryRow[] = []
+
+  for (const [userId, views] of byUser) {
+    const sessions = groupIntoSessions(views)
+    sessionsByUser[userId] = [...sessions].reverse() // newest first for display
+    const activeDayKeys = [...new Set(views.map((v) => dayKey(v.enteredAt)))]
+    const last = views[views.length - 1]
+    const u = userById.get(userId)
+    summary.push({
+      userId,
+      name: u?.name ?? "Unknown user",
+      email: u?.email ?? userId,
+      lastSeenAt: last?.enteredAt ?? null,
+      lastPath: last?.path ?? null,
+      sessionCount: sessions.length,
+      sessionsToday: sessions.filter((s) => dayKey(s.startedAt) === today).length,
+      totalMs: sessions.reduce((sum, s) => sum + s.durationMs, 0),
+      activeDays: activeDayKeys.length,
+      currentStreak: countStreak(activeDayKeys, today),
+    })
+  }
+
+  summary.sort(
+    (a, b) => (b.lastSeenAt?.getTime() ?? 0) - (a.lastSeenAt?.getTime() ?? 0),
+  )
+
+  const activeDays: ActiveDay[] = [...dayCounts.entries()]
+    .map(([date, views]) => ({ date, views }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  const topRoutes: TopRoute[] = [...routeVisits.entries()]
+    .map(([route, visits]) => ({
+      route,
+      visits,
+      medianDwellMs: median(routeDwells.get(route) ?? []),
+    }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 15)
+
+  return { summary, sessionsByUser, activeDays, topRoutes }
+}
+
+/** Cheap read for the Bridge tile — the index page must not pay for a
+ * 30-day scan just to say "last seen 14m ago". */
+export async function getEngagementHeadline(): Promise<{
+  name: string
+  lastSeenAt: Date
+  lastPath: string
+  sessionsToday: number
+} | null> {
+  const latest = await prisma.pageView.findFirst({
+    orderBy: { enteredAt: "desc" },
+    select: { userId: true, path: true, enteredAt: true },
+  })
+  if (!latest) return null
+
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+
+  const [user, todayViews] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: latest.userId },
+      select: { name: true },
+    }),
+    prisma.pageView.findMany({
+      where: { userId: latest.userId, enteredAt: { gte: startOfToday } },
+      orderBy: { enteredAt: "asc" },
+      select: { path: true, route: true, enteredAt: true, dwellMs: true },
+    }),
+  ])
+
+  return {
+    name: user?.name ?? "Unknown user",
+    lastSeenAt: latest.enteredAt,
+    lastPath: latest.path,
+    sessionsToday: groupIntoSessions(todayViews).length,
+  }
 }
