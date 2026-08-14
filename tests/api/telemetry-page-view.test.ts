@@ -93,6 +93,40 @@ describe("POST /api/telemetry/page-view — no-op cases", () => {
   })
 })
 
+describe("POST /api/telemetry/page-view — cross-site origin", () => {
+  beforeEach(() => {
+    mockedSession.mockResolvedValue(session() as never)
+  })
+
+  it("writes nothing when Sec-Fetch-Site says cross-site", async () => {
+    const r = new Request("http://test.local/api/telemetry/page-view", {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "cross-site" },
+      body: JSON.stringify(validBody),
+    })
+    const res = await POST(r)
+    expect(res.status).toBe(204)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it("writes when Sec-Fetch-Site says same-origin", async () => {
+    const r = new Request("http://test.local/api/telemetry/page-view", {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+      body: JSON.stringify(validBody),
+    })
+    await POST(r)
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  // Fail-open: a missing header must NOT block the write, or any client that
+  // omits it loses every page view silently.
+  it("writes when the header is absent entirely", async () => {
+    await POST(req(validBody))
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("POST /api/telemetry/page-view — accepted writes", () => {
   beforeEach(() => {
     mockedSession.mockResolvedValue(session() as never)

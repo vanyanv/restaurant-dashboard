@@ -45,6 +45,16 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NO_CONTENT()
     }
 
+    // A cross-site page can sendBeacon a text/plain body with the owner's
+    // cookies and no preflight, injecting junk rows. Impact is small — this
+    // data only renders as escaped text on a developer-only tab — but the
+    // check is nearly free. Deliberately fail-OPEN when the header is absent:
+    // rejecting on absence would silently kill the only write path for any
+    // client that omits it, which is a far worse failure than the one it
+    // prevents. Browsers that matter all send it.
+    const fetchSite = req.headers.get("sec-fetch-site")
+    if (fetchSite && fetchSite !== "same-origin") return NO_CONTENT()
+
     const parsed = bodySchema.safeParse(await req.json())
     if (!parsed.success) return NO_CONTENT()
 
