@@ -12,12 +12,24 @@ const PAST_SKEW_MS = 24 * 60 * 60 * 1000
 
 /** Route bases whose next segment is dynamic, with the placeholder to use.
  * Needed because not every id is id-shaped — a P&L period is `2026-08`. */
+// Enumerated from the real route tree, not guessed — an invented base is how
+// `/dashboard/pnl/[period]` (a route that never existed) got here in the first
+// place. Regenerate with:
+//   find src/app/dashboard "src/app/(mobile)/m" -type d -name '[[]*[]]'
+// Longer bases must precede any base that is a prefix of them, since the first
+// match wins.
 const DYNAMIC_BASES: ReadonlyArray<readonly [string, string]> = [
-  ["/dashboard/orders", "[id]"],
+  ["/dashboard/operations/inventory/counts", "[id]"],
+  ["/dashboard/menu/catalog", "[id]"],
+  ["/dashboard/analytics", "[storeId]"],
+  ["/dashboard/cogs", "[storeId]"],
+  ["/dashboard/labor", "[storeId]"],
   ["/dashboard/invoices", "[id]"],
+  ["/dashboard/orders", "[id]"],
   ["/dashboard/pnl", "[storeId]"],
-  ["/m/orders", "[id]"],
+  ["/dashboard/stores", "[id]"],
   ["/m/invoices", "[id]"],
+  ["/m/orders", "[id]"],
   ["/m/pnl", "[storeId]"],
 ]
 
