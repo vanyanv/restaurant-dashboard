@@ -71,6 +71,41 @@ describe("normalizeRoute", () => {
   })
 })
 
+describe("normalizeRoute — full dynamic-route coverage", () => {
+  // One case per dynamic route that actually exists in src/app. If a new
+  // dynamic route is added without a DYNAMIC_BASES entry, it still collapses
+  // via the generic id matcher, but its placeholder stops matching the real
+  // segment name — which is what made Most Visited read inconsistently.
+  const CUID = "clx8f2abcdefghijklmnopq"
+
+  it.each([
+    ["/dashboard/analytics/" + CUID, "/dashboard/analytics/[storeId]"],
+    ["/dashboard/cogs/" + CUID, "/dashboard/cogs/[storeId]"],
+    ["/dashboard/labor/" + CUID, "/dashboard/labor/[storeId]"],
+    ["/dashboard/stores/" + CUID, "/dashboard/stores/[id]"],
+    ["/dashboard/menu/catalog/" + CUID, "/dashboard/menu/catalog/[id]"],
+    [
+      "/dashboard/operations/inventory/counts/" + CUID,
+      "/dashboard/operations/inventory/counts/[id]",
+    ],
+    ["/dashboard/pnl/" + CUID, "/dashboard/pnl/[storeId]"],
+    ["/m/pnl/" + CUID, "/m/pnl/[storeId]"],
+  ])("collapses %s", (input, expected) => {
+    expect(normalizeRoute(input)).toBe(expected)
+  })
+
+  it("does not let a shorter base shadow a longer one", () => {
+    // /dashboard/menu/catalog must not be matched by a hypothetical
+    // /dashboard/menu base, and the deep counts route must keep its full path.
+    expect(normalizeRoute("/dashboard/menu/catalog/" + CUID)).toBe(
+      "/dashboard/menu/catalog/[id]",
+    )
+    expect(
+      normalizeRoute("/dashboard/operations/inventory/counts/" + CUID),
+    ).toBe("/dashboard/operations/inventory/counts/[id]")
+  })
+})
+
 describe("isTrackablePath", () => {
   it("accepts dashboard and mobile surfaces", () => {
     expect(isTrackablePath("/dashboard")).toBe(true)
