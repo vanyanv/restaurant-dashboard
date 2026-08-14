@@ -1,5 +1,6 @@
 import { InlineSpark } from "./inline-spark"
 import { monoLabel, fraunces17 } from "./styles"
+import { fmtClockPT } from "./time-format"
 
 type ErrorRow = {
   id: string
@@ -78,6 +79,5 @@ export function ErrorsPanel({
 }
 
 function formatTime(d: Date | string): string {
-  const x = new Date(d)
-  return `${String(x.getHours()).padStart(2, "0")}:${String(x.getMinutes()).padStart(2, "0")}`
+  return fmtClockPT(d)
 }
