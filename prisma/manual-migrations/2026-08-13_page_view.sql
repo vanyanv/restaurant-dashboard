@@ -1,6 +1,7 @@
 -- Owner engagement tracking: raw page-view stream.
--- NOT YET APPLIED — run before deploying this branch.
--- Every read and write of PageView will fail until this lands.
+-- APPLIED to production 2026-08-13 via `prisma db execute --file`.
+-- Verified afterwards: `prisma migrate diff --from-config-datasource
+-- --to-schema prisma/schema.prisma` reports an empty migration.
 -- See docs/superpowers/specs/2026-08-13-owner-engagement-tracking-design.md
 
 CREATE TABLE IF NOT EXISTS "PageView" (
