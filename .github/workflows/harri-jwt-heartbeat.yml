@@ -54,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_NAME: Harri JWT Heartbeat
-          ISSUE_TITLE: "[Auto] Harri refresh token dead — rotate manually"
+          ISSUE_TITLE: "[Auto] Harri token or rotation chain unhealthy"
           ISSUE_LABEL: cron-failure
           LOG_FILE: logs/harri-jwt-heartbeat.log
           FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
@@ -64,6 +64,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           WORKFLOW_NAME: Harri JWT Heartbeat
-          ISSUE_TITLE: "[Auto] Harri refresh token dead — rotate manually"
+          ISSUE_TITLE: "[Auto] Harri token or rotation chain unhealthy"
           ISSUE_LABEL: cron-failure
         run: bash .github/scripts/report-workflow-recovery.sh
