@@ -1,6 +1,7 @@
 import type { BridgeEventRow } from "@/lib/monitoring/queries"
 import { monoLabel, fraunces17 } from "../styles"
 import { SYSTEM_INK } from "../system-color"
+import { fmtClockPT } from "../time-format"
 
 const SYSTEM_COLOR_FOR_PILL: Record<BridgeEventRow["system"], string> = {
   db:     SYSTEM_INK.db,
@@ -83,8 +84,5 @@ export function RecentEventsFeed({ rows }: { rows: BridgeEventRow[] }) {
 }
 
 function fmtTime(d: Date): string {
-  const date = d instanceof Date ? d : new Date(d)
-  const hh = String(date.getHours()).padStart(2, "0")
-  const mm = String(date.getMinutes()).padStart(2, "0")
-  return `${hh}:${mm}`
+  return fmtClockPT(d)
 }

@@ -6,6 +6,7 @@ import { RegisterMark } from "../register-mark"
 import { SYSTEM_INK } from "../system-color"
 import type { Session } from "@/lib/monitoring/engagement"
 import { fmtDuration } from "./engagement-summary"
+import { fmtStampPT, fmtClockPT } from "../time-format"
 
 export function SessionsTable({
   sessions,
@@ -133,31 +134,14 @@ export function SessionsTable({
   )
 }
 
-// Both the timezone and the locale are pinned. This component renders on the
-// server (UTC, server locale) and again in the browser (PT, user locale); any
-// implicit default would differ between the two and every timestamp here would
-// trip a hydration mismatch — on the page whose job is surfacing errors. PT
-// also matches the masthead label and the LA day bucketing in engagement.ts.
-const LA_TZ = "America/Los_Angeles"
-
-const DAY_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: LA_TZ,
-  month: "short",
-  day: "2-digit",
-})
-
-const CLOCK_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: LA_TZ,
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-})
-
+// Formatters live in ../time-format so the whole monitoring surface agrees on
+// Pacific. That matters twice over here: this is the only client component in
+// the set, so an unpinned timezone or locale would differ between the server
+// render and the browser render and trip a hydration mismatch on every row.
 function fmtStamp(d: Date): string {
-  const date = new Date(d)
-  return `${DAY_FMT.format(date)} · ${CLOCK_FMT.format(date)}`
+  return fmtStampPT(d)
 }
 
 function fmtClock(d: Date): string {
-  return CLOCK_FMT.format(new Date(d))
+  return fmtClockPT(d)
 }

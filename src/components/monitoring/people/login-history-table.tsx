@@ -1,6 +1,7 @@
 import { fraunces17, monoLabel, dmBody } from "../styles"
 import { RegisterMark } from "../register-mark"
 import { SYSTEM_INK } from "../system-color"
+import { fmtStampPT } from "../time-format"
 import type { LoginKind } from "@/generated/prisma/client"
 
 export type LoginHistoryRow = {
@@ -81,10 +82,5 @@ export function LoginHistoryTable({ rows }: { rows: LoginHistoryRow[] }) {
 }
 
 function fmtTime(d: Date): string {
-  const date = d instanceof Date ? d : new Date(d)
-  const month = date.toLocaleString(undefined, { month: "short" })
-  const day = String(date.getDate()).padStart(2, "0")
-  const hh = String(date.getHours()).padStart(2, "0")
-  const mm = String(date.getMinutes()).padStart(2, "0")
-  return `${month} ${day} · ${hh}:${mm}`
+  return fmtStampPT(d)
 }

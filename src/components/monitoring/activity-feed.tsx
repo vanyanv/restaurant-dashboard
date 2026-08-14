@@ -1,5 +1,6 @@
 import type { ActivityRow } from "@/lib/monitoring/queries"
 import { dmBody, fraunces17, monoLabel } from "./styles"
+import { fmtClockPT } from "./time-format"
 
 export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
   if (rows.length === 0) {
@@ -83,8 +84,5 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
 }
 
 function formatTime(d: Date | string): string {
-  const x = new Date(d)
-  const hh = String(x.getHours()).padStart(2, "0")
-  const mm = String(x.getMinutes()).padStart(2, "0")
-  return `${hh}:${mm}`
+  return fmtClockPT(d)
 }
