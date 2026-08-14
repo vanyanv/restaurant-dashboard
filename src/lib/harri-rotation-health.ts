@@ -88,7 +88,12 @@ export function classifyTokenAge(updatedAt: string | Date, now: Date = new Date(
 
 // --- rotation leg accounting -------------------------------------------------
 
-export type LegStatus = "ok" | "skipped" | "failed"
+// The leg rules are not Harri-specific — the same silent-failure shape turned
+// up in the Otter rotation the next day — so they live in `rotation-health.ts`
+// and this module keeps the Harri-shaped wrapper its callers already use.
+import { summarizeLegs, type LegSpec, type LegStatus } from "./rotation-health"
+
+export type { LegStatus }
 export type LegName = "envLocal" | "vercel" | "github"
 
 export const LEG_LABELS: Record<LegName, string> = {
@@ -107,7 +112,7 @@ export type RotationVerdict = {
 }
 
 /**
- * Decide whether a rotation actually succeeded.
+ * Decide whether a Harri rotation actually succeeded.
  *
  * The old script treated "skipped" and "failed" alike — both just logged and
  * carried on to print "Done!". Both are now failures when the leg is required,
@@ -119,17 +124,17 @@ export function summarizeRotation(
   required: LegName[],
 ): RotationVerdict {
   const requiredSet = new Set(required)
-  const problems: Array<{ leg: LegName; status: LegStatus }> = []
-  const lines: string[] = []
+  const specs: LegSpec[] = (Object.keys(LEG_LABELS) as LegName[]).map((leg) => ({
+    name: leg,
+    label: LEG_LABELS[leg],
+    status: legs[leg],
+    required: requiredSet.has(leg),
+  }))
 
-  for (const leg of Object.keys(LEG_LABELS) as LegName[]) {
-    const status = legs[leg]
-    const isRequired = requiredSet.has(leg)
-    if (isRequired && status !== "ok") problems.push({ leg, status })
-    const mark = status === "ok" ? "ok" : status === "skipped" ? "SKIPPED" : "FAILED"
-    const suffix = isRequired ? "" : " (not required)"
-    lines.push(`  ${LEG_LABELS[leg].padEnd(16)} ${mark}${suffix}`)
+  const verdict = summarizeLegs(specs)
+  return {
+    ok: verdict.ok,
+    problems: verdict.problems.map((p) => ({ leg: p.leg as LegName, status: p.status })),
+    lines: verdict.lines,
   }
-
-  return { ok: problems.length === 0, problems, lines }
 }
