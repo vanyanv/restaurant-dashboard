@@ -13,7 +13,7 @@ export const POST = withCronAuth(
     // out from under a still-in-window ChatTurn would silently null its link.
     // Delete ChatTurn first to keep the join intact for in-window rows.
     const chat = await prisma.chatTurn.deleteMany({ where: { occurredAt: { lt: cutoff } } })
-    const [jobRun, ai, err, cache, snapshot, vercel, login, r2] = await Promise.all([
+    const [jobRun, ai, err, cache, snapshot, vercel, login, r2, pageView] = await Promise.all([
       prisma.jobRun.deleteMany({ where: { startedAt: { lt: cutoff } } }),
       prisma.aiUsageEvent.deleteMany({ where: { occurredAt: { lt: cutoff } } }),
       prisma.errorEvent.deleteMany({ where: { occurredAt: { lt: cutoff } } }),
@@ -22,6 +22,7 @@ export const POST = withCronAuth(
       prisma.vercelUsageSnapshot.deleteMany({ where: { capturedAt: { lt: cutoff } } }),
       prisma.loginEvent.deleteMany({ where: { createdAt: { lt: cutoff } } }),
       prisma.r2BucketSnapshot.deleteMany({ where: { capturedAt: { lt: cutoff } } }),
+      prisma.pageView.deleteMany({ where: { enteredAt: { lt: cutoff } } }),
     ])
     return NextResponse.json({
       cutoff: cutoff.toISOString(),
@@ -35,6 +36,7 @@ export const POST = withCronAuth(
         vercelUsageSnapshot: vercel.count,
         loginEvent: login.count,
         r2BucketSnapshot: r2.count,
+        pageView: pageView.count,
       },
     })
   },

@@ -6,6 +6,7 @@ import { MobileTabBar } from "@/components/mobile/mobile-tab-bar"
 import { getTabs } from "@/lib/mobile/tabs"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
 import { consumePendingWelcome } from "@/lib/welcome"
+import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
 import "@/styles/editorial-tokens.css"
 import "@/styles/editorial-mobile.css"
 import "@/styles/welcome-marquee.css"
@@ -48,6 +49,12 @@ export default async function MobileLayout({
   children: React.ReactNode
 }) {
   const session = await getServerSession(authOptions)
+  const trackViews =
+    session?.user?.id != null &&
+    (session.user.role !== "DEVELOPER" ||
+      // Local-only escape hatch; never honoured in production.
+      (process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1" &&
+        process.env.NODE_ENV !== "production"))
   const tabs = getTabs()
   const firstName = session?.user?.firstName ?? null
   const showWelcome =
@@ -59,6 +66,7 @@ export default async function MobileLayout({
     <div
       className={`${fraunces.variable} editorial-surface editorial-surface--mobile`}
     >
+      <PageViewTracker enabled={trackViews} />
       <div className="m-shell">
         <main className="m-shell__main">
           {showWelcome && firstName ? (
