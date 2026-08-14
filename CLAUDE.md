@@ -1,6 +1,8 @@
 # Chris Neddy's — Restaurant Dashboard
 
-Multi-store restaurant analytics dashboard. Next.js 15 (App Router), React 19, Prisma/Postgres, TanStack Query, shadcn/ui, Tailwind v4, deployed on Vercel.
+Multi-store restaurant analytics dashboard. Next.js 16 (App Router, Turbopack), React 19, Prisma 7/Postgres, TanStack Query, shadcn/ui, Tailwind v4, deployed on Vercel.
+
+Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. The whole-project gate is `npm test && npx tsc --noEmit && npm run build`.
 
 ---
 
