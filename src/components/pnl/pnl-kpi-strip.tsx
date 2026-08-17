@@ -18,6 +18,9 @@ export interface PnLKpi {
   label: string
   value: number
   percentOfSales?: number
+  /** Shown in place of the "% of sales" line — use when the ratio would be
+   * misleading because an input is still incomplete. */
+  note?: string
   costStyle?: boolean
   /** Same figure over the previous equal-length window — renders a Δ stamp. */
   prior?: number | null
@@ -49,11 +52,15 @@ export function PnLKpiStrip({ kpis, className }: PnLKpiStripProps) {
               <div className={cn("mt-1 text-2xl font-semibold tabular-nums", toneClass)}>
                 {formatDollar(k.value)}
               </div>
-              {k.percentOfSales != null && (
+              {k.percentOfSales != null ? (
                 <div className="mt-0.5 text-xs text-(--ink-muted) tabular-nums">
                   {formatPercent(k.percentOfSales)} of sales
                 </div>
-              )}
+              ) : k.note ? (
+                <div className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-(--ink-muted)">
+                  {k.note}
+                </div>
+              ) : null}
               {k.prior != null && (
                 <div className="mt-1.5">
                   <DeltaStamp

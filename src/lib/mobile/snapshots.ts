@@ -23,6 +23,7 @@ import type {
   DailyTrend,
   HourlyComparisonPeriod,
   HourlyOrderPoint,
+  OrderPatternsHourlyComparison,
 } from "@/types/analytics"
 
 type MobileStore = { id: string; name: string }
@@ -47,6 +48,10 @@ export type MobileHomeSnapshot =
       netGrowth: number | null
       previousNet: number
       hourly: HourlyOrderPoint[] | null
+      /** Cutoff-aware same-weekday pace comparison; null outside named periods
+       * or when there aren't enough baseline weeks. Preferred over `netGrowth`
+       * whenever the period is still in progress. */
+      hourlyComparison: OrderPatternsHourlyComparison | null
       dailyTrends: DailyTrend[]
       /** Null when the invoice-count lookup fails — callers must omit the
        * masthead cell, never render a fake zero (same contract as
@@ -92,6 +97,7 @@ export async function getMobileHomeSnapshot(input: {
           netGrowth: null,
           previousNet: 0,
           hourly: null,
+          hourlyComparison: null,
           dailyTrends: [],
           pendingInvoiceCount,
           laborGlance: null,
@@ -160,7 +166,10 @@ export async function getMobileHomeSnapshot(input: {
         }),
         input.hourlyPeriod
           ? getMobileHourly(validStoreId, input.hourlyPeriod)
-          : Promise.resolve(null),
+          : Promise.resolve(null as {
+              hourly: HourlyOrderPoint[]
+              hourlyComparison: OrderPatternsHourlyComparison | null
+            } | null),
         laborStoreId
           ? getMobileLaborGlance(laborStoreId, accountId)
           : Promise.resolve(null),
@@ -230,7 +239,8 @@ export async function getMobileHomeSnapshot(input: {
         previousNet,
         netGrowth:
           previousNet > 0 ? ((totalSales - previousNet) / previousNet) * 100 : null,
-        hourly,
+        hourly: hourly?.hourly ?? null,
+        hourlyComparison: hourly?.hourlyComparison ?? null,
         dailyTrends: [...byDate.entries()]
           .map(([date, vals]) => ({ date, ...vals }))
           .sort((a, b) => a.date.localeCompare(b.date)),
@@ -312,10 +322,18 @@ async function getMobileLaborGlance(
   }
 }
 
+/**
+ * Returns both the chart series and the pace comparison. The comparison used to
+ * be discarded here, which left /m computing its own partial-day-vs-full-day
+ * growth and contradicting the desktop; see `formatPaceLine`.
+ */
 async function getMobileHourly(
   storeId: string | null,
   period: HourlyComparisonPeriod,
-): Promise<HourlyOrderPoint[]> {
+): Promise<{
+  hourly: HourlyOrderPoint[]
+  hourlyComparison: OrderPatternsHourlyComparison | null
+}> {
   const spec = derivePeriodSpec(period)
   const allDates = [...spec.currentDates, ...spec.comparisonGroups.flat()]
   const earliest = allDates.reduce((min, d) => (d < min ? d : min), allDates[0])
@@ -359,7 +377,7 @@ async function getMobileHourly(
     rows: [...aggregated.values()],
     spec,
     period,
-  }).hourly
+  })
 }
 
 export type MobileInvoiceSnapshot = {

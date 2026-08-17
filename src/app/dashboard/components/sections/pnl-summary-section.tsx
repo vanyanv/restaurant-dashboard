@@ -57,6 +57,18 @@ export async function PnLSummarySection({
   const hasData = result.storeCount > 0 && c.grossSales > 0
   const profitNegative = c.bottomLine < 0
 
+  // A day in progress collects sales continuously but labor in lumps: Harri
+  // posts through the day and fixed costs are apportioned at close. Early in
+  // service that leaves a real sales number divided by a near-zero cost base,
+  // which renders as an exceptional margin — the audit caught 35.8% off labor
+  // of $19 (0.9% of sales) against a trailing 17.8%. No restaurant runs a
+  // single-digit labor percentage, so treat that as "not in yet" and withhold
+  // every ratio derived from it rather than publishing a flattering fiction.
+  const MIN_PLAUSIBLE_LABOR_PCT = 0.05
+  const laborIncomplete =
+    isToday && hasData && c.laborPct < MIN_PLAUSIBLE_LABOR_PCT
+  const marginTrustworthy = hasData && !laborIncomplete
+
   return (
     <div className="dock-in dock-in-3">
       {header}
@@ -77,9 +89,17 @@ export async function PnLSummarySection({
               {hasData ? fmtMoney(c.bottomLine) : "—"}
             </span>
             <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-(--ink-muted) [font-variant-numeric:tabular-nums]">
-              {hasData ? `${fmtPctFromRatio(c.marginPct)} margin` : "no data"}
+              {marginTrustworthy
+                ? `${fmtPctFromRatio(c.marginPct)} margin`
+                : hasData
+                  ? "margin pending"
+                  : "no data"}
             </span>
-            {isToday && hasData && profitNegative ? (
+            {laborIncomplete ? (
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-(--ink-muted)">
+                labor still posting — margin follows at close
+              </span>
+            ) : isToday && hasData && profitNegative ? (
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-(--ink-faint)">
                 costs post in lumps — judge after close
               </span>
@@ -103,13 +123,15 @@ export async function PnLSummarySection({
           {
             label: "Labor",
             value: c.laborValue,
-            percentOfSales: c.laborPct,
+            percentOfSales: laborIncomplete ? undefined : c.laborPct,
+            note: laborIncomplete ? "so far today" : undefined,
             costStyle: true,
           },
           {
             label: "Net profit",
             value: c.bottomLine,
-            percentOfSales: c.marginPct,
+            percentOfSales: marginTrustworthy ? c.marginPct : undefined,
+            note: laborIncomplete ? "before full labor" : undefined,
           },
         ]}
       />

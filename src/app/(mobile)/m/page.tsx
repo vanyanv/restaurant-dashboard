@@ -16,6 +16,7 @@ import {
   MOBILE_PERIODS,
 } from "@/lib/mobile/period"
 import { todayInLA } from "@/lib/dashboard-utils"
+import { formatPaceLine } from "@/lib/hourly-orders"
 import {
   getMobileHomeSnapshot,
   trailingRevenueStart,
@@ -85,6 +86,7 @@ export default async function MobileHomePage({
   const totalOrders = snapshot?.totalOrders ?? 0
   const netGrowth = snapshot?.netGrowth ?? null
   const previousNet = snapshot?.previousNet ?? 0
+  const hourlyComparison = snapshot?.hourlyComparison ?? null
   const pendingInvoiceCount = snapshot?.pendingInvoiceCount ?? null
   const laborGlance = snapshot?.laborGlance ?? null
   const canSeeLabor = hasOwnerAccess(session.user.role)
@@ -94,14 +96,30 @@ export default async function MobileHomePage({
       ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.short ?? "TODAY")
       : "CUSTOM"
 
+  // A period that includes today is still running, so comparing its total
+  // against a *complete* prior period reads as a collapse all morning — that
+  // is what produced "−88% vs prior" at 1:16 PM on a day the desktop correctly
+  // called +4%. Prefer the cutoff-aware same-weekday pace line (shared with the
+  // desktop hero KPIs); only fall back to prior-period growth once the period
+  // has actually closed, and say nothing rather than guess in between.
+  const periodInProgress = periodEnd >= todayInLA()
+  const pace = formatPaceLine(hourlyComparison, hourlyComparison?.salesPacePct)
+  const priorGrowth =
+    netGrowth != null && previousNet > 0
+      ? `${netGrowth >= 0 ? "+" : ""}${netGrowth.toFixed(0)}% vs prior`
+      : null
+
+  const netSub = pace
+    ? pace.display
+    : periodInProgress
+      ? "in progress · no like-for-like yet"
+      : (priorGrowth ?? "no prior comparison")
+
   const cells: MastheadCell[] = [
     {
       label: `NET ${periodLabel}`,
       value: fmtMoney(totalSales),
-      sub:
-        netGrowth != null && previousNet > 0
-          ? `${netGrowth >= 0 ? "+" : ""}${netGrowth.toFixed(0)}% vs prior`
-          : "no prior comparison",
+      sub: netSub,
     },
     {
       label: "ORDERS",
