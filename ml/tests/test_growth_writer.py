@@ -29,6 +29,7 @@ def test_writes_each_opportunity_via_upsert_keyed_on_store_date_type_title():
             opportunity_type="reprice",
             title="Raise price on Bacon Eddy by $0.25",
             estimated_dollar_impact=42.5,
+            horizon_days=1,
             confidence="high",
             evidence=[Evidence(kind="elasticity_fit", ref="MenuItemElasticity:Bacon Eddy", value=-0.4)],
             caveats=[],

@@ -32,6 +32,13 @@ export interface DecisionDay {
   bucket: VolumeBucket
   pctVsTrailing: number | null
   staffDelta: number | null
+  /**
+   * Why `staffDelta` is null, when there's a reason worth showing. The staffing
+   * cell rendered a bare em-dash on all seven days, which reads as a broken
+   * feature; the classifier actually knew the answer ("missing_schedule" —
+   * Harri has published no schedule for that day).
+   */
+  staffNote: string | null
   hasAnomaly: boolean
   anomalyHint: string | null
   weatherTone: "clear" | "rain" | "heat" | "cold" | "heavy_rain" | null
@@ -46,6 +53,7 @@ export interface DecisionAction {
   category: string // "Pricing", "Menu mix", ...
   type: OpportunityType
   title: string
+  /** Impact normalised to one week, whatever horizon the generator used. */
   impactUsdPerWeek: number
   why: string
   doByDate: string // ISO date YYYY-MM-DD
@@ -160,6 +168,7 @@ export async function getDecisionsView(input: {
     const event = aggregateEvents(eventRows, key)
     const anom = findAnomalyForDay(anomaliesResult, key)
     const staffDelta = computeStaffDelta(laborData, key)
+    const staffNote = computeStaffNote(laborData, key)
     const foodCostNote = isAggregate ? null : foodCostNoteFor(foodCostData, key)
 
     return {
@@ -169,6 +178,7 @@ export async function getDecisionsView(input: {
       bucket,
       pctVsTrailing: pct,
       staffDelta,
+      staffNote,
       hasAnomaly: !!anom,
       anomalyHint: anom,
       weatherTone: weather.tone,
@@ -306,6 +316,19 @@ type LaborData = NonNullable<
   Extract<Awaited<ReturnType<typeof getLaborStaffingForecast>>, { ok: true }>
 >["data"]
 
+/**
+ * Short reason for an absent staffing arrow, so the cell can explain itself
+ * rather than showing a bare em-dash seven days running.
+ */
+function computeStaffNote(data: LaborData | null, dayKey: string): string | null {
+  if (!data) return "no forecast"
+  const day = data.days.find((d) => ymd(d.date) === dayKey)
+  if (!day) return "no forecast"
+  if (day.staffingRisk === "missing_schedule") return "no schedule"
+  if (day.staffingRisk == null) return "no schedule"
+  return null
+}
+
 /** Map per-day staffingRisk → +1 / 0 / -1 / null staff arrow. */
 function computeStaffDelta(
   data: LaborData | null,
@@ -364,7 +387,12 @@ function buildActionCards(
     category: translateOpportunityType(o.opportunityType),
     type: o.opportunityType,
     title: stripJargon(o.title),
-    impactUsdPerWeek: o.estimatedDollarImpact,
+    // Generators emit over different horizons (1 day for reprice, 7 for the
+    // risk types, 30 for menu engineering). The card has always said "/wk", so
+    // normalise rather than relabel — a 30-day figure shown as weekly is what
+    // produced "+$10,839/wk" for a single slow-moving combo.
+    impactUsdPerWeek:
+      o.estimatedDollarImpact * (7 / Math.max(1, o.horizonDays ?? 7)),
     why: stripJargon(o.suggestedAction || ""),
     doByDate: doByKey,
     dots: translateConfidence(o.confidence),

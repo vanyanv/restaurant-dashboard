@@ -64,6 +64,8 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
         opportunity_type="channel_mix",
         title=f"Shift ~{int(units_to_shift)} orders/wk from 3P to 1P",
         estimated_dollar_impact=round(impact, 2),
+        # units_to_shift is a credible weekly shift (see _RECOMMENDED_SHIFT_FRACTION).
+        horizon_days=7,
         confidence="medium",
         evidence=[
             Evidence(kind="fp_net_per_order", ref="OtterDailySummary:fp", value=round(fp_net, 2)),

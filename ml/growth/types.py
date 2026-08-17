@@ -35,6 +35,10 @@ class GrowthOpportunity:
     opportunity_type: OpportunityType
     title: str
     estimated_dollar_impact: float
+    # Number of days `estimated_dollar_impact` covers. Generators disagree (7
+    # for the risk types, 30 for menu engineering) and the UI used to label
+    # every one of them "/wk", overstating the 30-day ones by ~4x.
+    horizon_days: int
     confidence: Confidence
     evidence: list[Evidence] = field(default_factory=list)
     caveats: list[str] = field(default_factory=list)

@@ -63,7 +63,7 @@ export function DayDetailPanel({ day }: Props) {
             label="STAFF"
             value={
               day.staffDelta == null
-                ? "—"
+                ? (day.staffNote ?? "—")
                 : day.staffDelta > 0
                   ? `+${day.staffDelta} vs typical`
                   : day.staffDelta < 0

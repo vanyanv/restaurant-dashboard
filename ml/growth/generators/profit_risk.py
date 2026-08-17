@@ -132,6 +132,7 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
         opportunity_type="profit_risk",
         title=f"7-day projected margin {margin*100:.1f}% (forecast)",
         estimated_dollar_impact=round(profit, 2),  # signed — negative = loss
+        horizon_days=_HORIZON_DAYS,
         confidence="medium",
         evidence=[
             Evidence(kind="forecast_revenue",  ref="ForecastDailyRevenue",  value=round(revenue, 2)),
