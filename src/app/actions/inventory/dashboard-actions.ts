@@ -3,8 +3,11 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { computeRunningOnHand } from "@/lib/inventory/running-on-hand"
-import { computeDailyDepletionRate } from "@/lib/inventory/depletion-rate"
+import {
+  loadStoreInventoryContext,
+  runningOnHandFromContext,
+  dailyDepletionRateFromContext,
+} from "@/lib/inventory/store-inventory-context"
 import {
   computeReorderRecommendation,
   type ReorderStatus,
@@ -128,12 +131,18 @@ export async function getInventoryDashboardData(input: {
     vendorByIngredient.set(line.canonicalIngredientId, line.invoice.vendorName)
   }
 
-  const rows = await Promise.all(
-    ingredients.map(async (ing): Promise<InventoryDashboardRow> => {
-      const [onHandResult, depletionResult] = await Promise.all([
-        computeRunningOnHand({ storeId: input.storeId, ingredientId: ing.id, asOf }),
-        computeDailyDepletionRate({ storeId: input.storeId, ingredientId: ing.id, asOf }),
-      ])
+  // One store-wide prefetch instead of ~10 queries per ingredient. The readers
+  // below run the same arithmetic as computeRunningOnHand /
+  // computeDailyDepletionRate via the shared helpers in usage-math.ts.
+  const inventoryCtx = await loadStoreInventoryContext({
+    storeId: input.storeId,
+    accountId: user.accountId,
+    asOf,
+  })
+
+  const rows = ingredients.map((ing): InventoryDashboardRow => {
+      const onHandResult = runningOnHandFromContext(inventoryCtx, ing)
+      const depletionResult = dailyDepletionRateFromContext(inventoryCtx, ing)
 
       const onHand = onHandResult?.onHand ?? 0
       const baseAt = onHandResult?.baseAt ?? null
@@ -180,8 +189,7 @@ export async function getInventoryDashboardData(input: {
         confidenceSampleSize: modelState?.sampleSize ?? 0,
         isGraduated: modelState?.isGraduated ?? false,
       }
-    })
-  )
+  })
 
   return {
     ok: true,
