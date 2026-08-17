@@ -405,3 +405,54 @@ export function StoreAnalyticsPageSkeleton() {
     </div>
   )
 }
+
+/* ------------------------------------------------------------------ */
+/*  Neutral route skeleton                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Shape-agnostic fallback for the dashboard's root `loading.tsx`.
+ *
+ * That boundary is the nearest one for every route without its own, so it must
+ * not commit to a layout. `DashboardPageSkeleton` is Today-shaped (KPI row +
+ * chart + 17-column ledger) and previously flashed on Labor, Decisions, Menu
+ * Profit, Product Mix, Settings and Ingredients — none of which look like that.
+ * This renders only the topbar and two generic panels, which is true anywhere.
+ */
+export function RoutePageSkeleton() {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="sticky top-0 z-30 border-b border-(--hairline-bold) bg-(--paper)/80 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-4 w-8 rounded-xs" />
+            <Skeleton className="h-5 w-32" />
+          </div>
+          <Skeleton className="h-8 w-40 rounded-xs" />
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-4 p-4 sm:p-6">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <section key={i} className="inv-panel">
+            <div className="inv-panel__head">
+              <div className="space-y-2">
+                <Skeleton className="h-2.5 w-24" />
+                <Skeleton className="h-4 w-44" />
+              </div>
+            </div>
+            <div className="space-y-3 pt-2">
+              {Array.from({ length: i === 0 ? 4 : 6 }).map((_, r) => (
+                <div key={r} className="flex items-center gap-4">
+                  <Skeleton className="h-3.5 flex-1" />
+                  <Skeleton className="h-3.5 w-20" />
+                  <Skeleton className="h-3.5 w-16" />
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}

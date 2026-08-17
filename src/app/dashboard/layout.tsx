@@ -11,6 +11,12 @@ import { authOptions } from "@/lib/auth"
 import { consumePendingWelcome } from "@/lib/welcome"
 import "@/styles/editorial-tokens.css"
 import "@/styles/editorial-dashboard.css"
+// Despite the name, editorial-auth.css also carries the whole Settings
+// ("The Masthead") block, the shared .editorial-field / .editorial-submit form
+// primitives, and the .missing-dispatch 404 treatment. Without it every route
+// under /dashboard/settings and the dashboard 404 render unstyled. All rules in
+// it are class-scoped, so nothing leaks into the rest of the dashboard.
+import "@/styles/editorial-auth.css"
 import "@/styles/welcome-marquee.css"
 
 const fraunces = Fraunces({
