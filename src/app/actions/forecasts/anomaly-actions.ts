@@ -2,10 +2,11 @@
 
 import { prisma } from "@/lib/prisma"
 import { getCachedSession, resolveStoreContext } from "./_shared"
+import { anomalyHorizon } from "@/lib/anomaly-window"
 
 export type AnomalyTarget = "REVENUE" | "MENU_ITEM" | "INGREDIENT" | "LABOR" | "REFUNDS"
 export type AnomalyMethod = "ZSCORE" | "ISOLATION_FOREST"
-export type AnomalyStatus = "OPEN" | "ACKNOWLEDGED" | "EXPLAINED"
+export type AnomalyStatus = "OPEN" | "ACKNOWLEDGED" | "EXPLAINED" | "EXPIRED"
 
 export interface AnomalyEvent {
   id: string
@@ -46,8 +47,14 @@ export async function getOpenAnomalies(input: {
   const { storeIds, storeName, storeIdOut, storeNameById } = resolved.ctx
 
   const limit = input.limit ?? 20
+  // Bounded to the relevance horizon — an anomaly from three months ago is not
+  // "open", and fifty of them drown the ones that still matter.
   const events = await prisma.anomalyEvent.findMany({
-    where: { storeId: { in: storeIds }, status: "OPEN" },
+    where: {
+      storeId: { in: storeIds },
+      status: "OPEN",
+      occurredOn: { gte: anomalyHorizon() },
+    },
     orderBy: [{ occurredOn: "desc" }, { detectedAt: "desc" }],
     take: limit,
     select: {
