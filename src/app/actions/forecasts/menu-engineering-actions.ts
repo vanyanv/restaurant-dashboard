@@ -36,6 +36,16 @@ export interface MenuEngineeringRow {
   totalContribution: number
   marginPct: number | null
   quadrant: MenuQuadrant
+  /**
+   * Price elasticity for this item, when the nightly fit produced a usable
+   * one. Computed per store every night and previously obtainable only by
+   * asking the chatbot — which meant the page about item pricing didn't show
+   * how price actually moves volume. Null when there is no signal (fewer than
+   * two observed price points, or a fit too weak to quote).
+   */
+  elasticity: number | null
+  /** "high" | "low" — how much to trust `elasticity`. Null when absent. */
+  elasticityConfidence: "high" | "low" | null
 }
 
 export interface MenuEngineeringCoverage {
@@ -100,7 +110,7 @@ export async function getMenuEngineering(input: {
     category: { not: "Packaging" },
   }
 
-  const [grouped, statusRollup, partialAgg] = await Promise.all([
+  const [grouped, statusRollup, partialAgg, elasticityRows] = await Promise.all([
     prisma.dailyCogsItem.groupBy({
       by: ["itemName", "category", "recipeId"],
       where: { ...windowWhere, status: "COSTED" },
@@ -115,7 +125,40 @@ export async function getMenuEngineering(input: {
       where: { ...windowWhere, status: "COSTED", partialCost: true },
       _sum: { salesRevenue: true },
     }),
+    // `otterItemSkuId` is populated with the Otter item name (see
+    // ml/elasticity/menu_item.py), so it joins straight onto these rows.
+    prisma.menuItemElasticity.findMany({
+      where: { storeId: { in: storeIds } },
+      select: {
+        otterItemSkuId: true,
+        elasticity: true,
+        fitR2: true,
+        sampleSize: true,
+        pricePointCount: true,
+      },
+    }),
   ])
+
+  // Mirrors the confidence rule the chat tool applies: no price variance means
+  // the fit is meaningless, and a weak fit on a short series is not worth
+  // quoting to an operator as if it were a measurement.
+  const elasticityByItem = new Map<
+    string,
+    { elasticity: number; confidence: "high" | "low" }
+  >()
+  for (const e of elasticityRows) {
+    if (e.pricePointCount < 2) continue
+    if (e.fitR2 < 0.1 || e.sampleSize < 14) continue
+    // Positive coefficients are noise for a demand curve, not a finding.
+    if (e.elasticity >= 0) continue
+    const existing = elasticityByItem.get(e.otterItemSkuId)
+    if (existing) continue
+    elasticityByItem.set(e.otterItemSkuId, {
+      elasticity: e.elasticity,
+      confidence: e.fitR2 >= 0.4 && e.sampleSize >= 60 ? "high" : "low",
+    })
+  }
+  const elasticityFor = (itemName: string) => elasticityByItem.get(itemName)
 
   const revenueByStatus = new Map<string, number>()
   for (const s of statusRollup) {
@@ -233,6 +276,8 @@ export async function getMenuEngineering(input: {
       totalContribution: totalC,
       marginPct: r.revenue > 0 ? (totalC / r.revenue) * 100 : null,
       quadrant,
+      elasticity: elasticityFor(r.itemName)?.elasticity ?? null,
+      elasticityConfidence: elasticityFor(r.itemName)?.confidence ?? null,
     }
   })
 

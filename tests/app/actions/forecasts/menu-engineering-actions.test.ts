@@ -12,6 +12,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     store: { findUnique: vi.fn(), findMany: vi.fn() },
     dailyCogsItem: { groupBy: vi.fn(), aggregate: vi.fn() },
+    menuItemElasticity: { findMany: vi.fn() },
   },
 }))
 
@@ -28,6 +29,9 @@ beforeEach(() => {
   vi.mocked(prisma.dailyCogsItem.aggregate).mockResolvedValue({
     _sum: { salesRevenue: 0 },
   } as never)
+  // Elasticity is decoration on these rows — default to "no fits available"
+  // so the classification assertions stay about the classifier.
+  vi.mocked(prisma.menuItemElasticity.findMany).mockResolvedValue([] as never)
 })
 
 describe("getMenuEngineering", () => {
@@ -95,6 +99,86 @@ describe("getMenuEngineering", () => {
     expect(result.data.counts).toEqual({ STAR: 1, PLOWHORSE: 1, PUZZLE: 1, DOG: 1 })
     // Total contribution = 500 + 100 + 160 + 10 = 770
     expect(result.data.totalContribution).toBeCloseTo(770, 5)
+  })
+
+  it("attaches elasticity only when the nightly fit is usable", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+      id: "s1",
+      name: "S1",
+      accountId: "acct-A",
+    } as never)
+    vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
+      {
+        itemName: "Burger",
+        category: "Entree",
+        _sum: { qtySold: 100, salesRevenue: 1000, lineCost: 500 },
+      },
+      {
+        itemName: "Soda",
+        category: "Drinks",
+        _sum: { qtySold: 100, salesRevenue: 300, lineCost: 200 },
+      },
+      {
+        itemName: "Steak",
+        category: "Entree",
+        _sum: { qtySold: 20, salesRevenue: 400, lineCost: 240 },
+      },
+      {
+        itemName: "Salad",
+        category: "Sides",
+        _sum: { qtySold: 20, salesRevenue: 60, lineCost: 50 },
+      },
+    ] as never)
+    vi.mocked(prisma.menuItemElasticity.findMany).mockResolvedValue([
+      // Strong fit, long series — quotable.
+      {
+        otterItemSkuId: "Burger",
+        elasticity: -1.4,
+        fitR2: 0.55,
+        sampleSize: 90,
+        pricePointCount: 6,
+      },
+      // Real but weak — shown, flagged.
+      {
+        otterItemSkuId: "Soda",
+        elasticity: -0.6,
+        fitR2: 0.18,
+        sampleSize: 40,
+        pricePointCount: 3,
+      },
+      // No price variance: the coefficient is meaningless.
+      {
+        otterItemSkuId: "Steak",
+        elasticity: -2.2,
+        fitR2: 0.9,
+        sampleSize: 200,
+        pricePointCount: 1,
+      },
+      // Positive coefficient is noise for a demand curve, not a finding.
+      {
+        otterItemSkuId: "Salad",
+        elasticity: 0.4,
+        fitR2: 0.6,
+        sampleSize: 120,
+        pricePointCount: 5,
+      },
+    ] as never)
+
+    const result = await getMenuEngineering({ storeId: "s1" })
+    if (!result || !result.ok) throw new Error("expected ok")
+    const byName = Object.fromEntries(result.data.rows.map((r) => [r.itemName, r]))
+
+    expect(byName.Burger.elasticity).toBeCloseTo(-1.4, 5)
+    expect(byName.Burger.elasticityConfidence).toBe("high")
+
+    expect(byName.Soda.elasticity).toBeCloseTo(-0.6, 5)
+    expect(byName.Soda.elasticityConfidence).toBe("low")
+
+    expect(byName.Steak.elasticity).toBeNull()
+    expect(byName.Steak.elasticityConfidence).toBeNull()
+
+    expect(byName.Salad.elasticity).toBeNull()
   })
 
   it("filters out long-tail items below minSoldQty", async () => {

@@ -1,5 +1,6 @@
 import { Suspense } from "react"
 import { ChartSkeleton } from "@/components/skeletons"
+import { SectionErrorBoundary } from "@/components/analytics/section-error"
 import { hasOwnerAccess } from "@/lib/auth"
 import { Role } from "@/generated/prisma/client"
 import type { DashboardRange } from "@/lib/dashboard-utils"
@@ -16,6 +17,7 @@ import { PnLSummarySection } from "./sections/pnl-summary-section"
 import { HourlyOrdersSection } from "./sections/hourly-orders-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
 import { InvoiceSnapshotSection } from "./sections/invoice-snapshot-section"
+import { RatingsSection } from "./sections/ratings-section"
 import { buildDashboardData, buildPnLSummary } from "./sections/data"
 
 interface DashboardShellProps {
@@ -82,6 +84,15 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
         <Suspense fallback={<InvoiceSnapshotSkeleton />}>
           <InvoiceSnapshotSection />
         </Suspense>
+
+        {/* Reviews explain the numbers above them, so they close the report
+            rather than opening it. Own boundary: ratings are the newest read
+            path here and must never take the daily report down. */}
+        <SectionErrorBoundary label="Customer reviews unavailable">
+          <Suspense fallback={null}>
+            <RatingsSection />
+          </Suspense>
+        </SectionErrorBoundary>
       </div>
     </div>
   )
