@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { Prisma } from "@/generated/prisma/client"
 import { bustTags, cached, stableKey } from "@/lib/cache/cached"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
@@ -97,10 +98,23 @@ export async function getInvoiceSummary(options?: {
   )
   const invoiceCount = vendorGroups.reduce((sum, g) => sum + g._count._all, 0)
   const avgInvoiceTotal = invoiceCount > 0 ? totalSpend / invoiceCount : 0
-  const vendorCount = vendorGroups.length
 
-  const spendByVendor = vendorGroups
-    .map((g) => ({ vendor: g.vendorName, total: g._sum.totalAmount ?? 0 }))
+  // groupBy runs on the raw vendorName, so the same supplier arriving under two
+  // invoice templates ("Vitco Foodservice" / "VITCO FOOD SERVICE") produced two
+  // bars on the chart and inflated the unique-vendor count. Merge on the
+  // canonical name — the same normaliser the ingredient matcher already uses.
+  const byCanonicalVendor = new Map<string, number>()
+  for (const g of vendorGroups) {
+    const key = normalizeVendorName(g.vendorName)
+    byCanonicalVendor.set(
+      key,
+      (byCanonicalVendor.get(key) ?? 0) + (g._sum.totalAmount ?? 0),
+    )
+  }
+  const vendorCount = byCanonicalVendor.size
+
+  const spendByVendor = [...byCanonicalVendor.entries()]
+    .map(([vendor, total]) => ({ vendor, total }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
 

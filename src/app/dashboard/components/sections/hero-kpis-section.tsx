@@ -1,27 +1,21 @@
 import { HeroKpi, formatMoneyLarge, formatUsd, type HeroKpiDelta } from "../hero-kpi"
 import { getRangeStamp, type DashboardRange } from "@/lib/dashboard-utils"
 import { getHourlyOrderPatterns } from "@/app/actions/hourly-orders-actions"
-import { HOUR_LABELS } from "@/lib/hourly-orders"
+import { formatPaceLine } from "@/lib/hourly-orders"
 import type { OrderPatternsHourlyComparison } from "@/types/analytics"
 import type { OtterPromise } from "./data"
 
 /**
  * Pace line under a KPI: today-so-far vs the average of the same weekday's
  * same hours over the last 4 weeks (cutoff-aware — partial day compared to
- * partial baselines, never to full days).
+ * partial baselines, never to full days). Shared with /m so the two surfaces
+ * report the same direction; see `formatPaceLine`.
  */
 function paceDelta(
   cmp: OrderPatternsHourlyComparison | null | undefined,
   pct: number | null | undefined
 ): HeroKpiDelta | null {
-  if (!cmp || pct == null || cmp.baselineWeeks < 2) return null
-  const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "·"
-  const thru =
-    cmp.lastDataHour != null ? ` · thru ${HOUR_LABELS[cmp.lastDataHour]}` : ""
-  return {
-    value: pct,
-    display: `${arrow} ${Math.abs(pct).toFixed(0)}% vs avg ${cmp.weekdayLabel}${thru}`,
-  }
+  return formatPaceLine(cmp, pct)
 }
 
 export async function HeroKpisSection({

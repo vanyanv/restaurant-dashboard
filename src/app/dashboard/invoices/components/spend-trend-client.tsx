@@ -105,13 +105,22 @@ export function SpendTrendClient({
   peakBucket,
   periodLabel,
 }: SpendTrendClientProps) {
-  const nonEmpty = buckets.filter((b) => b.total > 0)
-  const first = nonEmpty[0]
-  const last = nonEmpty[nonEmpty.length - 1]
+  // The trailing bucket is usually still filling — comparing it to a complete
+  // one reported "−87%" on a window whose weekly totals were $20.4k / $13k /
+  // $18k / $18k / $3k, where the $3k week was two days old. Compare complete
+  // buckets only, and say which ones.
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const complete = buckets.filter((b) => b.total > 0 && b.bucketEnd < todayKey)
+  const first = complete[0]
+  const last = complete[complete.length - 1]
   let trendDelta: number | null = null
   if (first && last && first !== last && first.total > 0) {
     trendDelta = ((last.total - first.total) / first.total) * 100
   }
+  const trendScope =
+    trendDelta != null && first && last
+      ? `${first.label} → ${last.label}`
+      : null
 
   const TrendIcon =
     trendDelta == null
@@ -136,21 +145,35 @@ export function SpendTrendClient({
               <span>{formatCurrency(total)}</span>
               {trendDelta != null ? (
                 <em
-                  style={{
-                    color:
-                      trendDelta > 2
-                        ? "var(--accent)"
-                        : trendDelta < -2
-                          ? "#2f7a4e"
-                          : "var(--ink-muted)",
-                  }}
+                  // Spend is a cost line: falling isn't automatically good and
+                  // rising isn't automatically an alarm, so the direction is
+                  // carried by the arrow and sign rather than by red/green.
+                  // (The old green was a hardcoded #2f7a4e, outside the palette.)
+                  style={{ color: "var(--ink-muted)" }}
+                  title={trendScope ? `${trendScope}, complete periods only` : undefined}
                 >
                   <TrendIcon
                     size={10}
                     style={{ display: "inline", marginRight: 3 }}
+                    aria-hidden
                   />
                   {trendDelta > 0 ? "+" : ""}
                   {trendDelta.toFixed(0)}%
+                  {trendScope ? (
+                    <span
+                      style={{
+                        fontStyle: "normal",
+                        fontFamily: "var(--font-jetbrains-mono), monospace",
+                        fontSize: 9,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        marginLeft: 6,
+                        color: "var(--ink-muted)",
+                      }}
+                    >
+                      {trendScope}
+                    </span>
+                  ) : null}
                 </em>
               ) : null}
             </div>

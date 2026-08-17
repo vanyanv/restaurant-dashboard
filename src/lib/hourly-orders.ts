@@ -20,6 +20,40 @@ export const HOUR_LABELS = [
 
 export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
 
+export interface PaceLine {
+  /** Signed percentage, for callers that colour by direction. */
+  value: number
+  /** Rendered line, e.g. "▲ 4% vs avg Mon · thru 1 PM". */
+  display: string
+}
+
+/**
+ * Format a today-so-far comparison: the current partial day against the average
+ * of the same weekday's *same hours* over the trailing baseline weeks.
+ *
+ * This is the only correct way to compare a day in progress. Comparing a
+ * partial day against a complete prior day reads as a collapse every morning —
+ * mobile did exactly that and reported −88% at 1:16 PM on a day the desktop
+ * (which already used this logic) correctly reported as +4%. Both surfaces now
+ * call this, so they cannot disagree again.
+ *
+ * Returns null when there aren't at least two baseline weeks to average, in
+ * which case callers must show no delta rather than an unstable one.
+ */
+export function formatPaceLine(
+  cmp: OrderPatternsHourlyComparison | null | undefined,
+  pct: number | null | undefined,
+): PaceLine | null {
+  if (!cmp || pct == null || cmp.baselineWeeks < 2) return null
+  const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "·"
+  const thru =
+    cmp.lastDataHour != null ? ` · thru ${HOUR_LABELS[cmp.lastDataHour]}` : ""
+  return {
+    value: pct,
+    display: `${arrow} ${Math.abs(pct).toFixed(0)}% vs avg ${cmp.weekdayLabel}${thru}`,
+  }
+}
+
 export function emptyHourly(): HourlyOrderPoint[] {
   return Array.from({ length: 24 }, (_, i) => ({
     hour: i,
