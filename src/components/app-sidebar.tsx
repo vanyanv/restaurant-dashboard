@@ -19,11 +19,11 @@ import {
   UtensilsCrossed,
   MessageSquare,
   CalendarDays,
+  BellRing,
   LineChart,
   Wallet,
   Coins,
   Users,
-  PieChart,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react"
@@ -67,6 +67,7 @@ const NAV: NavSection[] = [
       { title: "Today", url: "/dashboard", icon: BarChart3 },
       { title: "Ask", url: "/dashboard/chat", icon: MessageSquare },
       { title: "Decisions", url: "/dashboard/decisions", icon: CalendarDays },
+      { title: "Alerts", url: "/dashboard/alerts", icon: BellRing },
       { title: "Orders", url: "/dashboard/orders", icon: Receipt },
     ],
   },
@@ -78,7 +79,6 @@ const NAV: NavSection[] = [
       { title: "COGS", url: "/dashboard/cogs", icon: Coins },
       { title: "Menu Profit", url: "/dashboard/menu-profit", icon: TrendingUp },
       { title: "Labor", url: "/dashboard/labor", icon: Users },
-      { title: "Product Mix", url: "/dashboard/product-mix", icon: PieChart },
     ],
   },
   {
@@ -89,10 +89,11 @@ const NAV: NavSection[] = [
         url: "/dashboard/operations",
         icon: Activity,
         items: [
-          { title: "Overview", url: "/dashboard/operations" },
           { title: "Inventory", url: "/dashboard/operations/inventory" },
           { title: "Stock Counts", url: "/dashboard/operations/inventory/counts" },
           { title: "Product Usage", url: "/dashboard/operations/product-usage" },
+          { title: "Menu Item Costs", url: "/dashboard/operations/product-usage?view=costs" },
+          { title: "Vendor Prices", url: "/dashboard/operations/product-usage?view=vendors" },
           { title: "Packaging", url: "/dashboard/operations/packaging" },
         ],
       },
@@ -113,7 +114,7 @@ const NAV: NavSection[] = [
         items: [
           { title: "Canonical catalog", url: "/dashboard/ingredients" },
           { title: "Price monitor", url: "/dashboard/ingredients/prices" },
-          { title: "Needs review", url: "/dashboard/ingredients?tab=review" },
+          { title: "Needs review", url: "/dashboard/ingredients#review" },
         ],
       },
       {
@@ -362,15 +363,30 @@ function EditorialNav({ items }: { items: NavItem[] }) {
   )
 }
 
+/** Masthead titles for the two real roles. */
+const ROLE_TITLE: Record<string, string> = {
+  OWNER: "Proprietor",
+  DEVELOPER: "Developer",
+}
+
 function EditorialUserCard() {
-  const [name] = React.useState("Owner")
-  const [role] = React.useState("Proprietor")
+  const { data: session, status } = useSession()
+  const user = session?.user
+
+  // While the session resolves, show the frame without inventing an identity.
+  const name = user?.firstName ?? user?.name ?? (status === "loading" ? "" : "Signed in")
+  const role = user?.role ? (ROLE_TITLE[user.role] ?? user.role.toLowerCase()) : ""
+  const initial = name.trim().charAt(0).toUpperCase()
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="editorial-user-card w-full text-left">
-          <div className="user-avatar">{name.charAt(0).toUpperCase()}</div>
+        <button
+          type="button"
+          className="editorial-user-card w-full text-left"
+          aria-label={name ? `Account menu — ${name}` : "Account menu"}
+        >
+          <div className="user-avatar">{initial}</div>
           <div className="flex-1 min-w-0">
             <div className="user-name">{name}</div>
             <div className="user-role">{role}</div>
