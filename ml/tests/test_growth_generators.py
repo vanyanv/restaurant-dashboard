@@ -82,7 +82,10 @@ def test_generator_registry_lists_all_five_by_w10_close():
 
 def test_menu_engineering_generator_flags_slow_movers_in_active_categories():
     """A category whose median velocity is 20/day with an item at 5/day and
-    margin $4 — over 30 days the upside if lifted to median is (20-5)*4*30 = $1800."""
+    margin $4. Lifting all the way to median would be (20-5)*4*30 = $1800 over
+    30 days, but that assumes a promotion turns a slow mover into a median
+    seller. The generator books 30% of that gap ($540) and records the $1800
+    ceiling as evidence."""
     from ml.growth.generators.menu_engineering import generate
 
     # Cursor 1: per-(item, category) trailing-30d velocity + margin.
@@ -102,11 +105,38 @@ def test_menu_engineering_generator_flags_slow_movers_in_active_categories():
     # Cheesy Eddy ~ median; Veggie Eddy is above median (not a slow-mover).
     bacon = [o for o in out if "Bacon Eddy" in o.title]
     assert len(bacon) == 1
-    # Hand-check: median of [5, 20, 22] = 20. (20-5) * 4.0 * 30 = 1800.
-    assert bacon[0].estimated_dollar_impact == 1800.0
+    # Hand-check: median of [5, 20, 22] = 20. Ceiling (20-5) * 4.0 * 30 = 1800;
+    # booked at 30% = 540. Current-contribution cap is 5 * 4 * 30 = 600, so the
+    # lift fraction binds here, not the cap.
+    assert bacon[0].estimated_dollar_impact == 540.0
     assert bacon[0].opportunity_type == "menu_engineering"
+    assert bacon[0].horizon_days == 30
+    # The unbounded figure survives as evidence so the reasoning is inspectable.
+    ceiling = [e for e in bacon[0].evidence if e.kind == "ceiling_if_lifted_to_median"]
+    assert len(ceiling) == 1 and ceiling[0].value == 1800.0
     # Drinks category has only one item — generator should not fire (no peer).
     assert not any("Iced Coffee" in o.title for o in out)
+
+
+def test_menu_engineering_impact_capped_at_the_items_own_contribution():
+    """A near-dormant item has a huge gap to the median, but no promotion
+    multiplies its throughput without limit. The cap keeps the claim to at most
+    the item's own current contribution over the horizon."""
+    from ml.growth.generators.menu_engineering import generate
+
+    rows = [
+        ("Ghost Item", "Sides", 0.1, 10.0),   # gap to median is enormous
+        ("Fries", "Sides", 40.0, 2.0),
+        ("Slaw", "Sides", 44.0, 2.0),
+    ]
+    out = generate(_mk_conn([_mk_cursor([rows])]),
+                   store_id="store-hwd", as_of_date=dt.date(2026, 6, 16))
+
+    ghost = [o for o in out if "Ghost Item" in o.title]
+    assert len(ghost) == 1
+    # 30% of the gap would be (40 - 0.1) * 10 * 30 * 0.3 = $3591 — far more than
+    # the item has ever earned. Capped at 0.1 * 10 * 30 = $30.
+    assert ghost[0].estimated_dollar_impact == 30.0
 
 
 def test_channel_mix_generator_recommends_shifting_to_higher_net_channel():

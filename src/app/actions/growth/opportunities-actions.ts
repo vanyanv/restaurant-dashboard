@@ -84,6 +84,7 @@ export async function getOpportunities(input: {
     opportunityType: r.opportunityType as GrowthOpportunity["opportunityType"],
     title: r.title,
     estimatedDollarImpact: r.estimatedDollarImpact,
+    horizonDays: r.horizonDays,
     confidence: r.confidence as GrowthOpportunity["confidence"],
     evidence: (r.evidence ?? []) as unknown as GrowthOpportunity["evidence"],
     caveats: r.caveats,

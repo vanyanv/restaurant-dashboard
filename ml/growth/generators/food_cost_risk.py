@@ -98,6 +98,7 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
         opportunity_type="food_cost_risk",
         title=f"7-day food cost trending {forecast_pct*100:.1f}% (target {target_pct*100:.1f}%)",
         estimated_dollar_impact=round(impact, 2),
+        horizon_days=_HORIZON_DAYS,
         confidence="medium" if forecast_pct - target_pct < 0.05 else "high",
         evidence=[
             Evidence(kind="forecast_food_cost_pct", ref="derived", value=round(forecast_pct, 4)),

@@ -13,11 +13,13 @@ from ml.growth.types import GrowthOpportunity
 _UPSERT_SQL = '''
     INSERT INTO "GrowthOpportunity"
         (id, "storeId", "asOfDate", "opportunityType", title,
-         "estimatedDollarImpact", confidence, evidence, caveats, "suggestedAction")
-    VALUES (%s, %s, %s, %s::"OpportunityType", %s, %s,
+         "estimatedDollarImpact", "horizonDays", confidence, evidence, caveats,
+         "suggestedAction")
+    VALUES (%s, %s, %s, %s::"OpportunityType", %s, %s, %s,
             %s::"OpportunityConfidence", %s, %s, %s)
     ON CONFLICT ("storeId", "asOfDate", "opportunityType", title) DO UPDATE SET
         "estimatedDollarImpact" = EXCLUDED."estimatedDollarImpact",
+        "horizonDays"           = EXCLUDED."horizonDays",
         confidence              = EXCLUDED.confidence,
         evidence                = EXCLUDED.evidence,
         caveats                 = EXCLUDED.caveats,
@@ -35,7 +37,7 @@ def write_opportunities(conn, ops: list[GrowthOpportunity]) -> int:
             cur.execute(
                 _UPSERT_SQL,
                 (cuid_like(), o.store_id, o.as_of_date, o.opportunity_type,
-                 o.title, o.estimated_dollar_impact, o.confidence,
+                 o.title, o.estimated_dollar_impact, o.horizon_days, o.confidence,
                  evidence_json, o.caveats, o.suggested_action),
             )
             written += 1

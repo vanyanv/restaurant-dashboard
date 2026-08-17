@@ -97,6 +97,9 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
             opportunity_type="reprice",
             title=f"{direction.title()} price on {sku} by ${abs(delta):.2f}",
             estimated_dollar_impact=round(net_benefit, 2),
+            # meanQty is a mean *daily* quantity, so the closed form yields a
+            # per-day benefit.
+            horizon_days=1,
             confidence=confidence,
             evidence=[
                 Evidence(kind="elasticity_fit", ref=f"MenuItemElasticity:{sku}", value=round(float(elasticity), 3)),

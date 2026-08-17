@@ -76,7 +76,9 @@ export function DecisionWeekCalendar({ days, storeName }: Props) {
               ) : (
                 <span className="decisions-day-cell__staff is-neutral">
                   <span className="decisions-day-cell__staff-label">STAFF</span>
-                  —
+                  {/* An em-dash on all seven days read as a broken field. Say
+                      which of "no schedule published" or "level" it is. */}
+                  {day.staffDelta === 0 ? "level" : (day.staffNote ?? "—")}
                 </span>
               )}
             </button>

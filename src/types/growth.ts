@@ -27,6 +27,8 @@ export interface GrowthOpportunity {
   opportunityType: OpportunityType
   title: string
   estimatedDollarImpact: number
+  /** Days `estimatedDollarImpact` covers (1 | 7 | 30, per generator). */
+  horizonDays: number
   confidence: OpportunityConfidence
   evidence: OpportunityEvidence[]
   caveats: string[]

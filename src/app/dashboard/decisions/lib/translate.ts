@@ -50,7 +50,17 @@ export function translateConfidence(c: OpportunityConfidence): 1 | 2 | 3 {
 export function stripJargon(input: string): string {
   let out = input
   for (const re of JARGON_PATTERNS) out = out.replace(re, "")
-  return out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:!?])/g, "$1").trim()
+  out = out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:!?])/g, "$1")
+
+  // Briefing lines are assembled from chunks that render as adjacent inline
+  // spans, so the space joining a chunk to the number beside it lives at the
+  // chunk's own edge. Trimming outright produced "at23.4%" / "plus49more".
+  // Collapse each edge to a single space instead of dropping it.
+  const core = out.trim()
+  if (core === "") return ""
+  const lead = /^\s/.test(input) ? " " : ""
+  const trail = /\s$/.test(input) ? " " : ""
+  return `${lead}${core}${trail}`
 }
 
 export interface WeatherInput {
