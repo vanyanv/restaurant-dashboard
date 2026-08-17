@@ -64,6 +64,18 @@ export interface ProductUsageKpis {
   ingredientsTracked: number
   recipesConfigured: number
   menuItemsCovered: number
+  /** Distinct menu items sold in the window — the denominator for coverage. */
+  menuItemsSold: number
+  /**
+   * Whether the variance/waste figures rest on enough recipe mapping to mean
+   * anything. When false the UI must show coverage instead of the waste
+   * numbers: without recipes, theoretical usage collapses toward zero and
+   * "waste" degenerates into "everything purchased", which rendered as a red
+   * 99.4% against a theoretical cost 12× total purchases.
+   */
+  varianceReliable: boolean
+  /** 0–1 share of sold menu items that have a recipe attached. */
+  recipeCoverage: number
 }
 
 export interface MenuItemCostRow {

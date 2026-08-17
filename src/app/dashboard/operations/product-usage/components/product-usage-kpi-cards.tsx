@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef } from "react"
+import Link from "next/link"
 import { formatCurrency } from "@/lib/format"
 import { motion, useReducedMotion } from "framer-motion"
 import type { ProductUsageKpis } from "@/types/product-usage"
@@ -42,9 +43,53 @@ const CARDS: { key: keyof ProductUsageKpis; label: string; tone: Tone | "dynamic
   { key: "wastePercent", label: "Waste %", tone: "dynamic" },
 ]
 
+/**
+ * Coverage panel shown in place of the waste tiles when the variance maths has
+ * no basis. Publishing "99.4% waste" off a theoretical cost twelve times total
+ * purchases teaches the owner to stop believing this page; the honest reading
+ * is that recipes aren't mapped yet, so that is what we say.
+ */
+function CoverageNotice({ kpis }: ProductUsageKpiCardsProps) {
+  const pct = Math.round(kpis.recipeCoverage * 100)
+  return (
+    <section className="inv-panel">
+      <div className="inv-panel__head">
+        <div>
+          <div className="inv-panel__dept">Variance · not yet measurable</div>
+          <h3 className="inv-panel__title">Recipe coverage is {pct}%</h3>
+        </div>
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-muted) tabular-nums">
+          {kpis.menuItemsCovered} of {kpis.menuItemsSold} items costed
+        </span>
+      </div>
+      <p className="max-w-[68ch] text-[13px] leading-6 text-(--ink-muted)">
+        Theoretical usage is derived from recipes, so with most sold items
+        unmapped the theoretical side is unusable and every dollar purchased
+        reads as waste. Purchases below are still accurate — the variance,
+        waste and efficiency figures are withheld until coverage passes 60%.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-(--ink-muted)">
+            Total purchased
+          </div>
+          <div className="mt-0.5 text-xl font-semibold tabular-nums">
+            {formatCurrency(kpis.totalPurchasedCost)}
+          </div>
+        </div>
+        <Link href="/dashboard/recipes" className="toolbar-btn">
+          Map recipes
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 export function ProductUsageKpiCards({ kpis }: ProductUsageKpiCardsProps) {
   const hasAnimated = useRef(false)
   const prefersReducedMotion = useReducedMotion()
+
+  if (!kpis.varianceReliable) return <CoverageNotice kpis={kpis} />
 
   const getValue = (key: keyof ProductUsageKpis): string => {
     switch (key) {
