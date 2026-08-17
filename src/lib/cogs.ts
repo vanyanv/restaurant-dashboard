@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { salesRowValues, type OtterSummaryRow } from "@/lib/pnl"
+import type { LifecycleStage } from "@/generated/prisma/client"
 
 /** Internal: end-exclusive Prisma where for a date window. */
 function dateWindow(storeId: string, startDate: Date, endDate: Date) {
@@ -123,6 +124,7 @@ export interface CogsStoreOverviewRow {
   targetCogsPct: number | null
   deltaVsTargetPp: number | null
   warningCount: number
+  lifecycleStage: LifecycleStage
 }
 
 export async function getCogsKpis(
@@ -573,7 +575,7 @@ export async function getCogsStoreOverview(
 ): Promise<CogsStoreOverviewRow[]> {
   const stores = await prisma.store.findMany({
     where: { accountId, isActive: true },
-    select: { id: true, name: true, targetCogsPct: true },
+    select: { id: true, name: true, targetCogsPct: true, lifecycleStage: true },
     orderBy: { name: "asc" },
   })
 
@@ -705,6 +707,7 @@ export async function getCogsStoreOverview(
     return {
       storeId: store.id,
       storeName: store.name,
+      lifecycleStage: store.lifecycleStage,
       cogsPct,
       cogsDollars,
       foodCogsDollars,

@@ -4,6 +4,7 @@ import { startOfDay, subDays } from "date-fns"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { getCogsStoreOverview } from "@/lib/cogs"
+import { isOperational, lifecycleSummary } from "@/lib/store-lifecycle"
 import { EditorialTopbar } from "../components/editorial-topbar"
 
 function formatMoney(value: number): string {
@@ -36,7 +37,18 @@ export default async function CogsLandingPage() {
     endDate
   )
 
-  if (stores.length === 1) redirect(`/dashboard/cogs/${stores[0].storeId}`)
+  // Pre-open stores have no COGS by definition. Listing them alongside trading
+  // stores gave them a row reading "0.0% · set · no target · $0 · $0 · $0 ·
+  // clean" — and "clean" is the healthy state, so two-thirds of the watchlist
+  // said everything was fine at stores that have never served a customer.
+  const trading = stores.filter((s) => isOperational(s))
+  const preOpen = stores.filter((s) => !isOperational(s))
+
+  // With one trading store this page is a waypoint to a single link; go there.
+  if (trading.length === 1) redirect(`/dashboard/cogs/${trading[0].storeId}`)
+  if (trading.length === 0 && stores.length === 1) {
+    redirect(`/dashboard/cogs/${stores[0].storeId}`)
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -50,13 +62,18 @@ export default async function CogsLandingPage() {
                 <h1 className="inv-panel__title">Store COGS watchlist</h1>
               </div>
               <span className="cogs-store-overview__scope">
-                ranked by target miss, data risk, then dollars
+                {lifecycleSummary(stores) ??
+                  "ranked by target miss, data risk, then dollars"}
               </span>
             </div>
 
             {stores.length === 0 ? (
               <div className="cogs-empty-note">
                 No active stores. Create a store before reviewing COGS.
+              </div>
+            ) : trading.length === 0 ? (
+              <div className="cogs-empty-note">
+                No store is trading yet. COGS begins once a store opens.
               </div>
             ) : (
               <div className="cogs-store-ledger" role="table" aria-label="COGS by store">
@@ -70,7 +87,7 @@ export default async function CogsLandingPage() {
                   <span role="columnheader">Revenue</span>
                   <span role="columnheader">Risk</span>
                 </div>
-                {stores.map((store) => {
+                {trading.map((store) => {
                   const overTarget =
                     store.deltaVsTargetPp != null && store.deltaVsTargetPp > 0
                   return (
@@ -101,6 +118,13 @@ export default async function CogsLandingPage() {
                 })}
               </div>
             )}
+
+            {preOpen.length > 0 ? (
+              <div className="cogs-empty-note">
+                {preOpen.map((s) => s.storeName).join(", ")} — pre-open, no
+                service yet.
+              </div>
+            ) : null}
           </section>
         </div>
       </div>

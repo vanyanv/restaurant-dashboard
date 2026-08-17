@@ -55,6 +55,7 @@ export default async function StoresPage() {
     address: s.address,
     phone: s.phone,
     isActive: s.isActive,
+    lifecycleStage: s.lifecycleStage,
     fixedMonthlyLabor: s.fixedMonthlyLabor,
     fixedMonthlyRent: s.fixedMonthlyRent,
     fixedMonthlyTowels: s.fixedMonthlyTowels,
