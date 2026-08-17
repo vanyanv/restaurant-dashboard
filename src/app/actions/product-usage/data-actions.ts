@@ -501,6 +501,22 @@ export async function getProductUsageData(options?: {
     if (recipeMap.has(menuKey)) menuItemsWithRecipe.add(menuKey)
   }
 
+  // Variance is only meaningful when most of what was sold can be costed. With
+  // thin recipe mapping the theoretical side is near-zero (so "waste" absorbs
+  // the entire purchase ledger) or wildly overstated by a mis-parsed pack size.
+  // Either way the four KPI tiles become fiction, so flag it and let the UI
+  // show coverage instead.
+  const menuItemsSold = menuSalesMap.size
+  const recipeCoverage =
+    menuItemsSold > 0 ? menuItemsWithRecipe.size / menuItemsSold : 0
+  const MIN_RECIPE_COVERAGE = 0.6
+  const MAX_THEORETICAL_MULTIPLE = 3
+  const theoreticalInBand =
+    totalPurchasedCost > 0 &&
+    theoreticalIngredientCost <= totalPurchasedCost * MAX_THEORETICAL_MULTIPLE
+  const varianceReliable =
+    menuItemsSold > 0 && recipeCoverage >= MIN_RECIPE_COVERAGE && theoreticalInBand
+
   const kpis: ProductUsageKpis = {
     totalPurchasedCost,
     theoreticalIngredientCost,
@@ -509,6 +525,9 @@ export async function getProductUsageData(options?: {
     ingredientsTracked: ingredientUsage.length,
     recipesConfigured: recipes.length,
     menuItemsCovered: menuItemsWithRecipe.size,
+    menuItemsSold,
+    recipeCoverage,
+    varianceReliable,
   }
 
   // ── Format recipes for response ──

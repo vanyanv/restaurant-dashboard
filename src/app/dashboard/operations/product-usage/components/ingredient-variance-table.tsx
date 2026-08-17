@@ -17,13 +17,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowUpDown } from "lucide-react"
+import {
+  SortGlyph,
+  ariaSort,
+  sortLabel,
+} from "@/components/dashboard/sort-affordance"
 import { formatCurrency } from "@/lib/format"
 import type { IngredientUsageRow } from "@/types/product-usage"
 
 interface IngredientVarianceTableProps {
   data: IngredientUsageRow[]
   onRowClick?: (ingredientName: string) => void
+  /**
+   * False when recipe coverage is too thin for theoretical usage to mean
+   * anything. Gating only the KPI tiles left the same fiction one level down:
+   * every row read `0.0` theoretical / `0.0%` variance while the waste column
+   * quietly restated the purchase cost as if it were loss.
+   */
+  varianceReliable?: boolean
 }
 
 const NUM_CLASS =
@@ -100,18 +111,19 @@ function SortHeader({
     <button
       type="button"
       onClick={onClick}
+      aria-label={sortLabel(label, isSorted)}
       className="inline-flex items-center gap-1 -ml-1"
       style={{
-        color: isSorted ? "var(--ink)" : "var(--ink-faint)",
+        color: isSorted ? "var(--ink)" : "var(--ink-muted)",
         fontFamily: "var(--font-jetbrains-mono), monospace",
         fontSize: 10,
         letterSpacing: "0.18em",
         textTransform: "uppercase",
-        fontWeight: 600,
+        fontWeight: isSorted ? 700 : 600,
       }}
     >
       {label}
-      <ArrowUpDown className="ml-0.5 h-3 w-3" />
+      <SortGlyph dir={isSorted} />
     </button>
   )
 }
@@ -119,12 +131,13 @@ function SortHeader({
 export function IngredientVarianceTable({
   data,
   onRowClick,
+  varianceReliable = true,
 }: IngredientVarianceTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "wasteEstimatedCost", desc: true },
+    { id: varianceReliable ? "wasteEstimatedCost" : "purchasedQuantity", desc: true },
   ])
 
-  const columns = useMemo<ColumnDef<IngredientUsageRow>[]>(
+  const allColumns = useMemo<ColumnDef<IngredientUsageRow>[]>(
     () => [
       {
         accessorKey: "canonicalName",
@@ -260,6 +273,15 @@ export function IngredientVarianceTable({
     ],
     []
   )
+
+  // Without recipes there is no theoretical side, so those three columns carry
+  // no information — drop them rather than print zeros that read as measured.
+  const DERIVED_COLUMNS = new Set(["theoreticalUsage", "variancePct", "wasteEstimatedCost"])
+  const columns = varianceReliable
+    ? allColumns
+    : allColumns.filter(
+        (c) => !DERIVED_COLUMNS.has((c as { accessorKey?: string }).accessorKey ?? ""),
+      )
 
   const table = useReactTable({
     data,
@@ -444,7 +466,15 @@ export function IngredientVarianceTable({
                 style={{ borderBottom: "1px solid var(--hairline)" }}
               >
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="pl-4">
+                  <TableHead
+                    key={header.id}
+                    className="pl-4"
+                    aria-sort={
+                      header.column.getCanSort()
+                        ? ariaSort(header.column.getIsSorted())
+                        : undefined
+                    }
+                  >
                     {header.isPlaceholder
                       ? null
                       : flexRender(

@@ -244,18 +244,36 @@ export function ProductUsageContent({
               {hasData ? <ProductUsageKpiCards kpis={data.kpis} /> : <KpiCardsSkeleton />}
             </DashboardSection>
 
-            <CollapsibleSection title="Ingredient Efficiency" defaultOpen>
-              {hasData ? <IngredientEfficiencyChart data={data.ingredientUsage} /> : <ChartSkeleton />}
-            </CollapsibleSection>
+            {/* Both charts plot purchased against theoretical usage. With
+                recipe coverage too thin to compute a theoretical side, the
+                "gap" they draw is simply the whole purchase ledger — the same
+                fiction the KPI tiles used to publish as a 99.4% waste rate.
+                Withhold them rather than render a chart of nothing. */}
+            {data?.kpis.varianceReliable ? (
+              <>
+                <CollapsibleSection title="Ingredient Efficiency" defaultOpen>
+                  {hasData ? (
+                    <IngredientEfficiencyChart data={data.ingredientUsage} />
+                  ) : (
+                    <ChartSkeleton />
+                  )}
+                </CollapsibleSection>
 
-            <CollapsibleSection title="Category Breakdown" defaultOpen>
-              {hasData ? <CategorySpendChart data={data.categoryBreakdown} /> : <ChartSkeleton />}
-            </CollapsibleSection>
+                <CollapsibleSection title="Category Breakdown" defaultOpen>
+                  {hasData ? (
+                    <CategorySpendChart data={data.categoryBreakdown} />
+                  ) : (
+                    <ChartSkeleton />
+                  )}
+                </CollapsibleSection>
+              </>
+            ) : null}
 
             <CollapsibleSection title="Ingredient Variance" defaultOpen>
               {hasData ? (
                 <IngredientVarianceTable
                   data={data.ingredientUsage}
+                  varianceReliable={data.kpis.varianceReliable}
                   onRowClick={(name) => {
                     const row = data.ingredientUsage.find((i) => i.canonicalName === name)
                     if (row) setSelectedIngredient(row)
