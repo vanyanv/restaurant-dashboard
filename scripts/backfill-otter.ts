@@ -63,6 +63,12 @@ function parseArgs(): { days: number; dailyOnly: boolean; storeIdFilter: string 
     process.exit(1)
   }
   const dailyOnly = process.argv.includes("--daily-only")
+  // Ratings were only ever fetched by the manual sync button, so the scheduled
+  // job never refreshed them — OtterRating's newest row was three months stale
+  // while the dashboard's reviews section had nothing recent to show. They are
+  // cheap relative to the metrics phases and now sync on the schedule too;
+  // pass --no-ratings to skip them for a fast metrics-only backfill.
+  const includeRatings = !process.argv.includes("--no-ratings") && !dailyOnly
   const storeIdArg = process.argv.find((a) => a.startsWith("--store-id="))
   const storeIdFilter = storeIdArg ? storeIdArg.slice("--store-id=".length) : null
   return { days, dailyOnly, storeIdFilter }
@@ -168,7 +174,7 @@ async function main() {
         const result = await runMetricsSyncForStore(sid, uuids, startDate, endDate, {
           triggeredBy: "internal",
           dailyOnly,
-          includeRatings: false,
+          includeRatings,
           metadata: {
             source: "scripts/backfill-otter.ts",
             chunkIndex: chunk,

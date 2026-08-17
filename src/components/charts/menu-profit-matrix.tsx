@@ -35,15 +35,42 @@ const CORNER_LABELS = [
   { text: "Plowhorses — reprice or trim", pos: "right-3 bottom-8", tone: "var(--ink-muted)" },
 ] as const
 
+/** True when a point sits far enough right that a start-anchored label clips. */
+function nearRightEdge(cx: number | undefined): boolean {
+  return (cx ?? 0) > 0 && (cx ?? 0) > RIGHT_EDGE_GUARD_PX
+}
+
+// Plot area is ~5/3 of the container; anything past this is close enough to the
+// frame that a ~140px label would overflow.
+const RIGHT_EDGE_GUARD_PX = 620
+
 export function MenuProfitMatrix({
   rows,
   medianVelocity,
   medianUnitMargin,
 }: MenuProfitMatrixProps) {
-  const data = rows.map((r) => ({
+  // A single item selling 7,236 units stretched a linear x-axis to 8,000 and
+  // collapsed the other ~50 into the bottom-left corner. Menu velocity spans
+  // orders of magnitude, so the axis has to as well. Log needs strictly
+  // positive values; anything at zero units is not on the matrix anyway.
+  const plotted = rows.filter((r) => r.soldQty > 0)
+
+  // A matrix you can't read item names off is just a cloud. Label the points
+  // an operator would act on: the biggest contributors, and anything losing
+  // money per unit.
+  const labelled = new Set(
+    [...plotted]
+      .sort((a, b) => b.totalContribution - a.totalContribution)
+      .slice(0, 6)
+      .map((r) => r.itemName),
+  )
+  for (const r of plotted) if (r.unitMargin < 0) labelled.add(r.itemName)
+
+  const data = plotted.map((r) => ({
     ...r,
     x: r.soldQty,
     y: r.unitMargin,
+    showLabel: labelled.has(r.itemName),
   }))
 
   return (
@@ -65,11 +92,14 @@ export function MenuProfitMatrix({
             type="number"
             dataKey="x"
             name="Units sold"
+            scale="log"
+            domain={["auto", "auto"]}
+            allowDataOverflow={false}
             tick={{ fontSize: 11, fill: "var(--ink-muted)" }}
             axisLine={{ stroke: "var(--hairline-bold)" }}
             tickLine={false}
             label={{
-              value: "units sold",
+              value: "units sold (log)",
               position: "insideBottomRight",
               offset: -4,
               style: {
@@ -148,17 +178,47 @@ export function MenuProfitMatrix({
             fill="var(--ink)"
             fillOpacity={0.75}
             isAnimationActive={false}
-            shape={(props: { cx?: number; cy?: number }) => (
-              <circle
-                cx={props.cx}
-                cy={props.cy}
-                r={4}
-                fill="var(--ink)"
-                fillOpacity={0.7}
-                stroke="var(--paper)"
-                strokeWidth={1}
-              />
-            )}
+            shape={(props: {
+              cx?: number
+              cy?: number
+              payload?: { itemName: string; showLabel: boolean; unitMargin: number }
+            }) => {
+              const p = props.payload
+              const negative = (p?.unitMargin ?? 0) < 0
+              return (
+                <g>
+                  <circle
+                    cx={props.cx}
+                    cy={props.cy}
+                    r={4}
+                    fill={negative ? "var(--subtract)" : "var(--ink)"}
+                    fillOpacity={0.7}
+                    stroke="var(--paper)"
+                    strokeWidth={1}
+                  />
+                  {p?.showLabel ? (
+                    // Flip the label inboard near the right edge — a star sits
+                    // by definition at high volume, so its label would
+                    // otherwise run off the plot.
+                    <text
+                      x={(props.cx ?? 0) + (nearRightEdge(props.cx) ? -7 : 7)}
+                      y={(props.cy ?? 0) + 3}
+                      textAnchor={nearRightEdge(props.cx) ? "end" : "start"}
+                      style={{
+                        fontFamily: "var(--font-jetbrains-mono), monospace",
+                        fontSize: 9,
+                        letterSpacing: "0.04em",
+                        fill: "var(--ink-muted)",
+                      }}
+                    >
+                      {p.itemName.length > 22
+                        ? `${p.itemName.slice(0, 21)}…`
+                        : p.itemName}
+                    </text>
+                  ) : null}
+                </g>
+              )
+            }}
           />
         </ScatterChart>
       </ResponsiveContainer>
