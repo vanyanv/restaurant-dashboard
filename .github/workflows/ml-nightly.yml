@@ -58,13 +58,17 @@ jobs:
         continue-on-error: true
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          INGEST_URL: ${{ secrets.ALERTS_INGEST_URL }}
+          # Was `secrets.ALERTS_INGEST_URL`, a bespoke secret no other workflow
+          # used and which was never set — so this step silently skipped on
+          # every run and the Alert table stayed empty from the day F21 shipped.
+          # APP_URL is the base every other cron step here uses.
+          APP_URL: ${{ secrets.APP_URL }}
         run: |
-          if [ -z "$INGEST_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "ALERTS_INGEST_URL or CRON_SECRET not set — skipping."
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET not set — skipping."
             exit 0
           fi
-          curl -sS -X POST "$INGEST_URL" \
+          curl -sS -X POST "$APP_URL/api/cron/alerts-ingest" \
             -H "Authorization: Bearer $CRON_SECRET" \
             -H "Content-Type: application/json" \
             -d '{"sinceDays": 14}' \
