@@ -58,7 +58,7 @@ export default async function SettingsMastheadPage() {
       index: "§ 08.3",
       title: "Preferences",
       description:
-        "Timezone and a short list of settings still awaiting their issue — theme, date format, default store.",
+        "The publication time zone every date, cut-off hour and weekly report runs against.",
       href: "/dashboard/settings/preferences",
     },
   ]
