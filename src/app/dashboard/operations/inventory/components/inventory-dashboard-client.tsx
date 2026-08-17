@@ -284,7 +284,14 @@ function SortBtn({
     <button
       type="button"
       onClick={() => onChange(value)}
-      className={active ? "text-[var(--ink)]" : "hover:text-[var(--accent)]"}
+      // These pick the sort key rather than toggling a direction, so the state
+      // that needs announcing is "is this the active key", not asc/desc.
+      aria-pressed={active}
+      className={
+        active
+          ? "font-semibold text-[var(--ink)] underline underline-offset-2"
+          : "hover:text-[var(--accent)]"
+      }
     >
       {children}
     </button>

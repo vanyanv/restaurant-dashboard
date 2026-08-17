@@ -418,7 +418,7 @@
   width: 6px;
   height: 6px;
   border-radius: 0;
-  background: var(--ink-faint);
+  background: var(--ink-ornament);
   transform: rotate(45deg);
 }
 

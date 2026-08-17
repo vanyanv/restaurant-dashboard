@@ -838,7 +838,7 @@
   display: inline-flex;
   align-items: center;
   padding: 3px 7px 2px;
-  border: 1.5px dashed var(--ink-faint);
+  border: 1.5px dashed var(--ink-ornament);
   border-radius: 2px;
   font-family: var(--font-dm-sans), sans-serif;
   font-size: 9.5px;

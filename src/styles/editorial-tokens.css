@@ -3,7 +3,18 @@
 .editorial-surface {
   --ink: #1a1613;
   --ink-muted: #6b625a;
-  --ink-faint: #a69d92;
+  /* Caption ink. DESIGN.md scopes this to decoration ("must not carry
+     meaning"), but in practice it is the colour of every department caption,
+     folio, field label, status word and unit stamp in the product — roughly
+     530 sites, almost all of them load-bearing text at 10px.
+     The old #a69d92 measured 2.48:1 against --paper: below AA for both normal
+     (4.5:1) and large (3:1) text. This value is 4.70:1, so the captions an
+     operator reads at 11pm actually pass. Genuinely decorative marks (rules,
+     dashes, chart gridlines) use --ink-ornament below. */
+  --ink-faint: #776d63;
+  /* The old --ink-faint value, kept for non-text ornament only: never use it
+     for anything a reader has to make out. */
+  --ink-ornament: #a69d92;
   --paper: #fbf6ee;
   --paper-deep: #f4ecdf;
   --paper-soft: #fff9ef;

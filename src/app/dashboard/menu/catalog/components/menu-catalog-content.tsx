@@ -19,6 +19,11 @@ import {
   ChevronRight,
   Search
 } from "lucide-react"
+import {
+  ariaSort,
+  sortLabel,
+  type SortDirection
+} from "@/components/dashboard/sort-affordance"
 import { cn } from "@/lib/utils"
 import { marginBandClass } from "@/lib/menu-margin"
 
@@ -618,20 +623,24 @@ function SortHeader({
   onSort: (key: SortKey) => void
 }) {
   const active = sort.key === sortKey
+  const dir: SortDirection = active ? (sort.dir === "desc" ? "desc" : "asc") : false
   const Arrow = active ? (sort.dir === "desc" ? ArrowDown : ArrowUp) : null
   return (
-    <button
-      type="button"
-      onClick={() => onSort(sortKey)}
-      className={cn(
-        "inline-flex items-center gap-1 transition hover:text-[var(--ink)] focus-visible:text-[var(--ink)] focus-visible:outline-none",
-        align === "right" ? "justify-end" : "justify-start",
-        active && "text-[var(--ink)]"
-      )}
-    >
-      {label}
-      {Arrow && <Arrow className="h-2.5 w-2.5" />}
-    </button>
+    <span role="columnheader" aria-sort={ariaSort(dir)}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        aria-label={sortLabel(label, dir)}
+        className={cn(
+          "inline-flex items-center gap-1 transition hover:text-[var(--ink)] focus-visible:text-[var(--ink)] focus-visible:outline-none",
+          align === "right" ? "justify-end" : "justify-start",
+          active && "font-semibold text-[var(--ink)]"
+        )}
+      >
+        {label}
+        {Arrow && <Arrow className="h-2.5 w-2.5" aria-hidden />}
+      </button>
+    </span>
   )
 }
 

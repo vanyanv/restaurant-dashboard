@@ -4729,7 +4729,7 @@
   content: "";
   width: 4px;
   height: 4px;
-  background: var(--ink-faint);
+  background: var(--ink-ornament);
   transform: rotate(45deg);
 }
 
@@ -5135,7 +5135,7 @@
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.08em;
-  fill: var(--ink-faint);
+  fill: var(--ink-ornament);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6451,7 +6451,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--ink-faint);
+  background: var(--ink-ornament);
 }
 
 .editorial-toggle[data-state="on"] .editorial-toggle__dot {
@@ -6815,6 +6815,111 @@
 @media (prefers-reduced-motion: reduce) {
   .forecasts-ribbon__item::after,
   .forecasts-ribbon__item {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Wide-ledger scroll affordance                                      */
+/* ------------------------------------------------------------------ */
+
+/* The daily report's financial summary carries 17 columns and therefore
+   always scrolls sideways at any real desktop width. It used to end mid-word
+   with no cue, hiding the paid-in / paid-out / theoretical-deposit / cash-
+   reconciliation columns entirely. A right-edge fade shows there is more
+   ledger; it hides itself once the reader has scrolled to the end. */
+.fin-table-scroll {
+  position: relative;
+  scroll-behavior: smooth;
+}
+.fin-table-scroll::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40px;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(251, 246, 238, 0),
+    var(--paper) 85%
+  );
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+/* Scroll-driven: fade out as the reader reaches the right-hand end. */
+@supports (animation-timeline: scroll(x)) {
+  .fin-table-scroll::after {
+    animation: fin-scroll-fade linear both;
+    animation-timeline: scroll(x);
+    animation-range: 85% 100%;
+  }
+  @keyframes fin-scroll-fade {
+    to {
+      opacity: 0;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fin-table-scroll {
+    scroll-behavior: auto;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stack rows — block-flow interactive list rows                      */
+/* ------------------------------------------------------------------ */
+
+/* Same interaction contract as `.inv-row` — 4px red accent bar scaling in
+   from the left, warm wash on hover/focus — but block flow rather than the
+   invoice ledger's seven-column grid. Alerts and customer reviews are a
+   headline plus prose (plus controls), not a row of aligned cells; reusing
+   .inv-row squeezed every line into its 28px rule column. */
+.stack-row {
+  position: relative;
+  display: block;
+  padding: 16px 20px 18px;
+  border-top: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  transition: background-color 160ms ease;
+}
+
+.stack-row:first-child {
+  border-top: 0;
+}
+
+.stack-row:hover,
+.stack-row:focus-within {
+  background: var(--row-hover-bg);
+}
+
+.stack-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8%;
+  bottom: 8%;
+  width: 4px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.stack-row:hover::before,
+.stack-row:focus-within::before {
+  transform: scaleY(1);
+}
+
+.stack-row[data-resolved="true"] {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-row,
+  .stack-row::before {
     transition: none;
   }
 }

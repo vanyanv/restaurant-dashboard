@@ -4,7 +4,8 @@ description: Editorial docket — a newspaper financial section in operator's ha
 colors:
   ink: "#1a1613"
   ink-muted: "#6b625a"
-  ink-faint: "#a69d92"
+  ink-faint: "#776d63"
+  ink-ornament: "#a69d92"
   paper: "#fbf6ee"
   paper-deep: "#f4ecdf"
   paper-soft: "#fff9ef"
@@ -153,7 +154,8 @@ A monochrome warm-paper system with one red proofmark and a strict per-platform 
 ### Neutral (Inks)
 - **Ink** (`#1a1613`): Body text, totals at rest, headings. Dark warm brown-black, never `#000`.
 - **Ink Muted** (`#6b625a`): Secondary copy, store names in row meta, mono labels in nav sections.
-- **Ink Faint** (`#a69d92`): Folios, decorative date strings, perforation dashes, placeholder text. **Decorative-only — must not carry meaning** (a11y rule).
+- **Ink Faint** (`#776d63`): Department captions, folios, field labels, unit stamps, status words — the small-type layer. **4.70:1 on `--paper`, so it passes AA for normal text.** It was `#a69d92` (2.48:1, failing AA at both normal and large sizes) under a "decorative-only, must not carry meaning" rule the code never honoured: roughly 530 sites used it, including every `.inv-panel__dept`, the "Invoice Date" field label and the order-row status column. The rule lost to reality, so the token moved to meet the rule's intent instead.
+- **Ink Ornament** (`#a69d92`): The old Ink Faint value, retained for **non-text marks only** — chart gridlines, perforation dashes, decorative fills. Never use it for anything a reader has to make out.
 
 ### Neutral (Papers)
 - **Paper** (`#fbf6ee`): The base surface beneath the editorial layout.
@@ -332,6 +334,7 @@ colors reads as a different product.
 - **Do** use the editorial tokens — `--ink`, `--ink-muted`, `--ink-faint`, `--paper`, `--paper-deep`, `--hairline`, `--hairline-bold`, `--accent` — for every color decision on `/dashboard/*`.
 - **Do** set every figure (KPI, total, count, currency) in DM Sans 500–600 with `font-variant-numeric: tabular-nums lining-nums`.
 - **Do** wrap interactive list rows with `.inv-row` or `.order-row` and let the existing `::before` red-bar pattern carry the hover state.
+- **Do** use `.stack-row` for interactive rows whose content is a headline plus prose plus controls (alerts, customer reviews) rather than aligned ledger cells. It carries the identical interaction contract — 4px accent bar, warm wash, reduced-motion opt-out — in block flow. `.inv-row` is a seven-column grid; putting prose in it squeezes every line into the 28px rule column.
 - **Do** compose page sections with `.inv-panel` (warm-cream background, `1px solid var(--hairline-bold)`, `2px` radius, no shadow).
 - **Do** set Fraunces with explicit `font-variation-settings` (`opsz` 96 for headlines, `opsz` 144 for display, `SOFT` 30–50) — default Fraunces reads too literary.
 - **Do** stagger first-paint reveals with `.dock-in-1` through `.dock-in-12` (60ms steps, 480ms duration, `cubic-bezier(0.2, 0.7, 0.2, 1)`).
