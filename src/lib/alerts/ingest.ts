@@ -65,8 +65,14 @@ function fmtSigned(n: number): string {
 }
 
 // Human-readable title. Kept short — long context lives in the inbox row.
+//
+// Item-scoped targets name their subject: an inbox of nine rows all reading
+// "Menu-item demand -44 below forecast" tells the operator nothing they can
+// act on. `targetId` carries the menu-item sku / ingredient id for exactly
+// this purpose, so use it whenever it is present.
 function titleFor(ev: AnomalyEvent): string {
   const dir = ev.residual >= 0 ? "above" : "below"
+  const subject = ev.targetId?.trim() || null
   switch (ev.target) {
     case "REVENUE":
       return `Revenue ${fmtSigned(ev.residual)} ${dir} forecast`
@@ -75,9 +81,13 @@ function titleFor(ev: AnomalyEvent): string {
     case "REFUNDS":
       return `Refunds ${fmtSigned(ev.residual)} ${dir} forecast`
     case "MENU_ITEM":
-      return `Menu-item demand ${fmtSigned(ev.residual)} ${dir} forecast`
+      return subject
+        ? `${subject} — ${fmtSigned(ev.residual)} units ${dir} forecast`
+        : `Menu-item demand ${fmtSigned(ev.residual)} ${dir} forecast`
     case "INGREDIENT":
-      return `Ingredient usage ${fmtSigned(ev.residual)} ${dir} forecast`
+      return subject
+        ? `${subject} usage ${fmtSigned(ev.residual)} ${dir} forecast`
+        : `Ingredient usage ${fmtSigned(ev.residual)} ${dir} forecast`
     default:
       return `Anomaly ${fmtSigned(ev.residual)}`
   }
