@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ChevronDown } from "lucide-react"
+import { isOperational, LIFECYCLE_LABEL } from "@/lib/store-lifecycle"
 import { StoreDossier, type StoreDossierData } from "./store-dossier"
 
 interface StoresDirectoryProps {
@@ -62,7 +63,12 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
     updateUrl(next)
   }
 
-  const activeCount = stores.filter((store) => store.isActive).length
+  // `isActive` is a soft-delete flag, not a trading state — stamping every row
+  // "Active" told the owner two stores under construction were open for
+  // business, while Today and P&L correctly showed them as PRE-OPEN.
+  const tradingCount = stores.filter(
+    (store) => store.isActive && isOperational(store),
+  ).length
   const configuredCount = stores.filter(
     (store) =>
       store.fixedMonthlyLabor != null &&
@@ -78,7 +84,7 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
           <h2 className="stores-ledger__title">Store operating files</h2>
         </div>
         <div className="stores-ledger__folio" aria-label="Store counts">
-          <span>{activeCount} active</span>
+          <span>{tradingCount} trading</span>
           <span>{configuredCount} configured</span>
           <span>{stores.length} total</span>
         </div>
@@ -98,7 +104,7 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
                   currency: "USD",
                   maximumFractionDigits: 0,
                 })
-              : "Unset"
+              : "Set →"
           const commissionLabel = [
             `${(store.uberCommissionRate * 100).toFixed(1)}% Uber`,
             `${(store.doordashCommissionRate * 100).toFixed(1)}% DD`,
@@ -144,7 +150,7 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
                     <span className="store-row__figure-value">
                       {store.targetCogsPct != null
                         ? `${store.targetCogsPct.toFixed(1)}%`
-                        : "Unset"}
+                        : "Set →"}
                     </span>
                   </span>
                   <span>
@@ -155,9 +161,17 @@ export function StoresDirectory({ stores, isOwner }: StoresDirectoryProps) {
                 <span className="store-row__trail">
                   <span
                     className="inv-stamp"
-                    data-status={store.isActive ? "MATCHED" : "REJECTED"}
+                    data-status={
+                      !store.isActive
+                        ? "REJECTED"
+                        : isOperational(store)
+                          ? "MATCHED"
+                          : "PENDING"
+                    }
                   >
-                    {store.isActive ? "Active" : "Inactive"}
+                    {!store.isActive
+                      ? "Inactive"
+                      : LIFECYCLE_LABEL[store.lifecycleStage]}
                   </span>
                   <ChevronDown className="store-row__chev" aria-hidden />
                 </span>

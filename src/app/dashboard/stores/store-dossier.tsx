@@ -1,5 +1,6 @@
 "use client"
 
+import type { LifecycleStage } from "@/generated/prisma/client"
 import { useEffect, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -52,6 +53,7 @@ export interface StoreDossierData {
   address: string | null
   phone: string | null
   isActive: boolean
+  lifecycleStage: LifecycleStage
   fixedMonthlyLabor: number | null
   fixedMonthlyRent: number | null
   fixedMonthlyTowels: number | null
