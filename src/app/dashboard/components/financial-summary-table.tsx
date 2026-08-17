@@ -228,8 +228,20 @@ export function FinancialSummaryTable({
         )}
       </div>
 
-      {/* Table (≥640w) */}
-      <div className="relative hidden overflow-x-auto sm:block">
+      {/* Table (≥640w).
+          16 metric columns plus a sticky location column will not fit any real
+          desktop width, so it always scrolls sideways. It did that silently —
+          the header ended mid-word on "PAID IN" with no fade, arrow or
+          scrollbar, hiding the four end-of-day reconciliation columns this
+          product exists to deliver. The caption below names the count and the
+          right-edge fade shows there is more. */}
+      <div className="hidden sm:block">
+        <div className="mb-1 flex justify-end">
+          <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[color:var(--ink-muted)]">
+            {COLUMNS.length + 1} columns · scroll for reconciliation →
+          </span>
+        </div>
+      <div className="fin-table-scroll relative overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[color:var(--hairline-bold)] bg-[rgba(0,0,0,0.02)]">
@@ -340,6 +352,7 @@ export function FinancialSummaryTable({
             </tr>
           </tfoot>
         </table>
+      </div>
       </div>
 
       {/* Row count footer */}

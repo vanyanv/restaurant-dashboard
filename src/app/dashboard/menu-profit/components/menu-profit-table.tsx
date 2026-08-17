@@ -2,6 +2,12 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import {
+  ariaSort,
+  sortLabel,
+  type SortDirection,
+} from "@/components/dashboard/sort-affordance"
+import { cn } from "@/lib/utils"
 import type { MenuEngineeringRow } from "@/app/actions/forecasts/menu-engineering-actions"
 
 type SortKey =
@@ -67,20 +73,33 @@ export function MenuProfitTable({ rows }: { rows: MenuEngineeringRow[] }) {
         <thead>
           <tr className="border-b border-(--hairline-bold)">
             <th className="py-1.5 pr-2 text-left font-label">Item</th>
-            {COLUMNS.map((col) => (
-              <th key={col.key} className="py-1.5 pl-2 text-right font-label">
-                <button
-                  type="button"
-                  onClick={() => handleSort(col.key)}
-                  className="inline-flex items-center gap-0.5 uppercase tracking-[0.1em] transition hover:text-(--ink)"
+            {COLUMNS.map((col) => {
+              const dir: SortDirection =
+                sortKey === col.key ? (sortDesc ? "desc" : "asc") : false
+              return (
+                <th
+                  key={col.key}
+                  className="py-1.5 pl-2 text-right font-label"
+                  aria-sort={ariaSort(dir)}
                 >
-                  {col.label}
-                  {sortKey === col.key && (
-                    <span aria-hidden>{sortDesc ? "▾" : "▴"}</span>
-                  )}
-                </button>
-              </th>
-            ))}
+                  <button
+                    type="button"
+                    onClick={() => handleSort(col.key)}
+                    aria-label={sortLabel(col.label, dir)}
+                    className={cn(
+                      "inline-flex items-center gap-0.5 uppercase tracking-[0.1em] transition hover:text-(--ink)",
+                      dir && "font-semibold text-(--ink)",
+                    )}
+                  >
+                    {col.label}
+                    {dir && <span aria-hidden>{sortDesc ? "▾" : "▴"}</span>}
+                  </button>
+                </th>
+              )
+            })}
+            <th className="py-1.5 pl-2 text-right font-label" title="How much volume moves when price moves. -1.0 is unit elastic; nearer 0 means price changes barely move demand.">
+              Elasticity
+            </th>
             <th className="py-1.5 pl-2 text-right font-label">Class</th>
           </tr>
         </thead>
@@ -126,6 +145,36 @@ export function MenuProfitTable({ rows }: { rows: MenuEngineeringRow[] }) {
                   {r.marginPct != null ? `${r.marginPct.toFixed(1)}%` : "—"}
                 </td>
                 <td className={NUM_CLASS}>{money(r.totalContribution, 0)}</td>
+                <td className="py-1.5 pl-2 text-right">
+                  {r.elasticity != null ? (
+                    <span
+                      className="[font-variant-numeric:tabular-nums_lining-nums]"
+                      style={{
+                        color:
+                          r.elasticityConfidence === "high"
+                            ? "var(--ink)"
+                            : "var(--ink-muted)",
+                        fontWeight: r.elasticityConfidence === "high" ? 600 : 400,
+                      }}
+                      title={
+                        r.elasticityConfidence === "high"
+                          ? "Strong fit"
+                          : "Weak fit — directional only"
+                      }
+                    >
+                      {r.elasticity.toFixed(2)}
+                      {r.elasticityConfidence === "low" ? (
+                        <span className="ml-1 font-mono text-[9px] uppercase tracking-[0.12em] text-(--ink-muted)">
+                          weak
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-(--ink-muted)">
+                      no signal
+                    </span>
+                  )}
+                </td>
                 <td className="py-1.5 pl-2 text-right">
                   <span
                     className="font-mono text-[9.5px] uppercase tracking-[0.14em]"

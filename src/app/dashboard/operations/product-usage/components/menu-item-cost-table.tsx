@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowUpDown, TriangleAlert } from "lucide-react"
+import { ArrowUpDown, ArrowUp, ArrowDown, TriangleAlert } from "lucide-react"
 import Link from "next/link"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import type { MenuItemCostRow } from "@/types/product-usage"
@@ -87,24 +87,47 @@ function SortHeader({
   isSorted: false | "asc" | "desc"
   onClick: () => void
 }) {
+  // A static bidirectional glyph never showed *which way* the column was
+  // sorted, and "which column" was carried by ink-vs-ink-faint alone. Both are
+  // now explicit, and aria-sort is set on the cell (see the header row).
+  const SortIcon =
+    isSorted === "asc" ? ArrowUp : isSorted === "desc" ? ArrowDown : ArrowUpDown
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={`${label} — ${
+        isSorted === "asc"
+          ? "sorted ascending"
+          : isSorted === "desc"
+            ? "sorted descending"
+            : "not sorted"
+      }, activate to sort`}
       className="inline-flex items-center gap-1 -ml-1"
       style={{
-        color: isSorted ? "var(--ink)" : "var(--ink-faint)",
+        color: isSorted ? "var(--ink)" : "var(--ink-muted)",
         fontFamily: "var(--font-jetbrains-mono), monospace",
         fontSize: 10,
         letterSpacing: "0.18em",
         textTransform: "uppercase",
-        fontWeight: 600,
+        fontWeight: isSorted ? 700 : 600,
       }}
     >
       {label}
-      <ArrowUpDown className="ml-0.5 h-3 w-3" />
+      <SortIcon className="ml-0.5 h-3 w-3" aria-hidden />
     </button>
   )
+}
+
+/** `aria-sort` value for a column header cell. */
+export function ariaSort(
+  isSorted: false | "asc" | "desc",
+): "ascending" | "descending" | "none" {
+  return isSorted === "asc"
+    ? "ascending"
+    : isSorted === "desc"
+      ? "descending"
+      : "none"
 }
 
 export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
@@ -481,7 +504,15 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
                 style={{ borderBottom: "1px solid var(--hairline)" }}
               >
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="pl-4">
+                  <TableHead
+                    key={header.id}
+                    className="pl-4"
+                    aria-sort={
+                      header.column.getCanSort()
+                        ? ariaSort(header.column.getIsSorted())
+                        : undefined
+                    }
+                  >
                     {header.isPlaceholder
                       ? null
                       : flexRender(
