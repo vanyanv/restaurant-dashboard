@@ -12,6 +12,12 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/operations": "/m/operations",
   "/dashboard/orders": "/m/orders",
   "/dashboard/pnl": "/m/pnl",
+  // Desktop Product Mix was retired into Menu Profit (the two ranked menu
+  // items by the same measure, and Menu Profit's own docblock called the
+  // Product Mix scatter superseded). /m/product-mix stays — it is the phone's
+  // only menu-performance view — so Menu Profit maps to it, and the retired
+  // desktop path keeps its mapping for bookmarks.
+  "/dashboard/menu-profit": "/m/product-mix",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
   // Analytics, COGS, Stores had no mobile equivalent left after the mobile

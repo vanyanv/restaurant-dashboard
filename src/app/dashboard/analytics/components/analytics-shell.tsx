@@ -41,7 +41,7 @@ export function AnalyticsShell({ range, userRole }: AnalyticsShellProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <EditorialTopbar section="§ 06" title="Analytics" stamps={stamps}>
+      <EditorialTopbar section="§ 09" title="Analytics" stamps={stamps}>
         <DateRangeUrlControls range={range} basePath="/dashboard/analytics" />
         {userRole === "OWNER" && (
           <Suspense fallback={<Skeleton className="h-8 w-20 rounded-md" />}>

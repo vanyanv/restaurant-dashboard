@@ -35,7 +35,11 @@ export function ReviewInbox({
 
   return (
     <section
-      className="border-b border-[var(--hairline-bold)] px-8 py-6"
+      // Anchor for the sidebar's "Needs review" link. That link previously
+      // pointed at ?tab=review, a parameter nothing in this tree read, so it
+      // silently landed on the plain pantry.
+      id="review"
+      className="scroll-mt-16 border-b border-[var(--hairline-bold)] px-8 py-6"
       style={{
         background:
           "linear-gradient(180deg, rgba(252, 236, 236, 0.5) 0%, rgba(252, 236, 236, 0.1) 100%)",
