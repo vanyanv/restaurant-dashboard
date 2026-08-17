@@ -339,6 +339,8 @@ export function RecipesContent({
               latestVendor: null,
               latestSku: null,
               trend30d: null,
+              // Newly created by hand: no invoice lines, so no product history.
+              skuCount: 0,
               hasPhoto: false,
               photoVersion: null,
               caseUnit: null,
