@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { canonicalizeUnit, convert } from "@/lib/unit-conversion"
 import { walkRecipeForIngredient } from "./recipe-walk"
+import { sumDeliveries } from "./usage-math"
 
 export interface RunningOnHandResult {
   asOf: Date
@@ -69,16 +69,7 @@ export async function computeRunningOnHand(input: {
     select: { quantity: true, unit: true },
   })
 
-  let deliveriesQty = 0
-  let partial = false
-  for (const line of deliveryLines) {
-    const qty = convertQty(line.quantity, line.unit ?? recipeUnit, recipeUnit)
-    if (qty == null) {
-      partial = true
-      continue
-    }
-    deliveriesQty += qty
-  }
+  const { deliveriesQty, partial } = sumDeliveries(deliveryLines, recipeUnit)
 
   const sales = await prisma.otterMenuItem.findMany({
     where: {
@@ -138,12 +129,4 @@ export async function computeRunningOnHand(input: {
     onHand,
     partial,
   }
-}
-
-function convertQty(qty: number, fromUnit: string, toUnit: string): number | null {
-  const a = canonicalizeUnit(fromUnit)
-  const b = canonicalizeUnit(toUnit)
-  if (a && b && a === b) return qty
-  if (a && b) return convert(qty, fromUnit, toUnit)
-  return fromUnit.trim().toLowerCase() === toUnit.trim().toLowerCase() ? qty : null
 }

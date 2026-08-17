@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { walkRecipeForIngredient } from "./recipe-walk"
+import { depletionWindow } from "./usage-math"
 
 const DEFAULT_LOOKBACK_DAYS = 14
-const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 export interface DailyDepletionRateResult {
   asOf: Date
@@ -53,13 +53,8 @@ export async function computeDailyDepletionRate(input: {
     select: { stockCount: { select: { countedAt: true } } },
   })
 
-  const lookbackStart = new Date(asOf.getTime() - lookbackDays * MS_PER_DAY)
   const countAt = lastCount?.stockCount?.countedAt ?? null
-  const windowStart =
-    countAt && countAt.getTime() > lookbackStart.getTime() ? countAt : lookbackStart
-
-  const rawDays = (asOf.getTime() - windowStart.getTime()) / MS_PER_DAY
-  const windowDays = Math.max(1, Math.round(rawDays))
+  const { windowStart, windowDays } = depletionWindow(asOf, countAt, lookbackDays)
 
   const sales = await prisma.otterMenuItem.findMany({
     where: {
