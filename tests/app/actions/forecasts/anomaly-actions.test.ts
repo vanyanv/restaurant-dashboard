@@ -1,6 +1,7 @@
 // getOpenAnomalies + acknowledgeAnomaly — read + mutation actions for
 // the anomaly feed surfaced on /dashboard/forecasts.
 
+import { ANOMALY_RELEVANCE_DAYS } from "@/lib/anomaly-window"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }))
@@ -77,11 +78,36 @@ describe("getOpenAnomalies", () => {
     expect(result.data.events).toHaveLength(1)
     expect(result.data.events[0].zScore).toBe(-3.4)
     expect(prisma.anomalyEvent.findMany).toHaveBeenCalledWith({
-      where: { storeId: { in: ["s1"] }, status: "OPEN" },
+      where: {
+        storeId: { in: ["s1"] },
+        status: "OPEN",
+        // Bounded to the relevance horizon so the feed can't accumulate
+        // months of permanently-open events.
+        occurredOn: { gte: expect.any(Date) },
+      },
       orderBy: [{ occurredOn: "desc" }, { detectedAt: "desc" }],
       take: 20,
       select: expect.any(Object),
     })
+  })
+
+  it("only asks for anomalies inside the relevance horizon", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.store.findUnique).mockResolvedValue({
+      id: "s1",
+      name: "S1",
+      accountId: "acct-A",
+    } as never)
+    vi.mocked(prisma.anomalyEvent.findMany).mockResolvedValue([] as never)
+
+    const before = Date.now()
+    await getOpenAnomalies({ storeId: "s1" })
+
+    const call = vi.mocked(prisma.anomalyEvent.findMany).mock.calls.at(-1)?.[0]
+    const gte = (call?.where?.occurredOn as { gte: Date }).gte
+    const ageDays = (before - gte.getTime()) / (24 * 60 * 60 * 1000)
+    expect(ageDays).toBeGreaterThan(ANOMALY_RELEVANCE_DAYS - 1)
+    expect(ageDays).toBeLessThan(ANOMALY_RELEVANCE_DAYS + 2)
   })
 })
 

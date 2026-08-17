@@ -132,13 +132,6 @@ model Store {
   updatedAt DateTime @updatedAt
 
   // Yelp integration fields
-  yelpBusinessId  String? // Yelp's unique business ID
-  yelpRating      Float? // 1-5 star rating
-  yelpReviewCount Int? // Total number of reviews
-  yelpUrl         String? // Link to Yelp business page
-  yelpUpdatedAt   DateTime? // Last time Yelp data was fetched
-  yelpSearchTerm  String? // Store name + address used for search
-  yelpLastSearch  DateTime? // Prevent excessive API calls
 
   // Fixed cost inputs for P&L (monthly figures; converted per period when displayed)
   fixedMonthlyLabor    Float?
@@ -194,7 +187,6 @@ model Store {
   otterSubItemMappings  OtterSubItemMapping[]
   otterOrders           OtterOrder[]
   dailyCogsItems        DailyCogsItem[]
-  aiForecastRuns        AiForecastRun[]
   jobRuns               JobRun[]
   stockCounts           StockCount[]
   inventoryAdjustments  InventoryAdjustment[]
@@ -226,7 +218,6 @@ model Store {
 
   @@index([ownerId])
   @@index([accountId])
-  @@index([yelpBusinessId])
   @@index([latitude, longitude])
 }
 
@@ -505,18 +496,6 @@ model InvoiceLineItem {
   @@index([canonicalIngredientId])
 }
 
-model InvoiceSyncLog {
-  id              String    @id @default(cuid())
-  startedAt       DateTime  @default(now())
-  completedAt     DateTime?
-  emailsScanned   Int       @default(0)
-  invoicesCreated Int       @default(0)
-  invoicesSkipped Int       @default(0)
-  errors          Int       @default(0)
-  errorDetails    String?
-  triggeredBy     String
-}
-
 model Recipe {
   id               String   @id @default(cuid())
   ownerId          String
@@ -534,10 +513,10 @@ model Recipe {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  owner                User                  @relation(fields: [ownerId], references: [id])
-  account              Account               @relation(fields: [accountId], references: [id])
+  owner                User                    @relation(fields: [ownerId], references: [id])
+  account              Account                 @relation(fields: [accountId], references: [id])
   ingredients          RecipeIngredient[]
-  usedInIngredients    RecipeIngredient[]    @relation("ComponentRecipe")
+  usedInIngredients    RecipeIngredient[]      @relation("ComponentRecipe")
   otterItemMappings    OtterItemMapping[]
   otterSubItemMappings OtterSubItemMapping[]
   dailyCogsItems       DailyCogsItem[]
@@ -611,8 +590,8 @@ model CanonicalIngredient {
   recipeUnitsPerCase Float?
   innerPacksPerCase  Float?
 
-  owner                User                   @relation(fields: [ownerId], references: [id])
-  account              Account                @relation(fields: [accountId], references: [id])
+  owner                User                      @relation(fields: [ownerId], references: [id])
+  account              Account                   @relation(fields: [accountId], references: [id])
   aliases              IngredientAlias[]
   recipeIngredients    RecipeIngredient[]
   invoiceLineItems     InvoiceLineItem[]
@@ -774,14 +753,14 @@ model IngredientMatchDecision {
   productName String
 
   /// auto-exact | auto-vector | auto-llm
-  layer       String
-  confidence  Float
-  topScore    Float?
-  margin      Float?
-  reasoning   String?
-  model       String?
+  layer      String
+  confidence Float
+  topScore   Float?
+  margin     Float?
+  reasoning  String?
+  model      String?
   /// Runner-ups considered: [{ id, name, score }] — shown in the undo UI.
-  candidates  Json?
+  candidates Json?
 
   canonicalIngredientId String
   /// Always false while AUTO_CREATE_ENABLED is off. Retained so undo stays
@@ -800,7 +779,7 @@ model IngredientMatchDecision {
   undoneAt   DateTime?
   undoneById String?
 
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account             Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// Restrict, not Cascade: this is audit/history, not derived state — same
   /// convention as StockCountLine and InventoryAdjustment. A canonical must
   /// be re-parented (see `mergeCanonicalIngredients`) before it can be
@@ -922,38 +901,6 @@ model OtterOrderSubItem {
 
   @@index([orderItemId])
   @@index([skuId])
-}
-
-/// One row per AI demand/sales prediction. After the target window closes,
-/// the daily reconciliation job writes back `actualValue` and `errorPct` so
-/// the next forecast run can self-calibrate per (storeId, target).
-///
-/// `storeId` is required — forecasts are always store-scoped (ingredient
-/// usage patterns differ across kitchens).
-model AiForecastRun {
-  id                String    @id @default(cuid())
-  storeId           String
-  /// Stable identifier for the thing being predicted (e.g. canonical
-  /// ingredient name, menu item slug). The next-run prompt uses this to
-  /// look up the most recent residual.
-  target            String
-  /// Predicted quantity for the target window, in `unit`.
-  predictedValue    Float
-  unit              String
-  confidence        String? // "high" | "medium" | "low"
-  /// Inclusive start / exclusive end of the window the prediction covers.
-  targetWindowStart DateTime
-  targetWindowEnd   DateTime
-  /// Set by the reconciliation job after `targetWindowEnd` passes.
-  actualValue       Float?
-  errorPct          Float?
-  reconciledAt      DateTime?
-  generatedAt       DateTime  @default(now())
-
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@index([storeId, target, generatedAt])
-  @@index([targetWindowEnd, reconciledAt])
 }
 
 /// Owner-scoped chat thread. Each conversation is a sequence of `Message`
@@ -1234,21 +1181,6 @@ model DbSnapshot {
   perTable   Json
 
   @@index([date(sort: Desc)])
-}
-
-/// Periodic snapshot of Vercel plan quotas, polled every ~15 min from
-/// `GET /v1/usage` with `VERCEL_TOKEN`. `metrics` carries all 10 Hobby-plan
-/// gauges (blob ops, fluid CPU, function invocations, edge requests, ISR
-/// reads, image optimization, fast origin transfer, blob storage,
-/// provisioned memory, blob simple ops) as `{ used, limit }` pairs.
-model VercelUsageSnapshot {
-  id           String   @id @default(cuid())
-  capturedAt   DateTime @default(now())
-  billingCycle String
-  metrics      Json
-
-  @@index([capturedAt(sort: Desc)])
-  @@index([billingCycle])
 }
 
 enum LoginKind {
@@ -1537,6 +1469,9 @@ enum AnomalyStatus {
   OPEN
   ACKNOWLEDGED
   EXPLAINED
+  /// Aged past the relevance horizon by the retention sweep. Kept as history,
+  /// excluded from the open feed. See `src/lib/anomaly-window.ts`.
+  EXPIRED
 }
 
 /// One row per nightly pipeline invocation per (target, modelType). Captures
@@ -1766,6 +1701,11 @@ model GrowthOpportunity {
   opportunityType       OpportunityType
   title                 String
   estimatedDollarImpact Float
+  /// Days that `estimatedDollarImpact` covers — 1 for reprice (daily means),
+  /// 7 for the channel/risk types, 30 for menu engineering. The Decisions
+  /// cards labelled every impact "/wk" regardless, overstating the 30-day
+  /// figures ~4x and understating the daily ones 7x.
+  horizonDays           Int                   @default(7)
   confidence            OpportunityConfidence
   /// Array of { kind, ref, value } — see GrowthOpportunity.evidence type.
   evidence              Json                  @default("[]")

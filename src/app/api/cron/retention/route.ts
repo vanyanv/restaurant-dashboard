@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client"
 import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { logger } from "@/lib/logger"
+import { anomalyHorizon } from "@/lib/anomaly-window"
 
 export const maxDuration = 60
 
@@ -13,7 +14,6 @@ export const maxDuration = 60
 const POLICIES = [
   { table: "JobRun", dateColumn: "startedAt", retentionDays: 90 },
   { table: "ErrorEvent", dateColumn: "occurredAt", retentionDays: 90 },
-  { table: "AiForecastRun", dateColumn: "generatedAt", retentionDays: 365 },
   // Highest-volume writer here: one row per page view, written from the client
   // on every navigation. 90 days is what the engagement surfaces actually read.
   { table: "PageView", dateColumn: "enteredAt", retentionDays: 90 },
@@ -91,6 +91,21 @@ export const POST = withCronAuth(
               )
             }
           }
+
+          // Anomalies aren't deleted — they stay as history — but nothing ever
+          // closed them, so the Decisions briefing accumulated an unbounded
+          // "50 open anomalies" list whose oldest entry was three months old.
+          // Age them out of the open feed instead.
+          const expired = await prisma.anomalyEvent.updateMany({
+            where: { status: "OPEN", occurredOn: { lt: anomalyHorizon() } },
+            data: { status: "EXPIRED" },
+          })
+          addRows(expired.count)
+          outcomes.push({
+            table: "AnomalyEvent (expired)",
+            deleted: expired.count,
+            capped: false,
+          })
 
           return outcomes
         },
