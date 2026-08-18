@@ -14,7 +14,7 @@
 import { useState, useTransition } from "react"
 import { ChevronDown, Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { prettifyIngredientName } from "../../recipes/components/ingredient-picker-utils"
+import { prettifyIngredientName } from "@/app/dashboard/recipes/components/ingredient-picker-utils"
 import { undoAutoMatch } from "@/app/actions/ingredient-auto-match-actions"
 import type { RecentAutoMatch } from "@/app/actions/ingredient-auto-match-actions"
 
@@ -35,7 +35,7 @@ const LAYER_LABEL: Record<string, string> = {
   "auto-llm": "AI review",
 }
 
-export function AutoMatchActivity({ decisions, days }: Props) {
+export function AutoMatchLog({ decisions, days }: Props) {
   const [showAll, setShowAll] = useState(false)
   // Undone rows stay in place rather than vanishing: the row IS the record
   // that the automation was corrected here, and it is what suppresses a
