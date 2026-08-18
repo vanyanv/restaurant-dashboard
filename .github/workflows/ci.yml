@@ -1,6 +1,11 @@
 name: CI
 # Enforces typecheck + unit tests + ML pytest on every PR. Previously only
 # bundle-budget ran on PRs, so tsc/vitest/pytest regressions could merge freely.
+# scripts/ and .github/scripts/ are in the path filters because a change
+# touching only a cron entrypoint used to skip CI entirely — including the
+# typecheck:scripts step that exists to catch exactly that. The two lists are
+# duplicated rather than shared via a YAML anchor: GitHub Actions' parser does
+# not support anchors, and a silently-unparsed filter would disable CI.
 on:
   pull_request:
     branches: [main]
@@ -9,9 +14,30 @@ on:
       - 'tests/**'
       - 'prisma/**'
       - 'ml/**'
+      - 'scripts/**'
+      - '.github/scripts/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
+      - 'tsconfig.scripts.json'
+      - 'pytest.ini'
+      - 'vitest.config.*'
+      - '.github/workflows/ci.yml'
+  # Work reaches main by direct push here as often as by PR, and a
+  # pull_request-only trigger means those commits are never checked at all.
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'prisma/**'
+      - 'ml/**'
+      - 'scripts/**'
+      - '.github/scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'tsconfig.scripts.json'
       - 'pytest.ini'
       - 'vitest.config.*'
       - '.github/workflows/ci.yml'
