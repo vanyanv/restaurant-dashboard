@@ -1,5 +1,6 @@
 import { listCanonicalIngredients } from "@/app/actions/canonical-ingredient-actions"
 import { listUnmatchedLineItems } from "@/app/actions/ingredient-match-actions"
+import { listPantryLedger } from "@/app/actions/pantry-ledger-actions"
 import { PantryView } from "../pantry-view"
 
 type Props = {
@@ -14,15 +15,17 @@ type Props = {
  * the pantry list without a full reload).
  */
 export async function PantrySection({ initialOpenId }: Props) {
-  const [canonicals, unmatched] = await Promise.all([
+  const [canonicals, unmatched, ledger] = await Promise.all([
     listCanonicalIngredients(),
     listUnmatchedLineItems(),
+    listPantryLedger(),
   ])
 
   return (
     <PantryView
       initialCanonicals={canonicals}
       initialUnmatched={unmatched}
+      ledger={ledger}
       initialOpenId={initialOpenId}
     />
   )
