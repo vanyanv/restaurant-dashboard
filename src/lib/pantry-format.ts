@@ -28,3 +28,11 @@ export function formatUnitPrice(cost: number | null): string | null {
 export function isMaterialImpact(impact: number | null): boolean {
   return impact != null && Math.abs(impact) >= MATERIAL_IMPACT_USD
 }
+
+/** Whole-dollar money for ledger totals and queue headlines. Lifted out of
+ *  `pantry-ledger.tsx` so every pantry surface rounds the same way. */
+export function formatMoney(n: number): string {
+  return (
+    "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  )
+}

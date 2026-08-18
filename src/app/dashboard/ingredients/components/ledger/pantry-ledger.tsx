@@ -6,6 +6,7 @@ import {
   type PantryIngredientHistory,
   type PantryLedgerData,
 } from "@/app/actions/pantry-ledger-actions"
+import { formatMoney } from "@/lib/pantry-format"
 import { IngredientPanel } from "./ingredient-panel"
 import { LedgerRow } from "./ledger-row"
 import { ALL_FOOD, StationStrip, type StationFilter } from "./station-strip"
@@ -22,9 +23,6 @@ import { ALL_FOOD, StationStrip, type StationFilter } from "./station-strip"
  */
 
 const HEAD_ROWS = 12
-
-const money = (n: number) =>
-  "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
 type Props = {
   data: PantryLedgerData
@@ -86,7 +84,7 @@ export function PantryLedger({ data }: Props) {
       <div className="pl-summary">
         <div className="pl-summary__cell">
           <span className="pl-summary__k">Purchased · 90 days</span>
-          <span className="pl-summary__v">{money(data.totals.spend)}</span>
+          <span className="pl-summary__v">{formatMoney(data.totals.spend)}</span>
           <span className="pl-summary__n">across {data.totals.count} ingredients</span>
         </div>
         <div className="pl-summary__cell">
@@ -101,17 +99,17 @@ export function PantryLedger({ data }: Props) {
               : "—"}
           </span>
           <span className="pl-summary__n">
-            {money(data.rows.slice(0, 5).reduce((s, r) => s + r.spend90, 0))} of the total
+            {formatMoney(data.rows.slice(0, 5).reduce((s, r) => s + r.spend90, 0))} of the total
           </span>
         </div>
         <div className="pl-summary__cell">
           <span className="pl-summary__k">Food</span>
-          <span className="pl-summary__v">{money(data.totals.foodSpend)}</span>
+          <span className="pl-summary__v">{formatMoney(data.totals.foodSpend)}</span>
           <span className="pl-summary__n">{data.totals.foodCount} items</span>
         </div>
         <div className="pl-summary__cell">
           <span className="pl-summary__k">Packaging &amp; supplies</span>
-          <span className="pl-summary__v">{money(data.totals.packagingSpend)}</span>
+          <span className="pl-summary__v">{formatMoney(data.totals.packagingSpend)}</span>
           <span className="pl-summary__n">{data.totals.packagingCount} items</span>
         </div>
       </div>
@@ -195,7 +193,7 @@ export function PantryLedger({ data }: Props) {
           {showAll ? "Show fewer" : `Show all ${pool.length}`}
           {!showAll && hidden > 0 && (
             <span className="pl-more__n">
-              the other {hidden} are {money(hiddenSpend)}
+              the other {hidden} are {formatMoney(hiddenSpend)}
             </span>
           )}
         </button>
