@@ -1,0 +1,23 @@
+{
+  // scripts/ is excluded from the main tsconfig, so `npx tsc --noEmit` never
+  // saw it — that's how `includeRatings is not defined` reached prod in
+  // scripts/backfill-otter.ts and killed the daily Otter sync for 24h while
+  // the workflow stayed green (tsx doesn't typecheck).
+  //
+  // This config typechecks scripts/ so cron entrypoints can't ship a
+  // ReferenceError. The excludes below are pre-existing type debt in
+  // one-off/manual scripts, quarantined so the gate can go green today —
+  // shrink the list, don't grow it. Anything new under scripts/ is covered
+  // by default.
+  "extends": "./tsconfig.json",
+  "include": ["scripts/**/*.ts"],
+  "exclude": [
+    "scripts/audit/db-performance.ts",
+    "scripts/backfill-embeddings.ts",
+    "scripts/dedupe-canonicals-by-sku.ts",
+    "scripts/eval-chat/run.ts",
+    "scripts/fix-flagged-ingredient-costs.ts",
+    "scripts/seed-r365-recipes.ts",
+    "scripts/smoke-vector-db.ts"
+  ]
+}
