@@ -3,6 +3,13 @@
 //   npx tsx scripts/backfill-otter-hourly.ts            # default 60 days
 //   npx tsx scripts/backfill-otter-hourly.ts 90         # 90 days
 // Idempotent — uses delete+insert per (storeId, date) inside runHourlySync.
+//
+// Walks the range in CHUNK_DAYS slices. queryOtterEndpoint reads one response
+// page, so `limit` is a hard cap: a single 175-day call returned exactly 50,000
+// rows against 58,543 real orders (and 120,000 got a 413 back). Chunking keeps
+// every call far under that cap; runHourlySync now throws rather than writing a
+// truncated window, so a too-large chunk fails loudly instead of quietly
+// under-counting.
 
 import fs from "fs"
 import path from "path"
@@ -26,10 +33,19 @@ function loadEnvLocal(): void {
 
 loadEnvLocal()
 
-const ROW_LIMIT = 50000
+const ROW_LIMIT = 25000
+const CHUNK_DAYS = 30
+
+/** Subtract n days from an LA "YYYY-MM-DD" date string. */
+function minusDays(date: string, n: number): string {
+  const d = new Date(date + "T00:00:00.000Z")
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
+}
 
 async function main() {
   const { runHourlySync } = await import("../src/lib/hourly-sync")
+  const { todayInLA } = await import("../src/lib/dashboard-utils")
 
   const days = parseInt(process.argv[2] || "60", 10)
   if (isNaN(days) || days < 1) {
@@ -37,28 +53,51 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`\nOtter Hourly Backfill — ${days} days\n`)
+  const today = todayInLA()
+  console.log(
+    `\nOtter Hourly Backfill — ${days} days ending ${today} ` +
+      `(${Math.ceil(days / CHUNK_DAYS)} chunks of up to ${CHUNK_DAYS})\n`
+  )
 
-  const result = await runHourlySync({
-    windowDays: days,
-    rowLimit: ROW_LIMIT,
-    triggeredBy: "manual",
-    metadata: { backfill: true },
-  })
+  let totalRows = 0
+  let totalBuckets = 0
+  let earliest = ""
+  let latest = ""
+  let remaining = days
+  let offset = 0
+
+  while (remaining > 0) {
+    const windowDays = Math.min(CHUNK_DAYS, remaining)
+    const anchorDate = minusDays(today, offset)
+
+    const result = await runHourlySync({
+      windowDays,
+      rowLimit: ROW_LIMIT,
+      anchorDate,
+      triggeredBy: "manual",
+      metadata: { backfill: true, chunkAnchor: anchorDate },
+    })
+
+    const first = result.datesCovered[0]
+    const last = result.datesCovered[result.datesCovered.length - 1]
+    console.log(
+      `  ${first} .. ${last}  rows=${String(result.rowsFetched).padStart(6)} ` +
+        `buckets=${String(result.bucketsWritten).padStart(5)}`
+    )
+
+    totalRows += result.rowsFetched
+    totalBuckets += result.bucketsWritten
+    if (!latest) latest = last
+    earliest = first
+
+    offset += windowDays
+    remaining -= windowDays
+  }
 
   console.log(`\nBackfill complete:`)
-  console.log(`  Stores processed:       ${result.storesProcessed}`)
-  console.log(`  Otter rows fetched:     ${result.rowsFetched}`)
-  console.log(`  Hourly buckets written: ${result.bucketsWritten}`)
-  console.log(`  Dates covered: ${result.datesCovered.length} days`)
-  console.log(`    earliest: ${result.datesCovered[0]}`)
-  console.log(`    latest:   ${result.datesCovered[result.datesCovered.length - 1]}`)
-
-  if (result.rowsFetched >= ROW_LIMIT) {
-    console.warn(
-      `\n⚠  Hit row limit (${ROW_LIMIT}). Backfill may be incomplete — re-run with smaller windows.`
-    )
-  }
+  console.log(`  Otter rows fetched:     ${totalRows}`)
+  console.log(`  Hourly buckets written: ${totalBuckets}`)
+  console.log(`  Range: ${earliest} .. ${latest} (${days} days)`)
 }
 
 main()

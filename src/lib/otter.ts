@@ -401,6 +401,11 @@ export const CUSTOMER_ORDER_COLUMNS = [
   { type: "field", key: "acceptance_status" },
   { type: "field", key: "fulfillment_mode" },
   { type: "field", key: "subtotal" },
+  // Net of discounts, same basis as the aggregated endpoint's
+  // fp_sales_financials_net_sales / third_party_net_sales. Required for
+  // hourly-sync to reconcile with OtterDailySummary — see
+  // computeOrderNetSales in hourly-sync-helpers.ts.
+  { type: "field", key: "net_sales" },
   { type: "field", key: "tax" },
   { type: "field", key: "tip" },
   { type: "field", key: "restaurant_funded_discount" },
