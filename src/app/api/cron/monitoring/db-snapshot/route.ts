@@ -3,6 +3,7 @@ import { withCronAuth } from "@/lib/cron-auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { getDbSize, getTableSizes } from "@/lib/monitoring/db-stats"
+import { withJobRun } from "@/lib/monitoring/job-run"
 
 export const maxDuration = 30
 
@@ -14,7 +15,14 @@ export const maxDuration = 30
  * Schedule: daily (e.g. 02:00 UTC via GitHub Actions or Vercel cron).
  */
 export const POST = withCronAuth(
-  async () => {
+  async (_request, { fromCron }) =>
+    // This job has always worked, but never recorded a JobRun, so the
+    // monitoring page and the staleness detector both read it as "has never
+    // run". A job nothing can observe is a job nothing can miss.
+    withJobRun(
+      "monitoring.db-snapshot",
+      { triggeredBy: fromCron ? "cron" : "manual" },
+      async ({ addRows }) => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -41,11 +49,14 @@ export const POST = withCronAuth(
       select: { id: true, date: true, totalBytes: true },
     })
 
+    addRows(1)
+
     return NextResponse.json({
       id: row.id,
       date: row.date,
       totalBytes: Number(row.totalBytes),
     })
-  },
+      },
+    ),
   { unauthorized: { status: 403, error: "forbidden" } }
 )

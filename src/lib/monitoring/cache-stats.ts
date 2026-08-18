@@ -4,7 +4,12 @@ type Counter = { hits: number; misses: number; writes: number; busts: number; fa
 
 const counters = new Map<string, Counter>()
 
-const FLUSH_EVERY_OPS = 200
+// Was 200, paired with a 10-minute cron that was never wired up — so on this
+// traffic no instance ever reached the threshold before exiting and CacheStat
+// sat two months stale while the admin cache page read from it. The cron is
+// gone (an HTTP call flushes one arbitrary lambda's Map, not the fleet's), so
+// this is the only path that can work; it has to fire at real traffic.
+const FLUSH_EVERY_OPS = 25
 let opsSinceFlush = 0
 
 function getOrCreate(prefix: string): Counter {
