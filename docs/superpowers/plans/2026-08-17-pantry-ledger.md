@@ -37,7 +37,7 @@ Resolves an ingredient to a kitchen station. Product name is checked before stor
 - Consumes: nothing
 - Produces: `PANTRY_STATIONS: readonly PantryStation[]`, `type PantryStation`, `stationFor(name: string, category: string | null): PantryStation`, `isPackagingStation(s: PantryStation): boolean`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/lib/pantry-stations.test.ts
@@ -97,12 +97,12 @@ describe("stationFor", () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/lib/pantry-stations.test.ts`
 Expected: FAIL — `Failed to resolve import "@/lib/pantry-stations"`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 // src/lib/pantry-stations.ts
@@ -168,12 +168,12 @@ export function isPackagingStation(station: PantryStation): boolean {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/lib/pantry-stations.test.ts`
 Expected: PASS, 7 tests
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/pantry-stations.ts tests/lib/pantry-stations.test.ts
@@ -196,7 +196,7 @@ git commit -m "feat(pantry): resolve ingredients to kitchen stations by name bef
 - Consumes: `IngredientTrend` from `@/types/recipe`
 - Produces: `type TrendPoint = { date: Date; price: number; vendor: string; unit: string | null; sku: string | null }`, `type CanonicalTrend = { trend: IngredientTrend | null; skuCount: number }`, `computeTrendForPoints(points: TrendPoint[], nowMs: number): CanonicalTrend`
 
-- [ ] **Step 1: Add the two type fields**
+- [x] **Step 1: Add the two type fields**
 
 ```ts
 // src/types/recipe.ts — inside IngredientTrend, after `unit`
@@ -215,7 +215,7 @@ git commit -m "feat(pantry): resolve ingredients to kitchen stations by name bef
   skuCount: number
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 ```ts
 // tests/lib/canonical-trend.test.ts
@@ -316,12 +316,12 @@ describe("computeTrendForPoints", () => {
 })
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run tests/lib/canonical-trend.test.ts`
 Expected: FAIL — `Failed to resolve import "@/lib/canonical-trend"`
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 ```ts
 // src/lib/canonical-trend.ts
@@ -398,12 +398,12 @@ export function computeTrendForPoints(points: TrendPoint[], nowMs: number): Cano
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/lib/canonical-trend.test.ts`
 Expected: PASS, 8 tests
 
-- [ ] **Step 6: Rewire the action to use it**
+- [x] **Step 6: Rewire the action to use it**
 
 In `src/app/actions/canonical-ingredient-actions.ts`, add `sku: true` to the `select` in `computeTrendsByCanonical`, and replace the bucketing/comparison body with a per-canonical call to `computeTrendForPoints`. Change its return type to `Map<string, CanonicalTrend>`, and in `listCanonicalIngredients` set:
 
@@ -412,12 +412,12 @@ In `src/app/actions/canonical-ingredient-actions.ts`, add `sku: true` to the `se
       skuCount: trendsByCanonical.get(c.id)?.skuCount ?? 0,
 ```
 
-- [ ] **Step 7: Typecheck and full suite**
+- [x] **Step 7: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: PASS. If any existing test asserts on `IngredientTrend` object equality it will now need the `sku` key — update those assertions rather than making `sku` optional.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/lib/canonical-trend.ts tests/lib/canonical-trend.test.ts src/types/recipe.ts src/app/actions/canonical-ingredient-actions.ts
@@ -436,7 +436,7 @@ git commit -m "fix(pantry): compare prices within a SKU so product switches stop
 - Consumes: `prisma` from `@/lib/prisma`, `normalizeVendorName` from `@/lib/vendor-normalize`
 - Produces: `type CanonicalSpend = { spend: number; lineCount: number; vendors: string[]; skus: string[]; lastPurchaseAt: Date | null }`, `batchCanonicalSpend(accountId: string, days?: number): Promise<Map<string, CanonicalSpend>>`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/lib/canonical-spend-batch.test.ts
@@ -526,12 +526,12 @@ describe("batchCanonicalSpend", () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/lib/canonical-spend-batch.test.ts`
 Expected: FAIL — `Failed to resolve import "@/lib/canonical-spend-batch"`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```ts
 // src/lib/canonical-spend-batch.ts
@@ -613,12 +613,12 @@ export async function batchCanonicalSpend(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/lib/canonical-spend-batch.test.ts`
 Expected: PASS, 6 tests
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/canonical-spend-batch.ts tests/lib/canonical-spend-batch.test.ts
@@ -639,23 +639,23 @@ git commit -m "feat(pantry): batch 90-day spend, vendors and SKUs per canonical 
 
 `PantryLedgerRow` extends the summary with `station: PantryStation`, `isPackaging: boolean`, `spend90: number`, `vendors: string[]`, `skus: string[]`, `lastPurchaseAt: Date | null`, and `impact90: number | null` (`spend90 * pctChange / 100`, null when there is no trend). `PantryLedgerData` carries `rows` sorted by `spend90` descending plus `totals` (`spend`, `foodSpend`, `packagingSpend`, `count`) and `stations` (name, itemCount, spend), stations sorted by spend with packaging forced last.
 
-- [ ] **Step 1: Write the failing test** covering: rows sorted by spend descending; `impact90` computed from spend and trend; a null trend yielding a null impact; station and packaging flags applied from `stationFor`; totals splitting food from packaging; stations sorted by spend with `Packaging & Supplies` last regardless of its spend. Mock `listCanonicalIngredients` and `batchCanonicalSpend`; do not mock `stationFor` — its behaviour is part of the contract.
+- [x] **Step 1: Write the failing test** covering: rows sorted by spend descending; `impact90` computed from spend and trend; a null trend yielding a null impact; station and packaging flags applied from `stationFor`; totals splitting food from packaging; stations sorted by spend with `Packaging & Supplies` last regardless of its spend. Mock `listCanonicalIngredients` and `batchCanonicalSpend`; do not mock `stationFor` — its behaviour is part of the contract.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/app/actions/pantry-ledger-actions.test.ts`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement `listPantryLedger`**
+- [x] **Step 3: Implement `listPantryLedger`**
 
 Mark the file `"use server"`. Resolve the session scope the same way `listCanonicalIngredients` does and return empty data when there is no session. Call `listCanonicalIngredients()` and `batchCanonicalSpend(accountId)` in a single `Promise.all`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/app/actions/pantry-ledger-actions.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app/actions/pantry-ledger-actions.ts tests/app/actions/pantry-ledger-actions.test.ts
@@ -675,18 +675,18 @@ git commit -m "feat(pantry): compose spend-ranked ledger rows with stations and 
 
 The delivery rows carry the **raw invoice `productName`**, not the canonical name — that difference is the point: it is what shows an owner that `IMPLOT POTATO FRY 1/4 CLR SS` and `LAMB POTATO FRY SS 1/4 STEALTH` are two products under one ingredient.
 
-- [ ] **Step 1: Write the failing test** covering: series ordered oldest→newest and capped at 60; products grouped by SKU with `lastUnitPrice` from the newest line in that SKU; `costPerServing` divided by `servingSize`; `costPerServing` null when `computeIngredientLineCost` cannot reconcile units; empty history returning empty arrays rather than throwing.
+- [x] **Step 1: Write the failing test** covering: series ordered oldest→newest and capped at 60; products grouped by SKU with `lastUnitPrice` from the newest line in that SKU; `costPerServing` divided by `servingSize`; `costPerServing` null when `computeIngredientLineCost` cannot reconcile units; empty history returning empty arrays rather than throwing.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/app/actions/pantry-ingredient-history.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: Implement it**, reusing `computeIngredientLineCost` from `@/lib/recipe-cost` so per-serving costs match every other cost walk in the app.
+- [x] **Step 3: Implement it**, reusing `computeIngredientLineCost` from `@/lib/recipe-cost` so per-serving costs match every other cost walk in the app.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app/actions/canonical-ingredient-actions.ts tests/app/actions/pantry-ingredient-history.test.ts
@@ -706,7 +706,7 @@ Pure formatting, extracted so it is testable under the node-only Vitest config.
 **Interfaces:**
 - Produces: `formatUnitPrice(cost: number | null): string | null` and `MATERIAL_IMPACT_USD = 250`, plus `isMaterialImpact(impact: number | null): boolean`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/lib/pantry-format.test.ts
@@ -746,12 +746,12 @@ describe("isMaterialImpact", () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/lib/pantry-format.test.ts`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/lib/pantry-format.ts
@@ -779,12 +779,12 @@ export function isMaterialImpact(impact: number | null): boolean {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/lib/pantry-format.test.ts`
 Expected: PASS, 6 tests
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/pantry-format.ts tests/lib/pantry-format.test.ts
@@ -805,10 +805,10 @@ Build against the visual spec artifact. Editorial tokens only; ingredient names 
 - Create: `src/app/dashboard/ingredients/components/ledger/price-chart.tsx` — inline SVG, path broken at each SKU change with a dashed rule, endpoint dot in `--accent` only when the price rose
 - Modify: `src/styles/editorial-dashboard.css` — append a `.pantry-ledger` block
 
-- [ ] **Step 1: Build the components** to match the artifact. Delivery date links to `/dashboard/invoices/${invoiceId}` with `target="_blank" rel="noreferrer"` so the ledger keeps its scroll position.
-- [ ] **Step 2: Accessibility pass.** The row toggle is a real `<button>` with `aria-expanded` and `aria-controls`. Station filters are `<button aria-pressed>`. Chart `<svg>` carries `role="img"` and an `aria-label` naming the range and, when SKUs change, the number of products. Focus rings visible against warm paper.
-- [ ] **Step 3: `npx tsc --noEmit`** — expect PASS.
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Build the components** to match the artifact. Delivery date links to `/dashboard/invoices/${invoiceId}` with `target="_blank" rel="noreferrer"` so the ledger keeps its scroll position.
+- [x] **Step 2: Accessibility pass.** The row toggle is a real `<button>` with `aria-expanded` and `aria-controls`. Station filters are `<button aria-pressed>`. Chart `<svg>` carries `role="img"` and an `aria-label` naming the range and, when SKUs change, the number of products. Focus rings visible against warm paper.
+- [x] **Step 3: `npx tsc --noEmit`** — expect PASS.
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app/dashboard/ingredients/components/ledger src/styles/editorial-dashboard.css
@@ -824,15 +824,15 @@ git commit -m "feat(pantry): ledger, station strip and SKU-segmented ingredient 
 - Modify: `src/app/dashboard/ingredients/components/pantry-view.tsx` — add a Ledger/Cards view toggle, Ledger default
 - Keep: `ingredients-pantry.tsx` untouched and reachable as the Cards view
 
-- [ ] **Step 1: Wire it up**, defaulting to the ledger and keeping the tile grid behind the toggle so the change is reversible without a revert.
-- [ ] **Step 2: Full gate.**
+- [x] **Step 1: Wire it up**, defaulting to the ledger and keeping the tile grid behind the toggle so the change is reversible without a revert.
+- [x] **Step 2: Full gate.**
 
 Run: `npm test && npx tsc --noEmit && npm run build`
 Expected: all PASS.
 
-- [ ] **Step 3: Verify in the browser.** Start the dev server with `SERVICE_SHUTDOWN_AT=""`, sign in, and confirm against the artifact: ground beef is row 01, four rows carry red impact figures, the fry panel shows the product-change breaks, an invoice link opens `/dashboard/invoices/[id]` in a new tab, and `Soda Coke Mexican Glass` reads `$0.0036/ml` rather than `$0.00`.
-- [ ] **Step 4: Confirm mobile is unaffected.** Load `/m/ingredients` and confirm it still renders and that trend percentages appear.
-- [ ] **Step 5: Commit and push**
+- [x] **Step 3: Verify in the browser.** Start the dev server with `SERVICE_SHUTDOWN_AT=""`, sign in, and confirm against the artifact: ground beef is row 01, four rows carry red impact figures, the fry panel shows the product-change breaks, an invoice link opens `/dashboard/invoices/[id]` in a new tab, and `Soda Coke Mexican Glass` reads `$0.0036/ml` rather than `$0.00`.
+- [x] **Step 4: Confirm mobile is unaffected.** Load `/m/ingredients` and confirm it still renders and that trend percentages appear.
+- [x] **Step 5: Commit and push**
 
 ```bash
 git add src/app/dashboard/ingredients
@@ -847,3 +847,32 @@ git push -u origin feat/pantry-ledger
 - **Spec coverage:** stations (Task 1), SKU-aware trends (Task 2), spend ranking (Tasks 3–4), drill-down with history and invoice provenance (Tasks 5, 7), sub-cent prices and red rationing (Task 6), 12-row default with named remainder (Task 7), `listCanonicalIngredients` left alone (Tasks 3–4). Increments 2–4 are explicitly out of scope.
 - **Known risk:** Task 2 changes numbers users have already seen. The fry's headline moves from a SKU-blind figure to a within-SKU one, and some ingredients lose their trend entirely because no valid within-SKU baseline exists. That is the correct outcome, and Task 7's `N products` flag is what explains it on screen.
 - **Deliberately deferred:** `Fuel Surcharge` still appears as an ingredient; ingredient display names are still raw vendor strings; the review inbox and auto-match strip still sit above the ledger until increment 2.
+
+---
+
+## Increment 1 — closed 2026-08-18
+
+Merged to `main` as `0c7c12a` (branch `feat/pantry-ledger`), pushed.
+
+**Gate:** `npm test` 967 passed / 110 files · `npx tsc --noEmit` clean · `npm run build` succeeded.
+
+**Browser verification** (dev server, `SERVICE_SHUTDOWN_AT=""`, `/dashboard/ingredients` at 1440 wide, signed in as `demo@restaurantos.com`):
+
+| Check | Result |
+|---|---|
+| Ledger is the default view, Cards behind the toggle | PASS — `Ledger` renders `[pressed]` |
+| Ground beef is row 01 | PASS — `$57,696`, 32.9% of the 90-day `$175,226` |
+| Red only on rises worth ≥ $250/quarter | PASS — four rows carry red impact: House Sauce `+$2,139`, fry `+$7,292`, House Sauce Cup `+$1,156`, tomato `+$319`. Ground beef's `−4.8% −$2,753` stays ink. |
+| Fry panel shows the product-change breaks | PASS — chart segments on SKU, `product changed 9×`, and the panel names all `4 different SKUs` with their date ranges and spend |
+| Invoice provenance opens in a new tab | PASS — delivery dates link to `/dashboard/invoices/[id]` with `target="_blank" rel="noreferrer"` |
+| Sub-cent prices survive | PASS — `Soda Coke Mexican Glass` reads `$0.0036/ml` |
+| Stations resolved by product name | PASS — Sauce & Condiment is the #2 station at 18.0%, Packaging & Supplies is pinned last |
+| Hidden remainder named | PASS — `Show all 45 · the other 33 are $13,721` |
+| Mobile unaffected | PASS — `/m/ingredients` renders, trend percentages present |
+| Console | No React errors; only the dev-only CSS preload warning |
+
+Two figures differ from the spec's snapshot because the 90-day window moved a day: total spend `$175,226` (was `$171,199`) and top-five share 71% (was 70.4%). The fry row now reads `+45%` within-SKU rather than the old SKU-blind `+67%`, which is the Task 2 outcome the plan predicted.
+
+**Row-level `3 products` vs the panel's `4 different SKUs` is not a discrepancy:** the row counts SKUs inside the 90-day spend window, the panel counts them across all invoice history (Feb–Aug).
+
+Increments 2–4 remain unstarted and need their own plans.
