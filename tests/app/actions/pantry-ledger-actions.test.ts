@@ -15,6 +15,17 @@ vi.mock("@/app/actions/canonical-ingredient-actions", () => ({
   listCanonicalIngredients: vi.fn(),
 }))
 vi.mock("@/lib/canonical-spend-batch", () => ({ batchCanonicalSpend: vi.fn() }))
+// listPantryLedger never touches prisma directly, but its module does — the
+// ingredient-history loader lives alongside it. Without this the module's
+// import of @/lib/prisma builds a real client and the suite dies on a missing
+// DATABASE_URL.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    canonicalIngredient: { findFirst: vi.fn() },
+    invoiceLineItem: { findMany: vi.fn() },
+    recipeIngredient: { findMany: vi.fn() },
+  },
+}))
 
 import { getAuthScope } from "@/lib/auth-scope"
 import { listCanonicalIngredients } from "@/app/actions/canonical-ingredient-actions"
