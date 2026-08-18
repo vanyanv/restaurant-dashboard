@@ -23,11 +23,12 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     canonicalIngredient: { findFirst: vi.fn() },
     invoiceLineItem: { findMany: vi.fn() },
-    recipeIngredient: { findMany: vi.fn() },
+    recipeIngredient: { findMany: vi.fn(), groupBy: vi.fn() },
   },
 }))
 
 import { getAuthScope } from "@/lib/auth-scope"
+import { prisma } from "@/lib/prisma"
 import { listCanonicalIngredients } from "@/app/actions/canonical-ingredient-actions"
 import { batchCanonicalSpend } from "@/lib/canonical-spend-batch"
 import { listPantryLedger } from "@/app/actions/pantry-ledger-actions"
@@ -84,6 +85,7 @@ const spend = (over: Partial<CanonicalSpend> = {}): CanonicalSpend => ({
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAuthScope).mockResolvedValue({ ownerId: "u1", accountId: "acct-1" })
+  vi.mocked(prisma.recipeIngredient.groupBy).mockResolvedValue([] as never)
 })
 
 describe("listPantryLedger", () => {
@@ -229,5 +231,22 @@ describe("listPantryLedger", () => {
     expect(byId.a.skus).toHaveLength(3)
     expect(byId.b).toMatchObject({ spend90: 0, lineCount: 0, impact90: null })
     expect(byId.b.lastPurchaseAt).toBeNull()
+  })
+
+  it("counts recipe uses so an ingredient that never reaches a plate is visible", async () => {
+    vi.mocked(listCanonicalIngredients).mockResolvedValue([
+      canonical({ id: "a", name: "ground beef", category: "Meat" }),
+      canonical({ id: "b", name: "container foam", category: "Paper/Supplies" }),
+    ])
+    vi.mocked(batchCanonicalSpend).mockResolvedValue(new Map())
+    vi.mocked(prisma.recipeIngredient.groupBy).mockResolvedValue([
+      { canonicalIngredientId: "a", _count: { _all: 6 } },
+    ] as never)
+
+    const data = await listPantryLedger()
+    const byId = Object.fromEntries(data.rows.map((r) => [r.id, r]))
+    expect(byId.a.recipeUseCount).toBe(6)
+    // Purchased but on no recipe — its cost is invisible to menu margin.
+    expect(byId.b.recipeUseCount).toBe(0)
   })
 })
