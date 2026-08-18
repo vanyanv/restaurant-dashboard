@@ -39,6 +39,10 @@ interface BucketValue {
 export async function runHourlySync(opts?: {
   windowDays?: number  // default 2 (today + yesterday)
   rowLimit?: number    // default 10000
+  // Last LA date the window should cover ("YYYY-MM-DD"). Defaults to today in
+  // LA. Only backfills pass this — it lets a caller walk history in chunks
+  // small enough to stay under the row cap (see runHourlySyncInner).
+  anchorDate?: string
   triggeredBy?: "cron" | "manual" | "github-actions"
   metadata?: Record<string, unknown>
 }): Promise<HourlySyncResult> {
@@ -50,6 +54,7 @@ export async function runHourlySync(opts?: {
       metadata: {
         windowDays: opts?.windowDays ?? 2,
         rowLimit: opts?.rowLimit ?? 10000,
+        ...(opts?.anchorDate ? { anchorDate: opts.anchorDate } : {}),
         ...(opts?.metadata ?? {}),
       },
     },
@@ -64,6 +69,7 @@ export async function runHourlySync(opts?: {
 async function runHourlySyncInner(opts?: {
   windowDays?: number
   rowLimit?: number
+  anchorDate?: string
 }): Promise<HourlySyncResult> {
   const windowDays = opts?.windowDays ?? 2
   const rowLimit = opts?.rowLimit ?? 10000
@@ -85,8 +91,8 @@ async function runHourlySyncInner(opts?: {
   for (const os of active) otterToStore.set(os.otterStoreId, os.storeId)
   const otterIds = active.map((os) => os.otterStoreId)
 
-  // Build the window: from start-of-day (today - (windowDays-1)) to end-of-day today.
-  const today = todayInLA()
+  // Build the window: from start-of-day (anchor - (windowDays-1)) to end-of-day anchor.
+  const today = opts?.anchorDate ?? todayInLA()
   const earliest = laDateMinusDays(today, windowDays - 1)
   const rangeStart = startOfDayLA(earliest)
   const rangeEnd = endOfDayLA(today)
@@ -105,6 +111,19 @@ async function runHourlySyncInner(opts?: {
   body.limit = rowLimit
 
   const rows = await queryMetrics(body)
+
+  // queryOtterEndpoint reads a single response page — `limit` is a hard cap,
+  // not a page size. Landing exactly on it means Otter had more rows and we
+  // silently dropped them, which would write an under-counted day. Fail loudly
+  // instead: the caller must shrink windowDays or raise rowLimit (Otter 413s
+  // somewhere above 50k, so shrinking the window is usually the answer).
+  if (rows.length >= rowLimit) {
+    throw new Error(
+      `[hourly-sync] row cap hit: Otter returned ${rows.length} rows for a ` +
+        `${windowDays}-day window ending ${today}, which equals rowLimit=${rowLimit}. ` +
+        `Results are truncated — re-run with a smaller windowDays.`
+    )
+  }
 
   // Bucket by (storeId, date, hour).
   const buckets = new Map<string, BucketValue>()  // key: `${storeId}|${date}|${hour}`
