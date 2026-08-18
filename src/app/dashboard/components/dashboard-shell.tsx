@@ -14,7 +14,7 @@ import { PnLSummarySkeleton } from "./skeletons/pnl-summary-skeleton"
 import { HeroKpisSection } from "./sections/hero-kpis-section"
 import { DispatchesStrip } from "./sections/dispatches-strip"
 import { PnLSummarySection } from "./sections/pnl-summary-section"
-import { HourlyOrdersSection } from "./sections/hourly-orders-section"
+import { SplhSection } from "./sections/splh-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
 import { InvoiceSnapshotSection } from "./sections/invoice-snapshot-section"
 import { RatingsSection } from "./sections/ratings-section"
@@ -65,14 +65,19 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
             <SectionHead label="Revenue trend" />
             <RevenueTrendChartSlot />
           </div>
+          {/* Labour productivity sits beside revenue because the pair is the
+              question: the trend says what came in, this says whether the
+              hours behind it were earned. Order volume by hour moved to
+              /dashboard/analytics — it answers "when is demand", which this
+              chart deliberately does not. */}
           <div className="min-w-0 lg:col-span-2">
-            <SectionHead label="Service by the hour" />
+            <SectionHead label="Sales per labor hour" />
             <Suspense
               fallback={
                 <ChartSkeleton height="h-[280px] md:h-[340px] lg:h-[380px]" />
               }
             >
-              <HourlyOrdersSection dashboardPromise={dashboardPromise} />
+              <SplhSection />
             </Suspense>
           </div>
         </div>
