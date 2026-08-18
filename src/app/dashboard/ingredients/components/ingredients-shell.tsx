@@ -2,9 +2,9 @@ import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SectionErrorBoundary } from "@/components/analytics/section-error"
 import { EditorialTopbar } from "../../components/editorial-topbar"
-import { AutoMatchSection } from "./sections/auto-match-section"
 import { PantrySection } from "./sections/pantry-section"
 import { SubItemsSection } from "./sections/subitems-section"
+import { AutoMatchNoticeSection } from "./sections/auto-match-notice-section"
 
 type Props = {
   initialOpenId: string | null
@@ -15,13 +15,13 @@ export function IngredientsShell({ initialOpenId }: Props) {
     <div className="editorial-surface flex min-h-[calc(100vh-3.5rem)] flex-col">
       <EditorialTopbar section="§ 11" title="Pantry" />
 
-      {/* Above the review inbox (which lives inside PantrySection): what the
-          automation already decided comes before what it is asking you to
-          decide. Its own boundary so a decision-log failure never takes the
-          pantry down with it. */}
+      {/* What the automation already changed comes before what it is asking
+          you to decide. One line unless there is something to undo, and
+          nothing at all while auto-match is in shadow. Its own boundary so a
+          decision-log failure never takes the pantry down with it. */}
       <SectionErrorBoundary label="Auto-match activity unavailable">
         <Suspense fallback={null}>
-          <AutoMatchSection />
+          <AutoMatchNoticeSection />
         </Suspense>
       </SectionErrorBoundary>
 

@@ -3,7 +3,7 @@
 // read as free. A price that exists must never display as zero.
 
 import { describe, it, expect } from "vitest"
-import { formatUnitPrice, isMaterialImpact, MATERIAL_IMPACT_USD } from "@/lib/pantry-format"
+import { formatMoney, formatUnitPrice, isMaterialImpact, MATERIAL_IMPACT_USD } from "@/lib/pantry-format"
 
 describe("formatUnitPrice", () => {
   it("uses two decimals at or above a dollar", () => {
@@ -51,5 +51,19 @@ describe("isMaterialImpact", () => {
 
   it("treats an unmeasured move as not material", () => {
     expect(isMaterialImpact(null)).toBe(false)
+  })
+})
+
+describe("formatMoney", () => {
+  it("renders whole dollars with thousands separators", () => {
+    expect(formatMoney(175226)).toBe("$175,226")
+    expect(formatMoney(4133)).toBe("$4,133")
+    expect(formatMoney(0)).toBe("$0")
+  })
+
+  it("rounds to the dollar rather than showing cents", () => {
+    // Ledger totals are for scale, not reconciliation; cents on a $57k figure
+    // are noise, and the invoice page is where exact math lives.
+    expect(formatMoney(57695.62)).toBe("$57,696")
   })
 })

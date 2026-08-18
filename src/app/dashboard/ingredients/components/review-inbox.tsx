@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowRight, ChevronDown, Receipt, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { summarizeReviewQueue } from "@/lib/pantry-attention"
+import { formatMoney } from "@/lib/pantry-format"
 import { prettifyIngredientName } from "../../recipes/components/ingredient-picker-utils"
 import { MatchPickerSheet } from "./match-picker-sheet"
 import type { UnmatchedLineItemGroup } from "@/app/actions/ingredient-match-actions"
@@ -23,10 +25,45 @@ export function ReviewInbox({
   onMatched,
   onCanonicalCreated,
 }: Props) {
+  // Collapsed by default: this queue is 31 groups worth $4,133 against a
+  // ledger that reports $175,226. It is a chore, not the headline, and it used
+  // to push every ingredient below the fold.
+  const [expanded, setExpanded] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [activeKey, setActiveKey] = useState<string | null>(null)
 
-  if (groups.length === 0) return null
+  // The sidebar's "Needs review" link is /dashboard/ingredients#review. Landing
+  // on a collapsed bar would make that link look broken.
+  useEffect(() => {
+    const checkHash = () => {
+      if (window.location.hash === "#review") setExpanded(true)
+    }
+    checkHash()
+
+    // A same-page click on that link is a soft navigation — Next.js's <Link>
+    // updates the URL via the History API, which does not fire `hashchange`
+    // or `popstate` (confirmed empirically). Worse, if the hash is already
+    // #review (e.g. re-clicking after collapsing manually) Next skips the
+    // navigation entirely and no history event fires at all. What does
+    // reliably fire in both cases is the click itself, which bubbles to the
+    // document regardless of what the router does with it afterward.
+    const onClick = (e: MouseEvent) => {
+      const target = e.target
+      if (!(target instanceof Element)) return
+      const anchor = target.closest("a")
+      if (anchor && anchor.hash === "#review") setExpanded(true)
+    }
+    document.addEventListener("click", onClick)
+    window.addEventListener("hashchange", checkHash)
+
+    return () => {
+      document.removeEventListener("click", onClick)
+      window.removeEventListener("hashchange", checkHash)
+    }
+  }, [])
+
+  const summary = summarizeReviewQueue(groups)
+  if (!summary.show) return null
 
   const visible = showAll ? groups : groups.slice(0, INITIAL_VISIBLE)
   const overflow = groups.length - INITIAL_VISIBLE
@@ -35,59 +72,69 @@ export function ReviewInbox({
 
   return (
     <section
-      // Anchor for the sidebar's "Needs review" link. That link previously
-      // pointed at ?tab=review, a parameter nothing in this tree read, so it
-      // silently landed on the plain pantry.
       id="review"
-      className="scroll-mt-16 border-b border-[var(--hairline-bold)] px-8 py-6"
-      style={{
-        background:
-          "linear-gradient(180deg, rgba(252, 236, 236, 0.5) 0%, rgba(252, 236, 236, 0.1) 100%)",
-      }}
+      className="scroll-mt-16 border-b border-[var(--hairline-bold)] bg-[var(--paper)]/60"
     >
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-dashed border-[var(--accent-dark)]/25 pb-4">
-        <div>
-          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-dark)]">
-            <span
-              className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent-dark)]"
-              aria-hidden
-            />
-            § needs your review
-          </div>
-          <h2 className="mt-1.5 font-display text-[28px] italic leading-tight text-[var(--ink)]">
-            {groups.length} new {groups.length === 1 ? "item" : "items"} on your
-            invoices.
-          </h2>
-          <p className="mt-1 max-w-xl font-mono text-[10px] leading-relaxed text-[var(--ink-muted)]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-8 py-3">
+        <span
+          className="inline-flex h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--accent-dark)]"
+          aria-hidden
+        />
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--accent-dark)]">
+          § needs your review
+        </span>
+        <span className="text-[13px] font-medium tabular-nums text-[var(--ink)]">
+          {summary.count} new {summary.count === 1 ? "item" : "items"} on your invoices
+        </span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
+          {formatMoney(summary.totalSpend)}
+        </span>
+
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls="review-queue"
+          onClick={() => setExpanded((v) => !v)}
+          className="ml-auto inline-flex items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+        >
+          <ChevronDown className={cn("h-3 w-3 transition", expanded && "rotate-180")} />
+          {expanded ? "Hide" : "Review"}
+        </button>
+      </div>
+
+      {expanded && (
+        <div
+          id="review-queue"
+          className="border-t border-dashed border-[var(--accent-dark)]/25 px-8 pb-6 pt-4"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(252, 236, 236, 0.5) 0%, rgba(252, 236, 236, 0.1) 100%)",
+          }}
+        >
+          <p className="max-w-xl font-mono text-[10px] leading-relaxed text-[var(--ink-muted)]">
             Match each to an existing pantry ingredient or create a new one.
             Matching once teaches the system — future invoices for the same
             vendor + SKU will auto-link.
           </p>
-        </div>
-      </div>
 
-      <ul className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
-        {visible.map((g) => (
-          <ReviewCard
-            key={g.key}
-            group={g}
-            onOpen={() => setActiveKey(g.key)}
-          />
-        ))}
-      </ul>
+          <ul className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {visible.map((g) => (
+              <ReviewCard key={g.key} group={g} onOpen={() => setActiveKey(g.key)} />
+            ))}
+          </ul>
 
-      {overflow > 0 && (
-        <div className="mt-4 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="inline-flex items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
-          >
-            <ChevronDown
-              className={cn("h-3 w-3 transition", showAll && "rotate-180")}
-            />
-            {showAll ? "Collapse" : `Show ${overflow} more`}
-          </button>
+          {overflow > 0 && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="inline-flex items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+              >
+                <ChevronDown className={cn("h-3 w-3 transition", showAll && "rotate-180")} />
+                {showAll ? "Collapse" : `Show ${overflow} more`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
