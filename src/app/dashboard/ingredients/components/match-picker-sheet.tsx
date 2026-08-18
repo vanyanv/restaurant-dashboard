@@ -227,6 +227,9 @@ export function MatchPickerSheet({
           defaultUnit: unit,
           category,
           aliasCount: 0,
+          // Brand new canonical: the line being matched is its first, so there
+          // is no multi-product history to warn about yet.
+          skuCount: 0,
           recipeUnit: null,
           costPerRecipeUnit: null,
           costSource: null,

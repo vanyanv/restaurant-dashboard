@@ -10,13 +10,15 @@ import {
   type SeedResult,
 } from "@/lib/canonical-ingredients"
 import { batchCanonicalCosts } from "@/lib/canonical-cost-batch"
+import {
+  computeTrendForPoints,
+  type CanonicalTrend,
+  type TrendPoint,
+} from "@/lib/canonical-trend"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { syncCanonicalEmbedding } from "@/lib/ingredient-embedding-sync"
-import type {
-  CanonicalIngredientSummary,
-  IngredientTrend,
-} from "@/types/recipe"
+import type { CanonicalIngredientSummary } from "@/types/recipe"
 import type {
   IngredientPriceHistory,
   IngredientPricePoint,
@@ -60,7 +62,8 @@ export async function listCanonicalIngredients(): Promise<
       latestPriceAt: cost?.asOfDate ?? null,
       latestVendor: cost?.sourceVendor ? normalizeVendorName(cost.sourceVendor) : null,
       latestSku: cost?.sourceSku ?? null,
-      trend30d: trendsByCanonical.get(c.id) ?? null,
+      trend30d: trendsByCanonical.get(c.id)?.trend ?? null,
+      skuCount: trendsByCanonical.get(c.id)?.skuCount ?? 0,
       hasPhoto: c.photoBlobPathname != null,
       photoVersion: c.photoUploadedAt ? c.photoUploadedAt.toISOString() : null,
       caseUnit: c.caseUnit,
@@ -144,7 +147,7 @@ export async function setCanonicalPackDefinition(input: {
  */
 async function computeTrendsByCanonical(
   accountId: string
-): Promise<Map<string, IngredientTrend>> {
+): Promise<Map<string, CanonicalTrend>> {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 90)
 
@@ -161,6 +164,7 @@ async function computeTrendsByCanonical(
       canonicalIngredientId: true,
       unitPrice: true,
       unit: true,
+      sku: true,
       invoice: {
         select: {
           vendorName: true,
@@ -170,59 +174,29 @@ async function computeTrendsByCanonical(
     },
   })
 
-  type Pt = { date: Date; price: number; vendor: string; unit: string | null }
-  const buckets = new Map<string, Pt[]>() // key = canonicalId|vendor|unit
-  const canonicalMap = new Map<string, string>() // bucketKey → canonicalId
+  // Group the raw lines per canonical; the bucketing that actually decides
+  // comparability (vendor + unit + SKU) lives in computeTrendForPoints so it
+  // can be tested without a database.
+  const pointsByCanonical = new Map<string, TrendPoint[]>()
   for (const li of lines) {
     if (!li.canonicalIngredientId || !li.invoice.invoiceDate) continue
-    const vendor = normalizeVendorName(li.invoice.vendorName)
-    const unit = li.unit?.trim().toUpperCase() || null
-    const key = `${li.canonicalIngredientId}|${vendor}|${unit ?? "∅"}`
-    canonicalMap.set(key, li.canonicalIngredientId)
-    const arr = buckets.get(key) ?? []
+    const arr = pointsByCanonical.get(li.canonicalIngredientId) ?? []
     arr.push({
       date: li.invoice.invoiceDate,
       price: li.unitPrice,
-      vendor,
-      unit,
+      vendor: normalizeVendorName(li.invoice.vendorName),
+      unit: li.unit?.trim().toUpperCase() || null,
+      sku: li.sku,
     })
-    buckets.set(key, arr)
+    pointsByCanonical.set(li.canonicalIngredientId, arr)
   }
 
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
-  const cutoffMs = Date.now() - THIRTY_DAYS_MS
-
-  const best = new Map<string, IngredientTrend>() // canonicalId → best trend
-  for (const [key, pts] of buckets) {
-    if (pts.length < 2) continue
-    pts.sort((a, b) => b.date.getTime() - a.date.getTime()) // newest first
-    const latest = pts[0]
-    // Baseline: most recent point dated on or before (now - 30d). If none,
-    // skip — we don't want to call a two-day swing a "30-day trend".
-    const baseline = pts.find((p) => p.date.getTime() <= cutoffMs)
-    if (!baseline) continue
-    if (baseline.price <= 0) continue
-    const pctChange = ((latest.price - baseline.price) / baseline.price) * 100
-    if (!Number.isFinite(pctChange)) continue
-
-    const canonicalId = canonicalMap.get(key)
-    if (!canonicalId) continue
-    const trend: IngredientTrend = {
-      pctChange,
-      latestPrice: latest.price,
-      baselinePrice: baseline.price,
-      vendor: latest.vendor,
-      unit: latest.unit,
-      latestDate: latest.date.toISOString().slice(0, 10),
-      baselineDate: baseline.date.toISOString().slice(0, 10),
-    }
-    const prior = best.get(canonicalId)
-    if (!prior || Math.abs(trend.pctChange) > Math.abs(prior.pctChange)) {
-      best.set(canonicalId, trend)
-    }
+  const nowMs = Date.now()
+  const out = new Map<string, CanonicalTrend>()
+  for (const [canonicalId, points] of pointsByCanonical) {
+    out.set(canonicalId, computeTrendForPoints(points, nowMs))
   }
-
-  return best
+  return out
 }
 
 /**
