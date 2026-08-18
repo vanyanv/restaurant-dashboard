@@ -16,9 +16,6 @@ export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   "invoices.email.sync":    { cadenceMinutes: 60 * 6,  description: "every 6h" },
   "cogs.sweep":             { cadenceMinutes: 60 * 4,  description: "every 4h" },
   "cogs.stores":            { cadenceMinutes: 60 * 24, description: "daily" },
-  "monitoring.cache-flush": { cadenceMinutes: 10,      description: "every 10m" },
-  "monitoring.sweep":       { cadenceMinutes: 15,      description: "every 15m" },
-  "monitoring.cleanup":     { cadenceMinutes: 60 * 24, description: "daily" },
   "monitoring.db-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
   "ml.operator-gate-check": { cadenceMinutes: 60 * 24, description: "daily" },
   // These five record JobRun rows but had no schedule, so isOverdue() was
