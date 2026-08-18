@@ -28,6 +28,10 @@ export function AutoMatchNotice({ decisions, days }: Props) {
   // An undone row stays in place: it is the record that the automation was
   // corrected here, and it is what stops the ladder re-proposing the pairing.
   const [undoneIds, setUndoneIds] = useState<Set<string>>(new Set())
+  // Keyed by decision id: a failed undo on one row must not read as a
+  // message about a different row, and a later successful undo clears the
+  // stale failure so it cannot outlive the thing it described.
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [pending, startTransition] = useTransition()
 
   const summary = summarizeAutoMatchNotice(decisions)
@@ -92,20 +96,46 @@ export function AutoMatchNotice({ decisions, days }: Props) {
                     Undone
                   </span>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() =>
-                      startTransition(async () => {
-                        await undoAutoMatch(d.id)
-                        setUndoneIds((prev) => new Set(prev).add(d.id))
-                      })
-                    }
-                    className="ml-auto inline-flex items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--accent-dark)] hover:text-[var(--accent-dark)] disabled:opacity-50"
-                  >
-                    <Undo2 className="h-2.5 w-2.5" />
-                    Undo
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        setErrors((prev) => {
+                          if (!(d.id in prev)) return prev
+                          const next = { ...prev }
+                          delete next[d.id]
+                          return next
+                        })
+                        startTransition(async () => {
+                          try {
+                            await undoAutoMatch(d.id)
+                            setUndoneIds((prev) => new Set(prev).add(d.id))
+                            setErrors((prev) => {
+                              if (!(d.id in prev)) return prev
+                              const next = { ...prev }
+                              delete next[d.id]
+                              return next
+                            })
+                          } catch (e) {
+                            setErrors((prev) => ({
+                              ...prev,
+                              [d.id]: e instanceof Error ? e.message : "Undo failed",
+                            }))
+                          }
+                        })
+                      }}
+                      className="ml-auto inline-flex items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--accent-dark)] hover:text-[var(--accent-dark)] disabled:opacity-50"
+                    >
+                      <Undo2 className="h-2.5 w-2.5" />
+                      Undo
+                    </button>
+                    {errors[d.id] && (
+                      <span className="font-mono text-[9px] text-[var(--accent-dark)]">
+                        {errors[d.id]}
+                      </span>
+                    )}
+                  </>
                 )}
               </li>
             )
