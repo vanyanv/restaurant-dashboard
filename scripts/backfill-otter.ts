@@ -17,6 +17,7 @@
 
 import fs from "fs"
 import path from "path"
+import { fileURLToPath } from "url"
 
 // --- Load .env.local BEFORE dynamic imports that read process.env ---
 function loadEnvLocal(): void {
@@ -53,7 +54,12 @@ function elapsed(): string {
   return `${m}m${String(sec).padStart(2, "0")}s`
 }
 
-function parseArgs(): { days: number; dailyOnly: boolean; storeIdFilter: string | null } {
+export function parseArgs(): {
+  days: number
+  dailyOnly: boolean
+  storeIdFilter: string | null
+  includeRatings: boolean
+} {
   const positional = process.argv.slice(2).filter((a) => !a.startsWith("-"))
   const days = parseInt(positional[0] || "365", 10)
   if (isNaN(days) || days < 1) {
@@ -71,7 +77,32 @@ function parseArgs(): { days: number; dailyOnly: boolean; storeIdFilter: string 
   const includeRatings = !process.argv.includes("--no-ratings") && !dailyOnly
   const storeIdArg = process.argv.find((a) => a.startsWith("--store-id="))
   const storeIdFilter = storeIdArg ? storeIdArg.slice("--store-id=".length) : null
-  return { days, dailyOnly, storeIdFilter }
+  return { days, dailyOnly, storeIdFilter, includeRatings }
+}
+
+export type StoreOutcome = { name: string; daily: number; chunkFailures: number }
+
+/**
+ * Decide whether a backfill run should exit 0. A chunk that throws is caught
+ * per-store so one bad store can't block the rest — but the run as a whole is
+ * still a failure, and must say so through its exit code. Returning 0 here was
+ * what let `includeRatings is not defined` kill every scheduled sync for 24h
+ * while the workflow stayed green and no incident issue opened.
+ */
+export function summarizeBackfill(outcomes: StoreOutcome[]): {
+  ok: boolean
+  problems: string[]
+} {
+  const problems = outcomes.flatMap((o) => {
+    if (o.chunkFailures > 0) {
+      return [`${o.name}: ${o.chunkFailures} chunk(s) failed`]
+    }
+    if (o.daily === 0) {
+      return [`${o.name}: processed but wrote 0 daily rows`]
+    }
+    return []
+  })
+  return { ok: problems.length === 0, problems }
 }
 
 async function main() {
@@ -79,7 +110,7 @@ async function main() {
   const { runMetricsSyncForStore } = await import("../src/lib/otter-metrics-sync")
   const { withPrismaRetry } = await import("../src/lib/prisma-retry")
 
-  const { days, dailyOnly, storeIdFilter } = parseArgs()
+  const { days, dailyOnly, storeIdFilter, includeRatings } = parseArgs()
 
   const usingEnvJwt = !!process.env.OTTER_JWT
   console.log(
@@ -136,6 +167,7 @@ async function main() {
     itemsFailed: number
     modifiers: number
     modifiersFailed: number
+    chunkFailures: number
   }
   const totalsByStore = new Map<string, ChunkTotals>()
   for (const sid of storeGroups.keys()) {
@@ -148,6 +180,7 @@ async function main() {
       itemsFailed: 0,
       modifiers: 0,
       modifiersFailed: 0,
+      chunkFailures: 0,
     })
   }
 
@@ -205,7 +238,9 @@ async function main() {
         console.error(
           `  ${name}: chunk failed — ${err instanceof Error ? err.message : err}`,
         )
-        // Continue with next store; one store's failure shouldn't block the rest.
+        // Continue with next store; one store's failure shouldn't block the
+        // rest. The run still exits non-zero below so CI can see it.
+        totalsByStore.get(sid)!.chunkFailures++
       }
     }
 
@@ -237,10 +272,32 @@ async function main() {
     `  TOTAL                daily=${grandDaily} cat=${grandCategories} items=${grandItems} mods=${grandModifiers}\n`,
   )
 
+  const verdict = summarizeBackfill(
+    [...totalsByStore].map(([sid, t]) => ({
+      name: storeGroups.get(sid)?.name ?? sid,
+      daily: t.daily,
+      chunkFailures: t.chunkFailures,
+    })),
+  )
+
   await prisma.$disconnect()
+
+  if (!verdict.ok) {
+    for (const problem of verdict.problems) {
+      console.error(`Backfill incomplete — ${problem}`)
+    }
+    process.exit(1)
+  }
 }
 
-main().catch((err) => {
-  console.error("Backfill failed:", err)
-  process.exit(1)
-})
+// Only backfill when invoked as a script. Without this guard, importing the
+// module to unit-test parseArgs() would kick off a real sync.
+const invokedDirectly =
+  !!process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error("Backfill failed:", err)
+    process.exit(1)
+  })
+}

@@ -165,7 +165,13 @@ async function fetchAndPersistDetails(
 export async function runOrdersSync(
   days: number,
   endDateOverride?: Date,
-  opts?: { triggeredBy?: "cron" | "manual"; metadata?: Record<string, unknown> }
+  opts?: {
+    // Same union runOrdersSyncForStore accepts. scripts/sync-otter-orders.ts
+    // has always passed "github-actions"; the narrower union here only ever
+    // meant the call didn't typecheck, and scripts/ wasn't typechecked.
+    triggeredBy?: "cron" | "manual" | "github-actions" | "internal"
+    metadata?: Record<string, unknown>
+  }
 ): Promise<OrdersSyncResult> {
   const triggeredBy = opts?.triggeredBy ?? "manual"
   return withJobRun(

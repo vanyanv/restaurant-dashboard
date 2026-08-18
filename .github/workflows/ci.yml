@@ -37,6 +37,10 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: Typecheck cron scripts
+        # scripts/ is outside the main tsconfig; without this a bare
+        # ReferenceError in a cron entrypoint only surfaces in production.
+        run: npm run typecheck:scripts
       - name: Unit tests
         run: npm test
 
