@@ -35,7 +35,31 @@ export function ReviewInbox({
   // The sidebar's "Needs review" link is /dashboard/ingredients#review. Landing
   // on a collapsed bar would make that link look broken.
   useEffect(() => {
-    if (window.location.hash === "#review") setExpanded(true)
+    const checkHash = () => {
+      if (window.location.hash === "#review") setExpanded(true)
+    }
+    checkHash()
+
+    // A same-page click on that link is a soft navigation — Next.js's <Link>
+    // updates the URL via the History API, which does not fire `hashchange`
+    // or `popstate` (confirmed empirically). Worse, if the hash is already
+    // #review (e.g. re-clicking after collapsing manually) Next skips the
+    // navigation entirely and no history event fires at all. What does
+    // reliably fire in both cases is the click itself, which bubbles to the
+    // document regardless of what the router does with it afterward.
+    const onClick = (e: MouseEvent) => {
+      const target = e.target
+      if (!(target instanceof Element)) return
+      const anchor = target.closest("a")
+      if (anchor && anchor.hash === "#review") setExpanded(true)
+    }
+    document.addEventListener("click", onClick)
+    window.addEventListener("hashchange", checkHash)
+
+    return () => {
+      document.removeEventListener("click", onClick)
+      window.removeEventListener("hashchange", checkHash)
+    }
   }, [])
 
   const summary = summarizeReviewQueue(groups)
