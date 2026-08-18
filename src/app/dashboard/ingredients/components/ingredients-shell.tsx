@@ -4,6 +4,7 @@ import { SectionErrorBoundary } from "@/components/analytics/section-error"
 import { EditorialTopbar } from "../../components/editorial-topbar"
 import { PantrySection } from "./sections/pantry-section"
 import { SubItemsSection } from "./sections/subitems-section"
+import { AutoMatchNoticeSection } from "./sections/auto-match-notice-section"
 
 type Props = {
   initialOpenId: string | null
@@ -13,6 +14,16 @@ export function IngredientsShell({ initialOpenId }: Props) {
   return (
     <div className="editorial-surface flex min-h-[calc(100vh-3.5rem)] flex-col">
       <EditorialTopbar section="§ 11" title="Pantry" />
+
+      {/* What the automation already changed comes before what it is asking
+          you to decide. One line unless there is something to undo, and
+          nothing at all while auto-match is in shadow. Its own boundary so a
+          decision-log failure never takes the pantry down with it. */}
+      <SectionErrorBoundary label="Auto-match activity unavailable">
+        <Suspense fallback={null}>
+          <AutoMatchNoticeSection />
+        </Suspense>
+      </SectionErrorBoundary>
 
       <SectionErrorBoundary label="Pantry unavailable">
         <Suspense fallback={<PantryFallback />}>
