@@ -11,8 +11,14 @@ import {
 import { LaborStoreTabs, type LaborStoreTab } from "./components/labor-store-tabs"
 import { LaborWeekNav } from "./components/labor-week-nav"
 import { LaborWeekKpis } from "./components/labor-week-kpis"
+import { LaborVerdict } from "./components/labor-verdict"
+import { LaborLeakLedger } from "./components/labor-leak-ledger"
 import { LaborStoresPanel } from "./components/labor-stores-panel"
 import { LaborWeekTrend } from "./components/labor-week-trend"
+import { LaborStaffingCurve } from "./components/labor-staffing-curve"
+import { LaborDayScorecard } from "./components/labor-day-scorecard"
+import { LaborPositionMix } from "./components/labor-position-mix"
+import { getLaborProductivity } from "@/app/actions/labor-productivity-actions"
 
 const TREND_WEEKS = 13
 
@@ -89,6 +95,8 @@ export default async function LaborIndexPage(props: {
     getHarriTrendAllStores(isoMondayUTC(new Date()), TREND_WEEKS),
   ])
 
+  const productivity = await getLaborProductivity(weekStart, weekEnd)
+
   const brandSet = new Set(brands.map((b) => b.storeId))
   const tabStores: LaborStoreTab[] = stores.map((s) => ({
     id: s.id,
@@ -99,8 +107,11 @@ export default async function LaborIndexPage(props: {
   const kpiRows = aggregateForKpis(storesWeek)
   const totalAlerts = storesWeek.reduce((a, r) => a + r.alertCount, 0)
   const priorActual = priorStoresWeek.reduce((a, r) => a + r.actualCost, 0) || null
+  // Days of the week that have labor data anywhere, not the number of stores
+  // reporting — the nav renders this as "n/7 days recorded", so summing a
+  // per-store boolean made a fully-recorded week read as "1/7".
   const totalDaysWithData = storesWeek.reduce(
-    (a, r) => a + (r.daysWithData > 0 ? 1 : 0),
+    (a, r) => Math.max(a, r.daysWithData),
     0
   )
 
@@ -129,33 +140,112 @@ export default async function LaborIndexPage(props: {
         />
       </div>
 
+      {/* The verdict replaces the KPI grid: eight equal tiles made the reader
+          rank the numbers, which is the job this page should do for them. The
+          old strip stays as the fallback for weeks with cost but no hours. */}
       <div className="dock-in dock-in-4">
-        <LaborWeekKpis
-          rows={kpiRows}
-          alertsCount={totalAlerts}
-          priorWeekActual={priorActual}
-        />
+        {productivity && productivity.totals.actualHours > 0 ? (
+          <LaborVerdict
+            totals={productivity.totals}
+            drift={productivity.drift}
+            costVariance={
+              kpiRows.reduce((a, r) => a + (r.actualCost ?? 0), 0) -
+              kpiRows.reduce((a, r) => a + (r.forecastCost ?? 0), 0)
+            }
+          />
+        ) : (
+          <LaborWeekKpis
+            rows={kpiRows}
+            alertsCount={totalAlerts}
+            priorWeekActual={priorActual}
+          />
+        )}
       </div>
 
-      <section className="inv-panel dock-in dock-in-5">
-        <div className="inv-panel__head">
-          <div>
-            <span className="inv-panel__dept">§ Stores</span>
-            <h2 className="inv-panel__title">Ranked by actual labor.</h2>
+      {productivity ? (
+        <section className="labor-lede dock-in dock-in-4">
+          <div className="labor-lede__head">
+            <span className="labor-lede__dept">§ Where it went · ranked by cost</span>
           </div>
-        </div>
-        <LaborStoresPanel rows={storesWeek} weekIso={weekIso} />
-      </section>
+          <h2 className="labor-lede__title">
+            What to change before next week&rsquo;s schedule goes out.
+          </h2>
+          <LaborLeakLedger leaks={productivity.leaks} />
+        </section>
+      ) : null}
 
-      <section className="inv-panel dock-in dock-in-6">
-        <div className="inv-panel__head">
-          <div>
-            <span className="inv-panel__dept">§ Trend · {TREND_WEEKS} weeks</span>
-            <h2 className="inv-panel__title">Rolling weekly totals across all stores.</h2>
-          </div>
+      {/* The staffing curve leads because it is the only view that shows
+          WHERE inside a day the hours went. Everything below it is daily or
+          weekly and cannot answer that. */}
+      {/* Curve and position mix share a row: the curve needs width for a
+          24-bar axis, the mix is three lines. Equal-width stacking wasted
+          both. */}
+      {productivity ? (
+        <div className="labor-grid dock-in dock-in-5">
+          <section className="inv-panel">
+            <div className="inv-panel__head">
+              <div>
+                <span className="inv-panel__dept">§ Staffing curve · hour of day</span>
+                <h2 className="inv-panel__title">
+                  Where the hours went, against the sales they covered.
+                </h2>
+              </div>
+            </div>
+            <LaborStaffingCurve
+              hours={productivity.staffing}
+              blendedRate={productivity.blendedRate}
+            />
+          </section>
+
+          {productivity.positions.length > 0 ? (
+            <section className="inv-panel">
+              <div className="inv-panel__head">
+                <div>
+                  <span className="inv-panel__dept">§ Position mix</span>
+                </div>
+              </div>
+              <LaborPositionMix rows={productivity.positions} />
+            </section>
+          ) : null}
         </div>
-        <LaborWeekTrend trend={trend} selectedWeek={weekIso} storeId="" />
-      </section>
+      ) : null}
+
+      {productivity ? (
+        <section className="inv-panel dock-in dock-in-5">
+          <div className="inv-panel__head">
+            <div>
+              <span className="inv-panel__dept">§ Day scorecard</span>
+              <h2 className="inv-panel__title">
+                Hours worked against hours the sales earned.
+              </h2>
+            </div>
+          </div>
+          <LaborDayScorecard rows={productivity.scorecard} totals={productivity.totals} />
+        </section>
+      ) : null}
+
+      {/* Context row. Both are reference material, so they close the page
+          side by side rather than each claiming full width. */}
+      <div className="labor-grid dock-in dock-in-6">
+        <section className="inv-panel">
+          <div className="inv-panel__head">
+            <div>
+              <span className="inv-panel__dept">§ Trend · {TREND_WEEKS} weeks</span>
+              <h2 className="inv-panel__title">Rolling weekly totals.</h2>
+            </div>
+          </div>
+          <LaborWeekTrend trend={trend} selectedWeek={weekIso} storeId="" />
+        </section>
+
+        <section className="inv-panel">
+          <div className="inv-panel__head">
+            <div>
+              <span className="inv-panel__dept">§ Stores</span>
+            </div>
+          </div>
+          <LaborStoresPanel rows={storesWeek} weekIso={weekIso} />
+        </section>
+      </div>
     </main>
   )
 }
