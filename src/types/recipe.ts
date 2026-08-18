@@ -9,6 +9,12 @@ export type IngredientTrend = {
   vendor: string
   /** Unit the comparison was done in (e.g. "CASE", "LB"). */
   unit: string | null
+  /**
+   * SKU the compared prices share. Comparisons never cross a SKU boundary — a
+   * different SKU is a different product, so a price "change" across one is a
+   * supplier or brand switch, not inflation. Null when the vendor sent no SKU.
+   */
+  sku: string | null
   /** ISO date of latest price. */
   latestDate: string
   /** ISO date of baseline price. */
@@ -38,6 +44,12 @@ export type CanonicalIngredientSummary = {
   latestSku: string | null
   /** ~30d price trend, sourced from matched invoice line items. Null when no comparable baseline exists. */
   trend30d: IngredientTrend | null
+  /**
+   * Distinct SKUs seen on this ingredient's invoice lines in the trend window.
+   * Greater than 1 means the invoice history spans more than one product, so
+   * any figure derived across the whole ingredient compares different things.
+   */
+  skuCount: number
   /** True when the canonical has a product reference photo stored in R2. */
   hasPhoto: boolean
   /** Cache-busting key — uploaded-at timestamp as ISO string, null when no photo. */
