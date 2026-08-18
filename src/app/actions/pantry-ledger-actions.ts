@@ -36,6 +36,11 @@ export type PantryLedgerRow = CanonicalIngredientSummary & {
   skus: string[]
   lastPurchaseAt: Date | null
   /**
+   * How many recipes use this ingredient. Zero means its cost never reaches a
+   * plate, so it is invisible to menu margin — true of 43 of 76 ingredients.
+   */
+  recipeUseCount: number
+  /**
    * What the 30-day price move is worth against 90-day spend, in dollars.
    * Null when there is no comparable price history — deliberately not 0,
    * which would read as "measured, and flat".
@@ -81,10 +86,24 @@ export async function listPantryLedger(): Promise<PantryLedgerData> {
   const scope = await getAuthScope()
   if (!scope) return EMPTY
 
-  const [canonicals, spendById] = await Promise.all([
+  const [canonicals, spendById, recipeUses] = await Promise.all([
     listCanonicalIngredients(),
     batchCanonicalSpend(scope.accountId),
+    prisma.recipeIngredient.groupBy({
+      by: ["canonicalIngredientId"],
+      where: {
+        canonicalIngredientId: { not: null },
+        recipe: { accountId: scope.accountId },
+      },
+      _count: { _all: true },
+    }),
   ])
+
+  const recipeCountById = new Map<string, number>(
+    recipeUses
+      .filter((r) => r.canonicalIngredientId != null)
+      .map((r) => [r.canonicalIngredientId as string, r._count._all])
+  )
 
   const rows: PantryLedgerRow[] = canonicals.map((c) => {
     const spend = spendById.get(c.id)
@@ -101,6 +120,7 @@ export async function listPantryLedger(): Promise<PantryLedgerData> {
       vendors: spend?.vendors ?? [],
       skus: spend?.skus ?? [],
       lastPurchaseAt: spend?.lastPurchaseAt ?? null,
+      recipeUseCount: recipeCountById.get(c.id) ?? 0,
       impact90: pct == null ? null : (spend90 * pct) / 100,
     }
   })
