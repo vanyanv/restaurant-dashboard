@@ -65,9 +65,21 @@ describe("summarizeBackfill", () => {
     expect(verdict.problems.join(" ")).toContain("Hollywood")
   })
 
-  it("fails when a store was processed but wrote nothing", () => {
+  /**
+   * Glendale and Van Nuys are pre-opening and legitimately sync 0 rows every
+   * run. Treating that as a failure opened an incident on both the first time
+   * this shipped. Staleness of the data as a whole is checked in
+   * lib/monitoring/staleness.ts, which has the context to judge it.
+   */
+  it("does not fail a store that wrote nothing without erroring", () => {
     expect(
-      summarizeBackfill([{ name: "Hollywood", daily: 0, chunkFailures: 0 }]).ok,
+      summarizeBackfill([{ name: "Van Nuys", daily: 0, chunkFailures: 0 }]).ok,
+    ).toBe(true)
+  })
+
+  it("still fails a store whose chunk threw even though it wrote nothing", () => {
+    expect(
+      summarizeBackfill([{ name: "Hollywood", daily: 0, chunkFailures: 1 }]).ok,
     ).toBe(false)
   })
 

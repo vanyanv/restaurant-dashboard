@@ -88,20 +88,23 @@ export type StoreOutcome = { name: string; daily: number; chunkFailures: number 
  * still a failure, and must say so through its exit code. Returning 0 here was
  * what let `includeRatings is not defined` kill every scheduled sync for 24h
  * while the workflow stayed green and no incident issue opened.
+ *
+ * Deliberately NOT a failure: a store that wrote 0 rows without throwing.
+ * This script cannot tell an outage from a store that legitimately has no
+ * sales — Glendale and Van Nuys are pre-opening and return 0 every run, so
+ * failing on that fired an incident on both of them on the first run and
+ * burned the retry budget on a condition no retry can fix. Whether the data
+ * as a whole went stale is a question with enough context to answer, and
+ * JOB_DATA_OWNERSHIP in lib/monitoring/staleness.ts answers it against
+ * OtterDailySummary directly.
  */
 export function summarizeBackfill(outcomes: StoreOutcome[]): {
   ok: boolean
   problems: string[]
 } {
-  const problems = outcomes.flatMap((o) => {
-    if (o.chunkFailures > 0) {
-      return [`${o.name}: ${o.chunkFailures} chunk(s) failed`]
-    }
-    if (o.daily === 0) {
-      return [`${o.name}: processed but wrote 0 daily rows`]
-    }
-    return []
-  })
+  const problems = outcomes
+    .filter((o) => o.chunkFailures > 0)
+    .map((o) => `${o.name}: ${o.chunkFailures} chunk(s) failed`)
   return { ok: problems.length === 0, problems }
 }
 
