@@ -15,7 +15,10 @@
 
 import { getAuthScope } from "@/lib/auth-scope"
 import { listCanonicalIngredients } from "@/app/actions/canonical-ingredient-actions"
+import { prisma } from "@/lib/prisma"
 import { batchCanonicalSpend } from "@/lib/canonical-spend-batch"
+import { computeIngredientLineCost } from "@/lib/recipe-cost"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
 import {
   isPackagingStation,
   stationFor,
@@ -141,4 +144,212 @@ export async function listPantryLedger(): Promise<PantryLedgerData> {
   })
 
   return { rows, stations, totals }
+}
+
+/* ------------------------------------------------------------------ *
+ * Expanded row: one ingredient's history
+ * ------------------------------------------------------------------ */
+
+export type PantryPricePoint = {
+  /** ISO date, yyyy-mm-dd. */
+  date: string
+  unitPrice: number
+  unit: string | null
+  vendor: string
+  sku: string | null
+}
+
+export type PantryDelivery = {
+  date: string
+  invoiceId: string
+  invoiceNumber: string
+  /** The RAW invoice line name, not the canonical name — that difference is
+   *  how an owner sees that one ingredient spans several products. */
+  productName: string
+  vendor: string
+  sku: string | null
+  quantity: number
+  unit: string | null
+  unitPrice: number
+  extendedPrice: number
+}
+
+export type PantryProductGroup = {
+  sku: string | null
+  /** Name from the most recent line in this SKU. */
+  productName: string
+  vendor: string
+  firstAt: string
+  lastAt: string
+  lastUnitPrice: number
+  unit: string | null
+  spend: number
+}
+
+export type PantryRecipeUse = {
+  recipeName: string
+  quantity: number
+  unit: string
+  /** Null when the ingredient has no price, or the units cannot reconcile. */
+  costPerServing: number | null
+}
+
+export type PantryIngredientHistory = {
+  /** Oldest first, capped at the 60 most recent points. */
+  series: PantryPricePoint[]
+  /** Newest first, 8 most recent. */
+  deliveries: PantryDelivery[]
+  /** Grouped by SKU, ranked by spend. */
+  products: PantryProductGroup[]
+  recipes: PantryRecipeUse[]
+}
+
+const EMPTY_HISTORY: PantryIngredientHistory = {
+  series: [],
+  deliveries: [],
+  products: [],
+  recipes: [],
+}
+
+const SERIES_CAP = 60
+const DELIVERY_CAP = 8
+
+const isoDay = (d: Date): string => d.toISOString().slice(0, 10)
+
+export async function getPantryIngredientHistory(
+  canonicalId: string
+): Promise<PantryIngredientHistory> {
+  const scope = await getAuthScope()
+  if (!scope) return EMPTY_HISTORY
+
+  // Scope the lookup by account as well as id: the canonical id arrives from
+  // the client, so this is the tenant boundary, not a convenience.
+  const canonical = await prisma.canonicalIngredient.findFirst({
+    where: { id: canonicalId, accountId: scope.accountId },
+    select: { id: true, recipeUnit: true, costPerRecipeUnit: true },
+  })
+  if (!canonical) return EMPTY_HISTORY
+
+  const [lines, recipeUses] = await Promise.all([
+    prisma.invoiceLineItem.findMany({
+      where: {
+        canonicalIngredientId: canonicalId,
+        invoice: { accountId: scope.accountId, invoiceDate: { not: null } },
+      },
+      select: {
+        unitPrice: true,
+        unit: true,
+        quantity: true,
+        extendedPrice: true,
+        sku: true,
+        productName: true,
+        invoiceId: true,
+        invoice: {
+          select: { vendorName: true, invoiceDate: true, invoiceNumber: true },
+        },
+      },
+    }),
+    prisma.recipeIngredient.findMany({
+      where: {
+        canonicalIngredientId: canonicalId,
+        recipe: { accountId: scope.accountId },
+      },
+      select: {
+        quantity: true,
+        unit: true,
+        recipe: { select: { itemName: true, servingSize: true } },
+      },
+    }),
+  ])
+
+  const ordered = [...lines]
+    .filter((l) => l.invoice.invoiceDate != null)
+    .sort(
+      (a, b) =>
+        a.invoice.invoiceDate!.getTime() - b.invoice.invoiceDate!.getTime()
+    )
+
+  const series: PantryPricePoint[] = ordered
+    .slice(-SERIES_CAP)
+    .map((l) => ({
+      date: isoDay(l.invoice.invoiceDate!),
+      unitPrice: l.unitPrice,
+      unit: l.unit,
+      vendor: normalizeVendorName(l.invoice.vendorName),
+      sku: l.sku?.trim() || null,
+    }))
+
+  const deliveries: PantryDelivery[] = [...ordered]
+    .reverse()
+    .slice(0, DELIVERY_CAP)
+    .map((l) => ({
+      date: isoDay(l.invoice.invoiceDate!),
+      invoiceId: l.invoiceId,
+      invoiceNumber: l.invoice.invoiceNumber,
+      productName: l.productName,
+      vendor: normalizeVendorName(l.invoice.vendorName),
+      sku: l.sku?.trim() || null,
+      quantity: l.quantity,
+      unit: l.unit,
+      unitPrice: l.unitPrice,
+      extendedPrice: l.extendedPrice,
+    }))
+
+  const groups = new Map<string, PantryProductGroup>()
+  for (const l of ordered) {
+    const sku = l.sku?.trim() || null
+    const key = sku ?? "∅"
+    const date = isoDay(l.invoice.invoiceDate!)
+    const existing = groups.get(key)
+    if (!existing) {
+      groups.set(key, {
+        sku,
+        productName: l.productName,
+        vendor: normalizeVendorName(l.invoice.vendorName),
+        firstAt: date,
+        lastAt: date,
+        lastUnitPrice: l.unitPrice,
+        unit: l.unit,
+        spend: l.extendedPrice,
+      })
+      continue
+    }
+    existing.spend += l.extendedPrice
+    if (date < existing.firstAt) existing.firstAt = date
+    // `ordered` runs oldest → newest, so the last write wins on the newest line.
+    if (date >= existing.lastAt) {
+      existing.lastAt = date
+      existing.lastUnitPrice = l.unitPrice
+      existing.unit = l.unit
+      existing.productName = l.productName
+      existing.vendor = normalizeVendorName(l.invoice.vendorName)
+    }
+  }
+  const products = [...groups.values()].sort((a, b) => b.spend - a.spend)
+
+  const recipes: PantryRecipeUse[] = recipeUses
+    .map((r) => {
+      let costPerServing: number | null = null
+      if (canonical.costPerRecipeUnit != null && canonical.recipeUnit) {
+        const { lineCost, qtyInCostUnit } = computeIngredientLineCost({
+          ingredientQuantity: r.quantity,
+          ingredientUnit: r.unit,
+          costUnitCost: canonical.costPerRecipeUnit,
+          costUnit: canonical.recipeUnit,
+        })
+        costPerServing =
+          qtyInCostUnit == null
+            ? null
+            : lineCost / Math.max(r.recipe.servingSize ?? 1, 1)
+      }
+      return {
+        recipeName: r.recipe.itemName,
+        quantity: r.quantity,
+        unit: r.unit,
+        costPerServing,
+      }
+    })
+    .sort((a, b) => (b.costPerServing ?? 0) - (a.costPerServing ?? 0))
+
+  return { series, deliveries, products, recipes }
 }
