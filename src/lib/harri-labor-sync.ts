@@ -14,6 +14,7 @@
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { isoWeekStartsCovering } from "@/lib/labor-week"
 import {
   buildLaborActualUrl,
   buildLaborCategoriesUrl,
@@ -106,31 +107,37 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       )
 
       // ---------------------------------------------------------------
-      // Phase 2 — positions/pay_types, one HTTP call per day.
+      // Phase 2 — positions/pay_types, one HTTP call per ISO week.
       //
-      // Harri's gateway 500s on this endpoint for most dates (verified
-      // 2026-05-12: 7 of 8 recent days return 500, one returns 200). A
-      // single multi-day call therefore fails whenever ANY day in the
-      // range is bad, which means a wide-window cron writes nothing. By
-      // looping per-day we capture whatever days the gateway happens to
-      // serve, and a per-day failure doesn't poison the rest. Failures
-      // are aggregated into positionsFailures and surfaced on the JobRun
-      // row so the issue stays visible.
+      // This endpoint is not per-day addressable. Verified 2026-08-18:
+      //   from_date=Monday, to_date within that week  -> 200, one entry/day
+      //   from_date=Monday, range spilling into next week -> 400
+      //   from_date=any non-Monday                    -> 500
+      // The previous implementation called it once per day with
+      // from_date === to_date, which only ever succeeded when the day
+      // happened to be a Monday — every other day 500'd and was swallowed
+      // as a "known Harri issue", leaving ~1/7 of the hours data written.
+      // Requesting whole Mon..Sun weeks is the only shape it accepts, and
+      // it returns the entire week in a single response.
       // ---------------------------------------------------------------
       type PositionsResult =
-        | { date: Date; ok: true; data: HarriPositionsPayTypesResponse }
-        | { date: Date; ok: false; error: string }
+        | { week: Date; ok: true; data: HarriPositionsPayTypesResponse }
+        | { week: Date; ok: false; error: string }
+
+      const weeks = isoWeekStartsCovering(days)
 
       const positionsByDay: PositionsResult[] = await Promise.all(
-        days.map(async (date): Promise<PositionsResult> => {
+        weeks.map(async (weekStart): Promise<PositionsResult> => {
+          const weekEnd = new Date(weekStart)
+          weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
           try {
             const env = await harriFetch<HarriEnvelope<HarriPositionsPayTypesResponse>>(
-              buildPositionsPayTypesUrl(brandId, date, date)
+              buildPositionsPayTypesUrl(brandId, weekStart, weekEnd)
             )
-            return { date, ok: true, data: env.data }
+            return { week: weekStart, ok: true, data: env.data }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
-            return { date, ok: false, error: msg.slice(0, 200) }
+            return { week: weekStart, ok: false, error: msg.slice(0, 200) }
           }
         })
       )
@@ -138,7 +145,7 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       const positionsFailures = positionsByDay.filter((r) => !r.ok).length
       if (positionsFailures > 0) {
         console.warn(
-          `[harri.sync] positions/pay_types: ${positionsFailures}/${positionsByDay.length} days failed (Harri gateway 500s — known issue)`
+          `[harri.sync] positions/pay_types: ${positionsFailures}/${positionsByDay.length} weeks failed`
         )
       }
 
@@ -252,7 +259,7 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
       if (positionsFailures > 0) {
         const failedDates = positionsByDay
           .filter((r): r is Extract<PositionsResult, { ok: false }> => !r.ok)
-          .map((r) => ({ date: r.date.toISOString().slice(0, 10), error: r.error }))
+          .map((r) => ({ weekStart: r.week.toISOString().slice(0, 10), error: r.error }))
         await prisma.jobRun
           .update({
             where: { id: jobRunId },
@@ -260,9 +267,9 @@ export async function runHarriLaborSync(opts: RunHarriLaborSyncOpts): Promise<Ha
               metadata: {
                 startDate: startDate.toISOString(),
                 endDate: endDate.toISOString(),
-                positionsDaysTotal: positionsByDay.length,
-                positionsDaysOk: positionsByDay.length - positionsFailures,
-                positionsDaysFailed: positionsFailures,
+                positionsWeeksTotal: positionsByDay.length,
+                positionsWeeksOk: positionsByDay.length - positionsFailures,
+                positionsWeeksFailed: positionsFailures,
                 positionsFailures: failedDates.slice(0, 30),
               },
             },
