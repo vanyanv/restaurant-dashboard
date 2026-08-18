@@ -6,6 +6,11 @@
 .labor-shell {
   padding: 32px 28px 80px;
   max-width: 1280px;
+  /* `margin: 0 auto` on a flex item cancels the parent's stretch and makes the
+     item size to fit-content, so the widest descendant (the 720px scorecard)
+     set the page width and the whole page scrolled sideways. width:100% keeps
+     the centring while restoring the stretch. */
+  width: 100%;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -849,4 +854,572 @@
     transition: none;
   }
   .labor-days__drawer { animation: none; }
+}
+
+/* ── Staffing curve ─────────────────────────────────────────────────────── */
+
+.labor-curve {
+  width: 100%;
+  height: 260px;
+}
+
+@media (min-width: 768px) {
+  .labor-curve { height: 320px; }
+}
+
+.labor-curve__note {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.labor-curve__flag {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Day scorecard ──────────────────────────────────────────────────────── */
+
+.labor-score {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.labor-score__table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.labor-score__table th {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 400;
+  text-align: right;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--hairline-bold);
+  white-space: nowrap;
+}
+
+.labor-score__table th:first-child { text-align: left; }
+
+.labor-score__row {
+  position: relative;
+  border-top: 1px solid var(--hairline);
+  transition: background 160ms ease;
+}
+
+.labor-score__row:first-child { border-top: 0; }
+
+.labor-score__row td {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  text-align: right;
+  padding: 11px 10px;
+  white-space: nowrap;
+}
+
+.labor-score__row td:first-child { text-align: left; }
+
+.labor-score__row:hover { background: rgba(220, 38, 38, 0.045); }
+.labor-score__row:hover .labor-score__splh { color: var(--accent); }
+
+.labor-score__day {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.labor-score__muted { color: var(--ink-muted); font-weight: 400; }
+.labor-score__bad { color: var(--accent); }
+
+.labor-score__foot td {
+  border-top: 1px solid var(--hairline-bold);
+  padding-top: 12px;
+  font-weight: 600;
+}
+
+/* ── Position mix ───────────────────────────────────────────────────────── */
+
+.labor-mix { display: flex; flex-direction: column; gap: 10px; }
+
+.labor-mix__row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
+
+.labor-mix__name {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.labor-mix__cat {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-left: 8px;
+}
+
+.labor-mix__nums {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+.labor-mix__bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+.labor-mix__fill { display: block; height: 100%; background: var(--ink); }
+
+/* The KPI strip carries 8 tiles once productivity is present; keep it legible
+   below desktop instead of squeezing eight 28px numbers into one row. */
+@media (max-width: 1100px) {
+  .labor-kpi-strip { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .labor-kpi-strip { grid-template-columns: 1fr; }
+}
+
+/* ── The week's verdict ─────────────────────────────────────────────────────
+   Deliberately not a card grid. A masthead band: judgement in Fraunces, the
+   supporting figures ruled off beneath it with hairlines, no boxes. */
+
+.labor-verdict {
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--hairline-bold);
+  padding: 22px 0 0;
+}
+
+.labor-verdict__eyebrow {
+  display: block;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.labor-verdict__line {
+  margin: 12px 0 24px;
+  max-width: 34ch;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 144, "SOFT" 30;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(24px, 3.4vw, 38px);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.labor-verdict__hot { color: var(--accent); }
+
+.labor-verdict__figures {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.labor-verdict__fig {
+  padding: 16px 20px 18px 0;
+  border-left: 1px solid var(--hairline);
+  padding-left: 20px;
+}
+
+.labor-verdict__fig:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.labor-verdict__fig dt {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.labor-verdict__fig dd {
+  margin: 8px 0 4px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: clamp(22px, 2.6vw, 30px);
+  line-height: 1;
+  letter-spacing: -0.028em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum", "lnum";
+}
+
+.labor-verdict__fig span {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+@media (max-width: 900px) {
+  .labor-verdict__figures { grid-template-columns: repeat(2, 1fr); }
+  .labor-verdict__fig:nth-child(3) { border-left: 0; padding-left: 0; }
+  .labor-verdict__fig:nth-child(n + 3) { border-top: 1px solid var(--hairline); }
+}
+
+@media (max-width: 520px) {
+  .labor-verdict__figures { grid-template-columns: 1fr; }
+  .labor-verdict__fig { border-left: 0; padding-left: 0; }
+  .labor-verdict__fig + .labor-verdict__fig { border-top: 1px solid var(--hairline); }
+}
+
+/* ── Leak ledger ──────────────────────────────────────────────────────────── */
+
+.labor-leaks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.labor-leak {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  gap: 0 16px;
+  align-items: start;
+  padding: 18px 20px 18px 16px;
+  border-top: 1px solid var(--hairline);
+  transition: background 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.labor-leak:first-child { border-top: 0; }
+
+/* The house row accent: 4px red bar wiping in from the left on hover. */
+.labor-leak::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.labor-leak:hover { background: rgba(220, 38, 38, 0.045); }
+.labor-leak:hover::before { transform: scaleY(1); }
+.labor-leak:hover .labor-leak__amount strong { color: var(--accent); }
+
+.labor-leak__rank {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  padding-top: 3px;
+}
+
+.labor-leak__title {
+  margin: 0;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.labor-leak__evidence,
+.labor-leak__action {
+  margin: 6px 0 0;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 62ch;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.labor-leak__evidence { color: var(--ink); }
+
+.labor-leak__action {
+  color: var(--ink-muted);
+  padding-left: 14px;
+  position: relative;
+}
+
+.labor-leak__action::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--ink-faint);
+}
+
+.labor-leak__amount {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.labor-leak__amount strong {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum", "lnum";
+  transition: color 180ms ease;
+}
+
+.labor-leak__amount span {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  /* One line. A four-line ragged-left caption under a number reads as damage,
+     not as a label — the basis copy is written short to fit. */
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+@media (max-width: 700px) {
+  .labor-leak__amount span { white-space: normal; }
+}
+
+.labor-leaks__note {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 700px) {
+  .labor-leak {
+    grid-template-columns: 24px 1fr;
+    gap: 0 12px;
+  }
+  .labor-leak__amount {
+    grid-column: 2;
+    align-items: flex-start;
+    text-align: left;
+    margin-top: 10px;
+  }
+  .labor-leak__amount span { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .labor-leak,
+  .labor-leak::before,
+  .labor-leak__amount strong { transition: none; }
+  .labor-leak:hover::before { transform: scaleY(1); }
+}
+
+/* ── Shell overflow ─────────────────────────────────────────────────────────
+   .labor-shell is a column flex container, so every child keeps its intrinsic
+   min-width and the widest one (the three-column week nav) was stretching the
+   whole page past the viewport — the page scrolled sideways below ~800px.
+   Letting children shrink, and collapsing the week nav, contains it. */
+
+/* `main` is itself a flex item of the sidebar inset, so its default
+   `min-width: auto` let the widest descendant (the 720px scorecard table) set
+   the page width and push the whole shell past the viewport. Both the shell
+   and its children have to be allowed to shrink for the table's own
+   `overflow-x: auto` to do its job. */
+.labor-shell,
+.labor-shell > * {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .labor-shell {
+    padding: 24px 16px 64px;
+    gap: 22px;
+  }
+
+  .labor-weeknav {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    justify-items: center;
+  }
+
+  .labor-weeknav__right {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* Tabs keep wrapping. An overflow-x rail was tried and made things worse:
+     nowrap raised the row's min-content width, which propagated up the block
+     chain and widened the whole shell from 778px to 1002px. */
+  .labor-tabs__tab {
+    padding: 12px 14px 14px;
+  }
+}
+
+/* ══ Composition ══════════════════════════════════════════════════════════
+   The page was seven full-width panels stacked in one column, every one with
+   the same hairline frame and the same "§ DEPT + italic sentence" header. That
+   drumbeat flattens the hierarchy: the verdict and the position mix carried
+   identical visual weight.
+
+   Two devices fix it without touching the palette (a dark band or a second
+   accent would be a per-page reskin, which DESIGN.md principle 5 forbids):
+
+   1. Lede vs. panel. The lead story sits directly on the paper, ruled but
+      unframed. Supporting material keeps the .inv-panel frame. Frame = aside.
+   2. A real column grid, so not every block is page-width.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* Lead sections: on the paper, not in a box. */
+.labor-lede {
+  border-top: 2px solid var(--ink);
+  padding-top: 20px;
+}
+
+.labor-lede__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.labor-lede__dept {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.labor-lede__title {
+  margin: 0 0 18px;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+  color: var(--ink-muted);
+}
+
+/* Two-column editorial grid. 8/4 keeps the staffing curve wide enough for a
+   24-bar axis while the aside column carries the short lists. */
+.labor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .labor-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══ Leak ledger: rank by SIZE, not just by order ═══════════════════════════
+   Three equal 24px numbers under a heading that says "ranked by cost" makes
+   the ranking invisible. The lead leak gets the display size; the rest step
+   down. This is the front-page lead-story idiom, not decoration. */
+
+.labor-leak[data-lead="true"] {
+  padding-top: 4px;
+  padding-bottom: 24px;
+}
+
+.labor-leak[data-lead="true"] .labor-leak__title {
+  font-size: 30px;
+  letter-spacing: -0.022em;
+}
+
+.labor-leak[data-lead="true"] .labor-leak__amount strong {
+  font-size: 46px;
+  letter-spacing: -0.035em;
+  line-height: 0.92;
+}
+
+.labor-leak[data-lead="true"] .labor-leak__evidence {
+  font-size: 15px;
+  max-width: 54ch;
+}
+
+@media (max-width: 700px) {
+  .labor-leak[data-lead="true"] .labor-leak__title { font-size: 23px; }
+  .labor-leak[data-lead="true"] .labor-leak__amount strong { font-size: 36px; }
+  .labor-leak[data-lead="true"] .labor-leak__evidence { font-size: 14px; }
+}
+
+/* ══ Density contrast ═══════════════════════════════════════════════════════
+   The scorecard is a ledger and should read like one. Tightening it against
+   the airy leak ledger is what creates rhythm down the page; uniform padding
+   everywhere is the monotony we're removing. */
+
+.labor-score__row td { padding: 8px 10px; }
+.labor-score__table th { padding: 0 10px 7px; }
+
+/* ══ Stores panel in a narrow column ═══════════════════════════════════════
+   The row grid has hard minimums (180px name + 140px bars + auto nums + gaps
+   ≈ 640px), so in the 1/3 aside column the store name wrapped and the numbers
+   ran outside the panel. A container query is the right instrument: the panel
+   restacks on ITS OWN width, so it works in the aside, at full width, and on
+   the per-store page without any of them knowing about each other. */
+
+.labor-stores {
+  container-type: inline-size;
+}
+
+@container (max-width: 560px) {
+  .labor-stores__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  .labor-stores__bars {
+    order: 3;
+  }
+
+  .labor-stores__nums {
+    order: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+  }
+
+  .labor-stores__title {
+    /* Two-line store names read worse than one tight line here. */
+    font-size: 16px;
+  }
 }

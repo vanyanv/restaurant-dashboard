@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { HarriWeeklyRow } from "@/app/actions/harri-actions"
+import { LABOR_OVERBUDGET_THRESHOLD } from "@/lib/labor-week"
 
 function fmtUsd(n: number, dp = 0): string {
   const sign = n < 0 ? "-" : ""
@@ -43,8 +44,14 @@ export function LaborWeekTrend({
           const forecastH = empty ? 0 : Math.max(2, (w.totalForecast / max) * 100)
           const isSelected = w.weekStart === selectedWeek
           const variance = w.variance
+          // Flag on a RELATIVE overage, not a flat $50: against ~$8.8k of
+          // weekly labor, $50 is 0.6%, so the flat rule painted 13 of 14 weeks
+          // red and the colour stopped meaning anything. LABOR_OVERBUDGET_THRESHOLD
+          // is the same 5% the KPI tiles already judge a week by.
+          const overPct =
+            w.totalForecast > 0 ? variance / w.totalForecast : 0
           const cls =
-            !empty && Math.abs(variance) >= 50 && variance > 0
+            !empty && variance > 0 && overPct > LABOR_OVERBUDGET_THRESHOLD
               ? "labor-trend__col labor-trend__col--bad"
               : "labor-trend__col"
 
