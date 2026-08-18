@@ -61,6 +61,13 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      # next-env.d.ts is gitignored and generated, so tsc on a fresh checkout
+      # could not resolve the image-module declarations it provides. Both CI
+      # runs this workflow has ever had failed here, which meant the typecheck
+      # gate it advertises has never actually run. typegen writes it without
+      # paying for a full build.
+      - name: Generate Next types
+        run: npx next typegen
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Typecheck cron scripts
