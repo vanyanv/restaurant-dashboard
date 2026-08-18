@@ -1,7 +1,7 @@
 # Pantry Ledger — Design
 
 **Date:** 2026-08-17
-**Status:** approved (design); increment 1 shipped 2026-08-18 (`0c7c12a`); increments 2–4 unstarted
+**Status:** approved (design); increment 1 shipped 2026-08-18 (`0c7c12a`); increment 2 shipped on branch `feat/pantry-increment-2`; increments 3–4 unstarted
 **Visual spec:** https://claude.ai/code/artifact/2d28a9f5-1957-42e0-90e3-f50303159fb1 — an interactive mock built on live production data. It is the authority on layout, copy, and interaction; this document is the authority on data and scope.
 
 ---
