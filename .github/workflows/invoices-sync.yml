@@ -26,6 +26,7 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           LOG_FILE: logs/invoices-sync.log
+          CRON_RETRIES: "2"
           CRON_MAX_TIME: "115"
         run: |
           bash .github/scripts/run-with-cron-logging.sh \

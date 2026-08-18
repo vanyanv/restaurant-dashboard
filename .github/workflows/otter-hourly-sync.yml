@@ -36,6 +36,7 @@ jobs:
           OTTER_EMAIL: ${{ secrets.OTTER_EMAIL }}
           OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
           LOG_FILE: logs/otter-hourly-sync.log
+          CRON_RETRIES: "2"
       - name: Upload failure log
         if: failure()
         uses: actions/upload-artifact@v4

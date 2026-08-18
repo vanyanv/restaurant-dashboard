@@ -21,14 +21,26 @@ export const JOB_SCHEDULES: Record<string, JobSchedule> = {
   "monitoring.cleanup":     { cadenceMinutes: 60 * 24, description: "daily" },
   "monitoring.db-snapshot": { cadenceMinutes: 60 * 24, description: "daily" },
   "ml.operator-gate-check": { cadenceMinutes: 60 * 24, description: "daily" },
+  // These five record JobRun rows but had no schedule, so isOverdue() was
+  // permanently false for them — harri-labor-sync could have gone silent
+  // forever with no signal at all. Cadences read off the workflow crons.
+  "harri-labor-sync":       { cadenceMinutes: 60 * 4,  description: "every 4h" },
+  "harri-employee-sync":    { cadenceMinutes: 60 * 24 * 31, description: "monthly" },
+  "proposals.generate":     { cadenceMinutes: 60 * 4,  description: "every 4h" },
+  "maintenance.retention":  { cadenceMinutes: 60 * 24, description: "daily" },
+  "alerts.ingest":          { cadenceMinutes: 60 * 24, description: "daily" },
 }
 
 export const OVERDUE_MULTIPLIER = 1.5
 
-export function isOverdue(jobName: string, lastRunAt: Date | null): boolean {
+export function isOverdue(
+  jobName: string,
+  lastRunAt: Date | null,
+  now: Date = new Date(),
+): boolean {
   if (!lastRunAt) return false
   const sched = JOB_SCHEDULES[jobName]
   if (!sched) return false
-  const ageMs = Date.now() - lastRunAt.getTime()
+  const ageMs = now.getTime() - lastRunAt.getTime()
   return ageMs > sched.cadenceMinutes * 60_000 * OVERDUE_MULTIPLIER
 }

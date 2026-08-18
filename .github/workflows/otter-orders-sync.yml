@@ -38,6 +38,7 @@ jobs:
           OTTER_PASSWORD: ${{ secrets.OTTER_PASSWORD }}
           DAYS: ${{ github.event.inputs.days || '3' }}
           LOG_FILE: logs/otter-orders-sync.log
+          CRON_RETRIES: "2"
         run: |
           bash .github/scripts/run-with-cron-logging.sh \
             npx tsx scripts/sync-otter-orders.ts --days="$DAYS"
