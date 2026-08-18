@@ -37,6 +37,25 @@ export function AutoMatchNotice({ decisions, days }: Props) {
   const summary = summarizeAutoMatchNotice(decisions)
   if (!summary.show) return null
 
+  // Mirrors the three-way shape auto-match-log.tsx already uses on the audit
+  // page for the analogous case, so "0 items linked without you" — reachable
+  // whenever every live decision in the window has since been undone — never
+  // renders. The undone count is always folded into the headline here (both
+  // branches below state it), so the caption never repeats it.
+  const headline =
+    summary.liveCount > 0 && summary.undoneCount > 0
+      ? `${summary.liveCount} linked, ${summary.undoneCount} undone`
+      : summary.liveCount === 0 && summary.undoneCount > 0
+        ? `${summary.undoneCount} automatic ${summary.undoneCount === 1 ? "link" : "links"} undone`
+        : `${summary.liveCount} ${summary.liveCount === 1 ? "item" : "items"} linked without you`
+
+  const captionParts = [
+    summary.linkedLineCount > 0
+      ? `${summary.linkedLineCount} invoice ${summary.linkedLineCount === 1 ? "line" : "lines"}`
+      : null,
+    `last ${days} days`,
+  ].filter((part): part is string => part != null)
+
   return (
     <section className="border-b border-[var(--hairline-bold)] bg-[var(--paper-deep)]/30">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-8 py-3">
@@ -44,13 +63,10 @@ export function AutoMatchNotice({ decisions, days }: Props) {
           § matched automatically
         </span>
         <span className="text-[13px] font-medium tabular-nums text-[var(--ink)]">
-          {summary.liveCount} {summary.liveCount === 1 ? "item" : "items"} linked
-          without you
+          {headline}
         </span>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-faint)]">
-          {summary.linkedLineCount} invoice{" "}
-          {summary.linkedLineCount === 1 ? "line" : "lines"} · last {days} days
-          {summary.undoneCount > 0 ? ` · ${summary.undoneCount} undone` : ""}
+          {captionParts.join(" · ")}
         </span>
 
         <button
@@ -61,7 +77,7 @@ export function AutoMatchNotice({ decisions, days }: Props) {
           className="ml-auto inline-flex items-center gap-1.5 border border-[var(--hairline-bold)] bg-[var(--paper)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-muted)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
         >
           <ChevronDown className={cn("h-3 w-3 transition", expanded && "rotate-180")} />
-          {expanded ? "Hide" : "Review"}
+          {expanded ? "Hide links" : "Show links"}
         </button>
       </div>
 

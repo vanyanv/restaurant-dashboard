@@ -49,7 +49,7 @@ Pure functions first, so the two UI tasks have something tested to render. `form
   - `summarizeAutoMatchNotice(decisions: AutoMatchNoticeInput[]): AutoMatchNoticeSummary`
   - types `ReviewQueueInput`, `ReviewQueueSummary`, `AutoMatchNoticeInput`, `AutoMatchNoticeSummary`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/lib/pantry-attention.test.ts`:
 
@@ -162,12 +162,12 @@ describe("formatMoney", () => {
 
 Add `formatMoney` to that file's existing import from `@/lib/pantry-format`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/lib/pantry-attention.test.ts tests/lib/pantry-format.test.ts`
 Expected: FAIL — `Failed to resolve import "@/lib/pantry-attention"` and `formatMoney is not a function`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `src/lib/pantry-attention.ts`:
 
@@ -269,12 +269,12 @@ import { formatMoney } from "@/lib/pantry-format"
 
 Then rename every `money(` call site in that file to `formatMoney(` — there are five, at lines ~89, 104, 109, 114 and 198 (the last is the hidden-remainder line). `grep -c "money(" src/app/dashboard/ingredients/components/ledger/pantry-ledger.tsx` should report `0` when you are done.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/lib/pantry-attention.test.ts tests/lib/pantry-format.test.ts && npx tsc --noEmit`
 Expected: both PASS, typecheck clean. `tsc` is what catches a missed `money(` call site.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/pantry-attention.ts src/lib/pantry-format.ts tests/lib/pantry-attention.test.ts tests/lib/pantry-format.test.ts src/app/dashboard/ingredients/components/ledger/pantry-ledger.tsx
@@ -295,7 +295,7 @@ The cards, the `MatchPickerSheet` wiring and the `onMatched`/`onCanonicalCreated
 - Consumes: `summarizeReviewQueue`, `formatMoney` from Task 1.
 - Produces: no exported API change. `ReviewInbox` keeps its current props exactly.
 
-- [ ] **Step 1: Add the collapsed bar**
+- [x] **Step 1: Add the collapsed bar**
 
 Replace the component body's header/list region in `src/app/dashboard/ingredients/components/review-inbox.tsx`. Keep `ReviewCard` and the `MatchPickerSheet` block as they are.
 
@@ -433,7 +433,7 @@ export function ReviewInbox({
 
 The `h2` display title is gone on purpose: a Fraunces italic headline is a claim on the reader's attention, and the collapsed state is explicitly not making that claim. The count now renders in DM Sans tabular per tripwire #2.
 
-- [ ] **Step 2: Verify the anchor and the a11y wiring by reading the diff**
+- [x] **Step 2: Verify the anchor and the a11y wiring by reading the diff**
 
 Confirm all four hold before moving on:
 1. `id="review"` is still on the outermost `<section>`.
@@ -441,12 +441,12 @@ Confirm all four hold before moving on:
 3. `useEffect` reads `window.location.hash` — not `useSearchParams`, which never sees a fragment.
 4. No `bg-*`/`text-*` Tailwind palette colors were introduced.
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/app/dashboard/ingredients/components/review-inbox.tsx
@@ -470,7 +470,7 @@ git commit -m "feat(pantry): collapse the review inbox to a bar that expands in 
 - Consumes: `listRecentAutoMatches(days, opts?)` and `undoAutoMatch` from `@/app/actions/ingredient-auto-match-actions` (unchanged).
 - Produces: `AutoMatchLog({ decisions, days }: { decisions: RecentAutoMatch[]; days: number })`.
 
-- [ ] **Step 1: Move the file**
+- [x] **Step 1: Move the file**
 
 ```bash
 mkdir -p src/app/dashboard/admin/monitoring/ingredient-audit/components
@@ -478,7 +478,7 @@ git mv src/app/dashboard/ingredients/components/auto-match-activity.tsx \
        src/app/dashboard/admin/monitoring/ingredient-audit/components/auto-match-log.tsx
 ```
 
-- [ ] **Step 2: Fix the moved file's exports and imports**
+- [x] **Step 2: Fix the moved file's exports and imports**
 
 In `auto-match-log.tsx`:
 
@@ -495,7 +495,7 @@ import { undoAutoMatch } from "@/app/actions/ingredient-auto-match-actions"
 
 Everything else in the file — `INITIAL_VISIBLE`, `LAYER_LABEL`, the undo transition, the expandable candidate list — stays untouched.
 
-- [ ] **Step 3: Render it on the audit page**
+- [x] **Step 3: Render it on the audit page**
 
 Rewrite `src/app/dashboard/admin/monitoring/ingredient-audit/page.tsx`:
 
@@ -535,7 +535,7 @@ export default async function IngredientAuditPage() {
 
 `listRecentAutoMatches` keeps its default (SHADOW included) here — on the audit page shadow proposals are the entire point of a shadow rollout.
 
-- [ ] **Step 4: Remove the strip from the pantry shell**
+- [x] **Step 4: Remove the strip from the pantry shell**
 
 ```bash
 git rm src/app/dashboard/ingredients/components/sections/auto-match-section.tsx
@@ -557,12 +557,12 @@ In `src/app/dashboard/ingredients/components/ingredients-shell.tsx`, delete the 
 
 Task 4 puts a replacement block back in this exact position, so leave the surrounding structure alone.
 
-- [ ] **Step 5: Typecheck and full suite**
+- [x] **Step 5: Typecheck and full suite**
 
 Run: `npx tsc --noEmit && npm test`
 Expected: both PASS. `tsc` catches any straggling import of the moved file.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A src/app/dashboard/ingredients src/app/dashboard/admin/monitoring/ingredient-audit
@@ -584,7 +584,7 @@ The pantry keeps the one thing an owner needs from the ladder: it linked somethi
 - Consumes: `summarizeAutoMatchNotice` (Task 1), `listRecentAutoMatches(7, { excludeShadow: true })`, `undoAutoMatch`, `RecentAutoMatch`.
 - Produces: `AutoMatchNotice({ decisions, days })`, `AutoMatchNoticeSection()`.
 
-- [ ] **Step 1: Build the notice**
+- [x] **Step 1: Build the notice**
 
 Create `src/app/dashboard/ingredients/components/auto-match-notice.tsx`:
 
@@ -710,7 +710,7 @@ export function AutoMatchNotice({ decisions, days }: Props) {
 
 Check `undoAutoMatch`'s signature in `src/app/actions/ingredient-auto-match-actions.ts` before writing the handler and match it — it returns an `UndoAutoMatchResult`, and the moved `auto-match-log.tsx` is the reference for how the old strip called it.
 
-- [ ] **Step 2: Build the server section**
+- [x] **Step 2: Build the server section**
 
 Create `src/app/dashboard/ingredients/components/sections/auto-match-notice-section.tsx`:
 
@@ -734,7 +734,7 @@ export async function AutoMatchNoticeSection() {
 }
 ```
 
-- [ ] **Step 3: Wire it into the shell**
+- [x] **Step 3: Wire it into the shell**
 
 In `src/app/dashboard/ingredients/components/ingredients-shell.tsx`, import `AutoMatchNoticeSection` and put this where the old `AutoMatchSection` block was:
 
@@ -750,12 +750,12 @@ In `src/app/dashboard/ingredients/components/ingredients-shell.tsx`, import `Aut
       </SectionErrorBoundary>
 ```
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 Run: `npx tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app/dashboard/ingredients
@@ -770,12 +770,12 @@ The point of this increment is a measurement, so take it rather than assuming it
 
 **Files:** none — verification only, then the plan's closure record.
 
-- [ ] **Step 1: Full gate**
+- [x] **Step 1: Full gate**
 
 Run: `npm test && npx tsc --noEmit && npm run build`
 Expected: all PASS. `npm test` should still report 967+ passing with the new `pantry-attention` cases added.
 
-- [ ] **Step 2: Measure the fold**
+- [x] **Step 2: Measure the fold**
 
 Start the dev server with `SERVICE_SHUTDOWN_AT=""`, sign in as `demo@restaurantos.com` (credentials in `.env.test.local`), open `/dashboard/ingredients` at 1440×900, and measure where the ledger begins:
 
@@ -785,7 +785,7 @@ document.querySelector('[class*="pl-summary"]').getBoundingClientRect().top
 
 Expected: under 150px (it was ~760px before this increment). Record the number in the closure section — that figure is what this increment bought.
 
-- [ ] **Step 3: Verify behaviour in the browser**
+- [x] **Step 3: Verify behaviour in the browser**
 
 1. The review bar reads `14 new items on your invoices · $4,133` and is collapsed.
 2. Clicking `Review` expands the cards in place; `Match` still opens the picker sheet; matching an item removes its card and refreshes the ledger.
@@ -795,7 +795,7 @@ Expected: under 150px (it was ~760px before this increment). Record the number i
 6. As a non-DEVELOPER user the audit page still 404s.
 7. `/m/ingredients` is unaffected.
 
-- [ ] **Step 4: Record and commit**
+- [x] **Step 4: Record and commit**
 
 Append a closure section to this plan in the same shape as increment 1's (gate results, a verification table, the measured fold number, anything deliberately deferred), then:
 
@@ -813,3 +813,47 @@ git push origin main
 - **Deliberately unchanged:** the Ledger/Cards toggle, the `?open=` deep link into the tile grid, `listCanonicalIngredients()`, the modifier drawer, and every loader increment 1 added.
 - **Known risk:** Task 4's notice is unexercisable today. `INGREDIENT_AUTO_MATCH` is unset locally and SHADOW in prod, so `excludeShadow: true` returns an empty list and the component returns null on every surface you can reach. Its first real render will be the day the flag flips. Mitigation: verify it by temporarily flipping one `IngredientMatchDecision` row to `APPLIED` in a local database, or by rendering the component with a fixture in a scratch route — do not ship either.
 - **Not addressed here:** `Fuel Surcharge` is still an ingredient, ingredient display names are still raw vendor strings, and `/dashboard/ingredients/prices` still renders the same 76 rows a second time. That last one is increment 3, which is the only increment that deletes and should wait until the ledger has been used in anger.
+
+---
+
+## Increment 2 — closed 2026-08-18
+
+Branch `feat/pantry-increment-2` (base `a362a2b`), through Task 5's browser verification, a same-page `#review` navigation fix, and a final whole-branch review's fix wave.
+
+**Gate:** `npm test` 976 passed / 111 files · `npx tsc --noEmit` clean · `npm run build` compiled successfully.
+
+**Browser verification** (dev server, `SERVICE_SHUTDOWN_AT=""`, `/dashboard/ingredients` at 1440×900, signed in as `demo@restaurantos.com`), from the Task 5 verification report:
+
+| Check | Result |
+|---|---|
+| Fold: `pl-summary` top at 1440×900 | **192px** (was ~760px pre-increment). Above the plan's "under 150px" estimate; the reviewer ruled the estimate wrong, not the result — the remaining height is the page header plus the ledger's own View/Ledger/Cards toggle row, and nothing extraneous renders between the toggle and the ledger summary. |
+| Review bar collapsed, one line, reads count + $ total | PASS — `§ needs your review · 14 new items on your invoices · $3,612` with a `Review` button |
+| Click `Review` expands cards in place | PASS — 4 cards shown with a "Show 10 more" control, no navigation |
+| `Match` opens the picker sheet | PASS — search, station filter, suggested matches, create-new affordance |
+| Direct load of `/dashboard/ingredients#review` | PASS — queue already expanded on cold load |
+| Same-page hash nav via sidebar "Needs review" link while already on the page | Initially **FAILED** (queue stayed collapsed, App Router soft nav doesn't re-run a mount-only hash effect) — fixed in commit `e79b92d` (document-level click delegation + hashchange fallback), then re-verified in-browser for all three cases: cold load, same-page click, and a repeat click after Hide all expand correctly |
+| No auto-match bar / no empty bordered strip on the pantry | PASS — confirmed empty by DOM query; SHADOW mode renders nothing |
+| `/dashboard/admin/monitoring/ingredient-audit` shows the decision log above the audit table, 30-day window, scores/candidates/undo intact | PASS — header, shadow-proposal caption, 408-row audit table below, per-row similarity/margin/candidates/undo on expand |
+| No React console errors on `/dashboard/ingredients`, the audit page, or `/m/ingredients` | PASS — 0 errors on all three, only dev-only CSS-preload/next-auth warnings |
+| `/m/ingredients` unaffected | PASS — renders, trend percentages present |
+| Non-DEVELOPER user gets a 404 on the audit page | **Not tested** — only the DEVELOPER dev account was available for this verification pass |
+
+**Final whole-branch review** found 3 Important findings, fixed in this branch before merge:
+
+1. Two stacked expanders with the identical accessible name "Review" (review inbox + auto-match notice, once `INGREDIENT_AUTO_MATCH` is `on`). Fixed: the auto-match notice's expander now reads "Show links" / "Hide links"; the review inbox keeps "Review" / "Hide".
+2. "0 items linked without you" was a reachable headline whenever every live decision in the window had been undone. Fixed: the notice's headline now mirrors `auto-match-log.tsx`'s three-way shape (`N linked, M undone` / `M automatic link(s) undone` / the existing `N items linked without you`), and the invoice-lines caption is suppressed when there are none to report.
+3. This closure record and the spec's stale status line — the two edits in this section and in `docs/superpowers/specs/2026-08-17-pantry-ledger-design.md`.
+
+**Deferred into increment 3** (7 Minor findings from the final whole-branch review, none blocking):
+
+- The pending label on Undo in the pantry notice — the reference (`auto-match-log.tsx`) swaps its label to "Undoing…"; the notice only disables the button.
+- The dangling `aria-controls="auto-match-notice"` while the region is collapsed.
+- A single shared `useTransition` pending flag disables every row's Undo while any one row is in flight.
+- The click listener's missing pathname guard (`anchor.hash === "#review"` with no `anchor.pathname` check) — not exploitable today since only one `#review` link exists in `src/`.
+- `listRecentAutoMatches`' doc comment still saying "Defaults to a 7-day window," which reads oddly next to the audit page's 30-day call site.
+- The `editorial-tokens.css` block heading.
+- The private `money` helpers duplicated in three ledger components.
+
+**Known risk carried forward:** the 192px fold was measured with `INGREDIENT_AUTO_MATCH` in SHADOW, where the auto-match notice renders nothing. The reviewer noted it becomes roughly 240px once the flag flips to `on` and the notice starts rendering — re-measure then.
+
+Increments 3–4 remain unstarted and need their own plans.
