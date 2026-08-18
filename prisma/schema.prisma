@@ -213,6 +213,7 @@ model Store {
   harriPositionDaily     HarriPositionDaily[]
   harriTimekeepingAlerts HarriTimekeepingAlert[]
   harriEmployees         HarriEmployee[]
+  harriShifts            HarriShift[]
 
   fixedExpenses StoreFixedExpense[]
 
@@ -2077,6 +2078,44 @@ model HarriTimekeepingAlert {
 // from the labor sync hot path. The (storeId, userId) unique key matches how
 // alerts join — Harri's user_id is a global id but the same person can exist
 // at multiple brands, so we scope by store.
+/// One scheduled shift from Harri's scheduling service — the only intra-day
+/// labor signal in the integration (HarriDailyLabor and HarriPositionDaily are
+/// both daily-grain). Crossing this with OtterHourlySummary gives hour-of-day
+/// SPLH, i.e. which shifts actually carry the store.
+///
+/// `startTime`/`endTime` hold LOCAL wall-clock encoded as UTC — the same trick
+/// Otter's reference_time_local_without_tz uses — so `getUTCHours()` yields the
+/// posted clock hour with no timezone math. Never render these with a timezone.
+model HarriShift {
+  id           String   @id @default(cuid())
+  storeId      String
+  /// assignee_shifts[].id — the upsert key.
+  harriShiftId BigInt   @unique
+  /// LA calendar date the shift STARTS on. Overnight shifts end the next day.
+  date         DateTime @db.Date
+  /// Monday of the ISO week this shift was published under.
+  weekStart    DateTime @db.Date
+  startTime    DateTime
+  endTime      DateTime
+  /// Scheduled length in minutes; denormalised so hour-bucketing never has to
+  /// re-parse two timestamps.
+  minutes      Int
+  /// Null for VIRTUAL rows — an unfilled slot the manager left on the grid.
+  userId       Int?
+  isVirtual    Boolean  @default(false)
+  positionCode String
+  positionName String?
+  categoryCode String?
+  categoryName String?
+  status       String?
+  syncedAt     DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, date])
+  @@index([storeId, weekStart])
+}
+
 model HarriEmployee {
   id         String   @id @default(cuid())
   storeId    String

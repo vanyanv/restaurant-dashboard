@@ -14,6 +14,7 @@
  */
 
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+import { formatHarriWeekParam } from "@/lib/harri-schedule"
 
 const HARRI_BASE = "https://gateway.harri.com"
 
@@ -211,6 +212,21 @@ export function buildPositionsPayTypesUrl(
   return (
     `${HARRI_BASE}/lpm-api/api/v1/brands/${brandId}/stats/labor/categories/positions/pay_types?${params}`
   )
+}
+
+/**
+ * Weekly schedule (scheduled shifts with start/end times).
+ *
+ * `week` must be the Monday, formatted "%b %d, %Y" — ISO dates are rejected
+ * with an explicit 400. The endpoint returns the whole week (~66 KB) and
+ * yields an empty `schedule[]` for weeks that were never published.
+ * See docs/harri-api-notes.md §8.
+ */
+export function buildScheduleWeekUrl(brandId: number, weekStartMonday: Date): string {
+  const params = new URLSearchParams({
+    week: formatHarriWeekParam(weekStartMonday),
+  })
+  return `${HARRI_BASE}/scheduling/api/v1/brands/${brandId}/schedule?${params}`
 }
 
 export function buildTimekeepingAlertsUrl(brandId: number, day: Date): string {

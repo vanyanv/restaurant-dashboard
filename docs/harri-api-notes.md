@@ -241,3 +241,92 @@ We don't need these — Otter is the source of truth for sales.
    - Find key matching `CognitoIdentityServiceProvider.7rbq1fkugjphupo0ujb1qetuar.<userId>.refreshToken`
    - Copy the value, update Vercel env var.
 3. If refresh works but specific endpoints 403: Cognito access token is fine, but the user's role lacks permission for that endpoint. Verify `core-reader/.../groups/{groupId}/users/policy` includes the relevant service flag (e.g., `TEAM_SCHEDULING`, `PAYROLL`).
+
+---
+
+## Addendum — 2026-08-18 probe session
+
+Confirmed against live calls on **2026-08-18**. Three findings, one of which is a
+standing data-loss bug.
+
+### 7. BUG: `positions/pay_types` needs a **Monday-anchored, single-week** range
+
+`src/lib/harri-labor-sync.ts` calls the endpoint once per day with
+`from_date === to_date`. That only succeeds when the day happens to be a Monday;
+every other day returns **500**. The failures are swallowed by the
+`console.warn` at `harri-labor-sync.ts:141`, so the sync reports success while
+writing ~1/7 of the rows. As of this probe `HarriPositionDaily` held **15 dates,
+every one a Monday** — i.e. `actualSeconds` (our only source of labor *hours*)
+was ~8% complete.
+
+Empirically derived range rule:
+
+| `from_date` | span | result |
+|---|---|---|
+| Monday | 1 day | ✅ 200 |
+| Monday | 2–7 days (through Sun) | ✅ 200, one entry per day |
+| Monday | 8+ days | ❌ 400 |
+| any non-Monday | any | ❌ 500 |
+
+**So: one call per ISO week, `from_date` = Monday, `to_date` = that Sunday.**
+A `Mon..Sun` call returns all 7 days in a single response.
+
+Verified data depth: weeks resolve back to at least **2025-02-17**, so a full
+18-month hours backfill is ~78 calls.
+
+### 8. Scheduling — shift-level start/end times (NEW)
+
+```
+GET /scheduling/api/v1/brands/{brandId}/schedule?week={date}
+```
+
+**Date format is `%b %d, %Y`** — e.g. `Aug 10, 2026` (URL-encoded). ISO dates are
+rejected with `{"field":"week","error":"Incorrect date format, should be %b %d, %Y"}`.
+Accepted params (per the endpoint's own 400 body): `week`, `days`, `dates`,
+`from_day`, `to_day`. `week` = the Monday; returns the whole week (~66 KB).
+
+Shape:
+
+```
+data.schedule[]                       // one per week
+  .id .start_date .status .publish_time .lock_status
+  .roles[]
+    .position { id, name, code, color, category { id, name, code } }
+    .role_days[]
+      .date                           // "Aug 10, 2026"
+      .assignees[]
+        .user_id                      // null when type === "VIRTUAL" (unfilled slot)
+        .type                         // "USER" | "VIRTUAL"
+        .assignee_shifts[]
+          .start_time                 // "Aug 10, 2026 09:00"  (local wall-clock)
+          .end_time                   // "Aug 11, 2026 01:00"  (may cross midnight)
+          .status .weight .breaks[] .day_parts[] .revenue_center_id .note
+```
+
+~64 shifts / ~440 scheduled hours per week for brand 5756969. `type: "VIRTUAL"`
+rows are empty placeholder slots — filter to `type === "USER"` with a non-empty
+`assignee_shifts` to get real scheduled labor. Shifts crossing midnight must be
+split across dates when bucketing to hours.
+
+This is the first intra-day labor signal available anywhere in the integration —
+`HarriDailyLabor` and `HarriPositionDaily` are both daily-grain. Crossing it with
+`OtterHourlySummary` yields hour-of-day SPLH.
+
+Scheduled hours reconcile closely with actual: week of Aug 10 was 439.5 scheduled
+vs 433.7 actual (endpoint #4), ~1.3% apart.
+
+Future weeks return an empty `schedule[]` until published, so this is a
+backward-looking source; don't build forecasting on it.
+
+### 9. Gateway 403 is meaningless — it's the default for unknown services
+
+`/zzz-nonexistent-api/...` and `/totally-made-up/...` both return **403**. Do not
+read 403 as "exists but forbidden". The informative signal is **404**, which means
+the service name routes but the path is wrong. That is how `/scheduling/` was
+found (403 on `scheduling-api`, 404 on `scheduling`).
+
+Service names confirmed to route: `lpm-api`, `lpm-stats`, `timekeeping-alert`,
+`team`, `scheduling`, `attendance` (routes, but no working path found yet).
+
+Still not found after sweeping ~40 name/path combinations: raw punches /
+timecards / clock-in-out detail, and any wage-rate endpoint.
