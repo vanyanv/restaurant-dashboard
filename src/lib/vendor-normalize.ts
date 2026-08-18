@@ -21,3 +21,24 @@ export function normalizeVendorName(raw: string): string {
   }
   return raw.trim()
 }
+
+/**
+ * Identity key for learned (vendor, sku) mappings.
+ *
+ * `normalizeVendorName` is a *display* normalizer: unknown vendors fall
+ * through with their raw casing intact. That made it unsafe as a database
+ * key. "VITCO FOODSERVICE" and "Vitco Foodservice" hashed to two different
+ * IngredientSkuMatch rows for the same SKU, so one invoice template taught
+ * the matcher that Vitco 15725 was the 1.5oz sauce cup and the other taught
+ * it the 4x4LB bulk tub — $15,119 of cup purchases booked against the bulk
+ * ingredient, and every 15726 invoice that spelled the vendor in caps fell
+ * into the review queue because no caps-spelled row existed for it.
+ *
+ * Case, punctuation and spacing are all noise in a vendor name. Strip them.
+ */
+export function vendorMatchKey(raw: string): string {
+  return normalizeVendorName(raw)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}

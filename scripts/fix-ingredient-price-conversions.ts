@@ -712,7 +712,7 @@ async function main(): Promise<void> {
   const { deriveCostFromLineItem } = await import("../src/lib/ingredient-cost")
   const { canonicalizeUnit } = await import("../src/lib/unit-conversion")
   const { recomputeCanonicalCost } = await import("../src/lib/ingredient-cost")
-  const { normalizeVendorName } = await import("../src/lib/vendor-normalize")
+  const { normalizeVendorName, vendorMatchKey } = await import("../src/lib/vendor-normalize")
 
   const lineWhere = {
     canonicalIngredientId: { not: null },
@@ -1097,7 +1097,9 @@ async function main(): Promise<void> {
       if (!canonical) continue
 
       await prisma.ingredientSkuMatch.upsert({
-        where: { accountId_vendorName_sku: { accountId, vendorName, sku } },
+        where: {
+          accountId_vendorKey_sku: { accountId, vendorKey: vendorMatchKey(vendorName), sku },
+        },
         update: {
           ownerId: canonical.ownerId,
           canonicalIngredientId: canonical.id,
@@ -1111,6 +1113,7 @@ async function main(): Promise<void> {
           ownerId: canonical.ownerId,
           accountId,
           vendorName,
+          vendorKey: vendorMatchKey(vendorName),
           sku,
           canonicalIngredientId: canonical.id,
           conversionFactor: patch.conversionFactor,

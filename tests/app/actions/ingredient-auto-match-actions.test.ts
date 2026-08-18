@@ -132,7 +132,7 @@ describe("undoAutoMatch", () => {
     expect(txMocks.ingredientSkuMatch.deleteMany).toHaveBeenCalledWith({
       where: {
         accountId: "acct-A",
-        vendorName: "Sysco",
+        vendorKey: "sysco",
         sku: "SKU1",
         canonicalIngredientId: "canon-1",
       },

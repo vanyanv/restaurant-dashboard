@@ -614,7 +614,11 @@ model IngredientSkuMatch {
   id                    String   @id @default(cuid())
   ownerId               String
   accountId             String
+  /// Display spelling, as it appeared on the invoice that taught the match.
   vendorName            String
+  /// Identity. `vendorMatchKey(vendorName)` — case/punctuation-insensitive so
+  /// two spellings of one vendor cannot own contradictory mappings for a SKU.
+  vendorKey             String   @default("")
   sku                   String
   canonicalIngredientId String
   conversionFactor      Float    @default(1)
@@ -627,8 +631,8 @@ model IngredientSkuMatch {
   account             Account             @relation(fields: [accountId], references: [id])
   canonicalIngredient CanonicalIngredient @relation(fields: [canonicalIngredientId], references: [id], onDelete: Cascade)
 
-  @@unique([ownerId, vendorName, sku])
-  @@unique([accountId, vendorName, sku])
+  @@unique([ownerId, vendorKey, sku])
+  @@unique([accountId, vendorKey, sku])
   @@index([canonicalIngredientId])
   @@index([ownerId])
   @@index([accountId])

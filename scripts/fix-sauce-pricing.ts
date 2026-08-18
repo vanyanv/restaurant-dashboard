@@ -116,6 +116,7 @@ async function printSummary(prisma: PrismaClient, label: string, accountId: stri
 
 async function main(): Promise<void> {
   const { prisma } = await import("../src/lib/prisma")
+  const { vendorMatchKey } = await import("../src/lib/vendor-normalize")
   const ctx = await resolveContext(prisma)
   const now = new Date()
 
@@ -178,7 +179,13 @@ async function main(): Promise<void> {
     })
 
     await tx.ingredientSkuMatch.upsert({
-      where: { accountId_vendorName_sku: { accountId: ctx.accountId, vendorName: VENDOR, sku: "15725" } },
+      where: {
+        accountId_vendorKey_sku: {
+          accountId: ctx.accountId,
+          vendorKey: vendorMatchKey(VENDOR),
+          sku: "15725",
+        },
+      },
       update: {
         ownerId: ctx.ownerId,
         canonicalIngredientId: cup.id,
@@ -192,6 +199,7 @@ async function main(): Promise<void> {
         ownerId: ctx.ownerId,
         accountId: ctx.accountId,
         vendorName: VENDOR,
+        vendorKey: vendorMatchKey(VENDOR),
         sku: "15725",
         canonicalIngredientId: cup.id,
         conversionFactor: 1.5,
@@ -202,7 +210,13 @@ async function main(): Promise<void> {
     })
 
     await tx.ingredientSkuMatch.upsert({
-      where: { accountId_vendorName_sku: { accountId: ctx.accountId, vendorName: VENDOR, sku: "15726" } },
+      where: {
+        accountId_vendorKey_sku: {
+          accountId: ctx.accountId,
+          vendorKey: vendorMatchKey(VENDOR),
+          sku: "15726",
+        },
+      },
       update: {
         ownerId: ctx.ownerId,
         canonicalIngredientId: bulk.id,
@@ -216,6 +230,7 @@ async function main(): Promise<void> {
         ownerId: ctx.ownerId,
         accountId: ctx.accountId,
         vendorName: VENDOR,
+        vendorKey: vendorMatchKey(VENDOR),
         sku: "15726",
         canonicalIngredientId: bulk.id,
         conversionFactor: 1,
