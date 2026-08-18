@@ -37,6 +37,7 @@ jobs:
           HARRI_COGNITO_USER_POOL_REGION: ${{ secrets.HARRI_COGNITO_USER_POOL_REGION }}
           HARRI_REFRESH_TOKEN: ${{ secrets.HARRI_REFRESH_TOKEN }}
           LOG_FILE: logs/harri-sync.log
+          CRON_RETRIES: "2"
       - name: Upload failure log
         if: failure()
         uses: actions/upload-artifact@v4

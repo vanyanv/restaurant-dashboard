@@ -36,6 +36,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           FORCE: ${{ github.event.inputs.force || 'false' }}
           LOG_FILE: logs/cogs-sweep-list-stores.log
+          CRON_RETRIES: "2"
           CRON_MAX_TIME: "30"
         run: |
           bash .github/scripts/run-with-cron-logging.sh bash -lc '
@@ -90,6 +91,7 @@ jobs:
           LOOKBACK: ${{ github.event.inputs.lookbackDays || '3' }}
           FORCE: ${{ github.event.inputs.force || 'false' }}
           LOG_FILE: logs/cogs-sweep-${{ matrix.storeId }}.log
+          CRON_RETRIES: "2"
           CRON_MAX_TIME: "295"
         run: |
           bash .github/scripts/run-with-cron-logging.sh \

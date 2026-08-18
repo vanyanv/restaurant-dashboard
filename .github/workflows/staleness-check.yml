@@ -1,0 +1,61 @@
+name: Staleness Check (every 2h)
+on:
+  schedule:
+    # Every 2h. The tightest thing it guards is a 4h-cadence job, which is
+    # declared overdue at 1.5x = 6h, so a 2h probe always catches it well
+    # inside that window. Hourly would triple the Actions spend to shave
+    # minutes off a 6h detection floor.
+    - cron: '40 */2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: staleness-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  staleness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: GET /api/cron/monitoring/staleness
+        id: cron
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LOG_FILE: logs/staleness-check.log
+          CRON_MAX_TIME: "60"
+          # No retries: the endpoint is a detector, not a mutation. Retrying a
+          # true "things are stale" verdict only delays the alert.
+          CRON_RETRIES: "0"
+        run: |
+          bash .github/scripts/run-with-cron-logging.sh \
+            .github/scripts/curl-cron-json.sh GET "$APP_URL/api/cron/monitoring/staleness"
+      - name: Upload failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staleness-check-log-${{ github.run_id }}
+          path: logs/staleness-check.log
+          retention-days: 14
+      - name: Open or update incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Staleness Check
+          ISSUE_TITLE: "[Auto] A scheduled job has gone stale"
+          ISSUE_LABEL: cron-failure
+          LOG_FILE: logs/staleness-check.log
+          FAILED_EXIT_CODE: ${{ steps.cron.outputs.status }}
+        run: bash .github/scripts/report-workflow-failure.sh
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_NAME: Staleness Check
+          ISSUE_TITLE: "[Auto] A scheduled job has gone stale"
+          ISSUE_LABEL: cron-failure
+        run: bash .github/scripts/report-workflow-recovery.sh

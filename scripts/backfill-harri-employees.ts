@@ -54,6 +54,7 @@ async function main() {
     }
 
     let totalUpserted = 0
+    let failed = 0
     for (const b of brands) {
       console.log(
         `[harri.employees.backfill] storeId=${b.storeId} brandId=${b.brandId} (${b.brandName ?? "—"})`
@@ -70,6 +71,9 @@ async function main() {
         totalUpserted += r.upserted
       } catch (err) {
         console.error(`[harri.employees.backfill]   FAILED:`, err)
+        // Keep going for the other brands, but the run is a failure. Exiting 0
+        // here is what let a dead Otter sync look green for 24h.
+        failed++
       }
       // Be polite to Harri's gateway between brands.
       if (brands.indexOf(b) < brands.length - 1) {
@@ -77,7 +81,11 @@ async function main() {
       }
     }
 
-    console.log(`[harri.employees.backfill] done · totalUpserted=${totalUpserted}`)
+    console.log(
+      `[harri.employees.backfill] done · totalUpserted=${totalUpserted}` +
+        (failed ? ` · ${failed} brand(s) failed` : "")
+    )
+    if (failed > 0) process.exitCode = 1
   } finally {
     await prisma.$disconnect()
   }
