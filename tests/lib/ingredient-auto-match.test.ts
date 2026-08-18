@@ -712,8 +712,12 @@ describe("undoAutoMatch — reverses what autoResolveUnmatchedLines did", () => 
 
     expect(txMocks.ingredientSkuMatch.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: {
+          ownerId_vendorKey_sku: { ownerId: SCOPE.ownerId, vendorKey: "sysco", sku: "SKU1" },
+        },
         create: expect.objectContaining({
           vendorName: "Sysco",
+          vendorKey: "sysco",
           sku: "SKU1",
           canonicalIngredientId: "canon-1",
         }),
@@ -753,7 +757,7 @@ describe("undoAutoMatch — reverses what autoResolveUnmatchedLines did", () => 
     expect(txMocks.ingredientSkuMatch.deleteMany).toHaveBeenCalledWith({
       where: {
         accountId: SCOPE.accountId,
-        vendorName: "Sysco",
+        vendorKey: "sysco",
         sku: "SKU1",
         canonicalIngredientId: "canon-1",
       },

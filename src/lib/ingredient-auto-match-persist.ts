@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
+import { vendorMatchKey } from "@/lib/vendor-normalize"
 import type { ResolvedGroup, SuggestedGroup } from "@/lib/ingredient-auto-match-core"
 
 export type PersistResult = {
@@ -126,13 +127,23 @@ export async function persistResolvedGroups(input: {
         if (r.group.sku) {
           await tx.ingredientSkuMatch.upsert({
             where: {
-              ownerId_vendorName_sku: { ownerId, vendorName: r.group.vendorName, sku: r.group.sku },
+              ownerId_vendorKey_sku: {
+                ownerId,
+                vendorKey: vendorMatchKey(r.group.vendorName),
+                sku: r.group.sku,
+              },
             },
-            update: { canonicalIngredientId: r.canonicalIngredientId, confirmedBy: ownerId, confirmedAt: now },
+            update: {
+              canonicalIngredientId: r.canonicalIngredientId,
+              vendorName: r.group.vendorName,
+              confirmedBy: ownerId,
+              confirmedAt: now,
+            },
             create: {
               ownerId,
               accountId,
               vendorName: r.group.vendorName,
+              vendorKey: vendorMatchKey(r.group.vendorName),
               sku: r.group.sku,
               canonicalIngredientId: r.canonicalIngredientId,
               conversionFactor: 1,

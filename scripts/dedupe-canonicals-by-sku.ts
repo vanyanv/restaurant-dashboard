@@ -109,7 +109,7 @@ async function main() {
   console.log(`\n${mode}: dedupe canonicals by (normalizedVendor, sku)\n`)
 
   const { prisma } = await import("../src/lib/prisma")
-  const { normalizeVendorName } = await import("../src/lib/vendor-normalize")
+  const { normalizeVendorName, vendorMatchKey } = await import("../src/lib/vendor-normalize")
 
   // 1. Load every line item with a SKU, the invoice vendor/store, and any
   //    existing FK-linked canonical.
@@ -444,15 +444,15 @@ async function main() {
         const targetSkuKeys = new Set(
           (await tx.ingredientSkuMatch.findMany({
             where: { canonicalIngredientId: winnerId },
-            select: { vendorName: true, sku: true },
-          })).map((m) => `${m.vendorName}::${m.sku}`)
+            select: { vendorKey: true, sku: true },
+          })).map((m) => `${m.vendorKey}::${m.sku}`)
         )
         const sourceSku = await tx.ingredientSkuMatch.findMany({
           where: { canonicalIngredientId: loserId },
-          select: { id: true, vendorName: true, sku: true },
+          select: { id: true, vendorKey: true, sku: true },
         })
         const collidingSku = sourceSku
-          .filter((m) => targetSkuKeys.has(`${m.vendorName}::${m.sku}`))
+          .filter((m) => targetSkuKeys.has(`${m.vendorKey}::${m.sku}`))
           .map((m) => m.id)
         if (collidingSku.length > 0) {
           await tx.ingredientSkuMatch.deleteMany({ where: { id: { in: collidingSku } } })
@@ -503,9 +503,9 @@ async function main() {
       const firstLine = g.lineItems[0]
       await tx.ingredientSkuMatch.upsert({
         where: {
-          ownerId_vendorName_sku: {
+          ownerId_vendorKey_sku: {
             ownerId: g.ownerId,
-            vendorName: g.vendor,
+            vendorKey: vendorMatchKey(g.vendor),
             sku: g.sku,
           },
         },
@@ -516,6 +516,7 @@ async function main() {
         create: {
           ownerId: g.ownerId,
           vendorName: g.vendor,
+          vendorKey: vendorMatchKey(g.vendor),
           sku: g.sku,
           canonicalIngredientId: winnerId,
           conversionFactor: 1,

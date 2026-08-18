@@ -2,6 +2,7 @@ import { z } from "zod"
 import { embed, toVectorLiteral } from "@/lib/chat/embeddings"
 import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 
 /**
  * Canonical-ingredient tools.
@@ -405,17 +406,20 @@ export const compareVendorPrices: ChatTool<typeof compareParams, CompareVendorPr
     // confirmed.
     const skuMatches = await ctx.prisma.ingredientSkuMatch.findMany({
       where: { canonicalIngredientId: c.id, accountId: ctx.accountId },
-      select: { vendorName: true, sku: true },
+      select: { vendorKey: true, sku: true },
     })
+    // vendorKey is not a column on Invoice, so the SKU fallback widens to
+    // "any invoice carrying one of these SKUs" and the vendor check happens
+    // below in JS. Comparing the stored key against Invoice.vendorName
+    // directly matched nothing once the key stopped being a raw spelling.
+    const fallbackKeys = new Set(skuMatches.map((m) => `${m.vendorKey}::${m.sku}`))
+    const fallbackSkus = [...new Set(skuMatches.map((m) => m.sku))]
 
-    const lines = await ctx.prisma.invoiceLineItem.findMany({
+    const rawLines = await ctx.prisma.invoiceLineItem.findMany({
       where: {
         OR: [
           { canonicalIngredientId: c.id },
-          ...skuMatches.map((m) => ({
-            invoice: { vendorName: m.vendorName },
-            sku: m.sku,
-          })),
+          ...(fallbackSkus.length ? [{ sku: { in: fallbackSkus } }] : []),
         ],
         invoice: {
           accountId: ctx.accountId,
@@ -425,9 +429,18 @@ export const compareVendorPrices: ChatTool<typeof compareParams, CompareVendorPr
       orderBy: { invoice: { invoiceDate: "asc" } },
       select: {
         unitPrice: true,
+        sku: true,
+        canonicalIngredientId: true,
         invoice: { select: { vendorName: true, invoiceDate: true } },
       },
     })
+
+    const lines = rawLines.filter(
+      (l) =>
+        l.canonicalIngredientId === c.id ||
+        (l.sku != null &&
+          fallbackKeys.has(`${vendorMatchKey(l.invoice.vendorName)}::${l.sku}`))
+    )
 
     type Bucket = {
       vendor: string
@@ -439,7 +452,7 @@ export const compareVendorPrices: ChatTool<typeof compareParams, CompareVendorPr
     const buckets = new Map<string, Bucket>()
     for (const l of lines) {
       if (!l.invoice.invoiceDate || l.unitPrice <= 0) continue
-      const v = l.invoice.vendorName
+      const v = normalizeVendorName(l.invoice.vendorName)
       const cur = buckets.get(v) ?? {
         vendor: v,
         prices: [],

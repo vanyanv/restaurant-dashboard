@@ -17,6 +17,7 @@
 import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
+import { vendorMatchKey } from "@/lib/vendor-normalize"
 import { revalidatePath } from "next/cache"
 
 export type RecentAutoMatchCandidate = { id: string; name: string; score: number }
@@ -208,10 +209,12 @@ export async function undoAutoMatch(decisionId: string): Promise<UndoAutoMatchRe
     // Step 2 — un-teach the learned pattern, regardless of which
     // individual lines step 1 left alone.
     if (decision.sku) {
+      // Match on vendorKey, not the decision's stored spelling: the row this
+      // undo has to find is keyed the same way the matcher looks it up.
       const removed = await tx.ingredientSkuMatch.deleteMany({
         where: {
           accountId,
-          vendorName: decision.vendorName,
+          vendorKey: vendorMatchKey(decision.vendorName),
           sku: decision.sku,
           canonicalIngredientId: decision.canonicalIngredientId,
         },

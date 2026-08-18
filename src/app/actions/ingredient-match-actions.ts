@@ -3,7 +3,7 @@
 import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { recomputeCanonicalCost, getLineItemBaseQty } from "@/lib/ingredient-cost"
 import { syncCanonicalEmbedding } from "@/lib/ingredient-embedding-sync"
 import { buildGroupKey } from "@/lib/ingredient-auto-match-core"
@@ -352,12 +352,15 @@ export async function confirmSkuMatch(input: {
   const targetCanonicalId: string = canonicalId
 
   if (li.sku) {
+    const vendorKey = vendorMatchKey(li.invoice.vendorName)
+
     await prisma.ingredientSkuMatch.upsert({
       where: {
-        ownerId_vendorName_sku: { ownerId, vendorName: vendor, sku: li.sku },
+        ownerId_vendorKey_sku: { ownerId, vendorKey, sku: li.sku },
       },
       update: {
         canonicalIngredientId: targetCanonicalId,
+        vendorName: vendor,
         confirmedBy: ownerId,
         confirmedAt: new Date(),
       },
@@ -365,6 +368,7 @@ export async function confirmSkuMatch(input: {
         ownerId,
         accountId,
         vendorName: vendor,
+        vendorKey,
         sku: li.sku,
         canonicalIngredientId: targetCanonicalId,
         conversionFactor: 1,
@@ -374,18 +378,30 @@ export async function confirmSkuMatch(input: {
       },
     })
 
-    const backfill = await prisma.invoiceLineItem.updateMany({
-      where: {
-        sku: li.sku,
-        canonicalIngredientId: null,
-        invoice: { accountId, vendorName: { equals: li.invoice.vendorName } },
-      },
-      data: {
-        canonicalIngredientId: targetCanonicalId,
-        matchSource: "sku",
-        matchedAt: new Date(),
-      },
+    // Backfill every past line for this (vendor, sku) — across every spelling
+    // the vendor uses, not just the one on the invoice that was clicked.
+    // Matching on the raw string meant a caps-spelled invoice template left
+    // its own history unmatched, which is how five Vitco 15726 lines sat in
+    // the review queue for six weeks after 15726 had already been matched.
+    // Postgres cannot express vendorMatchKey, so filter the candidates here.
+    const candidates = await prisma.invoiceLineItem.findMany({
+      where: { sku: li.sku, canonicalIngredientId: null, invoice: { accountId } },
+      select: { id: true, invoice: { select: { vendorName: true } } },
     })
+    const backfillIds = candidates
+      .filter((c) => vendorMatchKey(c.invoice.vendorName) === vendorKey)
+      .map((c) => c.id)
+
+    const backfill = backfillIds.length
+      ? await prisma.invoiceLineItem.updateMany({
+          where: { id: { in: backfillIds } },
+          data: {
+            canonicalIngredientId: targetCanonicalId,
+            matchSource: "sku",
+            matchedAt: new Date(),
+          },
+        })
+      : { count: 0 }
 
     // Auto-derive canonical.costPerRecipeUnit from the newly-linked invoice.
     // No-ops when the canonical is locked, has no recipeUnit, or units don't convert.

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { normalizeVendorName, vendorMatchKey } from "@/lib/vendor-normalize"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import {
   COST_CANDIDATE_WINDOW,
@@ -63,10 +63,10 @@ export async function seedCanonicalIngredientsFromInvoices(
 ): Promise<SeedResult> {
   const existingSkuMatches = await prisma.ingredientSkuMatch.findMany({
     where: { accountId },
-    select: { vendorName: true, sku: true, canonicalIngredientId: true },
+    select: { vendorKey: true, sku: true, canonicalIngredientId: true },
   })
   const skuIndex = new Map<string, string>(
-    existingSkuMatches.map((m) => [`${m.vendorName}::${m.sku}`, m.canonicalIngredientId])
+    existingSkuMatches.map((m) => [`${m.vendorKey}::${m.sku}`, m.canonicalIngredientId])
   )
 
   const existingAliases = await prisma.ingredientAlias.findMany({
@@ -118,7 +118,8 @@ export async function seedCanonicalIngredientsFromInvoices(
 
     for (const li of lineItems) {
       const vendor = normalizeVendorName(li.invoice.vendorName)
-      const skuKey = li.sku ? `${vendor}::${li.sku}` : null
+      const vendorKey = vendorMatchKey(li.invoice.vendorName)
+      const skuKey = li.sku ? `${vendorKey}::${li.sku}` : null
       const canonicalName = normalizeProductName(li.productName)
       const now = new Date()
 
@@ -145,13 +146,14 @@ export async function seedCanonicalIngredientsFromInvoices(
           const normalizedUnit = normalizeUnitToken(li.unit)
           await prisma.ingredientSkuMatch.upsert({
             where: {
-              ownerId_vendorName_sku: { ownerId, vendorName: vendor, sku: li.sku },
+              ownerId_vendorKey_sku: { ownerId, vendorKey, sku: li.sku },
             },
-            update: { canonicalIngredientId: canonicalId, confirmedAt: now },
+            update: { canonicalIngredientId: canonicalId, vendorName: vendor, confirmedAt: now },
             create: {
               ownerId,
               accountId,
               vendorName: vendor,
+              vendorKey,
               sku: li.sku,
               canonicalIngredientId: canonicalId,
               conversionFactor: 1,

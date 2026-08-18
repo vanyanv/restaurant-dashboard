@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { normalizeVendorName } from "@/lib/vendor-normalize"
+import { vendorMatchKey } from "@/lib/vendor-normalize"
 import { recomputeCanonicalCost } from "@/lib/ingredient-cost"
 
 export type MatchResult = {
@@ -44,11 +44,11 @@ export async function matchNewLineItems(
   // Pre-load sku matches for this account in one go.
   const skuMatches = await prisma.ingredientSkuMatch.findMany({
     where: { accountId },
-    select: { vendorName: true, sku: true, canonicalIngredientId: true },
+    select: { vendorKey: true, sku: true, canonicalIngredientId: true },
   })
   const skuIndex = new Map<string, string>()
   for (const m of skuMatches) {
-    skuIndex.set(`${m.vendorName}::${m.sku}`, m.canonicalIngredientId)
+    skuIndex.set(`${m.vendorKey}::${m.sku}`, m.canonicalIngredientId)
   }
 
   // Pre-load aliases per store.
@@ -73,7 +73,7 @@ export async function matchNewLineItems(
   const touchedCanonicals = new Set<string>()
 
   for (const inv of invoices) {
-    const vendor = normalizeVendorName(inv.vendorName)
+    const vendor = vendorMatchKey(inv.vendorName)
     for (const li of inv.lineItems) {
       let canonicalId: string | undefined
       let source: "sku" | "alias" | undefined
