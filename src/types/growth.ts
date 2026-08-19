@@ -29,6 +29,16 @@ export interface GrowthOpportunity {
   estimatedDollarImpact: number
   /** Days `estimatedDollarImpact` covers (1 | 7 | 30, per generator). */
   horizonDays: number
+  /**
+   * 10th / 25th / 90th percentile of the impact, once the elasticity's standard
+   * error is propagated through the generator's own formula. Null when the fit
+   * reported no standard error — an invented range would read as precision the
+   * estimate does not have. Only the elasticity's uncertainty is propagated, so
+   * a range shown here is a floor on the true one.
+   */
+  impactP10: number | null
+  impactP25: number | null
+  impactP90: number | null
   confidence: OpportunityConfidence
   evidence: OpportunityEvidence[]
   caveats: string[]

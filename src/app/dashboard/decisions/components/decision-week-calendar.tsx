@@ -4,6 +4,7 @@ import { useState } from "react"
 import type { DecisionDay } from "@/app/actions/decisions/get-decisions-view"
 import { DayBadge } from "./day-badge"
 import { DayDetailPanel } from "./day-detail-panel"
+import type { LaborLane } from "../lib/labor-lane"
 
 interface Props {
   days: DecisionDay[]
@@ -12,6 +13,21 @@ interface Props {
 
 const TABULAR = {
   fontVariantNumeric: "tabular-nums lining-nums" as const,
+}
+
+const fmtUsd = (n: number) =>
+  n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  })
+
+/** Compact band for the cell, which has ~90px to work with: "4.6k-5.8k". */
+function fmtBand(p10: number | null, p90: number | null): string | null {
+  if (p10 == null || p90 == null) return null
+  const k = (n: number) =>
+    n >= 1000 ? `${(n / 1000).toFixed(1)}k` : Math.round(n).toString()
+  return `${k(p10)}–${k(p90)}`
 }
 
 export function DecisionWeekCalendar({ days, storeName }: Props) {
@@ -44,11 +60,19 @@ export function DecisionWeekCalendar({ days, storeName }: Props) {
                 (isSelected ? " is-selected" : "")
               }
               aria-pressed={isSelected}
-              aria-label={`${day.weekdayShort} ${day.monthDayShort} — ${day.bucket}`}
+              aria-label={`${day.weekdayShort} ${day.monthDayShort} — ${fmtUsd(day.predictedRevenue)} forecast, ${day.bucket}`}
             >
               <span className="decisions-day-cell__folio">
                 {day.weekdayShort} · {day.monthDayShort}
               </span>
+              <span className="decisions-day-cell__amt" style={TABULAR}>
+                {fmtUsd(day.predictedRevenue)}
+              </span>
+              {fmtBand(day.p10, day.p90) ? (
+                <span className="decisions-day-cell__band" style={TABULAR}>
+                  {fmtBand(day.p10, day.p90)}
+                </span>
+              ) : null}
               <span className="decisions-day-cell__badge">
                 <DayBadge bucket={day.bucket} />
               </span>
@@ -61,26 +85,7 @@ export function DecisionWeekCalendar({ days, storeName }: Props) {
                 {day.hasAnomaly ? <SignalIcon kind="anomaly" /> : null}
                 {day.topEventTitle ? <SignalIcon kind="event" /> : null}
               </span>
-              {day.staffDelta != null && day.staffDelta !== 0 ? (
-                <span
-                  className={
-                    "decisions-day-cell__staff" +
-                    (day.staffDelta > 0 ? " is-up" : " is-down")
-                  }
-                  style={TABULAR}
-                >
-                  <span className="decisions-day-cell__staff-label">STAFF</span>
-                  {day.staffDelta > 0 ? "+" : ""}
-                  {day.staffDelta}
-                </span>
-              ) : (
-                <span className="decisions-day-cell__staff is-neutral">
-                  <span className="decisions-day-cell__staff-label">STAFF</span>
-                  {/* An em-dash on all seven days read as a broken field. Say
-                      which of "no schedule published" or "level" it is. */}
-                  {day.staffDelta === 0 ? "level" : (day.staffNote ?? "—")}
-                </span>
-              )}
+              <LaborLaneCell labor={day.labor} />
             </button>
           )
         })}
@@ -136,5 +141,68 @@ function SignalIcon({
       ) : null}
       {kind === "event" ? <circle cx="8" cy="8" r="3" fill="currentColor" /> : null}
     </svg>
+  )
+}
+
+/**
+ * Scheduled hours against hours needed, drawn as one bar.
+ *
+ * The bar is scaled to whichever of the two is larger, so a short day shows a
+ * red remainder and a heavy day shows an ochre overhang — the reading is the
+ * shape, and the numbers underneath confirm it.
+ */
+function LaborLaneCell({ labor }: { labor: LaborLane }) {
+  const { scheduledHours, neededHours, gapHours, status, unfilledSlots } = labor
+
+  if (status === "unknown") {
+    return (
+      <span className="decisions-lane">
+        <span className="decisions-lane__label">Labor</span>
+        <span className="decisions-lane__read is-quiet">no benchmark yet</span>
+      </span>
+    )
+  }
+
+  if (status === "unscheduled") {
+    return (
+      <span className="decisions-lane">
+        <span className="decisions-lane__label">Labor</span>
+        <span className="decisions-lane__read is-quiet">
+          none published{neededHours != null ? ` · ${neededHours}h needed` : ""}
+        </span>
+      </span>
+    )
+  }
+
+  const span = Math.max(scheduledHours, neededHours ?? 0) || 1
+  const havePct = (scheduledHours / span) * 100
+  const extraPct = Math.abs(gapHours ?? 0) / span * 100
+
+  return (
+    <span className="decisions-lane">
+      <span className="decisions-lane__label">
+        Labor
+        {unfilledSlots > 0 ? (
+          <em className="decisions-lane__unfilled">
+            {unfilledSlots} open
+          </em>
+        ) : null}
+      </span>
+      <span className="decisions-lane__track">
+        <span
+          className="decisions-lane__have"
+          style={{ width: `${Math.min(100, havePct)}%` }}
+        />
+        {status === "short" ? (
+          <span className="decisions-lane__gap" style={{ right: 0, width: `${extraPct}%` }} />
+        ) : null}
+        {status === "heavy" ? (
+          <span className="decisions-lane__over" style={{ right: 0, width: `${extraPct}%` }} />
+        ) : null}
+      </span>
+      <span className={`decisions-lane__read is-${status}`} style={TABULAR}>
+        {scheduledHours} / {neededHours} hrs
+      </span>
+    </span>
   )
 }

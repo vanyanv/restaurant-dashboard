@@ -7,7 +7,7 @@ the TS side is read-only (server action returns rows as this shape).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Union
+from typing import Optional, Literal, Union
 
 
 OpportunityType = Literal[
@@ -43,6 +43,13 @@ class GrowthOpportunity:
     evidence: list[Evidence] = field(default_factory=list)
     caveats: list[str] = field(default_factory=list)
     suggested_action: str = ""
+    # 10th / 25th / 90th percentile of the impact once the elasticity's standard
+    # error is propagated. None when the fit reported no standard error — an
+    # invented range reads as precision the estimate does not have. impact_p25
+    # is what the Decisions ledger ranks on.
+    impact_p10: Optional[float] = None
+    impact_p25: Optional[float] = None
+    impact_p90: Optional[float] = None
 
 
 # Deferred for Phase 2 (kept here as a comment so the union stays explicit):

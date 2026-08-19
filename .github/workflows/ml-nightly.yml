@@ -9,7 +9,14 @@ name: ML Nightly (revenue forecast)
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    # 10:00 UTC = 03:00 PT. The Pacific business day ends at 07:00 UTC (PDT) and
+    # otter-sync runs at 08:00, so day D-1 is complete and synced by the time we
+    # train. At 06:00 UTC it was not: the last sync before it was 04:00 UTC =
+    # 21:00 PT, and this store takes 31.9% of daily net sales after 21:00, so
+    # the newest day arrived ~68% written and dragged lag_1 down with it.
+    # `trim_incomplete_trailing_days` guards the winter edge, when PST pushes
+    # the close to 08:00 UTC and the 08:00 sync can just miss it.
+    - cron: '0 10 * * *'
   workflow_dispatch:
     inputs:
       lookbackDays:

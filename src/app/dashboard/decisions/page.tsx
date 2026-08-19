@@ -8,6 +8,8 @@ import { DecisionsStorePicker } from "./components/decisions-store-picker"
 import { DecisionWeekCalendar } from "./components/decision-week-calendar"
 import { DecisionBriefing } from "./components/decision-briefing"
 import { ActionCard } from "./components/action-card"
+import { ForecastScorecard } from "./components/forecast-scorecard"
+import { DecisionLedger } from "./components/decision-ledger"
 import { ConfidenceDots } from "./components/confidence-dots"
 import "./decisions.css"
 
@@ -102,13 +104,38 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
               keep an eye on the calendar above.
             </div>
           ) : (
-            <div className="decisions-actions-grid">
-              {data.actions.map((action) => (
-                <ActionCard key={action.id} action={action} />
-              ))}
-            </div>
+            <>
+              {/* Five cards each said "+$X/wk" and never added up. */}
+              <div className="decisions-pot">
+                <div>
+                  <span className="decisions-pot__label">This week&apos;s pot</span>
+                  <span className="decisions-pot__amt">
+                    {data.potUsdPerWeek.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    })}
+                  </span>
+                </div>
+                <span className="decisions-pot__meta">
+                  across {data.actions.length} action
+                  {data.actions.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="decisions-actions-grid">
+                {data.actions.map((action) => (
+                  <ActionCard key={action.id} action={action} asOf={data.asOf} />
+                ))}
+              </div>
+            </>
           )}
         </section>
+
+        {/* What was already decided, and what came of it. */}
+        <DecisionLedger decisions={data.decisions} />
+
+        {/* The forecast's own track record, shown last and shown honestly. */}
+        {data.scorecard ? <ForecastScorecard scorecard={data.scorecard} /> : null}
       </div>
     </div>
   )

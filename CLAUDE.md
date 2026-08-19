@@ -22,6 +22,19 @@ Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. 
 
 5. **Don't split or restructure files >400 lines without reading [`docs/refactor-playbook.md`](docs/refactor-playbook.md).** The methodology assumes a re-export shim at the original path (and that shim must NOT have `"use server"` — it breaks Next.js re-exports), contract tests with mocked Prisma, and an explicit mobile-import check (`src/app/(mobile)/m/**` ∪ `src/lib/mobile/**`). New patterns discovered during a split get added back to the playbook.
 
+## Database migrations
+
+Convention is `prisma db push` + a hand-written `prisma/manual-migrations/YYYY-MM-DD_*.sql`.
+**Never `prisma migrate dev`** — it would reset the Neon production database.
+
+**Run `npm run db:drift` before any schema change.** It reports differences between
+schema.prisma and the live database. It must say "No difference detected" before you start;
+if it doesn't, the database is carrying objects the schema no longer declares, and `db push`
+will offer to delete them as the price of your migration. That happened once: the 2026-08-17
+audit removed three models from the schema and left the tables in the database, so adding one
+nullable column on 2026-08-19 came with a prompt to drop 129 rows. Resolve drift first, as its
+own change, with the data archived — never by reaching for `--accept-data-loss`.
+
 ## Other references
 
 - Refactor playbook (split big files safely): [`docs/refactor-playbook.md`](docs/refactor-playbook.md)

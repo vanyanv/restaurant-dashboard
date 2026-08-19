@@ -12,15 +12,18 @@ heuristic and tag the flavor with `-fallback`.
 """
 from __future__ import annotations
 
+import logging
+
 import datetime as dt
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 import pandas as pd
-from xgboost import XGBRegressor
+from xgboost import DMatrix, XGBRegressor
 
 from ml.evaluation.conformal import ConformalWrapper, wrap_xgboost_conformal
+from ml.models.attribution import build_attribution
 from ml.features.revenue import (
     build_enriched_features,
     build_features,
@@ -35,6 +38,8 @@ from ml.features.external_signals import external_signal_coverage
 
 # MAPIE's 95% wrapper needs >=20 samples (1/alpha). Below that the inner
 # call raises, so anything smaller forces the legacy-residual-std fallback.
+_LOG = logging.getLogger(__name__)
+
 MIN_CALIBRATION_ROWS = 20
 
 # Per-day interval widening factor for multi-step forecasts. Iterative
@@ -72,6 +77,9 @@ class ForecastRow:
     predicted_revenue: float
     p10: float
     p90: float
+    #: TreeSHAP waterfall — {"base": float, "groups": [{"label", "value"}]} —
+    #: summing to predicted_revenue. None if the booster wouldn't produce one.
+    attribution: Optional[dict] = None
 
 
 def _conformal_split(feats: pd.DataFrame, cols: list[str]) -> tuple[
@@ -168,6 +176,30 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         flavor = f"{flavor}-fallback"
     else:
         flavor = f"{flavor}-conformal"
+        # Deployment refit, AFTER the holdout score above.
+        #
+        # `base` was fit on the train slice alone so the calibration slice stays
+        # disjoint and conformal keeps its guarantee. That left the estimator
+        # that actually ships blind to the newest 20% of the window — on
+        # Hollywood, 91 days whose mean ran 7.3% above what it trained on — and a
+        # level error like that compounds through recursive multi-step
+        # forecasting. Backtested through the real train+forecast path over 10
+        # chronological cutoffs at 14-day horizons (n=140):
+        #
+        #     train-slice only      bias -5.4%   MAPE 10.4%
+        #     refit on all history  bias -1.9%   MAPE  9.4%
+        #
+        # `conformal.point_model` IS this object, so refitting in place moves the
+        # forecast point too. The interval half-widths stay as calibrated on the
+        # train-slice model's residuals, which makes them mildly conservative
+        # around a better point — the safe direction, since measured coverage at
+        # one day out was 71% against an 80% target.
+        #
+        # `mape` above is untouched: it scores the pre-refit model on a holdout
+        # it never saw, and `_select_result` needs that to choose baseline vs
+        # enriched honestly.
+        deploy_df = feats.dropna(subset=cols)
+        base.fit(deploy_df[cols], deploy_df["revenue"])
 
     return TrainResult(
         model=base,
@@ -185,7 +217,21 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
     )
 
 
-def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list[ForecastRow]:
+def forecast(
+    store_id: str,
+    result: TrainResult,
+    horizon_days: int = 14,
+    horizon_widths: Optional[dict[int, float]] = None,
+) -> list[ForecastRow]:
+    """Forecast forward from the last observed day.
+
+    `horizon_widths` maps horizon (1-based) to a half-width expressed as a
+    fraction of the prediction, measured from reconciled history by
+    `ml.evaluation.horizon_calibration`. When a horizon is present there it
+    replaces HORIZON_WIDENING_PER_DAY, which inflated the one-step conformal
+    width by a flat 5% a day and produced 71% coverage at one day out against
+    97% at eight. Horizons with too little history fall through to the old path.
+    """
     history = load_daily_revenue(store_id)
     if history.empty:
         return []
@@ -219,23 +265,33 @@ def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list
         x = feat_row[cols].to_frame().T
         x_arr = x.to_numpy(dtype=float, na_value=np.nan)
 
+        measured = (horizon_widths or {}).get(offset)
+
         if result.conformal is not None and not result.uses_fallback_interval:
             point, lower80, upper80, _, _ = result.conformal.predict_intervals(x_arr)
             pred = float(point[0])
-            # The conformal half-width is 1-step-calibrated; inflate it for the
-            # extra forecast steps so coverage holds across the horizon. Anchor
-            # at offset-1 → horizon 1 keeps the raw (correct) 1-step width.
-            widening = 1.0 + HORIZON_WIDENING_PER_DAY * (offset - 1)
-            p10 = pred - (pred - float(lower80[0])) * widening
-            p90 = pred + (float(upper80[0]) - pred) * widening
+            if measured is not None:
+                half = pred * measured
+                p10, p90 = pred - half, pred + half
+            else:
+                # The conformal half-width is 1-step-calibrated; inflate it for
+                # the extra forecast steps so coverage holds across the horizon.
+                # Anchor at offset-1 → horizon 1 keeps the raw 1-step width.
+                widening = 1.0 + HORIZON_WIDENING_PER_DAY * (offset - 1)
+                p10 = pred - (pred - float(lower80[0])) * widening
+                p90 = pred + (float(upper80[0]) - pred) * widening
         else:
             pred = float(result.model.predict(x_arr)[0])
-            # Legacy ±1.28 SD ≈ 80% PI from holdout residual std, widened by
-            # 1 + k * offset to reflect compounding uncertainty.
-            widening = 1.0 + HORIZON_WIDENING_PER_DAY * offset
-            sigma = result.holdout_residual_std * widening
-            p10 = pred - 1.28 * sigma
-            p90 = pred + 1.28 * sigma
+            if measured is not None:
+                half = pred * measured
+                p10, p90 = pred - half, pred + half
+            else:
+                # Legacy ±1.28 SD ≈ 80% PI from holdout residual std, widened by
+                # 1 + k * offset to reflect compounding uncertainty.
+                widening = 1.0 + HORIZON_WIDENING_PER_DAY * offset
+                sigma = result.holdout_residual_std * widening
+                p10 = pred - 1.28 * sigma
+                p90 = pred + 1.28 * sigma
 
         out.append(
             ForecastRow(
@@ -243,11 +299,46 @@ def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list
                 predicted_revenue=max(0.0, pred),
                 p10=max(0.0, p10),
                 p90=max(0.0, p90),
+                attribution=_attribution_for(result.model, x_arr, cols, pred),
             )
         )
         rolling.iloc[-1, rolling.columns.get_loc("revenue")] = pred
 
     return out
+
+
+def _attribution_for(
+    model: XGBRegressor,
+    x_arr: "np.ndarray",
+    cols: list[str],
+    predicted: float,
+) -> Optional[dict]:
+    """Exact TreeSHAP for one row, grouped for the owner.
+
+    `pred_contribs=True` returns one value per feature plus a trailing bias
+    term, and they sum to the raw prediction — no surrogate model, no extra
+    dependency, one call against the booster already in memory.
+
+    Attribution is a nice-to-have on top of a forecast, so a failure here must
+    never cost the forecast itself: the row simply ships without a waterfall.
+    """
+    try:
+        booster = model.get_booster()
+        names = list(booster.feature_names) if booster.feature_names else list(cols)
+        contribs = booster.predict(
+            DMatrix(x_arr, feature_names=names), pred_contribs=True
+        )[0]
+        base_value = float(contribs[-1])
+        feature_contribs = [float(v) for v in contribs[:-1]]
+        return build_attribution(
+            base_value=base_value,
+            feature_names=names,
+            contributions=feature_contribs,
+            predicted=predicted,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOG.debug("attribution unavailable: %s", exc)
+        return None
 
 
 def model_safe_predict(model: XGBRegressor, x: pd.DataFrame) -> float:

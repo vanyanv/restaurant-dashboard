@@ -14,16 +14,19 @@ _UPSERT_SQL = '''
     INSERT INTO "GrowthOpportunity"
         (id, "storeId", "asOfDate", "opportunityType", title,
          "estimatedDollarImpact", "horizonDays", confidence, evidence, caveats,
-         "suggestedAction")
+         "suggestedAction", "impactP10", "impactP25", "impactP90")
     VALUES (%s, %s, %s, %s::"OpportunityType", %s, %s, %s,
-            %s::"OpportunityConfidence", %s, %s, %s)
+            %s::"OpportunityConfidence", %s, %s, %s, %s, %s, %s)
     ON CONFLICT ("storeId", "asOfDate", "opportunityType", title) DO UPDATE SET
         "estimatedDollarImpact" = EXCLUDED."estimatedDollarImpact",
         "horizonDays"           = EXCLUDED."horizonDays",
         confidence              = EXCLUDED.confidence,
         evidence                = EXCLUDED.evidence,
         caveats                 = EXCLUDED.caveats,
-        "suggestedAction"       = EXCLUDED."suggestedAction"
+        "suggestedAction"       = EXCLUDED."suggestedAction",
+        "impactP10"             = EXCLUDED."impactP10",
+        "impactP25"             = EXCLUDED."impactP25",
+        "impactP90"             = EXCLUDED."impactP90"
 '''
 
 
@@ -38,7 +41,8 @@ def write_opportunities(conn, ops: list[GrowthOpportunity]) -> int:
                 _UPSERT_SQL,
                 (cuid_like(), o.store_id, o.as_of_date, o.opportunity_type,
                  o.title, o.estimated_dollar_impact, o.horizon_days, o.confidence,
-                 evidence_json, o.caveats, o.suggested_action),
+                 evidence_json, o.caveats, o.suggested_action,
+                 o.impact_p10, o.impact_p25, o.impact_p90),
             )
             written += 1
     return written
