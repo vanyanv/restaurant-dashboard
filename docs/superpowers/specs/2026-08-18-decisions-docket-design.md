@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); phase 2 hourly drawer and phase 3-4 unstarted
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 hourly drawer and phase 3-4 unstarted
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -86,6 +86,34 @@ Effect on the REVENUE evaluation over the same 26-day window:
 | Interval coverage (80%) | 61.5% | 69.2% |
 | Monday bias | +47.7% | −11.1% |
 | MAPE at horizon 1d | 30.5% | 10.6% |
+
+**The under-prediction was root-caused on 2026-08-19 (`90ad7e0`).** It was not a modelling
+problem at all — it was the same disease as the reconciliation bug, one layer up. `ml-nightly`
+ran at 06:00 UTC; the last `otter-sync` before it is 04:00 UTC = 21:00 Pacific, and this store
+takes **31.9%** of daily net sales after 21:00, peaking at 22:00-23:00. The newest day in
+`load_daily_revenue` was routinely ~68% written, so `lag_1` was a third too low and every
+horizon inherited it.
+
+| 1-step over the trailing 45 days | bias | MAPE |
+|---|---|---|
+| complete history | +3.4% | 14.6% |
+| previous day shaved to 68.1% | −7.9% | 19.7% |
+| production, horizon 1d, same period | −6.7% | 10.6% |
+
+Shaving one day reproduces production almost exactly. It also explains why bias was negative at
+*every* horizon including day 1, where recursion cannot be blamed.
+
+Two hypotheses were tested and dropped before this one:
+
+- **Recursive error compounding** — MAPE flat across horizon. Withdrawn (below).
+- **The deployed point model never trains on the calib+holdout tail.** True — `base` is fit on
+  the train slice only, leaving 91 days and a 7.3%-higher mean unseen. It sounded sufficient.
+  But refitting on the full pool moved MAPE 15.1% → 14.0% and made bias slightly *worse*, so it
+  is not the cause. Not shipped. Worth revisiting as a small accuracy gain, not as a bias fix.
+
+Fix: `trim_incomplete_trailing_days` drops trailing dates whose `OtterHourlySummary` coverage
+stops short of closing hour — tail only, failing open when coverage is missing. `ml-nightly`
+also moves to 10:00 UTC so the previous Pacific day is closed and synced before training.
 
 **Two model findings changed as a result.**
 
