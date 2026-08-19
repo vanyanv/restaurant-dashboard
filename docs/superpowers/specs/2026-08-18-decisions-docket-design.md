@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); forecast accuracy verified by backtest (`1d3bf3e`); phase 3-4 in progress
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); phase 3 remainder + phase 4 open
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -225,10 +225,22 @@ cashier) and 28 staff, so position mix is thinner than the visual spec assumes.
 
 ### Phase 3 — Make the model explain and behave
 
-9. TreeSHAP attributions via `booster.predict(dmatrix, pred_contribs=True)` — exact, no new
-   dependency. Top contributors stored per forecast row; rendered as the drawer waterfall.
-10. `reg:quantileerror` for conditional quantiles; conformal calibration per horizon step and per
-    weekday. `HORIZON_WIDENING_PER_DAY` is deleted, not tuned.
+9. ~~TreeSHAP attributions~~ — **shipped** (`4370bc4`). Stored on
+   `ForecastDailyRevenue.attribution` (JSONB, additive; applied via manual-migration SQL, not
+   `db push`, which wanted to drop `InvoiceSyncLog` and `VercelUsageSnapshot`). Grouped into six
+   operator-facing buckets — `is_holiday` is matched before `is_weekend`, since both begin `is_`
+   and Mother's Day under "Day of week" would mislead. Small groups fold into the base so the
+   waterfall still sums to the forecast. Merged across stores in the view layer, which is valid
+   because SHAP is additive.
+10. ~~Per-horizon interval calibration~~ — **built and deliberately gated** (`72f501f`).
+    `relative_half_widths` measures the coverage quantile of |error| per horizon, with a
+    split-conformal finite-sample correction and a monotonicity constraint. But an out-of-sample
+    split over pre-fix history gave only 60–76% coverage, because every residual in that history
+    came from the model fixed earlier the same day. `CALIBRATION_EPOCH` excludes it, so
+    `load_horizon_widths` returns `{}` and `forecast()` keeps the conformal path until ~12
+    post-fix runs reconcile. Per-weekday remains out of reach: ~38 rows per horizon is five or
+    six per weekday. `reg:quantileerror` not attempted — measured widths address the symptom
+    without changing the objective.
 11. ~~Direct multi-horizon~~ — **withdrawn 2026-08-19**, see findings above.
 12. Diagnose and correct the uniform negative bias (trend lag against rolling means).
 13. Elasticity standard errors persisted; Monte Carlo propagation through `impact.py`.
