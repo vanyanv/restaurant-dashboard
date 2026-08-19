@@ -17,9 +17,33 @@
 --                        key gone, README references stale). Seven columns and
 --                        an index survived it with zero code references.
 --
--- STATUS: the two additive statements at the bottom are APPLIED (2026-08-17).
--- The DROP statements are NOT applied and are pending an explicit decision,
--- because a pre-flight count showed the "dead" tables are not empty:
+-- STATUS: FULLY APPLIED 2026-08-19. The additive statements went in on
+-- 2026-08-17; the DROPs followed once the data was archived.
+--
+-- The reasoning below said leaving the tables in place was "harmless" because
+-- Prisma ignores tables it does not know about. That is true at runtime and
+-- false for tooling: with the models gone from schema.prisma but the tables
+-- still present, `prisma db push` refused to run without --accept-data-loss.
+-- Adding one nullable column on 2026-08-19 therefore came with a prompt to
+-- delete these three tables, and the next person in a hurry would have been a
+-- single flag away from doing it with no archive at all. Deferring the decision
+-- did not keep the data safe; it made an ordinary migration dangerous.
+--
+-- Before dropping, every row was archived to
+-- prisma/manual-migrations/archive/2026-08-19_dead_table_archive.sql and the
+-- archive was verified by replaying it into a scratch schema: 61/61 and 68/68
+-- rows restored, metrics JSON byte-identical. DbSnapshot tracks table SIZES,
+-- not contents, so it was never a backup.
+--
+-- Store.yelp*: all seven columns were dropped. Checked first — zero stores
+-- carried a businessId, rating, review count or URL. The only non-null value in
+-- the whole family was one yelpLastSearch timestamp, for a search that found
+-- nothing.
+--
+-- `npm run db:drift` now reports schema-vs-database differences, so this class
+-- of drift is visible before it turns into a data-loss prompt.
+--
+-- The original pre-flight counts, for the record:
 --
 --   InvoiceSyncLog        61 rows
 --   VercelUsageSnapshot   68 rows   (so something wrote them once, even though
