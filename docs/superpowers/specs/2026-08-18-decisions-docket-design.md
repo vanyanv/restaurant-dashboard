@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped on `feat/decisions-docket` (`fe691cd`); phases 2-4 unstarted
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); phases 2-4 unstarted
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -67,6 +67,45 @@ hierarchicalforecast 1.5.1, scikit-learn 1.5.2).
 - **`ForecastDailyRevenue` stamps `generatedAt`.** This is the load-bearing fact behind the causal
   read-out: the forecast produced *before* a decision is, by construction, an estimate of what
   would have happened without it.
+
+## What phase 1 found — measured 2026-08-19
+
+Shipping the report card exposed a broken yardstick within a day, and re-ranked the model work.
+
+**The reconciliation bug (fixed, `82487bc`).** `reconcile_past_forecasts` guarded every UPDATE
+with `actual* IS NULL`. It runs nightly at ~06:2x UTC — ~23:2x Pacific — so it stamped each day's
+actual while that day's Otter sync was still landing, and the guard made the partial value
+permanent. All 20 most recent days were understated (Aug 17: $2,204 stored against $7,178 taken).
+841 historical rows repaired; 0 of 1,211 now disagree with source.
+
+Effect on the REVENUE evaluation over the same 26-day window:
+
+| Metric | Corrupted actuals | Clean actuals |
+|---|---|---|
+| WAPE | 18.1% | 11.5% |
+| Interval coverage (80%) | 61.5% | 69.2% |
+| Monday bias | +47.7% | −11.1% |
+| MAPE at horizon 1d | 30.5% | 10.6% |
+
+**Two model findings changed as a result.**
+
+- **Error compounding is withdrawn.** It was ranked the top fix. On clean actuals MAPE is flat
+  across horizon — 10.6% at 1d, 10.3% at 4d, 9.7% at 7d, 10.6% at 13d. Compounding would climb.
+  The recursive loop in `forecast()` is real but is not costing this store accuracy. Rewriting
+  three models to direct multi-horizon would have been ~a week spent on a non-problem. Revisit
+  only if the horizon curve steepens at another store.
+- **Uniform under-prediction is the new top issue.** Bias is negative on all seven weekdays
+  (Mon −11.1%, Wed −11.2%, Thu −9.4%, Sun −6.9%, Tue −5.4%, Fri −3.6%, Sat −0.3%), and the model
+  loses to a seasonal-naive `y[t-7]` baseline: 11.5% WAPE against 5.6%. On a stricter join without
+  the evaluator's fallback the gap narrows to 10.5% vs 8.3% — the evaluator's
+  `_seasonal_naive_baseline` falls back to the row's own actual when `t-7` is missing, which its
+  docstring notes biases the baseline toward zero. Either way the trained model does not beat
+  "use last week's same day". Likely trend lag: revenue is rising (Monday averaged $6,760 in June,
+  $7,169 in July, $7,276 in August) while `roll_28` / `roll_90` pull toward the past. Diagnose
+  before building.
+- **Interval calibration confirmed, with the direction now known.** Coverage by horizon against
+  an 80% target: 1d 71%, 4d 71%, 7d 84%, 8d 97%, 11d 96%, 12d 96%. Too tight near, far too loose
+  far out — `HORIZON_WIDENING_PER_DAY` inflating by a fixed slope. Delete it rather than retune.
 
 ## Decisions
 
@@ -137,17 +176,18 @@ No model changes. Everything below is already computed somewhere in the repo.
    dependency. Top contributors stored per forecast row; rendered as the drawer waterfall.
 10. `reg:quantileerror` for conditional quantiles; conformal calibration per horizon step and per
     weekday. `HORIZON_WIDENING_PER_DAY` is deleted, not tuned.
-11. Direct multi-horizon — retire the recursive prediction loop in all three models.
-12. Elasticity standard errors persisted; Monte Carlo propagation through `impact.py`.
-13. `HarriShift` scheduled-hours features; moving holidays.
+11. ~~Direct multi-horizon~~ — **withdrawn 2026-08-19**, see findings above.
+12. Diagnose and correct the uniform negative bias (trend lag against rolling means).
+13. Elasticity standard errors persisted; Monte Carlo propagation through `impact.py`.
+14. `HarriShift` scheduled-hours features; moving holidays.
 
 ### Phase 4 — Close the loop
 
-14. `DecisionLog` — opportunity, state (committed / dismissed with reason / expired), actor,
+15. `DecisionLog` — opportunity, state (committed / dismissed with reason / expired), actor,
     timestamps, and **the forecast frozen at commit time**.
-15. Causal read-out: actuals against the frozen band, with the interval as the significance test.
-16. Isotonic calibration of predicted impact against realized impact, per opportunity type.
-17. Interval-based anomalies (a day outside its own 95% band); grounded LLM verdict line.
+16. Causal read-out: actuals against the frozen band, with the interval as the significance test.
+17. Isotonic calibration of predicted impact against realized impact, per opportunity type.
+18. Interval-based anomalies (a day outside its own 95% band); grounded LLM verdict line.
 
 ## Testing
 
