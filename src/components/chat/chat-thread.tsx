@@ -170,6 +170,12 @@ export function ChatThread({
             const isLast = idx === messages.length - 1
             const streamingThis =
               isStreaming && isLast && m.role === "assistant"
+            // 1-based ordinal of this assistant turn, stamped on the return's
+            // head so an answer can be referred to by number within a thread.
+            const turnNo =
+              m.role === "assistant"
+                ? messages.slice(0, idx + 1).filter((x) => x.role === "assistant").length
+                : undefined
             // Cap stagger index so a long thread's reveal doesn't grow into
             // a multi-second wave. After the sixth row, every reveal lands
             // at the same time as the chat-thread fade.
@@ -181,6 +187,7 @@ export function ChatThread({
                 parts={m.parts as never}
                 isStreaming={streamingThis}
                 msgIdx={msgIdx}
+                turnNo={turnNo}
               />
             )
           })

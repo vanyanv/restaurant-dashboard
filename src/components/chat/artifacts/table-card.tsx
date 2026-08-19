@@ -56,7 +56,11 @@ export function TableCard<T>({
       subline={subline}
       footerHref={footerHref}
       footerLabel={footerLabel}
-      defaultOpen={defaultOpen ?? rows.length <= 3}
+      // Open by default: inside the Answer Block the table IS the evidence,
+      // not an attachment under the prose. Long tables stay bounded because
+      // `maxVisible` (10) truncates the rendered rows with an overflow note,
+      // so opening one can't dump a wall of ledger lines into the thread.
+      defaultOpen={defaultOpen ?? true}
     >
       <div
         className={
