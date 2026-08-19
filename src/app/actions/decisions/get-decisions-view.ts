@@ -4,6 +4,8 @@ import { ymdUTC as ymd } from "@/lib/date-utils"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@/generated/prisma/client"
+import { weekdayTargets, type SplhInput } from "@/lib/splh"
 import { getCachedSession, resolveStoreContext } from "@/app/actions/forecasts/_shared"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
@@ -27,6 +29,10 @@ import {
   combineEvaluations,
   type Scorecard,
 } from "@/app/dashboard/decisions/lib/scorecard"
+import {
+  computeLaborLane,
+  type LaborLane,
+} from "@/app/dashboard/decisions/lib/labor-lane"
 import {
   stripJargon,
   translateConfidence,
@@ -58,6 +64,13 @@ export interface DecisionDay {
    * Harri has published no schedule for that day).
    */
   staffNote: string | null
+  /**
+   * Scheduled hours from HarriShift against the hours this day's forecast
+   * earns at typical weekday productivity. Replaces the +1/-1 staff arrow,
+   * which read "no schedule" six days out of seven because its source table
+   * has no forward rows.
+   */
+  labor: LaborLane
   hasAnomaly: boolean
   anomalyHint: string | null
   weatherTone: "clear" | "rain" | "heat" | "cold" | "heavy_rain" | null
@@ -148,6 +161,8 @@ export async function getDecisionsView(input: {
     storeTargets,
     weatherRows,
     eventRows,
+    shiftRows,
+    splhHistoryRows,
     evaluationRows,
   ] = await Promise.all([
     getRevenueForecast({ storeId: input.storeId, horizonDays: 14 }),
@@ -199,6 +214,38 @@ export async function getDecisionsView(input: {
         majorEventCount: true,
       },
     }),
+    // Published shifts covering the forecast week. HarriShift runs ~2 weeks
+    // ahead of today once the manager publishes; nothing else in the fan-out
+    // reaches forward.
+    prisma.harriShift.findMany({
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: today, lte: addDays(today, 7) },
+        status: { not: "DELETED" },
+      },
+      select: { date: true, minutes: true, isVirtual: true },
+    }).catch(() => []),
+    // Labor hours joined to net sales, for the per-weekday productivity median.
+    // Same sources and grain as getSplhSeries: HarriPositionDaily.actualSeconds
+    // and OtterHourlySummary.netSales, both LA-calendar daily.
+    prisma.$queryRaw<Array<{ date: Date; hours: number | null; net: number | null }>>(
+      Prisma.sql`
+        SELECT h."date",
+               SUM(h."actualSeconds") / 3600.0  AS hours,
+               s.net                            AS net
+          FROM "HarriPositionDaily" h
+          LEFT JOIN (
+            SELECT "storeId", "date", SUM("netSales") AS net
+              FROM "OtterHourlySummary"
+             WHERE "storeId" IN (${Prisma.join(storeIds)})
+               AND "date" >= ${addDays(today, -120)}
+             GROUP BY "storeId", "date"
+          ) s ON s."storeId" = h."storeId" AND s."date" = h."date"
+         WHERE h."storeId" IN (${Prisma.join(storeIds)})
+           AND h."date" >= ${addDays(today, -120)}
+         GROUP BY h."date", s.net
+      `,
+    ).catch(() => []),
     // First reader of MlForecastEvaluation anywhere in src/. Ordered newest
     // first and deduped per store below — Prisma has no latest-per-group, and
     // the row count here is stores x model versions, not unbounded.
@@ -241,6 +288,28 @@ export async function getDecisionsView(input: {
   const scorecard = combineEvaluations([...latestPerStore.values()])
   const trailing7Mean = revenueData ? trailingMean(revenueData.days) : 0
 
+  // Published hours and unfilled slots per day.
+  const shiftsByDate = new Map<string, { hours: number; unfilled: number }>()
+  for (const row of shiftRows) {
+    const key = ymd(row.date)
+    const cur = shiftsByDate.get(key) ?? { hours: 0, unfilled: 0 }
+    cur.hours += row.minutes / 60
+    if (row.isVirtual) cur.unfilled += 1
+    shiftsByDate.set(key, cur)
+  }
+
+  // Median $/labor-hour per weekday. A flat target would just redraw the volume
+  // curve and condemn every Tuesday, so the comparison is like-for-like.
+  const splhHistory: SplhInput[] = splhHistoryRows
+    .filter((r) => Number(r.hours ?? 0) > 0 && Number(r.net ?? 0) > 0)
+    .map((r) => ({
+      date: ymd(r.date),
+      netSales: Number(r.net ?? 0),
+      laborHours: Number(r.hours ?? 0),
+      laborCost: 0,
+    }))
+  const splhByWeekday = weekdayTargets(splhHistory)
+
   const next7 = revenueData?.days.slice(0, 7) ?? []
   const days: DecisionDay[] = next7.map((d) => {
     const key = ymd(d.date)
@@ -252,6 +321,13 @@ export async function getDecisionsView(input: {
     const staffDelta = computeStaffDelta(laborData, key)
     const staffNote = computeStaffNote(laborData, key)
     const foodCostNote = isAggregate ? null : foodCostNoteFor(foodCostData, key)
+    const shifts = shiftsByDate.get(key) ?? { hours: 0, unfilled: 0 }
+    const labor = computeLaborLane({
+      forecastRevenue: d.predictedRevenue,
+      scheduledHours: shifts.hours,
+      targetSplh: splhByWeekday[d.date.getUTCDay()] ?? null,
+      unfilledSlots: shifts.unfilled,
+    })
 
     return {
       date: key,
@@ -264,6 +340,7 @@ export async function getDecisionsView(input: {
       pctVsTrailing: pct,
       staffDelta,
       staffNote,
+      labor,
       hasAnomaly: !!anom,
       anomalyHint: anom,
       weatherTone: weather.tone,
