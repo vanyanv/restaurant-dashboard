@@ -34,6 +34,12 @@ import {
   type LaborLane,
 } from "@/app/dashboard/decisions/lib/labor-lane"
 import {
+  OPERATING_HOURS,
+  buildHourlyCoverage,
+  type HourlyCoverage,
+} from "@/app/dashboard/decisions/lib/hourly-coverage"
+import { bucketShiftHours } from "@/lib/harri-schedule"
+import {
   stripJargon,
   translateConfidence,
   translateOpportunityType,
@@ -71,6 +77,11 @@ export interface DecisionDay {
    * has no forward rows.
    */
   labor: LaborLane
+  /**
+   * Demand per hour against the shifts posted for it. The lane says a day is
+   * short; this says which stretch, which is what a manager actually posts.
+   */
+  hourly: HourlyCoverage
   hasAnomaly: boolean
   anomalyHint: string | null
   weatherTone: "clear" | "rain" | "heat" | "cold" | "heavy_rain" | null
@@ -162,6 +173,8 @@ export async function getDecisionsView(input: {
     weatherRows,
     eventRows,
     shiftRows,
+    hourlyForecastRows,
+    ordersHistoryRows,
     splhHistoryRows,
     evaluationRows,
   ] = await Promise.all([
@@ -220,10 +233,42 @@ export async function getDecisionsView(input: {
     prisma.harriShift.findMany({
       where: {
         storeId: { in: storeIds },
-        date: { gte: today, lte: addDays(today, 7) },
+        // Back 60 days as well: the throughput rate behind "needed hours" is
+        // the store's own orders per labor hour, and that needs history.
+        date: { gte: addDays(today, -60), lte: addDays(today, 7) },
         status: { not: "DELETED" },
       },
-      select: { date: true, minutes: true, isVirtual: true },
+      select: {
+        date: true,
+        minutes: true,
+        isVirtual: true,
+        startTime: true,
+        endTime: true,
+      },
+    }).catch(() => []),
+    // Hourly demand forecast for the week, newest generation only.
+    prisma.forecastHourlyOrders.findMany({
+      where: {
+        storeId: { in: storeIds },
+        forecastDate: { gte: today, lte: addDays(today, 7) },
+      },
+      orderBy: { generatedAt: "desc" },
+      take: 24 * 8 * 4,
+      select: {
+        forecastDate: true,
+        hourBucket: true,
+        predictedOrders: true,
+        generatedAt: true,
+      },
+    }).catch(() => []),
+    // Orders actually taken, for the throughput denominator's other half.
+    prisma.otterHourlySummary.groupBy({
+      by: ["date"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: addDays(today, -60), lt: today },
+      },
+      _sum: { orderCount: true },
     }).catch(() => []),
     // Labor hours joined to net sales, for the per-weekday productivity median.
     // Same sources and grain as getSplhSeries: HarriPositionDaily.actualSeconds
@@ -314,6 +359,44 @@ export async function getDecisionsView(input: {
     }))
   const splhByWeekday = weekdayTargets(splhHistory)
 
+  // Orders per labor hour, the store's own throughput. Numerator from orders
+  // actually taken, denominator from shifts posted for those same completed
+  // days — the same "typical, not optimal" benchmark the daily lane uses.
+  const shiftHoursByDate = new Map<string, number>()
+  for (const row of shiftRows) {
+    const key = ymd(row.date)
+    shiftHoursByDate.set(key, (shiftHoursByDate.get(key) ?? 0) + row.minutes / 60)
+  }
+  let histOrders = 0
+  let histHours = 0
+  for (const row of ordersHistoryRows) {
+    const hours = shiftHoursByDate.get(ymd(row.date)) ?? 0
+    const orders = row._sum.orderCount ?? 0
+    if (hours <= 0 || orders <= 0) continue
+    histOrders += orders
+    histHours += hours
+  }
+  const ordersPerLaborHour = histHours > 0 ? histOrders / histHours : null
+
+  // Newest generation only — the query is ordered desc, so first wins.
+  const hourlyByDate = new Map<string, Map<number, number>>()
+  const seenGeneration = new Map<string, number>()
+  for (const row of hourlyForecastRows) {
+    const key = ymd(row.forecastDate)
+    const stamp = row.generatedAt.getTime()
+    const kept = seenGeneration.get(key)
+    if (kept == null) seenGeneration.set(key, stamp)
+    else if (stamp !== kept) continue
+    const byHour = hourlyByDate.get(key) ?? new Map<number, number>()
+    byHour.set(row.hourBucket, row.predictedOrders)
+    hourlyByDate.set(key, byHour)
+  }
+
+  // Shift minutes spread across the clock hours they actually cover. Overnight
+  // shifts land on the next date key, which is why hours 0-1 of the following
+  // morning are read back for the trading day that opened before midnight.
+  const staffedByDate = bucketShiftHours(shiftRows)
+
   const next7 = revenueData?.days.slice(0, 7) ?? []
   const days: DecisionDay[] = next7.map((d) => {
     const key = ymd(d.date)
@@ -326,6 +409,20 @@ export async function getDecisionsView(input: {
     const staffNote = computeStaffNote(laborData, key)
     const foodCostNote = isAggregate ? null : foodCostNoteFor(foodCostData, key)
     const shifts = shiftsByDate.get(key) ?? { hours: 0, unfilled: 0 }
+    const nextKey = ymd(addDays(d.date, 1))
+    const hourly = buildHourlyCoverage(
+      OPERATING_HOURS.map((hour) => {
+        // Hours 0 and 1 belong to the trading day that opened the morning
+        // before, so they are read from the following calendar date.
+        const srcKey = hour <= 1 ? nextKey : key
+        return {
+          hour,
+          predictedOrders: hourlyByDate.get(srcKey)?.get(hour) ?? 0,
+          staffedHours: staffedByDate.get(srcKey)?.[hour] ?? 0,
+        }
+      }),
+      ordersPerLaborHour,
+    )
     const labor = computeLaborLane({
       forecastRevenue: d.predictedRevenue,
       scheduledHours: shifts.hours,
@@ -345,6 +442,7 @@ export async function getDecisionsView(input: {
       staffDelta,
       staffNote,
       labor,
+      hourly,
       hasAnomaly: !!anom,
       anomalyHint: anom,
       weatherTone: weather.tone,
