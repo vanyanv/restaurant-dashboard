@@ -2,11 +2,14 @@
 
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChatDrawer } from "./chat-drawer-context"
 import { ChatEmpty } from "./chat-empty"
 import { ChatInput } from "./chat-input"
 import { ChatMessage } from "./chat-message"
+import { selectFiledReturn, type ReturnPart } from "@/lib/chat/return"
+import { isNearBottom, shouldAutoScroll } from "@/lib/chat/thread-scroll"
+import { buildScopedMessage, type ComposerScope } from "@/lib/chat/composer"
 
 interface Props {
   /** When set, the thread hydrates from this list of past messages on
@@ -28,7 +31,11 @@ interface Props {
    * by the caller). Parent surfaces clear their context id so the next
    * send creates a fresh conversation instead of failing again. */
   onConversationLost?: () => void
+  /** Fires with the new conversation id after a turn is branched. */
+  onBranched?: (id: string) => void
   inputHint?: string
+  /** Stores the owner runs, for the composer's scope chips. */
+  stores?: Array<{ id: string; name: string }>
 }
 
 /** Wraps `useChat` for the drawer + page surfaces. Exports a single
@@ -43,10 +50,17 @@ export function ChatThread({
   onTurnFinish,
   onConversationCaptured,
   onConversationLost,
+  onBranched,
   inputHint,
+  stores,
 }: Props = {}) {
   const { conversationId } = useChatDrawer()
   const [seedText, setSeedText] = useState<string | undefined>(undefined)
+  const [scope, setScope] = useState<ComposerScope>({
+    storeName: null,
+    from: null,
+    to: null,
+  })
   // Hold the latest onTurnFinish in a ref so the status-watching effect
   // doesn't need it as a dependency (which would re-run on every prop
   // change and could double-fire).
@@ -64,6 +78,14 @@ export function ChatThread({
   // it to every outgoing request without forcing a remount.
   const conversationIdRef = useRef<string | null>(conversationId)
   conversationIdRef.current = conversationId
+
+  // Ids that came from the server. Only these can be branched: a live turn's
+  // id is generated client-side by the AI SDK and matches no Message row, so
+  // offering Branch on one would 404.
+  const serverMessageIds = useMemo(
+    () => new Set((initialMessages ?? []).map((m) => m.id)),
+    [initialMessages],
+  )
 
   const transport = useMemo(
     () =>
@@ -99,29 +121,66 @@ export function ChatThread({
     [],
   )
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, stop, regenerate } = useChat({
     transport,
     messages: initialMessages,
   })
 
+  const isStreaming = status === "submitted" || status === "streaming"
+
   const send = (text: string) => {
-    void sendMessage({ text })
+    const scoped = buildScopedMessage(text, scope)
+    if (!scoped) return
+    void sendMessage({ text: scoped })
   }
 
-  // Auto-scroll to bottom on new content.
+  // --- scroll ---------------------------------------------------------
+  // The rule: never fight a scroll-up. `stuckRef` tracks whether the reader
+  // is parked at the bottom; new content only pulls the viewport when they
+  // are. Scrolling up mid-answer releases the lock and raises the pill.
   const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollFrameRef = useRef<number | null>(null)
+  const stuckRef = useRef(true)
+  const firstPaintRef = useRef(true)
+  const [showJump, setShowJump] = useState(false)
+
+  const scrollToBottom = useCallback((smooth = false) => {
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" })
+    stuckRef.current = true
+    setShowJump(false)
+  }, [])
+
+  const handleScroll = useCallback(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const near = isNearBottom(el)
+    stuckRef.current = near
+    setShowJump(!near)
+  }, [])
+
   useEffect(() => {
     if (scrollFrameRef.current !== null) {
       window.cancelAnimationFrame(scrollFrameRef.current)
     }
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
+      if (
+        !shouldAutoScroll({
+          stuck: stuckRef.current,
+          isStreaming,
+          firstPaint: firstPaintRef.current,
+        })
+      ) {
+        return
+      }
+      firstPaintRef.current = false
       const el = scrollerRef.current
       if (!el) return
       el.scrollTop = el.scrollHeight
     })
-  }, [messages])
+  }, [messages, isStreaming])
 
   useEffect(() => {
     return () => {
@@ -129,12 +188,6 @@ export function ChatThread({
         window.cancelAnimationFrame(scrollFrameRef.current)
       }
     }
-  }, [])
-
-  useEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
   }, [])
 
   // Fire `onTurnFinish` once per turn — when status transitions from an
@@ -151,48 +204,133 @@ export function ChatThread({
     }
   }, [status])
 
-  const isStreaming = status === "submitted" || status === "streaming"
+  // Esc stops a run in flight. Matches the composer's own Esc handling,
+  // which only clears a draft when there is one.
+  useEffect(() => {
+    if (!isStreaming) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") stop()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [isStreaming, stop])
+
+  async function branchFrom(messageId: string) {
+    const cid = conversationIdRef.current
+    if (!cid) return
+    try {
+      const res = await fetch(`/api/chat/conversations/${cid}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ throughMessageId: messageId }),
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { id: string }
+      onBranched?.(data.id)
+    } catch {
+      /* leave the thread as it is — branching is additive */
+    }
+  }
+
   const hasMessages = messages.length > 0
   const errorText = error ? friendlyError(error.message) : null
 
+  // Follow-ups hang off the newest settled answer only. On older turns they
+  // would be stale suggestions about a question two answers back.
+  const lastAssistant = !isStreaming
+    ? [...messages].reverse().find((m) => m.role === "assistant")
+    : undefined
+  const followUps = lastAssistant
+    ? (selectFiledReturn(lastAssistant.parts as unknown as ReturnPart[])?.followUps ?? [])
+    : []
+
   return (
     <>
-      <div className="chat-thread" ref={scrollerRef}>
-        {!hasMessages ? (
-          <ChatEmpty
-            onSelect={(s) => {
-              setSeedText(s)
-              send(s)
-            }}
-          />
-        ) : (
-          messages.map((m, idx) => {
-            const isLast = idx === messages.length - 1
-            const streamingThis =
-              isStreaming && isLast && m.role === "assistant"
-            // 1-based ordinal of this assistant turn, stamped on the return's
-            // head so an answer can be referred to by number within a thread.
-            const turnNo =
-              m.role === "assistant"
-                ? messages.slice(0, idx + 1).filter((x) => x.role === "assistant").length
-                : undefined
-            // Cap stagger index so a long thread's reveal doesn't grow into
-            // a multi-second wave. After the sixth row, every reveal lands
-            // at the same time as the chat-thread fade.
-            const msgIdx = Math.min(idx, 5)
-            return (
-              <ChatMessage
-                key={m.id}
-                role={m.role}
-                parts={m.parts as never}
-                isStreaming={streamingThis}
-                msgIdx={msgIdx}
-                turnNo={turnNo}
-              />
-            )
-          })
+      <div className="chat-thread-wrap">
+        <div className="chat-thread" ref={scrollerRef} onScroll={handleScroll}>
+          {!hasMessages ? (
+            <ChatEmpty
+              onSelect={(s) => {
+                setSeedText(s)
+                send(s)
+              }}
+            />
+          ) : (
+            messages.map((m, idx) => {
+              const isLast = idx === messages.length - 1
+              const streamingThis =
+                isStreaming && isLast && m.role === "assistant"
+              // 1-based ordinal of this assistant turn, stamped on the return's
+              // head so an answer can be referred to by number within a thread.
+              const turnNo =
+                m.role === "assistant"
+                  ? messages.slice(0, idx + 1).filter((x) => x.role === "assistant").length
+                  : undefined
+              // Cap stagger index so a long thread's reveal doesn't grow into
+              // a multi-second wave. After the sixth row, every reveal lands
+              // at the same time as the chat-thread fade.
+              const msgIdx = Math.min(idx, 5)
+              return (
+                <ChatMessage
+                  key={m.id}
+                  role={m.role}
+                  parts={m.parts as never}
+                  isStreaming={streamingThis}
+                  msgIdx={msgIdx}
+                  turnNo={turnNo}
+                  onRetry={
+                    m.role === "assistant" && !isStreaming
+                      ? () => void regenerate({ messageId: m.id })
+                      : undefined
+                  }
+                  onBranch={
+                    m.role === "assistant" && !isStreaming && serverMessageIds.has(m.id)
+                      ? () => void branchFrom(m.id)
+                      : undefined
+                  }
+                />
+              )
+            })
+          )}
+
+          {/* Announced politely so a screen reader hears the answer land
+              without having the whole stream read over the reader. */}
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {isStreaming ? "Answering." : hasMessages ? "Answer ready." : ""}
+          </div>
+        </div>
+
+        {(isStreaming || showJump) && (
+          <div className="chat-floaty">
+            {isStreaming ? (
+              <button type="button" className="chat-pill chat-pill--stop" onClick={() => stop()}>
+                <span className="live-dot" aria-hidden />
+                Stop generating
+                <span className="kbd-chip">Esc</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="chat-pill"
+                onClick={() => scrollToBottom(true)}
+              >
+                ↓ Jump to latest
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {followUps.length > 0 && (
+        <div className="chat-followups">
+          {followUps.map((q) => (
+            <button key={q} type="button" className="chat-followup" onClick={() => send(q)}>
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
       <ChatInput
         onSubmit={send}
         disabled={isStreaming}
@@ -200,6 +338,9 @@ export function ChatThread({
         error={errorText}
         initialText={seedText}
         metaHint={inputHint}
+        stores={stores}
+        scope={scope}
+        onScopeChange={setScope}
       />
     </>
   )

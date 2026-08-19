@@ -32,13 +32,15 @@ interface ConversationSummary {
 
 interface Props {
   initialConversations: ConversationSummary[]
+  /** Stores the owner runs, for the composer's scope chips. */
+  stores?: Array<{ id: string; name: string }>
 }
 
 /** Two-column shell for the dedicated chat page: a 280px conversations
  * rail on the left and the same `<ChatThread>` the drawer uses on the
  * right. The thread reads its conversation id from the drawer context, so
  * picking a conversation in the rail repoints the thread to that id. */
-export function ChatPageClient({ initialConversations }: Props) {
+export function ChatPageClient({ initialConversations, stores }: Props) {
   const {
     conversationId,
     setConversationId,
@@ -51,6 +53,7 @@ export function ChatPageClient({ initialConversations }: Props) {
     messages: UIMessage[]
   }>({ id: null, messages: [] })
   const [pendingClearAll, setPendingClearAll] = useState(false)
+  const [query, setQuery] = useState("")
   // Marker set when the active <ChatThread> bubbles up its server-assigned
   // conversation id mid-stream. The hydration effect below skips when the
   // context's conversationId matches this — re-fetching would change the
@@ -137,6 +140,16 @@ export function ChatPageClient({ initialConversations }: Props) {
     }
   }, [conversationId])
 
+  // Search runs server-side over titles AND turn content, so it finds the
+  // thread the owner remembers by a number in the answer rather than by its
+  // auto-generated title. Debounced so typing does not fire a query a letter.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void refresh()
+    }, 220)
+    return () => window.clearTimeout(t)
+  }, [query])
+
   // Refresh the rail when the tab regains focus — covers the case where
   // another tab created or renamed a conversation. The post-turn refresh
   // is wired through `<ChatThread onTurnFinish>` below.
@@ -148,11 +161,16 @@ export function ChatPageClient({ initialConversations }: Props) {
     return () => window.removeEventListener("focus", onFocus)
   }, [])
 
+  const queryRef = useRef("")
+  queryRef.current = query
+
   async function refresh() {
     try {
-      const res = await fetch("/api/chat/conversations", {
-        cache: "no-store",
-      })
+      const q = queryRef.current.trim()
+      const res = await fetch(
+        q ? `/api/chat/conversations?q=${encodeURIComponent(q)}` : "/api/chat/conversations",
+        { cache: "no-store" },
+      )
       if (!res.ok) return
       const data = (await res.json()) as { conversations: ConversationSummary[] }
       setConversations(data.conversations)
@@ -231,10 +249,24 @@ export function ChatPageClient({ initialConversations }: Props) {
             </button>
           </div>
         </div>
+        <label className="chat-page__search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search questions and answers"
+            aria-label="Search conversations"
+          />
+        </label>
         <div className="chat-page__list">
           {conversations.length === 0 ? (
             <div className="chat-page__empty-rail">
-              No conversations yet. Ask a question to start one.
+              {query.trim()
+                ? "No thread matches that. Ask it as a new question."
+                : "No conversations yet. Ask a question to start one."}
             </div>
           ) : (
             conversations.map((c) => (
@@ -270,6 +302,12 @@ export function ChatPageClient({ initialConversations }: Props) {
             resetConversation()
             setHydrated({ id: null, messages: [] })
           }}
+          onBranched={(id) => {
+            capturedIdRef.current = null
+            setConversationId(id)
+            void refresh()
+          }}
+          stores={stores}
         />
       </section>
     </div>

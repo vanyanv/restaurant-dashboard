@@ -69,6 +69,110 @@ export async function createConversation(
   return c
 }
 
+/**
+ * Copies a thread up to and including one turn into a fresh conversation, so
+ * the owner can take a different direction from a given answer without losing
+ * the thread they already have.
+ *
+ * Everything after the chosen turn is dropped — that is the branch. Tool calls
+ * are deliberately NOT copied: they are provenance for a call that happened in
+ * the source thread at a particular moment, and re-attributing them to a
+ * conversation where that call never ran would make the branch's history claim
+ * something untrue. The copied text is what the model needs for context.
+ */
+export async function forkConversation(
+  prisma: PrismaClient,
+  ownerId: string,
+  accountId: string,
+  conversationId: string,
+  throughMessageId: string,
+): Promise<{ id: string }> {
+  // Enforces the account boundary and throws NOT_FOUND / NOT_OWNED.
+  const source = await getConversation(prisma, accountId, conversationId)
+
+  const cut = source.messages.findIndex((m) => m.id === throughMessageId)
+  if (cut === -1) {
+    throw new ConversationAccessError(
+      "NOT_FOUND",
+      "message not in this conversation",
+    )
+  }
+
+  const branch = await createConversation(prisma, ownerId, accountId)
+
+  // Sequential on purpose: Message rows order by createdAt, and firing the
+  // creates in parallel would let them land out of order within the same
+  // millisecond, scrambling the branch's history.
+  for (const m of source.messages.slice(0, cut + 1)) {
+    await prisma.message.create({
+      data: {
+        conversationId: branch.id,
+        role: m.role,
+        content: m.content,
+      },
+      select: { id: true },
+    })
+  }
+
+  if (source.title) {
+    await setConversationTitle(prisma, branch.id, `${source.title} (branch)`)
+  }
+
+  return branch
+}
+
+/**
+ * Searches conversations on the caller's account by title AND by the text of
+ * any turn inside them, newest-updated first.
+ *
+ * Searching turn content is the whole point. Titles are auto-generated, so a
+ * thread the owner remembers by a number in the answer ("the one where produce
+ * came out at twelve thousand") is unreachable by title alone — the failure
+ * every ChatGPT write-up names once a user passes a few dozen threads. A blank
+ * query degrades to a plain listing so the rail can use one code path.
+ */
+export async function searchConversations(
+  prisma: PrismaClient,
+  accountId: string,
+  query: string,
+  limit = 50,
+): Promise<ConversationSummary[]> {
+  const q = query.trim()
+  const rows = await prisma.conversation.findMany({
+    where: {
+      accountId,
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" as const } },
+              {
+                messages: {
+                  some: { content: { contains: q, mode: "insensitive" as const } },
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { messages: true } },
+    },
+  })
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    messageCount: r._count.messages,
+  }))
+}
+
 /** Lists conversations on the caller's account, newest-updated first. */
 export async function listConversations(
   prisma: PrismaClient,

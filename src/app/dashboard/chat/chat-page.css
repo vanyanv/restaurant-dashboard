@@ -194,3 +194,42 @@
     display: none;
   }
 }
+
+/* Thread search — titles and turn content, so a thread the owner remembers by
+   a number in its answer is findable. */
+.chat-page__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 16px 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--hairline-bold);
+  background: rgba(255, 255, 255, 0.55);
+  transition: border-color 120ms ease;
+}
+
+.chat-page__search:focus-within {
+  border-color: var(--ink);
+}
+
+.chat-page__search svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.chat-page__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.chat-page__search input::placeholder {
+  color: var(--ink-faint);
+}

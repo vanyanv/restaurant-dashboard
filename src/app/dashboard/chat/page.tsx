@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
+import { listOwnerStores } from "@/lib/chat/owner-scope"
 import { listConversations } from "@/lib/chat/conversation"
 import { ChatPageClient } from "./chat-page-client"
 
@@ -31,9 +32,15 @@ export default async function ChatPage() {
   if (!session?.user) redirect("/login")
   if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
 
-  const initialConversations = await getCachedConversations(
-    session.user.accountId
-  )
+  const [initialConversations, stores] = await Promise.all([
+    getCachedConversations(session.user.accountId),
+    listOwnerStores(session.user.accountId),
+  ])
 
-  return <ChatPageClient initialConversations={initialConversations} />
+  return (
+    <ChatPageClient
+      initialConversations={initialConversations}
+      stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+    />
+  )
 }

@@ -75,6 +75,13 @@ const parameters = z
       .describe(
         "The one to three numbers the answer turns on, most important first. File one figure for a single-fact question and none at all when the department is No data.",
       ),
+    followUps: z
+      .array(z.string().min(1).max(90))
+      .max(3)
+      .optional()
+      .describe(
+        "Up to three questions this answer makes worth asking next, each phrased the way the owner would type it and each answerable by the tools you have. Omit rather than pad.",
+      ),
   })
   .strict()
 

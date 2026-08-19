@@ -15,6 +15,8 @@ interface Props {
   note?: ReactNode
   /** The one-line provenance footer, already split off the note. */
   provenance?: string | null
+  /** Copy / Retry / Branch, rendered under the block. */
+  actions?: ReactNode
 }
 
 /**
@@ -26,7 +28,14 @@ interface Props {
  *   short — two hairlines and one ledger line, for a single-fact answer
  *   empty — frame and verdict with no figure strip, for an out-of-scope ask
  */
-export function ChatReturn({ filed, turnNo, evidence, note, provenance }: Props) {
+export function ChatReturn({
+  filed,
+  turnNo,
+  evidence,
+  note,
+  provenance,
+  actions,
+}: Props) {
   const form = returnForm(filed)
 
   if (form === "short") {
@@ -50,6 +59,7 @@ export function ChatReturn({ filed, turnNo, evidence, note, provenance }: Props)
         {evidence}
         {note && <div className="chat-return__note">{note}</div>}
         {provenance && <div className="chat-return__prov">{provenance}</div>}
+        {actions}
       </div>
     )
   }
@@ -77,6 +87,7 @@ export function ChatReturn({ filed, turnNo, evidence, note, provenance }: Props)
       {evidence}
       {note && <div className="chat-return__note">{note}</div>}
       {provenance && <div className="chat-return__prov">{provenance}</div>}
+      {actions && <div className="chat-return__acts">{actions}</div>}
     </div>
   )
 }

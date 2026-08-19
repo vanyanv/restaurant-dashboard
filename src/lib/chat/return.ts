@@ -24,6 +24,9 @@ export interface FiledReturn {
   /** "Hollywood · Aug 11 – 17". Empty string when the model omitted it. */
   scope: string
   figures: ReturnFigure[]
+  /** Questions this answer makes worth asking next. Model-authored, so they
+   * are grounded in what it just read rather than a static chip list. */
+  followUps: string[]
 }
 
 /** The three forms the block takes. See the spec's form-selection table. */
@@ -41,6 +44,7 @@ export interface ReturnPart {
 
 const FILE_RETURN_TOOL = "fileReturn"
 const MAX_FIGURES = 3
+const MAX_FOLLOW_UPS = 3
 
 /** The department the model files when the question is out of scope. Drives
  * the empty form regardless of what else was filed. */
@@ -98,11 +102,20 @@ export function selectFiledReturn(parts: readonly ReturnPart[]): FiledReturn | n
       if (figures.length === MAX_FIGURES) break
     }
 
+    const rawFollowUps = Array.isArray(out.followUps) ? out.followUps : []
+    const followUps: string[] = []
+    for (const raw of rawFollowUps) {
+      const q = str(raw)
+      if (q) followUps.push(q)
+      if (followUps.length === MAX_FOLLOW_UPS) break
+    }
+
     return {
       verdict,
       department,
       scope: str(out.scope) ?? "",
       figures,
+      followUps,
     }
   }
   return null

@@ -168,3 +168,29 @@ describe("splitProvenance", () => {
     expect(splitProvenance("")).toEqual({ body: "", footer: null })
   })
 })
+
+describe("follow-ups", () => {
+  it("reads the questions the model filed", () => {
+    const r = selectFiledReturn([filed({ followUps: ["Break that out by platform", "Same week last year"] })])
+    expect(r!.followUps).toEqual(["Break that out by platform", "Same week last year"])
+  })
+
+  it("is an empty list when the model filed none", () => {
+    expect(selectFiledReturn([filed()])!.followUps).toEqual([])
+  })
+
+  it("caps at three so the answer does not end in a wall of chips", () => {
+    const r = selectFiledReturn([filed({ followUps: ["a", "b", "c", "d", "e"] })])
+    expect(r!.followUps).toEqual(["a", "b", "c"])
+  })
+
+  it("drops blank and non-string entries", () => {
+    const r = selectFiledReturn([filed({ followUps: ["Real question", "   ", 42, null] })])
+    expect(r!.followUps).toEqual(["Real question"])
+  })
+
+  it("survives a followUps field that is not an array", () => {
+    const r = selectFiledReturn([filed({ followUps: "not an array" })])
+    expect(r!.followUps).toEqual([])
+  })
+})
