@@ -19,6 +19,11 @@ import numpy as np
 import pandas as pd
 
 from ml.db import connect
+from ml.features.completeness import (
+    DEFAULT_CLOSING_HOUR,
+    load_hourly_coverage,
+    trim_incomplete_trailing_days,
+)
 from ml.features.external_signals import (
     daily_signal_feature_columns,
     fill_event_daily_defaults,
@@ -73,7 +78,9 @@ def load_daily_revenue(store_id: str, lookback_days: int = 540) -> pd.DataFrame:
     full_range = pd.date_range(df["date"].min(), df["date"].max(), freq="D")
     df = df.set_index("date").reindex(full_range).fillna({"revenue": 0.0}).rename_axis("date").reset_index()
     df["revenue"] = df["revenue"].astype(float)
-    return df
+    # The newest day is usually still being written when the nightly runs; an
+    # anchor a third too low drags every horizon down with it.
+    return trim_incomplete_trailing_days(df, load_hourly_coverage(store_id, lookback_days))
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:

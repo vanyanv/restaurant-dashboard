@@ -4,8 +4,18 @@
  *
  * The endpoint is week-addressable only (`week` = the Monday), so the unit of
  * work is an ISO week, same as the positions/pay_types phase of
- * harri-labor-sync. Future weeks return an empty schedule until published, so
- * this is a backward-looking source — don't forecast on it.
+ * harri-labor-sync.
+ *
+ * This IS a forward-looking source. An earlier note here called it
+ * backward-looking on the grounds that unpublished weeks come back empty —
+ * true, but the published horizon runs about two weeks out. Probed 2026-08-19:
+ * week +0 returned 64 shifts, week +1 returned 63 (437h, Aug 24-30), weeks +2
+ * and +3 were empty. Because that note said not to forecast on it, nothing did:
+ * the staffing classifier read HarriDailyLabor.forecastCost instead, which has
+ * no forward rows, and /dashboard/decisions showed "no schedule" for a week the
+ * manager had already published.
+ *
+ * Callers should use `scheduleSyncWindow()` for the bounds.
  */
 
 import { prisma } from "@/lib/prisma"

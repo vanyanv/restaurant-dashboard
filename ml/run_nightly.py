@@ -17,6 +17,7 @@ Workflow:
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import sys
 import time
@@ -41,6 +42,7 @@ from ml.evaluation.promotion import (
     transfer_forecast_wape,
 )
 from ml.evaluation.reconcile import reconcile_past_forecasts
+from ml.evaluation.horizon_calibration import load_horizon_widths
 from ml.features.menu_item import load_top_items
 from ml.features.revenue import (
     list_active_store_ids,
@@ -144,8 +146,8 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
     sql = """
         INSERT INTO "ForecastDailyRevenue"
             (id, "storeId", "forecastDate", "hourBucket",
-             "predictedRevenue", p10, p90, "modelVersion")
-        VALUES (%s, %s, %s, 0, %s, %s, %s, %s)
+             "predictedRevenue", p10, p90, "modelVersion", "attribution")
+        VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s::jsonb)
     """
     written = 0
     with connect() as conn:
@@ -161,6 +163,7 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
                         r.p10,
                         r.p90,
                         model_version,
+                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
@@ -188,7 +191,16 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
         )
         selected_version = _version_with_flavor(model_version, result)
         _set_run_model_version(run_id, selected_version)
-        rows = forecast_revenue(store_id, result, horizon_days=REVENUE_HORIZON_DAYS)
+        # Measured per-horizon interval widths, replacing the flat 5%/day
+        # widening constant. Empty until a store has enough reconciled rows,
+        # in which case forecast() keeps the old path.
+        horizon_widths = load_horizon_widths(store_id)
+        rows = forecast_revenue(
+            store_id,
+            result,
+            horizon_days=REVENUE_HORIZON_DAYS,
+            horizon_widths=horizon_widths,
+        )
         written = _write_revenue_forecasts(store_id, selected_version, rows)
         warning = None
         if gate != "promoted":
@@ -250,6 +262,7 @@ def _write_menu_item_forecasts(
                         r.p10,
                         r.p90,
                         model_version,
+                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
@@ -363,6 +376,7 @@ def _write_hourly_order_forecasts(store_id: str, model_version: str, rows: list)
                         r.p10,
                         r.p90,
                         model_version,
+                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1

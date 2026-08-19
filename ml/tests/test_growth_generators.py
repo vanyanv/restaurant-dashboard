@@ -34,9 +34,10 @@ def test_reprice_generator_produces_opportunity_for_inelastic_item():
 
     # Mocked cursors in the SQL call order of reprice.generate:
     #   1. Top elastic items query (fitR2 >= 0.10, pricePointCount >= 2):
-    #      one row: (skuId, elasticity, fitR2, sampleSize, meanPrice, meanQty)
+    #      one row: (skuId, elasticity, fitR2, sampleSize, elasticityStdErr,
+    #                meanPrice, meanQty)
     elastic_rows = [
-        ("Bacon Eddy", -0.4, 0.45, 60, 9.50, 30.0),  # inelastic |e|<1
+        ("Bacon Eddy", -0.4, 0.45, 60, 0.05, 9.50, 30.0),  # inelastic |e|<1
     ]
     # 2. Item margin (salesRevenue - lineCost per qty, last 30 days):
     margin_rows = [("Bacon Eddy", 4.25)]
@@ -58,6 +59,11 @@ def test_reprice_generator_produces_opportunity_for_inelastic_item():
     # Evidence must cite the elasticity fit:
     kinds = [e.kind for e in o.evidence]
     assert "elasticity_fit" in kinds
+    # The fit reported a standard error, so the impact carries a range and the
+    # ledger has a downside to rank on rather than a bare point estimate.
+    assert o.impact_p10 is not None and o.impact_p90 is not None
+    assert o.impact_p10 < o.estimated_dollar_impact < o.impact_p90
+    assert o.impact_p10 < o.impact_p25 < o.impact_p90
 
 
 def test_reprice_generator_skips_low_confidence_fits():
