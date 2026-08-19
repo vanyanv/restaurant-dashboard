@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 hourly drawer and phase 3-4 unstarted
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); phase 3-4 unstarted
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -199,8 +199,13 @@ No model changes. Everything below is already computed somewhere in the repo.
    where the target is `weekdayTargets()` from `lib/splh` — the store's own median
    $/labor-hour for that weekday. Tolerance reuses `SPLH_TOLERANCE` so this and the SPLH
    chart flag the same days.
-6. Day drawer: hourly demand (`ForecastHourlyOrders`) against shift coverage (`HarriShift`),
-   via the existing `bucketShiftHours()`. **Not started.**
+6. ~~Day drawer: hourly demand against shift coverage~~ — **shipped** (`16bf0c0`).
+   `OPERATING_HOURS` runs 10:00 → 01:00, not 00:00 → 23:00: predicted orders peak at hour 23
+   (40.7) and are still 36.4 at hour 0, so a midnight-split axis would break the evening in
+   half. Hours 0–1 are read from the following calendar date, matching how `bucketShiftHours`
+   lands overnight shifts. Per-hour "needed" uses the store's own orders per labor hour over
+   the last 60 days. The flagged stretch is the *longest* run of short hours, not the deepest —
+   one shift fixes a three-hour hole.
 7. ~~Unfilled-slot flag from `HarriShift.isVirtual`~~ — **shipped**, but demoted. Measured
    11 occurrences in 3,737 shifts over 13 months (0.3%), so it is an occasional flag, not
    the design fixture the visual spec made it. The mockup's "2 slots unfilled" is not
@@ -236,6 +241,28 @@ cashier) and 28 staff, so position mix is thinner than the visual spec assumes.
 16. Causal read-out: actuals against the frozen band, with the interval as the significance test.
 17. Isotonic calibration of predicted impact against realized impact, per opportunity type.
 18. Interval-based anomalies (a day outside its own 95% band); grounded LLM verdict line.
+
+## Verification pass — 2026-08-19
+
+Checking the trailing-day fix for knock-on effects found the same bug in two more loaders and
+one dangerous coupling (`8a7d5d9`):
+
+- **`reconciledAt` was being written by the wrong subsystem.** `ml/evaluation/reconcile.py`
+  stamped it on every actuals UPDATE, but it is the MinTrace writer's freshness marker for
+  `reconciledRevenue` — `isReconciledStale()` gates both revenue and food-cost reads on it.
+  Under the old NULL guard that was one stamp per row; with the 35-day re-reconciliation window
+  it would restamp 35 days nightly, so `isReconciledStale` would never fire and a stale
+  `reconciledRevenue` would be served as current. The backfiller no longer touches it, and
+  `ml-status.ts` now reads `actualOrders IS NOT NULL` for "has actuals".
+- **Hourly orders had the same still-open-day bug, worse.** `complete_hourly_grid` zero-fills
+  gaps, so a day synced to hour 13 had hours 14–23 written as *zero orders* — 31.9% of the
+  day's take — into `orders_lag_24` and the hour-of-day rolling means.
+- **Menu-item quantities had it too**, via the same reindex-and-fill.
+- The guard moved to `ml/features/completeness.py`, shared by all three, working at either
+  grain. Live: all three loaders stop at 2026-08-18 with 24 hours on the last day.
+- Smaller: Harri cron `maxDuration` 60 → 120 (the schedule sync roughly doubled its work), and
+  the Decisions SPLH history window now stops at yesterday so a partial today can't drag a
+  weekday median built on ~17 observations.
 
 ## Testing
 
