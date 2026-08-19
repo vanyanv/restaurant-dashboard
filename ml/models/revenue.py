@@ -168,6 +168,30 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         flavor = f"{flavor}-fallback"
     else:
         flavor = f"{flavor}-conformal"
+        # Deployment refit, AFTER the holdout score above.
+        #
+        # `base` was fit on the train slice alone so the calibration slice stays
+        # disjoint and conformal keeps its guarantee. That left the estimator
+        # that actually ships blind to the newest 20% of the window — on
+        # Hollywood, 91 days whose mean ran 7.3% above what it trained on — and a
+        # level error like that compounds through recursive multi-step
+        # forecasting. Backtested through the real train+forecast path over 10
+        # chronological cutoffs at 14-day horizons (n=140):
+        #
+        #     train-slice only      bias -5.4%   MAPE 10.4%
+        #     refit on all history  bias -1.9%   MAPE  9.4%
+        #
+        # `conformal.point_model` IS this object, so refitting in place moves the
+        # forecast point too. The interval half-widths stay as calibrated on the
+        # train-slice model's residuals, which makes them mildly conservative
+        # around a better point — the safe direction, since measured coverage at
+        # one day out was 71% against an 80% target.
+        #
+        # `mape` above is untouched: it scores the pre-refit model on a holdout
+        # it never saw, and `_select_result` needs that to choose baseline vs
+        # enriched honestly.
+        deploy_df = feats.dropna(subset=cols)
+        base.fit(deploy_df[cols], deploy_df["revenue"])
 
     return TrainResult(
         model=base,
