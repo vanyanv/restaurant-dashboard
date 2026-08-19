@@ -4,22 +4,35 @@ import { PnLKpiStrip } from "@/components/pnl/pnl-kpi-strip"
 import { fmtMoney, fmtPctFromRatio } from "@/lib/format"
 import { getRangeStamp, type DashboardRange } from "@/lib/dashboard-utils"
 import { cn } from "@/lib/utils"
-import type { PnLSummaryPromise } from "./data"
+import {
+  computePnLPace,
+  formatMarginPace,
+  formatProfitPace,
+  sumPnLDays,
+} from "@/lib/pnl-pace"
+import type { PnLBaseline, PnLSummaryPromise } from "./data"
 
 /**
  * Owner-only "Profitability" block for the Overview page. Surfaces the existing
  * all-stores P&L (getAllStoresPnL) as a glance: a Net Profit headline plus a
  * four-card strip (Total Sales / COGS / Labor / Net Profit) and a link to the
- * full P&L. Reflects the dashboard's selected range, like the hero figures.
+ * full P&L. Reflects the dashboard's selected range, like the hero figures —
+ * including the "vs avg" pace line, which is computed against the same
+ * weekday-aligned four-week baseline the hero strip uses.
  */
 export async function PnLSummarySection({
   pnlPromise,
+  baseline,
   range,
 }: {
   pnlPromise: PnLSummaryPromise
+  baseline: PnLBaseline | null
   range: DashboardRange
 }) {
-  const result = await pnlPromise
+  const [result, baselineResult] = await Promise.all([
+    pnlPromise,
+    baseline?.promise ?? Promise.resolve(null),
+  ])
   const stamp = getRangeStamp(range)
   const isToday = range.kind === "days" && range.days === 1
 
@@ -69,6 +82,29 @@ export async function PnLSummarySection({
     isToday && hasData && c.laborPct < MIN_PLAUSIBLE_LABOR_PCT
   const marginTrustworthy = hasData && !laborIncomplete
 
+  // Profit pace, on the same baseline as the hero strip: this range against
+  // the average of the same dates one to four weeks back.
+  //
+  // Withheld while the range is still running. Sales accrue by the minute but
+  // COGS and labor post in lumps, so a partial day's profit against four
+  // settled days is not a slow day — it is an unfinished one. The hourly pace
+  // above can slice its baseline to the current hour; a P&L cannot.
+  const pace =
+    baseline && baselineResult && !("error" in baselineResult) && marginTrustworthy
+      ? computePnLPace(
+          { totalSales: c.grossSales, bottomLine: c.bottomLine },
+          baseline.comparisonGroups.map((group) =>
+            sumPnLDays(baselineResult.consolidatedRows, baseline.periodDates, group)
+          )
+        )
+      : null
+  const profitPace = baseline?.inProgress
+    ? null
+    : formatProfitPace(pace, baseline?.label ?? "")
+  const marginPace = baseline?.inProgress
+    ? null
+    : formatMarginPace(pace, baseline?.label ?? "")
+
   return (
     <div className="dock-in dock-in-3">
       {header}
@@ -105,6 +141,29 @@ export async function PnLSummarySection({
               </span>
             ) : null}
           </div>
+          {(profitPace || marginPace) && (
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              {profitPace && (
+                <span
+                  className={cn(
+                    "font-mono text-[11px] uppercase tracking-[0.14em] [font-variant-numeric:tabular-nums]",
+                    (pace?.profitPct ?? 0) > 0
+                      ? "text-(--accent)"
+                      : (pace?.profitPct ?? 0) < 0
+                        ? "text-(--subtract)"
+                        : "text-(--ink-muted)"
+                  )}
+                >
+                  {profitPace}
+                </span>
+              )}
+              {marginPace && (
+                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-(--ink-muted) [font-variant-numeric:tabular-nums]">
+                  {marginPace}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

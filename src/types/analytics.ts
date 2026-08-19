@@ -299,6 +299,8 @@ export type HourlyComparisonPeriod =
   | "yesterday"
   | "this-week"
   | "last-week"
+  /** Any dashboard-selected range, resolved by `deriveRangeSpec`. */
+  | "range"
 
 export interface OrderPatternsHourlyComparison {
   period: HourlyComparisonPeriod
@@ -313,6 +315,8 @@ export interface OrderPatternsHourlyComparison {
   salesPacePct: number | null
   /** Latest hour (0–23) with data on the last current day, for "thru H PM" folios. */
   lastDataHour: number | null
+  /** True when the range's last day is today, i.e. an hour cutoff was applied. */
+  inProgress: boolean
 }
 
 export interface DayOfWeekOrderPoint {

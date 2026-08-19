@@ -18,7 +18,7 @@ import { SplhSection } from "./sections/splh-section"
 import { FinancialSummarySection } from "./sections/financial-summary-section"
 import { InvoiceSnapshotSection } from "./sections/invoice-snapshot-section"
 import { RatingsSection } from "./sections/ratings-section"
-import { buildDashboardData, buildPnLSummary } from "./sections/data"
+import { buildDashboardData, buildPnLBaseline, buildPnLSummary } from "./sections/data"
 
 interface DashboardShellProps {
   range: DashboardRange
@@ -30,6 +30,7 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
     buildDashboardData(range)
   const isOwner = hasOwnerAccess(userRole as Role)
   const pnlPromise = isOwner ? buildPnLSummary(range) : null
+  const pnlBaseline = isOwner ? buildPnLBaseline(range) : null
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -56,7 +57,11 @@ export function DashboardShell({ range, userRole }: DashboardShellProps) {
       <div className="px-6 py-8 space-y-8">
         {pnlPromise && (
           <Suspense fallback={<PnLSummarySkeleton />}>
-            <PnLSummarySection pnlPromise={pnlPromise} range={range} />
+            <PnLSummarySection
+              pnlPromise={pnlPromise}
+              baseline={pnlBaseline}
+              range={range}
+            />
           </Suspense>
         )}
 

@@ -335,6 +335,7 @@ async function getHourlyOrderDistributionWithComparison(
       salesPacePct:
         salesPacePct == null ? null : Math.round(salesPacePct * 10) / 10,
       lastDataHour,
+      inProgress: spec.hourCutoff != null,
     },
   }
 }

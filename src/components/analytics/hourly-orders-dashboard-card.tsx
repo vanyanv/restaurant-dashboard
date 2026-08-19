@@ -53,14 +53,18 @@ function getCurrentLAHour(): number {
   )
 }
 
-const PERIOD_LABELS: Record<HourlyComparisonPeriod, string> = {
+/** The four periods this card lets you pick. "range" belongs to Overview,
+ *  which follows the date picker rather than a fixed period toggle. */
+type CardPeriod = Exclude<HourlyComparisonPeriod, "range">
+
+const PERIOD_LABELS: Record<CardPeriod, string> = {
   today: "Today",
   yesterday: "Yday",
   "this-week": "Wk",
   "last-week": "Last Wk",
 }
 
-const PACE_LABELS: Record<HourlyComparisonPeriod, string> = {
+const PACE_LABELS: Record<CardPeriod, string> = {
   today: "Today",
   yesterday: "Yesterday",
   "this-week": "This week",
@@ -72,7 +76,7 @@ function formatPace(pct: number): string {
   return `${sign}${pct.toFixed(0)}%`
 }
 
-const ALL_PERIODS: HourlyComparisonPeriod[] = [
+const ALL_PERIODS: CardPeriod[] = [
   "today",
   "yesterday",
   "this-week",
@@ -84,7 +88,7 @@ export function HourlyOrdersDashboardCard({
   className,
 }: HourlyOrdersDashboardCardProps) {
   const [selectedStore, setSelectedStore] = useState("all")
-  const [period, setPeriod] = useState<HourlyComparisonPeriod>("today")
+  const [period, setPeriod] = useState<CardPeriod>("today")
   const queryClient = useQueryClient()
 
   const storeIdArg = selectedStore === "all" ? undefined : selectedStore
@@ -142,7 +146,7 @@ export function HourlyOrdersDashboardCard({
               type="single"
               value={period}
               onValueChange={(v) =>
-                v && setPeriod(v as HourlyComparisonPeriod)
+                v && setPeriod(v as CardPeriod)
               }
               disabled={isLoading}
             >
@@ -190,7 +194,10 @@ export function HourlyOrdersDashboardCard({
             }}
           >
             <span style={{ color: "var(--ink-muted)" }}>
-              {PACE_LABELS[comparison.period]}:
+              {comparison.period === "range"
+                ? comparison.weekdayLabel
+                : PACE_LABELS[comparison.period]}
+              :
             </span>
             <span
               style={{

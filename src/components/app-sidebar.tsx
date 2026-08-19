@@ -64,7 +64,7 @@ const NAV: NavSection[] = [
   {
     label: "Daily",
     items: [
-      { title: "Today", url: "/dashboard", icon: BarChart3 },
+      { title: "Overview", url: "/dashboard", icon: BarChart3 },
       { title: "Ask", url: "/dashboard/chat", icon: MessageSquare },
       { title: "Decisions", url: "/dashboard/decisions", icon: CalendarDays },
       { title: "Alerts", url: "/dashboard/alerts", icon: BellRing },

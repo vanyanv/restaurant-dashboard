@@ -5,10 +5,13 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
   derivePeriodSpec,
+  deriveRangeSpec,
   bucketHourlyRows,
   emptyHourly,
   type AggregateHourlyRow,
+  type PeriodSpec,
 } from "@/lib/hourly-orders"
+import type { DashboardRange } from "@/lib/dashboard-utils"
 import type {
   HourlyComparisonPeriod,
   HourlyOrderPoint,
@@ -23,15 +26,36 @@ import type {
 export async function getHourlyOrderPatterns(
   storeId: string | undefined,
   period: HourlyComparisonPeriod
-): Promise<{
+): Promise<HourlyPatternsResult | null> {
+  return readHourlyPatterns(storeId, derivePeriodSpec(period), period)
+}
+
+/**
+ * Same read path, but for the range the dashboard's date picker is on rather
+ * than one of the four fixed periods. Overview calls this so the pace lines
+ * under the hero figures follow the selected range instead of only rendering
+ * on "today".
+ */
+export async function getHourlyPatternsForRange(
+  range: DashboardRange,
+  storeId?: string
+): Promise<HourlyPatternsResult | null> {
+  return readHourlyPatterns(storeId, deriveRangeSpec(range), "range")
+}
+
+type HourlyPatternsResult = {
   hourly: HourlyOrderPoint[]
   hourlyComparison: OrderPatternsHourlyComparison | null
-} | null> {
+}
+
+async function readHourlyPatterns(
+  storeId: string | undefined,
+  spec: PeriodSpec,
+  period: HourlyComparisonPeriod
+): Promise<HourlyPatternsResult | null> {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) return null
-
-    const spec = derivePeriodSpec(period)
 
     const allComparisonDates = spec.comparisonGroups.flat()
     const allDates = [...spec.currentDates, ...allComparisonDates]
