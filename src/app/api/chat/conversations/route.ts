@@ -5,16 +5,26 @@ import { chatPrisma } from "@/lib/chat/prisma-chat"
 import {
   createConversation,
   deleteAllConversations,
-  listConversations,
+  searchConversations,
 } from "@/lib/chat/conversation"
 
-/** Lists the authenticated owner's conversations. Newest-updated first. */
-export async function GET() {
+/**
+ * Lists the authenticated owner's conversations, newest-updated first.
+ * `?q=` searches titles and the text of the turns inside each thread; an
+ * absent or blank query returns the plain listing.
+ */
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  const rows = await listConversations(chatPrisma, session.user.accountId, 100)
+  const q = new URL(req.url).searchParams.get("q") ?? ""
+  const rows = await searchConversations(
+    chatPrisma,
+    session.user.accountId,
+    q,
+    100,
+  )
   return NextResponse.json({ conversations: rows })
 }
 
