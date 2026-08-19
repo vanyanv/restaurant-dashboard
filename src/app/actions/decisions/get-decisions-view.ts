@@ -9,6 +9,9 @@ import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-act
 import { getOpenAnomalies } from "@/app/actions/forecasts/anomaly-actions"
 import { getLaborStaffingForecast } from "@/app/actions/forecasts/labor-staffing-actions"
 import { getFoodCostForecast } from "@/app/actions/forecasts/food-cost-forecast-actions"
+import { getCashPositionForecast } from "@/app/actions/forecasts/cash-position-actions"
+import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
+import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getOpportunities } from "@/app/actions/growth/opportunities-actions"
 import { buildBriefing, type BriefingLine } from "@/app/actions/decisions/build-briefing"
 import { bucketByMean, pctVsTrailing, trailingMean, type VolumeBucket } from "@/app/dashboard/decisions/lib/bucket-volume"
@@ -16,6 +19,14 @@ import {
   confidenceFromForecast,
   type DotCount,
 } from "@/app/dashboard/decisions/lib/confidence"
+import {
+  deadlineFor,
+  type DecisionDeadline,
+} from "@/app/dashboard/decisions/lib/deadline"
+import {
+  combineEvaluations,
+  type Scorecard,
+} from "@/app/dashboard/decisions/lib/scorecard"
 import {
   stripJargon,
   translateConfidence,
@@ -30,6 +41,14 @@ export interface DecisionDay {
   weekdayShort: string // MON, TUE
   monthDayShort: string // MAY 18
   bucket: VolumeBucket
+  /**
+   * The forecast in dollars, plus its 80% band. All three were already loaded
+   * by `getRevenueForecast` and thrown away — the cell rendered the adjective
+   * ("busy") and nothing an owner could order stock against.
+   */
+  predictedRevenue: number
+  p10: number | null
+  p90: number | null
   pctVsTrailing: number | null
   staffDelta: number | null
   /**
@@ -56,7 +75,8 @@ export interface DecisionAction {
   /** Impact normalised to one week, whatever horizon the generator used. */
   impactUsdPerWeek: number
   why: string
-  doByDate: string // ISO date YYYY-MM-DD
+  /** Derived from the generator's own horizon, not a flat today+7. */
+  deadline: DecisionDeadline
   dots: DotCount
   confidence: OpportunityConfidence
   evidence: { kind: string; ref: string; value: string }[]
@@ -70,6 +90,10 @@ export interface DecisionsView {
   confidence: DotCount
   days: DecisionDay[]
   actions: DecisionAction[]
+  /** Sum of the shown actions' weekly impact — the week's pot. */
+  potUsdPerWeek: number
+  /** The forecast's own track record. Null until the evaluator has run. */
+  scorecard: Scorecard | null
   briefing: BriefingLine[]
 }
 
@@ -118,8 +142,13 @@ export async function getDecisionsView(input: {
     laborResultRaw,
     foodCostResultRaw,
     opportunitiesResult,
+    cashResultRaw,
+    lostSalesResultRaw,
+    menuEngResultRaw,
+    storeTargets,
     weatherRows,
     eventRows,
+    evaluationRows,
   ] = await Promise.all([
     getRevenueForecast({ storeId: input.storeId, horizonDays: 14 }),
     getOpenAnomalies({ storeId: input.storeId, limit: 50 }),
@@ -128,6 +157,26 @@ export async function getDecisionsView(input: {
     ),
     getFoodCostForecast({ storeId: input.storeId }).catch(() => null),
     getOpportunities({ storeId: input.storeId }).catch(() => null),
+    // These three were passed to buildBriefing as `null`, which made the cash,
+    // stockout and menu generators unreachable. They are independent of each
+    // other and of the forecasts above, so they join the same fan-out rather
+    // than adding a serial hop.
+    getCashPositionForecast({ storeId: input.storeId, horizonDays: 14 }).catch(
+      () => null,
+    ),
+    getLostSales({ storeId: input.storeId }).catch(() => null),
+    getMenuEngineering({ storeId: input.storeId }).catch(() => null),
+    // `cogsLine` has two branches and production could only ever reach the
+    // target-less one, which reports a percentage and passes no judgment.
+    // The target is per-store, so the portfolio view keeps the neutral branch.
+    isAggregate
+      ? Promise.resolve(null)
+      : prisma.store
+          .findUnique({
+            where: { id: storeIds[0] },
+            select: { targetCogsPct: true },
+          })
+          .catch(() => null),
     prisma.storeWeatherSignal.findMany({
       where: {
         storeId: { in: storeIds },
@@ -150,6 +199,26 @@ export async function getDecisionsView(input: {
         majorEventCount: true,
       },
     }),
+    // First reader of MlForecastEvaluation anywhere in src/. Ordered newest
+    // first and deduped per store below — Prisma has no latest-per-group, and
+    // the row count here is stores x model versions, not unbounded.
+    prisma.mlForecastEvaluation.findMany({
+      where: {
+        storeId: { in: storeIds },
+        target: "REVENUE",
+        horizonDay: 0,
+        sampleSize: { gt: 0 },
+      },
+      orderBy: { computedAt: "desc" },
+      take: 50,
+      select: {
+        storeId: true,
+        wape: true,
+        baselineWape: true,
+        intervalCoverage80: true,
+        sampleSize: true,
+      },
+    }).catch(() => []),
   ])
 
   const revenueData = revenueResult && revenueResult.ok ? revenueResult.data : null
@@ -157,6 +226,19 @@ export async function getDecisionsView(input: {
     laborResultRaw && laborResultRaw.ok ? laborResultRaw.data : null
   const foodCostData =
     foodCostResultRaw && foodCostResultRaw.ok ? foodCostResultRaw.data : null
+  const cashData = cashResultRaw && cashResultRaw.ok ? cashResultRaw.data : null
+  const lostSalesData =
+    lostSalesResultRaw && lostSalesResultRaw.ok ? lostSalesResultRaw.data : null
+  const menuEngData =
+    menuEngResultRaw && menuEngResultRaw.ok ? menuEngResultRaw.data : null
+  const targetCogsPct = storeTargets?.targetCogsPct ?? null
+
+  // Newest evaluation per store; the rest are older model versions.
+  const latestPerStore = new Map<string, (typeof evaluationRows)[number]>()
+  for (const row of evaluationRows) {
+    if (!latestPerStore.has(row.storeId)) latestPerStore.set(row.storeId, row)
+  }
+  const scorecard = combineEvaluations([...latestPerStore.values()])
   const trailing7Mean = revenueData ? trailingMean(revenueData.days) : 0
 
   const next7 = revenueData?.days.slice(0, 7) ?? []
@@ -176,6 +258,9 @@ export async function getDecisionsView(input: {
       weekdayShort: weekdayShort(d.date),
       monthDayShort: monthDayShort(d.date),
       bucket,
+      predictedRevenue: d.predictedRevenue,
+      p10: d.p10,
+      p90: d.p90,
       pctVsTrailing: pct,
       staffDelta,
       staffNote,
@@ -192,13 +277,13 @@ export async function getDecisionsView(input: {
   const briefing: BriefingLine[] = revenueData
     ? buildBriefing({
         revenue: revenueData,
-        cash: null,
+        cash: cashData,
         foodCost: foodCostData,
-        targetCogsPct: null,
+        targetCogsPct,
         anomalies:
           anomaliesResult && anomaliesResult.ok ? anomaliesResult.data : null,
-        lostSales: null,
-        menuEngineering: null,
+        lostSales: lostSalesData,
+        menuEngineering: menuEngData,
         isAggregate,
       })
     : []
@@ -230,6 +315,8 @@ export async function getDecisionsView(input: {
       confidence: overallConfidence,
       days,
       actions,
+      potUsdPerWeek: actions.reduce((sum, a) => sum + a.impactUsdPerWeek, 0),
+      scorecard,
       briefing: sanitizedBriefing,
     },
   }
@@ -368,10 +455,6 @@ function buildActionCards(
   todayKey: string,
 ): DecisionAction[] {
   if (!result || !result.ok || result.opportunities.length === 0) return []
-  const today = new Date(`${todayKey}T00:00:00Z`)
-  const doBy = new Date(today)
-  doBy.setUTCDate(doBy.getUTCDate() + 7)
-  const doByKey = ymd(doBy)
 
   const ranked = result.opportunities
     .map((o) => {
@@ -394,7 +477,7 @@ function buildActionCards(
     impactUsdPerWeek:
       o.estimatedDollarImpact * (7 / Math.max(1, o.horizonDays ?? 7)),
     why: stripJargon(o.suggestedAction || ""),
-    doByDate: doByKey,
+    deadline: deadlineFor(o.horizonDays, todayKey),
     dots: translateConfidence(o.confidence),
     confidence: o.confidence,
     evidence: o.evidence.map((e) => ({

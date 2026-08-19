@@ -288,6 +288,70 @@
   color: var(--ink-faint);
 }
 
+/* The day cell's primary reading: money, not an adjective. */
+.decisions-day-cell__amt {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 15.5px;
+  letter-spacing: -0.016em;
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.decisions-day-cell__band {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--ink-ornament);
+  white-space: nowrap;
+}
+
+/* Earn-the-red: only a genuinely closing window, never every card. */
+.decisions-action-card__doby.is-tight {
+  color: var(--accent);
+}
+
+/* Pot total — the sum the five cards never added up to. */
+.decisions-pot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--hairline-bold);
+  border-bottom: 1px solid var(--hairline-bold);
+  margin-bottom: 1rem;
+}
+
+.decisions-pot__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.decisions-pot__amt {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 1.75rem;
+  letter-spacing: -0.024em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.decisions-pot__meta {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
 .decisions-action-card__title {
   font-family: var(--font-fraunces), serif;
   font-size: 1.05rem;
@@ -446,4 +510,88 @@
   font-family: var(--font-fraunces), serif;
   font-style: italic;
   color: var(--ink-muted);
+}
+
+/* ============================================================ */
+/* Forecast scorecard — the model's own track record            */
+/* ============================================================ */
+
+.decisions-scorecard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1px;
+  background: var(--hairline-bold);
+  border: 1px solid var(--hairline-bold);
+}
+
+@media (max-width: 720px) {
+  .decisions-scorecard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.decisions-score {
+  background: var(--paper-soft);
+  padding: 0.875rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.decisions-score__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.decisions-score__value {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 1.6rem;
+  letter-spacing: -0.022em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+/* Ochre, not red: a coverage miss is a caveat on the number, not a fire. */
+.decisions-score__value.is-warn {
+  color: var(--ink-ochre);
+}
+
+.decisions-score__sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+
+.decisions-score__meter {
+  position: relative;
+  display: block;
+  height: 4px;
+  margin-top: 0.15rem;
+  background: var(--paper-deep);
+  border: 1px solid var(--hairline);
+}
+
+.decisions-score__meter-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--ink-muted);
+}
+
+.decisions-score__meter-fill.is-warn {
+  background: var(--ink-ochre);
+}
+
+/* The target tick — the thing the fill is being judged against. */
+.decisions-score__meter-target {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--ink);
 }

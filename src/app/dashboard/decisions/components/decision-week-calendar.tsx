@@ -14,6 +14,21 @@ const TABULAR = {
   fontVariantNumeric: "tabular-nums lining-nums" as const,
 }
 
+const fmtUsd = (n: number) =>
+  n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  })
+
+/** Compact band for the cell, which has ~90px to work with: "4.6k-5.8k". */
+function fmtBand(p10: number | null, p90: number | null): string | null {
+  if (p10 == null || p90 == null) return null
+  const k = (n: number) =>
+    n >= 1000 ? `${(n / 1000).toFixed(1)}k` : Math.round(n).toString()
+  return `${k(p10)}–${k(p90)}`
+}
+
 export function DecisionWeekCalendar({ days, storeName }: Props) {
   const initial = days.find((d) => d.bucket === "busy")?.date ?? days[0]?.date ?? null
   const [selected, setSelected] = useState<string | null>(initial)
@@ -44,11 +59,19 @@ export function DecisionWeekCalendar({ days, storeName }: Props) {
                 (isSelected ? " is-selected" : "")
               }
               aria-pressed={isSelected}
-              aria-label={`${day.weekdayShort} ${day.monthDayShort} — ${day.bucket}`}
+              aria-label={`${day.weekdayShort} ${day.monthDayShort} — ${fmtUsd(day.predictedRevenue)} forecast, ${day.bucket}`}
             >
               <span className="decisions-day-cell__folio">
                 {day.weekdayShort} · {day.monthDayShort}
               </span>
+              <span className="decisions-day-cell__amt" style={TABULAR}>
+                {fmtUsd(day.predictedRevenue)}
+              </span>
+              {fmtBand(day.p10, day.p90) ? (
+                <span className="decisions-day-cell__band" style={TABULAR}>
+                  {fmtBand(day.p10, day.p90)}
+                </span>
+              ) : null}
               <span className="decisions-day-cell__badge">
                 <DayBadge bucket={day.bucket} />
               </span>
