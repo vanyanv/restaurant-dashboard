@@ -171,3 +171,38 @@ export function bucketShiftHours(
 
   return buckets
 }
+
+/**
+ * How far ahead the schedule sync reaches.
+ *
+ * Probed against the live gateway on 2026-08-19: the current week and the next
+ * one came back published (64 and 63 shifts), weeks +2 and +3 were empty. Two
+ * weeks is the publishing horizon, so 14 days collects everything that exists
+ * without spending requests on weeks nobody has written yet.
+ */
+export const SCHEDULE_LOOKAHEAD_DAYS = 14
+
+/**
+ * How far back it re-fetches. Managers edit published weeks, and
+ * `runHarriScheduleSync` replaces a week wholesale rather than upserting, so
+ * re-fetching is the only way an edit — or a deleted shift — reaches us.
+ */
+export const SCHEDULE_LOOKBACK_DAYS = 7
+
+/**
+ * Date bounds for a schedule sync run, normalised to UTC midnight so a run at
+ * 23:07 covers the same days as one at 06:00.
+ */
+export function scheduleSyncWindow(now: Date = new Date()): {
+  startDate: Date
+  endDate: Date
+} {
+  const anchor = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  )
+  const startDate = new Date(anchor)
+  startDate.setUTCDate(startDate.getUTCDate() - SCHEDULE_LOOKBACK_DAYS)
+  const endDate = new Date(anchor)
+  endDate.setUTCDate(endDate.getUTCDate() + SCHEDULE_LOOKAHEAD_DAYS)
+  return { startDate, endDate }
+}
