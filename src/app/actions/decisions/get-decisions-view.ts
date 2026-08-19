@@ -108,6 +108,13 @@ export interface DecisionAction {
   title: string
   /** Impact normalised to one week, whatever horizon the generator used. */
   impactUsdPerWeek: number
+  /**
+   * The same figure's 10th-90th percentile range, normalised the same way.
+   * Null when the underlying fit reported no standard error — showing a range
+   * there would be precision the estimate does not have. Note the range covers
+   * only the elasticity's uncertainty, so it is a floor on the true one.
+   */
+  impactRangeUsdPerWeek: { low: number; high: number } | null
   why: string
   /** Derived from the generator's own horizon, not a flat today+7. */
   deadline: DecisionDeadline
@@ -143,6 +150,16 @@ function weekdayShort(d: Date): string {
 }
 function monthDayShort(d: Date): string {
   return `${MONTH[d.getUTCMonth()]} ${d.getUTCDate().toString().padStart(2, "0")}`
+}
+
+/**
+ * Generators emit over different horizons — 1 day for reprice, 7 for the risk
+ * types, 30 for menu engineering — and the card has always said "/wk". Normalise
+ * rather than relabel; showing a 30-day figure as weekly is what produced
+ * "+$10,839/wk" for a single slow-moving combo.
+ */
+function weeklyFactor(horizonDays: number | null | undefined): number {
+  return 7 / Math.max(1, horizonDays ?? 7)
 }
 
 const CONFIDENCE_WEIGHT: Record<OpportunityConfidence, number> = {
@@ -677,8 +694,16 @@ function buildActionCards(
 
   const ranked = result.opportunities
     .map((o) => {
-      const cw = CONFIDENCE_WEIGHT[o.confidence] ?? 0.5
-      const score = o.estimatedDollarImpact * cw
+      const weekly = weeklyFactor(o.horizonDays)
+      // Rank on the measured downside where the generator produced one: a wide,
+      // speculative $900 should not outrank a tight, dependable $700. The
+      // confidence weight is the older, coarser proxy for the same idea, so it
+      // still applies to opportunities whose fit reported no standard error —
+      // otherwise an estimate would be promoted merely for lacking error bars.
+      const score =
+        o.impactP25 != null
+          ? o.impactP25 * weekly
+          : o.estimatedDollarImpact * weekly * (CONFIDENCE_WEIGHT[o.confidence] ?? 0.5)
       return { o, score }
     })
     .sort((a, b) => b.score - a.score)
@@ -693,8 +718,14 @@ function buildActionCards(
     // risk types, 30 for menu engineering). The card has always said "/wk", so
     // normalise rather than relabel — a 30-day figure shown as weekly is what
     // produced "+$10,839/wk" for a single slow-moving combo.
-    impactUsdPerWeek:
-      o.estimatedDollarImpact * (7 / Math.max(1, o.horizonDays ?? 7)),
+    impactUsdPerWeek: o.estimatedDollarImpact * weeklyFactor(o.horizonDays),
+    impactRangeUsdPerWeek:
+      o.impactP10 != null && o.impactP90 != null
+        ? {
+            low: o.impactP10 * weeklyFactor(o.horizonDays),
+            high: o.impactP90 * weeklyFactor(o.horizonDays),
+          }
+        : null,
     why: stripJargon(o.suggestedAction || ""),
     deadline: deadlineFor(o.horizonDays, todayKey),
     dots: translateConfidence(o.confidence),

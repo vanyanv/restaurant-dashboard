@@ -31,6 +31,9 @@ class ElasticityFit:
     price_point_count: int
     mean_price: float
     mean_qty: float
+    #: Standard error of the elasticity coefficient. None when the fit had no
+    #: price variance to identify it from.
+    elasticity_std_err: float | None = None
 
 
 def load_price_qty_history(
@@ -79,6 +82,7 @@ def fit(item_name: str, df: pd.DataFrame) -> ElasticityFit | None:
             elasticity=0.0,
             intercept=float(np.log(df["qty"].mean())),
             fit_r2=0.0,
+            elasticity_std_err=None,
             sample_size=int(len(df)),
             price_point_count=int(len(distinct_prices)),
             mean_price=float(df["unit_price"].mean()),
@@ -103,11 +107,31 @@ def fit(item_name: str, df: pd.DataFrame) -> ElasticityFit | None:
     ss_tot = float(np.sum((y - y.mean()) ** 2))
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
+    # Standard error of the elasticity coefficient, from the same design matrix:
+    #   se(beta) = sqrt(sigma^2 * diag((X'X)^-1)),  sigma^2 = RSS / (n - k)
+    # Downstream this is what lets reprice_impact report a range instead of a
+    # single figure, so a coefficient fitted on 41 noisy days stops looking
+    # exactly as authoritative as one fitted on 400 clean ones. pinv rather than
+    # inv because collinear weekday dummies can make X'X singular.
+    n_obs, n_params = X.shape
+    dof = n_obs - n_params
+    std_err: float | None = None
+    if dof > 0:
+        sigma2 = ss_res / dof
+        try:
+            xtx_inv = np.linalg.pinv(X.T @ X)
+            var_beta = sigma2 * float(np.diag(xtx_inv)[1])
+            if np.isfinite(var_beta) and var_beta >= 0:
+                std_err = float(np.sqrt(var_beta))
+        except np.linalg.LinAlgError:
+            std_err = None
+
     return ElasticityFit(
         item_name=item_name,
         elasticity=float(coef[1]),
         intercept=float(coef[0]),
         fit_r2=float(r2),
+        elasticity_std_err=std_err,
         sample_size=int(len(df)),
         price_point_count=int(len(distinct_prices)),
         mean_price=float(df["unit_price"].mean()),
@@ -119,8 +143,9 @@ def upsert_elasticity(store_id: str, fit_result: ElasticityFit) -> None:
     sql = """
         INSERT INTO "MenuItemElasticity"
             (id, "storeId", "otterItemSkuId", elasticity, intercept,
-             "fitR2", "sampleSize", "pricePointCount", "meanPrice", "meanQty")
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             "fitR2", "sampleSize", "pricePointCount", "meanPrice", "meanQty",
+             "elasticityStdErr")
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT ("storeId", "otterItemSkuId")
         DO UPDATE SET
             elasticity = EXCLUDED.elasticity,
@@ -130,6 +155,7 @@ def upsert_elasticity(store_id: str, fit_result: ElasticityFit) -> None:
             "pricePointCount" = EXCLUDED."pricePointCount",
             "meanPrice" = EXCLUDED."meanPrice",
             "meanQty" = EXCLUDED."meanQty",
+            "elasticityStdErr" = EXCLUDED."elasticityStdErr",
             "computedAt" = CURRENT_TIMESTAMP
     """
     with connect() as conn:
@@ -147,6 +173,7 @@ def upsert_elasticity(store_id: str, fit_result: ElasticityFit) -> None:
                     fit_result.price_point_count,
                     fit_result.mean_price,
                     fit_result.mean_qty,
+                    fit_result.elasticity_std_err,
                 ),
             )
 

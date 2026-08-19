@@ -1712,6 +1712,13 @@ model GrowthOpportunity {
   opportunityType       OpportunityType
   title                 String
   estimatedDollarImpact Float
+  /// 10th / 25th / 90th percentile of the impact once the elasticity's standard
+  /// error is propagated. Null when the fit reported no standard error — an
+  /// invented range would be worse than none. `impactP25` is what the Decisions
+  /// ledger ranks on, so a wide speculative figure cannot outrank a tight one.
+  impactP10             Float?
+  impactP25             Float?
+  impactP90             Float?
   /// Days that `estimatedDollarImpact` covers — 1 for reprice (daily means),
   /// 7 for the channel/risk types, 30 for menu engineering. The Decisions
   /// cards labelled every impact "/wk" regardless, overstating the 30-day
@@ -1977,6 +1984,10 @@ model MenuItemElasticity {
   /// R² goodness-of-fit on the training window. Below ~0.10 should be
   /// treated as low-confidence.
   fitR2           Float
+  /// Standard error of `elasticity`, from the same OLS design matrix. Null when
+  /// the fit saw fewer than two price points, so the coefficient was never
+  /// identified. Propagated into GrowthOpportunity.impactP* by Monte Carlo.
+  elasticityStdErr Float?
   /// Number of daily observations used in the fit.
   sampleSize      Int
   /// Number of distinct price points observed. < 2 means no price variance
