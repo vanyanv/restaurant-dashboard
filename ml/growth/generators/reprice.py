@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 
+from ml.growth.uncertainty import interval_for
 from ml.growth.types import GrowthOpportunity, Evidence
 
 
@@ -27,6 +28,7 @@ def _load_elastic_items(conn, store_id: str):
         cur.execute(
             '''
             SELECT "otterItemSkuId", elasticity, "fitR2", "sampleSize",
+                   "elasticityStdErr",
                    "meanPrice", "meanQty"
             FROM "MenuItemElasticity"
             WHERE "storeId" = %s
@@ -70,7 +72,7 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
     margins = _load_item_margins(conn, store_id, [r[0] for r in items])
 
     out: list[GrowthOpportunity] = []
-    for sku, elasticity, fit_r2, n, mean_price, mean_qty in items:
+    for sku, elasticity, fit_r2, n, std_err, mean_price, mean_qty in items:
         margin = margins.get(sku)
         if margin is None or margin <= 0:
             continue
@@ -81,14 +83,20 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
 
         # Net benefit = (new_revenue - new_cost) - (old_revenue - old_cost).
         # new_qty derives from elasticity × proportional price change.
-        new_qty = mean_qty * (1 + (elasticity * (delta / mean_price)))
-        old_revenue = mean_price * mean_qty
-        new_revenue = (mean_price + delta) * new_qty
-        old_cost = (mean_price - margin) * mean_qty
-        new_cost = (mean_price - margin) * new_qty
-        net_benefit = (new_revenue - new_cost) - (old_revenue - old_cost)
+        def _net_benefit(e: float, *, _d=delta, _p=mean_price, _q=mean_qty, _m=margin) -> float:
+            nq = _q * (1 + (e * (_d / _p)))
+            return ((_p + _d) * nq - (_p - _m) * nq) - (_p * _q - (_p - _m) * _q)
+
+        net_benefit = _net_benefit(elasticity)
         if net_benefit <= 0:
             continue
+
+        # Push the elasticity's standard error through this same closed form, so
+        # a coefficient fitted on 41 noisy days stops looking exactly as
+        # authoritative as one fitted on 400 clean ones.
+        interval = interval_for(
+            _net_benefit, elasticity=elasticity, elasticity_std_err=std_err
+        )
 
         confidence = "high" if fit_r2 >= 0.30 else "medium"
         out.append(GrowthOpportunity(
@@ -97,6 +105,9 @@ def generate(conn, *, store_id: str, as_of_date: dt.date) -> list[GrowthOpportun
             opportunity_type="reprice",
             title=f"{direction.title()} price on {sku} by ${abs(delta):.2f}",
             estimated_dollar_impact=round(net_benefit, 2),
+            impact_p10=None if interval.is_degenerate else round(interval.p10, 2),
+            impact_p25=None if interval.is_degenerate else round(interval.p25, 2),
+            impact_p90=None if interval.is_degenerate else round(interval.p90, 2),
             # meanQty is a mean *daily* quantity, so the closed form yields a
             # per-day benefit.
             horizon_days=1,

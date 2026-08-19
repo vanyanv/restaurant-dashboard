@@ -852,3 +852,14 @@
   padding-top: 0.5rem;
 }
 .decisions-attr__row.is-total .decisions-attr__val { font-size: 14px; }
+
+/* The impact's range. Deliberately quiet — it qualifies the number above it
+   rather than competing with it, and it is absent whenever the underlying fit
+   reported no standard error. */
+.decisions-action-card__range {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--ink-ornament);
+  margin: -0.35rem 0 0.35rem;
+}

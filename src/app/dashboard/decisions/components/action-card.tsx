@@ -94,6 +94,12 @@ export function ActionCard({ action }: Props) {
         +{fmtUsd(action.impactUsdPerWeek)}
         <span className="decisions-action-card__impact-unit">/wk</span>
       </div>
+      {action.impactRangeUsdPerWeek ? (
+        <p className="decisions-action-card__range" style={TABULAR}>
+          {fmtUsd(action.impactRangeUsdPerWeek.low)}–
+          {fmtUsd(action.impactRangeUsdPerWeek.high)} likely
+        </p>
+      ) : null}
 
       {action.why ? (
         <p className="decisions-action-card__why">{action.why}</p>
