@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); phase 3 remainder + phase 4 open
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); schema drift resolved (`cbc1591`); impact intervals shipped (`327977a`); **phase 3 complete**; phase 4 open
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -242,8 +242,19 @@ cashier) and 28 staff, so position mix is thinner than the visual spec assumes.
     six per weekday. `reg:quantileerror` not attempted — measured widths address the symptom
     without changing the objective.
 11. ~~Direct multi-horizon~~ — **withdrawn 2026-08-19**, see findings above.
-12. Diagnose and correct the uniform negative bias (trend lag against rolling means).
-13. Elasticity standard errors persisted; Monte Carlo propagation through `impact.py`.
+12. ~~Diagnose and correct the uniform negative bias~~ — **done**, and it was not trend lag.
+    Root cause was a still-open business day plus a train-slice-only estimator; see the accuracy
+    section above.
+13. ~~Elasticity standard errors; Monte Carlo impact intervals~~ — **shipped** (`327977a`).
+    Propagated through each generator's *own* closed form via `interval_for`, not through a
+    parallel formula. Ledger ranks on `impactP25`.
+
+    **Known limit:** only `reprice` produces intervals — 12 of 39 rows. The other four
+    generators' inputs (velocity medians, channel margins, food-cost forecasts) report no error,
+    so their cards show a bare point, and after horizon normalisation they currently fill the
+    whole top five. `interval_for` is generic; each generator can adopt it once its inputs learn
+    to report uncertainty. Separately, only the *elasticity's* uncertainty is propagated — units
+    and margin are estimates too — so every range shown is a floor on the true one.
 14. `HarriShift` scheduled-hours features; moving holidays.
 
 ### Phase 4 — Close the loop
@@ -306,6 +317,24 @@ one dangerous coupling (`8a7d5d9`):
 - Smaller: Harri cron `maxDuration` 60 → 120 (the schedule sync roughly doubled its work), and
   the Decisions SPLH history window now stops at yesterday so a partial today can't drag a
   weekday median built on ~17 observations.
+
+## Schema drift resolved — 2026-08-19 (`cbc1591`)
+
+Adding the attribution column surfaced that `prisma db push` could not run without
+`--accept-data-loss`: the 2026-08-17 audit removed three models from `schema.prisma` and left the
+tables in the database. Its note called this harmless because "Prisma ignores tables it doesn't
+know about" — true at runtime, false for tooling. Deferring the decision did not keep the data
+safe; it made every future migration a data-loss prompt.
+
+Archived all 129 rows to `prisma/manual-migrations/archive/2026-08-19_dead_table_archive.sql` and
+verified the archive by replaying it into a scratch schema (61/61, 68/68, metrics JSON
+byte-identical). `DbSnapshot` records table *sizes*, not contents, so nothing else held a copy.
+Then applied the drops. All seven `Store.yelp*` columns went too — checked first, and no store
+carried a businessId, rating, review count or URL; the only non-null value was one
+`yelpLastSearch` timestamp.
+
+`npm run db:drift` now reports schema-vs-database differences, and CLAUDE.md requires it before
+any schema change.
 
 ## Testing
 
