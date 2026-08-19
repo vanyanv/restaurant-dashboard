@@ -66,8 +66,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 "errorPct" = CASE
                     WHEN agg.actual = 0 THEN NULL
                     ELSE ((f."predictedRevenue" - agg.actual) / agg.actual) * 100
-                END,
-                "reconciledAt" = CURRENT_TIMESTAMP
+                END
             FROM (
                 SELECT "storeId", date,
                        SUM(COALESCE("fpNetSales", 0) + COALESCE("tpNetSales", 0)) AS actual
@@ -99,8 +98,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 "errorPct" = CASE
                     WHEN o."orderCount" = 0 THEN NULL
                     ELSE ((f."predictedOrders" - o."orderCount") / o."orderCount") * 100
-                END,
-                "reconciledAt" = CURRENT_TIMESTAMP
+                END
             FROM "OtterHourlySummary" o
             WHERE f."storeId" = %s
               AND (
@@ -119,8 +117,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
             f'''
             UPDATE "ForecastHourlyOrders" f
             SET "actualOrders" = 0,
-                "errorPct" = NULL,
-                "reconciledAt" = CURRENT_TIMESTAMP
+                "errorPct" = NULL
             WHERE f."storeId" = %s
               AND f."actualOrders" IS NULL
               AND f."forecastDate" < CURRENT_DATE - {ZERO_FILL_SETTLE_DAYS}
@@ -143,8 +140,7 @@ def reconcile_past_forecasts(store_id: str) -> dict:
                 "errorPct" = CASE
                     WHEN agg.actual = 0 THEN NULL
                     ELSE ((f."predictedQty" - agg.actual) / agg.actual) * 100
-                END,
-                "reconciledAt" = CURRENT_TIMESTAMP
+                END
             FROM (
                 SELECT "storeId", date, "itemName",
                        SUM(COALESCE("fpQuantitySold", 0) + COALESCE("tpQuantitySold", 0)) AS actual

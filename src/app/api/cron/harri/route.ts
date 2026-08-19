@@ -5,7 +5,10 @@ import { runHarriScheduleSync } from "@/lib/harri-schedule-sync"
 import { scheduleSyncWindow } from "@/lib/harri-schedule"
 import { bustTags } from "@/lib/cache/cached"
 
-export const maxDuration = 60
+// Raised from 60 when the schedule sync joined this route: it adds four
+// week-addressable gateway calls plus a transaction each, on top of the labor
+// sync. Matches the other multi-phase crons (alerts-ingest, harri-employees).
+export const maxDuration = 120
 
 /**
  * Per-store Harri labor sync. Re-syncs the last 3 days because managers

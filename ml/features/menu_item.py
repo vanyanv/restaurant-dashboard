@@ -18,6 +18,10 @@ import numpy as np
 import pandas as pd
 
 from ml.db import connect
+from ml.features.completeness import (
+    load_hourly_coverage,
+    trim_incomplete_trailing_days,
+)
 
 
 def load_top_items(store_id: str, top_n: int = 30, lookback_days: int = 90) -> list[str]:
@@ -75,7 +79,12 @@ def load_daily_quantity(
         .reset_index()
     )
     df["qty"] = df["qty"].astype(float)
-    return df
+    # A still-syncing day understates quantities, and the reindex above fills
+    # any gap with 0.0 — either way the newest row would teach the model a
+    # demand level the item never actually saw.
+    return trim_incomplete_trailing_days(
+        df, load_hourly_coverage(store_id, lookback_days)
+    )
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:

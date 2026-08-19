@@ -239,10 +239,14 @@ export async function getDecisionsView(input: {
               FROM "OtterHourlySummary"
              WHERE "storeId" IN (${Prisma.join(storeIds)})
                AND "date" >= ${addDays(today, -120)}
+               AND "date" < ${today}
              GROUP BY "storeId", "date"
           ) s ON s."storeId" = h."storeId" AND s."date" = h."date"
          WHERE h."storeId" IN (${Prisma.join(storeIds)})
            AND h."date" >= ${addDays(today, -120)}
+           -- Today is always partial; one low sample would drag a weekday
+           -- median that only has ~17 observations behind it.
+           AND h."date" < ${today}
          GROUP BY h."date", s.net
       `,
     ).catch(() => []),
