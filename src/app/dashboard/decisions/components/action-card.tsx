@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { DecisionAction } from "@/app/actions/decisions/get-decisions-view"
+import type { DecisionDeadline } from "../lib/deadline"
 import { ConfidenceDots } from "./confidence-dots"
 
 interface Props {
@@ -25,6 +26,25 @@ function fmtDoBy(iso: string): string {
   const WEEKDAY = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
   const MONTH = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
   return `${WEEKDAY[d.getUTCDay()]} ${MONTH[d.getUTCMonth()]} ${d.getUTCDate().toString().padStart(2, "0")}`
+}
+
+/**
+ * Every card used to read "DO BY <today+7>". The deadline now reflects what
+ * kind of decision it is: a reprice bleeds daily and gets no date to hide
+ * behind, a month-long play gets a horizon rather than false urgency.
+ */
+function deadlineLabel(deadline: DecisionDeadline): string {
+  if (deadline.kind === "decays") return "DECAYS DAILY"
+  if (deadline.kind === "horizon") return `${deadline.days}-DAY PLAY`
+  return `BY ${fmtDoBy(deadline.date)} · ${deadline.daysLeft}D`
+}
+
+/** Red is earned: only when the window is genuinely closing. */
+function isTight(deadline: DecisionDeadline): boolean {
+  return (
+    deadline.kind === "decays" ||
+    (deadline.kind === "date" && deadline.daysLeft <= 3)
+  )
 }
 
 export function ActionCard({ action }: Props) {
@@ -55,8 +75,14 @@ export function ActionCard({ action }: Props) {
     <article className="inv-panel decisions-action-card" aria-label={action.title}>
       <header className="decisions-action-card__head">
         <span className="decisions-action-card__category">{action.category}</span>
-        <span className="decisions-action-card__doby" style={TABULAR}>
-          DO BY · {fmtDoBy(action.doByDate)}
+        <span
+          className={
+            "decisions-action-card__doby" +
+            (isTight(action.deadline) ? " is-tight" : "")
+          }
+          style={TABULAR}
+        >
+          {deadlineLabel(action.deadline)}
         </span>
       </header>
 
