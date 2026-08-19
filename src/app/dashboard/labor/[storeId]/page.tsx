@@ -8,11 +8,17 @@ import {
   getHarriAlerts,
   getHarriTrend,
 } from "@/app/actions/harri-actions"
+import { getLaborProductivity } from "@/app/actions/labor-productivity-actions"
 import { LaborStoreTabs, type LaborStoreTab } from "../components/labor-store-tabs"
 import { LaborWeekNav } from "../components/labor-week-nav"
 import { LaborWeekKpis } from "../components/labor-week-kpis"
 import { LaborWeekDays } from "../components/labor-week-days"
 import { LaborWeekTrend } from "../components/labor-week-trend"
+import { LaborVerdict } from "../components/labor-verdict"
+import { LaborLeakLedger } from "../components/labor-leak-ledger"
+import { LaborStaffingCurve } from "../components/labor-staffing-curve"
+import { LaborDayScorecard } from "../components/labor-day-scorecard"
+import { LaborPositionMix } from "../components/labor-position-mix"
 import {
   isoMondayUTC,
   buildLaborWeekWindow,
@@ -35,7 +41,7 @@ export default async function StoreLaborPage(props: {
 
   const store = await prisma.store.findFirst({
     where: { id: storeId, accountId: session.user.accountId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, lifecycleStage: true, openedAt: true },
   })
   if (!store) notFound()
 
@@ -64,20 +70,8 @@ export default async function StoreLaborPage(props: {
   const { weekStart, weekEnd, priorWeekStart, priorWeekEnd, weekIso, thisWeekIso } =
     buildLaborWeekWindow(sp.week)
 
-  const [daily, alerts, prior, trend] = await Promise.all([
-    getHarriDailyLabor(store.id, weekStart, weekEnd),
-    getHarriAlerts(store.id, weekStart, weekEnd),
-    getHarriDailyLabor(store.id, priorWeekStart, priorWeekEnd),
-    getHarriTrend(store.id, isoMondayUTC(new Date()), TREND_WEEKS),
-  ])
-
-  const alertsByDate = groupAlertsByDate(alerts)
-  const agg = aggregateLaborWeek(daily, prior)
-  const priorWeekActual = agg.priorActual || null
-  const daysWithData = agg.daysWithData
-
-  return (
-    <main className="labor-shell">
+  const header = (
+    <>
       <header className="labor-shell__header dock-in dock-in-1">
         <div>
           <span className="inv-panel__dept">§ Labor · LiveWire</span>
@@ -93,46 +87,161 @@ export default async function StoreLaborPage(props: {
       <div className="dock-in dock-in-2">
         <LaborStoreTabs stores={tabStores} activeStoreId={store.id} weekIso={weekIso} />
       </div>
+    </>
+  )
+
+  // A store that has not opened has no brand, no punches and no schedule.
+  // Rendering the full report as a column of empty panels would read as
+  // breakage; say plainly what is missing and what will fill it.
+  if (!harriBrand) {
+    return (
+      <main className="labor-shell">
+        {header}
+        <section className="labor-lede dock-in dock-in-3">
+          <div className="labor-lede__head">
+            <span className="labor-lede__dept">§ Not yet reporting</span>
+          </div>
+          <p className="labor-empty-lede">
+            {store.name} has no Harri brand mapped, so there are no punches,
+            no schedule and no labor cost to report
+            {store.lifecycleStage === "pre_open" ? " — it has not opened yet" : ""}.
+          </p>
+          <p className="labor-empty-note">
+            Map a HarriBrand row for this store and the sync backfills the week
+            automatically. Everything on the all-stores page — the verdict, the
+            leak ledger, the staffing curve and the day scorecard — appears here
+            the moment hours land.
+          </p>
+        </section>
+      </main>
+    )
+  }
+
+  const [daily, alerts, prior, trend, productivity] = await Promise.all([
+    getHarriDailyLabor(store.id, weekStart, weekEnd),
+    getHarriAlerts(store.id, weekStart, weekEnd),
+    getHarriDailyLabor(store.id, priorWeekStart, priorWeekEnd),
+    getHarriTrend(store.id, isoMondayUTC(new Date()), TREND_WEEKS),
+    getLaborProductivity(weekStart, weekEnd, store.id),
+  ])
+
+  const alertsByDate = groupAlertsByDate(alerts)
+  const agg = aggregateLaborWeek(daily, prior)
+  const priorWeekActual = agg.priorActual || null
+  const hasHours = !!productivity && productivity.totals.actualHours > 0
+
+  return (
+    <main className="labor-shell">
+      {header}
 
       <div className="dock-in dock-in-3">
         <LaborWeekNav
           weekStart={weekIso}
           isCurrentWeek={weekIso === thisWeekIso}
-          daysWithData={daysWithData}
+          daysWithData={agg.daysWithData}
         />
       </div>
 
+      {/* Same arc as the all-stores page: verdict, what to change, then the
+          evidence. The old KPI strip stays as the fallback for a store that
+          reports cost but no hours yet. */}
       <div className="dock-in dock-in-4">
-        <LaborWeekKpis
-          rows={daily}
-          alertsCount={alerts.length}
-          priorWeekActual={priorWeekActual}
-        />
+        {hasHours && productivity ? (
+          <LaborVerdict
+            totals={productivity.totals}
+            drift={productivity.drift}
+            costVariance={agg.variance}
+          />
+        ) : (
+          <LaborWeekKpis
+            rows={daily}
+            alertsCount={alerts.length}
+            priorWeekActual={priorWeekActual}
+          />
+        )}
       </div>
 
-      <section className="inv-panel dock-in dock-in-5">
-        <div className="inv-panel__head">
-          <div>
-            <span className="inv-panel__dept">§ Day-by-day</span>
-            <h2 className="inv-panel__title">Actual vs forecast. Open a day for clock anomalies.</h2>
+      {hasHours && productivity ? (
+        <section className="labor-lede dock-in dock-in-4">
+          <div className="labor-lede__head">
+            <span className="labor-lede__dept">§ Where it went · ranked by cost</span>
           </div>
-        </div>
-        <LaborWeekDays
-          weekStart={weekIso}
-          rows={daily}
-          alertsByDate={alertsByDate}
-        />
-      </section>
+          <h2 className="labor-lede__title">
+            What to change before next week&rsquo;s schedule goes out.
+          </h2>
+          <LaborLeakLedger leaks={productivity.leaks} />
+        </section>
+      ) : null}
 
-      <section className="inv-panel dock-in dock-in-6">
-        <div className="inv-panel__head">
-          <div>
-            <span className="inv-panel__dept">§ Trend · {TREND_WEEKS} weeks</span>
-            <h2 className="inv-panel__title">Rolling weekly totals</h2>
-          </div>
+      {hasHours && productivity ? (
+        <div className="labor-grid dock-in dock-in-5">
+          <section className="inv-panel">
+            <div className="inv-panel__head">
+              <div>
+                <span className="inv-panel__dept">§ Staffing curve · hour of day</span>
+                <h2 className="inv-panel__title">
+                  Where the hours went, against the sales they covered.
+                </h2>
+              </div>
+            </div>
+            <LaborStaffingCurve
+              hours={productivity.staffing}
+              blendedRate={productivity.blendedRate}
+            />
+          </section>
+
+          {productivity.positions.length > 0 ? (
+            <section className="inv-panel">
+              <div className="inv-panel__head">
+                <div>
+                  <span className="inv-panel__dept">§ Position mix</span>
+                </div>
+              </div>
+              <LaborPositionMix rows={productivity.positions} />
+            </section>
+          ) : null}
         </div>
-        <LaborWeekTrend trend={trend} selectedWeek={weekIso} storeId={store.id} />
-      </section>
+      ) : null}
+
+      {hasHours && productivity ? (
+        <section className="inv-panel dock-in dock-in-5">
+          <div className="inv-panel__head">
+            <div>
+              <span className="inv-panel__dept">§ Day scorecard</span>
+              <h2 className="inv-panel__title">
+                Hours worked against hours the sales earned.
+              </h2>
+            </div>
+          </div>
+          <LaborDayScorecard rows={productivity.scorecard} totals={productivity.totals} />
+        </section>
+      ) : null}
+
+      {/* The per-store extra: cost per day with the clock anomalies behind it.
+          This is the drill-down for the clock-drift leak above, which is why it
+          sits after the scorecard rather than replacing it. */}
+      <div className="labor-grid labor-grid--even dock-in dock-in-6">
+        <section className="inv-panel">
+          <div className="inv-panel__head">
+            <div>
+              <span className="inv-panel__dept">§ Day-by-day</span>
+              <h2 className="inv-panel__title">
+                Cost against forecast. Open a day for the punches behind it.
+              </h2>
+            </div>
+          </div>
+          <LaborWeekDays weekStart={weekIso} rows={daily} alertsByDate={alertsByDate} />
+        </section>
+
+        <section className="inv-panel">
+          <div className="inv-panel__head">
+            <div>
+              <span className="inv-panel__dept">§ Trend · {TREND_WEEKS} weeks</span>
+            </div>
+          </div>
+          <LaborWeekTrend trend={trend} selectedWeek={weekIso} storeId={store.id} />
+        </section>
+      </div>
     </main>
   )
 }
