@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); phase 3-4 unstarted
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); forecast accuracy verified by backtest (`1d3bf3e`); phase 3-4 in progress
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -241,6 +241,37 @@ cashier) and 28 staff, so position mix is thinner than the visual spec assumes.
 16. Causal read-out: actuals against the frozen band, with the interval as the significance test.
 17. Isotonic calibration of predicted impact against realized impact, per opportunity type.
 18. Interval-based anomalies (a day outside its own 95% band); grounded LLM verdict line.
+
+## Accuracy verification — 2026-08-19
+
+Backtested through the real `train()` + `forecast()` path — not a probe — over 10 chronological
+cutoffs from 2026-04-15, 14-day horizons, n=140 predictions scored against actuals.
+
+| | bias | MAPE |
+|---|---|---|
+| before (train-slice model, partial-day anchor) | −5.4% + ~1.7pp | 10.4% |
+| partial-day fix only | −7.1% | 9.6% |
+| **shipped (both fixes)** | **−1.9%** | **9.4%** |
+
+The partial-day fix alone accounted for ~1.1pp of MAPE but left a −7.1% bias standing. The rest
+was the **deployment refit** (`1d3bf3e`): `base` was fit on the train slice only, so the
+estimator that shipped had never seen the newest 20% of the window — 91 days on Hollywood, mean
+7.3% higher than training.
+
+**That hypothesis was tested twice and the first test was wrong.** A 1-step probe against a
+differently-fit pool said refitting made bias slightly *worse*, so it was dropped. Re-run through
+the real pipeline with recursion it improved bias in 7 of 10 cutoffs. A level error compounds
+through recursive multi-step forecasting in a way a 1-step probe cannot see — worth remembering
+before dropping the next hypothesis on a cheap test.
+
+Dry run of the live enriched path afterwards: promotion gate reports
+`enriched WAPE 0.0752 beats baseline-XGB 0.0852 (+11.7%) and seasonal-naive 0.0975 (+22.8%)`.
+The model beating seasonal-naive is the comparison that was inverted this morning, when it was
+being scored against corrupted actuals.
+
+**Still open:** band widths run $1,986 at day 1 to $2,582 at day 7 on a ~$6–8k forecast, i.e.
+±15–20%, and measured coverage is 71% at 1d against 97% at 8d. `HORIZON_WIDENING_PER_DAY` is
+visible in that progression. Per-horizon, per-weekday calibration is the next item.
 
 ## Verification pass — 2026-08-19
 
