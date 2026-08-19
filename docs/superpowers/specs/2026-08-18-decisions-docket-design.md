@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); phases 2-4 unstarted
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); phase 2 hourly drawer and phase 3-4 unstarted
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -165,10 +165,30 @@ No model changes. Everything below is already computed somewhere in the repo.
 
 ### Phase 2 — Make it about labor
 
-5. Labor lane on the week ribbon — scheduled vs. needed hours, from `getLaborProductivity`.
-6. Day drawer: hourly demand (`ForecastHourlyOrders`) against shift coverage (`HarriShift`).
-7. Unfilled-slot flag from `HarriShift.isVirtual`.
+5. ~~Labor lane on the week ribbon~~ — **shipped** (`d578975`). Sourced from `HarriShift`
+   directly, not `getLaborProductivity`: the lane needs hours per forecast day, and
+   `getLaborProductivity` is a history surface. "Needed" is `forecastRevenue / targetSplh`
+   where the target is `weekdayTargets()` from `lib/splh` — the store's own median
+   $/labor-hour for that weekday. Tolerance reuses `SPLH_TOLERANCE` so this and the SPLH
+   chart flag the same days.
+6. Day drawer: hourly demand (`ForecastHourlyOrders`) against shift coverage (`HarriShift`),
+   via the existing `bucketShiftHours()`. **Not started.**
+7. ~~Unfilled-slot flag from `HarriShift.isVirtual`~~ — **shipped**, but demoted. Measured
+   11 occurrences in 3,737 shifts over 13 months (0.3%), so it is an occasional flag, not
+   the design fixture the visual spec made it. The mockup's "2 slots unfilled" is not
+   representative of this store.
 8. Harri labor features into the daily revenue model, reusing `load_harri_features()`.
+   **Not started** — model work.
+
+**Harri findings, 2026-08-19.** `runHarriScheduleSync` had exactly one caller,
+`scripts/backfill-harri-schedule.ts`; it was in no cron or route, so `HarriShift` only moved
+when someone ran that script by hand. Its docstring called the endpoint "a backward-looking
+source — don't forecast on it", which is false and is why nothing did. Probed live: week +0
+returned 64 shifts, week +1 returned 63 (437h, Aug 24-30, published and missing from the
+database), weeks +2 and +3 empty — a ~2-week publishing horizon. Now wired into the nightly
+Harri cron behind `scheduleSyncWindow()` (7 back for edits, since the sync replaces a week
+wholesale; 14 forward for the horizon). Store has only 2 position codes (line-cook-5,
+cashier) and 28 staff, so position mix is thinner than the visual spec assumes.
 
 ### Phase 3 — Make the model explain and behave
 
