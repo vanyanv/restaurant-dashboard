@@ -106,6 +106,7 @@ model User {
   // Relations
   account              Account               @relation(fields: [accountId], references: [id])
   ownedStores          Store[]               @relation("StoreOwner")
+  decisionLogs         DecisionLog[]
   invoices             Invoice[]
   recipes              Recipe[]
   canonicalIngredients CanonicalIngredient[]
@@ -198,6 +199,7 @@ model Store {
   forecastDailyCategory ForecastDailyCategory[]
   mlReconciliationDaily MlReconciliationDaily[]
   growthOpportunities   GrowthOpportunity[]
+  decisionLogs          DecisionLog[]
   anomalyEvents         AnomalyEvent[]
   alerts                Alert[]
   alertPreferences      AlertPreference[]
@@ -1705,6 +1707,63 @@ model OperatorGateDailyVerdict {
 /// One row per (store, day, opportunityType, title) produced by the
 /// nightly growth pipeline (ml/growth/generators/*). Read-only feed —
 /// no operator feedback capture in Phase 1. See spec §3.1.
+/// What the owner actually decided about an opportunity, and what happened next.
+///
+/// The Decisions page kept "Mark done" in React state, so it forgot on refresh
+/// and the system could never learn whether a recommendation was any good.
+enum DecisionState {
+  COMMITTED
+  DISMISSED
+}
+
+/// One decision per opportunity, plus the counterfactual to judge it against.
+///
+/// `frozenForecast` is the load-bearing idea: ForecastDailyRevenue stamps
+/// `generatedAt`, so the forecast made *before* a decision is by construction an
+/// estimate of what would have happened without it. Freezing it at commit time
+/// gives an interrupted-time-series read with no experiment design, no holdout
+/// stores, and no new data collection. See
+/// src/app/dashboard/decisions/lib/decision-outcome.ts.
+model DecisionLog {
+  id String @id @default(cuid())
+  storeId String
+  /// Stable identity of the opportunity. Deliberately NOT a foreign key:
+  /// GrowthOpportunity rows are regenerated nightly with fresh ids, so a
+  /// reference would dangle by morning. (type, title) survives regeneration.
+  opportunityType  OpportunityType
+  opportunityTitle String
+  /// asOfDate of the opportunity row that was on screen when the call was made.
+  opportunityAsOf  DateTime @db.Date
+
+  state         DecisionState
+  /// Why the owner said no. Dismissals are data — an owner who skips every
+  /// menu-engineering card for two months is telling the ranker something no
+  /// accuracy metric captures.
+  dismissReason String?
+
+  decidedByUserId String
+  decidedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  /// What the page promised at decision time, normalised to a week, with its
+  /// range where the generator produced one. Kept here rather than read back
+  /// from GrowthOpportunity because that row is rewritten nightly — this is the
+  /// number the owner actually saw.
+  predictedImpactUsdPerWeek Float
+  predictedImpactP10        Float?
+  predictedImpactP90        Float?
+
+  /// The counterfactual: [{ date, predicted, p10, p90 }] for the days following
+  /// the decision, frozen as the forecast stood before it was taken.
+  frozenForecast Json?
+
+  store     Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  decidedBy User  @relation(fields: [decidedByUserId], references: [id])
+
+  @@unique([storeId, opportunityType, opportunityTitle])
+  @@index([storeId, decidedAt(sort: Desc)])
+}
+
 model GrowthOpportunity {
   id                    String                @id @default(cuid())
   storeId               String

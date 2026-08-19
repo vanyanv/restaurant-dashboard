@@ -9,6 +9,7 @@ import { DecisionWeekCalendar } from "./components/decision-week-calendar"
 import { DecisionBriefing } from "./components/decision-briefing"
 import { ActionCard } from "./components/action-card"
 import { ForecastScorecard } from "./components/forecast-scorecard"
+import { DecisionLedger } from "./components/decision-ledger"
 import { ConfidenceDots } from "./components/confidence-dots"
 import "./decisions.css"
 
@@ -123,12 +124,15 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
               </div>
               <div className="decisions-actions-grid">
                 {data.actions.map((action) => (
-                  <ActionCard key={action.id} action={action} />
+                  <ActionCard key={action.id} action={action} asOf={data.asOf} />
                 ))}
               </div>
             </>
           )}
         </section>
+
+        {/* What was already decided, and what came of it. */}
+        <DecisionLedger decisions={data.decisions} />
 
         {/* The forecast's own track record, shown last and shown honestly. */}
         {data.scorecard ? <ForecastScorecard scorecard={data.scorecard} /> : null}

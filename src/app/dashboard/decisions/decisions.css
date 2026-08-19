@@ -863,3 +863,107 @@
   color: var(--ink-ornament);
   margin: -0.35rem 0 0.35rem;
 }
+
+/* ============================================================ */
+/* Decision ledger — what was decided, and what came of it      */
+/* ============================================================ */
+
+.decisions-log {
+  border-top: 1px solid var(--hairline-bold);
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.decisions-log__row {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) 210px;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.85rem 0.25rem 0.85rem 0.85rem;
+  border-top: 1px solid var(--hairline);
+  position: relative;
+}
+.decisions-log__row:first-child { border-top: 0; }
+
+@media (max-width: 720px) {
+  .decisions-log__row { grid-template-columns: minmax(0, 1fr); }
+}
+
+.decisions-log__state {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.decisions-log__state.is-committed { color: var(--ink); }
+
+.decisions-log__title {
+  font-family: var(--font-fraunces), serif;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  margin: 0 0 0.2rem;
+}
+
+.decisions-log__meta {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+.decisions-log__outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: right;
+}
+@media (max-width: 720px) {
+  .decisions-log__outcome { text-align: left; }
+}
+
+.decisions-log__verdict {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-align: right;
+}
+.decisions-log__verdict.is-working { color: var(--ink-good); }
+.decisions-log__verdict.is-backfiring { color: var(--accent); }
+.decisions-log__verdict.is-no-clear-effect { color: var(--ink-muted); }
+.decisions-log__verdict.is-quiet { color: var(--ink-faint); }
+@media (max-width: 720px) {
+  .decisions-log__verdict { text-align: left; }
+}
+
+.decisions-log__delta {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* The exceedance count is the evidence behind the verdict, not decoration. */
+.decisions-log__evidence {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--ink-ornament);
+}
+
+.decisions-log__caveat {
+  font-family: var(--font-fraunces), serif;
+  font-style: italic;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  margin: 0.75rem 0 0;
+  max-width: 62ch;
+}
+
+.decisions-action-card__error {
+  font-size: 12px;
+  color: var(--accent);
+  margin: 0.5rem 0 0;
+}
