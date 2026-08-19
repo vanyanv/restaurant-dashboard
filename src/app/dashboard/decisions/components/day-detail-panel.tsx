@@ -1,4 +1,5 @@
 import type { DecisionDay } from "@/app/actions/decisions/get-decisions-view"
+import type { LaborLane } from "../lib/labor-lane"
 
 interface Props {
   day: DecisionDay
@@ -33,6 +34,20 @@ export function DayDetailPanel({ day }: Props) {
       parts.push("Predicted in line with the trailing week.")
     }
   }
+  if (day.labor.status === "short" && day.labor.gapHours != null) {
+    parts.push(
+      `You are ${Math.abs(day.labor.gapHours)} hours short of what this day earns at typical productivity.`,
+    )
+  } else if (day.labor.status === "heavy" && day.labor.gapHours != null) {
+    parts.push(
+      `Carrying ${day.labor.gapHours} hours more than this day earns at typical productivity.`,
+    )
+  }
+  if (day.labor.unfilledSlots > 0) {
+    parts.push(
+      `${day.labor.unfilledSlots} shift${day.labor.unfilledSlots === 1 ? "" : "s"} published with nobody assigned.`,
+    )
+  }
   if (day.weatherPhrase) parts.push(`Weather: ${day.weatherPhrase}.`)
   if (day.eventPhrase) parts.push(`Heads up: ${day.eventPhrase}.`)
   if (day.anomalyHint) parts.push(`Watch: ${day.anomalyHint} flagged yesterday.`)
@@ -60,20 +75,30 @@ export function DayDetailPanel({ day }: Props) {
         </div>
         <dl className="decisions-day-detail__rows">
           <DetailRow
-            label="STAFF"
+            label="SCHEDULED"
             value={
-              day.staffDelta == null
-                ? (day.staffNote ?? "—")
-                : day.staffDelta > 0
-                  ? `+${day.staffDelta} vs typical`
-                  : day.staffDelta < 0
-                    ? `${day.staffDelta} vs typical`
-                    : "as usual"
+              day.labor.status === "unscheduled"
+                ? "none published"
+                : `${day.labor.scheduledHours} hrs`
             }
+            tone={day.labor.status === "unscheduled" ? "accent" : "neutral"}
+          />
+          <DetailRow
+            label="NEEDED"
+            value={
+              day.labor.neededHours == null
+                ? "no benchmark"
+                : `${day.labor.neededHours} hrs`
+            }
+            tone="neutral"
+          />
+          <DetailRow
+            label="GAP"
+            value={laborGapText(day.labor)}
             tone={
-              day.staffDelta && day.staffDelta > 0
+              day.labor.status === "short"
                 ? "accent"
-                : day.staffDelta && day.staffDelta < 0
+                : day.labor.status === "heavy"
                   ? "muted"
                   : "neutral"
             }
@@ -119,4 +144,13 @@ function DetailRow({
       </dd>
     </div>
   )
+}
+
+/** "11 hrs short" reads faster than "-11". */
+function laborGapText(labor: LaborLane): string {
+  if (labor.gapHours == null) return "—"
+  if (labor.status === "level") return "level"
+  return labor.gapHours < 0
+    ? `${Math.abs(labor.gapHours)} hrs short`
+    : `${labor.gapHours} hrs over`
 }
