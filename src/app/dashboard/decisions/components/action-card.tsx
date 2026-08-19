@@ -1,12 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import {
+  commitDecision,
+  dismissDecision,
+} from "@/app/actions/decisions/decision-log-actions"
 import type { DecisionAction } from "@/app/actions/decisions/get-decisions-view"
 import type { DecisionDeadline } from "../lib/deadline"
 import { ConfidenceDots } from "./confidence-dots"
 
 interface Props {
   action: DecisionAction
+  /** asOfDate of the opportunity set on screen, recorded with the decision. */
+  asOf: string
 }
 
 const TABULAR = {
@@ -47,28 +54,32 @@ function isTight(deadline: DecisionDeadline): boolean {
   )
 }
 
-export function ActionCard({ action }: Props) {
-  const [state, setState] = useState<"open" | "done" | "skipped">("open")
+export function ActionCard({ action, asOf }: Props) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
   const [whyOpen, setWhyOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  if (state !== "open") {
-    return (
-      <article
-        className={`inv-panel decisions-action-card is-${state}`}
-        aria-label={`${action.title} — ${state}`}
-      >
-        <p className="decisions-action-card__resolved">
-          {state === "done" ? "Marked done." : "Skipped this week."}{" "}
-          <button
-            type="button"
-            className="decisions-link"
-            onClick={() => setState("open")}
-          >
-            undo
-          </button>
-        </p>
-      </article>
-    )
+  const ref = {
+    storeId: action.storeId,
+    opportunityType: action.type,
+    opportunityTitle: action.rawTitle,
+    opportunityAsOf: asOf,
+    predictedImpactUsdPerWeek: action.impactUsdPerWeek,
+    predictedImpactP10: action.impactRangeUsdPerWeek?.low ?? null,
+    predictedImpactP90: action.impactRangeUsdPerWeek?.high ?? null,
+  }
+
+  // The card used to resolve into local state, which forgot on refresh. It now
+  // writes a DecisionLog row and lets the server re-render the ledger, so the
+  // record outlives the tab — and can be scored later.
+  const decide = (fn: typeof commitDecision) => {
+    setError(null)
+    startTransition(async () => {
+      const result = await fn(ref)
+      if (result.ok) router.refresh()
+      else setError("Couldn't save that. Try again in a moment.")
+    })
   }
 
   return (
@@ -111,14 +122,16 @@ export function ActionCard({ action }: Props) {
           <button
             type="button"
             className="decisions-action-btn is-primary"
-            onClick={() => setState("done")}
+            onClick={() => decide(commitDecision)}
+            disabled={pending}
           >
-            Mark done
+            {pending ? "Saving…" : "Commit"}
           </button>
           <button
             type="button"
             className="decisions-action-btn"
-            onClick={() => setState("skipped")}
+            onClick={() => decide(dismissDecision)}
+            disabled={pending}
           >
             Skip
           </button>
@@ -132,6 +145,8 @@ export function ActionCard({ action }: Props) {
           </button>
         </div>
       </footer>
+
+      {error ? <p className="decisions-action-card__error">{error}</p> : null}
 
       {whyOpen ? (
         <div className="decisions-action-card__evidence">

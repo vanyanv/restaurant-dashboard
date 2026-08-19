@@ -43,6 +43,11 @@ import {
   parseAttribution,
   type Attribution,
 } from "@/app/dashboard/decisions/lib/attribution"
+import {
+  computeDecisionOutcome,
+  type DecisionOutcome,
+  type FrozenDay,
+} from "@/app/dashboard/decisions/lib/decision-outcome"
 import { bucketShiftHours } from "@/lib/harri-schedule"
 import {
   stripJargon,
@@ -101,11 +106,35 @@ export interface DecisionDay {
   foodCostNote: string | null
 }
 
+/** A decision the owner already made, and what has happened since. */
+export interface DecisionRecord {
+  storeId: string
+  storeName: string | null
+  opportunityType: OpportunityType
+  title: string
+  rawTitle: string
+  state: "COMMITTED" | "DISMISSED"
+  decidedAt: Date
+  dismissReason: string | null
+  predictedImpactUsdPerWeek: number
+  /** Null for dismissals — nothing was done, so there is nothing to measure. */
+  outcome: DecisionOutcome | null
+}
+
 export interface DecisionAction {
   id: string
+  /** Needed to record a decision; opportunities can span stores on the
+   *  portfolio view. */
+  storeId: string
   category: string // "Pricing", "Menu mix", ...
   type: OpportunityType
   title: string
+  /**
+   * The generator's untouched title. `title` above is jargon-stripped for
+   * display, and DecisionLog keys on (store, type, title) — sending the
+   * stripped one would write a key that never matches on the way back.
+   */
+  rawTitle: string
   /** Impact normalised to one week, whatever horizon the generator used. */
   impactUsdPerWeek: number
   /**
@@ -133,6 +162,8 @@ export interface DecisionsView {
   actions: DecisionAction[]
   /** Sum of the shown actions' weekly impact — the week's pot. */
   potUsdPerWeek: number
+  /** Decisions already taken, newest first. The page's memory. */
+  decisions: DecisionRecord[]
   /** The forecast's own track record. Null until the evaluator has run. */
   scorecard: Scorecard | null
   briefing: BriefingLine[]
@@ -204,6 +235,8 @@ export async function getDecisionsView(input: {
     ordersHistoryRows,
     splhHistoryRows,
     attributionRows,
+    decisionRows,
+    actualsRows,
     evaluationRows,
   ] = await Promise.all([
     getRevenueForecast({ storeId: input.storeId, horizonDays: 14 }),
@@ -336,6 +369,33 @@ export async function getDecisionsView(input: {
       orderBy: { generatedAt: "desc" },
       take: 8 * 4 * Math.max(1, storeIds.length),
       select: { storeId: true, forecastDate: true, attribution: true },
+    }).catch(() => []),
+    // What the owner already decided. The page's memory.
+    prisma.decisionLog.findMany({
+      where: { storeId: { in: storeIds } },
+      orderBy: { decidedAt: "desc" },
+      take: 50,
+      select: {
+        storeId: true,
+        opportunityType: true,
+        opportunityTitle: true,
+        state: true,
+        decidedAt: true,
+        dismissReason: true,
+        predictedImpactUsdPerWeek: true,
+        frozenForecast: true,
+        store: { select: { name: true } },
+      },
+    }).catch(() => []),
+    // Actuals to judge those decisions against. A frozen forecast reaches at
+    // most 14 days past the decision, so 60 days back covers every open one.
+    prisma.otterDailySummary.groupBy({
+      by: ["date"],
+      where: {
+        storeId: { in: storeIds },
+        date: { gte: addDays(today, -60), lt: today },
+      },
+      _sum: { fpNetSales: true, tpNetSales: true },
     }).catch(() => []),
     // First reader of MlForecastEvaluation anywhere in src/. Ordered newest
     // first and deduped per store below — Prisma has no latest-per-group, and
@@ -531,9 +591,42 @@ export async function getDecisionsView(input: {
     ),
   }))
 
+  // Revenue actually taken, keyed by day, for the counterfactual comparison.
+  const actualByDate = new Map<string, number>()
+  for (const row of actualsRows) {
+    const key = ymd(row.date)
+    const taken = (row._sum.fpNetSales ?? 0) + (row._sum.tpNetSales ?? 0)
+    actualByDate.set(key, (actualByDate.get(key) ?? 0) + taken)
+  }
+
+  const decisions: DecisionRecord[] = decisionRows.map((d) => ({
+    storeId: d.storeId,
+    storeName: isAggregate ? (d.store?.name ?? null) : null,
+    opportunityType: d.opportunityType as OpportunityType,
+    title: stripJargon(d.opportunityTitle),
+    rawTitle: d.opportunityTitle,
+    state: d.state as "COMMITTED" | "DISMISSED",
+    decidedAt: d.decidedAt,
+    dismissReason: d.dismissReason,
+    predictedImpactUsdPerWeek: d.predictedImpactUsdPerWeek,
+    // Only a commitment has an effect to measure, and only if the forecast at
+    // that moment was captured.
+    outcome:
+      d.state === "COMMITTED"
+        ? computeDecisionOutcome(parseFrozen(d.frozenForecast), actualByDate)
+        : null,
+  }))
+
+  // An opportunity already decided leaves the open ledger; it lives on as a
+  // record below rather than being offered again every morning.
+  const decided = new Set(
+    decisionRows.map((d) => `${d.storeId}|${d.opportunityType}|${d.opportunityTitle}`),
+  )
+
   const actions: DecisionAction[] = buildActionCards(
     opportunitiesResult,
     todayKey,
+    decided,
   )
 
   const overallConfidence: DotCount = confidenceFromForecast(
@@ -552,6 +645,7 @@ export async function getDecisionsView(input: {
       days,
       actions,
       potUsdPerWeek: actions.reduce((sum, a) => sum + a.impactUsdPerWeek, 0),
+      decisions,
       scorecard,
       briefing: sanitizedBriefing,
     },
@@ -686,13 +780,33 @@ function foodCostNoteFor(data: FoodCostData | null, _dayKey: string): string | n
 
 type OpportunitiesResult = Awaited<ReturnType<typeof getOpportunities>>
 
+/** Re-validate the frozen counterfactual coming back out of a Json column. */
+function parseFrozen(raw: unknown): FrozenDay[] {
+  if (!Array.isArray(raw)) return []
+  const out: FrozenDay[] = []
+  for (const entry of raw) {
+    if (entry == null || typeof entry !== "object") continue
+    const r = entry as Record<string, unknown>
+    if (typeof r.date !== "string" || typeof r.predicted !== "number") continue
+    out.push({
+      date: r.date,
+      predicted: r.predicted,
+      p10: typeof r.p10 === "number" ? r.p10 : null,
+      p90: typeof r.p90 === "number" ? r.p90 : null,
+    })
+  }
+  return out
+}
+
 function buildActionCards(
   result: OpportunitiesResult,
   todayKey: string,
+  decided: Set<string>,
 ): DecisionAction[] {
   if (!result || !result.ok || result.opportunities.length === 0) return []
 
   const ranked = result.opportunities
+    .filter((o) => !decided.has(`${o.storeId}|${o.opportunityType}|${o.title}`))
     .map((o) => {
       const weekly = weeklyFactor(o.horizonDays)
       // Rank on the measured downside where the generator produced one: a wide,
@@ -711,9 +825,11 @@ function buildActionCards(
 
   return ranked.map(({ o }) => ({
     id: o.id,
+    storeId: o.storeId,
     category: translateOpportunityType(o.opportunityType),
     type: o.opportunityType,
     title: stripJargon(o.title),
+    rawTitle: o.title,
     // Generators emit over different horizons (1 day for reprice, 7 for the
     // risk types, 30 for menu engineering). The card has always said "/wk", so
     // normalise rather than relabel — a 30-day figure shown as weekly is what
