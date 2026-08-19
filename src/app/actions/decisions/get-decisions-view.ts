@@ -38,6 +38,11 @@ import {
   buildHourlyCoverage,
   type HourlyCoverage,
 } from "@/app/dashboard/decisions/lib/hourly-coverage"
+import {
+  mergeAttributions,
+  parseAttribution,
+  type Attribution,
+} from "@/app/dashboard/decisions/lib/attribution"
 import { bucketShiftHours } from "@/lib/harri-schedule"
 import {
   stripJargon,
@@ -82,6 +87,11 @@ export interface DecisionDay {
    * short; this says which stretch, which is what a manager actually posts.
    */
   hourly: HourlyCoverage
+  /**
+   * Why the model landed on this number — TreeSHAP, grouped for an operator.
+   * Null until the nightly has written a waterfall for the day.
+   */
+  attribution: Attribution | null
   hasAnomaly: boolean
   anomalyHint: string | null
   weatherTone: "clear" | "rain" | "heat" | "cold" | "heavy_rain" | null
@@ -176,6 +186,7 @@ export async function getDecisionsView(input: {
     hourlyForecastRows,
     ordersHistoryRows,
     splhHistoryRows,
+    attributionRows,
     evaluationRows,
   ] = await Promise.all([
     getRevenueForecast({ storeId: input.storeId, horizonDays: 14 }),
@@ -295,6 +306,20 @@ export async function getDecisionsView(input: {
          GROUP BY h."date", s.net
       `,
     ).catch(() => []),
+    // The forecast's own explanation. Read here rather than through
+    // getRevenueForecast so that shared action keeps its shape; merging across
+    // stores is sound because SHAP contributions are additive.
+    prisma.forecastDailyRevenue.findMany({
+      where: {
+        storeId: { in: storeIds },
+        hourBucket: 0,
+        forecastDate: { gte: today, lte: addDays(today, 7) },
+        attribution: { not: Prisma.DbNull },
+      },
+      orderBy: { generatedAt: "desc" },
+      take: 8 * 4 * Math.max(1, storeIds.length),
+      select: { storeId: true, forecastDate: true, attribution: true },
+    }).catch(() => []),
     // First reader of MlForecastEvaluation anywhere in src/. Ordered newest
     // first and deduped per store below — Prisma has no latest-per-group, and
     // the row count here is stores x model versions, not unbounded.
@@ -397,6 +422,19 @@ export async function getDecisionsView(input: {
   // morning are read back for the trading day that opened before midnight.
   const staffedByDate = bucketShiftHours(shiftRows)
 
+  // Newest generation per (store, date); rows arrive newest-first.
+  const attributionByDate = new Map<string, Attribution[]>()
+  const seenStoreDate = new Set<string>()
+  for (const row of attributionRows) {
+    const key = ymd(row.forecastDate)
+    const dedupe = `${row.storeId}|${key}`
+    if (seenStoreDate.has(dedupe)) continue
+    seenStoreDate.add(dedupe)
+    const parsed = parseAttribution(row.attribution)
+    if (!parsed) continue
+    attributionByDate.set(key, [...(attributionByDate.get(key) ?? []), parsed])
+  }
+
   const next7 = revenueData?.days.slice(0, 7) ?? []
   const days: DecisionDay[] = next7.map((d) => {
     const key = ymd(d.date)
@@ -423,6 +461,7 @@ export async function getDecisionsView(input: {
       }),
       ordersPerLaborHour,
     )
+    const attribution = mergeAttributions(attributionByDate.get(key) ?? [])
     const labor = computeLaborLane({
       forecastRevenue: d.predictedRevenue,
       scheduledHours: shifts.hours,
@@ -443,6 +482,7 @@ export async function getDecisionsView(input: {
       staffNote,
       labor,
       hourly,
+      attribution,
       hasAnomaly: !!anom,
       anomalyHint: anom,
       weatherTone: weather.tone,

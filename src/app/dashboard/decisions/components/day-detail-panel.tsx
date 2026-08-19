@@ -1,6 +1,7 @@
 import type { DecisionDay } from "@/app/actions/decisions/get-decisions-view"
 import type { LaborLane } from "../lib/labor-lane"
 import type { HourlyCoverage } from "../lib/hourly-coverage"
+import type { Attribution } from "../lib/attribution"
 
 interface Props {
   day: DecisionDay
@@ -37,7 +38,15 @@ export function DayDetailPanel({ day }: Props) {
   }
   if (day.hourly.worstStretch) {
     const { startHour, endHour } = day.hourly.worstStretch
-    parts.push(`Demand outruns the posted schedule ${hourRange(startHour, endHour)}.`)
+    const range = hourRange(startHour, endHour)
+    // The day-total and the hourly shape can disagree, and when they do the
+    // disagreement is the finding: enough hours on the schedule, posted at the
+    // wrong end of the day. Saying only "level" would bury that.
+    parts.push(
+      day.labor.status === "short"
+        ? `Demand outruns the posted schedule ${range}.`
+        : `The day carries enough hours, but not where the demand is — short ${range}.`,
+    )
   } else if (day.labor.status === "short" && day.labor.gapHours != null) {
     parts.push(
       `You are ${Math.abs(day.labor.gapHours)} hours short of what this day earns at typical productivity.`,
@@ -123,6 +132,9 @@ export function DayDetailPanel({ day }: Props) {
             tone={day.foodCostNote?.includes("over") ? "accent" : "neutral"}
           />
         </dl>
+        {day.attribution ? (
+          <Waterfall attribution={day.attribution} predicted={day.predictedRevenue} />
+        ) : null}
         <HourlyChart hourly={day.hourly} />
       </div>
     </div>
@@ -248,6 +260,67 @@ function HourlyChart({ hourly }: { hourly: HourlyCoverage }) {
           <span><i className="is-short" />uncovered</span>
         ) : null}
       </p>
+    </div>
+  )
+}
+
+
+const usd = (n: number) =>
+  n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+
+/**
+ * Why the forecast is what it is.
+ *
+ * XGBoost computes these contributions exactly, as a by-product of predicting —
+ * they are not a post-hoc guess at the model's reasoning. The base is what a day
+ * with no distinguishing features would earn; each bar is a group that moved it,
+ * and they sum to the forecast.
+ *
+ * Bars are drawn from a centre line so a drag reads as a drag. Ink for lifts,
+ * accent for drags — the one place red is not about urgency but about direction,
+ * which the amount beside it makes unambiguous.
+ */
+function Waterfall({
+  attribution,
+  predicted,
+}: {
+  attribution: Attribution
+  predicted: number
+}) {
+  const { base, groups } = attribution
+  if (groups.length === 0) return null
+
+  // Scale to the largest single move so the smallest still reads.
+  const widest = groups.reduce((m, g) => Math.max(m, Math.abs(g.value)), 0)
+  if (widest <= 0) return null
+
+  return (
+    <div className="decisions-attr">
+      <p className="decisions-attr__title">Why {usd(predicted)}</p>
+      <div className="decisions-attr__row is-base">
+        <span className="decisions-attr__label">Typical day</span>
+        <span className="decisions-attr__track" aria-hidden="true" />
+        <span className="decisions-attr__val">{usd(base)}</span>
+      </div>
+      {groups.map((g) => (
+        <div key={g.label} className="decisions-attr__row">
+          <span className="decisions-attr__label">{g.label}</span>
+          <span className="decisions-attr__track">
+            <span
+              className={"decisions-attr__bar " + (g.value >= 0 ? "is-up" : "is-down")}
+              style={{ width: `${(Math.abs(g.value) / widest) * 50}%` }}
+            />
+          </span>
+          <span className={"decisions-attr__val" + (g.value < 0 ? " is-down" : "")}>
+            {g.value >= 0 ? "+" : "−"}{usd(Math.abs(g.value))}
+          </span>
+        </div>
+      ))}
+      <div className="decisions-attr__row is-total">
+        <span className="decisions-attr__label">Forecast</span>
+        <span className="decisions-attr__track" aria-hidden="true" />
+        <span className="decisions-attr__val">{usd(predicted)}</span>
+      </div>
     </div>
   )
 }

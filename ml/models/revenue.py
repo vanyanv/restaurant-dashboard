@@ -12,15 +12,18 @@ heuristic and tag the flavor with `-fallback`.
 """
 from __future__ import annotations
 
+import logging
+
 import datetime as dt
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 import pandas as pd
-from xgboost import XGBRegressor
+from xgboost import DMatrix, XGBRegressor
 
 from ml.evaluation.conformal import ConformalWrapper, wrap_xgboost_conformal
+from ml.models.attribution import build_attribution
 from ml.features.revenue import (
     build_enriched_features,
     build_features,
@@ -35,6 +38,8 @@ from ml.features.external_signals import external_signal_coverage
 
 # MAPIE's 95% wrapper needs >=20 samples (1/alpha). Below that the inner
 # call raises, so anything smaller forces the legacy-residual-std fallback.
+_LOG = logging.getLogger(__name__)
+
 MIN_CALIBRATION_ROWS = 20
 
 # Per-day interval widening factor for multi-step forecasts. Iterative
@@ -72,6 +77,9 @@ class ForecastRow:
     predicted_revenue: float
     p10: float
     p90: float
+    #: TreeSHAP waterfall — {"base": float, "groups": [{"label", "value"}]} —
+    #: summing to predicted_revenue. None if the booster wouldn't produce one.
+    attribution: Optional[dict] = None
 
 
 def _conformal_split(feats: pd.DataFrame, cols: list[str]) -> tuple[
@@ -291,11 +299,46 @@ def forecast(
                 predicted_revenue=max(0.0, pred),
                 p10=max(0.0, p10),
                 p90=max(0.0, p90),
+                attribution=_attribution_for(result.model, x_arr, cols, pred),
             )
         )
         rolling.iloc[-1, rolling.columns.get_loc("revenue")] = pred
 
     return out
+
+
+def _attribution_for(
+    model: XGBRegressor,
+    x_arr: "np.ndarray",
+    cols: list[str],
+    predicted: float,
+) -> Optional[dict]:
+    """Exact TreeSHAP for one row, grouped for the owner.
+
+    `pred_contribs=True` returns one value per feature plus a trailing bias
+    term, and they sum to the raw prediction — no surrogate model, no extra
+    dependency, one call against the booster already in memory.
+
+    Attribution is a nice-to-have on top of a forecast, so a failure here must
+    never cost the forecast itself: the row simply ships without a waterfall.
+    """
+    try:
+        booster = model.get_booster()
+        names = list(booster.feature_names) if booster.feature_names else list(cols)
+        contribs = booster.predict(
+            DMatrix(x_arr, feature_names=names), pred_contribs=True
+        )[0]
+        base_value = float(contribs[-1])
+        feature_contribs = [float(v) for v in contribs[:-1]]
+        return build_attribution(
+            base_value=base_value,
+            feature_names=names,
+            contributions=feature_contribs,
+            predicted=predicted,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOG.debug("attribution unavailable: %s", exc)
+        return None
 
 
 def model_safe_predict(model: XGBRegressor, x: pd.DataFrame) -> float:

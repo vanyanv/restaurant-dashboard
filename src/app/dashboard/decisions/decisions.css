@@ -770,3 +770,85 @@
 .decisions-hours__legend i.is-demand { background: var(--ink); }
 .decisions-hours__legend i.is-staff  { background: var(--ink-ochre); }
 .decisions-hours__legend i.is-short  { background: var(--accent); }
+
+/* ============================================================ */
+/* Attribution waterfall — why the forecast is what it is       */
+/* ============================================================ */
+
+.decisions-attr {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.decisions-attr__title {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.5rem;
+}
+
+.decisions-attr__row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 92px;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+
+.decisions-attr__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bars grow out from a centre line, so a drag reads as a drag. */
+.decisions-attr__track {
+  position: relative;
+  display: block;
+  height: 10px;
+}
+.decisions-attr__track::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--hairline-bold);
+}
+
+.decisions-attr__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.decisions-attr__bar.is-up { left: 50%; background: var(--ink); }
+.decisions-attr__bar.is-down { right: 50%; background: var(--accent); }
+
+.decisions-attr__val {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+  color: var(--ink);
+}
+.decisions-attr__val.is-down { color: var(--accent); }
+
+.decisions-attr__row.is-base .decisions-attr__val { color: var(--ink-muted); }
+.decisions-attr__row.is-total {
+  border-top: 1px solid var(--hairline-bold);
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+}
+.decisions-attr__row.is-total .decisions-attr__val { font-size: 14px; }

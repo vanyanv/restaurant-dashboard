@@ -1530,6 +1530,12 @@ model ForecastDailyRevenue {
   reconciledP10        Float?
   reconciledP90        Float?
   reconciliationMethod String?
+  /// TreeSHAP waterfall for this prediction:
+  /// {"base": number, "groups": [{"label", "value"}]}, summing to
+  /// predictedRevenue. Grouped for operators in ml/models/attribution.py —
+  /// nobody running a restaurant wants lag_7 weighed against roll_28.
+  /// Null on rows written before 2026-08-19 and whenever the booster declines.
+  attribution          Json?
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
