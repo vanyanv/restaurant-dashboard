@@ -209,7 +209,21 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
     )
 
 
-def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list[ForecastRow]:
+def forecast(
+    store_id: str,
+    result: TrainResult,
+    horizon_days: int = 14,
+    horizon_widths: Optional[dict[int, float]] = None,
+) -> list[ForecastRow]:
+    """Forecast forward from the last observed day.
+
+    `horizon_widths` maps horizon (1-based) to a half-width expressed as a
+    fraction of the prediction, measured from reconciled history by
+    `ml.evaluation.horizon_calibration`. When a horizon is present there it
+    replaces HORIZON_WIDENING_PER_DAY, which inflated the one-step conformal
+    width by a flat 5% a day and produced 71% coverage at one day out against
+    97% at eight. Horizons with too little history fall through to the old path.
+    """
     history = load_daily_revenue(store_id)
     if history.empty:
         return []
@@ -243,23 +257,33 @@ def forecast(store_id: str, result: TrainResult, horizon_days: int = 14) -> list
         x = feat_row[cols].to_frame().T
         x_arr = x.to_numpy(dtype=float, na_value=np.nan)
 
+        measured = (horizon_widths or {}).get(offset)
+
         if result.conformal is not None and not result.uses_fallback_interval:
             point, lower80, upper80, _, _ = result.conformal.predict_intervals(x_arr)
             pred = float(point[0])
-            # The conformal half-width is 1-step-calibrated; inflate it for the
-            # extra forecast steps so coverage holds across the horizon. Anchor
-            # at offset-1 → horizon 1 keeps the raw (correct) 1-step width.
-            widening = 1.0 + HORIZON_WIDENING_PER_DAY * (offset - 1)
-            p10 = pred - (pred - float(lower80[0])) * widening
-            p90 = pred + (float(upper80[0]) - pred) * widening
+            if measured is not None:
+                half = pred * measured
+                p10, p90 = pred - half, pred + half
+            else:
+                # The conformal half-width is 1-step-calibrated; inflate it for
+                # the extra forecast steps so coverage holds across the horizon.
+                # Anchor at offset-1 → horizon 1 keeps the raw 1-step width.
+                widening = 1.0 + HORIZON_WIDENING_PER_DAY * (offset - 1)
+                p10 = pred - (pred - float(lower80[0])) * widening
+                p90 = pred + (float(upper80[0]) - pred) * widening
         else:
             pred = float(result.model.predict(x_arr)[0])
-            # Legacy ±1.28 SD ≈ 80% PI from holdout residual std, widened by
-            # 1 + k * offset to reflect compounding uncertainty.
-            widening = 1.0 + HORIZON_WIDENING_PER_DAY * offset
-            sigma = result.holdout_residual_std * widening
-            p10 = pred - 1.28 * sigma
-            p90 = pred + 1.28 * sigma
+            if measured is not None:
+                half = pred * measured
+                p10, p90 = pred - half, pred + half
+            else:
+                # Legacy ±1.28 SD ≈ 80% PI from holdout residual std, widened by
+                # 1 + k * offset to reflect compounding uncertainty.
+                widening = 1.0 + HORIZON_WIDENING_PER_DAY * offset
+                sigma = result.holdout_residual_std * widening
+                p10 = pred - 1.28 * sigma
+                p90 = pred + 1.28 * sigma
 
         out.append(
             ForecastRow(

@@ -41,6 +41,7 @@ from ml.evaluation.promotion import (
     transfer_forecast_wape,
 )
 from ml.evaluation.reconcile import reconcile_past_forecasts
+from ml.evaluation.horizon_calibration import load_horizon_widths
 from ml.features.menu_item import load_top_items
 from ml.features.revenue import (
     list_active_store_ids,
@@ -188,7 +189,16 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
         )
         selected_version = _version_with_flavor(model_version, result)
         _set_run_model_version(run_id, selected_version)
-        rows = forecast_revenue(store_id, result, horizon_days=REVENUE_HORIZON_DAYS)
+        # Measured per-horizon interval widths, replacing the flat 5%/day
+        # widening constant. Empty until a store has enough reconciled rows,
+        # in which case forecast() keeps the old path.
+        horizon_widths = load_horizon_widths(store_id)
+        rows = forecast_revenue(
+            store_id,
+            result,
+            horizon_days=REVENUE_HORIZON_DAYS,
+            horizon_widths=horizon_widths,
+        )
         written = _write_revenue_forecasts(store_id, selected_version, rows)
         warning = None
         if gate != "promoted":
