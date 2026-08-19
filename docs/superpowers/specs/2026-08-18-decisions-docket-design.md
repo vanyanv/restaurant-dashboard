@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); schema drift resolved (`cbc1591`); impact intervals shipped (`327977a`); **phase 3 complete**; phase 4 items 14-15 shipped (`ac8dfeb`); items 16-17 open
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); schema drift resolved (`cbc1591`); impact intervals shipped (`327977a`); **phase 3 complete**; phase 4 items 14-15 shipped (`ac8dfeb`); items 16-17 open; **Act I (verdict + vitals) and the ranked action ledger shipped** — principle #1 had no matching phase item and was never built, so the page kept opening with three panels at equal weight until now
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -137,7 +137,7 @@ also moves to 10:00 UTC so the previous Pacific day is closed and synced before 
 
 ## Decisions
 
-1. **The page leads with one verdict, not three equal panels.** Hierarchy is verdict → week →
+1. ~~**The page leads with one verdict, not three equal panels.**~~ — **shipped**. Hierarchy is verdict → week →
    ledger. Everything else moves below or into a drawer.
 2. **The labor lane sits on the week ribbon, not in the drawer.** "You are 11 hours short on
    Saturday" is the only thing on this page the owner can act on today. (User decision, 2026-08-18.)
@@ -263,7 +263,13 @@ cashier) and 28 staff, so position mix is thinner than the visual spec assumes.
     timestamps, and **the forecast frozen at commit time**.
 16. Causal read-out: actuals against the frozen band, with the interval as the significance test.
 17. Isotonic calibration of predicted impact against realized impact, per opportunity type.
-18. Interval-based anomalies (a day outside its own 95% band); grounded LLM verdict line.
+18. Interval-based anomalies (a day outside its own 95% band); ~~grounded LLM verdict line~~ —
+    **the verdict line shipped** with Act I. `src/lib/decision-verdict-llm.ts` narrates from a
+    block of already-formatted figures, and `parseVerdictLine` rebuilds its allowlist from that
+    same block, so any digit-run the page did not compute is rejected and the deterministic
+    composer renders instead. Principle #7 is enforced mechanically, not by prompt wording.
+    Cached in `DecisionVerdict` on (scope, date) + a hash of the fact block: one API call per
+    scope per day, re-costed only when a displayed figure moves. Interval-based anomalies remain open.
 
 ## Accuracy verification — 2026-08-19
 

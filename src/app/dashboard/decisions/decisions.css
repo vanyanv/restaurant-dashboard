@@ -248,46 +248,6 @@
 .decisions-briefing__num { font-family: var(--font-dm-sans), system-ui, sans-serif; font-weight: 500; }
 .decisions-briefing__empty { padding: 0.75rem 1.25rem 1.25rem; font-family: var(--font-fraunces), serif; font-style: italic; color: var(--ink-muted); margin: 0; }
 
-/* ============================================================ */
-/* Action cards                                                  */
-/* ============================================================ */
-
-.decisions-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
-}
-
-.decisions-action-card {
-  padding: 1rem 1.1rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.decisions-action-card__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.decisions-action-card__category {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.decisions-action-card__doby {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
 /* The day cell's primary reading: money, not an adjective. */
 .decisions-day-cell__amt {
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
@@ -304,11 +264,6 @@
   letter-spacing: 0.04em;
   color: var(--ink-ornament);
   white-space: nowrap;
-}
-
-/* Earn-the-red: only a genuinely closing window, never every card. */
-.decisions-action-card__doby.is-tight {
-  color: var(--accent);
 }
 
 /* Pot total — the sum the five cards never added up to. */
@@ -351,53 +306,6 @@
   letter-spacing: 0.18em;
   color: var(--ink-faint);
 }
-
-.decisions-action-card__title {
-  font-family: var(--font-fraunces), serif;
-  font-size: 1.05rem;
-  font-weight: 400;
-  line-height: 1.25;
-  margin: 0;
-  color: var(--ink);
-}
-.decisions-action-card__title em { font-style: italic; }
-
-.decisions-action-card__impact {
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 1.55rem;
-  color: var(--accent);
-  line-height: 1;
-  display: flex;
-  align-items: baseline;
-  gap: 0.2rem;
-}
-.decisions-action-card__impact-unit {
-  font-weight: 500;
-  font-size: 0.85rem;
-  color: var(--ink-muted);
-}
-
-.decisions-action-card__why {
-  font-family: var(--font-fraunces), serif;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  color: var(--ink-muted);
-  margin: 0;
-}
-
-.decisions-action-card__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: auto;
-  padding-top: 0.5rem;
-  border-top: 1px dotted var(--hairline);
-}
-
-.decisions-action-card__buttons { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-
 .decisions-action-btn {
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 10px;
@@ -412,21 +320,16 @@
   transition: background-color 120ms ease, color 120ms ease;
 }
 .decisions-action-btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--paper)); }
-.decisions-action-btn.is-primary { background: var(--accent); color: var(--paper); border-color: var(--accent); }
-.decisions-action-btn.is-primary:hover { background: color-mix(in srgb, var(--ink) 12%, var(--accent)); }
+/* Earn-the-red: red is state, never a fill at rest. Commit reads as the
+   primary action through its ink-weight border, and takes the proofmark only
+   on hover — the same bargain every other control on the dashboard makes. */
+.decisions-action-btn.is-primary { border-color: var(--ink); color: var(--ink); font-weight: 500; }
+.decisions-action-btn.is-primary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
 .decisions-action-btn.is-ghost { border-color: var(--hairline); color: var(--ink-muted); }
-
-.decisions-action-card.is-done,
-.decisions-action-card.is-skipped {
-  padding: 1rem 1.1rem;
-}
-
-.decisions-action-card__resolved {
-  font-family: var(--font-fraunces), serif;
-  font-style: italic;
-  color: var(--ink-muted);
-  margin: 0;
-}
 
 .decisions-link {
   background: none;
@@ -437,49 +340,6 @@
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-.decisions-action-card__evidence {
-  border-top: 1px dotted var(--hairline);
-  padding-top: 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.decisions-action-card__evidence-title {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  margin: 0;
-}
-.decisions-action-card__evidence-empty {
-  font-family: var(--font-fraunces), serif;
-  font-size: 0.875rem;
-  font-style: italic;
-  color: var(--ink-muted);
-  margin: 0;
-}
-.decisions-action-card__evidence-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
-.decisions-action-card__evidence-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-}
-.decisions-action-card__evidence-kind {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 10px;
-  color: var(--ink-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-.decisions-action-card__evidence-val {
-  font-family: var(--font-dm-sans), system-ui, sans-serif;
-  font-weight: 500;
-  color: var(--ink);
 }
 
 /* ============================================================ */
@@ -853,17 +713,6 @@
 }
 .decisions-attr__row.is-total .decisions-attr__val { font-size: 14px; }
 
-/* The impact's range. Deliberately quiet — it qualifies the number above it
-   rather than competing with it, and it is absent whenever the underlying fit
-   reported no standard error. */
-.decisions-action-card__range {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--ink-ornament);
-  margin: -0.35rem 0 0.35rem;
-}
-
 /* ============================================================ */
 /* Decision ledger — what was decided, and what came of it      */
 /* ============================================================ */
@@ -962,8 +811,339 @@
   max-width: 62ch;
 }
 
-.decisions-action-card__error {
+/* ============================================================ */
+/* Act I — the verdict, and the week as four numbers            */
+/* ============================================================ */
+
+/* The page opened with a calendar, a bulleted briefing and five cards at equal
+   weight, so nothing said what to read first. Hierarchy is verdict -> week ->
+   actions; this block is the top of it. */
+.decisions-verdict {
+  margin-bottom: 1.75rem;
+}
+
+.decisions-verdict__kicker {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.7rem;
+}
+
+.decisions-verdict__line {
+  font-family: var(--font-fraunces), serif;
+  font-variation-settings: "opsz" 96, "SOFT" 50;
+  font-size: clamp(24px, 3.4vw, 36px);
+  font-weight: 450;
+  font-style: italic;
+  line-height: 1.14;
+  letter-spacing: -0.024em;
+  color: var(--ink);
+  max-width: 24ch;
+  margin: 0;
+  text-wrap: balance;
+}
+
+/* The two-tier rule: Fraunces never sets a number. Figures inside the sentence
+   drop into DM Sans tabular so the currency reads as a figure, not as prose. */
+.decisions-verdict__num {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.decisions-verdict__src {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0.9rem 0 0;
+}
+
+.decisions-vitals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  margin-top: 1.4rem;
+  border-top: 1px solid var(--hairline-bold);
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.decisions-vital {
+  padding: 0.85rem 1.1rem 0.9rem;
+  border-left: 1px solid var(--hairline);
+  min-width: 0;
+}
+
+.decisions-vital:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.decisions-vital__label {
+  display: block;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.45rem;
+}
+
+.decisions-vital__value {
+  display: block;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 25px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+/* Earn-the-red: a week genuinely short of the hours it earns is a state. */
+.decisions-vital__value.is-short { color: var(--accent); }
+/* Ochre for heavy, matching the day lane's reading of the same condition. */
+.decisions-vital__value.is-heavy { color: var(--ink-ochre); }
+
+.decisions-vital__sub {
+  display: block;
+  margin-top: 0.3rem;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+
+/* ============================================================ */
+/* Action ledger — ranked rows, not a grid of equal cards       */
+/* ============================================================ */
+
+.decisions-led {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.decisions-ledrow {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 150px 128px;
+  gap: 1rem;
+  align-items: start;
+  padding: 0.95rem 0.25rem 0.95rem 0.85rem;
+  border-top: 1px solid var(--hairline);
+  position: relative;
+  transition: background 180ms ease;
+}
+
+/* The row interaction contract: 4px proofmark bar, warm wash, total turns red.
+   Same pattern as .inv-row — a list row on this dashboard hovers exactly one
+   way. :focus-within carries it for keyboard users, since the row's controls
+   are what take focus. */
+.decisions-ledrow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.decisions-ledrow:hover::before,
+.decisions-ledrow:focus-within::before {
+  transform: scaleY(1);
+}
+
+.decisions-ledrow:hover,
+.decisions-ledrow:focus-within {
+  background: rgba(220, 38, 38, 0.045);
+}
+
+.decisions-ledrow:hover .decisions-ledrow__amt,
+.decisions-ledrow:focus-within .decisions-ledrow__amt {
+  color: var(--accent);
+}
+
+.decisions-ledrow__rank {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-ornament);
+  padding-top: 0.35rem;
+}
+
+.decisions-ledrow__body { min-width: 0; }
+
+.decisions-ledrow__cat {
+  display: block;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.25rem;
+}
+
+.decisions-ledrow__title {
+  font-family: var(--font-fraunces), serif;
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+  font-size: 16.5px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+  color: var(--ink);
+  margin: 0;
+}
+
+.decisions-ledrow__title em { font-style: italic; }
+
+.decisions-ledrow__why {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+  margin: 0.2rem 0 0;
+  max-width: 54ch;
+}
+
+.decisions-ledrow__error {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
   font-size: 12px;
   color: var(--accent);
-  margin: 0.5rem 0 0;
+  margin: 0.4rem 0 0;
+}
+
+.decisions-ledrow__amt {
+  text-align: right;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.016em;
+  color: var(--ink);
+  transition: color 180ms ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+/* The figure and its unit are one reading; the column flex above would
+   otherwise break "/wk" onto a line of its own. */
+.decisions-ledrow__figure {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.decisions-ledrow__amt-unit {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  margin-left: 0.15rem;
+}
+
+/* Quiet by design: the range qualifies the number above it rather than
+   competing with it, and it is absent when the fit reported no standard error. */
+.decisions-ledrow__band {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--ink-ornament);
+}
+
+.decisions-ledrow__act {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: stretch;
+}
+
+.decisions-ledrow__deadline {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: center;
+  margin-top: 0.15rem;
+}
+
+/* Earn-the-red: only a genuinely closing window, never every row. */
+.decisions-ledrow__deadline.is-tight { color: var(--accent); }
+
+.decisions-ledrow__evidence {
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px dotted var(--hairline-bold);
+}
+
+.decisions-ledrow__evidence-title {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.4rem;
+}
+
+.decisions-ledrow__evidence-empty {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+.decisions-ledrow__evidence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.decisions-ledrow__evidence-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 12px;
+}
+
+.decisions-ledrow__evidence-kind {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.decisions-ledrow__evidence-val {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+@media (max-width: 860px) {
+  .decisions-ledrow {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .decisions-ledrow__amt {
+    grid-column: 2;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .decisions-ledrow__act {
+    grid-column: 2;
+    align-items: flex-start;
+  }
+  .decisions-ledrow__deadline { text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .decisions-ledrow::before { transition: none; }
+  .decisions-ledrow { transition: none; }
 }
