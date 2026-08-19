@@ -17,6 +17,7 @@ Workflow:
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import sys
 import time
@@ -145,8 +146,8 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
     sql = """
         INSERT INTO "ForecastDailyRevenue"
             (id, "storeId", "forecastDate", "hourBucket",
-             "predictedRevenue", p10, p90, "modelVersion")
-        VALUES (%s, %s, %s, 0, %s, %s, %s, %s)
+             "predictedRevenue", p10, p90, "modelVersion", "attribution")
+        VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s::jsonb)
     """
     written = 0
     with connect() as conn:
@@ -162,6 +163,7 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
                         r.p10,
                         r.p90,
                         model_version,
+                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
@@ -260,6 +262,7 @@ def _write_menu_item_forecasts(
                         r.p10,
                         r.p90,
                         model_version,
+                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
@@ -373,6 +376,7 @@ def _write_hourly_order_forecasts(store_id: str, model_version: str, rows: list)
                         r.p10,
                         r.p90,
                         model_version,
+                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
