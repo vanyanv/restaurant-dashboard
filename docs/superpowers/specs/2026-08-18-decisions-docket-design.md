@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 in progress
+**Status:** approved (design); phase 1 shipped on `feat/decisions-docket` (`fe691cd`); phases 2-4 unstarted
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
