@@ -9,7 +9,12 @@ import type {
   HourlyOrderPoint,
   OrderPatternsHourlyComparison,
 } from "@/types/analytics"
-import { todayInLA } from "@/lib/dashboard-utils"
+import {
+  addDaysLA,
+  resolveRangeDates,
+  todayInLA,
+  type DashboardRange,
+} from "@/lib/dashboard-utils"
 
 export const HOUR_LABELS = [
   "12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM",
@@ -46,8 +51,13 @@ export function formatPaceLine(
 ): PaceLine | null {
   if (!cmp || pct == null || cmp.baselineWeeks < 2) return null
   const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "·"
+  // "thru 4 PM" is only meaningful while the range is still filling. On a
+  // finished day it announced the last hour the kitchen took an order (
+  // "thru 10 PM"), which reads as a cutoff that was never applied.
   const thru =
-    cmp.lastDataHour != null ? ` · thru ${HOUR_LABELS[cmp.lastDataHour]}` : ""
+    cmp.inProgress && cmp.lastDataHour != null
+      ? ` · thru ${HOUR_LABELS[cmp.lastDataHour]}`
+      : ""
   return {
     value: pct,
     display: `${arrow} ${Math.abs(pct).toFixed(0)}% vs avg ${cmp.weekdayLabel}${thru}`,
@@ -78,9 +88,7 @@ export function getCurrentLAHour(): number {
 
 /** YYYY-MM-DD `n` days before `dateStr` (LA-naive arithmetic via UTC noon). */
 export function laDateMinusDays(dateStr: string, n: number): string {
-  const d = new Date(dateStr + "T12:00:00Z")
-  d.setUTCDate(d.getUTCDate() - n)
-  return d.toISOString().slice(0, 10)
+  return addDaysLA(dateStr, -n)
 }
 
 export interface PeriodSpec {
@@ -158,6 +166,72 @@ export function derivePeriodSpec(
     hourCutoff: null,
     weekdayLabel: "last week",
   }
+}
+
+/** Weekday of an LA date string, 0=Sun. */
+function dowOf(dateStr: string): number {
+  return new Date(dateStr + "T12:00:00Z").getUTCDay()
+}
+
+/**
+ * How a set of current dates names itself in "vs avg ___".
+ *
+ * One day is its weekday ("Tue"), because the baseline is that same weekday.
+ * A week or less spans its ends ("Tue–Mon"), matching the "Mon–Wed" shape
+ * `this-week` already used. Longer spans just state their length — "vs avg
+ * Jul 3–Aug 2" would claim a calendar comparison the baseline doesn't make.
+ */
+export function rangeWeekdayLabel(dates: string[]): string {
+  if (dates.length === 0) return ""
+  if (dates.length === 1) return DAY_NAMES[dowOf(dates[0])]
+  if (dates.length <= 7) {
+    return `${DAY_NAMES[dowOf(dates[0])]}–${DAY_NAMES[dowOf(dates[dates.length - 1])]}`
+  }
+  return `${dates.length} days`
+}
+
+/**
+ * The `derivePeriodSpec` generalisation: any dashboard range → the same
+ * weekday-aligned baseline the four fixed periods use.
+ *
+ * The baseline is the identical set of dates shifted back 1, 2, 3 and 4 weeks,
+ * so every current day is compared against the same weekday — a Saturday is
+ * never averaged against a Tuesday. The hour cutoff applies only when the
+ * range's last day *is* today, which is what keeps a day in progress from
+ * being measured against four complete days.
+ */
+export function deriveRangeSpec(
+  range: DashboardRange,
+  now?: { todayLA: string; currentLAHour: number }
+): PeriodSpec {
+  const today = now?.todayLA ?? todayInLA()
+  const currentLAHour = now?.currentLAHour ?? getCurrentLAHour()
+  const currentDates = resolveRangeDates(range, today)
+  const lastDate = currentDates[currentDates.length - 1]
+
+  return {
+    currentDates,
+    comparisonGroups: [1, 2, 3, 4].map((wk) =>
+      currentDates.map((d) => laDateMinusDays(d, wk * 7))
+    ),
+    hourCutoff: lastDate === today ? currentLAHour : null,
+    weekdayLabel: rangeWeekdayLabel(currentDates),
+  }
+}
+
+/**
+ * Average-ticket pace, derived from the two paces already computed rather than
+ * bucketed separately: current $/order against baseline $/order, both under
+ * whatever hour cutoff the spec applied. Null unless both sides have orders.
+ */
+export function avgTicketPacePct(
+  cmp: OrderPatternsHourlyComparison | null | undefined
+): number | null {
+  if (!cmp || cmp.currentTotal <= 0 || cmp.baselineTotal <= 0) return null
+  const current = cmp.salesCurrentTotal / cmp.currentTotal
+  const baseline = cmp.salesBaselineTotal / cmp.baselineTotal
+  if (!(baseline > 0)) return null
+  return Math.round(((current - baseline) / baseline) * 1000) / 10
 }
 
 /** Aggregate row from OtterHourlySummary (or any hourly-bucketed source). */
@@ -272,10 +346,14 @@ export function bucketHourlyRows(args: {
     }
   }
 
+  // Average over the weeks that actually have data, not over all four slots.
+  // Dividing by 4 when only 3 baseline weeks exist understated the baseline by
+  // a quarter and inflated every pace figure by ~33% — the "▲ 69% vs avg Tue"
+  // class of number. `baselineWeeks < 2` still suppresses the line entirely.
   const baselineWeeks = groupTotals.filter((t) => t > 0).length
   const baselineTotal =
     baselineWeeks > 0
-      ? groupTotals.reduce((a, b) => a + b, 0) / spec.comparisonGroups.length
+      ? groupTotals.reduce((a, b) => a + b, 0) / baselineWeeks
       : 0
   const pacePct =
     baselineTotal > 0 ? ((currentTotal - baselineTotal) / baselineTotal) * 100 : null
@@ -283,7 +361,7 @@ export function bucketHourlyRows(args: {
   const salesBaselineWeeks = groupSalesTotals.filter((t) => t > 0).length
   const salesBaselineTotal =
     salesBaselineWeeks > 0
-      ? groupSalesTotals.reduce((a, b) => a + b, 0) / spec.comparisonGroups.length
+      ? groupSalesTotals.reduce((a, b) => a + b, 0) / salesBaselineWeeks
       : 0
   const salesPacePct =
     salesBaselineTotal > 0
@@ -304,6 +382,7 @@ export function bucketHourlyRows(args: {
       salesPacePct:
         salesPacePct == null ? null : Math.round(salesPacePct * 10) / 10,
       lastDataHour,
+      inProgress: spec.hourCutoff != null,
     },
   }
 }

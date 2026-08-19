@@ -9,12 +9,14 @@ import {
   getInvoiceStoreBreakdown,
 } from "@/app/actions/invoice-actions"
 import {
+  addDaysLA,
   rangeToActionOptions,
   startOfDayLA,
   endOfDayLA,
   todayInLA,
   type DashboardRange,
 } from "@/lib/dashboard-utils"
+import { deriveRangeSpec, laDateMinusDays } from "@/lib/hourly-orders"
 
 /**
  * Fires every server-action the dashboard shell needs in one place and hands
@@ -89,3 +91,59 @@ export const fetchInvoiceBreakdown = cache(() =>
   getInvoiceStoreBreakdown({ days: 30 })
 )
 
+
+/**
+ * Longest range that still gets a profit pace line.
+ *
+ * The baseline needs a daily-granularity P&L spanning the range plus three
+ * weeks, and `getAllStoresPnL` recomputes every store for every day in that
+ * window. At a month that is ~52 daily periods — fine, and cached for ten
+ * minutes. At ninety days it is a quarter of P&L arithmetic to decorate one
+ * line of type, so past this the section simply shows no comparison.
+ */
+export const MAX_PNL_PACE_DAYS = 31
+
+export interface PnLBaseline {
+  /** Daily P&L covering every baseline date — one call, not four. */
+  promise: ReturnType<typeof getAllStoresPnL>
+  /** Ascending LA dates, index-aligned with that result's daily `periods`. */
+  periodDates: string[]
+  /** The selected dates shifted back 1–4 weeks, one group per week. */
+  comparisonGroups: string[][]
+  /** How the range names itself in "vs avg ___" — shared with the hero strip. */
+  label: string
+  /** True when the range ends today, i.e. costs have not finished posting. */
+  inProgress: boolean
+}
+
+/**
+ * Baseline P&L for the profit/margin pace on Overview.
+ *
+ * Pulls one daily-granularity P&L across the whole 4-week-back window and lets
+ * the section pick out the same weekdays, rather than firing four separate
+ * range calls. Returns null when the range is too long to be worth the query
+ * (see MAX_PNL_PACE_DAYS) or when there is nothing to compare.
+ */
+export function buildPnLBaseline(range: DashboardRange): PnLBaseline | null {
+  const spec = deriveRangeSpec(range)
+  const dates = spec.currentDates
+  if (dates.length === 0 || dates.length > MAX_PNL_PACE_DAYS) return null
+
+  const earliest = laDateMinusDays(dates[0], 28)
+  const latest = laDateMinusDays(dates[dates.length - 1], 7)
+
+  const periodDates: string[] = []
+  for (let d = earliest; d <= latest; d = addDaysLA(d, 1)) periodDates.push(d)
+
+  return {
+    promise: getAllStoresPnL({
+      startDate: startOfDayLA(earliest),
+      endDate: endOfDayLA(latest),
+      granularity: "daily",
+    }),
+    periodDates,
+    comparisonGroups: spec.comparisonGroups,
+    label: spec.weekdayLabel,
+    inProgress: spec.hourCutoff != null,
+  }
+}

@@ -1,15 +1,16 @@
 import { HeroKpi, formatMoneyLarge, formatUsd, type HeroKpiDelta } from "../hero-kpi"
 import { getRangeStamp, type DashboardRange } from "@/lib/dashboard-utils"
-import { getHourlyOrderPatterns } from "@/app/actions/hourly-orders-actions"
-import { formatPaceLine } from "@/lib/hourly-orders"
+import { getHourlyPatternsForRange } from "@/app/actions/hourly-orders-actions"
+import { avgTicketPacePct, formatPaceLine } from "@/lib/hourly-orders"
 import type { OrderPatternsHourlyComparison } from "@/types/analytics"
 import type { OtterPromise } from "./data"
 
 /**
- * Pace line under a KPI: today-so-far vs the average of the same weekday's
- * same hours over the last 4 weeks (cutoff-aware — partial day compared to
- * partial baselines, never to full days). Shared with /m so the two surfaces
- * report the same direction; see `formatPaceLine`.
+ * Pace line under a KPI: the selected range against the average of the same
+ * dates shifted back one to four weeks — same weekdays, same shape, and (when
+ * the range ends today) the same hours. Cutoff-aware, so a day in progress is
+ * never measured against four complete days. Shared with /m so the two
+ * surfaces report the same direction; see `formatPaceLine`.
  */
 function paceDelta(
   cmp: OrderPatternsHourlyComparison | null | undefined,
@@ -25,10 +26,12 @@ export async function HeroKpisSection({
   range: DashboardRange
   otterPromise: OtterPromise
 }) {
-  const isToday = range.kind === "days" && range.days === 1
+  // Follows the date picker rather than only firing on "today": the pace line
+  // is the one figure that says whether the numbers above it are good, and it
+  // used to disappear the moment anyone changed the range.
   const [otter, patterns] = await Promise.all([
     otterPromise,
-    isToday ? getHourlyOrderPatterns(undefined, "today") : Promise.resolve(null),
+    getHourlyPatternsForRange(range),
   ])
 
   const kpis = otter
@@ -43,19 +46,24 @@ export async function HeroKpisSection({
   const scope = getRangeStamp(range)
   const cmp = patterns?.hourlyComparison
 
+  // OtterHourlySummary only banks net sales, so the sales pace is a net-sales
+  // pace. Gross and net move together (discounts are a stable share), so the
+  // same line reads true on both — but only net is exact by construction.
+  const salesPace = paceDelta(cmp, cmp?.salesPacePct)
+
   return (
     <dl className="editorial-kpi-strip editorial-kpi-strip-wide dock-in dock-in-2">
       <HeroKpi
         label="Gross sales"
         value={kpis ? formatMoneyLarge(kpis.gross) : "—"}
         unit={`USD · ${scope}`}
-        delta={paceDelta(cmp, cmp?.salesPacePct)}
+        delta={salesPace}
       />
       <HeroKpi
         label="Net sales"
         value={kpis ? formatMoneyLarge(kpis.net) : "—"}
         unit={`USD · ${scope} · after discounts`}
-        delta={null}
+        delta={salesPace}
       />
       <HeroKpi
         label="Orders"
@@ -67,7 +75,7 @@ export async function HeroKpisSection({
         label="Avg ticket"
         value={kpis ? formatUsd(kpis.avg) : "—"}
         unit={`per order · ${scope}`}
-        delta={null}
+        delta={paceDelta(cmp, avgTicketPacePct(cmp))}
       />
     </dl>
   )

@@ -6,18 +6,23 @@ export type DashboardRange =
   | { kind: "days"; days: number }
   | { kind: "custom"; startDate: string; endDate: string }
 
-/** Parse /dashboard URL searchParams into a typed date range. Defaults to days=1. */
+/**
+ * Default preset for Overview when the URL carries no range.
+ *
+ * Yesterday, not today: a day in progress has no complete labor, COGS or
+ * payout data, so the first thing a new visitor saw was a partial day that
+ * reads as a collapse. Yesterday is the most recent *finished* day and is the
+ * only range where every figure on the page is settled.
+ */
+export const DEFAULT_DASHBOARD_DAYS = -1
+
+/** Parse /dashboard URL searchParams into a typed date range. Defaults to yesterday. */
 export function parseDashboardRange(sp: {
   start?: string
   end?: string
   days?: string
 }): DashboardRange {
-  if (sp.start && sp.end) {
-    return { kind: "custom", startDate: sp.start, endDate: sp.end }
-  }
-  const parsed = sp.days ? Number.parseInt(sp.days, 10) : 1
-  const days = Number.isFinite(parsed) && parsed !== 0 ? parsed : 1
-  return { kind: "days", days }
+  return parseRangeWithDefault(sp, DEFAULT_DASHBOARD_DAYS)
 }
 
 /** Convert a DashboardRange into the options shape every server action expects. */
@@ -41,6 +46,52 @@ export function parseRangeWithDefault(
   const days =
     Number.isFinite(parsed) && parsed !== 0 ? parsed : defaultDays
   return { kind: "days", days }
+}
+
+/** YYYY-MM-DD `n` days after `dateStr` (negative goes back). LA-naive via UTC noon. */
+export function addDaysLA(dateStr: string, n: number): string {
+  const d = new Date(dateStr + "T12:00:00Z")
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Hard ceiling on how many days a range may expand to, so a hand-typed
+ *  `?start=1970-01-01` can't turn a pace lookup into an unbounded scan. */
+export const MAX_RANGE_DAYS = 400
+
+/**
+ * Resolve a DashboardRange into the ascending list of LA calendar dates it
+ * covers. Mirrors exactly how `getDashboardAnalytics` / `getOtterAnalytics` /
+ * `buildPnLSummary` widen the same range (days=1 → today, days=-1 → yesterday
+ * only, days=N → the N+1 days ending today), so anything derived from this
+ * list lines up with the figures on screen instead of drifting a day.
+ */
+export function resolveRangeDates(
+  range: DashboardRange,
+  today: string = todayInLA()
+): string[] {
+  let start: string
+  let end: string
+
+  if (range.kind === "custom") {
+    start = range.startDate
+    end = range.endDate
+  } else if (range.days === 1) {
+    start = end = today
+  } else if (range.days === -1) {
+    start = end = addDaysLA(today, -1)
+  } else {
+    start = addDaysLA(today, -range.days)
+    end = today
+  }
+
+  if (end < start) [start, end] = [end, start]
+
+  const dates: string[] = []
+  for (let d = start; d <= end && dates.length < MAX_RANGE_DAYS; d = addDaysLA(d, 1)) {
+    dates.push(d)
+  }
+  return dates
 }
 
 /** Get "today" as a YYYY-MM-DD string in LA timezone (works correctly on Vercel/UTC servers). */
