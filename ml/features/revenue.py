@@ -73,7 +73,65 @@ def load_daily_revenue(store_id: str, lookback_days: int = 540) -> pd.DataFrame:
     full_range = pd.date_range(df["date"].min(), df["date"].max(), freq="D")
     df = df.set_index("date").reindex(full_range).fillna({"revenue": 0.0}).rename_axis("date").reset_index()
     df["revenue"] = df["revenue"].astype(float)
-    return df
+    # The newest day is usually still being written when the nightly runs; an
+    # anchor a third too low drags every horizon down with it.
+    return trim_incomplete_trailing_days(df, load_hourly_coverage(store_id, lookback_days))
+
+
+#: Hour bucket the store's business day is expected to reach. Hollywood's
+#: hourly curve peaks at 22:00-23:00, so a date whose hourly data stops short of
+#: this is still being written.
+DEFAULT_CLOSING_HOUR = 23
+
+
+def load_hourly_coverage(store_id: str, lookback_days: int = 540) -> dict[date, int]:
+    """Highest hour bucket present per date in OtterHourlySummary."""
+    sql = """
+        SELECT date::date AS date, MAX(hour) AS max_hour
+        FROM "OtterHourlySummary"
+        WHERE "storeId" = %s
+          AND date >= (CURRENT_DATE - %s::int)
+        GROUP BY date
+    """
+    with connect() as conn:
+        df = pd.read_sql_query(sql, conn, params=(store_id, lookback_days))
+    if df.empty:
+        return {}
+    return {r.date: int(r.max_hour) for r in df.itertuples()}
+
+
+def trim_incomplete_trailing_days(
+    df: pd.DataFrame,
+    coverage: dict[date, int],
+    closing_hour: int = DEFAULT_CLOSING_HOUR,
+) -> pd.DataFrame:
+    """Drop trailing dates whose hourly data hasn't reached closing time.
+
+    ml-nightly runs at 06:00 UTC; the last otter-sync before it is 04:00 UTC =
+    21:00 Pacific, and this store takes 31.9% of its daily net sales after 21:00.
+    So the newest day in the series was routinely ~68% of its real value, and
+    `lag_1` — the feature the model leans on hardest — was a third too low.
+    Measured effect on 1-step predictions over 45 days: bias +3.4% with complete
+    history, -7.9% with the previous day shaved to 68.1%. Production ran -6.7%.
+
+    Only the tail is trimmed. An interior short day is a real short day (a
+    holiday, a closure); only the tail can be mid-sync. If coverage is missing
+    entirely the series is returned untouched — a model trained on slightly
+    stale data beats one trained on nothing.
+    """
+    if df.empty or not coverage:
+        return df
+
+    out = df.sort_values("date").reset_index(drop=True)
+    cut = len(out)
+    for i in range(len(out) - 1, -1, -1):
+        day = out.loc[i, "date"].date()
+        if coverage.get(day, -1) >= closing_hour:
+            break
+        cut = i
+    if cut == 0:
+        return out
+    return out.iloc[:cut].reset_index(drop=True)
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
