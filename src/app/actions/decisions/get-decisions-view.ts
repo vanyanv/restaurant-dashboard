@@ -29,6 +29,9 @@ import {
   combineEvaluations,
   type Scorecard,
 } from "@/app/dashboard/decisions/lib/scorecard"
+import { computeVitals, type Vitals } from "@/app/dashboard/decisions/lib/vitals"
+import { buildVerdictFacts, verdictSources } from "@/app/dashboard/decisions/lib/verdict-copy"
+import { getVerdictLine } from "@/app/actions/decisions/get-verdict"
 import {
   computeLaborLane,
   type LaborLane,
@@ -166,7 +169,15 @@ export interface DecisionsView {
   decisions: DecisionRecord[]
   /** The forecast's own track record. Null until the evaluator has run. */
   scorecard: Scorecard | null
+  /** Briefing lines the verdict did NOT absorb — [0] is in the verdict. */
   briefing: BriefingLine[]
+  /** The week read as four numbers — the strip under the verdict. */
+  vitals: Vitals
+  /**
+   * The one sentence the page leads with. `model` is null when the
+   * deterministic composer wrote it, which is a normal state, not an error.
+   */
+  verdict: { line: string; sources: string[]; model: string | null }
 }
 
 export type GetDecisionsViewResult =
@@ -634,6 +645,37 @@ export async function getDecisionsView(input: {
     next7[0]?.forecastSource ?? null,
   )
 
+  const potUsdPerWeek = actions.reduce((sum, a) => sum + a.impactUsdPerWeek, 0)
+
+  // Act I. The page used to open with three panels at equal weight and leave
+  // the owner to add seven day cells in their head; hierarchy is now
+  // verdict -> week -> actions (design principle #1).
+  const vitals = computeVitals({ days, scorecard })
+
+  // buildBriefing orders by detection priority (cash floor first), so [0] is
+  // the most urgent thing it found. The verdict absorbs it and the list below
+  // renders the remainder, so the page never says the same thing twice.
+  const topBriefing =
+    sanitizedBriefing.length > 0
+      ? sanitizedBriefing[0].chunks.map((c) => c.value).join("")
+      : null
+
+  const verdictFacts = buildVerdictFacts({
+    storeName,
+    isAggregate,
+    days,
+    vitals,
+    actions,
+    potUsdPerWeek,
+    topBriefing,
+  })
+  const verdict = await getVerdictLine({
+    facts: verdictFacts,
+    storeId: storeIdOut,
+    asOf: todayKey,
+    userId: session.user.id ?? null,
+  })
+
   return {
     ok: true,
     data: {
@@ -644,10 +686,12 @@ export async function getDecisionsView(input: {
       confidence: overallConfidence,
       days,
       actions,
-      potUsdPerWeek: actions.reduce((sum, a) => sum + a.impactUsdPerWeek, 0),
+      potUsdPerWeek,
       decisions,
       scorecard,
-      briefing: sanitizedBriefing,
+      briefing: sanitizedBriefing.slice(1),
+      vitals,
+      verdict: { ...verdict, sources: verdictSources(verdictFacts) },
     },
   }
 }

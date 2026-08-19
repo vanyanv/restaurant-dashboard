@@ -7,7 +7,8 @@ import { EditorialTopbar } from "../components/editorial-topbar"
 import { DecisionsStorePicker } from "./components/decisions-store-picker"
 import { DecisionWeekCalendar } from "./components/decision-week-calendar"
 import { DecisionBriefing } from "./components/decision-briefing"
-import { ActionCard } from "./components/action-card"
+import { DecisionVerdict } from "./components/decision-verdict"
+import { ActionRow } from "./components/action-row"
 import { ForecastScorecard } from "./components/forecast-scorecard"
 import { DecisionLedger } from "./components/decision-ledger"
 import { ConfidenceDots } from "./components/confidence-dots"
@@ -75,6 +76,14 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
       </EditorialTopbar>
 
       <div className="decisions-page">
+        {/* Act I. The page used to open with three panels at equal weight and
+            no reading order; hierarchy is verdict -> week -> actions. */}
+        <DecisionVerdict
+          line={data.verdict.line}
+          sources={data.verdict.sources}
+          vitals={data.vitals}
+        />
+
         {data.days.length === 0 ? (
           <div className="inv-panel decisions-empty">
             We don&apos;t have a forecast for this week yet. New stores need a
@@ -84,7 +93,10 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
           <DecisionWeekCalendar days={data.days} storeName={data.storeName} />
         )}
 
-        <DecisionBriefing lines={data.briefing} storeName={data.storeName} />
+        {/* What the verdict didn't absorb. Absent entirely when it took the lot. */}
+        {data.briefing.length > 0 ? (
+          <DecisionBriefing lines={data.briefing} storeName={data.storeName} />
+        ) : null}
 
         <section aria-label="Actions to consider">
           <header className="decisions-section-head">
@@ -122,9 +134,14 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
                   {data.actions.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <div className="decisions-actions-grid">
-                {data.actions.map((action) => (
-                  <ActionCard key={action.id} action={action} asOf={data.asOf} />
+              <div className="decisions-led">
+                {data.actions.map((action, i) => (
+                  <ActionRow
+                    key={action.id}
+                    action={action}
+                    rank={i + 1}
+                    asOf={data.asOf}
+                  />
                 ))}
               </div>
             </>

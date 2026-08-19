@@ -200,6 +200,7 @@ model Store {
   mlReconciliationDaily MlReconciliationDaily[]
   growthOpportunities   GrowthOpportunity[]
   decisionLogs          DecisionLog[]
+  decisionVerdicts      DecisionVerdict[]
   anomalyEvents         AnomalyEvent[]
   alerts                Alert[]
   alertPreferences      AlertPreference[]
@@ -1725,15 +1726,15 @@ enum DecisionState {
 /// stores, and no new data collection. See
 /// src/app/dashboard/decisions/lib/decision-outcome.ts.
 model DecisionLog {
-  id String @id @default(cuid())
-  storeId String
+  id               String          @id @default(cuid())
+  storeId          String
   /// Stable identity of the opportunity. Deliberately NOT a foreign key:
   /// GrowthOpportunity rows are regenerated nightly with fresh ids, so a
   /// reference would dangle by morning. (type, title) survives regeneration.
   opportunityType  OpportunityType
   opportunityTitle String
   /// asOfDate of the opportunity row that was on screen when the call was made.
-  opportunityAsOf  DateTime @db.Date
+  opportunityAsOf  DateTime        @db.Date
 
   state         DecisionState
   /// Why the owner said no. Dismissals are data — an owner who skips every
@@ -1762,6 +1763,35 @@ model DecisionLog {
 
   @@unique([storeId, opportunityType, opportunityTitle])
   @@index([storeId, decidedAt(sort: Desc)])
+}
+
+/// The Act I verdict sentence, cached so narration costs one API call per
+/// scope per day rather than one per page view.
+model DecisionVerdict {
+  id       String   @id @default(cuid())
+  /// "ALL" for the portfolio view, otherwise the store id. Postgres compares
+  /// NULLs as distinct, so a nullable storeId could not carry the unique
+  /// constraint this cache depends on.
+  scopeKey String
+  storeId  String?
+  asOfDate DateTime @db.Date
+
+  /// Hash of the fact block the sentence was written from. A changed hash means
+  /// the numbers moved and the sentence is restated; an unchanged one is served
+  /// from this row without calling the model at all.
+  inputsHash String
+  line       String
+  /// Null when the deterministic composer wrote it — no API key, a failed call,
+  /// or a candidate the narration guard rejected.
+  model      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store? @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([scopeKey, asOfDate])
+  @@index([asOfDate])
 }
 
 model GrowthOpportunity {
@@ -2035,26 +2065,26 @@ enum AlertStatus {
 /// move volume). Positive values are noise; surface them as 'no_signal'
 /// upstream.
 model MenuItemElasticity {
-  id              String   @id @default(cuid())
-  storeId         String
-  otterItemSkuId  String
-  elasticity      Float
-  intercept       Float
+  id               String   @id @default(cuid())
+  storeId          String
+  otterItemSkuId   String
+  elasticity       Float
+  intercept        Float
   /// R² goodness-of-fit on the training window. Below ~0.10 should be
   /// treated as low-confidence.
-  fitR2           Float
+  fitR2            Float
   /// Standard error of `elasticity`, from the same OLS design matrix. Null when
   /// the fit saw fewer than two price points, so the coefficient was never
   /// identified. Propagated into GrowthOpportunity.impactP* by Monte Carlo.
   elasticityStdErr Float?
   /// Number of daily observations used in the fit.
-  sampleSize      Int
+  sampleSize       Int
   /// Number of distinct price points observed. < 2 means no price variance
   /// — the row should be flagged as no_signal.
-  pricePointCount Int
-  meanPrice       Float
-  meanQty         Float
-  computedAt      DateTime @default(now())
+  pricePointCount  Int
+  meanPrice        Float
+  meanQty          Float
+  computedAt       DateTime @default(now())
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
