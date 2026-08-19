@@ -3,6 +3,8 @@
 import { memo, useMemo } from "react"
 import { ChatThinking } from "./chat-thinking"
 import { ChatArtifacts } from "./chat-artifacts"
+import { ChatReturn } from "./chat-return"
+import { selectFiledReturn, splitProvenance } from "@/lib/chat/return"
 
 interface MessagePart {
   type: string
@@ -20,14 +22,18 @@ interface Props {
   isStreaming?: boolean
   /** Stagger index for the reveal animation (capped by the parent). */
   msgIdx?: number
+  /** 1-based ordinal of this assistant turn, stamped on the return's head. */
+  turnNo?: number
 }
 
-/** Renders one message in the editorial register: a small mono role label
- * above the body, body text in DM Sans 13px, numbers wrapped in tabular
- * spans, footer line in mono caption. The provenance footer (the model's
- * "From getDailySales · …" line) is detected and pulled into its own
- * caption row. */
-function ChatMessageImpl({ role, parts, isStreaming, msgIdx = 0 }: Props) {
+/** Renders one message in the editorial register.
+ *
+ * A user turn sets as a docket line: a mono key on the left, the question in
+ * Fraunces italic beside it. An assistant turn renders as the Answer Block
+ * when the model filed one — verdict, figure strip, evidence, note — and falls
+ * back to the older prose-plus-cards layout when it did not. See
+ * `docs/superpowers/specs/2026-08-19-chat-answer-block-design.md`. */
+function ChatMessageImpl({ role, parts, isStreaming, msgIdx = 0, turnNo }: Props) {
   const text = useMemo(
     () =>
       parts
@@ -37,36 +43,62 @@ function ChatMessageImpl({ role, parts, isStreaming, msgIdx = 0 }: Props) {
     [parts],
   )
 
-  const { body, footer } = splitFooter(text)
+  const { body, footer } = splitProvenance(text)
 
   const isAssistant = role === "assistant"
 
-  return (
-    <div
-      className="chat-message"
-      style={{ ["--msg-idx" as string]: msgIdx }}
-    >
-      <span className="chat-message__role">
-        {role === "user" ? "You" : isAssistant ? "Assistant" : role}
-      </span>
+  // Only read a filed return once the stream has settled. Mid-stream the tool
+  // part may be half-formed, and swapping layouts under the caret reads as a
+  // flicker.
+  const filed = useMemo(
+    () => (isAssistant && !isStreaming ? selectFiledReturn(parts) : null),
+    [isAssistant, isStreaming, parts],
+  )
 
-      {isAssistant && (
-        <ChatThinking parts={parts} isStreaming={!!isStreaming} />
-      )}
-
-      <div
-        className={
-          "chat-message__body" +
-          (isAssistant ? " chat-message__body--assistant" : "")
-        }
-      >
-        {isStreaming ? body : renderWithTabularNumbers(body)}
-        {isStreaming && <span className="chat-message__streaming-caret" aria-hidden />}
+  if (!isAssistant && role === "user") {
+    return (
+      <div className="chat-message chat-message--user" style={{ ["--msg-idx" as string]: msgIdx }}>
+        <div className="chat-docket">
+          <span className="chat-docket__key">Asked</span>
+          <span className="chat-docket__q">{body}</span>
+        </div>
       </div>
+    )
+  }
 
-      {isAssistant && !isStreaming && <ChatArtifacts parts={parts} />}
+  const noteBody = body ? renderWithTabularNumbers(body) : null
 
-      {footer && <div className="chat-message__footer">{footer}</div>}
+  return (
+    <div className="chat-message" style={{ ["--msg-idx" as string]: msgIdx }}>
+      {!isAssistant && <span className="chat-message__role">{role}</span>}
+
+      {isAssistant && <ChatThinking parts={parts} isStreaming={!!isStreaming} />}
+
+      {filed ? (
+        <ChatReturn
+          filed={filed}
+          turnNo={turnNo}
+          evidence={<ChatArtifacts parts={parts} />}
+          note={noteBody}
+          provenance={footer}
+        />
+      ) : (
+        <>
+          <div
+            className={
+              "chat-message__body" +
+              (isAssistant ? " chat-message__body--assistant" : "")
+            }
+          >
+            {isStreaming ? body : noteBody}
+            {isStreaming && <span className="chat-message__streaming-caret" aria-hidden />}
+          </div>
+
+          {isAssistant && !isStreaming && <ChatArtifacts parts={parts} />}
+
+          {footer && <div className="chat-message__footer">{footer}</div>}
+        </>
+      )}
     </div>
   )
 }
@@ -74,19 +106,6 @@ function ChatMessageImpl({ role, parts, isStreaming, msgIdx = 0 }: Props) {
 // Memoised so that streaming status ticks on the parent don't re-render
 // every prior message. `parts` is a stable reference per AI SDK turn.
 export const ChatMessage = memo(ChatMessageImpl)
-
-/** Pulls the provenance footer ("From X · …") off the tail of the body
- * so we can render it in mono caption instead of in DM Sans 13px. */
-function splitFooter(text: string): { body: string; footer: string | null } {
-  const match = text.match(/\n+\s*(?:>\s*)?From\s+[^\n]+$/i)
-  if (!match) return { body: text, footer: null }
-  return {
-    body: text.slice(0, match.index!).trimEnd(),
-    footer: match[0]
-      .replace(/^[\s>]+/, "")
-      .trim(),
-  }
-}
 
 /** Wraps obvious number tokens (currency, percent, comma-grouped digits)
  * in a span that sets tabular figures — keeps assistant prose readable

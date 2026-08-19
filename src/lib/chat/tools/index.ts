@@ -65,6 +65,7 @@ import {
 import { listVendorLeadTimes } from "./vendors"
 import { getMenuItemElasticity, simulatePriceChange } from "./elasticity"
 import { describeSchema } from "./describe-schema"
+import { fileReturn } from "./file-return"
 
 export type { ChatTool, ChatToolContext } from "./types"
 
@@ -78,6 +79,8 @@ export const chatTools = {
   // Meta
   listStores,
   describeSchema,
+  // Presentation — files the answer for display, reads nothing
+  fileReturn,
   // Sales
   getDailySales,
   getHourlyTrend,
