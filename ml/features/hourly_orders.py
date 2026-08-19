@@ -13,6 +13,10 @@ import numpy as np
 import pandas as pd
 
 from ml.db import connect
+from ml.features.completeness import (
+    load_hourly_coverage,
+    trim_incomplete_trailing_days,
+)
 from ml.features.external_signals import (
     fill_event_daily_defaults,
     fill_weather_hourly_defaults,
@@ -60,6 +64,12 @@ def load_hourly_orders(store_id: str, lookback_days: int = 540) -> pd.DataFrame:
     if df.empty:
         return df
     df = _date_col(df)
+    # Trim before gridding: complete_hourly_grid zero-fills gaps, so a
+    # still-syncing day would have its busiest evening hours written as zero
+    # orders and fed into orders_lag_24 and the hour-of-day rolling means.
+    df = trim_incomplete_trailing_days(
+        df, load_hourly_coverage(store_id, lookback_days)
+    )
     return complete_hourly_grid(df)
 
 
@@ -76,7 +86,9 @@ def load_daily_context(store_id: str, lookback_days: int = 540) -> pd.DataFrame:
     """
     with connect() as conn:
         df = pd.read_sql_query(sql, conn, params=(store_id, lookback_days))
-    return _date_col(df)
+    return trim_incomplete_trailing_days(
+        _date_col(df), load_hourly_coverage(store_id, lookback_days)
+    )
 
 
 def load_harri_features(

@@ -27,7 +27,11 @@ import datetime as dt
 import pandas as pd
 import pytest
 
-from ml.features.revenue import trim_incomplete_trailing_days
+from ml.features.revenue import trim_incomplete_trailing_days  # re-exported
+from ml.features.completeness import (
+    incomplete_trailing_dates,
+    trim_incomplete_trailing_days as trim_shared,
+)
 
 
 def _daily(dates: list[str]) -> pd.DataFrame:
@@ -93,3 +97,47 @@ def test_never_empties_the_series():
 def test_empty_input_is_returned_untouched():
     df = pd.DataFrame({"date": pd.to_datetime([]), "revenue": []})
     assert trim_incomplete_trailing_days(df, {}, CLOSING_HOUR).empty
+
+
+# --- the hourly grain: many rows per date -----------------------------------
+#
+# This is where the bug bit hardest. `complete_hourly_grid` reindexes onto a
+# full 24-hour grid and fills gaps with 0.0, so a day that had only synced to
+# hour 13 got hours 14-23 written as ZERO orders — the store's busiest stretch,
+# 31.9% of its daily take — straight into orders_lag_24 and the hour-of-day
+# rolling means.
+
+def _hourly(rows: list[tuple[str, int]]) -> pd.DataFrame:
+    return pd.DataFrame({
+        "date": pd.to_datetime([d for d, _ in rows]),
+        "hour": [h for _, h in rows],
+        "orders": [10.0] * len(rows),
+    })
+
+
+def test_trims_whole_dates_at_the_hourly_grain():
+    df = _hourly(
+        [("2026-08-18", h) for h in range(24)] + [("2026-08-19", h) for h in range(14)]
+    )
+    cov = _coverage({"2026-08-18": 23, "2026-08-19": 13})
+    out = trim_shared(df, cov, CLOSING_HOUR)
+    assert set(out["date"].dt.strftime("%Y-%m-%d")) == {"2026-08-18"}
+    assert len(out) == 24
+
+
+def test_keeps_a_finished_day_whole_at_the_hourly_grain():
+    df = _hourly([("2026-08-18", h) for h in range(24)] + [("2026-08-19", h) for h in range(24)])
+    cov = _coverage({"2026-08-18": 23, "2026-08-19": 23})
+    assert len(trim_shared(df, cov, CLOSING_HOUR)) == 48
+
+
+def test_incomplete_trailing_dates_stops_at_the_first_finished_day():
+    cov = _coverage({"2026-08-16": 23, "2026-08-17": 12, "2026-08-18": 23, "2026-08-19": 9})
+    dates = [dt.date(2026, 8, d) for d in (16, 17, 18, 19)]
+    # 19 is incomplete; 18 is finished, so the walk stops and 17 is left alone.
+    assert incomplete_trailing_dates(dates, cov, CLOSING_HOUR) == {dt.date(2026, 8, 19)}
+
+
+def test_frame_without_a_date_column_is_returned_untouched():
+    df = pd.DataFrame({"hour": [1, 2], "orders": [3.0, 4.0]})
+    assert len(trim_shared(df, _coverage({"2026-08-19": 5}), CLOSING_HOUR)) == 2

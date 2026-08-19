@@ -103,3 +103,23 @@ def test_hourly_zero_fill_waits_for_the_day_to_finish_syncing(monkeypatch):
         s for s in statements if "ForecastHourlyOrders" in s and '"actualOrders" = 0' in s
     )
     assert "CURRENT_DATE - 1" in zero_fill
+
+
+def test_actuals_backfill_never_stamps_reconciledAt(monkeypatch):
+    """`reconciledAt` belongs to the MinTrace writer, which uses it as the
+    dashboard's freshness marker for `reconciledRevenue` — `isReconciledStale`
+    in src/lib/forecasts/reconciliation-prefs.ts falls back to raw values when
+    it is older than 48h.
+
+    This backfiller writes `actual*` and `errorPct`; it has no business
+    refreshing another subsystem's marker. It always did, but harmlessly-ish,
+    because the NULL guard meant one stamp per row near the day it closed. With
+    the re-reconciliation window it would restamp up to 35 days every night, so
+    `isReconciledStale` would never fire again and a stale reconciledRevenue
+    would be served as current.
+
+    "Has actuals" is already expressed by `actual* IS NOT NULL`. That is what
+    consumers should read, and what ml-status.ts now reads.
+    """
+    for sql in _captured_sql(monkeypatch):
+        assert '"reconciledAt" = CURRENT_TIMESTAMP' not in sql

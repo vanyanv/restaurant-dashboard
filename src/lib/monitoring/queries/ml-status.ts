@@ -108,7 +108,11 @@ export async function getBusyHoursModelStatus(): Promise<BusyHoursModelStatus> {
         AVG(ABS("errorPct"))::float AS mape,
         AVG(ABS("actualOrders" - "predictedOrders"))::float AS mae
       FROM "ForecastHourlyOrders"
-      WHERE "reconciledAt" IS NOT NULL
+      -- "has actuals" is actualOrders, not reconciledAt. The latter is the
+      -- MinTrace writer's freshness marker for reconciledRevenue; the actuals
+      -- backfiller stopped stamping it (Aug 2026) so it no longer answers this
+      -- question.
+      WHERE "actualOrders" IS NOT NULL
         AND "forecastDate" >= (CURRENT_DATE - 30)
     `,
   ])
