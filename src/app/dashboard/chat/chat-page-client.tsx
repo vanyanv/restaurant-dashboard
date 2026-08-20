@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import { useEffect, useRef, useState } from "react"
 import type { UIMessage } from "ai"
 import { useChatDrawer } from "@/components/chat/chat-drawer-context"
+import { groupConversations } from "@/lib/chat/group-conversations"
 import {
   hydrateConversationMessages,
   type SavedMessage,
@@ -224,8 +225,19 @@ export function ChatPageClient({ initialConversations, stores }: Props) {
 
   // Never "Ask the ledger." — the empty state prints that as its masthead
   // headline directly below, and a new thread has no title to show yet.
-  const activeTitle =
-    conversations.find((c) => c.id === conversationId)?.title ?? "New thread"
+  const activeIndex = conversations.findIndex((c) => c.id === conversationId)
+  const active = activeIndex >= 0 ? conversations[activeIndex] : null
+  const activeTitle = active?.title ?? "New thread"
+  // Folio. Both halves are real: the thread's position in the rail, newest
+  // last, and the turns it holds. Nothing invented to fill the corner.
+  const folio = active
+    ? `No. ${String(conversations.length - activeIndex).padStart(4, "0")}`
+    : "New thread"
+  const folioSub = active
+    ? `${active.messageCount} turn${active.messageCount === 1 ? "" : "s"}`
+    : "no turns yet"
+
+  const groups = groupConversations(conversations)
 
   return (
     <div className="chat-page">
@@ -274,26 +286,42 @@ export function ChatPageClient({ initialConversations, stores }: Props) {
                 : "No conversations yet. Ask a question to start one."}
             </div>
           ) : (
-            conversations.map((c) => (
-              <RailRow
-                key={c.id}
-                conversation={c}
-                active={c.id === conversationId}
-                onPick={() => pick(c.id)}
-                onDelete={() => remove(c.id)}
-                onRename={(next) => rename(c.id, next)}
-              />
+            // Perforated groups, newest first. Buckets come from the reader's
+            // own local midnight — see group-conversations.
+            groups.map((g) => (
+              <div key={g.label}>
+                <div className="chat-page__group">
+                  <span className="chat-drawer__dept">{g.label}</span>
+                </div>
+                {g.items.map((c) => (
+                  <RailRow
+                    key={c.id}
+                    conversation={c}
+                    active={c.id === conversationId}
+                    onPick={() => pick(c.id)}
+                    onDelete={() => remove(c.id)}
+                    onRename={(next) => rename(c.id, next)}
+                  />
+                ))}
+              </div>
             ))
           )}
         </div>
       </aside>
       <section className="chat-page__main">
         <header className="chat-page__main-head">
-          <div className="chat-drawer__dept">Owner Analyst · Late edition</div>
-          {/* The empty state carries its own "Ask the ledger." masthead, so
-              repeating it here doubled the headline. Name the open thread
-              instead — it also says which one you are in. */}
-          <div className="chat-page__title">{activeTitle}</div>
+          <div>
+            <div className="chat-drawer__dept">Owner Analyst · Late edition</div>
+            {/* The empty state carries its own "Ask the ledger." masthead, so
+                repeating it here doubled the headline. Name the open thread
+                instead — it also says which one you are in. */}
+            <div className="chat-page__title">{activeTitle}</div>
+          </div>
+          <div className="chat-page__folio">
+            {folio}
+            <br />
+            {folioSub}
+          </div>
         </header>
         <ChatThread
           // Remount the thread whenever the active conversation changes so
@@ -468,6 +496,9 @@ function RailRow({
           {c.title ?? "Untitled"}
         </span>
       )}
+      <span className="chat-page__rail-count">
+        {c.messageCount} turn{c.messageCount === 1 ? "" : "s"}
+      </span>
       <span
         className={
           "chat-page__rail-delete" +

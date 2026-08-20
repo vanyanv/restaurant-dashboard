@@ -19,6 +19,8 @@ interface CardShellProps {
   /** Default open state. Single-entity cards default to true; multi-row
    *  cards default to false when row count is high. */
   defaultOpen?: boolean
+  /** Caption on the left of the footer, opposite the link. */
+  footerNote?: ReactNode
   /** When true, the card frame paints a red proofmark left-bar — used to
    *  mark the entity the assistant's prose is answering about (e.g. the
    *  biggest invoice, the best-net store). */
@@ -42,6 +44,7 @@ export function CardShell({
   footerHref,
   footerLabel = "Open in dashboard",
   defaultOpen = true,
+  footerNote,
   isHighlighted = false,
   children,
 }: CardShellProps) {
@@ -64,8 +67,10 @@ export function CardShell({
           aria-controls={bodyId}
           onClick={() => setOpen((o) => !o)}
         >
-          <span className="chat-artifact__dept">{dept}</span>
-          <span className="chat-artifact__headline">{headline}</span>
+          <span className="chat-artifact__head-stack">
+            <span className="chat-artifact__dept">{dept}</span>
+            <span className="chat-artifact__headline">{headline}</span>
+          </span>
           <span className="chat-artifact__chevron" aria-hidden>
             <svg
               width="10"
@@ -96,6 +101,11 @@ export function CardShell({
           {children}
           {footerHref ? (
             <div className="chat-artifact__footer">
+              {footerNote ? (
+                <span className="chat-artifact__footer-note">{footerNote}</span>
+              ) : (
+                <span />
+              )}
               <a href={footerHref} className="chat-artifact__footer-link">
                 {footerLabel}
                 <span aria-hidden>→</span>

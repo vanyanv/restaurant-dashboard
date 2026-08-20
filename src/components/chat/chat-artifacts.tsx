@@ -398,6 +398,8 @@ export function ChatArtifacts({ parts }: Props) {
                 valueLabel="Net sales"
                 highlightedIndex={maxIndexBy(rows, (r) => r.net)}
                 footerHref="/dashboard/analytics"
+                showTotal
+                footerNote={`${rows.length} row${rows.length === 1 ? "" : "s"} · complete`}
               />,
             )
           } else if (rows[0].platform !== undefined) {

@@ -29,6 +29,8 @@ interface Props {
   /** Branch the thread here. Absent unless the turn came from the server —
    * a live turn's id matches no Message row. */
   onBranch?: () => void
+  /** ISO timestamp, when the server supplied one. */
+  createdAt?: string
 }
 
 /** Renders one message in the editorial register.
@@ -46,6 +48,7 @@ function ChatMessageImpl({
   turnNo,
   onRetry,
   onBranch,
+  createdAt,
 }: Props) {
   const text = useMemo(
     () =>
@@ -72,7 +75,9 @@ function ChatMessageImpl({
     return (
       <div className="chat-message chat-message--user" style={{ ["--msg-idx" as string]: msgIdx }}>
         <div className="chat-docket">
-          <span className="chat-docket__key">Asked</span>
+          <span className="chat-docket__key">
+            Asked{createdAt ? ` ${formatClock(createdAt)}` : ""}
+          </span>
           <span className="chat-docket__q">{body}</span>
         </div>
       </div>
@@ -184,6 +189,14 @@ function ChatMessageActions({
       )}
     </div>
   )
+}
+
+/** Local clock for the docket key, e.g. "14:31". Returns an empty string on
+ * an unparseable value so the line degrades to a bare "Asked". */
+function formatClock(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })
 }
 
 /** Wraps obvious number tokens (currency, percent, comma-grouped digits)

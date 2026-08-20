@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "@/components/charts/recharts"
 import { CardShell, Num, fmtMoney } from "./card-shell"
+import { buildTrendRows, trendTotal } from "@/lib/chat/trend-rows"
 import { useChatDrawer } from "@/components/chat/chat-drawer-context"
 import {
   axisTickStyle,
@@ -44,6 +45,12 @@ interface Props {
    *  max value). The chart adds a red ReferenceDot at that point; the table
    *  highlights the matching row. */
   highlightedIndex?: number
+  /** Foot the table with a total. Opt-in: a total is meaningful for a series
+   *  that sums (sales, spend) and misleading for one that does not (average
+   *  ticket, margin percent). */
+  showTotal?: boolean
+  /** Caption on the left of the card footer, e.g. "7 rows · complete". */
+  footerNote?: ReactNode
 }
 
 /**
@@ -63,6 +70,8 @@ export function TrendCard({
   formatValue = fmtMoney,
   footerHref,
   highlightedIndex,
+  showTotal,
+  footerNote,
 }: Props) {
   const highlight =
     highlightedIndex !== undefined &&
@@ -73,6 +82,7 @@ export function TrendCard({
   const { trendView, setTrendView } = useChatDrawer()
 
   const showSecondary = points.some((p) => p.secondary !== undefined)
+  const rows = buildTrendRows(points)
   const secondaryHeader =
     points.find((p) => p.secondaryLabel)?.secondaryLabel ?? "Detail"
 
@@ -82,6 +92,7 @@ export function TrendCard({
       headline={caption}
       subline={subline}
       footerHref={footerHref}
+      footerNote={footerNote}
       rightSlot={
         <span
           className="chat-artifact__view-toggle"
@@ -184,34 +195,73 @@ export function TrendCard({
             <thead>
               <tr>
                 <th>Label</th>
-                <th className="num">{valueLabel}</th>
                 {showSecondary ? (
                   <th className="num">{secondaryHeader}</th>
                 ) : null}
+                <th className="chat-artifact__bar-col" aria-hidden />
+                <th className="num">{valueLabel}</th>
+                {/* Previous row, not a prior period. The header says so. */}
+                <th className="num">vs prev</th>
               </tr>
             </thead>
             <tbody>
-              {points.map((p, i) => (
+              {rows.map((r, i) => (
                 <tr
                   key={i}
                   className={i === highlightedIndex ? "is-highlighted" : undefined}
                 >
-                  <td>{p.label}</td>
-                  <td className="num">
-                    <Num>{formatValue(p.value)}</Num>
-                  </td>
+                  <td>{r.point.label}</td>
                   {showSecondary ? (
                     <td className="num">
                       <Num>
-                        {p.secondary !== undefined
-                          ? p.secondary.toLocaleString()
+                        {r.point.secondary !== undefined
+                          ? r.point.secondary.toLocaleString()
                           : "—"}
                       </Num>
                     </td>
                   ) : null}
+                  <td className="chat-artifact__bar-col">
+                    <span
+                      className={`chat-artifact__bar chat-artifact__bar--${r.ramp}`}
+                      style={{ width: `${Math.round(r.intensity * 100)}%` }}
+                    />
+                  </td>
+                  <td className="num">
+                    <Num>{formatValue(r.point.value)}</Num>
+                  </td>
+                  <td className="num">
+                    {r.delta ? (
+                      <Num>
+                        <span
+                          className={
+                            r.delta.direction === "up"
+                              ? "chat-artifact__delta chat-artifact__delta--up"
+                              : r.delta.direction === "down"
+                                ? "chat-artifact__delta chat-artifact__delta--down"
+                                : "chat-artifact__delta"
+                          }
+                        >
+                          {r.delta.text}
+                        </span>
+                      </Num>
+                    ) : (
+                      <span className="chat-artifact__delta">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
+            {showTotal ? (
+              <tfoot>
+                <tr>
+                  <td className="chat-artifact__tfoot-label">Total</td>
+                  {showSecondary ? <td /> : null}
+                  <td />
+                  <td className="num">{formatValue(trendTotal(points))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
         </div>
       )}

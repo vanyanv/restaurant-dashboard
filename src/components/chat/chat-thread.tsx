@@ -282,6 +282,9 @@ export function ChatThread({
                       ? () => void regenerate({ messageId: m.id })
                       : undefined
                   }
+                  createdAt={
+                    (m as { metadata?: { createdAt?: string } }).metadata?.createdAt
+                  }
                   onBranch={
                     m.role === "assistant" && !isStreaming && serverMessageIds.has(m.id)
                       ? () => void branchFrom(m.id)

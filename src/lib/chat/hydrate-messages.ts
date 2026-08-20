@@ -18,6 +18,10 @@ export interface SavedMessage {
   id: string
   role: string
   content: string
+  /** ISO string from the server. Live turns have none — the docket line
+   * shows a time only when one is known rather than stamping "now" onto a
+   * message that was written hours ago. */
+  createdAt?: string
   toolCalls?: SavedToolCall[]
 }
 
@@ -47,6 +51,7 @@ export function hydrateConversationMessages(
       id: m.id,
       role: m.role,
       parts,
+      ...(m.createdAt ? { metadata: { createdAt: m.createdAt } } : {}),
     } as UIMessage)
   }
   return out
