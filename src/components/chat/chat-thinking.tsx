@@ -25,6 +25,10 @@ export function ChatThinking({ parts, isStreaming }: Props) {
   const calls = useMemo(() => {
     return parts
       .filter((p) => typeof p.type === "string" && p.type.startsWith("tool-"))
+      // `fileReturn` draws the answer, it does not read anything. Listing it
+      // in "Read · sales · fileReturn" tells the owner the analyst consulted a
+      // source that does not exist.
+      .filter((p) => (p.toolName ?? p.type.replace(/^tool-/, "")) !== "fileReturn")
       .map((p) => ({
         name: p.toolName ?? p.type.replace(/^tool-/, ""),
         state: p.state ?? "input-streaming",

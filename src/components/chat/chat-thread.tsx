@@ -55,7 +55,6 @@ export function ChatThread({
   stores,
 }: Props = {}) {
   const { conversationId } = useChatDrawer()
-  const [seedText, setSeedText] = useState<string | undefined>(undefined)
   const [scope, setScope] = useState<ComposerScope>({
     storeName: null,
     from: null,
@@ -249,12 +248,9 @@ export function ChatThread({
       <div className="chat-thread-wrap">
         <div className="chat-thread" ref={scrollerRef} onScroll={handleScroll}>
           {!hasMessages ? (
-            <ChatEmpty
-              onSelect={(s) => {
-                setSeedText(s)
-                send(s)
-              }}
-            />
+            // Send straight off; seeding the composer too would leave the
+            // question sitting in the box after it had already been asked.
+            <ChatEmpty onSelect={(s) => send(s)} />
           ) : (
             messages.map((m, idx) => {
               const isLast = idx === messages.length - 1
@@ -336,7 +332,6 @@ export function ChatThread({
         disabled={isStreaming}
         isStreaming={isStreaming}
         error={errorText}
-        initialText={seedText}
         metaHint={inputHint}
         stores={stores}
         scope={scope}
