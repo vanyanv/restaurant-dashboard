@@ -13,8 +13,11 @@ const day = (over: Partial<RibbonDay> = {}): RibbonDay => ({
   p90: 5500,
   labor: { status: "level", unfilledSlots: 0 },
   weatherTone: null,
+  weatherHighC: null,
+  weatherLowC: null,
   hasAnomaly: false,
   topEventTitle: null,
+  majorEventCount: 0,
   ...over,
 })
 
@@ -117,7 +120,12 @@ describe("computeRibbon — the peak", () => {
 describe("computeRibbon — signals", () => {
   it("names the signals it has, in reading order", () => {
     const r = computeRibbon([
-      day({ topEventTitle: "Bowl show", weatherTone: "rain", hasAnomaly: true }),
+      day({
+        topEventTitle: "Bowl show",
+        majorEventCount: 2,
+        weatherTone: "rain",
+        hasAnomaly: true,
+      }),
     ])
     expect(r.cells[0].signals.map((s) => s.label)).toEqual(["EVENT", "RAIN", "FLAG"])
   })
@@ -145,6 +153,7 @@ describe("computeRibbon — red is earned", () => {
         date: "b",
         predictedRevenue: 9000,
         topEventTitle: "Bowl show",
+        majorEventCount: 1,
         labor: { status: "short", unfilledSlots: 0 },
       }),
     ])
@@ -158,6 +167,7 @@ describe("computeRibbon — red is earned", () => {
         date: "a",
         predictedRevenue: 5000,
         topEventTitle: "Bowl show",
+        majorEventCount: 1,
         labor: { status: "short", unfilledSlots: 0 },
       }),
       day({ date: "b", predictedRevenue: 9000 }),
@@ -167,7 +177,7 @@ describe("computeRibbon — red is earned", () => {
 
   it("leaves the peak alone when the schedule covers it", () => {
     const r = computeRibbon([
-      day({ predictedRevenue: 9000, topEventTitle: "Bowl show" }),
+      day({ predictedRevenue: 9000, topEventTitle: "Bowl show", majorEventCount: 1 }),
     ])
     expect(r.cells[0].isPeak).toBe(true)
     expect(r.cells[0].signals[0].hot).toBe(false)
@@ -195,5 +205,80 @@ describe("computeRibbon — red is earned", () => {
       c.signals.some((s) => s.hot),
     )
     expect(hotDays).toHaveLength(1)
+  })
+})
+
+// The live page on 2026-08-20 printed EVENT on six of seven days and HOT on all
+// seven, because "is there an event title" and "is it over 32°C" are both true
+// almost every August day in Los Angeles. Fourteen identical chips carry no
+// information. A chip has to mean "this day is not like the others".
+describe("computeRibbon — a chip has to be news", () => {
+  const hotDay = (date: string, highC: number, over: Partial<RibbonDay> = {}) =>
+    day({ date, weatherTone: "heat", weatherHighC: highC, ...over })
+
+  it("ignores an event title with no major event behind it", () => {
+    const r = computeRibbon([day({ topEventTitle: "Farmers market", majorEventCount: 0 })])
+    expect(r.cells[0].signals).toEqual([])
+  })
+
+  it("chips an event the provider ranked major", () => {
+    const r = computeRibbon([day({ topEventTitle: "Bowl show", majorEventCount: 1 })])
+    expect(r.cells[0].signals.map((s) => s.label)).toEqual(["EVENT"])
+  })
+
+  it("gives HOT to one day a week, not seven", () => {
+    const week = [
+      hotDay("a", 33), hotDay("b", 34), hotDay("c", 35),
+      hotDay("d", 38), hotDay("e", 34), hotDay("f", 33), hotDay("g", 32),
+    ]
+    const cells = computeRibbon(week).cells
+    expect(cells.filter((c) => c.signals.some((s) => s.label === "HOT"))).toHaveLength(1)
+    expect(cells[3].signals.map((s) => s.label)).toEqual(["HOT"])
+  })
+
+  it("gives COLD to the coldest day only", () => {
+    const week = [
+      day({ date: "a", weatherTone: "cold", weatherLowC: 1 }),
+      day({ date: "b", weatherTone: "cold", weatherLowC: -4 }),
+      day({ date: "c", weatherTone: "cold", weatherLowC: 2 }),
+    ]
+    const cells = computeRibbon(week).cells
+    expect(cells.map((c) => c.signals.map((s) => s.label).join(""))).toEqual(["", "COLD", ""])
+  })
+
+  it("still chips every rainy day — rain is episodic, not relative", () => {
+    const week = [
+      day({ date: "a", weatherTone: "rain" }),
+      day({ date: "b", weatherTone: "heavy_rain" }),
+      day({ date: "c", weatherTone: "clear" }),
+    ]
+    expect(computeRibbon(week).cells.map((c) => c.signals.length)).toEqual([1, 1, 0])
+  })
+
+  it("never suppresses an anomaly or an unfilled shift", () => {
+    const r = computeRibbon([
+      day({ date: "a", hasAnomaly: true, labor: { status: "level", unfilledSlots: 3 } }),
+      day({ date: "b", hasAnomaly: true }),
+    ])
+    expect(r.cells[0].signals.map((s) => s.label)).toEqual(["FLAG", "3 OPEN"])
+    expect(r.cells[1].signals.map((s) => s.label)).toEqual(["FLAG"])
+  })
+
+  it("holds the whole week under six chips on the shape that broke it", () => {
+    // Six days with an event title and no major count, all of them hot.
+    const week = ["a", "b", "c", "d", "e", "f", "g"].map((date, i) =>
+      hotDay(date, 33 + (i === 5 ? 4 : 0), {
+        predictedRevenue: 6000 + i * 100,
+        topEventTitle: i === 6 ? null : "Something nearby",
+        majorEventCount: i === 5 ? 2 : 0,
+      }),
+    )
+    const total = computeRibbon(week).cells.reduce((n, c) => n + c.signals.length, 0)
+    expect(total).toBeLessThanOrEqual(5)
+  })
+
+  it("says nothing at all about a day with no weather reading", () => {
+    expect(computeRibbon([day({ weatherTone: "heat", weatherHighC: null })]).cells[0].signals)
+      .toEqual([])
   })
 })

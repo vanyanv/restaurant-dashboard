@@ -45,13 +45,14 @@ describe("buildVerdictFacts", () => {
         { weekdayShort: "SUN", predictedRevenue: 7100 },
       ],
       vitals: {
-        weekForecast: { total: 21340, p10: null, p90: null, daysCounted: 3 },
+        weekForecast: { total: 21340, p10: null, p90: null, daysCounted: 3, vsPriorWeek: null },
         laborGap: {
           hours: -11,
           status: "short",
           shortDays: 2,
           heavyDays: 0,
           unscheduledDays: 0,
+          unfilledSlots: 0,
         },
         splh: { actual: null, target: null, status: "unknown" },
         accuracy: { wape: 0.064, beatsBaselineBy: 0.31, sampleSize: 26 },
@@ -69,13 +70,14 @@ describe("buildVerdictFacts", () => {
       isAggregate: false,
       days: [],
       vitals: {
-        weekForecast: { total: null, p10: null, p90: null, daysCounted: 0 },
+        weekForecast: { total: null, p10: null, p90: null, daysCounted: 0, vsPriorWeek: null },
         laborGap: {
           hours: null,
           status: "unknown",
           shortDays: 0,
           heavyDays: 0,
           unscheduledDays: 0,
+          unfilledSlots: 0,
         },
         splh: { actual: null, target: null, status: "unknown" },
         accuracy: null,
@@ -233,9 +235,9 @@ describe("verdictInputsHash", () => {
 describe("splitVerdictChunks", () => {
   it("lifts a currency figure out whole, dollar sign included", () => {
     expect(splitVerdictChunks("SAT carries $9,240 today.")).toEqual([
-      { kind: "text", value: "SAT carries " },
-      { kind: "num", value: "$9,240" },
-      { kind: "text", value: " today." },
+      { kind: "text", value: "SAT carries ", flagged: false },
+      { kind: "num", value: "$9,240", flagged: false },
+      { kind: "text", value: " today.", flagged: false },
     ])
   })
 
@@ -253,7 +255,7 @@ describe("splitVerdictChunks", () => {
 
   it("passes a sentence with no figures through as one chunk", () => {
     expect(splitVerdictChunks("The schedule is thin.")).toEqual([
-      { kind: "text", value: "The schedule is thin." },
+      { kind: "text", value: "The schedule is thin.", flagged: false },
     ])
   })
 
@@ -266,5 +268,65 @@ describe("splitVerdictChunks", () => {
     ]) {
       expect(splitVerdictChunks(line).map((c) => c.value).join("")).toBe(line)
     }
+  })
+})
+
+// The concept sets "11 hours short" in accent so the sentence has a subject.
+// Live couldn't: the narrator returns plain prose and nothing marked a clause.
+// The rule lives here rather than in the prompt — principle #7 does not let the
+// model decide anything about the page, emphasis included.
+describe("splitVerdictChunks — the flagged clause", () => {
+  const joined = (cs: ReturnType<typeof splitVerdictChunks>) =>
+    cs.filter((c) => c.flagged).map((c) => c.value).join("")
+
+  it("flags nothing unless the week is actually short", () => {
+    const cs = splitVerdictChunks("You are 11 hours short on the line.", false)
+    expect(cs.every((c) => !c.flagged)).toBe(true)
+  })
+
+  it("flags the clause the owner has to act on", () => {
+    expect(joined(splitVerdictChunks("SAT carries $9,240 and you are 11 hours short.", true)))
+      .toBe("11 hours short")
+  })
+
+  it("carries the rest of the clause with it", () => {
+    expect(joined(splitVerdictChunks("You are 11.2 hours short on the line today.", true)))
+      .toBe("11.2 hours short on the line today")
+  })
+
+  it("flags an overstaffed clause too", () => {
+    expect(joined(splitVerdictChunks("The schedule runs 22 hours over what it earns.", true)))
+      .toBe("22 hours over what it earns")
+  })
+
+  it("flags the narrator's phrasing as well as the composer's", () => {
+    expect(joined(splitVerdictChunks("This week peaks on SAT, a labor gap of 11.2 hours.", true)))
+      .toBe("a labor gap of 11.2 hours")
+  })
+
+  // Tripwire #2: Fraunces never sets a number, red or otherwise. A flagged
+  // clause must still hand its figure to the sans chunk.
+  it("keeps the figure inside a flagged clause in its own num chunk", () => {
+    const cs = splitVerdictChunks("You are 11 hours short.", true)
+    const num = cs.find((c) => c.kind === "num")
+    expect(num).toEqual({ kind: "num", value: "11", flagged: true })
+  })
+
+  it("reassembles the original sentence exactly, flagged or not", () => {
+    for (const line of [
+      "SAT carries $9,240 and you are 11 hours short.",
+      "The schedule runs 22 hours over what it earns.",
+      "Nothing numeric here at all.",
+      "This week peaks on SAT, a labor gap of 11.2 hours to level.",
+    ]) {
+      for (const flag of [true, false]) {
+        expect(splitVerdictChunks(line, flag).map((c) => c.value).join("")).toBe(line)
+      }
+    }
+  })
+
+  it("never emits an empty chunk", () => {
+    const cs = splitVerdictChunks("11 hours short.", true)
+    expect(cs.every((c) => c.value.length > 0)).toBe(true)
   })
 })

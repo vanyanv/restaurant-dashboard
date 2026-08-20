@@ -1200,3 +1200,37 @@
   .decisions-ledrow::before { transition: none; }
   .decisions-ledrow { transition: none; }
 }
+
+/* ============================================================ */
+/* Concept alignment — the accented clause, the richer subs     */
+/* ============================================================ */
+
+/* The verdict points at its own problem. The concept sets the labor clause in
+   accent so the sentence has a subject; `splitVerdictChunks` decides which
+   words those are from a rule, never from the model. Fires only on a week
+   genuinely short of the hours it earns. */
+.decisions-verdict__line .is-flag { color: var(--accent); }
+
+/* Comparison figures inside a vitals subtitle. Bold carries "this is the
+   number in the sentence"; colour is reserved for direction. */
+.decisions-vital__sub b { font-weight: 600; color: var(--ink); }
+.decisions-vital__sub b.is-up { color: var(--ink-good); }
+.decisions-vital__sub b.is-down { color: var(--accent); }
+/* A productivity shortfall is ochre, the same reading the day lane gives a
+   heavy day: a caveat on the number rather than something on fire. */
+.decisions-vital__sub b.is-warn { color: var(--ink-ochre); }
+
+/* Only one control in the row is a button. Skip and Why? are real actions but
+   secondary ones, and three equally-boxed controls made the ledger's right
+   column louder than the concept's single Commit. */
+.decisions-action-btn.is-quiet {
+  border-color: transparent;
+  color: var(--ink-faint);
+  background: transparent;
+}
+.decisions-action-btn.is-quiet:hover {
+  color: var(--ink);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

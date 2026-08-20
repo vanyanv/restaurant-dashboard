@@ -23,8 +23,10 @@ const fmtHours = (n: number): string => {
   return Number.isInteger(abs) ? `${abs}` : abs.toFixed(1)
 }
 
+const fmtPct = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.abs(n * 100).toFixed(1)}%`
+
 function WeekForecast({ v }: { v: Vitals }) {
-  const { total, p10, p90, daysCounted } = v.weekForecast
+  const { total, p10, p90, daysCounted, vsPriorWeek } = v.weekForecast
   return (
     <div className="decisions-vital">
       <span className="decisions-vital__label">Week forecast</span>
@@ -37,13 +39,20 @@ function WeekForecast({ v }: { v: Vitals }) {
           : p10 != null && p90 != null
             ? `${fmtUsd(p10)}–${fmtUsd(p90)} likely`
             : `over ${daysCounted} day${daysCounted === 1 ? "" : "s"}`}
+        {vsPriorWeek != null ? (
+          <>
+            {" · "}
+            <b className={vsPriorWeek >= 0 ? "is-up" : "is-down"}>{fmtPct(vsPriorWeek)}</b>
+            {" vs last week"}
+          </>
+        ) : null}
       </span>
     </div>
   )
 }
 
 function LaborGap({ v }: { v: Vitals }) {
-  const { hours, status, shortDays, unscheduledDays } = v.laborGap
+  const { hours, status, shortDays, unscheduledDays, unfilledSlots } = v.laborGap
 
   // Earn-the-red: a genuinely short week is a state worth the proofmark. Heavy
   // takes the ochre the day lane already uses for the same condition.
@@ -69,7 +78,17 @@ function LaborGap({ v }: { v: Vitals }) {
           ? "—"
           : `${hours < 0 ? "−" : "+"}${fmtHours(hours)}h`}
       </span>
-      <span className="decisions-vital__sub">{sub}</span>
+      <span className="decisions-vital__sub">
+        {sub}
+        {unfilledSlots > 0 ? (
+          <>
+            {" · "}
+            <b>
+              {unfilledSlots} slot{unfilledSlots === 1 ? "" : "s"} unfilled
+            </b>
+          </>
+        ) : null}
+      </span>
     </div>
   )
 }
@@ -83,11 +102,22 @@ function SalesPerLaborHour({ v }: { v: Vitals }) {
         {actual == null ? "—" : fmtUsd(actual)}
       </span>
       <span className="decisions-vital__sub" style={TABULAR}>
-        {actual == null || target == null
-          ? "nothing scheduled"
-          : status === "level"
-            ? `on this week's ${fmtUsd(target)} target`
-            : `${status} the ${fmtUsd(target)} target`}
+        {actual == null || target == null ? (
+          "nothing scheduled"
+        ) : (
+          <>
+            {`target ${fmtUsd(target)} · `}
+            {status === "level" ? (
+              "level"
+            ) : (
+              <b className={status === "above" ? "is-up" : "is-warn"}>
+                {`${actual >= target ? "+" : "−"}${fmtUsd(Math.abs(actual - target))} ${
+                  status === "above" ? "clear" : "gap"
+                }`}
+              </b>
+            )}
+          </>
+        )}
       </span>
     </div>
   )
@@ -125,13 +155,19 @@ export function DecisionVerdict({ line, sources, vitals }: Props) {
       <p className="decisions-verdict__kicker">The call this week</p>
 
       <h2 className="decisions-verdict__line">
-        {splitVerdictChunks(line).map((chunk, i) =>
+        {splitVerdictChunks(line, vitals.laborGap.status === "short").map((chunk, i) =>
           chunk.kind === "num" ? (
-            <b key={i} className="decisions-verdict__num" style={TABULAR}>
+            <b
+              key={i}
+              className={"decisions-verdict__num" + (chunk.flagged ? " is-flag" : "")}
+              style={TABULAR}
+            >
               {chunk.value}
             </b>
           ) : (
-            <span key={i}>{chunk.value}</span>
+            <span key={i} className={chunk.flagged ? "is-flag" : undefined}>
+              {chunk.value}
+            </span>
           ),
         )}
       </h2>

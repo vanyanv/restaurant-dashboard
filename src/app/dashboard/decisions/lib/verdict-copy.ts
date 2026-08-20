@@ -179,7 +179,22 @@ export function composeVerdict(f: VerdictFacts): string {
 export interface VerdictChunk {
   kind: "text" | "num"
   value: string
+  /**
+   * Inside the clause the page is pointing at, set in accent by the component.
+   * Flagging is a rule this module applies to the finished sentence — the model
+   * is never asked which words matter, because principle #7 doesn't let it
+   * decide anything about the page.
+   */
+  flagged: boolean
 }
+
+/**
+ * The labor clause, in the shapes the composer and the narrator both produce:
+ * "11 hours short", "you are 11.2 hours short on the line", "runs 22 hours
+ * over what it earns", "a labor gap of 11.2 hours".
+ */
+const LABOR_CLAUSE =
+  /(?:a labor gap of\s+)?\d[\d,]*(?:\.\d+)?\s+hours?\s+(?:short|over)\b[^,.;]*|a labor gap of\s+\d[\d,]*(?:\.\d+)?\s+hours?\b/gi
 
 /**
  * Split the verdict into prose and figures.
@@ -190,18 +205,43 @@ export interface VerdictChunk {
  * component; this decides where they are. The `$` and `%` travel with the
  * figure so a currency mark never dangles in the wrong face.
  */
-export function splitVerdictChunks(line: string): VerdictChunk[] {
-  const out: VerdictChunk[] = []
-  const re = /\$?\d[\d,]*(?:\.\d+)?%?/g
-  let last = 0
+export function splitVerdictChunks(
+  line: string,
+  /**
+   * Set the labor clause in accent. Only true when the week is genuinely short
+   * of the hours it earns — a level week has nothing to point at, and red on
+   * every verdict is red on none.
+   */
+  flagLabor = false,
+): VerdictChunk[] {
+  const isNum = new Array<boolean>(line.length).fill(false)
+  const isFlag = new Array<boolean>(line.length).fill(false)
 
-  for (const m of line.matchAll(re)) {
-    const at = m.index
-    if (at > last) out.push({ kind: "text", value: line.slice(last, at) })
-    out.push({ kind: "num", value: m[0] })
-    last = at + m[0].length
+  for (const m of line.matchAll(/\$?\d[\d,]*(?:\.\d+)?%?/g)) {
+    for (let i = m.index; i < m.index + m[0].length; i++) isNum[i] = true
   }
-  if (last < line.length) out.push({ kind: "text", value: line.slice(last) })
+  if (flagLabor) {
+    for (const m of line.matchAll(LABOR_CLAUSE)) {
+      for (let i = m.index; i < m.index + m[0].length; i++) isFlag[i] = true
+    }
+  }
+
+  // Walk the line and close a chunk wherever either property changes. Splitting
+  // on both keeps a figure inside a flagged clause in DM Sans tabular — a red
+  // Fraunces-italic dollar amount would fail the two-tier rule as surely as a
+  // black one.
+  const out: VerdictChunk[] = []
+  let start = 0
+  for (let i = 1; i <= line.length; i++) {
+    const ended = i === line.length || isNum[i] !== isNum[start] || isFlag[i] !== isFlag[start]
+    if (!ended) continue
+    out.push({
+      kind: isNum[start] ? "num" : "text",
+      value: line.slice(start, i),
+      flagged: isFlag[start],
+    })
+    start = i
+  }
 
   return out
 }

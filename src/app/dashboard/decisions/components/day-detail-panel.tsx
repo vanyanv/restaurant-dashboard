@@ -93,18 +93,7 @@ export function DayDetailPanel({ day }: Props) {
                 ? "no benchmark"
                 : `${day.labor.neededHours} hrs`
             }
-            tone="neutral"
-          />
-          <DetailRow
-            label="GAP"
-            value={laborGapText(day.labor)}
-            tone={
-              day.labor.status === "short"
-                ? "accent"
-                : day.labor.status === "heavy"
-                  ? "muted"
-                  : "neutral"
-            }
+            tone={day.labor.status === "short" ? "accent" : "neutral"}
           />
           <DetailRow
             label="UNFILLED"
@@ -114,16 +103,6 @@ export function DayDetailPanel({ day }: Props) {
                 : `${day.labor.unfilledSlots} shift${day.labor.unfilledSlots === 1 ? "" : "s"}`
             }
             tone={day.labor.unfilledSlots > 0 ? "accent" : "neutral"}
-          />
-          <DetailRow
-            label="WEATHER"
-            value={day.weatherPhrase ?? "no signal"}
-            tone="neutral"
-          />
-          <DetailRow
-            label="EVENT"
-            value={day.eventPhrase ?? "none nearby"}
-            tone="neutral"
           />
           <DetailRow
             label="FOOD COST"
@@ -260,12 +239,12 @@ function HourlyChart({ hourly }: { hourly: HourlyCoverage }) {
       </div>
       <p className="decisions-hours__legend">
         <span><i className="is-demand" />forecast orders</span>
-        <span><i className="is-staff" />staff posted</span>
+        <span><i className="is-staff" />staff scheduled</span>
         {/* Deliberately not a number: the GAP row above already carries the
             day's shortfall, and the stretch's own sum differs from it. Two
             similar figures side by side read as a contradiction. */}
         {hourly.worstStretch ? (
-          <span><i className="is-short" />uncovered</span>
+          <span><i className="is-short" />uncovered demand</span>
         ) : null}
       </p>
     </div>

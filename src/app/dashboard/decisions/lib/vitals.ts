@@ -22,11 +22,14 @@ export interface VitalsDay {
   predictedRevenue: number
   p10: number | null
   p90: number | null
+  /** This day's forecast against the same weekday a week ago. */
+  pctVsTrailing: number | null
   labor: {
     scheduledHours: number
     neededHours: number | null
     gapHours: number | null
     status: LaborLaneStatus
+    unfilledSlots: number
   }
 }
 
@@ -41,6 +44,11 @@ export interface Vitals {
     p10: number | null
     p90: number | null
     daysCounted: number
+    /**
+     * The week against the week before it, as a fraction. Null unless every
+     * day carried a comparison — a partial sum would understate the change.
+     */
+    vsPriorWeek: number | null
   }
   laborGap: {
     /** Scheduled − needed across the week. Negative is short. */
@@ -51,6 +59,8 @@ export interface Vitals {
     heavyDays: number
     /** Days with nothing published at all — a different problem than thin. */
     unscheduledDays: number
+    /** Shifts published with nobody on them, across the week. */
+    unfilledSlots: number
   }
   splh: {
     /** Week forecast per scheduled hour. */
@@ -82,6 +92,19 @@ export function computeVitals(input: {
   const banded = days.every((d) => d.p10 != null && d.p90 != null)
   const p10 = days.length > 0 && banded ? days.reduce((s, d) => s + (d.p10 ?? 0), 0) : null
   const p90 = days.length > 0 && banded ? days.reduce((s, d) => s + (d.p90 ?? 0), 0) : null
+
+  // Each day carries its own change against the same weekday last week, so the
+  // prior week is recoverable without a second query: predicted / (1 + pct).
+  // Same all-or-none rule as the band — a week compared on five of seven days
+  // is not a week-over-week number.
+  const comparable =
+    days.length > 0 &&
+    days.every((d) => d.pctVsTrailing != null && 1 + d.pctVsTrailing > 0)
+  const priorTotal = comparable
+    ? days.reduce((s, d) => s + d.predictedRevenue / (1 + (d.pctVsTrailing ?? 0)), 0)
+    : null
+  const vsPriorWeek =
+    total != null && priorTotal != null && priorTotal > 0 ? total / priorTotal - 1 : null
 
   // ---- labor ---------------------------------------------------------------
   const judged = days.filter((d) => d.labor.gapHours != null)
@@ -120,13 +143,14 @@ export function computeVitals(input: {
           : "level"
 
   return {
-    weekForecast: { total, p10, p90, daysCounted: days.length },
+    weekForecast: { total, p10, p90, daysCounted: days.length, vsPriorWeek },
     laborGap: {
       hours: gapHours,
       status: gapStatus,
       shortDays: days.filter((d) => d.labor.status === "short").length,
       heavyDays: days.filter((d) => d.labor.status === "heavy").length,
       unscheduledDays: days.filter((d) => d.labor.status === "unscheduled").length,
+      unfilledSlots: days.reduce((n, d) => n + d.labor.unfilledSlots, 0),
     },
     splh: { actual, target, status: rateStatus },
     // A row with nothing reconciled behind it is informational. Rendering
