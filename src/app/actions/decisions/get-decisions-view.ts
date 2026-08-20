@@ -104,8 +104,13 @@ export interface DecisionDay {
   anomalyHint: string | null
   weatherTone: "clear" | "rain" | "heat" | "cold" | "heavy_rain" | null
   weatherPhrase: string | null
+  /** Day high/low in Celsius, for judging a hot day against its own week. */
+  weatherHighC: number | null
+  weatherLowC: number | null
   eventPhrase: string | null
   topEventTitle: string | null
+  /** Events the signal provider ranked major. Zero on an ordinary day. */
+  majorEventCount: number
   foodCostNote: string | null
 }
 
@@ -575,8 +580,11 @@ export async function getDecisionsView(input: {
       anomalyHint: anom,
       weatherTone: weather.tone,
       weatherPhrase: weather.phrase,
+      weatherHighC: weather.highC,
+      weatherLowC: weather.lowC,
       eventPhrase: event.phrase,
       topEventTitle: event.title,
+      majorEventCount: event.majorCount,
       foodCostNote,
     }
   })
@@ -709,9 +717,14 @@ function aggregateWeather(
     precipitationMm: number | null
   }>,
   dayKey: string,
-): { tone: DecisionDay["weatherTone"]; phrase: string | null } {
+): {
+  tone: DecisionDay["weatherTone"]
+  phrase: string | null
+  highC: number | null
+  lowC: number | null
+} {
   const dayRows = rows.filter((r) => ymd(r.date) === dayKey)
-  if (dayRows.length === 0) return { tone: null, phrase: null }
+  if (dayRows.length === 0) return { tone: null, phrase: null, highC: null, lowC: null }
   const temps = dayRows.map((r) => r.temperatureC).filter((v): v is number => v != null)
   const precips = dayRows.map((r) => r.precipitationMm ?? 0)
   const maxTempC = temps.length > 0 ? Math.max(...temps) : null
@@ -723,7 +736,9 @@ function aggregateWeather(
   else if (totalPrecipMm >= 2) tone = "rain"
   else if (maxTempC != null && maxTempC >= 32) tone = "heat"
   else if (minTempC != null && minTempC <= 2) tone = "cold"
-  return { tone, phrase }
+  // The temperatures travel with the tone because "hot" is only worth a chip
+  // relative to the week around it — an LA August is hot every day.
+  return { tone, phrase, highC: maxTempC, lowC: minTempC }
 }
 
 function aggregateEvents(
@@ -733,20 +748,23 @@ function aggregateEvents(
     majorEventCount: number
   }>,
   dayKey: string,
-): { phrase: string | null; title: string | null } {
+): { phrase: string | null; title: string | null; majorCount: number } {
   const dayRows = rows.filter((r) => ymd(r.date) === dayKey)
-  if (dayRows.length === 0) return { phrase: null, title: null }
+  if (dayRows.length === 0) return { phrase: null, title: null, majorCount: 0 }
   const sorted = [...dayRows].sort(
     (a, b) => (b.majorEventCount ?? 0) - (a.majorEventCount ?? 0),
   )
   const top = sorted[0]
-  if (!top) return { phrase: null, title: null }
+  if (!top) return { phrase: null, title: null, majorCount: 0 }
   return {
     phrase: eventPhrase({
       topEventTitle: top.topEventTitle,
       majorEventCount: top.majorEventCount,
     }),
     title: top.topEventTitle,
+    // A title exists on almost every day; a *major* count is what makes the
+    // day different from the six around it.
+    majorCount: top.majorEventCount ?? 0,
   }
 }
 

@@ -48,8 +48,11 @@ export interface RibbonDay {
   p90: number | null
   labor: { status: LaborLaneStatus; unfilledSlots: number }
   weatherTone: "clear" | "rain" | "heat" | "cold" | "heavy_rain" | null
+  weatherHighC: number | null
+  weatherLowC: number | null
   hasAnomaly: boolean
   topEventTitle: string | null
+  majorEventCount: number
 }
 
 /** Below this a column reads as a rule rather than a bar. */
@@ -75,6 +78,8 @@ export function computeRibbon(days: RibbonDay[]): Ribbon {
       ? (days.find((d) => d.predictedRevenue === peakRevenue)?.date ?? null)
       : null
 
+  const extremes = weekExtremes(days)
+
   return {
     scaleMax,
     cells: days.map((d) => {
@@ -90,10 +95,37 @@ export function computeRibbon(days: RibbonDay[]): Ribbon {
             : 0,
         whisker: whiskerFor(d),
         isPeak,
-        signals: signalsFor(d, isPeak),
+        signals: signalsFor(d, isPeak, extremes),
       }
     }),
   }
+}
+
+/**
+ * The hottest and coldest day in the week, by date.
+ *
+ * A chip is meant to say "this day is not like the others". Judged against a
+ * fixed threshold, an LA August prints HOT seven times a week and the row of
+ * chips stops carrying information — which is exactly what the live page did.
+ * Judged against the week it sits in, at most one day can claim it.
+ */
+function weekExtremes(days: RibbonDay[]): { hottest: string | null; coldest: string | null } {
+  let hottest: string | null = null
+  let coldest: string | null = null
+  let high = -Infinity
+  let low = Infinity
+
+  for (const d of days) {
+    if (d.weatherHighC != null && d.weatherHighC > high) {
+      high = d.weatherHighC
+      hottest = d.date
+    }
+    if (d.weatherLowC != null && d.weatherLowC < low) {
+      low = d.weatherLowC
+      coldest = d.date
+    }
+  }
+  return { hottest, coldest }
 }
 
 function whiskerFor(d: RibbonDay): RibbonCell["whisker"] {
@@ -109,7 +141,11 @@ function whiskerFor(d: RibbonDay): RibbonCell["whisker"] {
   }
 }
 
-function signalsFor(d: RibbonDay, isPeak: boolean): RibbonSignal[] {
+function signalsFor(
+  d: RibbonDay,
+  isPeak: boolean,
+  extremes: { hottest: string | null; coldest: string | null },
+): RibbonSignal[] {
   // Earn-the-red. A weather or event chip is only a state worth the proofmark
   // on the day the verdict already named — the peak — and only when that day is
   // short of the hours it earns. One red day in the week, or none. Reddening
@@ -117,12 +153,25 @@ function signalsFor(d: RibbonDay, isPeak: boolean): RibbonSignal[] {
   const hot = isPeak && d.labor.status === "short"
 
   const out: RibbonSignal[] = []
-  if (d.topEventTitle) out.push({ label: "EVENT", hot })
+
+  // A title alone is not news: the signal provider names something on almost
+  // every day. A *major* event is the one worth interrupting a schedule for.
+  if (d.topEventTitle && d.majorEventCount > 0) out.push({ label: "EVENT", hot })
+
+  // Rain is episodic — when it rains it is genuinely different from the days
+  // either side of it, so it needs no comparison to earn the chip.
   if (d.weatherTone === "rain" || d.weatherTone === "heavy_rain") {
     out.push({ label: "RAIN", hot })
   }
-  if (d.weatherTone === "heat") out.push({ label: "HOT", hot })
-  if (d.weatherTone === "cold") out.push({ label: "COLD", hot })
+
+  // Temperature is not episodic, so it is judged against its own week.
+  if (d.weatherTone === "heat" && d.date === extremes.hottest) {
+    out.push({ label: "HOT", hot })
+  }
+  if (d.weatherTone === "cold" && d.date === extremes.coldest) {
+    out.push({ label: "COLD", hot })
+  }
+
   if (d.hasAnomaly) out.push({ label: "FLAG", hot })
 
   // Unfilled shifts are rare enough (11 of 3,737 over thirteen months) to earn

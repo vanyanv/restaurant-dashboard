@@ -16,11 +16,13 @@ const day = (over: Partial<VitalsDay> = {}): VitalsDay => ({
   predictedRevenue: 8000,
   p10: 7000,
   p90: 9000,
+  pctVsTrailing: null,
   labor: {
     scheduledHours: 100,
     neededHours: 100,
     gapHours: 0,
     status: "level",
+    unfilledSlots: 0,
   },
   ...over,
 })
@@ -73,7 +75,7 @@ describe("computeVitals — week forecast", () => {
 describe("computeVitals — labor gap", () => {
   it("adds the daily gaps into one week-level number", () => {
     const days = week({
-      labor: { scheduledHours: 85, neededHours: 100, gapHours: -15, status: "short" },
+      labor: { scheduledHours: 85, neededHours: 100, gapHours: -15, status: "short", unfilledSlots: 0 },
     })
     const v = computeVitals({ days, scorecard: null })
     expect(v.laborGap.hours).toBe(-105)
@@ -83,7 +85,7 @@ describe("computeVitals — labor gap", () => {
   it("calls a week level when the gap sits inside SPLH tolerance", () => {
     // needed 700h total, tolerance 10% = 70h of slack; 21h short is level.
     const days = week({
-      labor: { scheduledHours: 97, neededHours: 100, gapHours: -3, status: "level" },
+      labor: { scheduledHours: 97, neededHours: 100, gapHours: -3, status: "level", unfilledSlots: 0 },
     })
     expect(computeVitals({ days, scorecard: null }).laborGap.status).toBe("level")
   })
@@ -93,7 +95,7 @@ describe("computeVitals — labor gap", () => {
   // the day cells would all read level under a masthead saying otherwise.
   it("agrees with the lane at exactly the tolerance boundary", () => {
     const days = week({
-      labor: { scheduledHours: 90, neededHours: 100, gapHours: -10, status: "level" },
+      labor: { scheduledHours: 90, neededHours: 100, gapHours: -10, status: "level", unfilledSlots: 0 },
     })
     const v = computeVitals({ days, scorecard: null })
     expect(v.laborGap.hours).toBe(-70)
@@ -102,7 +104,7 @@ describe("computeVitals — labor gap", () => {
 
   it("flags an over-staffed week as heavy", () => {
     const days = week({
-      labor: { scheduledHours: 130, neededHours: 100, gapHours: 30, status: "heavy" },
+      labor: { scheduledHours: 130, neededHours: 100, gapHours: 30, status: "heavy", unfilledSlots: 0 },
     })
     expect(computeVitals({ days, scorecard: null }).laborGap.status).toBe("heavy")
   })
@@ -112,10 +114,10 @@ describe("computeVitals — labor gap", () => {
   it("counts short days separately from the net total", () => {
     const days = week()
     days[5] = day({
-      labor: { scheduledHours: 60, neededHours: 100, gapHours: -40, status: "short" },
+      labor: { scheduledHours: 60, neededHours: 100, gapHours: -40, status: "short", unfilledSlots: 0 },
     })
     days[6] = day({
-      labor: { scheduledHours: 140, neededHours: 100, gapHours: 40, status: "heavy" },
+      labor: { scheduledHours: 140, neededHours: 100, gapHours: 40, status: "heavy", unfilledSlots: 0 },
     })
     const v = computeVitals({ days, scorecard: null })
     expect(v.laborGap.hours).toBe(0)
@@ -124,7 +126,7 @@ describe("computeVitals — labor gap", () => {
 
   it("reports unknown when no day could be judged", () => {
     const days = week({
-      labor: { scheduledHours: 0, neededHours: null, gapHours: null, status: "unknown" },
+      labor: { scheduledHours: 0, neededHours: null, gapHours: null, status: "unknown", unfilledSlots: 0 },
     })
     const v = computeVitals({ days, scorecard: null })
     expect(v.laborGap.status).toBe("unknown")
@@ -136,7 +138,7 @@ describe("computeVitals — labor gap", () => {
   it("counts days with no schedule published", () => {
     const days = week()
     days[0] = day({
-      labor: { scheduledHours: 0, neededHours: 100, gapHours: null, status: "unscheduled" },
+      labor: { scheduledHours: 0, neededHours: 100, gapHours: null, status: "unscheduled", unfilledSlots: 0 },
     })
     expect(computeVitals({ days, scorecard: null }).laborGap.unscheduledDays).toBe(1)
   })
@@ -153,7 +155,7 @@ describe("computeVitals — sales per labor hour", () => {
   // re-reading weekdayTargets() and risking a different answer than the lane's.
   it("recovers the target the lane measured against", () => {
     const days = week({
-      labor: { scheduledHours: 90, neededHours: 80, gapHours: 10, status: "heavy" },
+      labor: { scheduledHours: 90, neededHours: 80, gapHours: 10, status: "heavy", unfilledSlots: 0 },
     })
     const v = computeVitals({ days, scorecard: null })
     // 56,000 / 560h needed
@@ -162,7 +164,7 @@ describe("computeVitals — sales per labor hour", () => {
 
   it("withholds a rate when nothing is scheduled", () => {
     const days = week({
-      labor: { scheduledHours: 0, neededHours: 100, gapHours: null, status: "unscheduled" },
+      labor: { scheduledHours: 0, neededHours: 100, gapHours: null, status: "unscheduled", unfilledSlots: 0 },
     })
     const v = computeVitals({ days, scorecard: null })
     expect(v.splh.actual).toBeNull()
@@ -171,7 +173,7 @@ describe("computeVitals — sales per labor hour", () => {
 
   it("reads above target when the week is staffed lean", () => {
     const days = week({
-      labor: { scheduledHours: 70, neededHours: 100, gapHours: -30, status: "short" },
+      labor: { scheduledHours: 70, neededHours: 100, gapHours: -30, status: "short", unfilledSlots: 0 },
     })
     // 56,000/490h = $114 against a $80 target
     expect(computeVitals({ days, scorecard: null }).splh.status).toBe("above")

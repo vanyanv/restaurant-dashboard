@@ -157,7 +157,7 @@ export function ActionRow({ action, rank, asOf }: Props) {
         </button>
         <button
           type="button"
-          className="decisions-action-btn"
+          className="decisions-action-btn is-quiet"
           onClick={() => decide(dismissDecision)}
           disabled={pending}
         >
@@ -165,7 +165,7 @@ export function ActionRow({ action, rank, asOf }: Props) {
         </button>
         <button
           type="button"
-          className="decisions-action-btn is-ghost"
+          className="decisions-action-btn is-quiet"
           onClick={() => setWhyOpen((v) => !v)}
           aria-expanded={whyOpen}
         >
