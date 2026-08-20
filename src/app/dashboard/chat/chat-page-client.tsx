@@ -222,8 +222,10 @@ export function ChatPageClient({ initialConversations, stores }: Props) {
     }
   }
 
+  // Never "Ask the ledger." — the empty state prints that as its masthead
+  // headline directly below, and a new thread has no title to show yet.
   const activeTitle =
-    conversations.find((c) => c.id === conversationId)?.title ?? "Ask the ledger."
+    conversations.find((c) => c.id === conversationId)?.title ?? "New thread"
 
   return (
     <div className="chat-page">

@@ -165,6 +165,9 @@ export function ChatThread({
     }
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null
+      // Nothing to catch up to on an empty thread, and the first-paint rule
+      // would otherwise scroll the docket's masthead and headline off the top.
+      if (messages.length === 0) return
       if (
         !shouldAutoScroll({
           stuck: stuckRef.current,
