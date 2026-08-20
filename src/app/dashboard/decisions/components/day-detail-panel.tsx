@@ -18,13 +18,6 @@ function pctText(p: number | null): string | null {
 }
 
 export function DayDetailPanel({ day }: Props) {
-  const headline =
-    day.bucket === "busy"
-      ? `${day.weekdayShort.charAt(0)}${day.weekdayShort.slice(1).toLowerCase()} looks busy`
-      : day.bucket === "slow"
-        ? `${day.weekdayShort.charAt(0)}${day.weekdayShort.slice(1).toLowerCase()} looks slow`
-        : `${day.weekdayShort.charAt(0)}${day.weekdayShort.slice(1).toLowerCase()} looks normal`
-
   const pct = pctText(day.pctVsTrailing)
   const parts: string[] = []
   if (pct && day.pctVsTrailing != null) {
@@ -66,27 +59,24 @@ export function DayDetailPanel({ day }: Props) {
   if (day.anomalyHint) parts.push(`Watch: ${day.anomalyHint} flagged yesterday.`)
 
   return (
-    <div className="inv-panel decisions-day-detail">
-      <header className="inv-panel__head">
-        <span className="inv-panel__dept">
-          {day.weekdayShort} · {day.monthDayShort}
-        </span>
-        <span className="decisions-day-detail__bucket">
-          {day.bucket.toUpperCase()}
-        </span>
-      </header>
-      <div className="decisions-day-detail__body">
-        <div className="decisions-day-detail__prose">
-          <h3 className="decisions-day-detail__headline">
-            <em>{headline}</em>
-          </h3>
-          <p className="decisions-day-detail__paragraph">
-            {parts.length === 0
-              ? "Forecast available — no special signals for this day."
-              : parts.join(" ")}
-          </p>
-        </div>
-        <dl className="decisions-day-detail__rows">
+    <div className="decisions-drawer">
+      <div className="decisions-drawer__col">
+        <h3 className="decisions-drawer__title">
+          <em>{fullDate(day.date)}</em>
+        </h3>
+        <p className="decisions-drawer__prose">
+          {parts.length === 0
+            ? "Forecast available — no special signals for this day."
+            : parts.join(" ")}
+        </p>
+        <HourlyChart hourly={day.hourly} />
+      </div>
+
+      <div className="decisions-drawer__col">
+        {day.attribution ? (
+          <Waterfall attribution={day.attribution} predicted={day.predictedRevenue} />
+        ) : null}
+        <dl className="decisions-drawer__rows">
           <DetailRow
             label="SCHEDULED"
             value={
@@ -117,6 +107,15 @@ export function DayDetailPanel({ day }: Props) {
             }
           />
           <DetailRow
+            label="UNFILLED"
+            value={
+              day.labor.unfilledSlots === 0
+                ? "none"
+                : `${day.labor.unfilledSlots} shift${day.labor.unfilledSlots === 1 ? "" : "s"}`
+            }
+            tone={day.labor.unfilledSlots > 0 ? "accent" : "neutral"}
+          />
+          <DetailRow
             label="WEATHER"
             value={day.weatherPhrase ?? "no signal"}
             tone="neutral"
@@ -132,13 +131,22 @@ export function DayDetailPanel({ day }: Props) {
             tone={day.foodCostNote?.includes("over") ? "accent" : "neutral"}
           />
         </dl>
-        {day.attribution ? (
-          <Waterfall attribution={day.attribution} predicted={day.predictedRevenue} />
-        ) : null}
-        <HourlyChart hourly={day.hourly} />
       </div>
     </div>
   )
+}
+
+/** "Saturday, 23 August" — the drawer is a dateline, not a verdict. */
+function fullDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  const WEEKDAY = [
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+  ]
+  const MONTH = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ]
+  return `${WEEKDAY[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTH[d.getUTCMonth()]}`
 }
 
 function DetailRow({
@@ -151,10 +159,10 @@ function DetailRow({
   tone: "accent" | "muted" | "neutral"
 }) {
   return (
-    <div className="decisions-day-detail__row">
-      <dt className="decisions-day-detail__row-label">{label}</dt>
+    <div className="decisions-drawer__row">
+      <dt className="decisions-drawer__row-label">{label}</dt>
       <dd
-        className={`decisions-day-detail__row-value is-${tone}`}
+        className={`decisions-drawer__row-value is-${tone}`}
         style={TABULAR}
       >
         {value}
@@ -296,10 +304,14 @@ function Waterfall({
 
   return (
     <div className="decisions-attr">
-      <p className="decisions-attr__title">Why {usd(predicted)}</p>
+      <p className="decisions-attr__title">Why {usd(predicted)} — model attribution</p>
       <div className="decisions-attr__row is-base">
         <span className="decisions-attr__label">Typical day</span>
-        <span className="decisions-attr__track" aria-hidden="true" />
+        {/* Full width, at half strength: the floor every other row moves from,
+            drawn as ground rather than as a contribution of its own. */}
+        <span className="decisions-attr__track" aria-hidden="true">
+          <span className="decisions-attr__bar is-base" />
+        </span>
         <span className="decisions-attr__val">{usd(base)}</span>
       </div>
       {groups.map((g) => (

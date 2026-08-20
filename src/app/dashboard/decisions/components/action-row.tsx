@@ -139,8 +139,8 @@ export function ActionRow({ action, rank, asOf }: Props) {
         </span>
         {action.impactRangeUsdPerWeek ? (
           <span className="decisions-ledrow__band">
-            {fmtUsd(action.impactRangeUsdPerWeek.low)}–
-            {fmtUsd(action.impactRangeUsdPerWeek.high)} likely
+            80% CI {fmtUsd(action.impactRangeUsdPerWeek.low)}–
+            {fmtUsd(action.impactRangeUsdPerWeek.high)}
           </span>
         ) : null}
         <ConfidenceDots count={action.dots} />

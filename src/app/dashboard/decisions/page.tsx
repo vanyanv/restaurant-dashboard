@@ -90,7 +90,7 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
             few days of orders before predictions begin.
           </div>
         ) : (
-          <DecisionWeekCalendar days={data.days} storeName={data.storeName} />
+          <DecisionWeekCalendar days={data.days} />
         )}
 
         {/* What the verdict didn't absorb. Absent entirely when it took the lot. */}
@@ -130,8 +130,8 @@ export default async function DecisionsPage({ searchParams }: PageProps) {
                   </span>
                 </div>
                 <span className="decisions-pot__meta">
-                  across {data.actions.length} action
-                  {data.actions.length === 1 ? "" : "s"}
+                  {data.actions.length} open · ranked by 25th-percentile impact,
+                  not the headline number
                 </span>
               </div>
               <div className="decisions-led">
