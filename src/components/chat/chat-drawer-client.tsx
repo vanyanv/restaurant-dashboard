@@ -11,6 +11,10 @@ const ChatDrawerLazy = dynamic(
   { ssr: false }
 )
 
-export function ChatDrawerClient() {
-  return <ChatDrawerLazy />
+export function ChatDrawerClient({
+  stores,
+}: {
+  stores?: Array<{ id: string; name: string }>
+}) {
+  return <ChatDrawerLazy stores={stores} />
 }

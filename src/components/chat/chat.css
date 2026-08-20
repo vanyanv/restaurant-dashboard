@@ -1202,6 +1202,8 @@
 
 /* --- the return frame --- */
 .chat-return {
+  container-type: inline-size;
+  container-name: return;
   border: 1px solid var(--hairline-bold);
   border-radius: 2px;
   background: rgba(255, 253, 247, 0.72);
@@ -1426,8 +1428,10 @@
   padding-right: 0;
 }
 
-/* Narrow surfaces — the drawer is ~440px, so the figure strip stacks. */
-@media (max-width: 620px) {
+/* Narrow surfaces. The strip stacks on the BLOCK's width, not the window's —
+   the drawer is 560px inside a full-width viewport, so a media query never
+   fired for it and three 30px figures stayed jammed across 440px. */
+@container return (max-width: 560px) {
   .chat-return__figs { flex-direction: column; }
   .chat-return__fig {
     border-right: 0;
@@ -1441,9 +1445,13 @@
     margin-bottom: 0;
     padding-bottom: 0;
   }
+  .chat-return__verdict { font-size: 19px; }
+}
+
+/* The docket sits outside the return, so it still keys off the viewport. */
+@media (max-width: 620px) {
   .chat-docket { grid-template-columns: minmax(0, 1fr); gap: 5px; }
   .chat-docket__key { text-align: left; }
-  .chat-return__verdict { font-size: 19px; }
 }
 
 /* ============================================================================

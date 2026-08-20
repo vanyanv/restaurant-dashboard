@@ -15,7 +15,11 @@ import {
  * owner closes and reopens. On reopen with an existing conversation id we
  * fetch the saved messages and hydrate them — including tool-call output
  * parts so inline cards (TrendCard, InvoiceCard, ...) survive a close. */
-export function ChatDrawer() {
+export function ChatDrawer({
+  stores,
+}: {
+  stores?: Array<{ id: string; name: string }>
+} = {}) {
   const {
     open,
     closeDrawer,
@@ -258,6 +262,7 @@ export function ChatDrawer() {
           <ChatThread
             key={hydrated.id ?? `new-${threadResetKey}`}
             initialMessages={hydrated.messages}
+            stores={stores}
             onConversationCaptured={(id) => {
               capturedIdRef.current = id
               setConversationId(id)

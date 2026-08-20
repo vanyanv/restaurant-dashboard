@@ -5,6 +5,7 @@ import { AppSidebarClient } from "@/components/app-sidebar-client"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ChatDrawerProvider } from "@/components/chat/chat-drawer-context"
 import { ChatDrawerClient } from "@/components/chat/chat-drawer-client"
+import { listOwnerStores } from "@/lib/chat/owner-scope"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
 import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
 import { authOptions } from "@/lib/auth"
@@ -47,6 +48,15 @@ export default async function DashboardLayout({
     firstName != null &&
     (await consumePendingWelcome(session.user.id))
 
+  // The drawer's composer offers the same store scope the chat page does.
+  // Owner-scoped, and empty for anyone without chat access.
+  const chatStores = session?.user?.accountId
+    ? (await listOwnerStores(session.user.accountId)).map((s) => ({
+        id: s.id,
+        name: s.name,
+      }))
+    : []
+
   return (
     <div className={`${fraunces.variable} editorial-surface`}>
       <ChatDrawerProvider>
@@ -63,7 +73,7 @@ export default async function DashboardLayout({
             {children}
           </SidebarInset>
         </SidebarProvider>
-        <ChatDrawerClient />
+        <ChatDrawerClient stores={chatStores} />
       </ChatDrawerProvider>
     </div>
   )
