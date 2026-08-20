@@ -43,9 +43,9 @@
   cursor: pointer;
   padding: 9px 18px 9px 18px;
   display: grid;
-  grid-template-columns: 36px 1fr 22px;
+  grid-template-columns: 36px minmax(0, 1fr) 22px;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
   font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   color: var(--ink);
@@ -232,4 +232,51 @@
 
 .chat-page__search input::placeholder {
   color: var(--ink-faint);
+}
+
+/* Masthead: department and thread name on the left, folio on the right. */
+.chat-page__main-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.chat-page__folio {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-align: right;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+/* Perforated group rule between Today / Yesterday / Earlier. */
+.chat-page__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 6px;
+}
+
+.chat-page__group::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--hairline-bold);
+}
+
+.chat-page__rail-count {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Turn count sits under the title, in the title's column. */
+.chat-page__rail-count {
+  grid-column: 2;
 }
