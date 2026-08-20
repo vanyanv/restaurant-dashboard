@@ -80,7 +80,10 @@
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
-  background: var(--hairline);
+  /* Paper, not hairline. Seven days over three columns leaves two empty slots,
+     and a hairline-coloured container paints them as a grey block. The seams
+     come from each cell's own ring instead, so an empty slot is just paper. */
+  background: var(--paper-soft);
   border: 1px solid var(--hairline);
   border-top: 0;
 }
@@ -108,6 +111,10 @@
 
 /* The day the verdict already named. Warm paper and an accent column, so the
    eye lands on the same day the sentence at the top of the page pointed at. */
+/* The ring fills the 1px gap on every side; neighbours overlap in the same
+   colour, so the grid reads as hairline seams with no container behind it. */
+.decisions-rday { box-shadow: 0 0 0 1px var(--hairline); }
+
 .decisions-rday.is-peak { background: var(--paper-warm); }
 
 .decisions-rday::before {
@@ -183,11 +190,14 @@
   color: var(--ink);
 }
 
+/* The concept sets the band in --ink-ornament; that token measures 2.48:1
+   against paper and its own definition scopes it to marks nobody has to read.
+   A dollar range is text. --ink-faint is the same reading at 4.83:1. */
 .decisions-rday__band {
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.03em;
-  color: var(--ink-ornament);
+  color: var(--ink-faint);
   white-space: nowrap;
 }
 
@@ -342,7 +352,7 @@
 .decisions-pot__amt {
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
   font-weight: 600;
-  font-size: 1.75rem;
+  font-size: 30px;
   letter-spacing: -0.024em;
   font-variant-numeric: tabular-nums lining-nums;
   color: var(--ink);
@@ -356,41 +366,49 @@
   letter-spacing: 0.18em;
   color: var(--ink-faint);
 }
+/* Sentence-case DM Sans, as the concept sets it — a mono uppercase stamp reads
+   as a status label, and these are things you press. */
 .decisions-action-btn {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 0.35rem 0.65rem;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: center;
+  padding: 5px 9px;
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--hairline-bold);
   border-radius: 2px;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
-.decisions-action-btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--paper)); }
-/* Earn-the-red: red is state, never a fill at rest. Commit reads as the
-   primary action through its ink-weight border, and takes the proofmark only
-   on hover — the same bargain every other control on the dashboard makes. */
-.decisions-action-btn.is-primary { border-color: var(--ink); color: var(--ink); font-weight: 500; }
+.decisions-action-btn:hover { border-color: var(--ink); background: rgba(0, 0, 0, 0.02); }
+
+/* Earn-the-red: red is state, never a fill at rest. Commit sits at the same
+   weight as the rest until you reach for it, then takes the proofmark. */
 .decisions-action-btn.is-primary:hover {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-bg);
 }
-.decisions-action-btn.is-ghost { border-color: var(--hairline); color: var(--ink-muted); }
 
-.decisions-link {
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  color: var(--accent);
-  cursor: pointer;
+/* Only one control in the row is a button. Skip and Why? are real actions but
+   secondary ones, and three equally-boxed controls made the ledger's right
+   column louder than the concept's single Commit. */
+.decisions-action-btn.is-quiet {
+  border-color: transparent;
+  color: var(--ink-faint);
+  background: transparent;
+}
+.decisions-action-btn.is-quiet:hover {
+  border-color: transparent;
+  color: var(--ink);
+  background: transparent;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
 
 /* ============================================================ */
 /* Confidence dots                                              */
@@ -521,10 +539,7 @@
 }
 
 .decisions-lane__label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.4rem;
+  display: block;
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.14em;
@@ -532,12 +547,6 @@
   color: var(--ink-faint);
 }
 
-/* Unfilled slots are genuinely rare (11 of 3,737 shifts over 13 months), so
-   this earns the accent on the occasions it appears. */
-.decisions-lane__unfilled {
-  font-style: normal;
-  color: var(--accent);
-}
 
 .decisions-lane__track {
   position: relative;
@@ -750,7 +759,7 @@
 
 .decisions-attr__val {
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums lining-nums;
   text-align: right;
@@ -758,7 +767,6 @@
 }
 .decisions-attr__val.is-down { color: var(--accent); }
 
-.decisions-attr__row.is-base .decisions-attr__val { color: var(--ink-muted); }
 .decisions-attr__row.is-total {
   border-top: 1px solid var(--hairline-bold);
   margin-top: 0.35rem;
@@ -851,7 +859,7 @@
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.06em;
-  color: var(--ink-ornament);
+  color: var(--ink-faint);
 }
 
 .decisions-log__caveat {
@@ -887,11 +895,11 @@
 .decisions-verdict__line {
   font-family: var(--font-fraunces), serif;
   font-variation-settings: "opsz" 96, "SOFT" 50;
-  font-size: clamp(24px, 3.4vw, 36px);
+  font-size: clamp(24px, 3.6vw, 38px);
   font-weight: 450;
   font-style: italic;
   line-height: 1.14;
-  letter-spacing: -0.024em;
+  letter-spacing: -0.026em;
   color: var(--ink);
   max-width: 24ch;
   margin: 0;
@@ -1023,7 +1031,7 @@
 .decisions-ledrow__rank {
   font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
   font-size: 11px;
-  color: var(--ink-ornament);
+  color: var(--ink-faint);
   padding-top: 0.35rem;
 }
 
@@ -1104,7 +1112,7 @@
   font-size: 9px;
   font-weight: 400;
   letter-spacing: 0.04em;
-  color: var(--ink-ornament);
+  color: var(--ink-faint);
 }
 
 .decisions-ledrow__act {
@@ -1219,18 +1227,3 @@
 /* A productivity shortfall is ochre, the same reading the day lane gives a
    heavy day: a caveat on the number rather than something on fire. */
 .decisions-vital__sub b.is-warn { color: var(--ink-ochre); }
-
-/* Only one control in the row is a button. Skip and Why? are real actions but
-   secondary ones, and three equally-boxed controls made the ledger's right
-   column louder than the concept's single Commit. */
-.decisions-action-btn.is-quiet {
-  border-color: transparent;
-  color: var(--ink-faint);
-  background: transparent;
-}
-.decisions-action-btn.is-quiet:hover {
-  color: var(--ink);
-  background: transparent;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}

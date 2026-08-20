@@ -8,7 +8,7 @@
 // behaviour so the whitespace can't be trimmed away again.
 
 import { describe, it, expect } from "vitest"
-import { stripJargon } from "@/app/dashboard/decisions/lib/translate"
+import { eventPhrase, stripJargon } from "@/app/dashboard/decisions/lib/translate"
 
 describe("stripJargon — chunk edge whitespace", () => {
   it("keeps the trailing space that joins a chunk to the number after it", () => {
@@ -52,5 +52,30 @@ describe("stripJargon — jargon removal still works", () => {
     const line =
       stripJargon("Food cost forecast at ") + "23.4%" + stripJargon(".")
     expect(line).toBe("Food cost forecast at 23.4%.")
+  })
+})
+
+// The ribbon's EVENT chip now gates on the same field this does. That makes
+// them agree — a day can no longer be chipped for an event the prose declines
+// to mention — so the rule underneath both is worth pinning.
+describe("eventPhrase — a title is not an event", () => {
+  it("says nothing when nothing major is happening", () => {
+    expect(eventPhrase({ topEventTitle: "Farmers market", majorEventCount: 0 })).toBeNull()
+  })
+
+  it("says nothing when the count is missing entirely", () => {
+    expect(eventPhrase({ topEventTitle: "Farmers market", majorEventCount: null })).toBeNull()
+  })
+
+  it("names an event the provider ranked major", () => {
+    expect(eventPhrase({ topEventTitle: "Bowl show", majorEventCount: 2 })).toBe("Bowl show nearby")
+  })
+
+  it("says nothing when there is a count but no title to name", () => {
+    expect(eventPhrase({ topEventTitle: null, majorEventCount: 3 })).toBeNull()
+  })
+
+  it("says nothing about a day with no signal row", () => {
+    expect(eventPhrase(null)).toBeNull()
   })
 })
