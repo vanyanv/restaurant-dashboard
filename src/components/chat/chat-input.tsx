@@ -22,6 +22,9 @@ interface Props {
   stores?: Array<{ id: string; name: string }>
   scope?: ComposerScope
   onScopeChange?: (next: ComposerScope) => void
+  /** Lean layout for the mobile surface: no scope row, shorter placeholder.
+   * Mobile is a glance-and-do tool, not a second desk. */
+  compact?: boolean
 }
 
 const BARE_SCOPE: ComposerScope = { storeName: null, from: null, to: null }
@@ -44,6 +47,7 @@ export function ChatInput({
   stores,
   scope = BARE_SCOPE,
   onScopeChange,
+  compact,
 }: Props) {
   const [value, setValue] = useState("")
   const [slashIdx, setSlashIdx] = useState(0)
@@ -91,7 +95,7 @@ export function ChatInput({
 
   return (
     <div className="chat-input-shell">
-      {onScopeChange && (
+      {onScopeChange && !compact && (
         <div className="chat-scope">
           <span className="chat-scope__lead">Asking about</span>
 
@@ -200,7 +204,9 @@ export function ChatInput({
             placeholder={
               isStreaming
                 ? "Answering…"
-                : "Ask about sales, costs, invoices, or menu prices.  Type / for shortcuts."
+                : compact
+                  ? "Ask about sales, costs or menu."
+                  : "Ask about sales, costs, invoices, or menu prices.  Type / for shortcuts."
             }
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {

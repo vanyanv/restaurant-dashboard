@@ -185,7 +185,8 @@ function MobileChatInner({
         <ChatThread
           key={hydrated.id ?? "new"}
           initialMessages={hydrated.messages}
-          inputHint="Ask about sales, costs, invoices, or menu prices."
+          compact
+          inputHint="Enter to send · Shift+Enter for a new line"
         />
       </div>
     </div>

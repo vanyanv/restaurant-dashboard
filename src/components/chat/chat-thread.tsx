@@ -36,6 +36,8 @@ interface Props {
   inputHint?: string
   /** Stores the owner runs, for the composer's scope chips. */
   stores?: Array<{ id: string; name: string }>
+  /** Lean composer for the mobile surface. */
+  compact?: boolean
 }
 
 /** Wraps `useChat` for the drawer + page surfaces. Exports a single
@@ -53,6 +55,7 @@ export function ChatThread({
   onBranched,
   inputHint,
   stores,
+  compact,
 }: Props = {}) {
   const { conversationId } = useChatDrawer()
   const [scope, setScope] = useState<ComposerScope>({
@@ -342,6 +345,7 @@ export function ChatThread({
         stores={stores}
         scope={scope}
         onScopeChange={setScope}
+        compact={compact}
       />
     </>
   )
