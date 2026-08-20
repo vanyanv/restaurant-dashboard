@@ -1,7 +1,7 @@
 # Decisions Docket — Design
 
 **Date:** 2026-08-18
-**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); schema drift resolved (`cbc1591`); impact intervals shipped (`327977a`); **phase 3 complete**; phase 4 items 14-15 shipped (`ac8dfeb`); items 16-17 open; **Act I (verdict + vitals) and the ranked action ledger shipped** — principle #1 had no matching phase item and was never built, so the page kept opening with three panels at equal weight until now
+**Status:** approved (design); phase 1 shipped (`fe691cd`); reconciliation bug found by phase 1 and fixed (`82487bc`); Harri schedule sync wired (`89213f1`); phase 2 labor lane shipped (`d578975`); forecast bias root-caused and fixed (`90ad7e0`); phase 2 complete (`16bf0c0`); accuracy verified by backtest (`1d3bf3e`); interval calibration built and gated (`72f501f`); TreeSHAP attribution shipped (`4370bc4`); schema drift resolved (`cbc1591`); impact intervals shipped (`327977a`); **phase 3 complete**; phase 4 items 14-15 shipped (`ac8dfeb`); items 16-17 open; **Act I (verdict + vitals) and the ranked action ledger shipped**; **Act II (the week ribbon) shipped** — the whole visual redesign lived only in the artifact's CSS, and the numbered phases covered data and model work alone, so no phase item ever pointed at a pixel of it. Act I was caught by hand; Act II was still the pre-redesign calendar a day later. Layout work now gets its own items
 **Visual spec:** https://claude.ai/code/artifact/88ea5f27-4e1a-43a1-b7ab-cf3c5459d0d0 — the redesigned page rendered in the editorial docket system, plus the model-change ledger. It is the authority on layout, copy, and interaction; this document is the authority on data, scope, and model work.
 
 ---
@@ -139,8 +139,14 @@ also moves to 10:00 UTC so the previous Pacific day is closed and synced before 
 
 1. ~~**The page leads with one verdict, not three equal panels.**~~ — **shipped**. Hierarchy is verdict → week →
    ledger. Everything else moves below or into a drawer.
-2. **The labor lane sits on the week ribbon, not in the drawer.** "You are 11 hours short on
-   Saturday" is the only thing on this page the owner can act on today. (User decision, 2026-08-18.)
+2. ~~**The labor lane sits on the week ribbon, not in the drawer.**~~ — **shipped**. "You are 11
+   hours short on Saturday" is the only thing on this page the owner can act on today. (User
+   decision, 2026-08-18.) The ribbon itself landed later than the lane it was meant to carry:
+   until Act II the lane sat on seven detached cards, under a busy/normal/slow pill the redesign
+   had deleted. The week is now one hairline-seamed object — seven columns of forecast revenue
+   with the 80% band drawn on the same axis, the peak day in accent, weather and event chips
+   under each. `lib/ribbon.ts` owns the geometry so the invariant that matters is testable:
+   the whisker's caps land exactly where p10 and p90 would draw as columns of their own.
 3. **`DecisionLog` is built.** It is the one new table, and it is the prerequisite for both the
    causal read-out and impact calibration. (User decision, 2026-08-18.)
 4. **The report card is always visible and never flattering.** Interval coverage is shown against
