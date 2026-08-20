@@ -5,7 +5,11 @@
 // assembled from partial data.
 
 import { describe, it, expect } from "vitest"
-import { computeVitals, type VitalsDay } from "@/app/dashboard/decisions/lib/vitals"
+import {
+  accuracySubtitle,
+  computeVitals,
+  type VitalsDay,
+} from "@/app/dashboard/decisions/lib/vitals"
 import type { Scorecard } from "@/app/dashboard/decisions/lib/scorecard"
 
 const day = (over: Partial<VitalsDay> = {}): VitalsDay => ({
@@ -191,5 +195,44 @@ describe("computeVitals — forecast accuracy", () => {
   it("is null when no days were reconciled", () => {
     const v = computeVitals({ days: week(), scorecard: scorecard({ sampleSize: 0 }) })
     expect(v.accuracy).toBeNull()
+  })
+})
+
+// The live page read "beats naive by -89%" on 2026-08-20, while the scorecard
+// six inches below it read "worse than last week's same day" off the same
+// number. Fixtures never caught it because every fixture had the model winning.
+describe("accuracySubtitle", () => {
+  it("claims a win only when there is one", () => {
+    expect(accuracySubtitle({ beatsBaselineBy: 0.31, sampleSize: 26 })).toBe(
+      "avg miss · beats a simple guess by 31%",
+    )
+  })
+
+  it("says plainly that a loss is a loss", () => {
+    expect(accuracySubtitle({ beatsBaselineBy: -0.89, sampleSize: 26 })).toBe(
+      "avg miss · 89% worse than a simple guess",
+    )
+  })
+
+  it("never prints a negative percentage after the word 'beats'", () => {
+    for (const b of [-2, -0.89, -0.01, 0, 0.01, 1.5]) {
+      const out = accuracySubtitle({ beatsBaselineBy: b, sampleSize: 26 })
+      expect(out).not.toMatch(/beats.*−|beats.*-\d/)
+    }
+  })
+
+  it("treats a dead heat as not losing", () => {
+    expect(accuracySubtitle({ beatsBaselineBy: 0, sampleSize: 26 })).toBe(
+      "avg miss · beats a simple guess by 0%",
+    )
+  })
+
+  it("falls back to the sample size when there is no baseline", () => {
+    expect(accuracySubtitle({ beatsBaselineBy: null, sampleSize: 26 })).toBe(
+      "avg miss over 26 days",
+    )
+    expect(accuracySubtitle({ beatsBaselineBy: null, sampleSize: 1 })).toBe(
+      "avg miss over 1 day",
+    )
   })
 })
