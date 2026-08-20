@@ -222,6 +222,9 @@ export function ChatPageClient({ initialConversations, stores }: Props) {
     }
   }
 
+  const activeTitle =
+    conversations.find((c) => c.id === conversationId)?.title ?? "Ask the ledger."
+
   return (
     <div className="chat-page">
       <aside className="chat-page__rail">
@@ -285,7 +288,10 @@ export function ChatPageClient({ initialConversations, stores }: Props) {
       <section className="chat-page__main">
         <header className="chat-page__main-head">
           <div className="chat-drawer__dept">Owner Analyst · Late edition</div>
-          <div className="chat-page__title">Ask the ledger.</div>
+          {/* The empty state carries its own "Ask the ledger." masthead, so
+              repeating it here doubled the headline. Name the open thread
+              instead — it also says which one you are in. */}
+          <div className="chat-page__title">{activeTitle}</div>
         </header>
         <ChatThread
           // Remount the thread whenever the active conversation changes so

@@ -1682,7 +1682,9 @@
   letter-spacing: 0.1em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
-  width: 10ch;
+  /* Native date controls render mm/dd/yyyy plus a picker glyph; 10ch clipped
+     the year and half the glyph. */
+  width: 14ch;
   cursor: pointer;
 }
 
@@ -1811,4 +1813,12 @@
   .chat-scope {
     row-gap: 6px;
   }
+}
+
+/* The reading measure for a whole turn. Without it the figure strip spread
+   three numbers across the full 1100px column on a wide monitor while the
+   verdict wrapped at 30ch beside a field of empty paper. */
+.chat-message,
+.chat-followups {
+  max-width: 880px;
 }
