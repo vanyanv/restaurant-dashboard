@@ -142,3 +142,25 @@ export function computeVitals(input: {
         : null,
   }
 }
+
+/**
+ * The accuracy cell's subtitle, in words that survive a negative number.
+ *
+ * `beatsBaselineBy` is signed, and on a bad week it is very negative. "beats
+ * naive by −89%" is not a sentence — and the scorecard at the foot of the page
+ * reads the identical figure as "worse than last week's same day", so the two
+ * cannot be allowed to disagree on one screen. Principle #4: the report card is
+ * never flattering, which also means it is never incoherent.
+ */
+export function accuracySubtitle(a: {
+  beatsBaselineBy: number | null
+  sampleSize: number
+}): string {
+  if (a.beatsBaselineBy == null) {
+    return `avg miss over ${a.sampleSize} day${a.sampleSize === 1 ? "" : "s"}`
+  }
+  const pct = Math.abs(a.beatsBaselineBy * 100).toFixed(0)
+  return a.beatsBaselineBy >= 0
+    ? `avg miss · beats a simple guess by ${pct}%`
+    : `avg miss · ${pct}% worse than a simple guess`
+}

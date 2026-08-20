@@ -1,5 +1,5 @@
 import { splitVerdictChunks } from "../lib/verdict-copy"
-import type { Vitals } from "../lib/vitals"
+import { accuracySubtitle, type Vitals } from "../lib/vitals"
 
 interface Props {
   line: string
@@ -102,11 +102,7 @@ function Accuracy({ v }: { v: Vitals }) {
         {a?.wape == null ? "—" : `${(a.wape * 100).toFixed(1)}%`}
       </span>
       <span className="decisions-vital__sub" style={TABULAR}>
-        {a == null
-          ? "no reconciled days yet"
-          : a.beatsBaselineBy != null
-            ? `avg miss · beats naive by ${(a.beatsBaselineBy * 100).toFixed(0)}%`
-            : `avg miss over ${a.sampleSize} days`}
+        {a == null ? "no reconciled days yet" : accuracySubtitle(a)}
       </span>
     </div>
   )
