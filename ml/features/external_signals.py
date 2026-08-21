@@ -277,6 +277,67 @@ def load_hourly_external_signals(
     return fill_event_daily_defaults(fill_weather_hourly_defaults(out)).sort_values(["date", "hour"]).reset_index(drop=True)
 
 
+#: Which marker column proves each family arrived, and which feature columns
+#: that family owns. Used to gate and to strip families that never landed.
+SIGNAL_FAMILIES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "weather": (
+        "has_weather_signal",
+        tuple(dict.fromkeys([*WEATHER_DAILY_COLUMNS, *WEATHER_HOURLY_COLUMNS])),
+    ),
+    "events": ("has_event_signal", tuple(EVENT_DAILY_COLUMNS)),
+}
+
+
+def is_external_signal_column(col: str) -> bool:
+    """True when `col` is owned by one of the signal families.
+
+    Lets a caller ask whether a fitted feature set is enriched by inspecting the
+    columns themselves, rather than parsing a flavor string that no longer
+    tracks the schema once a dead family has been stripped.
+    """
+    return any(col in family_cols for _marker, family_cols in SIGNAL_FAMILIES.values())
+
+
+def external_signal_coverage_by_family(df: pd.DataFrame) -> dict[str, float]:
+    """Fraction of rows each signal family actually covers.
+
+    `external_signal_coverage` takes the max across families, so weather alone
+    returns 1.0 and a dead event feed is invisible to it (F6). This reports each
+    family separately, which is the only way a gate can notice one has stopped.
+    """
+    out: dict[str, float] = {}
+    for family, (marker, _cols) in SIGNAL_FAMILIES.items():
+        if df.empty or marker not in df:
+            out[family] = 0.0
+            continue
+        out[family] = float(pd.to_numeric(df[marker], errors="coerce").fillna(0).mean())
+    return out
+
+
+def drop_dead_signal_columns(
+    cols: Iterable[str],
+    coverage_by_family: dict[str, float],
+    *,
+    floor: float = 0.6,
+) -> tuple[list[str], list[str]]:
+    """Split `cols` into (kept, dropped) by per-family coverage.
+
+    A family below `floor` never landed, so its columns are constant fill values
+    and carry no information — they only dilute the split candidates at every
+    node. Columns belonging to no family are always kept.
+    """
+    dead: set[str] = set()
+    for family, (_marker, family_cols) in SIGNAL_FAMILIES.items():
+        if coverage_by_family.get(family, 0.0) < floor:
+            dead.update(family_cols)
+
+    kept: list[str] = []
+    dropped: list[str] = []
+    for col in cols:
+        (dropped if col in dead else kept).append(col)
+    return kept, dropped
+
+
 def external_signal_coverage(df: pd.DataFrame) -> float:
     if df.empty:
         return 0.0

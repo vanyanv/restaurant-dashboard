@@ -5,22 +5,27 @@ matrix the revenue model can train on. Daily revenue is the sum of FP
 net sales + 3P net sales across platforms.
 
 Feature design follows the Phase 5 plan:
-  - Time: weekday, month, day-of-month, US-holiday flag
+  - Time: weekday, month, day-of-month
+  - Holidays: the day itself, split into dining vs closure, plus both
+    shoulder days. See `ml.features.holidays`.
   - Lags: 1d, 7d, 14d, 28d
   - Rolling: 7d / 28d / 90d mean and std
   - Trend: 90-day store growth rate
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+import logging
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 
 from ml.db import connect
+from ml.features.holidays import classify_holiday, is_holiday
 from ml.features.completeness import (
     DEFAULT_CLOSING_HOUR,
+    fill_calendar_gaps,
     load_hourly_coverage,
     trim_incomplete_trailing_days,
 )
@@ -32,31 +37,43 @@ from ml.features.external_signals import (
 )
 
 
-# US holidays we care about for restaurant volume. The Phase 5 plan calls out
-# Mother's Day, Father's Day, Super Bowl, Easter explicitly.  We include the
-# moving-date approximations using fixed years that are good enough for
-# weekday detection — calendar drift swamped by lag features anyway.
-_FIXED_HOLIDAYS = {
-    (1, 1): "new_years",
-    (7, 4): "july_4th",
-    (10, 31): "halloween",
-    (11, 11): "veterans",
-    (12, 24): "christmas_eve",
-    (12, 25): "christmas",
-    (12, 31): "new_years_eve",
-}
+_LOG = logging.getLogger(__name__)
 
 
-def _is_holiday(d: date) -> int:
-    return 1 if (d.month, d.day) in _FIXED_HOLIDAYS else 0
+def _holiday_frame(dates: pd.Series) -> pd.DataFrame:
+    """Holiday flags for a date series — the day itself and its shoulders.
+
+    See `ml.features.holidays`. The shoulder days carry as much signal as the
+    holiday: the Wednesday before Thanksgiving is one of the busiest nights of
+    the year, and the day after Christmas is dead.
+    """
+    days = pd.to_datetime(dates).dt.date
+    classified = days.map(classify_holiday)
+
+    return pd.DataFrame({
+        "is_holiday": classified.notna().astype(int).to_numpy(),
+        "is_dining_holiday": classified.map(
+            lambda h: 1 if h is not None and h.is_dining else 0
+        ).to_numpy(),
+        "is_closure_holiday": classified.map(
+            lambda h: 1 if h is not None and h.is_closure else 0
+        ).to_numpy(),
+        "is_day_before_holiday": days.map(
+            lambda d: 1 if is_holiday(d + timedelta(days=1)) else 0
+        ).to_numpy(),
+        "is_day_after_holiday": days.map(
+            lambda d: 1 if is_holiday(d - timedelta(days=1)) else 0
+        ).to_numpy(),
+    }, index=dates.index)
 
 
 def load_daily_revenue(store_id: str, lookback_days: int = 540) -> pd.DataFrame:
     """Load store daily revenue from OtterDailySummary, summed across rows.
 
-    Returns columns: ['date' (datetime64[D]), 'revenue' (float)].
-    Missing dates are forward-filled with 0 so feature engineering can
-    treat the series as gap-free.
+    Returns columns: ['date' (datetime64[D]), 'revenue' (float)] on a gap-free
+    daily calendar. A date with no sales row is $0 when its hourly data proves
+    the day was watched to closing, and NaN when it does not — see
+    `fill_calendar_gaps`. NaN days are dropped by the training splits.
     """
     sql = """
         SELECT date::date AS date,
@@ -74,13 +91,23 @@ def load_daily_revenue(store_id: str, lookback_days: int = 540) -> pd.DataFrame:
         return df
 
     # Reindex to a contiguous daily range so lag features don't skip days.
+    # Gaps are filled from evidence, not with zero: a date whose hourly data
+    # reached closing time and still has no sales row was open and empty; a date
+    # with short or absent hourly data was never observed and stays NaN. See
+    # `fill_calendar_gaps` — the old `.fillna(0.0)` made both a training target.
     df["date"] = pd.to_datetime(df["date"])
-    full_range = pd.date_range(df["date"].min(), df["date"].max(), freq="D")
-    df = df.set_index("date").reindex(full_range).fillna({"revenue": 0.0}).rename_axis("date").reset_index()
-    df["revenue"] = df["revenue"].astype(float)
+    coverage = load_hourly_coverage(store_id, lookback_days)
+    df = fill_calendar_gaps(df, coverage)
+    unobserved = int(df["revenue"].isna().sum())
+    if unobserved:
+        _LOG.warning(
+            "load_daily_revenue: %s day(s) unobserved for store %s — excluded from training",
+            unobserved,
+            store_id,
+        )
     # The newest day is usually still being written when the nightly runs; an
     # anchor a third too low drags every horizon down with it.
-    return trim_incomplete_trailing_days(df, load_hourly_coverage(store_id, lookback_days))
+    return trim_incomplete_trailing_days(df, coverage)
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -93,7 +120,8 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     out["is_weekend"] = (out["weekday"] >= 5).astype(int)
     out["month"] = out["date"].dt.month
     out["day_of_month"] = out["date"].dt.day
-    out["is_holiday"] = out["date"].dt.date.map(_is_holiday).astype(int)
+    for name, values in _holiday_frame(out["date"]).items():
+        out[name] = values
 
     for lag in (1, 7, 14, 28):
         out[f"lag_{lag}"] = out["revenue"].shift(lag)
@@ -129,6 +157,10 @@ def feature_columns() -> list[str]:
         "month",
         "day_of_month",
         "is_holiday",
+        "is_dining_holiday",
+        "is_closure_holiday",
+        "is_day_before_holiday",
+        "is_day_after_holiday",
         "lag_1",
         "lag_7",
         "lag_14",
@@ -156,8 +188,12 @@ def load_revenue_external_signals(
 def split_train_holdout(
     df: pd.DataFrame, holdout_days: int = 30
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Chronological split — never random for time series."""
-    df = df.dropna(subset=feature_columns()).reset_index(drop=True)
+    """Chronological split — never random for time series.
+
+    `revenue` joins the dropna subset for the same reason as `_conformal_split`:
+    an unobserved day is NaN, and NaN is not a target (F1).
+    """
+    df = df.dropna(subset=[*feature_columns(), "revenue"]).reset_index(drop=True)
     if len(df) <= holdout_days:
         return df.iloc[: len(df) // 2], df.iloc[len(df) // 2 :]
     return df.iloc[:-holdout_days], df.iloc[-holdout_days:]

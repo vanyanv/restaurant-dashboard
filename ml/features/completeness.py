@@ -47,6 +47,55 @@ def load_hourly_coverage(store_id: str, lookback_days: int = 540) -> dict[date, 
     return {r.date: int(r.max_hour) for r in df.itertuples()}
 
 
+#: What a date takes when the evidence says it was open-and-empty rather than
+#: unobserved. Named so the intent survives the next reader.
+CLOSED_DAY_VALUE = 0.0
+
+
+def fill_calendar_gaps(
+    df: pd.DataFrame,
+    coverage: dict[date, int],
+    closing_hour: int = DEFAULT_CLOSING_HOUR,
+    value_col: str = "revenue",
+) -> pd.DataFrame:
+    """Reindex onto a contiguous daily calendar without inventing observations.
+
+    Lag and rolling features are positional, so the calendar has to be gap-free
+    — but the value on a filled day depends on what we can actually show:
+
+    - hourly data reached `closing_hour` and no sales row exists → the day was
+      observed and took nothing. `CLOSED_DAY_VALUE`.
+    - hourly data is short or absent → nobody watched. `NaN`, which the
+      training split then drops.
+
+    The distinction is the whole point. `.fillna(0.0)` collapsed both onto zero,
+    and the zero was a training target as well as ninety days of lag inputs.
+    """
+    if df.empty or "date" not in df:
+        return df
+
+    out = df.copy()
+    out["date"] = pd.to_datetime(out["date"])
+    full_range = pd.date_range(out["date"].min(), out["date"].max(), freq="D")
+    out = (
+        out.set_index("date")
+        .reindex(full_range)
+        .rename_axis("date")
+        .reset_index()
+    )
+
+    missing = out[value_col].isna()
+    if missing.any():
+        synced = out.loc[missing, "date"].dt.date.map(
+            lambda d: coverage.get(d, -1) >= closing_hour
+        )
+        out.loc[missing & synced.reindex(out.index, fill_value=False), value_col] = (
+            CLOSED_DAY_VALUE
+        )
+    out[value_col] = out[value_col].astype(float)
+    return out
+
+
 def incomplete_trailing_dates(
     dates: Iterable[date],
     coverage: dict[date, int],
