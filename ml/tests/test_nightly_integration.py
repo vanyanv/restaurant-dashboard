@@ -175,3 +175,45 @@ def test_run_consistency_check_quiet_when_aligned(caplog):
 
     warns = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warns == []
+
+
+# ---------------------------------------------------------------------------
+# Which model an evaluation row is attributed to.
+#
+# The evaluator pools every reconciled forecast in a trailing 35-day window,
+# across however many model generations ran during it, then stamps the result
+# with ONE modelVersion. It took `rows[0]`, and the fetch is ordered by
+# forecastDate ASC — so the pooled statistic was labelled with the OLDEST
+# contributing model. During the 2026-08-19 model change that meant coverage
+# rows for windows ending 2026-08-20 were stamped `...20260726-0803`, a July
+# model, which is what made the Gate 3 failure so hard to read.
+# ---------------------------------------------------------------------------
+
+
+def test_evaluation_row_is_labelled_with_the_newest_contributing_model():
+    import datetime as dt
+
+    rows = [
+        # (forecastDate, predicted, actual, p10, p90, modelVersion)
+        (dt.date(2026, 8, 1), 100.0, 102.0, 90.0, 110.0, "xgboost-july-baseline"),
+        (dt.date(2026, 8, 10), 100.0, 98.0, 90.0, 110.0, "xgboost-july-baseline"),
+        (dt.date(2026, 8, 20), 100.0, 101.0, 90.0, 110.0, "xgboost-august-conformal"),
+    ]
+    inp = ni._build_eval_input(
+        rows, target="REVENUE", store_id="store-hwd", today=dt.date(2026, 8, 21)
+    )
+    assert inp is not None
+    assert inp.model_version == "xgboost-august-conformal"
+
+
+def test_evaluation_row_label_survives_a_single_generation():
+    import datetime as dt
+
+    rows = [
+        (dt.date(2026, 8, 1), 100.0, 102.0, 90.0, 110.0, "only-one"),
+        (dt.date(2026, 8, 2), 100.0, 98.0, 90.0, 110.0, "only-one"),
+    ]
+    inp = ni._build_eval_input(
+        rows, target="REVENUE", store_id="store-hwd", today=dt.date(2026, 8, 21)
+    )
+    assert inp is not None and inp.model_version == "only-one"

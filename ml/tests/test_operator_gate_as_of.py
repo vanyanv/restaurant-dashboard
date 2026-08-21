@@ -150,7 +150,10 @@ def test_gate3_window_uses_window_end_around_target_date():
 
 def test_gate3_strict_pass_inside_target_band():
     target = date(2026, 5, 14)
-    canned = [[("alpha", 0.80, 14, 14)]]  # sample large enough — exercised
+    # Second rowset: post-epoch reconciled counts, i.e. how many of those
+    # observations the CURRENT model generation produced. Enough here, so
+    # the store is genuinely band-checked rather than deferred.
+    canned = [[("alpha", 0.80, 14, 14)], [("alpha", 14)]]
     conn = _FakeConn(canned)
 
     strict, detail, accept = ogc.gate3_revenue_coverage(conn, target)
@@ -160,7 +163,7 @@ def test_gate3_strict_pass_inside_target_band():
 
 def test_gate3_accept_band_only_when_drift():
     target = date(2026, 5, 14)
-    canned = [[("alpha", 0.77, 14, 14)]]  # outside strict, inside accept
+    canned = [[("alpha", 0.77, 14, 14)], [("alpha", 14)]]  # outside strict, inside accept
     conn = _FakeConn(canned)
 
     strict, _, accept = ogc.gate3_revenue_coverage(conn, target)
@@ -171,7 +174,7 @@ def test_gate3_accept_band_only_when_drift():
 
 def test_gate3_fails_when_outside_accept_band():
     target = date(2026, 5, 14)
-    canned = [[("alpha", 0.60, 14, 14)]]
+    canned = [[("alpha", 0.60, 14, 14)], [("alpha", 14)]]
     conn = _FakeConn(canned)
 
     strict, _, accept = ogc.gate3_revenue_coverage(conn, target)
@@ -208,3 +211,30 @@ def test_main_today_mode_writes_jobrun():
     open_mock.assert_called_once()
     close_mock.assert_called_once()
     assert close_mock.call_args.kwargs["status"] == "SUCCESS"
+
+
+def test_gate3_defers_when_the_current_model_generation_is_thin():
+    """26 pooled observations, 2 from the model running today — the shape of the
+    2026-08-19 model change. The gate must defer, not call the new model BROKEN."""
+    target = date(2026, 5, 14)
+    canned = [[("alpha", 0.648, 7, 26)], [("alpha", 2)]]
+    conn = _FakeConn(canned)
+
+    strict, detail, accept = ogc.gate3_revenue_coverage(conn, target)
+
+    assert strict and accept, detail
+    assert "warming up" in detail and "BROKEN" not in detail
+    assert "0.648" in detail  # still reported, not hidden
+
+
+def test_gate3_treats_a_store_absent_from_post_epoch_counts_as_zero():
+    """A store that has produced no post-epoch reconciled rows at all does not
+    appear in the counts query; it must default to 0, not KeyError."""
+    target = date(2026, 5, 14)
+    canned = [[("alpha", 0.60, 14, 14)], []]
+    conn = _FakeConn(canned)
+
+    strict, detail, accept = ogc.gate3_revenue_coverage(conn, target)
+
+    assert strict and accept, detail
+    assert "warming up" in detail

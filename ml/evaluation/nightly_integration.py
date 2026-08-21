@@ -235,7 +235,15 @@ def _build_eval_input(
     acts = np.asarray([r[2] for r in rows], dtype=float)
     p10 = np.asarray([r[3] for r in rows], dtype=float)
     p90 = np.asarray([r[4] for r in rows], dtype=float)
-    model_version = rows[0][5] or "unknown"
+    # The window pools every model generation that ran during it, but the row
+    # carries one label. Take the NEWEST contributing version: `rows` is ordered
+    # by forecastDate ASC, so rows[0] was the OLDEST — which stamped a trailing
+    # statistic with a model that had already been retired (a July model
+    # labelled coverage for windows ending 2026-08-20, right after the
+    # 2026-08-19 model change). Newest is still an approximation of a pooled
+    # number, but it names the generation the window is converging on rather
+    # than the one it is leaving.
+    model_version = rows[-1][5] or rows[0][5] or "unknown"
     baseline_preds = _seasonal_naive_baseline(dates, acts)
 
     # We only have 80% PI columns. Widen by ~2x for an approximate 95% PI
