@@ -262,7 +262,6 @@ def _write_menu_item_forecasts(
                         r.p10,
                         r.p90,
                         model_version,
-                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
@@ -376,7 +375,6 @@ def _write_hourly_order_forecasts(store_id: str, model_version: str, rows: list)
                         r.p10,
                         r.p90,
                         model_version,
-                        json.dumps(r.attribution) if r.attribution else None,
                     ),
                 )
                 written += 1
