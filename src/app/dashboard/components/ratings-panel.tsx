@@ -76,7 +76,7 @@ export function RatingsPanel({ scopes }: { scopes: RatingsScope[] }) {
                 s.id === active
                   ? "bg-(--accent-bg) text-(--accent)"
                   : s.preOpen
-                    ? "text-(--ink-ornament) hover:text-(--ink-muted)"
+                    ? "text-(--ink-faint) hover:text-(--ink-muted)"
                     : "text-(--ink-muted) hover:text-(--ink)"
               )}
             >
@@ -225,7 +225,7 @@ function ScopeBody({ scope }: { scope: RatingsScope }) {
               )}
               <span
                 className="w-[52px] text-right text-[14px] font-semibold tabular-nums"
-                style={{ color: st.average == null ? "var(--ink-ornament)" : undefined }}
+                style={{ color: st.average == null ? "var(--ink-faint)" : undefined }}
               >
                 {st.average != null ? st.average.toFixed(2) : "—"}
               </span>

@@ -1154,7 +1154,11 @@
 .drp-popover {
   --ink: #1a1613;
   --ink-muted: #6b625a;
-  --ink-faint: #a69d92;
+  /* Mirrors --ink-faint in editorial-tokens.css. It was left at the old
+     #a69d92 (2.48:1) when that token was corrected, so every caption in a
+     popover, dropdown, dialog and sheet — including this page's own date
+     picker — has been failing AA since. Keep in step with the source. */
+  --ink-faint: #746a60;
   --paper: #fbf6ee;
   --paper-deep: #f4ecdf;
   --hairline: #e8dfd3;
@@ -1206,7 +1210,11 @@
 .editorial-menu {
   --ink: #1a1613;
   --ink-muted: #6b625a;
-  --ink-faint: #a69d92;
+  /* Mirrors --ink-faint in editorial-tokens.css. It was left at the old
+     #a69d92 (2.48:1) when that token was corrected, so every caption in a
+     popover, dropdown, dialog and sheet — including this page's own date
+     picker — has been failing AA since. Keep in step with the source. */
+  --ink-faint: #746a60;
   --paper: #fbf6ee;
   --paper-deep: #f4ecdf;
   --hairline: #e8dfd3;
@@ -1290,7 +1298,11 @@
 .editorial-dialog {
   --ink: #1a1613;
   --ink-muted: #6b625a;
-  --ink-faint: #a69d92;
+  /* Mirrors --ink-faint in editorial-tokens.css. It was left at the old
+     #a69d92 (2.48:1) when that token was corrected, so every caption in a
+     popover, dropdown, dialog and sheet — including this page's own date
+     picker — has been failing AA since. Keep in step with the source. */
+  --ink-faint: #746a60;
   --paper: #fbf6ee;
   --paper-deep: #f4ecdf;
   --hairline: #e8dfd3;
@@ -5857,7 +5869,11 @@
 [data-slot="sheet-content"] {
   --ink: #1a1613;
   --ink-muted: #6b625a;
-  --ink-faint: #a69d92;
+  /* Mirrors --ink-faint in editorial-tokens.css. It was left at the old
+     #a69d92 (2.48:1) when that token was corrected, so every caption in a
+     popover, dropdown, dialog and sheet — including this page's own date
+     picker — has been failing AA since. Keep in step with the source. */
+  --ink-faint: #746a60;
   --paper: #fbf6ee;
   --paper-deep: #f4ecdf;
   --paper-soft: #fff9ef;
