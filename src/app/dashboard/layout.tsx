@@ -25,6 +25,11 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
   display: "swap",
   axes: ["SOFT", "WONK", "opsz"],
+  // The docket is built on Fraunces italic — the verdict, every section head,
+  // the drawer dateline. Without the italic face the browser synthesises one by
+  // slanting the roman, and Fraunces' true italic is a different design, not a
+  // slant. Measured against the visual spec: it was faux on every italic.
+  style: ["normal", "italic"],
 })
 
 export default async function DashboardLayout({
