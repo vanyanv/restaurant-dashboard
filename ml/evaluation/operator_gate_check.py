@@ -42,6 +42,7 @@ import argparse
 import sys
 import time
 import traceback
+from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
@@ -49,6 +50,7 @@ from psycopg2.extras import Json
 
 from ml.db import connect, cuid_like
 from ml.evaluation.audit import fetch_reconciliation_rows, summarize_reconciliation
+from ml.evaluation.horizon_calibration import CALIBRATION_EPOCH
 
 
 _JOB_NAME = "ml.operator-gate-check"
@@ -255,14 +257,102 @@ def gate2_seasonal_naive_fired(conn, target_date: date) -> tuple[bool, str]:
     return any_fired, detail
 
 
+@dataclass(frozen=True)
+class CoverageVerdict:
+    """One store's line in the Gate 3 report, and whether it was band-checked."""
+
+    line: str
+    counted: bool
+    strict_ok: bool
+    accept_ok: bool
+
+
+def classify_coverage_row(
+    name: str,
+    avg_cov: float,
+    rows: int,
+    max_sample: int | None,
+    post_epoch_obs: int,
+) -> CoverageVerdict:
+    """Decide whether one store's pooled coverage number may be band-checked.
+
+    Two independent reasons to defer, both about the statistic being too thin
+    to carry a verdict rather than about the model being fine:
+
+    `max_sample` — total reconciled observations behind the number. At p=0.80
+    and N=8 the 95% Wilson CI is ~[0.55, 0.96], wider than the accept band
+    itself, so a healthy model would be flagged routinely.
+
+    `post_epoch_obs` — how many of those observations were produced by the
+    CURRENT model generation. The evaluator pools a trailing 35-day window
+    across every model that ran in it, so after a model changes, the number
+    keeps describing the retired one for weeks. On 2026-08-19 two forecast
+    bugs were fixed; the following days' coverage of 0.615-0.692 was measured
+    over 26 observations of which 2 came from the fixed model. Calling that
+    BROKEN blames the new model for the old one's intervals, and it is the
+    same era `horizon_calibration.CALIBRATION_EPOCH` already refuses to
+    calibrate on.
+
+    Deferral keeps the number visible in the report — it is not suppression,
+    and it ends by itself as the new generation reconciles.
+    """
+    if max_sample is None or max_sample < _COVERAGE_MIN_SAMPLE:
+        return CoverageVerdict(
+            line=f"  {name:<24} {avg_cov:.3f} over {rows} rows (max n={max_sample}) — warming up",
+            counted=False,
+            strict_ok=True,
+            accept_ok=True,
+        )
+
+    if post_epoch_obs < _COVERAGE_MIN_SAMPLE:
+        return CoverageVerdict(
+            line=(
+                f"  {name:<24} {avg_cov:.3f} over {rows} rows (n={max_sample}, "
+                f"only {post_epoch_obs} from current model since {CALIBRATION_EPOCH}) "
+                f"— warming up"
+            ),
+            counted=False,
+            strict_ok=True,
+            accept_ok=True,
+        )
+
+    strict_ok = _COVERAGE_TARGET_LOW <= avg_cov <= _COVERAGE_TARGET_HIGH
+    accept_ok = _COVERAGE_ACCEPT_LOW <= avg_cov <= _COVERAGE_ACCEPT_HIGH
+    verdict = "OK" if strict_ok else ("drift" if accept_ok else "BROKEN")
+    return CoverageVerdict(
+        line=f"  {name:<24} {avg_cov:.3f} over {rows} rows (n={max_sample}) — {verdict}",
+        counted=True,
+        strict_ok=strict_ok,
+        accept_ok=accept_ok,
+    )
+
+
+def _post_epoch_reconciled_counts(conn) -> dict[str, int]:
+    """Reconciled REVENUE observations per store name that were produced by the
+    current model generation, i.e. generated on/after CALIBRATION_EPOCH."""
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT s.name, COUNT(*)
+            FROM "ForecastDailyRevenue" f
+            JOIN "Store" s ON s.id = f."storeId"
+            WHERE f."hourBucket" = 0
+              AND f."actualRevenue" IS NOT NULL
+              AND f."generatedAt" >= %s::date
+            GROUP BY 1
+            ''',
+            (CALIBRATION_EPOCH,),
+        )
+        return {name: int(n) for name, n in cur.fetchall()}
+
+
 def gate3_revenue_coverage(conn, target_date: date) -> tuple[bool, str, bool]:
     """Per-store mean intervalCoverage80 for REVENUE over the 7 days
     ending at target_date.
 
-    Returns (strict_pass, detail, accept_band_pass). Stores whose MAX eval
-    sampleSize is below _COVERAGE_MIN_SAMPLE are reported as "warming up"
-    and excluded from band checks — coverage statistics on tiny windows
-    have wide CIs that would routinely flag healthy models as miscalibrated.
+    Returns (strict_pass, detail, accept_band_pass). See `classify_coverage_row`
+    for the two ways a store can be deferred as "warming up" instead of
+    band-checked.
     """
     window_lo = target_date - timedelta(days=_WINDOW_DAYS)
     window_hi = target_date - timedelta(days=1)
@@ -288,27 +378,24 @@ def gate3_revenue_coverage(conn, target_date: date) -> tuple[bool, str, bool]:
     if not rows:
         return False, f"no REVENUE coverage data with windowEnd in [{window_lo}, {window_hi}]", False
 
+    post_epoch = _post_epoch_reconciled_counts(conn)
+
     lines = []
     strict_pass = True
     accept_pass = True
     warming_up_count = 0
     evaluated_count = 0
     for name, avg_cov, count, max_sample in rows:
-        if max_sample is None or max_sample < _COVERAGE_MIN_SAMPLE:
+        verdict = classify_coverage_row(
+            name, float(avg_cov), int(count), max_sample, post_epoch.get(name, 0)
+        )
+        lines.append(verdict.line)
+        if not verdict.counted:
             warming_up_count += 1
-            lines.append(
-                f"  {name:<24} {avg_cov:.3f} over {count} rows (max n={max_sample}) — warming up"
-            )
             continue
         evaluated_count += 1
-        verdict = "OK"
-        if not (_COVERAGE_TARGET_LOW <= avg_cov <= _COVERAGE_TARGET_HIGH):
-            strict_pass = False
-            verdict = "drift"
-        if not (_COVERAGE_ACCEPT_LOW <= avg_cov <= _COVERAGE_ACCEPT_HIGH):
-            accept_pass = False
-            verdict = "BROKEN"
-        lines.append(f"  {name:<24} {avg_cov:.3f} over {count} rows (n={max_sample}) — {verdict}")
+        strict_pass = strict_pass and verdict.strict_ok
+        accept_pass = accept_pass and verdict.accept_ok
 
     detail = "\n".join(lines)
     if evaluated_count == 0:
