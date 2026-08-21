@@ -383,6 +383,14 @@ export function bucketHourlyRows(args: {
         salesPacePct == null ? null : Math.round(salesPacePct * 10) / 10,
       lastDataHour,
       inProgress: spec.hourCutoff != null,
+      // The per-week totals behind `baselineTotal`, kept rather than collapsed:
+      // the overview's bullet tracks need the spread of the four baseline
+      // weekdays, not just their mean. Empty weeks are dropped here so a
+      // missing week can't drag a band's floor to zero.
+      groupTotals: groupTotals.filter((t) => t > 0).map((t) => Math.round(t * 10) / 10),
+      groupSalesTotals: groupSalesTotals
+        .filter((t) => t > 0)
+        .map((t) => Math.round(t * 100) / 100),
     },
   }
 }

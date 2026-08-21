@@ -1,5 +1,6 @@
 import { getSplhSeries } from "@/app/actions/splh-actions"
-import { SplhChart } from "@/components/charts/splh-chart"
+import { foldSplhSeries } from "@/lib/dashboard/splh-fold"
+import { OverviewSplhChart } from "../overview-charts"
 
 /**
  * Both grains are fetched server-side so the day/week toggle is instant and
@@ -11,5 +12,9 @@ export async function SplhSection() {
     getSplhSeries("week"),
   ])
 
-  return <SplhChart day={day} week={week} />
+  // One series per store; SPLH is a ratio, so it is recombined from summed
+  // sales and hours rather than by averaging the per-store rates.
+  return (
+    <OverviewSplhChart day={foldSplhSeries(day)} week={foldSplhSeries(week)} />
+  )
 }

@@ -39,6 +39,12 @@ export interface RatingsSummary {
   distribution: number[]
   /** Change in mean vs the preceding equal-length window; null when either is empty. */
   deltaVsPrior: number | null
+  /**
+   * Mean and count per ordering platform, busiest first. The blended average
+   * hides the thing worth acting on: a 4.1 on one platform against a 4.9 on
+   * another is a fulfilment problem, not a food problem.
+   */
+  byPlatform: Array<{ platform: string; count: number; average: number }>
   recent: Array<{
     id: string
     rating: number
@@ -160,6 +166,23 @@ export async function getRatingsSummary(input?: {
     const average = mean(current.map((r) => r.rating))
     const priorAverage = mean(prior.map((r) => r.rating))
 
+    // Computed from the rows already in hand — no second query.
+    const platformTotals = new Map<string, { count: number; sum: number }>()
+    for (const r of current) {
+      const key = r.platform || "unknown"
+      const acc = platformTotals.get(key) ?? { count: 0, sum: 0 }
+      acc.count += 1
+      acc.sum += r.rating
+      platformTotals.set(key, acc)
+    }
+    const byPlatform = Array.from(platformTotals.entries())
+      .map(([platform, acc]) => ({
+        platform,
+        count: acc.count,
+        average: acc.sum / acc.count,
+      }))
+      .sort((a, b) => b.count - a.count || a.platform.localeCompare(b.platform))
+
     return {
       windowDays,
       stale,
@@ -172,6 +195,7 @@ export async function getRatingsSummary(input?: {
       average,
       lowCount: current.filter((r) => r.rating <= 2).length,
       distribution,
+      byPlatform,
       deltaVsPrior:
         average != null && priorAverage != null ? average - priorAverage : null,
       // Worst-first: a 5-star review needs no action, a 1-star one might.

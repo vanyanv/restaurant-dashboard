@@ -128,11 +128,11 @@ export async function getOtterAnalytics(
         : 0,
     }
 
-    const byDate: Record<string, { grossRevenue: number; netRevenue: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
+    const byDate: Record<string, { grossRevenue: number; netRevenue: number; orderCount: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
     for (const r of summaries) {
       const dateStr = r.date.toISOString().split("T")[0]
       if (!byDate[dateStr]) {
-        byDate[dateStr] = { grossRevenue: 0, netRevenue: 0, fpGross: 0, tpGross: 0, cashSales: 0, cardSales: 0 }
+        byDate[dateStr] = { grossRevenue: 0, netRevenue: 0, orderCount: 0, fpGross: 0, tpGross: 0, cashSales: 0, cardSales: 0 }
       }
       const d = byDate[dateStr]
       const isFP = isFPPlatform(r.platform)
@@ -140,6 +140,8 @@ export async function getOtterAnalytics(
       const rowNet = Number(isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0))
       d.grossRevenue += rowGross
       d.netRevenue += rowNet
+      // Counts live on the same row as the money, split the same FP/3P way.
+      d.orderCount += isFP ? (r.fpOrderCount ?? 0) : (r.tpOrderCount ?? 0)
       if (isFP) {
         d.fpGross += rowGross
         if (r.paymentMethod === "CASH") d.cashSales += r.fpGrossSales ?? 0
@@ -277,6 +279,8 @@ export async function getRevenueTrendData(
         fpNetSales: true,
         tpGrossSales: true,
         tpNetSales: true,
+        fpOrderCount: true,
+        tpOrderCount: true,
       },
       orderBy: { date: "asc" },
     })
@@ -285,11 +289,11 @@ export async function getRevenueTrendData(
 
     const isFPPlatform = (p: string) => p === "css-pos" || p === "bnm-web"
 
-    const byDate: Record<string, { grossRevenue: number; netRevenue: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
+    const byDate: Record<string, { grossRevenue: number; netRevenue: number; orderCount: number; fpGross: number; tpGross: number; cashSales: number; cardSales: number }> = {}
     for (const r of summaries) {
       const dateStr = r.date.toISOString().split("T")[0]
       if (!byDate[dateStr]) {
-        byDate[dateStr] = { grossRevenue: 0, netRevenue: 0, fpGross: 0, tpGross: 0, cashSales: 0, cardSales: 0 }
+        byDate[dateStr] = { grossRevenue: 0, netRevenue: 0, orderCount: 0, fpGross: 0, tpGross: 0, cashSales: 0, cardSales: 0 }
       }
       const d = byDate[dateStr]
       const isFP = isFPPlatform(r.platform)
@@ -297,6 +301,8 @@ export async function getRevenueTrendData(
       const rowNet = Number(isFP ? (r.fpNetSales ?? 0) : (r.tpNetSales ?? 0))
       d.grossRevenue += rowGross
       d.netRevenue += rowNet
+      // Counts live on the same row as the money, split the same FP/3P way.
+      d.orderCount += isFP ? (r.fpOrderCount ?? 0) : (r.tpOrderCount ?? 0)
       if (isFP) {
         d.fpGross += rowGross
         if (r.paymentMethod === "CASH") d.cashSales += r.fpGrossSales ?? 0
@@ -485,6 +491,35 @@ export async function getDashboardAnalytics(
       }
     }
 
+    // Per-store channel rows, keyed `<storeId>|||<platform>|||<paymentMethod>`.
+    // The account-wide `channelRows` above answer "how much came through
+    // DoorDash"; these answer "how much came through DoorDash AT HOLLYWOOD",
+    // which is the only honest way to nest a channel under a store row.
+    const summariesByStoreChannel = new Map<string, typeof summaries>()
+    for (const row of summaries) {
+      const isFP = isFPPlatform(row.platform)
+      const pm = isFP && row.paymentMethod && row.paymentMethod !== "N/A"
+        ? row.paymentMethod
+        : ""
+      const key = `${row.storeId}|||${row.platform}|||${pm}`
+      let bucket = summariesByStoreChannel.get(key)
+      if (!bucket) {
+        bucket = []
+        summariesByStoreChannel.set(key, bucket)
+      }
+      bucket.push(row)
+    }
+
+    const storeChannelRows: import("@/types/analytics").StoreSummaryRow[] = []
+    for (const [key, bucket] of summariesByStoreChannel) {
+      const [, platform, pmRaw] = key.split("|||")
+      const paymentMethod = pmRaw || null
+      const baseLabel = PLATFORM_LABELS[platform] ?? platform
+      const label = paymentMethod ? `${baseLabel} (${paymentMethod})` : baseLabel
+      const r = buildRow(key, label, bucket)
+      if (r.grossSales !== 0 || r.netSales !== 0) storeChannelRows.push(r)
+    }
+
     channelRows.sort((a, b) => {
       const [aPlatform] = a.storeId.split("|||")
       const [bPlatform] = b.storeId.split("|||")
@@ -507,6 +542,7 @@ export async function getDashboardAnalytics(
       rows,
       totals,
       channelRows,
+      storeChannelRows,
       dateRange: {
         startDate: rangeStart.toISOString().split("T")[0],
         endDate: rangeEnd.toISOString().split("T")[0],

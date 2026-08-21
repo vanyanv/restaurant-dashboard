@@ -38,6 +38,7 @@ function revenue(a: number, b: number): RevenueForecastData {
     modelVersion: "test",
     generatedAt: d(0),
     forecastSource: "native" as const,
+    attribution: null,
   })
   return {
     storeId: "store-1",
