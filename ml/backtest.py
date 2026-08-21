@@ -35,6 +35,7 @@ import pandas as pd
 
 from ml.evaluation import metrics
 from ml.features.revenue import load_daily_revenue
+from ml.models.direct_revenue import forecast_direct, train_direct
 from ml.models.revenue import forecast as forecast_revenue
 from ml.models.revenue import train as train_revenue
 
@@ -222,6 +223,54 @@ def backtest_revenue(
     return records
 
 
+def backtest_direct_revenue(
+    store_id: str,
+    *,
+    n_cutoffs: int = 10,
+    horizon: int = 14,
+    step: int = 7,
+    history: Optional[pd.DataFrame] = None,
+    min_train_days: int = DEFAULT_MIN_TRAIN_DAYS,
+) -> list[BacktestRecord]:
+    """Same folds, same scoring, against the direct multi-horizon candidate.
+
+    Identical cutoff selection to `backtest_revenue` so the two are directly
+    comparable — the only thing that differs between the runs is the model.
+    """
+    if history is None:
+        history = load_daily_revenue(store_id)
+    if history is None or history.empty:
+        return []
+
+    history = history.dropna(subset=["revenue"]).sort_values("date").reset_index(drop=True)
+    cutoffs = rolling_origin_cutoffs(
+        pd.DatetimeIndex(history["date"]),
+        n_cutoffs=n_cutoffs, horizon=horizon, step=step, min_train_days=min_train_days,
+    )
+    if not cutoffs:
+        return []
+
+    actual_by_date = {d.date(): float(v) for d, v in zip(history["date"], history["revenue"])}
+
+    records: list[BacktestRecord] = []
+    for cutoff in cutoffs:
+        past = history[history["date"] <= pd.Timestamp(cutoff)]
+        result = train_direct({store_id: past}, horizons=range(1, horizon + 1))
+        if result is None:
+            _LOG.warning("backtest_direct: fold %s did not train — skipped", cutoff)
+            continue
+        for row in forecast_direct(result, store_id, past, horizon_days=horizon):
+            actual = actual_by_date.get(row.forecast_date)
+            if actual is None:
+                continue
+            records.append(BacktestRecord(
+                cutoff=cutoff, forecast_date=row.forecast_date, horizon=row.horizon,
+                actual=actual, predicted=float(row.predicted_revenue),
+                p10=float(row.p10), p90=float(row.p90),
+            ))
+    return records
+
+
 def _report(records: list[BacktestRecord]) -> dict:
     scores = score_by_horizon(records)
     return {
@@ -241,6 +290,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="Also backtest the enriched flavor and print both",
     )
+    parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="Also backtest the direct multi-horizon candidate (F12/F13)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -255,6 +309,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             step=args.step, enriched=False, history=history,
         )),
     }
+    if args.direct:
+        out["direct"] = _report(backtest_direct_revenue(
+            args.store, n_cutoffs=args.cutoffs, horizon=args.horizon,
+            step=args.step, history=history,
+        ))
     if args.compare:
         out["enriched"] = _report(backtest_revenue(
             args.store, n_cutoffs=args.cutoffs, horizon=args.horizon,
