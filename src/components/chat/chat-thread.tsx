@@ -10,6 +10,7 @@ import { ChatMessage } from "./chat-message"
 import { selectFiledReturn, type ReturnPart } from "@/lib/chat/return"
 import { isNearBottom, shouldAutoScroll } from "@/lib/chat/thread-scroll"
 import { buildScopedMessage, type ComposerScope } from "@/lib/chat/composer"
+import { describeChatError } from "@/lib/chat/describe-error"
 
 interface Props {
   /** When set, the thread hydrates from this list of past messages on
@@ -130,9 +131,31 @@ export function ChatThread({
 
   const isStreaming = status === "submitted" || status === "streaming"
 
+  useEffect(() => {
+    if (isStreaming && runStartedRef.current === null) {
+      runStartedRef.current = Date.now()
+    } else if (!isStreaming) {
+      runStartedRef.current = null
+    }
+  }, [isStreaming])
+
+  /** Stop, and mark the turn it stopped so the partial is legible as partial. */
+  const stopRun = useCallback(() => {
+    const started = runStartedRef.current
+    const last = [...messages].reverse().find((m) => m.role === "assistant")
+    stop()
+    if (last) {
+      setInterrupted({
+        id: last.id,
+        seconds: started ? `${((Date.now() - started) / 1000).toFixed(1)}s` : "",
+      })
+    }
+  }, [messages, stop])
+
   const send = (text: string) => {
     const scoped = buildScopedMessage(text, scope)
     if (!scoped) return
+    setInterrupted(null)
     void sendMessage({ text: scoped })
   }
 
@@ -145,6 +168,11 @@ export function ChatThread({
   const stuckRef = useRef(true)
   const firstPaintRef = useRef(true)
   const [showJump, setShowJump] = useState(false)
+  // Which assistant turn the owner stopped, and how long it had run. A partial
+  // answer that is not marked as partial reads as a complete one that simply
+  // stopped making sense.
+  const [interrupted, setInterrupted] = useState<{ id: string; seconds: string } | null>(null)
+  const runStartedRef = useRef<number | null>(null)
 
   const scrollToBottom = useCallback((smooth = false) => {
     const el = scrollerRef.current
@@ -214,11 +242,11 @@ export function ChatThread({
   useEffect(() => {
     if (!isStreaming) return
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") stop()
+      if (e.key === "Escape") stopRun()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [isStreaming, stop])
+  }, [isStreaming, stopRun])
 
   async function branchFrom(messageId: string) {
     const cid = conversationIdRef.current
@@ -238,7 +266,7 @@ export function ChatThread({
   }
 
   const hasMessages = messages.length > 0
-  const errorText = error ? friendlyError(error.message) : null
+  const errorNotice = error ? describeChatError(error.message) : null
 
   // Follow-ups hang off the newest settled answer only. On older turns they
   // would be stale suggestions about a question two answers back.
@@ -285,6 +313,14 @@ export function ChatThread({
                       ? () => void regenerate({ messageId: m.id })
                       : undefined
                   }
+                  interruptedAfter={
+                    interrupted?.id === m.id ? interrupted.seconds : undefined
+                  }
+                  onContinue={
+                    interrupted?.id === m.id
+                      ? () => send("Continue from where you stopped.")
+                      : undefined
+                  }
                   createdAt={
                     (m as { metadata?: { createdAt?: string } }).metadata?.createdAt
                   }
@@ -298,6 +334,30 @@ export function ChatThread({
             })
           )}
 
+          {errorNotice && (
+            <div className="chat-notice" role="alert">
+              <div>
+                <div className="chat-notice__title">{errorNotice.title}</div>
+                <div className="chat-notice__detail">{errorNotice.detail}</div>
+              </div>
+              {errorNotice.retryLabel && (
+                <button
+                  type="button"
+                  className="chat-notice__action"
+                  onClick={() => {
+                    if (errorNotice.retryKind === "new-thread") {
+                      onConversationLost?.()
+                    } else {
+                      void regenerate()
+                    }
+                  }}
+                >
+                  {errorNotice.retryLabel}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Announced politely so a screen reader hears the answer land
               without having the whole stream read over the reader. */}
           <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -308,7 +368,7 @@ export function ChatThread({
         {(isStreaming || showJump) && (
           <div className="chat-floaty">
             {isStreaming ? (
-              <button type="button" className="chat-pill chat-pill--stop" onClick={() => stop()}>
+              <button type="button" className="chat-pill chat-pill--stop" onClick={stopRun}>
                 <span className="live-dot" aria-hidden />
                 Stop generating
                 <span className="kbd-chip">Esc</span>
@@ -340,7 +400,7 @@ export function ChatThread({
         onSubmit={send}
         disabled={isStreaming}
         isStreaming={isStreaming}
-        error={errorText}
+        error={null}
         metaHint={inputHint}
         stores={stores}
         scope={scope}
@@ -349,23 +409,4 @@ export function ChatThread({
       />
     </>
   )
-}
-
-/** Translate the AI SDK's raw error.message (often the JSON error body or an
- * HTTP status) into one short, owner-facing line. The 404 case is recovered
- * upstream — by the time it surfaces here, the next send will already land
- * on a fresh conversation, so the message just acknowledges the hiccup. */
-function friendlyError(raw: string | undefined): string {
-  if (!raw) return "Something went wrong."
-  const lower = raw.toLowerCase()
-  if (lower.includes("not_found") || lower.includes("not found")) {
-    return "That thread is gone — try again to start a new one."
-  }
-  if (lower.includes("not_owned") || lower.includes("forbidden")) {
-    return "You don't have access to this thread."
-  }
-  if (lower.includes("unauthorized") || lower.includes("401")) {
-    return "Please sign in again."
-  }
-  return raw
 }

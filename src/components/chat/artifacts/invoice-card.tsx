@@ -126,7 +126,10 @@ export function InvoiceSummaryCard({
           <span>{row.vendor}</span>
           {row.date ? <span> · {row.date}</span> : null}
           {row.lineCount !== undefined ? (
-            <span> · {row.lineCount} line items</span>
+            <span>
+              {" "}
+              · {row.lineCount} line item{row.lineCount === 1 ? "" : "s"}
+            </span>
           ) : null}
         </>
       }
