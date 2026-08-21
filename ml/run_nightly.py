@@ -23,6 +23,12 @@ import sys
 import time
 import traceback
 
+from ml.anomaly.interval import (
+    detect_revenue_interval_anomalies,
+    interval_coverage_rate,
+    load_reconciled_observations,
+    to_anomaly_events,
+)
 from ml.anomaly.zscore import (
     detect_menu_item_anomalies,
     detect_revenue_anomalies,
@@ -80,7 +86,7 @@ ENRICHED_FLAVOR = "weather-events"
 
 def _model_version() -> str:
     sha = os.environ.get("GITHUB_SHA", "local")[:8]
-    stamp = dt.datetime.utcnow().strftime("%Y%m%d-%H%M")
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M")
     return f"{MODEL_TYPE}-{sha}-{stamp}"
 
 
@@ -459,15 +465,35 @@ def run_busy_hours_for_store(store_id: str, model_version: str) -> dict:
 
 
 def run_anomaly_detection_for_store(store_id: str) -> dict:
-    """Score yesterday's revenue + top-N item quantities against the
-    trailing 28-day distribution. Flag |z| >= 3 with method ZSCORE.
+    """Score revenue against its own prediction intervals, and top-N item
+    quantities against the trailing 28-day distribution.
+
+    Revenue uses `ml.anomaly.interval` when the store has reconciled
+    forecasts, falling back to the z-score detector when it does not.
+    Menu items remain on z-score — they have no per-SKU interval to score
+    against yet.
 
     Anomaly detection has no MlTrainingRun row — it's a thresholding
     pass over the data, not a training job. Failures bubble up and
     stop the per-store loop iteration.
     """
     try:
-        revenue_anomalies = detect_revenue_anomalies(store_id)
+        # Prefer the interval detector: it scores every reconciled day in the
+        # window against that day's own P10/P90, so weekly seasonality is
+        # already accounted for and a skipped nightly backfills itself (F4).
+        # The z-score path stays as the fallback for a store that has no
+        # reconciled forecasts yet — a warming-up store, or a first run.
+        interval_anomalies = detect_revenue_interval_anomalies(store_id)
+        # Breach rate is calibration health, not an alert. Reported so a
+        # drifting band shows up in the nightly log rather than only as a
+        # change in how often the inbox fills (F10).
+        coverage = interval_coverage_rate(load_reconciled_observations(store_id))
+        if interval_anomalies:
+            revenue_anomalies = to_anomaly_events(interval_anomalies)
+            detector = "interval"
+        else:
+            revenue_anomalies = detect_revenue_anomalies(store_id)
+            detector = "zscore"
         item_anomalies = detect_menu_item_anomalies(
             store_id, load_top_items(store_id, top_n=TOP_N_ITEMS_PER_STORE)
         )
@@ -476,6 +502,8 @@ def run_anomaly_detection_for_store(store_id: str) -> dict:
         return {
             "store_id": store_id,
             "ok": True,
+            "revenue_detector": detector,
+            "interval_coverage80": round(coverage, 3) if coverage is not None else None,
             "revenue_count": len(revenue_anomalies),
             "menu_item_count": len(item_anomalies),
             "rows_written": written,

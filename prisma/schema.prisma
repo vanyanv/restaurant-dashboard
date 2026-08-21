@@ -1463,6 +1463,10 @@ enum OpportunityConfidence {
 enum AnomalyMethod {
   ZSCORE
   ISOLATION_FOREST
+  /// Actual fell outside that day's own calibrated P10/P90. Seasonality is
+  /// handled by the forecast rather than by a pooled dispersion estimate.
+  /// See ml/anomaly/interval.py. `zScore` is null on these rows.
+  PREDICTION_INTERVAL
 }
 
 enum AnomalyTarget {
