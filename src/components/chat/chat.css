@@ -1905,3 +1905,72 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
 }
+
+/* Notices: an interrupted turn, or a failure. Both name what happened and
+   carry exactly one way forward — a bare red line under the composer told the
+   reader neither. The accent is state, so it stays on the rule, not a fill. */
+.chat-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 13px;
+  border: 1px solid var(--hairline-bold);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-bg);
+  border-radius: 2px;
+}
+
+.chat-return .chat-notice {
+  margin: 12px 16px 12px;
+}
+
+.chat-notice__title {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-dark);
+}
+
+.chat-notice__detail {
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin-top: 3px;
+  max-width: 56ch;
+}
+
+.chat-notice__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chat-notice__action {
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--hairline-bold);
+  border-radius: 0;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.chat-notice__action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.chat-notice__action:focus-visible {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}

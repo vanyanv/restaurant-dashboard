@@ -31,6 +31,10 @@ interface Props {
   onBranch?: () => void
   /** ISO timestamp, when the server supplied one. */
   createdAt?: string
+  /** Set when the owner stopped this turn: how long it had run. */
+  interruptedAfter?: string
+  /** Carry on from the partial answer. */
+  onContinue?: () => void
 }
 
 /** Renders one message in the editorial register.
@@ -49,6 +53,8 @@ function ChatMessageImpl({
   onRetry,
   onBranch,
   createdAt,
+  interruptedAfter,
+  onContinue,
 }: Props) {
   const text = useMemo(
     () =>
@@ -86,6 +92,34 @@ function ChatMessageImpl({
 
   const noteBody = body ? renderWithTabularNumbers(body) : null
 
+  const stopped =
+    interruptedAfter !== undefined ? (
+      <div className="chat-notice">
+        <div>
+          <div className="chat-notice__title">
+            Stopped{interruptedAfter ? ` at ${interruptedAfter}` : ""}
+          </div>
+          <div className="chat-notice__detail">
+            {body.trim()
+              ? "The partial answer is kept. It was not finished, so do not read it as one."
+              : "Nothing had been written yet — it was still reading."}
+          </div>
+        </div>
+        <div className="chat-notice__actions">
+          {onContinue && (
+            <button type="button" className="chat-notice__action" onClick={onContinue}>
+              Continue
+            </button>
+          )}
+          {onRetry && (
+            <button type="button" className="chat-notice__action" onClick={onRetry}>
+              Start over
+            </button>
+          )}
+        </div>
+      </div>
+    ) : null
+
   const actions =
     isAssistant && !isStreaming ? (
       <ChatMessageActions text={text} onRetry={onRetry} onBranch={onBranch} />
@@ -104,7 +138,12 @@ function ChatMessageImpl({
           evidence={<ChatArtifacts parts={parts} />}
           note={noteBody}
           provenance={footer}
-          actions={actions}
+          actions={
+            <>
+              {stopped}
+              {actions}
+            </>
+          }
         />
       ) : (
         <>
@@ -121,6 +160,7 @@ function ChatMessageImpl({
           {isAssistant && !isStreaming && <ChatArtifacts parts={parts} />}
 
           {footer && <div className="chat-message__footer">{footer}</div>}
+          {stopped}
           {actions}
         </>
       )}
