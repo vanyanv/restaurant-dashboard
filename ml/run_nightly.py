@@ -151,9 +151,9 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
         return 0
     sql = """
         INSERT INTO "ForecastDailyRevenue"
-            (id, "storeId", "forecastDate", "hourBucket",
+            (id, "storeId", "forecastDate", "hourBucket", "horizonDay",
              "predictedRevenue", p10, p90, "modelVersion", "attribution")
-        VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s::jsonb)
+        VALUES (%s, %s, %s, 0, %s, %s, %s, %s, %s, %s::jsonb)
     """
     written = 0
     with connect() as conn:
@@ -165,6 +165,7 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
                         cuid_like(),
                         store_id,
                         r.forecast_date,
+                        r.horizon,
                         r.predicted_revenue,
                         r.p10,
                         r.p90,

@@ -86,6 +86,12 @@ class TrainResult:
 @dataclass
 class ForecastRow:
     forecast_date: dt.date
+    #: Steps ahead of the last *observed* day, 1-based — the offset this row
+    #: was actually produced at. Recorded rather than left to be re-derived
+    #: downstream: `forecastDate - generatedAt::date` is 0 for the 1-step
+    #: forecast on a normal night, and shifts whenever
+    #: `trim_incomplete_trailing_days` drops an extra trailing day (F16).
+    horizon: int
     predicted_revenue: float
     p10: float
     p90: float
@@ -351,6 +357,7 @@ def forecast(
         out.append(
             ForecastRow(
                 forecast_date=target_date,
+                horizon=offset,
                 predicted_revenue=max(0.0, pred),
                 p10=max(0.0, p10),
                 p90=max(0.0, p90),

@@ -66,6 +66,7 @@ def test_revenue_writer_binds_attribution():
     rows = [
         RevenueForecastRow(
             forecast_date=dt.date(2026, 8, 22),
+            horizon=1,
             predicted_revenue=8275.0,
             p10=7000.0,
             p90=9500.0,
@@ -90,6 +91,7 @@ def test_revenue_writer_accepts_row_without_attribution():
     rows = [
         RevenueForecastRow(
             forecast_date=dt.date(2026, 8, 22),
+            horizon=1,
             predicted_revenue=8275.0,
             p10=7000.0,
             p90=9500.0,

@@ -16,9 +16,18 @@ Too tight tomorrow, far too loose next week. A 96%-covering interval is not a
 safer interval, it is an uninformative one — it tells an owner Saturday will
 land somewhere in a $3,200 range they cannot order stock against.
 
-Every forecast row carries the horizon it was made at (`forecastDate` −
-`generatedAt`), so the width each horizon actually needs is measurable. This
-replaces the constant with that measurement.
+Every forecast row carries the horizon it was made at, so the width each
+horizon actually needs is measurable. This replaces the constant with that
+measurement.
+
+The horizon comes from the recorded `horizonDay` column, with
+`(forecastDate − generatedAt::date) + 1` as the fallback for rows written
+before 2026-08-21. The bare subtraction — what this module used until F16 —
+is one short: `forecast()` counts offsets from the last *observed* day, so
+its 1-step row lands on the generation date itself. With a `BETWEEN 1 AND 21`
+filter on top, that silently discarded the next-day forecast and shifted
+every surviving width onto the wrong horizon. The coverage table above was
+measured with the old expression and its labels are low by one.
 
 Two deliberate choices:
 
@@ -136,7 +145,8 @@ def load_horizon_widths(
 ) -> dict[int, float]:
     """Measured per-horizon half-widths for one store, or {} when too thin."""
     sql = """
-        SELECT ("forecastDate" - "generatedAt"::date) AS horizon,
+        SELECT COALESCE("horizonDay",
+                        ("forecastDate" - "generatedAt"::date) + 1) AS horizon,
                "predictedRevenue" AS predicted,
                "actualRevenue"    AS actual
         FROM "ForecastDailyRevenue"
@@ -145,7 +155,8 @@ def load_horizon_widths(
           AND "actualRevenue" IS NOT NULL
           AND "generatedAt" >= (CURRENT_DATE - %s::int)
           AND "generatedAt" >= %s::date
-          AND ("forecastDate" - "generatedAt"::date) BETWEEN 1 AND 21
+          AND COALESCE("horizonDay",
+                       ("forecastDate" - "generatedAt"::date) + 1) BETWEEN 1 AND 21
     """
     with connect() as conn, conn.cursor() as cur:
         cur.execute(sql, (store_id, lookback_days, CALIBRATION_EPOCH))
