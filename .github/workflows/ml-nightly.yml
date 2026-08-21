@@ -60,8 +60,17 @@ jobs:
       # F21 — fan-out AnomalyEvent rows into the unified Alert inbox.
       # Failure is non-fatal: alerts are a UX surface on top of detection
       # results that already landed in this job's main step.
+      #
+      # Deliberately NOT `if: success()`. The pipeline step is many phases in
+      # one process, and a failure in any of them used to skip this step
+      # entirely — so when the MENU_ITEM/BUSY_HOURS writers broke on
+      # 2026-08-20, ingestion stopped even though the ANOMALY phase had
+      # written its rows fine, and `alerts.ingest` went stale for two days
+      # until the every-2h staleness probe called it in. The anomalies this
+      # reads are already committed to Postgres by the time we get here;
+      # ingesting them does not depend on every other target having trained.
       - name: Ingest alerts
-        if: success()
+        if: ${{ !cancelled() }}
         continue-on-error: true
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
