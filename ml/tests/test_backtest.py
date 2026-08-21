@@ -182,3 +182,29 @@ def test_backtest_never_scores_a_day_the_model_could_see(monkeypatch):
 
     for r in bt.backtest_revenue("store-x", n_cutoffs=2, horizon=7, step=14):
         assert r.forecast_date > r.cutoff
+
+
+# --- sharpness ----------------------------------------------------------------
+
+def test_scores_report_interval_width_not_only_coverage():
+    """Coverage alone cannot judge a band. An interval covering 100% of days
+    may simply be uselessly wide — which is what the production run showed at
+    horizons 12-14. Width is the other half of the answer, expressed relative
+    to the prediction so it reads across stores.
+    """
+    records = [_rec(1, 100.0, 100.0, 80.0, 120.0) for _ in range(4)]
+    scored = score_by_horizon(records)
+    assert scored[1].mean_rel_width == pytest.approx(0.40)
+
+
+def test_a_wider_band_scores_a_larger_width():
+    narrow = score_by_horizon([_rec(1, 100.0, 100.0, 95.0, 105.0)])[1]
+    wide = score_by_horizon([_rec(1, 100.0, 100.0, 50.0, 150.0)])[1]
+    assert wide.mean_rel_width > narrow.mean_rel_width
+
+
+def test_width_ignores_rows_with_a_zero_prediction():
+    """Relative width is undefined against a zero forecast; it must not become
+    inf and poison the mean."""
+    records = [_rec(1, 100.0, 100.0, 80.0, 120.0), _rec(1, 0.0, 0.0, 0.0, 0.0)]
+    assert score_by_horizon(records)[1].mean_rel_width == pytest.approx(0.40)

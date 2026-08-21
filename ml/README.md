@@ -75,6 +75,30 @@ ordered against.
 `train()` and `forecast()` both accept `history=` for this. Never monkeypatch
 the loaders to simulate a cutoff.
 
+## Prediction intervals
+
+`p10`/`p90` come from conformalized quantile regression (`ml/evaluation/cqr.py`)
+— the conditional 10th and 90th quantiles fit directly, then conformalised, so
+the band varies by day and may be asymmetric. Set
+`ml.run_nightly.REVENUE_INTERVAL_METHOD = "conformal"` to revert to the
+symmetric single-width predecessor; nothing else changes.
+
+Backtested on Hollywood, 40 folds x 14-day horizon (n=560 per model). The point
+forecast is untouched by the choice — WAPE 9.48% either way — so the comparison
+is purely about the band:
+
+| | symmetric | CQR |
+|---|---|---|
+| mean \|coverage − 80%\| | 9.3pp | **6.2pp** |
+| mean coverage | 89.3% | **84.8%** |
+| mean band width | 45.5% | 46.9% |
+
+Judge an interval on **both** coverage and width. `ml.backtest` reports
+`mean_rel_width` next to `coverage80` for exactly this reason: a band covering
+100% of days may simply be too wide to act on, which is what horizons 12-14
+show. That residual over-coverage is `HORIZON_WIDENING_PER_DAY`, not the band
+shape — see F10.
+
 ## Missing days vs closed days
 
 `load_daily_revenue` returns a gap-free calendar, but it does not invent

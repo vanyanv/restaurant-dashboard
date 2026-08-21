@@ -83,6 +83,24 @@ TOP_N_ITEMS_PER_STORE = 30
 MODEL_TYPE = "xgboost"
 ENRICHED_FLAVOR = "weather-events"
 
+#: Interval method for REVENUE (F14). "cqr" fits the conditional 10th/90th
+#: quantiles and conformalises those, so the band varies by day and may be
+#: asymmetric; "conformal" is the symmetric single-width predecessor.
+#:
+#: Backtested on Hollywood, 40 folds x 14-day horizon (n=560 per model). The
+#: point forecast is untouched by this choice — WAPE was 9.48% either way —
+#: so the comparison is purely about the band:
+#:
+#:     mean |coverage - 80%|    symmetric 9.3pp    cqr 6.2pp
+#:     mean coverage            symmetric 89.3%    cqr 84.8%
+#:     mean band width          symmetric 45.5%    cqr 46.9%
+#:
+#: A third closer to the coverage it promises, for 1.4pp more width. The
+#: residual 6.2pp and the 45%+ widths are HORIZON_WIDENING_PER_DAY (F10),
+#: which this does not address and which is waiting on measured widths.
+#: Revert by setting this to "conformal" — no other change needed.
+REVENUE_INTERVAL_METHOD = "cqr"
+
 
 def _model_version() -> str:
     sha = os.environ.get("GITHUB_SHA", "local")[:8]
@@ -180,7 +198,9 @@ def _write_revenue_forecasts(store_id: str, model_version: str, rows: list) -> i
 def run_revenue_for_store(store_id: str, model_version: str) -> dict:
     run_id = _open_run("REVENUE", store_id, model_version)
     try:
-        baseline = train_revenue(store_id, enriched=False)
+        baseline = train_revenue(
+            store_id, enriched=False, interval_method=REVENUE_INTERVAL_METHOD
+        )
         if baseline is None:
             _close_run(
                 run_id,
@@ -192,7 +212,9 @@ def run_revenue_for_store(store_id: str, model_version: str) -> dict:
             )
             return {"store_id": store_id, "ok": False, "reason": "insufficient_history"}
 
-        enriched = train_revenue(store_id, enriched=True)
+        enriched = train_revenue(
+            store_id, enriched=True, interval_method=REVENUE_INTERVAL_METHOD
+        )
         result, gate, gate_reason = _select_result(
             baseline, enriched, target="REVENUE", store_id=store_id
         )
