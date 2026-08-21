@@ -1414,7 +1414,11 @@
      editorial vars locally — same trick .drp-popover uses. */
   --ink: #1a1613;
   --ink-muted: #6b625a;
-  --ink-faint: #a69d92;
+  /* Mirrors --ink-faint in editorial-tokens.css. The sixth copy of this token
+     set, and the one missed when the other five were corrected: still #a69d92
+     at 2.48:1, and this block uses it as text in a dozen places — every label,
+     unit and placeholder in the date sheet. Keep in step with the source. */
+  --ink-faint: #746a60;
   --paper: #fbf6ee;
   --hairline: #e8dfd3;
   --hairline-bold: #c9beaf;
