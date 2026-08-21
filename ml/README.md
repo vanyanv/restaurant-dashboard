@@ -9,8 +9,14 @@ from Postgres. **Never train inside Vercel functions.**
 ```
 ml/
 ├── db.py               connection + cuid-like id helper
+├── backtest.py         rolling-origin backtest CLI (per-horizon scores)
 ├── features/
-│   └── revenue.py      daily-revenue feature engineering
+│   ├── revenue.py      daily-revenue feature engineering
+│   ├── holidays.py     US holidays incl. the moving ones + shoulders
+│   └── completeness.py trailing-day trim + evidence-based gap filling
+├── anomaly/
+│   ├── interval.py     actual vs that day's own P10/P90 (preferred)
+│   └── zscore.py       pooled 28-day z (fallback, no forecast yet)
 ├── models/
 │   └── revenue.py      XGBoost trainer + 14-day forecaster
 ├── run_nightly.py      orchestrator (one MlTrainingRun per (target, store))
@@ -48,6 +54,49 @@ ml/.venv/bin/python -m ml.evaluation.operator_gate_check
 
 The check writes `JobRun` rows under `ml.operator-gate-check`; the ML
 monitoring tab shows the latest run, gate signals, and the 7-PASS streak.
+
+## Backtesting
+
+**Every model change gets backtested before it ships.** The harness replays the
+real `train()` -> `forecast()` path with history truncated at each cutoff, so
+nothing a fold is scored on was available to it:
+
+```bash
+ml/.venv/bin/python -m ml.backtest --store <id> --cutoffs 10 --horizon 14
+ml/.venv/bin/python -m ml.backtest --store <id> --cutoffs 10 --compare  # + enriched
+```
+
+Output is JSON: a summary plus one row per horizon day with WAPE, MAPE, signed
+relative bias, 80% interval coverage and sample size. Score **per horizon** —
+pooling them hides the thing that matters, since a model can be excellent one
+day out and useless at fourteen, and the fourteen-day number is what stock gets
+ordered against.
+
+`train()` and `forecast()` both accept `history=` for this. Never monkeypatch
+the loaders to simulate a cutoff.
+
+## Missing days vs closed days
+
+`load_daily_revenue` returns a gap-free calendar, but it does not invent
+observations. A date with no sales row is `$0` only when hourly coverage proves
+the day was watched to closing; otherwise it is `NaN` and the training splits
+drop it. `.fillna(0.0)` used to make a failed sync indistinguishable from a
+holiday closure, and that zero became both a training target and ninety days of
+poisoned lag/rolling features.
+
+## Anomaly detection
+
+Revenue anomalies come from `ml/anomaly/interval.py`: an actual outside that
+day's own calibrated P10/P90. Seasonality is handled by the forecast rather than
+by a pooled dispersion estimate, any window can be rescored so a skipped nightly
+backfills itself, and the output is a dollar residual against an expected value.
+
+`ml/anomaly/zscore.py` remains the fallback for stores with no reconciled
+forecasts yet (warming-up, or a first run), and still handles menu items, which
+have no per-SKU interval. Rows written by the interval detector carry
+`method = 'PREDICTION_INTERVAL'` and a null `zScore` — see
+`prisma/manual-migrations/2026-08-21_anomaly_method_prediction_interval.sql`,
+which must be applied before that path can write.
 
 ## Adding a new target
 

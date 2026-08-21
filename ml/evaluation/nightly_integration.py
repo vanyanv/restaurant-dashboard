@@ -37,6 +37,17 @@ _EVAL_WINDOW_DAYS = 35
 _CONSISTENCY_WINDOW_DAYS = 14
 _DISCREPANCY_THRESHOLD_PCT = 15.0
 
+#: `horizonDay` for the pooled row — the one built from the latest forecast
+#: per day, which is what the dashboard has always read. Named rather than
+#: left as a bare literal 0, because it is a specific claim ("pooled across
+#: whatever horizon happened to be freshest") and not "horizon zero" (F8).
+POOLED_HORIZON = 0
+
+#: Rows a horizon needs before its accuracy is written. One observation is
+#: not a measurement; publishing it puts a number on the quality panel that
+#: swings violently with a single day.
+MIN_ROWS_PER_HORIZON = 5
+
 
 # ---------------------------------------------------------------------------
 # Fetch helpers — each returns a list of tuples in a documented column order.
@@ -66,6 +77,38 @@ def _fetch_reconciled_revenue(conn, store_id: str, today: dt.date) -> list[tuple
           AND f."actualRevenue" IS NOT NULL
           AND f."forecastDate" BETWEEN %s AND %s
         ORDER BY f."forecastDate", f."generatedAt" DESC
+    """
+    window_end = today - dt.timedelta(days=1)
+    window_start = today - dt.timedelta(days=_EVAL_WINDOW_DAYS)
+    with conn.cursor() as cur:
+        cur.execute(sql, (store_id, window_start, window_end))
+        return list(cur.fetchall())
+
+
+def _fetch_revenue_by_horizon(conn, store_id: str, today: dt.date) -> list[tuple]:
+    """Every reconciled revenue forecast in the window, tagged with its horizon.
+
+    Deliberately does NOT collapse to one row per date. `_fetch_reconciled_revenue`
+    takes the freshest forecast per day, which is what the pooled row scores;
+    this keeps all of them so each horizon can be scored on its own rows (F8).
+
+    Horizon is `forecastDate - generatedAt::date`, the same derivation
+    `horizon_calibration` uses.
+    """
+    sql = """
+        SELECT f."forecastDate"::date,
+               f."predictedRevenue"::float,
+               f."actualRevenue"::float,
+               COALESCE(f.p10, f."predictedRevenue")::float,
+               COALESCE(f.p90, f."predictedRevenue")::float,
+               f."modelVersion",
+               (f."forecastDate"::date - f."generatedAt"::date) AS horizon
+        FROM "ForecastDailyRevenue" f
+        WHERE f."storeId" = %s
+          AND f."hourBucket" = 0
+          AND f."actualRevenue" IS NOT NULL
+          AND f."forecastDate" BETWEEN %s AND %s
+        ORDER BY f."forecastDate"
     """
     window_end = today - dt.timedelta(days=1)
     window_start = today - dt.timedelta(days=_EVAL_WINDOW_DAYS)
@@ -221,12 +264,40 @@ def _seasonal_naive_baseline(dates: list[dt.date], actuals: np.ndarray) -> np.nd
     return np.asarray(out, dtype=float)
 
 
+def split_rows_by_horizon(
+    rows: list[tuple],
+    *,
+    min_rows: int = 1,
+    horizon_index: int = 6,
+) -> dict[int, list[tuple]]:
+    """Group reconciled rows by the horizon they were forecast at.
+
+    A row whose horizon is missing or non-positive is dropped: a "forecast"
+    generated on or after the day it predicts is not a forecast, and scoring
+    it would flatter every metric it touches.
+
+    `min_rows` defaults to no floor: grouping is grouping. The publishing
+    policy (`MIN_ROWS_PER_HORIZON`) belongs to the caller that writes rows.
+    """
+    grouped: dict[int, list[tuple]] = {}
+    for row in rows:
+        horizon = row[horizon_index] if len(row) > horizon_index else None
+        if horizon is None:
+            continue
+        horizon = int(horizon)
+        if horizon <= 0:
+            continue
+        grouped.setdefault(horizon, []).append(row)
+    return {h: rs for h, rs in sorted(grouped.items()) if len(rs) >= min_rows}
+
+
 def _build_eval_input(
     rows: list[tuple],
     *,
     target: str,
     store_id: str,
     today: dt.date,
+    horizon_day: int = POOLED_HORIZON,
 ) -> EvaluationInput | None:
     if not rows:
         return None
@@ -259,7 +330,7 @@ def _build_eval_input(
         target=target,
         store_id=store_id,
         model_version=model_version,
-        horizon_day=0,
+        horizon_day=horizon_day,
         window_start=window_start,
         window_end=window_end,
         actuals=acts,
@@ -277,6 +348,40 @@ def _build_eval_input(
 # ---------------------------------------------------------------------------
 # Public entry points.
 # ---------------------------------------------------------------------------
+
+
+def _write_revenue_horizon_rows(conn, store_id: str, today: dt.date) -> int:
+    """One MlForecastEvaluation row per horizon with enough reconciled rows.
+
+    Failure here must not cost the pooled row that was already written, so it
+    is caught and logged rather than raised — the per-horizon rows are an
+    addition to the evaluation, not a precondition for it.
+    """
+    try:
+        rows = _fetch_revenue_by_horizon(conn, store_id, today)
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOG.warning("evaluator: per-horizon fetch failed for %s: %s", store_id, exc)
+        return 0
+
+    written = 0
+    for horizon, horizon_rows in split_rows_by_horizon(
+        rows, min_rows=MIN_ROWS_PER_HORIZON
+    ).items():
+        inp = _build_eval_input(
+            horizon_rows,
+            target="REVENUE",
+            store_id=store_id,
+            today=today,
+            horizon_day=horizon,
+        )
+        if inp is None:
+            continue
+        upsert_evaluation_row(conn, build_evaluation_row(inp))
+        written += 1
+
+    if written:
+        _LOG.info("evaluator: wrote %d per-horizon REVENUE rows for %s", written, store_id)
+    return written
 
 
 def run_evaluation_pass(conn, store_id: str, today: dt.date) -> int:
@@ -308,6 +413,11 @@ def run_evaluation_pass(conn, store_id: str, today: dt.date) -> int:
         upsert_evaluation_row(conn, build_evaluation_row(item_input))
         written += 1
         _LOG.info("evaluator: wrote MENU_ITEM row for %s (n=%d)", store_id, item_input.actuals.size)
+
+    # Per-horizon REVENUE rows, after the three pooled ones (F8). Last so the
+    # pooled rows are already committed if this fetch finds nothing — and so the
+    # established fetch order the callers' fixtures depend on is undisturbed.
+    written += _write_revenue_horizon_rows(conn, store_id, today)
 
     return written
 
