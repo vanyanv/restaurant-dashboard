@@ -46,6 +46,7 @@ import path from "path"
 import { chromium, type BrowserContext, type Locator, type Page } from "playwright"
 import sodium from "libsodium-wrappers"
 
+import { PAT_REMEDIATION, resolveGitHubCredential } from "../src/lib/github-credential"
 import {
   summarizeRotation,
   type LegName,
@@ -310,14 +311,14 @@ async function updateGitHub(
   env: Record<string, string>,
   credentials: { email?: string; password?: string }
 ): Promise<LegStatus> {
-  // Accept GH_PAT too — that's the name the CI workflows already use. `||` not
-  // `??` on purpose: `GH_TOKEN=` (set but empty) is a real shape and must fall
-  // through to the next candidate rather than counting as configured.
-  const token = process.env.GH_PAT || process.env.GH_TOKEN || env["GH_PAT"] || env["GH_TOKEN"]
-  if (!token) {
+  const credential = resolveGitHubCredential(process.env, env)
+  if (!credential) {
     console.error("  Skipped (neither GH_PAT nor GH_TOKEN set)")
+    console.error(`  ${PAT_REMEDIATION}`)
     return "skipped"
   }
+  if (!credential.durable) console.error(`  WARNING: ${credential.warning}`)
+  const token = credential.token
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
@@ -335,7 +336,7 @@ async function updateGitHub(
         console.error(
           "  → The GitHub credential is expired or lacks `repo` scope. Until it is replaced,\n" +
             "    rotation cannot reach CI and the labor syncs will break when the token expires.\n" +
-            "    Fix: set a fresh PAT as GH_TOKEN in .env.local (`gh auth token` works)."
+            `    ${PAT_REMEDIATION}`
         )
       }
       return "failed"

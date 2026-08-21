@@ -24,6 +24,7 @@ import fs from "fs"
 import path from "path"
 
 import { classifyTokenAge } from "../src/lib/harri-rotation-health"
+import { PAT_REMEDIATION, resolveGitHubCredential } from "../src/lib/github-credential"
 
 function loadEnvLocal(): void {
   const envPath = path.resolve(process.cwd(), ".env.local")
@@ -58,13 +59,21 @@ const GH_REPO = process.env.HARRI_GH_REPO || "vanyanv/restaurant-dashboard"
  * fail the liveness heartbeat.
  */
 async function checkRotationChain(): Promise<boolean> {
-  const token = process.env.GH_PAT || process.env.GH_TOKEN
-  if (!token) {
+  const credential = resolveGitHubCredential(process.env)
+  if (!credential) {
     console.error(
-      "[harri.heartbeat] FAIL · no GH_PAT/GH_TOKEN — cannot tell whether rotation can still land in CI"
+      "[harri.heartbeat] FAIL · no GH_PAT/GH_TOKEN — cannot tell whether rotation can still land in CI\n" +
+        `  ${PAT_REMEDIATION}`
     )
     return false
   }
+  // Caught here the token is still alive; caught at expiry it is a 3am outage.
+  // The shape is the earliest possible signal, so surface it every run.
+  if (!credential.durable) {
+    console.error(`[harri.heartbeat] FAIL · ${credential.warning}`)
+    return false
+  }
+  const token = credential.token
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
