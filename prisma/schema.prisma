@@ -1517,6 +1517,12 @@ model ForecastDailyRevenue {
   forecastDate         DateTime       @db.Date
   /// 0 means whole-day; 1-23 means a specific hour bucket (when we add it).
   hourBucket           Int            @default(0)
+  /// Steps ahead of the last *observed* day this row was forecast at, 1-based.
+  /// Recorded by the pipeline because it is not reliably derivable:
+  /// `forecastDate - generatedAt::date` is 0 for the 1-step forecast, and it
+  /// shifts whenever an extra incomplete trailing day is trimmed. Consumers
+  /// COALESCE to that expression + 1 for rows written before 2026-08-21.
+  horizonDay           Int?
   predictedRevenue     Float
   /// 10th / 90th percentile of the predictive interval.
   p10                  Float?

@@ -92,8 +92,10 @@ def _fetch_revenue_by_horizon(conn, store_id: str, today: dt.date) -> list[tuple
     takes the freshest forecast per day, which is what the pooled row scores;
     this keeps all of them so each horizon can be scored on its own rows (F8).
 
-    Horizon is `forecastDate - generatedAt::date`, the same derivation
-    `horizon_calibration` uses.
+    Horizon is the recorded `horizonDay` where present. Rows written before
+    2026-08-21 fall back to `(forecastDate - generatedAt::date) + 1` — the
+    `+ 1` because `forecast()` counts from the last *observed* day, so its
+    1-step row lands on the generation date itself (F16).
     """
     sql = """
         SELECT f."forecastDate"::date,
@@ -102,7 +104,8 @@ def _fetch_revenue_by_horizon(conn, store_id: str, today: dt.date) -> list[tuple
                COALESCE(f.p10, f."predictedRevenue")::float,
                COALESCE(f.p90, f."predictedRevenue")::float,
                f."modelVersion",
-               (f."forecastDate"::date - f."generatedAt"::date) AS horizon
+               COALESCE(f."horizonDay",
+                        (f."forecastDate"::date - f."generatedAt"::date) + 1) AS horizon
         FROM "ForecastDailyRevenue" f
         WHERE f."storeId" = %s
           AND f."hourBucket" = 0
