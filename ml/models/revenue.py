@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 from xgboost import DMatrix, XGBRegressor
 
+from ml.evaluation import metrics
 from ml.evaluation.conformal import ConformalWrapper, wrap_xgboost_conformal
 from ml.models.attribution import build_attribution
 from ml.features.revenue import (
@@ -33,7 +34,12 @@ from ml.features.revenue import (
     load_revenue_external_signals,
     split_train_holdout,
 )
-from ml.features.external_signals import external_signal_coverage
+from ml.features.external_signals import (
+    drop_dead_signal_columns,
+    external_signal_coverage,
+    external_signal_coverage_by_family,
+    is_external_signal_column,
+)
 
 
 # MAPIE's 95% wrapper needs >=20 samples (1/alpha). Below that the inner
@@ -57,11 +63,17 @@ HORIZON_WIDENING_PER_DAY = 0.05
 class TrainResult:
     model: XGBRegressor
     mape: float
+    #: Weighted absolute percentage error on the same holdout rows. Scale-free
+    #: and defined when an actual is zero, which MAPE is not — prefer it in gates.
+    wape: float
     mae: float
     sample_size: int
     holdout_residual_std: float
     flavor: str = "baseline"
     signal_coverage: float = 0.0
+    #: Per-family coverage of the external signals, e.g.
+    #: {"weather": 1.0, "events": 0.0}. Empty for baseline runs.
+    signal_families: dict = field(default_factory=dict)
     feature_names: tuple[str, ...] = ()
     conformal: Optional[ConformalWrapper] = None
     uses_fallback_interval: bool = False
@@ -89,10 +101,14 @@ def _conformal_split(feats: pd.DataFrame, cols: list[str]) -> tuple[
 
     Drops rows missing any feature so the calibration set is dense, then
     splits by index position. Returns (train, calib, holdout).
+
+    `revenue` is dropped alongside the features because an unobserved day now
+    carries NaN rather than a fabricated $0 (F1). A NaN target must never reach
+    `.fit()`, and it must never be scored as if it were an actual.
     """
     # Explicit chronological sort: calibration/holdout MUST be strictly future of train.
     clean = (
-        feats.dropna(subset=cols)
+        feats.dropna(subset=[*cols, "revenue"])
         .sort_values("date")
         .reset_index(drop=True)
     )
@@ -105,14 +121,27 @@ def _conformal_split(feats: pd.DataFrame, cols: list[str]) -> tuple[
     return train_df, calib_df, holdout_df
 
 
-def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
-    history = load_daily_revenue(store_id)
+def train(
+    store_id: str,
+    *,
+    enriched: bool = False,
+    history: Optional[pd.DataFrame] = None,
+) -> Optional[TrainResult]:
+    """Fit the deployable model for one store.
+
+    `history` overrides the DB load. The backtest harness passes a series
+    truncated at a cutoff so the real training path can be replayed as it
+    would have run that night — without monkeypatching production code.
+    """
+    if history is None:
+        history = load_daily_revenue(store_id)
     if history.empty or len(history) < 60:
         # Need enough history for lag-28 + rolling-28 to be meaningful.
         return None
 
     external_daily = pd.DataFrame()
     signal_coverage = 0.0
+    signal_families: dict[str, float] = {}
     if enriched:
         external_daily = load_revenue_external_signals(
             store_id,
@@ -123,7 +152,20 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         if signal_coverage < 0.6:
             return None
         feats = build_enriched_features(history, external_daily)
-        cols = enriched_feature_columns()
+        # Gate per family, not on the max across families (F6). A dead feed
+        # writes its columns as constant fill values; carrying them into the fit
+        # dilutes every split candidate while the aggregate coverage number
+        # still reads 1.0 because the *other* family landed.
+        signal_families = external_signal_coverage_by_family(external_daily)
+        cols, dead_cols = drop_dead_signal_columns(
+            enriched_feature_columns(), signal_families
+        )
+        if dead_cols:
+            _LOG.warning(
+                "revenue.train: dropping %s dead signal column(s) — coverage %s",
+                len(dead_cols),
+                signal_families,
+            )
         flavor = "weather-events"
     else:
         feats = build_features(history)
@@ -166,10 +208,17 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
         eval_df = holdout_df
 
     preds = base.predict(eval_df[cols])
-    actuals = eval_df["revenue"].to_numpy()
-    safe_actuals = np.where(actuals == 0, 1e-6, actuals)
-    mape = float(np.mean(np.abs((preds - actuals) / safe_actuals)))
-    mae = float(np.mean(np.abs(preds - actuals)))
+    actuals = eval_df["revenue"].to_numpy(dtype=float)
+    # One definition of every metric, shared with the evaluator (F2). The
+    # inline version here substituted 1e-6 for a zero actual, so a single
+    # closed day turned MAPE into ~1e8 — and `should_promote_enriched` gates
+    # on exactly that number. `metrics.mape` masks zeros instead; WAPE is
+    # carried alongside because it stays defined when every actual is zero.
+    mape = metrics.mape(actuals, preds)
+    mape = float(mape) if mape is not None else float("inf")
+    wape = metrics.wape(actuals, preds)
+    wape = float(wape) if wape is not None else float("inf")
+    mae = float(metrics.mae(actuals, preds) or 0.0)
     holdout_residual_std = float(np.std(preds - actuals, ddof=1)) if len(preds) > 1 else 0.0
 
     if uses_fallback:
@@ -204,11 +253,13 @@ def train(store_id: str, *, enriched: bool = False) -> Optional[TrainResult]:
     return TrainResult(
         model=base,
         mape=mape,
+        wape=wape,
         mae=mae,
         sample_size=int(len(train_df) if not uses_fallback else len(eval_df)),
         holdout_residual_std=holdout_residual_std,
         flavor=flavor,
         signal_coverage=signal_coverage,
+        signal_families=signal_families,
         feature_names=tuple(cols),
         conformal=conformal,
         uses_fallback_interval=uses_fallback,
@@ -222,6 +273,7 @@ def forecast(
     result: TrainResult,
     horizon_days: int = 14,
     horizon_widths: Optional[dict[int, float]] = None,
+    history: Optional[pd.DataFrame] = None,
 ) -> list[ForecastRow]:
     """Forecast forward from the last observed day.
 
@@ -232,15 +284,18 @@ def forecast(
     width by a flat 5% a day and produced 71% coverage at one day out against
     97% at eight. Horizons with too little history fall through to the old path.
     """
-    history = load_daily_revenue(store_id)
+    if history is None:
+        history = load_daily_revenue(store_id)
     if history.empty:
         return []
 
     feats = build_features(history)
     last_date = feats["date"].max().date()
     cols = list(result.feature_names or feature_columns())
-    # The pipeline always uses weather-events when the flavor starts with it.
-    is_enriched = result.flavor.startswith("weather-events")
+    # Derive enrichment from the columns actually fit, not from the flavor
+    # string: a dead family is stripped from `cols` (F6) while the flavor is
+    # unchanged, so the string is no longer a reliable witness of the schema.
+    is_enriched = any(is_external_signal_column(c) for c in cols)
     external_daily = pd.DataFrame()
     if is_enriched:
         external_daily = load_revenue_external_signals(
