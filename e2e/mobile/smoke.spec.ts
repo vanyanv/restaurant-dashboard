@@ -23,21 +23,34 @@ test.describe("@smoke mobile", () => {
     await page.goto("/m/pnl")
     await page.waitForLoadState("networkidle")
 
-    const dateTrigger = page
-      .getByRole("button")
-      .filter({ hasText: /today|yesterday|week|month|range|\d{4}/i })
-      .first()
+    // The trigger is the CUSTOM pill (`CustomPillTrigger`). The previous
+    // matcher — today|yesterday|week|month|range|\d{4} — never matched it, and
+    // the whole body sat inside `if (await dateTrigger.count())`, so this test
+    // passed without opening a sheet or asserting anything. A regression test
+    // that cannot fail is worse than no test: it reports the regression as
+    // covered. Assert the trigger exists so a rename fails loudly here instead.
+    const dateTrigger = page.getByRole("button", { name: /custom/i }).first()
+    await expect(dateTrigger, "date sheet trigger is on /m/pnl").toBeVisible()
 
-    if (await dateTrigger.count()) {
-      await dateTrigger.click()
-      await page.waitForTimeout(400)
+    await dateTrigger.click()
 
-      const sheets = page.locator(".m-sheet, [data-sheet], [role=dialog]")
-      const count = await sheets.count()
-      expect(count, "at least one sheet/dialog opened").toBeGreaterThan(0)
+    const sheet = page.locator(".m-sheet").first()
+    await expect(sheet, "the sheet opened").toBeVisible()
 
-      const lastVisible = sheets.last()
-      await expect(lastVisible).toBeVisible()
+    // The regression itself: the sheet has to paint above its own backdrop.
+    const stacking = await sheet.evaluate((el) => {
+      const backdrop = document.querySelector(
+        ".m-sheet-backdrop, [data-sheet-backdrop], [data-slot=sheet-overlay]",
+      )
+      const z = (n: Element | null) =>
+        n ? Number.parseInt(getComputedStyle(n).zIndex || "0", 10) || 0 : null
+      return { sheet: z(el), backdrop: z(backdrop) }
+    })
+    if (stacking.backdrop !== null) {
+      expect(
+        stacking.sheet,
+        "sheet paints above its backdrop",
+      ).toBeGreaterThanOrEqual(stacking.backdrop)
     }
   })
 
