@@ -30,6 +30,8 @@ export interface DailyTrend {
   date: string
   grossRevenue: number
   netRevenue: number
+  /** Tickets that day across both first- and third-party channels. */
+  orderCount: number
   fpGross: number
   tpGross: number
   cashSales: number
@@ -106,6 +108,14 @@ export interface DashboardData {
   rows: StoreSummaryRow[]
   totals: StoreSummaryRow
   channelRows: StoreSummaryRow[]
+  /**
+   * Channel rows scoped to a store, keyed
+   * `<storeId>|||<platform>|||<paymentMethod>`. `channelRows` above is the
+   * account-wide roll-up; these are what the overview ledger nests beneath each
+   * store, where attributing an account-wide channel to one location would be
+   * wrong the moment a second store trades.
+   */
+  storeChannelRows: StoreSummaryRow[]
   dateRange: { startDate: string; endDate: string }
   dayCount: number
   lastSyncAt: Date | string | null
@@ -317,6 +327,13 @@ export interface OrderPatternsHourlyComparison {
   lastDataHour: number | null
   /** True when the range's last day is today, i.e. an hour cutoff was applied. */
   inProgress: boolean
+  /**
+   * Per-baseline-week totals behind `baselineTotal` / `salesBaselineTotal`,
+   * weeks with no data removed. The overview's bullet tracks plot today's mark
+   * against the spread of these, so an average alone is not enough.
+   */
+  groupTotals: number[]
+  groupSalesTotals: number[]
 }
 
 export interface DayOfWeekOrderPoint {

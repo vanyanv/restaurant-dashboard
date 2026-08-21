@@ -454,49 +454,311 @@
   position: relative;
 }
 
-/* Slim masthead: no headline/paragraph, just meta row + hero KPI strip */
-.editorial-masthead-slim {
-  padding: 22px 32px 26px;
+/* ─── Overview masthead: greeting, lede, figure rail ──────────────────────
+   Namespaced away from `.editorial-kpi` deliberately. The operations tile
+   rule further down this file redefines `.editorial-kpi` with a full
+   hairline-bold box, and being later in the cascade it was silently winning
+   here: the masthead's intended hairline-divided columns rendered as four
+   bordered cards, and the 768px collapse in the old `-wide` grid never fired
+   because `.editorial-kpi-strip`'s `display: flex` also came later. Both of
+   those rule sets are gone. Nothing in this block shares a selector with the
+   operations tile, so the collision cannot come back. */
+
+.masthead {
+  padding: 26px 32px 30px;
   border-bottom: 1px solid var(--hairline);
   position: relative;
 }
 
-.editorial-kpi-strip-wide {
+.masthead__greeting {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 144, "SOFT" 30, "WONK" 0;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(28px, 3.6vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* Typewriter on the owner's name. Only the name's own box changes width and
+   nothing follows it on the line, so no sibling reflows. The caret blinks
+   eight times and stops — one that pulses forever reads as a stuck cursor.
+   `--name-width` and `--name-steps` are set inline from the name's length,
+   since CSS cannot measure the glyphs. */
+/* The resting state is the FULL name. The animation reveals it from zero via
+   its own `from` keyframe with fill-mode `both`, so if animations never run —
+   print, a paused tab, reduced-motion, a screenshot tool that disables them —
+   the name is simply there. Putting `max-width: 0` on the element instead made
+   the greeting render as "Good afternoon," with no one in it. */
+.masthead__name {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  width: max-content;
+  max-width: var(--name-width, 2.45em);
+  border-right: 2px solid transparent;
+  animation:
+    masthead-type 1.05s steps(var(--name-steps, 5), end) 0.45s both,
+    masthead-caret 900ms step-end 8;
+}
+
+@keyframes masthead-type {
+  from { max-width: 0; }
+  to { max-width: var(--name-width, 2.45em); }
+}
+
+@keyframes masthead-caret {
+  0%, 100% { border-right-color: var(--accent); }
+  50% { border-right-color: transparent; }
+}
+
+.masthead__folio {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.masthead__lede-block {
+  margin-top: 26px;
+  max-width: 940px;
+}
+
+/* The single decorative proofmark on the page. It replaces the four red ticks
+   that used to sit under every KPI value — see the Earn-the-Red rule. */
+.masthead__proofmark {
+  width: 22px;
+  height: 2px;
+  background: var(--accent);
+  margin-bottom: 14px;
+}
+
+.masthead__lede {
+  margin: 0;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 50, "WONK" 0;
+  font-style: italic;
+  font-weight: 450;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.24;
+  letter-spacing: -0.022em;
+  text-wrap: pretty;
+  color: var(--ink);
+}
+
+.masthead__suggest {
+  margin-top: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.masthead__suggest-label {
+  flex: none;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.masthead__suggest-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.masthead__source {
+  margin-top: 14px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+
+/* ── Figure rail ── */
+
+.masthead-rail {
+  margin: 28px 0 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--hairline-bold);
 }
 
-.editorial-kpi-strip-wide .editorial-kpi {
-  padding: 18px 24px 6px;
+.masthead-rail__cell {
+  padding: 18px 24px 4px;
   border-left: 1px solid var(--hairline);
+  min-width: 0;
 }
 
-.editorial-kpi-strip-wide .editorial-kpi:first-child {
+.masthead-rail__cell:first-child {
   border-left: none;
   padding-left: 0;
 }
 
-.editorial-kpi-strip-wide .editorial-kpi .kpi-value {
-  font-size: clamp(48px, 5vw, 68px);
-  line-height: 0.95;
+.masthead-rail__cell:last-child {
+  padding-right: 0;
 }
 
-@media (max-width: 768px) {
-  .editorial-kpi-strip-wide {
-    grid-template-columns: 1fr;
+.masthead-rail__label {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.masthead-rail__figure {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* DM Sans, not mono: the Two-Tier Rule puts every figure in DM Sans 500-600
+   with tabular lining figures. The old masthead set these in JetBrains Mono. */
+.masthead-rail__value {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-weight: 600;
+  font-size: clamp(30px, 3.4vw, 46px);
+  line-height: 0.95;
+  letter-spacing: -0.024em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum", "lnum";
+  color: var(--ink);
+}
+
+.masthead-rail__spark {
+  display: block;
+  margin-bottom: 4px;
+  flex: none;
+}
+
+.masthead-rail__meta {
+  margin-top: 8px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bullet track: the four-week band as a rail, the baseline average as a light
+   tick, today as an ink mark. A mark outside the band turns accent — the one
+   place a rail cell is allowed to spend red. */
+.masthead-rail__band {
+  margin-top: 16px;
+  position: relative;
+  height: 9px;
+  width: 100%;
+  max-width: 176px;
+}
+
+.masthead-rail__band-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 3px;
+  background: var(--hairline);
+}
+
+.masthead-rail__band-avg {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 9px;
+  background: var(--ink-ornament);
+}
+
+.masthead-rail__band-mark {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 9px;
+  background: var(--ink);
+}
+
+.masthead-rail__band-mark.is-breach {
+  width: 3px;
+  height: 11px;
+  top: -1px;
+  background: var(--accent);
+}
+
+.masthead-rail__delta {
+  margin-top: 7px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.masthead-rail__delta.is-breach {
+  color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .masthead-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .editorial-kpi-strip-wide .editorial-kpi {
+  .masthead-rail__cell:nth-child(odd) {
     border-left: none;
-    border-top: 1px solid var(--hairline);
-    padding: 14px 0 8px;
+    padding-left: 0;
   }
-  .editorial-kpi-strip-wide .editorial-kpi:first-child {
-    border-top: none;
+  .masthead-rail__cell:nth-child(n + 3) {
+    border-top: 1px solid var(--hairline);
+    margin-top: 4px;
     padding-top: 18px;
   }
 }
+
+@media (max-width: 640px) {
+  .masthead {
+    padding: 20px 20px 24px;
+  }
+  /* The label column costs a quarter of a phone screen; stack it so the
+     suggestion itself gets the width. */
+  .masthead__suggest {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .masthead-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .masthead-rail__cell {
+    border-left: none;
+    padding: 14px 0 6px;
+  }
+  .masthead-rail__cell + .masthead-rail__cell {
+    border-top: 1px solid var(--hairline);
+    margin-top: 0;
+  }
+  .masthead-rail__band {
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .masthead__name {
+    animation: none;
+  }
+}
+
 
 .editorial-masthead h1 {
   font-family: var(--font-fraunces), serif;
@@ -513,80 +775,6 @@
   color: var(--accent);
 }
 
-.editorial-kpi-strip {
-  display: flex;
-  gap: 40px;
-  flex-wrap: wrap;
-}
-
-.editorial-kpi {
-  min-width: 120px;
-  position: relative;
-}
-
-.editorial-kpi .kpi-label {
-  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  font-weight: 600;
-  color: var(--ink-muted);
-  margin-bottom: 10px;
-}
-
-.editorial-kpi .kpi-value {
-  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
-  font-weight: 600;
-  font-size: 52px;
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  position: relative;
-  padding-bottom: 10px;
-  display: inline-block;
-  font-feature-settings: "zero", "ss01";
-}
-
-/* Editorial accent tick beneath each value — rhymes with the red cartouche on cards */
-.editorial-kpi .kpi-value::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 22px;
-  height: 1px;
-  background: var(--accent);
-  opacity: 0.8;
-}
-
-.editorial-kpi .kpi-value .kpi-cents {
-  color: var(--ink-faint);
-  font-size: 0.6em;
-  letter-spacing: -0.02em;
-  margin-left: 0.05em;
-}
-
-.editorial-kpi .kpi-unit {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-  margin-top: 10px;
-}
-
-.editorial-kpi .kpi-delta {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  color: var(--ink-muted);
-  margin-top: 4px;
-}
-
-.editorial-kpi .kpi-delta.up { color: var(--ink-good); }
-.editorial-kpi .kpi-delta.down { color: var(--accent); }
 
 .editorial-section-label {
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
@@ -7574,4 +7762,725 @@
   .pl-chev {
     transition: none;
   }
+}
+
+/* ─── Overview: "What needs you" ──────────────────────────────────────────
+   The attention queue. Rows carry the same interaction contract as .inv-row —
+   4px accent bar scaling in from the left, warm wash, reduced-motion opt-out —
+   but in flex rather than the seven-column ledger grid, because the payload is
+   a sentence plus a figure, not aligned cells. */
+
+.needs-list {
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.needs-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 12px 14px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  transition: background-color 160ms ease;
+}
+
+.needs-row::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.needs-row:hover,
+.needs-row:focus-visible {
+  background: var(--row-hover-bg);
+  outline: none;
+}
+
+.needs-row:hover::before,
+.needs-row:focus-visible::before {
+  transform: scaleY(1);
+}
+
+.needs-row[aria-expanded="true"] {
+  background: rgba(255, 253, 247, 0.55);
+}
+
+.needs-row__chevron {
+  flex: none;
+  margin-left: 4px;
+  color: var(--ink-muted);
+  transition: transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.needs-row[aria-expanded="true"] .needs-row__chevron {
+  transform: rotate(90deg);
+}
+
+.needs-row__severity,
+.needs-row__source,
+.needs-row__horizon {
+  flex: none;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+
+.needs-row__severity { width: 62px; }
+.needs-row__source { width: 108px; }
+.needs-row__horizon { width: 76px; text-align: right; letter-spacing: 0.14em; }
+
+.needs-row__severity.is-critical { color: var(--accent); }
+
+.needs-row__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.needs-row__amount {
+  flex: none;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.needs-body {
+  padding: 4px 12px 22px 90px;
+  background: rgba(255, 253, 247, 0.55);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.needs-body__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 36px;
+}
+
+.needs-body__prose {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 64ch;
+}
+
+/* Impact range: p10 → p90 as the light span, p25 as the ink mark the ledger
+   actually ranks on. Absent when the fit reported no standard error, because a
+   drawn range would read as precision the estimate does not have. */
+.needs-range {
+  margin-top: 12px;
+  position: relative;
+  height: 26px;
+}
+
+.needs-range__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 11px;
+  height: 3px;
+  background: var(--hairline);
+}
+
+.needs-range__span {
+  position: absolute;
+  top: 11px;
+  height: 3px;
+  background: var(--hairline-bold);
+}
+
+.needs-range__mark {
+  position: absolute;
+  top: 6px;
+  width: 2px;
+  height: 13px;
+  background: var(--ink);
+}
+
+.needs-range__cap {
+  position: absolute;
+  top: 0;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.needs-meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.needs-meta-row__key {
+  flex: 1;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+.needs-meta-row__val {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.needs-empty {
+  padding: 26px 0 22px;
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.needs-empty__head {
+  margin: 0;
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 50, "WONK" 0;
+  font-style: italic;
+  font-weight: 450;
+  font-size: 21px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.needs-empty__checks {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.needs-empty__check {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  border: 1px solid var(--hairline);
+  padding: 3px 7px 2px;
+}
+
+@media (max-width: 900px) {
+  .needs-body { padding-left: 32px; }
+  .needs-body__grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .needs-row__source { display: none; }
+}
+
+@media (max-width: 640px) {
+  .needs-row { flex-wrap: wrap; gap: 6px 12px; }
+  .needs-row__title { flex-basis: 100%; order: 3; }
+  .needs-row__horizon { width: auto; }
+  .needs-body { padding-left: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .needs-row,
+  .needs-row::before,
+  .needs-row__chevron {
+    transition: none;
+  }
+}
+
+/* ─── Overview: "The model's call" ────────────────────────────────────────
+   What today should have been, and why the model thought so. The waterfall is
+   ForecastDailyRevenue.attribution — a TreeSHAP payload already grouped for
+   operators by ml/models/attribution.py. */
+
+.model-call {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: 40px;
+  padding: 18px 0 0;
+}
+
+.model-call__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.model-call__value {
+  margin-top: 8px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.022em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* p10 → p90 as the rail, the point forecast as a light tick, the day's actual
+   as the ink mark. An actual outside the interval turns accent — the model
+   missing is a state change, which is what red is for. */
+.model-call__track {
+  margin-top: 14px;
+  position: relative;
+  height: 11px;
+  width: 100%;
+}
+
+.model-call__track-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 3px;
+  background: var(--hairline);
+}
+
+.model-call__track-forecast {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 11px;
+  background: var(--ink-ornament);
+}
+
+.model-call__track-mark {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 11px;
+  background: var(--ink);
+}
+
+.model-call__track-mark.is-outside {
+  width: 3px;
+  background: var(--accent);
+}
+
+.model-call__caption {
+  margin-top: 8px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.model-call__caption + .model-call__caption {
+  margin-top: 5px;
+}
+
+.model-call__chart {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.model-call__none {
+  padding: 16px 0 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  max-width: 62ch;
+}
+
+@media (max-width: 900px) {
+  .model-call {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+
+/* ─── Overview: P&L rail ──────────────────────────────────────────────────
+   Five hairline-divided columns rather than the four `.inv-panel` cards the
+   /dashboard/pnl strip uses. The fifth column is what makes the block
+   reconcile on screen: sales − COGS − labor − (fees + fixed) = net profit.
+   Four columns showed a subtraction that visibly did not add up. */
+
+.pnl-rail {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--hairline-bold);
+  border-bottom: 1px solid var(--hairline-bold);
+}
+
+.pnl-rail__cell {
+  padding: 14px 18px;
+  border-left: 1px solid var(--hairline);
+  min-width: 0;
+}
+
+.pnl-rail__cell:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.pnl-rail__cell:last-child {
+  padding-right: 0;
+}
+
+.pnl-rail__label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.pnl-rail__value {
+  margin-top: 8px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+/* Costs read in subtract red, not accent — a cost being a cost is not an
+   alarm, and --accent stays reserved for state. */
+.pnl-rail__value.is-cost {
+  color: var(--subtract);
+}
+
+.pnl-rail__sub {
+  margin-top: 6px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pnl-rail__sub.is-breach {
+  color: var(--accent);
+}
+
+.pnl-prime {
+  margin-top: 9px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .pnl-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pnl-rail__cell:nth-child(3n + 1) { border-left: none; padding-left: 0; }
+  .pnl-rail__cell:nth-child(n + 4) { border-top: 1px solid var(--hairline); }
+}
+
+@media (max-width: 640px) {
+  .pnl-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pnl-rail__cell:nth-child(3n + 1) { border-left: 1px solid var(--hairline); padding-left: 18px; }
+  .pnl-rail__cell:nth-child(odd) { border-left: none; padding-left: 0; }
+  .pnl-rail__cell:nth-child(n + 3) { border-top: 1px solid var(--hairline); }
+}
+
+/* ─── Overview: "Still moving" ────────────────────────────────────────────
+   Everything that will change the figures in the masthead before the day
+   closes. Cells are hairline-divided like the rail, at a quieter scale — this
+   band reports pending state, not performance. */
+
+/* Auto-fit rather than an even split: open tickets and the next payout are not
+   in the database, so this band often has two real cells. Halving the page
+   between them read as a mostly empty strip; sizing to content lets the rule
+   carry the rest. */
+.moving-band {
+  display: grid;
+  grid-template-columns: repeat(var(--moving-cells, 3), minmax(min-content, max-content));
+  justify-content: start;
+  gap: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.moving-band__cell + .moving-band__cell {
+  padding-left: 32px;
+}
+
+.moving-band__cell {
+  padding: 14px 20px;
+  border-left: 1px solid var(--hairline);
+  min-width: 0;
+}
+
+.moving-band__cell:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.moving-band__cell:last-child {
+  padding-right: 0;
+}
+
+.moving-band__value {
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.moving-band__unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-muted);
+}
+
+.moving-band__note {
+  margin-top: 5px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.moving-band__note.is-flagged {
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .moving-band { grid-template-columns: minmax(0, 1fr); }
+  .moving-band__cell {
+    border-left: none;
+    padding: 12px 0;
+  }
+  .moving-band__cell + .moving-band__cell {
+    border-top: 1px solid var(--hairline);
+  }
+}
+
+/* ─── Overview: per-store ledger ──────────────────────────────────────────
+   Seven columns that foot, not the seventeen-column reconciliation scroller
+   `.fin-table-scroll` renders on /dashboard/analytics. Same data, different
+   question: the overview asks "how did the day go and where did it come
+   from", the analytics ledger asks "does the drawer tie out". */
+
+.ov-ledger {
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.72);
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.ov-ledger__grid {
+  min-width: 760px;
+}
+
+.ov-ledger__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) repeat(6, minmax(0, 1fr));
+  gap: 0;
+  align-items: baseline;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ov-ledger__row--head {
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--hairline-bold);
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.ov-ledger__row--channel {
+  padding: 10px 20px 10px 36px;
+}
+
+.ov-ledger__row--total {
+  border-bottom: none;
+  background: rgba(244, 236, 223, 0.5);
+  padding: 15px 20px;
+}
+
+.ov-ledger__row--note {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 13px 20px;
+}
+
+.ov-ledger__store {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+  font-style: italic;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.ov-ledger__store.is-quiet {
+  color: var(--ink-muted);
+}
+
+.ov-ledger__num {
+  text-align: right;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+}
+
+.ov-ledger__num.is-cost {
+  font-weight: 500;
+  color: var(--subtract);
+}
+
+.ov-ledger__row--channel .ov-ledger__num {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.ov-ledger__total-label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-faint);
+}
+
+/* ─── Overview: invoices ── */
+
+.ov-invoices {
+  border: 1px solid var(--hairline-bold);
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.ov-invoices__kpis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 32px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ov-invoices__kpi-label {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.ov-invoices__kpi-value {
+  margin-top: 4px;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.ov-invoices__kpi-value.is-flagged {
+  color: var(--accent);
+}
+
+.ov-invoices__vendor {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ov-invoices__vendor:last-child {
+  border-bottom: none;
+}
+
+.ov-invoices__vendor-name {
+  font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+  font-style: italic;
+  font-size: 17px;
+}
+
+.ov-invoices__vendor-total {
+  margin-left: auto;
+  font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ─── Overview: bottom pair ── */
+
+.ov-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+
+@media (max-width: 1100px) {
+  .ov-pair { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ─── Let the paper show through ──────────────────────────────────────────
+   `.editorial-surface` paints the cream gradient — two warm radial washes over
+   a paper-to-paper-deep ramp — and then shadcn's `SidebarInset` painted an
+   opaque `bg-background` rectangle straight over it, so the content area
+   rendered as flat #fffbf9 and the gradient was only ever visible in the
+   gutters.
+
+   `.editorial-surface` does redefine `--background`, but Tailwind v4's
+   `bg-background` reads `--color-background`, which the theme resolves once at
+   `:root`; redefining the raw channel triple deeper never reaches it. Rather
+   than shadow a second token, the wrapper and the inset go transparent: the
+   surface is the one painted ground on this route, exactly as in the concept. */
+
+.editorial-surface [data-slot="sidebar-inset"],
+.editorial-surface > [class*="sidebar-wrapper"] {
+  background: transparent;
+}
+
+/* Per-store channel disclosure. The chevron is its own hit target so the store
+   name stays a link to that store's analytics. */
+.ov-ledger__disclose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: -20px;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.ov-ledger__disclose:hover,
+.ov-ledger__disclose:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-ledger__disclose svg { transition: none; }
 }

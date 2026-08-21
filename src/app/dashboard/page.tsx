@@ -15,5 +15,11 @@ export default async function DashboardPage({
   const sp = await searchParams
   const range = parseDashboardRange(sp)
 
-  return <DashboardShell range={range} userRole={session.user.role} />
+  return (
+    <DashboardShell
+      range={range}
+      userRole={session.user.role}
+      userName={session.user.name}
+    />
+  )
 }

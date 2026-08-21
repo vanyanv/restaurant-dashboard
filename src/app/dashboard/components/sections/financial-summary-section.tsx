@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma"
-import { FinancialSummaryTable } from "../financial-summary-table"
+import { OverviewLedger } from "../overview-ledger"
 import { SectionHead } from "../section-head"
+import { rangeDateLabel } from "@/lib/dashboard/range-label"
+import type { DashboardRange } from "@/lib/dashboard-utils"
 import type { DashboardPromise } from "./data"
 
 export async function FinancialSummarySection({
   dashboardPromise,
+  range,
 }: {
   dashboardPromise: DashboardPromise
+  range: DashboardRange
 }) {
   const data = await dashboardPromise
   const hasData = data && data.rows.length > 0
@@ -27,14 +31,15 @@ export async function FinancialSummarySection({
   }
 
   return (
-    <div className="dock-in dock-in-5">
+    <div className="dock-in dock-in-8">
       <SectionHead label="Per-store ledger" />
       {hasData ? (
-        <FinancialSummaryTable
+        <OverviewLedger
           rows={data.rows}
           totals={data.totals}
-          channelRows={data.channelRows}
+          storeChannelRows={data.storeChannelRows}
           preOpenStoreIds={preOpenStoreIds}
+          stamp={rangeDateLabel(range)}
         />
       ) : (
         <div className="flex flex-col items-center py-20 text-center">

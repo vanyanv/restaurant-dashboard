@@ -38,7 +38,7 @@ export async function getInvoiceSummary(options?: {
   if (!session?.user) {
     return {
       totalSpend: 0, invoiceCount: 0, avgInvoiceTotal: 0,
-      pendingReviewCount: 0, vendorCount: 0,
+      pendingReviewCount: 0, pendingReviewTotal: 0, vendorCount: 0,
       spendByVendor: [], spendByCategory: [],
     }
   }
@@ -83,8 +83,13 @@ export async function getInvoiceSummary(options?: {
       _sum: { totalAmount: true },
       _count: { _all: true },
     }),
-    prisma.invoice.count({
+    prisma.invoice.aggregate({
       where: { ...where, status: "REVIEW" },
+      _count: { _all: true },
+      // The dollar value matters as much as the count: three invoices holding
+      // $2,184 out of COGS understates food cost by a knowable amount, and the
+      // overview says so.
+      _sum: { totalAmount: true },
     }),
     prisma.invoiceLineItem.findMany({
       where: { invoice: where },
@@ -132,7 +137,8 @@ export async function getInvoiceSummary(options?: {
     totalSpend,
     invoiceCount,
     avgInvoiceTotal,
-    pendingReviewCount: pendingReview,
+    pendingReviewCount: pendingReview._count._all,
+    pendingReviewTotal: pendingReview._sum.totalAmount ?? 0,
     vendorCount,
     spendByVendor,
     spendByCategory,

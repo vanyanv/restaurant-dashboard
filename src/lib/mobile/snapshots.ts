@@ -189,6 +189,7 @@ export async function getMobileHomeSnapshot(input: {
         {
           grossRevenue: number
           netRevenue: number
+          orderCount: number
           fpGross: number
           tpGross: number
           cashSales: number
@@ -213,6 +214,7 @@ export async function getMobileHomeSnapshot(input: {
           {
             grossRevenue: 0,
             netRevenue: 0,
+            orderCount: 0,
             fpGross: 0,
             tpGross: 0,
             cashSales: 0,
@@ -220,6 +222,7 @@ export async function getMobileHomeSnapshot(input: {
           }
         d.grossRevenue += gross
         d.netRevenue += net
+        d.orderCount += orders
         if (isFp(row.platform)) {
           d.fpGross += row.fpGrossSales ?? 0
           if (row.paymentMethod === "CASH") d.cashSales += row.fpGrossSales ?? 0

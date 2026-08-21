@@ -336,6 +336,13 @@ async function getHourlyOrderDistributionWithComparison(
         salesPacePct == null ? null : Math.round(salesPacePct * 10) / 10,
       lastDataHour,
       inProgress: spec.hourCutoff != null,
+      // Kept rather than collapsed to a mean — the overview's bullet tracks
+      // need the spread of the baseline weekdays. Empty weeks are dropped so a
+      // missing week cannot drag a band's floor to zero.
+      groupTotals: groupTotals.filter((t) => t > 0).map((t) => Math.round(t * 10) / 10),
+      groupSalesTotals: groupSalesTotals
+        .filter((t) => t > 0)
+        .map((t) => Math.round(t * 100) / 100),
     },
   }
 }

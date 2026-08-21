@@ -145,6 +145,8 @@ function cmp(
 ): OrderPatternsHourlyComparison {
   return {
     period: "range",
+    groupTotals: [78, 80, 82],
+    groupSalesTotals: [1560, 1600, 1640],
     currentTotal: 100,
     baselineTotal: 80,
     pacePct: 25,
@@ -254,7 +256,51 @@ describe("P&L pace", () => {
     expect(sumPnLDays(rows, periodDates, ["2026-08-03", "2026-08-10"])).toEqual({
       totalSales: 2000,
       bottomLine: 200,
+      labor: 0,
     })
+  })
+
+  it("sums the labor line when the P&L carries one", () => {
+    const withLabor: PnLRow[] = [
+      ...rows,
+      {
+        code: "6200",
+        label: "Labor",
+        values: [210, 210, 220, 230],
+        percents: [0.21, 0.21, 0.22, 0.23],
+      },
+    ]
+    expect(
+      sumPnLDays(withLabor, periodDates, ["2026-08-03", "2026-08-10"]).labor
+    ).toBe(450)
+  })
+
+  it("returns labor as a magnitude when the P&L stores costs as negatives", () => {
+    // Regression: the live P&L signs costs negative, so this summed to −450
+    // while `combined.laborPct` stayed positive. The masthead lede then read
+    // "labor is 40.6 points above its four-week share" on a 22.4% business.
+    const negativeLabor: PnLRow[] = [
+      ...rows,
+      {
+        code: "6200",
+        label: "Labor",
+        values: [-210, -210, -220, -230],
+        percents: [-0.21, -0.21, -0.22, -0.23],
+      },
+    ]
+    const totals = sumPnLDays(negativeLabor, periodDates, [
+      "2026-08-03",
+      "2026-08-10",
+    ])
+    expect(totals.labor).toBe(450)
+    // And the share it feeds is then plausible rather than absurd.
+    expect(totals.labor! / totals.totalSales).toBeCloseTo(0.225, 3)
+  })
+
+  it("reports zero labor rather than undefined when the row is absent", () => {
+    // The masthead lede divides by sales to get a labor share; an undefined
+    // here would silently become NaN in that ratio.
+    expect(sumPnLDays(rows, periodDates, ["2026-08-03"]).labor).toBe(0)
   })
 
   it("reports profit percent and margin points against the average", () => {

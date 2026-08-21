@@ -55,6 +55,8 @@ export interface InvoiceKpis {
   invoiceCount: number
   avgInvoiceTotal: number
   pendingReviewCount: number
+  /** Dollar value of the invoices awaiting review — what COGS is missing. */
+  pendingReviewTotal: number
   vendorCount: number
   spendByVendor: Array<{ vendor: string; total: number }>
   spendByCategory: Array<{ category: string; total: number }>

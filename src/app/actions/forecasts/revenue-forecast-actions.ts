@@ -7,6 +7,11 @@ import {
   isReconciledStale,
   type ForecastSourcePreference,
 } from "@/lib/forecasts/reconciliation-prefs"
+import {
+  mergeAttributions,
+  parseAttribution,
+  type Attribution,
+} from "@/lib/dashboard/model-call"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
 export interface RevenueForecastDay {
@@ -21,6 +26,10 @@ export interface RevenueForecastDay {
    *  When aggregating across stores, set to `transfer` if any contributing
    *  row was transfer (conservative — surfaces the caption on mixed days). */
   forecastSource: "native" | "transfer"
+  /** Operator-grouped TreeSHAP waterfall summing to `predictedRevenue`. Null
+   *  on rows written before 2026-08-19, whenever the booster declined, and
+   *  whenever the stored payload does not parse. */
+  attribution: Attribution | null
 }
 
 export interface RevenueForecastData {
@@ -100,6 +109,7 @@ export async function getRevenueForecast(input: {
         reconciledP10: true,
         reconciledP90: true,
         reconciledAt: true,
+        attribution: true,
       },
     }),
     prisma.mlTrainingRun.findFirst({
@@ -130,6 +140,7 @@ export async function getRevenueForecast(input: {
       modelVersion: string
       generatedAt: Date
       forecastSource: "native" | "transfer"
+      attributions: Attribution[]
     }
   >()
   for (const r of latestPerStoreDate.values()) {
@@ -146,6 +157,11 @@ export async function getRevenueForecast(input: {
     const rawP90 = useReconciled ? r.reconciledP90 : r.p90
     const p10 = rawP10 ?? pr
     const p90 = rawP90 ?? pr
+    // Reconciliation rewrites the point forecast but not the SHAP payload, so
+    // a merged attribution no longer sums to `predictedRevenue` on reconciled
+    // days. The band renders the mismatch honestly rather than hiding it; see
+    // buildWaterfall, which reports its own total.
+    const attribution = parseAttribution(r.attribution)
     if (!cur) {
       aggByDate.set(key, {
         date: r.forecastDate,
@@ -155,6 +171,7 @@ export async function getRevenueForecast(input: {
         modelVersion: r.modelVersion,
         generatedAt: r.generatedAt,
         forecastSource: r.forecastSource,
+        attributions: attribution ? [attribution] : [],
       })
     } else {
       cur.predictedRevenue += pr
@@ -167,6 +184,7 @@ export async function getRevenueForecast(input: {
       if (r.forecastSource === "transfer") {
         cur.forecastSource = "transfer"
       }
+      if (attribution) cur.attributions.push(attribution)
     }
   }
 
@@ -180,6 +198,7 @@ export async function getRevenueForecast(input: {
       modelVersion: r.modelVersion,
       generatedAt: r.generatedAt,
       forecastSource: r.forecastSource,
+      attribution: mergeAttributions(r.attributions),
     }))
 
   const generatedAt =

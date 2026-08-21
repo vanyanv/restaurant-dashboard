@@ -6,11 +6,22 @@
 // day. This computes the same weekday-aligned baseline from a daily-granularity
 // P&L, so both halves of Overview answer "compared to what?" the same way.
 
-import { AFTER_LABOR_RENT_CODE, TOTAL_SALES_CODE, type PnLRow } from "@/lib/pnl"
+import {
+  AFTER_LABOR_RENT_CODE,
+  LABOR_CODE,
+  TOTAL_SALES_CODE,
+  type PnLRow,
+} from "@/lib/pnl"
 
 export interface PnLTotals {
   totalSales: number
   bottomLine: number
+  /**
+   * Labor dollars over the same days. Always set by `sumPnLDays`; optional on
+   * the interface so the hand-built totals that `computePnLPace` accepts (which
+   * never look at labor) do not all have to carry a field they ignore.
+   */
+  labor?: number
 }
 
 export interface PnLPace {
@@ -31,15 +42,23 @@ export function sumPnLDays(
   const wanted = new Set(dates)
   const salesRow = rows.find((r) => r.code === TOTAL_SALES_CODE)
   const profitRow = rows.find((r) => r.code === AFTER_LABOR_RENT_CODE)
+  const laborRow = rows.find((r) => r.code === LABOR_CODE)
 
   let totalSales = 0
   let bottomLine = 0
+  let labor = 0
   periodDates.forEach((date, i) => {
     if (!wanted.has(date)) return
     totalSales += salesRow?.values[i] ?? 0
     bottomLine += profitRow?.values[i] ?? 0
+    labor += laborRow?.values[i] ?? 0
   })
-  return { totalSales, bottomLine }
+  // Costs are stored as negatives in the P&L rows, so labor sums to a negative
+  // number while `combined.laborPct` is a positive share. Comparing the two
+  // directly produced a "labor is 40.6 points above its four-week share" lede
+  // on a business running 22.4% labor. A share of sales is a magnitude; take it
+  // as one, whichever sign convention the row uses.
+  return { totalSales, bottomLine, labor: Math.abs(labor) }
 }
 
 /**
