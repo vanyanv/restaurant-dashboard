@@ -1,6 +1,9 @@
 /* Decisions page — owner-facing, plain-English layer over forecasts + intelligence. */
 
 .decisions-page {
+  /* The concept's body tracks at -0.005em. Scoped here rather than globally:
+     it only reaches prose that declares no tracking of its own. */
+  letter-spacing: -0.005em;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -54,7 +57,6 @@
 
 .decisions-ribbon-head__title {
   font-family: var(--font-fraunces), serif;
-  font-variation-settings: "opsz" 96, "SOFT" 50;
   font-size: 22px;
   font-weight: 450;
   letter-spacing: -0.02em;
@@ -894,14 +896,13 @@
 
 .decisions-verdict__line {
   font-family: var(--font-fraunces), serif;
-  font-variation-settings: "opsz" 96, "SOFT" 50;
   font-size: clamp(24px, 3.6vw, 38px);
   font-weight: 450;
   font-style: italic;
   line-height: 1.14;
   letter-spacing: -0.026em;
   color: var(--ink);
-  max-width: 24ch;
+  max-width: 22ch;
   margin: 0;
   text-wrap: balance;
 }
@@ -987,7 +988,7 @@
 
 .decisions-ledrow {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 150px 128px;
+  grid-template-columns: 26px minmax(0, 1fr) 138px 118px;
   gap: 1rem;
   align-items: start;
   padding: 0.95rem 0.25rem 0.95rem 0.85rem;
@@ -1049,7 +1050,6 @@
 
 .decisions-ledrow__title {
   font-family: var(--font-fraunces), serif;
-  font-variation-settings: "opsz" 96, "SOFT" 40;
   font-size: 16.5px;
   font-weight: 500;
   letter-spacing: -0.012em;
@@ -1058,7 +1058,6 @@
   margin: 0;
 }
 
-.decisions-ledrow__title em { font-style: italic; }
 
 .decisions-ledrow__why {
   font-family: var(--font-dm-sans), ui-sans-serif, sans-serif;

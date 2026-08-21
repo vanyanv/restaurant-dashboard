@@ -100,9 +100,7 @@ export function ActionRow({ action, rank, asOf }: Props) {
 
       <div className="decisions-ledrow__body">
         <span className="decisions-ledrow__cat">{action.category}</span>
-        <h3 className="decisions-ledrow__title">
-          <em>{action.title}</em>
-        </h3>
+        <h3 className="decisions-ledrow__title">{action.title}</h3>
         {action.why ? <p className="decisions-ledrow__why">{action.why}</p> : null}
 
         {error ? <p className="decisions-ledrow__error">{error}</p> : null}
