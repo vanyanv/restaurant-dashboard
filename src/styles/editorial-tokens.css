@@ -8,10 +8,19 @@
      folio, field label, status word and unit stamp in the product — roughly
      530 sites, almost all of them load-bearing text at 10px.
      The old #a69d92 measured 2.48:1 against --paper: below AA for both normal
-     (4.5:1) and large (3:1) text. This value is 4.70:1, so the captions an
-     operator reads at 11pm actually pass. Genuinely decorative marks (rules,
-     dashes, chart gridlines) use --ink-ornament below. */
-  --ink-faint: #776d63;
+     (4.5:1) and large (3:1) text. Genuinely decorative marks (rules, dashes,
+     chart gridlines) use --ink-ornament below.
+
+     Measured against the WHOLE surface, not just its top. The page ground is
+     `linear-gradient(--paper, --paper-deep)`, so a caption's background depends
+     on how far down the page it sits. The previous #776d63 was checked against
+     --paper alone (4.70:1) and reads 4.31:1 against --paper-deep — below AA for
+     anything low on a long route. That gap was invisible while shadcn's
+     SidebarInset painted an opaque #fffbf9 over the gradient; letting the paper
+     show through, which the design always intended, exposed it.
+     This value is 4.91:1 at the top of the gradient and 4.51:1 at the bottom,
+     so it clears AA at every vertical position. */
+  --ink-faint: #746a60;
   /* The old --ink-faint value, kept for non-text ornament only: never use it
      for anything a reader has to make out. */
   --ink-ornament: #a69d92;
