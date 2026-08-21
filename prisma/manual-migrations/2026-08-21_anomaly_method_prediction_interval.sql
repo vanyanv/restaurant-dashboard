@@ -1,0 +1,21 @@
+-- F4 — anomaly detection scored against each day's own prediction interval.
+--
+-- The rolling z-score pooled a 28-day mean and standard deviation over a series
+-- with a large weekly cycle, so the dispersion it measured was mostly
+-- seasonality the model already expects. Every z was deflated and |z| > 3 was
+-- close to unreachable. The replacement (ml/anomaly/interval.py) asks whether
+-- the actual fell outside the P10/P90 already stored on that day's forecast
+-- row, which is seasonality-aware by construction.
+--
+-- Rows written by that detector leave "zScore" NULL — there is no pooled
+-- distribution to standardise against, and the column is already nullable.
+--
+-- Apply with the repo convention (CLAUDE.md): run `npm run db:drift` first and
+-- confirm "No difference detected", then `prisma db push`, then record this
+-- file. NEVER `prisma migrate dev` — it would reset the Neon production DB.
+--
+-- ALTER TYPE ... ADD VALUE is not transactional in Postgres and cannot run
+-- inside an explicit BEGIN/COMMIT block. It is additive and does not rewrite
+-- existing rows, so it is safe to run against production on its own.
+
+ALTER TYPE "AnomalyMethod" ADD VALUE IF NOT EXISTS 'PREDICTION_INTERVAL';

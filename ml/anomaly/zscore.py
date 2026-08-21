@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from ml.db import connect, cuid_like
+from ml.features.revenue import load_daily_revenue
 
 
 WINDOW_DAYS = 28
@@ -31,7 +32,14 @@ class Anomaly:
     target_id: str | None
     occurred_on: dt.date
     residual: float
-    z_score: float
+    #: None when the detector does not produce one — the interval detector
+    #: has no pooled distribution to standardise against, and the column is
+    #: nullable precisely so it need not invent a value.
+    z_score: float | None
+    #: AnomalyMethod enum value. Carried on the row rather than hardcoded in
+    #: the INSERT so a second detector can share this writer.
+    method: str = "ZSCORE"
+    explanation: str | None = None
 
 
 def _score_series(series: pd.Series, window: int = WINDOW_DAYS) -> Iterable[tuple[pd.Timestamp, float, float]]:
@@ -56,21 +64,25 @@ def _score_series(series: pd.Series, window: int = WINDOW_DAYS) -> Iterable[tupl
 
 
 def detect_revenue_anomalies(store_id: str) -> list[Anomaly]:
-    sql = """
-        SELECT date::date AS date,
-               SUM(COALESCE("fpNetSales", 0) + COALESCE("tpNetSales", 0)) AS revenue
-        FROM "OtterDailySummary"
-        WHERE "storeId" = %s
-          AND date >= (CURRENT_DATE - 60)
-        GROUP BY date
-        ORDER BY date
+    """Fallback detector for stores with no reconciled forecasts yet.
+
+    Reads through `load_daily_revenue` rather than issuing its own SQL (F3).
+    This was the only reader in the pipeline that skipped
+    `trim_incomplete_trailing_days`, so it scored the newest business day while
+    it was still being written — on a store that books 31.9% of net sales after
+    21:00, that is a nightly false alarm that revenue collapsed. Going through
+    the shared loader also picks up the evidence-based gap filling from F1, so
+    an unsynced day arrives as NaN instead of a $0 outlier.
+
+    Prefer `ml.anomaly.interval` wherever a forecast interval exists; a pooled
+    z-score on a weekly-seasonal series is a blunt instrument (F4).
     """
-    with connect() as conn:
-        df = pd.read_sql_query(sql, conn, params=(store_id,))
+    df = load_daily_revenue(store_id, lookback_days=60)
     if df.empty:
         return []
-    df["date"] = pd.to_datetime(df["date"])
-    series = df.set_index("date")["revenue"].astype(float)
+    series = df.set_index("date")["revenue"].astype(float).dropna()
+    if series.empty:
+        return []
 
     out: list[Anomaly] = []
     for ts, residual, z in _score_series(series):
@@ -110,7 +122,14 @@ def detect_menu_item_anomalies(store_id: str, item_names: list[str]) -> list[Ano
 
     out: list[Anomaly] = []
     for item_name, group in df.groupby("itemName"):
+        # Reindex onto a contiguous calendar. A day with no sales for this
+        # SKU produces no row at all, so without this the "trailing 28"
+        # window spans however many calendar days it takes to find 28 rows,
+        # and the variance is measured only over days the item did sell.
         series = group.set_index("date")["qty"].astype(float)
+        series = series.reindex(
+            pd.date_range(series.index.min(), series.index.max(), freq="D")
+        ).fillna(0.0)
         for ts, residual, z in _score_series(series):
             if abs(z) >= Z_THRESHOLD:
                 out.append(
@@ -131,8 +150,9 @@ def write_anomalies(store_id: str, anomalies: list[Anomaly]) -> int:
     sql = """
         INSERT INTO "AnomalyEvent"
             (id, "storeId", target, "targetId", "occurredOn",
-             residual, "zScore", method, status)
-        VALUES (%s, %s, %s::"AnomalyTarget", %s, %s, %s, %s, 'ZSCORE'::"AnomalyMethod", 'OPEN')
+             residual, "zScore", method, explanation, status)
+        VALUES (%s, %s, %s::"AnomalyTarget", %s, %s, %s, %s,
+                %s::"AnomalyMethod", %s, 'OPEN')
     """
     written = 0
     with connect() as conn:
@@ -164,6 +184,8 @@ def write_anomalies(store_id: str, anomalies: list[Anomaly]) -> int:
                         a.occurred_on,
                         a.residual,
                         a.z_score,
+                        a.method,
+                        a.explanation,
                     ),
                 )
                 written += 1
