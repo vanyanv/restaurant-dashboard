@@ -24,6 +24,7 @@ from xgboost import DMatrix, XGBRegressor
 
 from ml.evaluation import metrics
 from ml.evaluation.conformal import ConformalWrapper, wrap_xgboost_conformal
+from ml.evaluation.cqr import CQRWrapper, fit_cqr
 from ml.models.attribution import build_attribution
 from ml.features.revenue import (
     build_enriched_features,
@@ -76,6 +77,10 @@ class TrainResult:
     signal_families: dict = field(default_factory=dict)
     feature_names: tuple[str, ...] = ()
     conformal: Optional[ConformalWrapper] = None
+    #: Conformalized quantile regression band (F14). When set, `forecast()`
+    #: takes p10/p90 from here instead of the symmetric conformal width. The
+    #: point forecast is unchanged either way, so the two are comparable.
+    cqr: Optional[CQRWrapper] = None
     uses_fallback_interval: bool = False
     # Holdout arrays used by the seasonal-naive promotion gate; empty arrays
     # mean "no holdout exposed" (back-compat default).
@@ -132,6 +137,7 @@ def train(
     *,
     enriched: bool = False,
     history: Optional[pd.DataFrame] = None,
+    interval_method: str = "conformal",
 ) -> Optional[TrainResult]:
     """Fit the deployable model for one store.
 
@@ -197,6 +203,7 @@ def train(
 
     uses_fallback = len(calib_df) < MIN_CALIBRATION_ROWS
     conformal: Optional[ConformalWrapper] = None
+    cqr: Optional[CQRWrapper] = None
     if uses_fallback:
         # Recombine train + calib to keep the fitting set as large as possible
         # when conformal coverage isn't available anyway.
@@ -212,6 +219,19 @@ def train(
         y_calib = calib_df["revenue"].to_numpy(dtype=float)
         conformal = wrap_xgboost_conformal(base, X_train, y_train, X_calib, y_calib)
         eval_df = holdout_df
+        if interval_method == "cqr":
+            # Same split, same rows. Only the band changes — the point
+            # forecast stays the squared-error model above, so a backtest
+            # comparing the two isolates band shape from point accuracy.
+            try:
+                cqr = fit_cqr(
+                    X_train, y_train, X_calib, y_calib, alpha=0.2,
+                    # The point forecast stays the squared-error model, so a
+                    # median booster would be a wasted fit every night.
+                    fit_median=False,
+                )
+            except ValueError as exc:
+                _LOG.warning("cqr unavailable, falling back to conformal: %s", exc)
 
     preds = base.predict(eval_df[cols])
     actuals = eval_df["revenue"].to_numpy(dtype=float)
@@ -230,7 +250,7 @@ def train(
     if uses_fallback:
         flavor = f"{flavor}-fallback"
     else:
-        flavor = f"{flavor}-conformal"
+        flavor = f"{flavor}-cqr" if cqr is not None else f"{flavor}-conformal"
         # Deployment refit, AFTER the holdout score above.
         #
         # `base` was fit on the train slice alone so the calibration slice stays
@@ -268,6 +288,7 @@ def train(
         signal_families=signal_families,
         feature_names=tuple(cols),
         conformal=conformal,
+        cqr=cqr,
         uses_fallback_interval=uses_fallback,
         holdout_y_true=np.asarray(actuals, dtype=float),
         holdout_y_pred=np.asarray(preds, dtype=float),
@@ -328,7 +349,26 @@ def forecast(
 
         measured = (horizon_widths or {}).get(offset)
 
-        if result.conformal is not None and not result.uses_fallback_interval:
+        if result.cqr is not None and not result.uses_fallback_interval:
+            # F14: the band comes from conditional quantiles, the point from
+            # the squared-error model as before. Widths vary by day, and the
+            # two sides are free to differ.
+            pred = float(result.model.predict(x_arr)[0])
+            cqr_lo, cqr_hi = result.cqr.predict_interval(x_arr)
+            lo_raw, hi_raw = float(cqr_lo[0]), float(cqr_hi[0])
+            # The quantile models and the point model can disagree; never ship
+            # an interval that excludes its own prediction.
+            lo_raw, hi_raw = min(lo_raw, pred), max(hi_raw, pred)
+            if measured is not None:
+                half = pred * measured
+                p10, p90 = pred - half, pred + half
+            else:
+                # Same horizon widening as the conformal path, applied to each
+                # side separately so asymmetry survives the stretch.
+                widening = 1.0 + HORIZON_WIDENING_PER_DAY * (offset - 1)
+                p10 = pred - (pred - lo_raw) * widening
+                p90 = pred + (hi_raw - pred) * widening
+        elif result.conformal is not None and not result.uses_fallback_interval:
             point, lower80, upper80, _, _ = result.conformal.predict_intervals(x_arr)
             pred = float(point[0])
             if measured is not None:

@@ -65,6 +65,10 @@ class HorizonScore:
     mape: Optional[float]
     bias: float
     coverage80: float
+    #: Mean (p90 - p10) / prediction. Coverage says whether the band is big
+    #: enough; this says what it costs. A band nobody can act on is not a
+    #: good band however often it contains the answer.
+    mean_rel_width: float
     sample_size: int
 
 
@@ -127,12 +131,15 @@ def score_by_horizon(records: Iterable[BacktestRecord]) -> dict[int, HorizonScor
 
         denom = float(np.sum(np.abs(actual)))
         wape = metrics.wape(actual, pred)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rel_width = np.where(pred > 0, (upper - lower) / pred, np.nan)
         out[horizon] = HorizonScore(
             horizon=horizon,
             wape=float(wape) if wape is not None else float("inf"),
             mape=metrics.mape(actual, pred),
             bias=float(np.sum(pred - actual) / denom) if denom else 0.0,
             coverage80=float(metrics.interval_coverage(actual, lower, upper) or 0.0),
+            mean_rel_width=float(np.nanmean(rel_width)) if np.any(np.isfinite(rel_width)) else 0.0,
             sample_size=len(rows),
         )
     return out
@@ -155,6 +162,8 @@ def summarise(scores: dict[int, HorizonScore]) -> dict:
         "bias_h1": ordered[0].bias,
         "coverage80_h1": ordered[0].coverage80,
         "coverage80_mean": float(np.mean([s.coverage80 for s in ordered])),
+        "rel_width_h1": ordered[0].mean_rel_width,
+        "rel_width_mean": float(np.mean([s.mean_rel_width for s in ordered])),
     }
 
 
@@ -167,6 +176,7 @@ def backtest_revenue(
     enriched: bool = False,
     history: Optional[pd.DataFrame] = None,
     min_train_days: int = DEFAULT_MIN_TRAIN_DAYS,
+    interval_method: str = "conformal",
 ) -> list[BacktestRecord]:
     """Replay train -> forecast at each cutoff and score against actuals.
 
@@ -200,7 +210,9 @@ def backtest_revenue(
     records: list[BacktestRecord] = []
     for cutoff in cutoffs:
         past = history[history["date"] <= pd.Timestamp(cutoff)]
-        result = train_revenue(store_id, enriched=enriched, history=past)
+        result = train_revenue(
+            store_id, enriched=enriched, history=past, interval_method=interval_method
+        )
         if result is None:
             _LOG.warning("backtest_revenue: fold %s did not train — skipped", cutoff)
             continue
@@ -295,6 +307,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="Also backtest the direct multi-horizon candidate (F12/F13)",
     )
+    parser.add_argument(
+        "--cqr",
+        action="store_true",
+        help="Also backtest conformalized quantile intervals (F14)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -309,6 +326,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             step=args.step, enriched=False, history=history,
         )),
     }
+    if args.cqr:
+        out["cqr"] = _report(backtest_revenue(
+            args.store, n_cutoffs=args.cutoffs, horizon=args.horizon,
+            step=args.step, enriched=False, history=history,
+            interval_method="cqr",
+        ))
     if args.direct:
         out["direct"] = _report(backtest_direct_revenue(
             args.store, n_cutoffs=args.cutoffs, horizon=args.horizon,
