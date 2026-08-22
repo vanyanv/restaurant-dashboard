@@ -1,0 +1,9 @@
+{
+  "raw": "This week at Hollywood peaks SAT with $9,240 forecast, has an 11-hour labor shortfall over 2 short days, averaging 5.5 hours short per day.",
+  "model": "gpt-4.1-mini",
+  "nudge": "In that same single sentence, state how many hours short per day that works out to.",
+  "pass": false,
+  "failures": [
+    "quoted 5.5, which the page never computed"
+  ]
+}

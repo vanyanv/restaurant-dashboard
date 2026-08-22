@@ -26,6 +26,23 @@ export const VERDICT_MODEL = "gpt-4.1-mini"
 // circular import. Re-exported here because the guard is its main consumer.
 export { VERDICT_MAX_CHARS } from "@/app/dashboard/decisions/lib/verdict-copy"
 
+/**
+ * The budget the PROMPT asks for. Deliberately below VERDICT_MAX_CHARS, which
+ * is what the guard enforces.
+ *
+ * A language model cannot count characters. Quoting it the guard's own limit
+ * puts the mean of its length distribution on the limit and roughly half the
+ * mass over it — the golden-set run measured 171 and 172 characters on two of
+ * eight cases with the limit stated as 170, both silently rejected, both pages
+ * falling back to the composed sentence with nothing but a logger.warn to show
+ * for it. The gap is the headroom that absorbs a sentence the model misjudged.
+ *
+ * Only the prompt moves. The guard still accepts anything up to
+ * VERDICT_MAX_CHARS, so a good sentence at 165 characters still reaches the
+ * page; this makes the model aim lower, it does not make the product tighter.
+ */
+export const VERDICT_PROMPT_MAX_CHARS = 150
+
 export function buildVerdictPrompt(facts: VerdictFacts): string {
   const block = verdictFactBlock(facts)
   return `You write the single opening sentence of a restaurant owner's weekly decisions page. The owner is closing books late and wants to know what this week asks of them.
@@ -35,7 +52,7 @@ Here are the only facts you may use. They are already computed and already forma
 ${JSON.stringify(block, null, 2)}
 
 Rules:
-- Write ONE sentence, at most ${VERDICT_MAX_CHARS} characters.
+- Write ONE sentence, at most ${VERDICT_PROMPT_MAX_CHARS} characters.
 - Use only figures that appear verbatim above. Copy them exactly, including the dollar sign and commas.
 - Do not compute anything. Do not add, subtract, average, project, or round any figure. Do not infer a number that is not listed.
 - Do not predict, promise, or speculate about outcomes. State what the week is.

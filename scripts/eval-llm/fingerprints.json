@@ -1,0 +1,42 @@
+{
+  "verdict": {
+    "sha256": "e8bbbde8f11f0777",
+    "model": "gpt-4.1-mini",
+    "evaluatedAt": "2026-08-22",
+    "cases": 8,
+    "passed": 8,
+    "passRate": 1,
+    "costUsd": 0.00148,
+    "floor": 0.85
+  },
+  "proposal": {
+    "sha256": "728b1187cf195922",
+    "model": "gpt-4.1-mini",
+    "evaluatedAt": "2026-08-22",
+    "cases": 5,
+    "passed": 5,
+    "passRate": 1,
+    "costUsd": 0.00282,
+    "floor": 0.75
+  },
+  "adjudicator": {
+    "sha256": "bbbf09bc15dc1f99",
+    "model": "gpt-5.4-nano",
+    "evaluatedAt": "2026-08-22",
+    "cases": 4,
+    "passed": 4,
+    "passRate": 1,
+    "costUsd": 0.00123,
+    "floor": 0.75
+  },
+  "chat-tool-choice": {
+    "sha256": "637c688f4623dbde",
+    "model": "gpt-5-mini",
+    "evaluatedAt": "2026-08-22",
+    "cases": 12,
+    "passed": 12,
+    "passRate": 1,
+    "costUsd": 0.03416,
+    "floor": 0.75
+  }
+}

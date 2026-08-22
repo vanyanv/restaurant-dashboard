@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"proposals\": [\n    {\n      \"itemName\": \"Jalapeno Popper Basket\",\n      \"kind\": \"NEW_RECIPE\",\n      \"suggestedName\": \"Jalapeno Popper Basket\",\n      \"suggestedCategory\": \"Sides\",\n      \"components\": [\n        { \"type\": \"ingredient\", \"name\": \"Jalapeno\", \"quantity\": 3, \"unit\": \"each\" },\n        { \"type\": \"ingredient\", \"name\": \"Cheese\", \"quantity\": 2, \"unit\": \"oz\" },\n        { \"type\": \"ingredient\", \"name\": \"Russet Potato\", \"quantity\": 5, \"unit\": \"oz\" },\n        { \"type\": \"ingredient\", \"name\": \"Yellow Onion\", \"quantity\": 1, \"unit\": \"slice\" }\n      ],\n      \"reasoning\": \"No existing recipe matches Jalapeno Popper Basket; it is a new side likely involving jalapenos and cheese, so a new recipe with canonical ingredients is needed.\",\n      \"confidence\": 0.6\n    }\n  ]\n}",
+  "model": "gpt-4.1-mini",
+  "pass": true,
+  "failures": []
+}

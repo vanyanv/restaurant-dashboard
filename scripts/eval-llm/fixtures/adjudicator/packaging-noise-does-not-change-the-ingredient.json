@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"drafts\": [\n    {\n      \"caseId\": \"d1\",\n      \"matchName\": \"Yellow Onion\",\n      \"confidence\": 0.92,\n      \"reasoning\": \"The invoice item is yellow jumbo onions, which directly corresponds to the canonical Yellow Onion ingredient.\",\n      \"newIngredient\": null\n    }\n  ]\n}",
+  "model": "gpt-5.4-nano",
+  "pass": true,
+  "failures": []
+}

@@ -1,0 +1,8 @@
+{
+  "called": [
+    "searchCanonicalIngredients"
+  ],
+  "model": "gpt-5-mini",
+  "pass": true,
+  "failures": []
+}

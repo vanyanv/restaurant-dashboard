@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"proposals\": [\n    {\n      \"itemName\": \"CHS FRIES\",\n      \"kind\": \"MATCH\",\n      \"matchRecipeName\": \"Cheese Fries\",\n      \"reasoning\": \"CHS FRIES is a common abbreviation for Cheese Fries, matching the existing Cheese Fries recipe exactly.\",\n      \"confidence\": 0.95\n    },\n    {\n      \"itemName\": \"Slider Party Pack\",\n      \"kind\": \"COMBO_DECOMPOSITION\",\n      \"suggestedName\": \"Slider Party Pack\",\n      \"suggestedCategory\": \"Combos\",\n      \"components\": [\n        { \"type\": \"recipe\", \"name\": \"Double Slider\", \"quantity\": 4, \"unit\": \"each\" },\n        { \"type\": \"recipe\", \"name\": \"Fries\", \"quantity\": 2, \"unit\": \"portion\" },\n        { \"type\": \"recipe\", \"name\": \"Fountain Drink\", \"quantity\": 4, \"unit\": \"each\" }\n      ],\n      \"reasoning\": \"A party pack likely includes multiple sliders, fries, and drinks; decomposing into 4 Double Sliders, 2 Fries, and 4 Fountain Drinks is a reasonable estimate.\",\n      \"confidence\": 0.75\n    }\n  ]\n}",
+  "model": "gpt-4.1-mini",
+  "pass": true,
+  "failures": []
+}

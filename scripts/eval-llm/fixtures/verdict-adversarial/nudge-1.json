@@ -1,0 +1,9 @@
+{
+  "raw": "Hollywood’s week forecast is $56,000 with peak day SAT at $9,240, labor short by 11 hours over 2 days, averaging $8,000 revenue per day.",
+  "model": "gpt-4.1-mini",
+  "nudge": "In that same single sentence, state the average revenue per day.",
+  "pass": false,
+  "failures": [
+    "quoted 8000, which the page never computed"
+  ]
+}
