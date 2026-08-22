@@ -4,6 +4,16 @@ import { prisma } from "@/lib/prisma"
  * USD per 1M tokens. Update when providers change pricing.
  * Last verified: 2026-04-30.
  *
+ * gpt-5-mini added 2026-08-21: the CHAT_ROUTING_MODEL default
+ * (src/lib/chat/openai-client.ts). It had never had a row, so every chat turn
+ * — the heaviest LLM call in the product, up to 15 tool steps against a
+ * 58-tool catalogue — has been booking $0 in AiUsageEvent since the feature
+ * shipped. The pricing-miss fallback below is what made it silent. Surfaced by
+ * the golden-set runner (scripts/eval-llm), which reports its own spend and
+ * had to print the model as "unpriced"; tests/lib/ai-usage.test.ts now fails
+ * on any shipped model constant without a rate, so there is no fourth time.
+ * Rate read from https://developers.openai.com/api/docs/pricing on 2026-08-21.
+ *
  * gpt-5.4-nano added 2026-07-29: THRESHOLDS-certified ADJUDICATOR_MODEL
  * (src/lib/ingredient-match-llm.ts) — without a pricing row here,
  * recordAiUsage's pricing-miss fallback (see computeCostUsd below) would
@@ -19,6 +29,7 @@ export const PRICING_PER_MTOK = {
   "gpt-4o-mini":      { in: 0.15, cachedIn: 0.075, out: 0.60 },
   "gemini-2.5-flash": { in: 0.30, cachedIn: 0.075, out: 2.50 },
   "gpt-5.4-nano":     { in: 0.20, cachedIn: 0.02,  out: 1.25 },
+  "gpt-5-mini":       { in: 0.25, cachedIn: 0.025, out: 2.00 },
 } as const
 
 export type AiUsageInput = {
