@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest"
 import {
   VERDICT_MAX_CHARS,
+  VERDICT_PROMPT_MAX_CHARS,
   buildVerdictPrompt,
   parseVerdictLine,
 } from "@/lib/decision-verdict-llm"
@@ -121,5 +122,43 @@ describe("parseVerdictLine — the anti-hallucination guard", () => {
     ]) {
       expect(parseVerdictLine(composeVerdict(f), f)).toBe(composeVerdict(f))
     }
+  })
+})
+
+describe("the budget the prompt asks for, versus the budget the guard enforces", () => {
+  // Found by the golden-set run, not by reasoning: with the prompt quoting the
+  // guard's own 170-character limit, gpt-4.1-mini came back at 171 and 172 on
+  // two of eight cases. Both were rejected and both pages silently rendered the
+  // composed sentence instead. Nothing in production reports that — the only
+  // trace is a logger.warn nobody reads.
+  //
+  // A model cannot count characters. Asking it for the exact limit therefore
+  // puts the distribution's mean on the limit and roughly half its mass over
+  // it. The prompt has to ask for less than the guard will accept.
+  it("asks the model for a budget below the one it will be judged against", () => {
+    expect(VERDICT_PROMPT_MAX_CHARS).toBeLessThan(VERDICT_MAX_CHARS)
+  })
+
+  it("leaves enough headroom to absorb a sentence the model misjudged", () => {
+    // 1-2 characters was the observed overshoot when it was aiming at the
+    // limit. That is the error when it is trying; the margin has to cover the
+    // case where it is not.
+    expect(VERDICT_MAX_CHARS - VERDICT_PROMPT_MAX_CHARS).toBeGreaterThanOrEqual(15)
+  })
+
+  it("quotes the asked-for budget in the prompt, not the enforced one", () => {
+    const p = buildVerdictPrompt(facts())
+    expect(p).toContain(`${VERDICT_PROMPT_MAX_CHARS} characters`)
+    expect(p).not.toContain(`${VERDICT_MAX_CHARS} characters`)
+  })
+
+  it("still accepts a sentence between the two limits — the guard did not move", () => {
+    // The point is headroom, not a tighter product. A good sentence at 165
+    // characters must still reach the page.
+    const f = facts()
+    const long = `SAT is the week's biggest day at $9,240, and you are 11 hours short on the schedule across 2 days, with $2,140 a week sitting in actions you have not called.`
+    expect(long.length).toBeGreaterThan(VERDICT_PROMPT_MAX_CHARS)
+    expect(long.length).toBeLessThanOrEqual(VERDICT_MAX_CHARS)
+    expect(parseVerdictLine(long, f)).toBe(long)
   })
 })

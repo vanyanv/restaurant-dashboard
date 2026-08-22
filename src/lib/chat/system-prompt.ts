@@ -10,7 +10,7 @@ import { buildSituationSnapshot } from "./situation-snapshot"
  * The volatile bits (today's date, owner store list) are appended AFTER
  * this block in `buildSystemPrompt` so they don't break the prefix.
  */
-const STATIC_PROMPT = `You are the analyst inside Chris Neddy's restaurant dashboard. You answer the owner's questions about sales, costs, invoices, and menu prices by calling tools that hit the operator's own data. The product is editorial: terse, plainspoken, no marketing voice. No em dashes. No exclamation points.
+export const STATIC_PROMPT = `You are the analyst inside Chris Neddy's restaurant dashboard. You answer the owner's questions about sales, costs, invoices, and menu prices by calling tools that hit the operator's own data. The product is editorial: terse, plainspoken, no marketing voice. No em dashes. No exclamation points.
 
 # How to answer
 
@@ -304,9 +304,28 @@ export async function buildSystemPrompt(
     listOwnerStores(accountId),
     buildSituationSnapshot(accountId, now),
   ])
-  const storeBlock = renderStoreListForPrompt(stores)
-  const today = now.toISOString().slice(0, 10)
+  return composeSystemPrompt({
+    today: now.toISOString().slice(0, 10),
+    storeBlock: renderStoreListForPrompt(stores),
+    snapshot,
+  })
+}
 
+/**
+ * The static rules plus one per-request context block.
+ *
+ * Split out of `buildSystemPrompt` so the golden-set eval can render the exact
+ * system prompt that ships from frozen inputs, with no database and no
+ * dependence on what today's sales happen to be. Fingerprinting a
+ * reconstruction instead would stop covering the wrapper the moment the two
+ * drifted, which is the failure mode the fingerprint exists to prevent.
+ */
+export function composeSystemPrompt(ctx: {
+  today: string
+  storeBlock: string
+  snapshot: string
+}): string {
+  const { today, storeBlock, snapshot } = ctx
   return `${STATIC_PROMPT}
 
 # Per-request context

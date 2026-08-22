@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"drafts\": [\n    {\n      \"caseId\": \"a1\",\n      \"matchName\": \"Roma Tomato\",\n      \"confidence\": 0.96,\n      \"reasoning\": \"The product is Roma tomatoes in a 25 lb case, which directly corresponds to the canonical Roma Tomato ingredient.\",\n      \"newIngredient\": null\n    },\n    {\n      \"caseId\": \"a2\",\n      \"matchName\": null,\n      \"confidence\": 0.2,\n      \"reasoning\": \"The product is powder-free nitrile gloves, and neither candidate (Roma Tomato or Slider Bun) is an appropriate match.\",\n      \"newIngredient\": {\n        \"name\": \"Nitrile Gloves (Powder-Free), Large\",\n        \"category\": \"food-safety supplies\",\n        \"recipeUnit\": \"each\"\n      }\n    }\n  ]\n}",
+  "model": "gpt-5.4-nano",
+  "pass": true,
+  "failures": []
+}

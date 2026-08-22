@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"drafts\": [\n    {\n      \"caseId\": \"c1\",\n      \"matchName\": \"Russet Potato\",\n      \"confidence\": 0.93,\n      \"reasoning\": \"The product is specifically Russet potatoes in a 50# bag and Russet Potato is the closest candidate match.\",\n      \"newIngredient\": null\n    },\n    {\n      \"caseId\": \"c2\",\n      \"matchName\": \"Sweet Potato\",\n      \"confidence\": 0.95,\n      \"reasoning\": \"The product is Sweet potatoes in a 40# bag and Sweet Potato is the strongest candidate match.\",\n      \"newIngredient\": null\n    }\n  ]\n}",
+  "model": "gpt-5.4-nano",
+  "pass": true,
+  "failures": []
+}

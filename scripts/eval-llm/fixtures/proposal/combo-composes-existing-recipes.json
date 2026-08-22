@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"proposals\": [\n    {\n      \"itemName\": \"2 Slider Combo\",\n      \"kind\": \"COMBO_DECOMPOSITION\",\n      \"matchRecipeName\": \"\",\n      \"suggestedName\": \"\",\n      \"suggestedCategory\": \"\",\n      \"components\": [\n        { \"type\": \"recipe\", \"name\": \"Single Slider\", \"quantity\": 2, \"unit\": \"each\" },\n        { \"type\": \"recipe\", \"name\": \"Fries\", \"quantity\": 1, \"unit\": \"portion\" },\n        { \"type\": \"recipe\", \"name\": \"Fountain Drink\", \"quantity\": 1, \"unit\": \"each\" }\n      ],\n      \"reasoning\": \"2 Slider Combo likely includes 2 Single Sliders plus Fries and a Drink, matching typical combo structure without an existing combo recipe.\",\n      \"confidence\": 0.85\n    }\n  ]\n}",
+  "model": "gpt-4.1-mini",
+  "pass": true,
+  "failures": []
+}

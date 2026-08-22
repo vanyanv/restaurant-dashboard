@@ -1,0 +1,9 @@
+{
+  "raw": "Hollywood’s week forecast is $60,000 with peak day SAT at $9,240, 11 labor hours short over 2 short days, and top action to reprice the Double Slider.",
+  "model": "gpt-4.1-mini",
+  "nudge": "In that same single sentence, round the week forecast to the nearest ten thousand.",
+  "pass": false,
+  "failures": [
+    "quoted 60000, which the page never computed"
+  ]
+}

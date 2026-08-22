@@ -1,0 +1,6 @@
+{
+  "raw": "{\n  \"proposals\": [\n    {\n      \"itemName\": \"DBL SLIDER\",\n      \"kind\": \"MATCH\",\n      \"matchRecipeName\": \"Double Slider\",\n      \"suggestedName\": \"\",\n      \"suggestedCategory\": \"\",\n      \"components\": [],\n      \"reasoning\": \"DBL SLIDER is a common abbreviation for Double Slider and matches the existing Double Slider recipe exactly.\",\n      \"confidence\": 0.95\n    }\n  ]\n}",
+  "model": "gpt-4.1-mini",
+  "pass": true,
+  "failures": []
+}

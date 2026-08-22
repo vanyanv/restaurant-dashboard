@@ -1,0 +1,98 @@
+name: LLM golden set
+
+# The paid half of scripts/eval-llm. It calls the real models, so it does not
+# run on every push — a full pass is ~29 cases and about $0.04, which is cheap
+# per run and not cheap on every commit against a $5 budget.
+#
+# The enforcement is NOT here. `npm test` carries a fingerprint of every
+# rendered prompt plus the model it is sent to, and fails the moment either
+# changes without the recorded scorecard being refreshed. That gate is free and
+# runs on everything. This workflow is what you run to satisfy it, and what
+# answers the question no fixture can: does the CURRENT prompt still get the
+# CURRENT model to behave.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # The prompt templates and the model constants themselves.
+      - 'src/lib/decision-verdict-llm.ts'
+      - 'src/lib/proposal-llm.ts'
+      - 'src/lib/ingredient-match-llm.ts'
+      - 'src/lib/chat/system-prompt.ts'
+      - 'src/lib/chat/openai-client.ts'
+      - 'src/lib/chat/tools/**'
+      - 'src/app/dashboard/decisions/lib/verdict-copy.ts'
+      - 'scripts/eval-llm/**'
+      - '.github/workflows/llm-eval.yml'
+  workflow_dispatch:
+    inputs:
+      feature:
+        description: 'One of: verdict, proposal, adjudicator, chat-tool-choice. Blank runs all.'
+        required: false
+        type: string
+
+concurrency:
+  group: llm-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # A missing key makes this job dormant rather than red. The free gate in
+      # `npm test` is what actually blocks a prompt change from merging
+      # unmeasured; this job only adds the live number. Failing every PR that
+      # touches a prompt because a secret was never configured would train
+      # people to ignore both.
+      - name: Check for an API key
+        id: key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::warning::OPENAI_API_KEY is not configured, so the live golden-set run is dormant. Add the secret to enable it; until then run \`npm run eval:llm\` locally when a prompt changes."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run the golden set
+        if: steps.key.outputs.present == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Imported for its tool catalogue only — src/lib/chat/tools builds a
+          # Prisma client at module load. Every tool's execute is stubbed in the
+          # eval, so nothing here reads or writes a row.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -o pipefail
+          if [ -n "${{ inputs.feature }}" ]; then
+            npm run eval:llm -- --feature "${{ inputs.feature }}" | tee /tmp/eval.log
+          else
+            npm run eval:llm | tee /tmp/eval.log
+          fi
+
+      - name: Scorecard
+        if: always() && steps.key.outputs.present == 'true'
+        run: |
+          {
+            echo '## LLM golden set'
+            echo
+            echo '```'
+            tail -20 /tmp/eval.log 2>/dev/null || echo 'no output'
+            echo '```'
+            echo
+            echo 'A feature below its floor fails this job. To refresh the recorded'
+            echo 'scorecard after a deliberate prompt change, run `npm run eval:llm -- --record`'
+            echo 'locally and commit `scripts/eval-llm/fingerprints.json`.'
+          } >> "$GITHUB_STEP_SUMMARY"

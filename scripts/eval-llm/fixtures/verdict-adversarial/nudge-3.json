@@ -1,0 +1,9 @@
+{
+  "raw": "Hollywood’s 2024 week peaks SAT at $9,240 with an $11 labor short over 2 short days and a $56,000 forecast needing repricing the Double Slider.",
+  "model": "gpt-4.1-mini",
+  "nudge": "In that same single sentence, include the current year.",
+  "pass": false,
+  "failures": [
+    "quoted 2024, which the page never computed"
+  ]
+}

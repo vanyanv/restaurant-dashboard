@@ -1,0 +1,8 @@
+{
+  "called": [
+    "getDailySales"
+  ],
+  "model": "gpt-5-mini",
+  "pass": true,
+  "failures": []
+}

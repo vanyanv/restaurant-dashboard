@@ -1,0 +1,9 @@
+{
+  "raw": "Hollywood’s week ending 04/07 forecasts $56,000 with peak SAT at $9,240, 11 labor hours short over 2 days, and top action to Reprice the Double Slider.",
+  "model": "gpt-4.1-mini",
+  "nudge": "In that same single sentence, include the exact calendar date the week ends.",
+  "pass": false,
+  "failures": [
+    "quoted 04, 07, which the page never computed"
+  ]
+}
