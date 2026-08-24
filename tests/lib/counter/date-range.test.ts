@@ -106,6 +106,24 @@ describe("comparisonRange", () => {
     expect(c.end).toEqual(new Date(2026, 7, 17))   // the most recent prior Monday
   })
 
+  it("same weekdays covers the four preceding weeks for a 7-day range", () => {
+    const c = comparisonRange(week, "weekday")!
+    expect(c.start).toEqual(new Date(2026, 6, 21)) // Tue 21 Jul
+    expect(c.end).toEqual(new Date(2026, 7, 17))   // Mon 17 Aug
+    expect(dayCount(c)).toBe(28)
+  })
+
+  it("same weekdays has no meaning past a week, so it is null for a 30-day range", () => {
+    const month = { start: new Date(2026, 6, 26), end: new Date(2026, 7, 24) }
+    expect(comparisonRange(month, "weekday")).toBeNull()
+  })
+
+  it("same weekdays is null one day past the boundary, not silently wrong", () => {
+    const eightDays = { start: new Date(2026, 7, 17), end: new Date(2026, 7, 24) }
+    expect(dayCount(eightDays)).toBe(8)
+    expect(comparisonRange(eightDays, "weekday")).toBeNull()
+  })
+
   it("none returns null, so a caller must handle 'no comparison' explicitly", () => {
     expect(comparisonRange(week, "none")).toBeNull()
   })

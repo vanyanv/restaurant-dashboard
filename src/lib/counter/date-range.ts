@@ -132,7 +132,19 @@ export function comparisonRange(r: DateRange, mode: ComparisonId): DateRange | n
     const span = dayCount(r)
     return { start: addDays(r.start, -span), end: addDays(r.end, -span) }
   }
-  // weekday: the same span, four weeks earlier through one week earlier —
-  // a like-for-like read for a trade whose week has a strong shape.
+  // weekday: NOT a same-length prior period. It returns a window that
+  // CONTAINS the four preceding occurrences of the period being compared —
+  // the four same-weekdays before a single day, or the four preceding weeks
+  // before a 7-day range — and a caller is expected to aggregate across that
+  // window (e.g. average it), not treat it as one equivalent period. That
+  // window is span + 21 days for any input, which is only a coherent "4
+  // preceding occurrences" concept up to a week (1..7 days: 4 same-weekdays
+  // through 4 same-weeks). Past a week it stops meaning anything — a 30-day
+  // range would return a 51-day window that isn't 4 of anything — so this
+  // returns null past 7 days rather than a plausible-looking range that
+  // answers no question. The date control should offer "prev" or "year"
+  // instead for longer ranges.
+  const span = dayCount(r)
+  if (span > 7) return null
   return { start: addDays(r.start, -28), end: addDays(r.end, -7) }
 }
