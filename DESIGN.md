@@ -262,15 +262,31 @@ computes; when it lands, that's the file to import from, not to duplicate.
 Import from `@/components/counter`. Never deeper — `state/` is private to
 `surface/` on purpose.
 
+**`Section` is the SOLE state renderer (R3).** It is the only primitive that
+takes `SectionData<T>`. `Strip`, `Table`, `Meter` and `Cascade` are
+presentational: they take their data directly — plain figures, rows, steps,
+values — and have no loading/empty/failed branching of their own. The
+six-state contract exists only where a `Section` wraps them; a `Strip` or
+`Table` rendered outside a `Section` has no fallback for a state it cannot
+see. This was a deliberate fork resolved during the fix wave that followed
+Plan 2's review: the alternative (each primitive re-implementing all six
+states so it works "nested or standalone") was half-built and had shipped a
+real bug — a failed `Table` and an empty `Table` both rendered a header over
+an empty `<tbody>`, pixel-identical, with no error, no reason, no retry. Sole
+rendering closes that gap by construction: there is exactly one place in the
+tree a state is ever rendered.
+
 | Primitive | Enforces |
 |---|---|
-| `<Section>` | All six `SectionData` states. `children` is a function, so it cannot run without data. Renders "Ask about this" only when there is an answer (note 55). |
-| `<Strip>` | Keeps its shape in every state, so the layout does not jump when figures land. Em-dashes, never zeroes. |
+| `<Section>` | All six `SectionData` states — the only primitive that sees a `SectionData`. `children` is a function, so it cannot run without data. Renders "Ask about this" only when there is an answer (note 55). |
+| `<Strip>` | Takes `cells: FigureProps[]` directly — no state, no `cellCount` (the count is just `cells.length`). Nest inside a `Section` for the em-dash/loading/failed shape. |
 | `<Figure>` | Tabular lining numerals on every value. |
-| `<Table>` | Rules only, sticky head, right-aligned figures. A row without `href` is not a link, not focusable, and wears no pointer (note 47). |
+| `<Table>` | Takes `columns` and `rows` directly — no state. Rules only, sticky head, right-aligned figures. A row without `href` is not a link, not focusable, and wears no pointer (note 47). |
 | `<Meter>` | Colours the overshoot, not the measure (note 35). |
 | `<Cascade>` | Draws a statement as the sequence of subtractions it is, not a donut (note 52). |
 
-The data they all take is `SectionData<T>` from `@/lib/counter/section-data`.
-Six states: `ready`, `stale`, `loading`, `failed`, `empty`, `not_computed`.
-A page never inspects `.status` — `npm run tokens` fails the build if one does.
+`SectionData<T>` (from `@/lib/counter/section-data`) has six states: `ready`,
+`stale`, `loading`, `failed`, `empty`, `not_computed`. A page never inspects
+`.status` — `npm run tokens` fails the build if one does — and, with R3, a
+`Strip`/`Table`/`Meter`/`Cascade` never inspects it either, because they
+never receive it.
