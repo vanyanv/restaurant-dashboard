@@ -122,5 +122,11 @@
     "path-to-regexp": "8.4.2",
     "postcss": "8.5.26",
     "protobufjs": "7.6.5"
-  }
+  },
+  "browserslist": [
+    "chrome >= 123",
+    "safari >= 17.5",
+    "firefox >= 120",
+    "edge >= 123"
+  ]
 }
