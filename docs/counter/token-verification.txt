@@ -1,0 +1,118 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /home/vardan/restaurant-dashboard
+
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-paper clears 4.5:1 (body text on the page) 2ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-surface clears 4.5:1 (body text on a panel) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-sunk clears 4.5:1 (e.g. nav/date-picker hover states) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-signal-wash clears 4.5:1 (emphasis inside a signal callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-accent-wash clears 4.5:1 (e.g. a hovered/selected table row) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-bad-wash clears 4.5:1 (e.g. a missing-line table row) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-paper clears 4.5:1 (secondary prose) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-surface clears 4.5:1 (e.g. the channel toggle, the share card) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-chrome clears 4.5:1 (e.g. the nav rail's resting label) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-sunk clears 4.5:1 (e.g. the segmented control, the compare toggle) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-signal-wash clears 4.5:1 (prose inside a signal callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-bad-wash clears 4.5:1 (prose inside a login error message) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-accent-wash clears 4.5:1 (e.g. an expanded store card's detail line) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-2 on --ct-good-wash clears 4.5:1 (e.g. a fitting-variance note, an OK login message) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-3 on --ct-paper clears 4.5:1 (captions, folios, SKUs) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-3 on --ct-surface clears 4.5:1 (captions on a panel) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-3 on --ct-chrome clears 4.5:1 (e.g. the nav rail's captions, the topbar breadcrumbs) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-3 on --ct-signal-wash clears 4.5:1 (captions inside a signal callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-3 on --ct-accent-wash clears 4.5:1 (e.g. a pressed store-picker option's caption) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink-3 on --ct-bad-wash clears 4.5:1 (captions in a missing-line row) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-accent on --ct-paper clears 4.5:1 (the proofmark, used as text) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-accent on --ct-accent-wash clears 4.5:1 (accent text on its own wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-signal-ink on --ct-signal-wash clears 4.5:1 (signal text on signal wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-good on --ct-good-wash clears 4.5:1 (good text on good wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-warn on --ct-warn-wash clears 4.5:1 (warn text on warn wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-bad on --ct-bad-wash clears 4.5:1 (bad text on bad wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > --ct-line and --ct-line-strong are distinguishable from each other 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > normal: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > normal: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > protanopia: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > protanopia: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > deuteranopia: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > deuteranopia: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > tritanopia: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > tritanopia: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > normal: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) — INHERITED prototype defect, knowingly accepted: measures dE 14.00 vs threshold 15 (normal vision)
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > protanopia: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) — INHERITED prototype defect, knowingly accepted: measures dE 13.60 vs threshold 15 (protanopia)
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > deuteranopia: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) — INHERITED prototype defect, knowingly accepted: measures dE 14.09 vs threshold 15 (deuteranopia)
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > mx bands — adjacency > tritanopia: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) — INHERITED prototype defect, knowingly accepted: measures dE 14.12 vs threshold 15 (tritanopia)
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > normal: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > protanopia: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > deuteranopia: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > tritanopia: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > tritanopia: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > normal: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) — INHERITED prototype defect, knowingly accepted: measures dE 14.95 vs threshold 16 (normal vision)
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > protanopia: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) — INHERITED prototype defect, knowingly accepted: measures dE 13.24 vs threshold 16 (protanopia)
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — adjacency > deuteranopia: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) — INHERITED prototype defect, knowingly accepted: measures dE 15.25 vs threshold 16 (deuteranopia)
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — contrast on surface > --ct-gp-1 clears 3:1 on surface 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — contrast on surface > --ct-gp-2 clears 3:1 on surface 0ms
+ ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — contrast on surface > --ct-gp-3 clears 3:1 on surface — INHERITED prototype defect, knowingly accepted: measures 2.980:1 vs the 3:1 threshold — misses by 0.02, a designer trade for palette harmony, not an oversight
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > the surface stack is monotone, so panels read as lifted 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > declares no pure white and no pure black 1ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > declares every token exactly once, in a single :root block 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink on --ct-paper clears 4.5:1 (body text on the page) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink on --ct-surface clears 4.5:1 (body text on a panel) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink on --ct-sunk clears 4.5:1 (e.g. nav/date-picker hover states) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink on --ct-signal-wash clears 4.5:1 (emphasis inside a signal callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink on --ct-accent-wash clears 4.5:1 (e.g. a hovered/selected table row) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink on --ct-bad-wash clears 4.5:1 (e.g. a missing-line table row) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-paper clears 4.5:1 (secondary prose) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-surface clears 4.5:1 (e.g. the channel toggle, the share card) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-chrome clears 4.5:1 (e.g. the nav rail's resting label) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-sunk clears 4.5:1 (e.g. the segmented control, the compare toggle) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-signal-wash clears 4.5:1 (prose inside a signal callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-bad-wash clears 4.5:1 (prose inside a login error message) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-accent-wash clears 4.5:1 (e.g. an expanded store card's detail line) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-2 on --ct-good-wash clears 4.5:1 (e.g. a fitting-variance note, an OK login message) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-3 on --ct-paper clears 4.5:1 (captions, folios, SKUs) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-3 on --ct-surface clears 4.5:1 (captions on a panel) 1ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-3 on --ct-chrome clears 4.5:1 (e.g. the nav rail's captions, the topbar breadcrumbs) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-3 on --ct-signal-wash clears 4.5:1 (captions inside a signal callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-3 on --ct-accent-wash clears 4.5:1 (e.g. a pressed store-picker option's caption) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-ink-3 on --ct-bad-wash clears 4.5:1 (captions in a missing-line row) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-accent on --ct-paper clears 4.5:1 (the proofmark, used as text) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-accent on --ct-accent-wash clears 4.5:1 (accent text on its own wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-signal-ink on --ct-signal-wash clears 4.5:1 (signal text on signal wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-good on --ct-good-wash clears 4.5:1 (good text on good wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-warn on --ct-warn-wash clears 4.5:1 (warn text on warn wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > contrast > --ct-bad on --ct-bad-wash clears 4.5:1 (bad text on bad wash) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > --ct-line and --ct-line-strong are distinguishable from each other 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > normal: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > normal: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > normal: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > protanopia: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > protanopia: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > protanopia: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > deuteranopia: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > deuteranopia: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > deuteranopia: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > tritanopia: --ct-mx-1 vs --ct-mx-2 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > tritanopia: --ct-mx-2 vs --ct-mx-3 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > mx bands — adjacency > tritanopia: --ct-mx-3 vs --ct-mx-4 clears dE 15 (adjacent mx bands) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > normal: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > normal: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > protanopia: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > protanopia: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > deuteranopia: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > deuteranopia: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > tritanopia: --ct-gp-1 vs --ct-gp-2 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — adjacency > tritanopia: --ct-gp-2 vs --ct-gp-3 clears dE 16 (adjacent gp steps) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — contrast on surface > --ct-gp-1 clears 3:1 on surface 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — contrast on surface > --ct-gp-2 clears 3:1 on surface 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — contrast on surface > --ct-gp-3 clears 3:1 on surface 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > the surface stack is monotone, so panels read as lifted 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > declares no pure white and no pure black 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > declares every token exactly once, in a single :root block 0ms
+
+ Test Files  1 passed (1)
+      Tests  98 passed | 8 skipped (106)
+   Start at  10:11:35
+   Duration  207ms (transform 26ms, setup 0ms, import 119ms, tests 16ms, environment 0ms)
+
