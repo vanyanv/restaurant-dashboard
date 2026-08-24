@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { FileWarning, Loader2 } from "lucide-react"
+import { FileExclamationPoint, Loader2 } from "lucide-react"
 
 const PdfViewerClient = dynamic(() => import("./pdf-viewer-client"), {
   ssr: false,
@@ -23,7 +23,7 @@ export function PdfViewer({ invoiceId, hasPdf }: PdfViewerProps) {
     return (
       <section className="inv-panel h-full">
         <div className="flex h-full flex-col items-center justify-center text-center gap-3 p-6">
-          <FileWarning className="h-10 w-10 text-(--ink-muted)" />
+          <FileExclamationPoint className="h-10 w-10 text-(--ink-muted)" />
           <div>
             <p className="font-medium">PDF not available</p>
             <p className="text-sm text-(--ink-muted) mt-1">

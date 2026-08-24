@@ -14,7 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  FileWarning,
+  FileExclamationPoint,
   Loader2,
   ZoomIn,
   ZoomOut,
@@ -139,7 +139,7 @@ export default function PdfViewerClient({
     return (
       <section className="inv-panel h-full">
         <div className="flex h-full flex-col items-center justify-center text-center gap-3 p-6">
-          <FileWarning className="h-10 w-10 text-(--ink-muted)" />
+          <FileExclamationPoint className="h-10 w-10 text-(--ink-muted)" />
           <div>
             <p className="font-medium">Failed to load PDF</p>
             <p className="text-sm text-(--ink-muted) mt-1">
