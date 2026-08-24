@@ -96,54 +96,53 @@
   --ct-ink-3:        light-dark(oklch(52.5% 0.011 50), oklch(65% 0.011 52));  /* light corrected from 55% (prototype) via 53.5%, see file header */
 
   /* action + state
-     Fix round 2 (post-review): --ct-bad, --ct-accent, --ct-signal and
-     --ct-warn's dark halves were solved TOGETHER, not one at a time. Round
-     1 fixed accent/bad and warn/signal separately; each fix passed on its
-     own, but round 1's accent move (68% -> 72.5%) ate into the lightness
-     gap between --ct-accent and --ct-signal (78%), regressing that pair's
-     separation from 24.71 to 7.83 under tritanopia — a genuine collision
-     round 1 didn't check for. The real shape of the problem: bad, warn,
-     accent and signal are four tokens in two CVD-confusable hue families
-     (bad/accent both red; warn/signal both amber-yellow) all needing to
-     fit in the "light enough to clear 4.5:1 against their own dark wash"
-     band, which is narrow. A grid search over all four lightnesses (plus
-     modest chroma moves on bad/accent, and a fresh hue+chroma for warn)
-     jointly, maximizing the worst margin across every contrast floor and
-     every SEMANTIC_PAIRS threshold at once, is what round 1's
-     one-token-at-a-time approach couldn't find. Final distribution:
-     --ct-bad 69.25%, --ct-accent 69.25%, --ct-warn 67.25%, --ct-signal
-     83.5% (moved off its original 78% — round 1 avoided moving it, but
-     round 2's own instructions authorize solving all four as a set, and
-     the accent/bad tension leaves no room for accent to sit far enough
-     below signal without signal moving up). --ct-accent and --ct-bad end
-     up at the SAME lightness (69.25%) — the search found no lightness gap
-     between them that clears both the accent/bad separation floor and
-     bad's own wash-contrast floor with acceptable margin (best found:
-     0.40 of margin; see the Task 12 report for the search evidence), so
-     they're told apart by chroma instead (bad C 0.165 -> 0.195, more
-     saturated, i.e. a louder "danger" red; accent C 0.170 -> 0.145, less
-     saturated, a calmer "brand" red) — this raised the joint margin to
-     0.72 without moving accent's hue at all, so it does not drift toward
-     warn's territory. Hue on bad (25) and accent (27) is untouched,
-     matching light exactly. --ct-warn's hue moved from light's 70 to 60
-     and its chroma to 0.13 — needed because at any hue within ~12° of
-     light's own 70° (which sits close to signal's 78°), no lightness/
-     chroma combination clears both the signal/warn separation floor and
-     warn's own wash-contrast floor simultaneously (searched exhaustively,
-     see report); 60° is still amber, not red or green, so warn keeps its
-     hue family even though the exact hue moved. */
-  --ct-accent:       light-dark(oklch(52% 0.19 27),    oklch(69.25% 0.145 27));
+     Fix round 3 (post-review): round 2 solved bad/warn/accent/signal
+     jointly but let the search desaturate --ct-accent (0.170 -> 0.145)
+     below --ct-bad (0.165 -> 0.195) to make room — numerically fine (every
+     assertion passed) but semantically backwards: --ct-accent is the
+     proofmark, the most-used colour in the system, and "earn the red" only
+     works if it reads as the STRONGER red. In light it already is (0.19
+     accent vs 0.175 bad); round 2 inverted that in dark. Re-ran the same
+     joint search with one added constraint, accent chroma >= bad chroma,
+     over all four tokens again (lightness on all four; chroma on bad and
+     accent; hue+chroma on warn; signal's hue/chroma held at light's
+     78°/0.150 throughout, bad/accent's hue held at light's 25°/27°
+     throughout — none of the three ever moved off their light hue). A
+     direct swap of round 2's chroma values (accent 0.195 / bad 0.145) was
+     tried first and rejected: it fixes accent/bad and accent/signal but
+     collapses warn/bad to 4.39 (floor 7.553), because desaturating bad
+     moves it toward warn's hue — confirming round 2's point that this
+     region only yields to a joint re-solve, not a swap. The actual
+     solution raises BOTH chromas (bad 0.165 -> 0.17, accent 0.170 -> 0.20)
+     with a fresh lightness split (bad 67.75%, accent 68.75%) rather than
+     converging them to one lightness the way round 2 did — with accent
+     chroma clearly ahead of bad's (0.20 vs 0.17), sRGB #fe5b52 (accent)
+     reads more vivid than #ee6660 (bad), the intended relationship
+     restored. --ct-warn's hue landed at 64° this round (was 60° in round
+     2) as a side effect of resolving warn/bad's margin under the new
+     bad chroma — still the same deliberate move away from light's 70°
+     (which sits too close to signal's 78° to separate both from warn and
+     from bad at once): the intent from round 2 (an amber against signal's
+     gold, not two golds) is unchanged, only the exact degree moved a
+     further 4-6° in service of it. Joint margin (the worst of all 11 live
+     constraints — 4 wash-contrast floors, accent's paper contrast, and
+     the 6 SEMANTIC_PAIRS floors under all 4 vision models) is 0.496,
+     versus round 2's 0.72 without the added constraint — a real but small
+     cost for correcting the accent/bad emphasis, not another near-zero
+     margin. See the Task 12 report for the full search evidence,
+     including the rejected swap. */
+  --ct-accent:       light-dark(oklch(52% 0.19 27),    oklch(68.75% 0.200 27));
   --ct-accent-hi:    light-dark(oklch(44% 0.17 27),    oklch(76% 0.150 27));
   --ct-accent-wash:  light-dark(oklch(94.5% 0.028 27), oklch(27% 0.045 27));
-  --ct-signal:       light-dark(oklch(80% 0.155 78),   oklch(83.5% 0.150 78));
+  --ct-signal:       light-dark(oklch(80% 0.155 78),   oklch(82.5% 0.150 78));
   --ct-signal-wash:  light-dark(oklch(95.5% 0.042 82), oklch(26% 0.045 82));
   --ct-signal-line:  light-dark(oklch(87% 0.070 80),   oklch(36% 0.060 80));
   --ct-signal-ink:   light-dark(oklch(44% 0.095 70),   oklch(84% 0.090 78));
   --ct-good:         light-dark(oklch(47% 0.098 160),  oklch(74% 0.115 160));
   --ct-good-wash:    light-dark(oklch(95.5% 0.026 160), oklch(24% 0.030 160));
-  --ct-warn:         light-dark(oklch(53% 0.115 70),   oklch(67.25% 0.130 60));
+  --ct-warn:         light-dark(oklch(53% 0.115 70),   oklch(68.5% 0.110 64));
   --ct-warn-wash:    light-dark(oklch(95.5% 0.035 78), oklch(25% 0.035 78));
-  --ct-bad:          light-dark(oklch(50% 0.175 25),   oklch(69.25% 0.195 25));
+  --ct-bad:          light-dark(oklch(50% 0.175 25),   oklch(67.75% 0.170 25));
   --ct-bad-wash:     light-dark(oklch(94.5% 0.030 25), oklch(26% 0.040 25));
 
   /* channel identity — brand marks, ALWAYS paired with a text label, lifted
