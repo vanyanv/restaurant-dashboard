@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { DM_Sans, JetBrains_Mono } from "next/font/google"
+import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google"
 import { NextAuthSessionProvider } from "@/lib/session-provider"
 import { QueryProvider } from "@/lib/query-client"
 import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
@@ -10,6 +10,12 @@ const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains-mono",
+})
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-bricolage",
+  display: "swap",
 })
 
 export const metadata: Metadata = {
@@ -41,7 +47,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeNoFlashScript }} />
       </head>
-      <body className={`${dmSans.variable} ${jetbrainsMono.variable} ${dmSans.className}`}>
+      <body className={`${dmSans.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${dmSans.className}`}>
         <CounterThemeProvider>
           <NextAuthSessionProvider>
             <QueryProvider>

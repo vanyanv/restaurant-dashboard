@@ -231,4 +231,8 @@
   --radius-ct-sm: var(--ct-r-sm);
 
   --ease-ct: var(--ct-ease);
+
+  --font-ct-display: var(--font-bricolage), "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-ct-sans:    var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-ct-mono:    var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
 }
