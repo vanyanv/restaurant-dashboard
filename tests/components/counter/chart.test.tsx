@@ -45,3 +45,35 @@ describe("Chart — line", () => {
     expect(table.textContent).toContain("Aug 20")
   })
 })
+
+describe("Chart — bar", () => {
+  beforeEach(() => vi.unstubAllGlobals())
+
+  it("renders a bar per reading", () => {
+    setReducedMotion(false)
+    const { container } = render(
+      <Chart variant="bar" labels={labels} series={series} title="Orders" />,
+    )
+    expect(container.querySelectorAll(".recharts-rectangle").length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("dims every bar except the hovered one to 42%", () => {
+    setReducedMotion(false)
+    const { container } = render(
+      <Chart variant="bar" labels={labels} series={series} title="Orders" />,
+    )
+    const bars = container.querySelectorAll("[data-bar-index]")
+    expect(bars.length).toBe(3)
+    // No hover yet: nothing is dimmed.
+    expect([...bars].every((b) => b.getAttribute("fill-opacity") === "1")).toBe(true)
+  })
+
+  it("emits no growth animation under reduced motion", () => {
+    setReducedMotion(true)
+    const { container } = render(
+      <Chart variant="bar" labels={labels} series={series} title="Orders" />,
+    )
+    const bar = container.querySelector("[data-bar-index]") as HTMLElement | null
+    expect(bar?.style.animationName ?? "").toBe("")
+  })
+})

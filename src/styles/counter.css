@@ -269,3 +269,11 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* Bars grow from the baseline. Paired with a custom `shape` on the Bar,
+ * because Recharts animates a whole bar series on one shared timer and the
+ * design calls for each bar to arrive 26ms after the one before it. */
+@keyframes ct-bar-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}

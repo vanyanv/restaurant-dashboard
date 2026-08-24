@@ -1,6 +1,18 @@
 "use client"
 
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { useState, type CSSProperties } from "react"
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  type BarShapeProps,
+} from "recharts"
 import { useChartDraw } from "@/components/counter/motion/use-chart-draw"
 import { TABULAR, money } from "@/lib/counter/format"
 
@@ -73,8 +85,12 @@ function toNumberOrNull(v: unknown): number | null {
  */
 export function Chart({ variant, labels, series, title, height, formatValue, comparisonLabel }: ChartProps) {
   const format = formatValue ?? ((v: number | null) => money(v))
-  const { animate, lineDurationMs } = useChartDraw()
+  const { animate, lineDurationMs, barStaggerMs } = useChartDraw()
   const ariaLabel = comparisonLabel ? `${title}, compared to ${comparisonLabel}` : title
+  // Bar-only: which reading (by data index, not series) is under the
+  // pointer. Shared across every series' `Bar` so hovering any of them dims
+  // the rest of the plot at that reading, per the spike's dimming contract.
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   // The single-reading degradation runs BEFORE any Recharts path — see the
   // module doc comment. This is intentionally not a `SectionData` state:
@@ -123,34 +139,103 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
           // deterministically under test.
           initialDimension={{ width: DEFAULT_WIDTH, height: height ?? DEFAULT_HEIGHT }}
         >
-          <LineChart data={rows}>
-            <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
-            <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
-            <Tooltip
-              cursor={{ stroke: "var(--ct-line-strong)" }}
-              formatter={(value: unknown) => format(toNumberOrNull(value))}
-              contentStyle={{
-                background: "var(--ct-surface)",
-                border: "1px solid var(--ct-line-strong)",
-                borderRadius: "var(--radius-ct-sm)",
-              }}
-            />
-            {series.map((s, i) => (
-              <Line
-                key={s.name}
-                type="monotone"
-                dataKey={s.name}
-                name={s.name}
-                stroke={colorVarFor(s, i)}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-                isAnimationActive={animate}
-                animationDuration={lineDurationMs}
-                connectNulls
+          {variant === "line" ? (
+            <LineChart data={rows}>
+              <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
+              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
+              <Tooltip
+                cursor={{ stroke: "var(--ct-line-strong)" }}
+                formatter={(value: unknown) => format(toNumberOrNull(value))}
+                contentStyle={{
+                  background: "var(--ct-surface)",
+                  border: "1px solid var(--ct-line-strong)",
+                  borderRadius: "var(--radius-ct-sm)",
+                }}
               />
-            ))}
-          </LineChart>
+              {series.map((s, i) => (
+                <Line
+                  key={s.name}
+                  type="monotone"
+                  dataKey={s.name}
+                  name={s.name}
+                  stroke={colorVarFor(s, i)}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  isAnimationActive={animate}
+                  animationDuration={lineDurationMs}
+                  connectNulls
+                />
+              ))}
+            </LineChart>
+          ) : (
+            <BarChart data={rows}>
+              <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
+              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
+              <Tooltip
+                cursor={{ fill: "var(--ct-accent-wash)" }}
+                formatter={(value: unknown) => format(toNumberOrNull(value))}
+                contentStyle={{
+                  background: "var(--ct-surface)",
+                  border: "1px solid var(--ct-line-strong)",
+                  borderRadius: "var(--radius-ct-sm)",
+                }}
+              />
+              {series.map((s, si) => (
+                <Bar
+                  key={s.name}
+                  dataKey={s.name}
+                  name={s.name}
+                  isAnimationActive={false}
+                  onMouseEnter={(_, index) => setHoverIndex(index)}
+                  onMouseLeave={() => setHoverIndex(null)}
+                  // Recharts animates a whole `Bar` series on one shared
+                  // timer (`animationBegin`/`animationDuration` are read
+                  // once per `<Bar>`, not per rect — see the spike). A
+                  // per-item 26ms stagger needs a custom `shape` instead,
+                  // driven by CSS keyframes (`ct-bar-grow` in counter.css)
+                  // with a hand-computed `animation-delay`.
+                  shape={(shapeProps: BarShapeProps) => {
+                    const { x, y, width: w, height: h, index, fillOpacity } = shapeProps
+                    const barIndex = (shapeProps as unknown as Record<string, unknown>)["data-bar-index"] ?? index
+                    const style: CSSProperties | undefined =
+                      animate && barStaggerMs > 0
+                        ? {
+                            animationName: "ct-bar-grow",
+                            animationDuration: "300ms",
+                            animationTimingFunction: "var(--ct-ease)",
+                            animationDelay: `${index * barStaggerMs}ms`,
+                            animationFillMode: "both",
+                            transformOrigin: "bottom",
+                            transformBox: "fill-box",
+                          }
+                        : undefined
+                    return (
+                      <rect
+                        className="recharts-rectangle"
+                        data-bar-index={barIndex}
+                        x={x}
+                        y={y}
+                        width={w}
+                        height={h}
+                        fill={colorVarFor(s, si)}
+                        fillOpacity={fillOpacity}
+                        style={style}
+                      />
+                    )
+                  }}
+                >
+                  {rows.map((_, i) => (
+                    <Cell
+                      key={i}
+                      data-bar-index={i}
+                      fillOpacity={hoverIndex === null || hoverIndex === i ? 1 : 0.42}
+                    />
+                  ))}
+                </Bar>
+              ))}
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
       {/* Reachable without the picture: every reading, in reading order. */}
