@@ -8,6 +8,7 @@
     "start": "next start",
     "analyze": "next experimental-analyze",
     "bundle:check": "tsx scripts/check-bundle-size.ts",
+    "drift": "tsx scripts/drift-watch.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:drift": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
