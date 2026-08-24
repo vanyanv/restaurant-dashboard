@@ -1,0 +1,134 @@
+/* src/styles/counter.css
+ *
+ * The only colour source in the application. Values are copied verbatim from
+ * the `.frame` block of docs/counter/counter-prototype.html — do not adjust
+ * them here; adjust the prototype and re-copy.
+ *
+ * Every raw property is prefixed --ct- because src/app/globals.css already
+ * defines --accent, --border, --ring and others as bare HSL triplets consumed
+ * as hsl(var(--x)). An oklch value under those names yields hsl(oklch(...)),
+ * which is invalid, and it fails silently.
+ *
+ * No #fff and no #000: every neutral is tinted warm.
+ *
+ * Task 12 converts every value below into light-dark(light, dark) so each
+ * token is declared exactly ONCE. There is deliberately no second block and no
+ * media query: a duplicated token set is what token-parity.test.ts exists to
+ * catch, and it caught six copies drifting apart once already.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* surfaces — content sits lighter than chrome */
+  --ct-surface:      oklch(98.4% 0.004 66);
+  --ct-paper:        oklch(96.2% 0.006 60);
+  --ct-chrome:       oklch(94.4% 0.008 56);
+  --ct-sunk:         oklch(92.6% 0.009 55);
+  --ct-line:         oklch(89.5% 0.009 58);
+  --ct-line-strong:  oklch(82.5% 0.013 55);
+
+  /* ink */
+  --ct-ink:          oklch(24% 0.014 40);
+  --ct-ink-2:        oklch(47% 0.012 45);
+  --ct-ink-3:        oklch(55% 0.011 50);
+
+  /* action + state */
+  --ct-accent:       oklch(52% 0.19 27);
+  --ct-accent-hi:    oklch(44% 0.17 27);
+  --ct-accent-wash:  oklch(94.5% 0.028 27);
+  --ct-signal:       oklch(80% 0.155 78);
+  --ct-signal-wash:  oklch(95.5% 0.042 82);
+  --ct-signal-line:  oklch(87% 0.070 80);
+  --ct-signal-ink:   oklch(44% 0.095 70);
+  --ct-good:         oklch(47% 0.098 160);
+  --ct-good-wash:    oklch(95.5% 0.026 160);
+  --ct-warn:         oklch(53% 0.115 70);
+  --ct-warn-wash:    oklch(95.5% 0.035 78);
+  --ct-bad:          oklch(50% 0.175 25);
+  --ct-bad-wash:     oklch(94.5% 0.030 25);
+
+  /* channel identity — brand marks, ALWAYS paired with a text label.
+     Never used to carry data: as a set these four clear only dE 8.5. */
+  --ct-ch-house: #4A4541;
+  --ct-ch-dd:    #EB1700;
+  --ct-ch-ue:    #16110F;
+  --ct-ch-gh:    #F15C26;
+
+  /* stacked data bands — separated by lightness, not hue. Adjacent pairs
+     clear dE 15 in normal vision and under all three CVD models. Fixed to
+     the channel, never to its rank (note 41). */
+  --ct-mx-1: oklch(29.5% 0.020 45);
+  --ct-mx-2: oklch(45.5% 0.027 45);
+  --ct-mx-3: oklch(60.5% 0.031 50);
+  --ct-mx-4: oklch(76% 0.025 58);
+
+  /* one overshoot, split into what made it. Sequential ramp of the bad hue,
+     monotone in lightness, fixed to the cause rather than to its size. */
+  --ct-gp-1: oklch(35.5% 0.125 28);
+  --ct-gp-2: oklch(51.5% 0.158 30);
+  --ct-gp-3: oklch(67% 0.118 45);
+
+  /* type scale, fixed px, ratio ~1.16 */
+  --ct-t-micro: 10px;
+  --ct-t-cap:   11.5px;
+  --ct-t-body:  13px;
+  --ct-t-mid:   15px;
+  --ct-t-lg:    18px;
+  --ct-t-xl:    22px;
+  --ct-t-hero:  30px;
+
+  --ct-r:    8px;
+  --ct-r-sm: 5px;
+
+  --ct-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@theme inline {
+  --color-ct-surface:      var(--ct-surface);
+  --color-ct-paper:        var(--ct-paper);
+  --color-ct-chrome:       var(--ct-chrome);
+  --color-ct-sunk:         var(--ct-sunk);
+  --color-ct-line:         var(--ct-line);
+  --color-ct-line-strong:  var(--ct-line-strong);
+  --color-ct-ink:          var(--ct-ink);
+  --color-ct-ink-2:        var(--ct-ink-2);
+  --color-ct-ink-3:        var(--ct-ink-3);
+  --color-ct-accent:       var(--ct-accent);
+  --color-ct-accent-hi:    var(--ct-accent-hi);
+  --color-ct-accent-wash:  var(--ct-accent-wash);
+  --color-ct-signal:       var(--ct-signal);
+  --color-ct-signal-wash:  var(--ct-signal-wash);
+  --color-ct-signal-line:  var(--ct-signal-line);
+  --color-ct-signal-ink:   var(--ct-signal-ink);
+  --color-ct-good:         var(--ct-good);
+  --color-ct-good-wash:    var(--ct-good-wash);
+  --color-ct-warn:         var(--ct-warn);
+  --color-ct-warn-wash:    var(--ct-warn-wash);
+  --color-ct-bad:          var(--ct-bad);
+  --color-ct-bad-wash:     var(--ct-bad-wash);
+  --color-ct-ch-house:     var(--ct-ch-house);
+  --color-ct-ch-dd:        var(--ct-ch-dd);
+  --color-ct-ch-ue:        var(--ct-ch-ue);
+  --color-ct-ch-gh:        var(--ct-ch-gh);
+  --color-ct-mx-1:         var(--ct-mx-1);
+  --color-ct-mx-2:         var(--ct-mx-2);
+  --color-ct-mx-3:         var(--ct-mx-3);
+  --color-ct-mx-4:         var(--ct-mx-4);
+  --color-ct-gp-1:         var(--ct-gp-1);
+  --color-ct-gp-2:         var(--ct-gp-2);
+  --color-ct-gp-3:         var(--ct-gp-3);
+
+  --text-ct-micro: var(--ct-t-micro);
+  --text-ct-cap:   var(--ct-t-cap);
+  --text-ct-body:  var(--ct-t-body);
+  --text-ct-mid:   var(--ct-t-mid);
+  --text-ct-lg:    var(--ct-t-lg);
+  --text-ct-xl:    var(--ct-t-xl);
+  --text-ct-hero:  var(--ct-t-hero);
+
+  --radius-ct:    var(--ct-r);
+  --radius-ct-sm: var(--ct-r-sm);
+
+  --ease-ct: var(--ct-ease);
+}
