@@ -1,0 +1,39 @@
+import { describe, it, expect } from "vitest"
+import { readFileSync, readdirSync } from "node:fs"
+import { join } from "node:path"
+
+const BARREL = join(process.cwd(), "src/components/counter/index.ts")
+const SURFACE = join(process.cwd(), "src/components/counter/surface")
+const STATE = join(process.cwd(), "src/components/counter/state")
+
+describe("the Counter public surface", () => {
+  it("re-exports every surface primitive, so a page imports from one place", () => {
+    const barrel = readFileSync(BARREL, "utf8")
+    for (const f of readdirSync(SURFACE).filter((f) => f.endsWith(".tsx"))) {
+      const name = f.replace(/\.tsx$/, "")
+      expect(barrel).toMatch(new RegExp(`from "\\./surface/${name}"`))
+    }
+  })
+
+  it("does NOT re-export the state components — they belong to surface/ alone", () => {
+    const barrel = readFileSync(BARREL, "utf8")
+    expect(barrel).not.toMatch(/\.\/state\//)
+  })
+
+  it("state components are imported only by surface components", () => {
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name)
+        if (e.isDirectory()) {
+          if (p !== STATE && p !== SURFACE) walk(p)
+          continue
+        }
+        if (!p.endsWith(".tsx") && !p.endsWith(".ts")) continue
+        if (readFileSync(p, "utf8").includes("counter/state/")) offenders.push(p)
+      }
+    }
+    walk(join(process.cwd(), "src"))
+    expect(offenders).toEqual([])
+  })
+})
