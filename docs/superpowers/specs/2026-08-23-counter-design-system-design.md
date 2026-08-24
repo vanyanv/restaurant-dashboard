@@ -1,6 +1,6 @@
 # Counter — design system and dashboard rebuild
 
-Status: approved design, not yet planned
+Status: implemented (dashboardv2, Phase 0b onward); see §2.4 for one amendment against what was originally specced here
 Branch: `dashboardv2`
 Date: 2026-08-23
 Prototype: [`docs/counter/counter-prototype.html`](../../counter/counter-prototype.html) (open directly in a browser)
@@ -144,9 +144,37 @@ lightness and every band is named on itself, so the chart is legible without the
 legend and without colour vision.
 
 Dark mode follows the system by default, with an explicit override persisted in
-settings. Tokens are defined on bare `:root`, redefined under
+settings — but not the way originally specced here.
+
+**Amendment (2026-08-23, during implementation):** this section originally
+prescribed tokens defined on bare `:root`, redefined under
 `@media (prefers-color-scheme: dark)` guarded by `:root:not([data-theme="light"])`,
-and again under `:root[data-theme="dark"]` so the toggle wins in both directions.
+and again under `:root[data-theme="dark"]`. That was not built. Every
+`counter.css` token is instead a single `light-dark(light, dark)` value,
+declared once, and dark mode is driven by the standard `color-scheme`
+property rather than a duplicated token block:
+`tests/styles/counter-tokens.test.ts` fails the build if a second `:root`
+block or a `prefers-color-scheme` media query appears at all, precisely to
+block the pattern this section used to prescribe.
+
+The `light-dark()` approach is better on its own terms: one declaration
+site per token instead of three, so there is nothing to keep in step —
+exactly the failure this document elsewhere blames for six drifted copies
+of `--ink-faint` in the old system. `color-scheme` is also what
+`CounterThemeProvider` (`src/components/counter/theme-provider.tsx`) sets
+directly: "system" stamps nothing and falls back to `:root`'s own
+`color-scheme` declaration; an explicit choice sets `style.colorScheme`
+inline on `<html>`, which overrides `:root` in both directions with no
+class-stamping and no media query involved.
+
+One deliberate deviation from that mechanism, found in the branch's final
+review: `:root` currently pins `color-scheme: light` rather than
+`color-scheme: light dark`, so "system" always resolves light rather than
+following the OS. That is not part of this amendment — it is a stopgap
+documented at the declaration itself in `counter.css`, because most of the
+app is still the pre-Counter editorial design (light-only, frozen shadcn
+tokens) and following the OS into dark half-inverts it. It reverts to
+`light dark` once every route is Counter.
 
 ### 2.5 Performance
 
