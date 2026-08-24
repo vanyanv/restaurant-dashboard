@@ -1,0 +1,10 @@
+/* tests/styles/fixtures/counter-lint/style-scope/other.css
+ * Stands in for a future src/styles/counter-components.css: a sibling of
+ * counter.css that is NOT itself allowlisted, so a raw colour literal here
+ * must still be caught. Before ROOTS included src/styles, nothing ever
+ * walked this directory at all, so the extension handling and the
+ * counter.css allowlist were both inert.
+ */
+.phantom {
+  color: #ff00ff;
+}
