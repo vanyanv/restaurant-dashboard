@@ -20,6 +20,7 @@
     "eval:chat": "tsx scripts/eval-chat/run.ts",
     "eval:llm": "DOTENV_CONFIG_PATH=.env.local tsx -r dotenv/config scripts/eval-llm/run.ts",
     "eval:ingredient-match": "tsx scripts/eval-ingredient-match/run.ts",
+    "tokens": "tsx scripts/counter-lint.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
