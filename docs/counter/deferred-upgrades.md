@@ -75,3 +75,56 @@ the intended Node major via `engines` in `package.json` and/or `.nvmrc`, matchin
 whichever of {20 local, 24 Vercel-default, or a deliberately chosen newer target} this
 project actually intends to run on — then keep `@types/node` aligned with that pin going
 forward.
+
+## Carried over from `.superpowers/sdd/2026-08-23-counter-foundation/` before it stops being tracked
+
+That directory is gitignored (`.superpowers/sdd/.gitignore` → `*`), so its task briefs and
+reports don't merge with the branch. The following pieces of reasoning from it are worth
+keeping somewhere tracked; moved here rather than left to disappear.
+
+### 7 lucide-react icons were silently redesigned, never visually re-verified
+
+Task 6's lucide-react 0.542.0 → 1.33.0 upgrade checked only that all 59 icon identifiers
+imported across the repo still resolve on 1.33.0 — identifier existence, not visual
+stability. Of those, 10 icons ship redesigned path data (different `__iconNode`) in 1.33.0,
+and 7 of the 10 were never actually screenshotted to confirm they still look right:
+`BookOpen`, `Building2`, `List`, `ListChecks`, `PackageCheck`, `ReceiptText`,
+`SlidersHorizontal`. (The other 3 were checked separately — see the task-6 report for
+which.) Nothing is known to be broken; this is an unverified gap, not a bug report.
+
+Phase 2's Playwright screenshot baselines (spec §4.3) are what will actually catch a
+regression here, once they exist — these seven names are what to look at first if a visual
+diff shows up on a page that uses one of them.
+
+### The Gemini leg of `src/lib/gemini-invoice.ts` has never been exercised live
+
+`@google/genai` was upgraded 1.52.0 → 2.18.0 (Ruling A) on a read-only, no-live-call
+assessment: the SDK's own changelog states the 2.0.0 breaking change is scoped to the
+`interactions` surface, and `gemini-invoice.ts` only calls `ai.models.generateContent` —
+unaffected. But that also means the upgrade, and the Gemini fallback path itself, has
+never actually run against the live Gemini API in this repo.
+
+Why that's tolerable rather than blocking: the Gemini leg only runs as a fallback (OpenAI
+extraction failing first — see `shouldFallBackToGemini` in `gemini-invoice.ts`), and
+`src/lib/invoice-sanity.ts` runs its reconciliation guards (including
+`total_reconciliation`) provider-agnostically on every extraction, Gemini's included —
+there's no separate, weaker validation path for it. `extractionModel` is persisted per
+invoice, so which provider actually produced a given extraction stays visible after the
+fact. And a Gemini throw is not swallowed: `extractViaGemini` throws on an empty response
+or a missing API key exactly like the OpenAI path does, rather than silently returning
+something that looks like a successful extraction. If Gemini's response shape ever drifted
+under 2.x, the reconciliation guard — not a Gemini-specific check — is what would catch it.
+
+### `npm run bundle:check` only counts JS bytes — CSS and fonts are invisible to it
+
+Task 14 found this while comparing bundle sizes across the Bricolage font addition:
+`check-bundle-size.ts` sums JS chunk bytes from `route-bundle-stats.json` only. The 41 KB
+Bricolage font file and its `@font-face` CSS rules never enter the measurement — a route
+could get meaningfully heavier in CSS/font weight while `bundle:check` reports it clean.
+
+`docs/counter/baseline-bundles.txt` is a one-time snapshot captured at Phase 0b, not a
+per-route budget enforced by anything — nothing fails if a route's *current* JS weight
+creeps up gradually and diverges from what the file recorded, only `bundle:check`'s own
+fixed budget matters day to day. Between the JS-only blind spot and the snapshot-not-budget
+gap, the spec's §2.5 claim that "Counter cannot ship a route slower than the one it
+replaces" is not actually enforced yet for the parts of "slower" that aren't JS bytes.
