@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { lintCounter, LEGACY } from "../../scripts/counter-lint"
+import { lintCounter, LEGACY, isCommitReachable, BaselineUnreachableError } from "../../scripts/counter-lint"
+
+/** A syntactically valid SHA-1 that no repository contains. Deliberately
+ * unreachable, so the shallow-checkout failure mode can be exercised
+ * directly and deterministically — this must NOT depend on the test
+ * runner's own checkout actually being shallow. */
+const UNREACHABLE_COMMIT = "0000000000000000000000000000000000dead"
 
 const FIXTURES = join(process.cwd(), "tests", "styles", "fixtures", "counter-lint")
 
@@ -171,5 +177,68 @@ describe("LEGACY skip list is well-formed", () => {
     for (const entry of LEGACY) {
       expect(entry.reason.trim().length).toBeGreaterThan(0)
     }
+  })
+})
+
+/**
+ * C2 (final whole-branch review): on a shallow checkout (`actions/checkout@v6`
+ * at the default `fetch-depth: 1`), `git show <baseline>:<path>` fails for
+ * every LEGACY file, not just changed ones. The original code could not
+ * tell that apart from "the path is genuinely new" and treated both as
+ * "not exempt", turning an ~80-page exemption into false violations across
+ * the whole legacy tree.
+ *
+ * These tests exercise that failure mode directly with a deliberately
+ * unreachable commit SHA, rather than requiring an actual shallow clone —
+ * so they assert the mechanism itself and do not accidentally depend on
+ * how deep *this* checkout happens to be (this suite must pass the same
+ * way whether it's run from a full clone or a shallow one).
+ */
+describe("C2: shallow-checkout resilience", () => {
+  it("isCommitReachable is false for a commit git cannot resolve locally", () => {
+    expect(isCommitReachable(UNREACHABLE_COMMIT)).toBe(false)
+  })
+
+  it("throws BaselineUnreachableError — not a wall of violations — when the baseline commit can't be read", () => {
+    let thrown: unknown
+    try {
+      lintCounter([join(process.cwd(), "src", "app", "dashboard")], {
+        baselineCommit: UNREACHABLE_COMMIT,
+      })
+    } catch (err) {
+      thrown = err
+    }
+    expect(thrown).toBeInstanceOf(BaselineUnreachableError)
+    expect((thrown as Error).message).toMatch(/fetch-depth/)
+    expect((thrown as Error).message).toMatch(/shallow/i)
+  })
+
+  it("does not throw for a root with no LEGACY-covered files, even with an unreachable baseline", () => {
+    // src/components/counter is not a LEGACY entry, so the exemption check
+    // (and the reachability check inside it) is never reached.
+    expect(() =>
+      lintCounter([join(process.cwd(), "src", "components", "counter")], {
+        baselineCommit: UNREACHABLE_COMMIT,
+      }),
+    ).not.toThrow()
+  })
+
+  it("ignoreLegacy bypasses the reachability check entirely, even with an unreachable baseline", () => {
+    expect(() =>
+      lintCounter([join(process.cwd(), "src", "app", "dashboard")], {
+        ignoreLegacy: true,
+        baselineCommit: UNREACHABLE_COMMIT,
+      }),
+    ).not.toThrow()
+  })
+
+  it("the real LEGACY_BASELINE_COMMIT is reachable in this checkout", () => {
+    // Same commit scripts/counter-lint.ts pins as LEGACY_BASELINE_COMMIT —
+    // duplicated here deliberately (it isn't exported) so this assertion
+    // exercises isCommitReachable exactly as the real exemption check does.
+    // True in a full clone; CI is fixed (fetch-depth: 0) to always be one.
+    // On a genuinely shallow checkout this would be false, and the tests
+    // above cover exactly that condition without needing one to reproduce.
+    expect(isCommitReachable("aecadf0f90c87bb7d0dc9c3ccb05f7bade67466b")).toBe(true)
   })
 })
