@@ -1,0 +1,8 @@
+/* tests/styles/fixtures/counter-lint/style-scope/counter.css
+ * Stands in for the real src/styles/counter.css — must stay allowlisted
+ * even once src/styles/** is in scope, since it's the one legitimate
+ * source of colour literals.
+ */
+:root {
+  --ct-paper: #fffbf8;
+}

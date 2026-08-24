@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { lintCounter, LEGACY, isCommitReachable, BaselineUnreachableError } from "../../scripts/counter-lint"
+import {
+  lintCounter,
+  LEGACY,
+  ROOTS,
+  isCommitReachable,
+  BaselineUnreachableError,
+} from "../../scripts/counter-lint"
 
 /** A syntactically valid SHA-1 that no repository contains. Deliberately
  * unreachable, so the shallow-checkout failure mode can be exercised
@@ -132,6 +138,53 @@ describe("FIX 3: no-status-branch is scoped away from lib/counter", () => {
     expect(found).toContainEqual(
       expect.objectContaining({ rule: "no-status-branch" }),
     )
+  })
+})
+
+/**
+ * IMPORTANT finding (final whole-branch review): ROOTS held four
+ * directories, none containing a `.css` file, so the `.css` extension
+ * handling on `no-colour-literal` and the `counter\.css$` allowlist were
+ * both inert — a future `src/styles/counter-components.css` would not have
+ * been linted at all. Separately, `no-tailwind-palette` could not see
+ * `bg-white` / `text-black`, which counter.css's own header explicitly
+ * forbids. Fail-before/pass-after, matching the discipline used above.
+ */
+describe("src/styles/** is in scope, and white/black are caught", () => {
+  it("ROOTS includes src/styles, so the real npm run tokens scan reaches it", () => {
+    expect(ROOTS).toContainEqual(join(process.cwd(), "src", "styles"))
+  })
+
+  it("catches a raw colour literal in a sibling stylesheet outside counter.css", () => {
+    // Stands in for a future src/styles/counter-components.css — before
+    // this fix, nothing under src/styles was walked at all, so this would
+    // have reported zero violations regardless of what the file contained.
+    const found = lintCounter([join(FIXTURES, "style-scope")]).filter((v) =>
+      v.file.endsWith("other.css"),
+    )
+    expect(found).toContainEqual(expect.objectContaining({ rule: "no-colour-literal" }))
+  })
+
+  it("still allowlists a file literally named counter.css within that same scope", () => {
+    const found = lintCounter([join(FIXTURES, "style-scope")]).filter((v) =>
+      v.file.endsWith("style-scope/counter.css"),
+    )
+    expect(found).toEqual([])
+  })
+
+  it("catches bg-white and border-black, which have no palette shade suffix to match", () => {
+    const found = lintCounter([FIXTURES]).filter((v) => v.file.endsWith("white-black.tsx"))
+    expect(found).toContainEqual(
+      expect.objectContaining({ rule: "no-tailwind-palette", text: expect.stringContaining("bg-white") }),
+    )
+    expect(found).toContainEqual(
+      expect.objectContaining({ rule: "no-tailwind-palette", text: expect.stringContaining("border-black") }),
+    )
+  })
+
+  it("reports the real src/styles tree clean (editorial CSS is LEGACY-exempt, counter.css is allowlisted)", () => {
+    const real = lintCounter([join(process.cwd(), "src", "styles")])
+    expect(real).toEqual([])
   })
 })
 

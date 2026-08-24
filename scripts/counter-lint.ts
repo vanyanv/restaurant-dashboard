@@ -116,9 +116,22 @@ export interface Violation {
 
 /** Colour written as a literal rather than taken from a token. */
 const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(/
-/** Any Tailwind palette colour. Counter's own utilities are all `ct-` prefixed. */
-const TAILWIND_PALETTE =
-  /\b(?:bg|text|border|ring|fill|stroke|from|via|to|decoration|outline|shadow|accent|caret|divide)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/
+/**
+ * Any Tailwind palette colour. Counter's own utilities are all `ct-`
+ * prefixed. Two alternatives: the shaded palette names (`bg-sky-500` and
+ * every sibling, which carry a `-\d{2,3}` shade suffix) and the bare
+ * `white`/`black` colour utilities, which have no shade suffix at all and
+ * so need their own branch — `counter.css`'s own header explicitly forbids
+ * both ("No #fff and no #000: every neutral is tinted warm."), and the
+ * original single-branch regex could not match either.
+ */
+const UTILITY_COLOUR_PREFIXES =
+  "bg|text|border|ring|fill|stroke|from|via|to|decoration|outline|shadow|accent|caret|divide"
+const TAILWIND_PALETTE = new RegExp(
+  String.raw`\b(?:${UTILITY_COLOUR_PREFIXES})-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b` +
+    "|" +
+    String.raw`\b(?:${UTILITY_COLOUR_PREFIXES})-(?:white|black)\b`,
+)
 /**
  * State branching on `SectionData.status` belongs to `surface/` and
  * `state/`, which RENDER it — never to the app routes (pages) that consume
@@ -202,6 +215,14 @@ export const LEGACY: Array<{ path: string; reason: string }> = [
     path: "src/app/(mobile)/m",
     reason:
       "Entire tree is the pre-Counter editorial mobile shell, deleted when mobile is rebuilt on Counter (see project_mobile_direction.md — mobile rebuild has not started as of this gate).",
+  },
+  {
+    path: "src/styles",
+    reason:
+      "src/styles/** entered ROOTS' no-colour-literal scope in this fix round (the linter-scope finding sibling to C2) — src/styles held only counter.css before that, so its four pre-Counter stylesheets " +
+      "(editorial-tokens.css, editorial-dashboard.css, editorial-mobile.css, editorial-auth.css — loaded by the still-editorial dashboard/login/signup/mobile layouts) were never walked at all. " +
+      "counter.css itself needs no entry here: RULES already excludes it up front via COLOUR_ALLOWED, before LEGACY is ever consulted. Deleted file by file in the same final dead-CSS sweep " +
+      "(spec §6 Phase F) as the rest of the editorial tree — narrow this to the remaining un-rewritten files as each stylesheet's pages move to Counter.",
   },
 ]
 
@@ -435,11 +456,22 @@ export function lintCounter(
   return violations
 }
 
-const ROOTS = [
+/**
+ * Exported so it can be asserted against directly (e.g. "src/styles/** is
+ * in scope") rather than only exercised indirectly through the CLI.
+ *
+ * `src/styles` was missing entirely until this fix: none of the other four
+ * roots contains a `.css` file, so the `.css` extension handling on
+ * `no-colour-literal` and the `counter\.css$` allowlist were both inert —
+ * a future `src/styles/counter-components.css` would not have been linted
+ * at all, despite rule 1 being "no colour literal outside counter.css".
+ */
+export const ROOTS = [
   join(process.cwd(), "src", "app", "dashboard"),
   join(process.cwd(), "src", "app", "(mobile)", "m"),
   join(process.cwd(), "src", "components", "counter"),
   join(process.cwd(), "src", "lib", "counter"),
+  join(process.cwd(), "src", "styles"),
 ]
 
 /** CLI entry. The test imports lintCounter directly; this is `npm run tokens`. */
