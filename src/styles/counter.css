@@ -261,3 +261,11 @@
   --font-ct-sans:    var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-ct-mono:    var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
 }
+
+/* The one entry animation. Declared here rather than in a component so the
+ * keyframe name is a token like any other, and so `useEntry` stays pure
+ * TypeScript with no style injection. */
+@keyframes ct-entry {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
