@@ -128,3 +128,61 @@ creeps up gradually and diverges from what the file recorded, only `bundle:check
 fixed budget matters day to day. Between the JS-only blind spot and the snapshot-not-budget
 gap, the spec's §2.5 claim that "Counter cannot ship a route slower than the one it
 replaces" is not actually enforced yet for the parts of "slower" that aren't JS bytes.
+
+## Carried over from Plan 3, Task 7 (2026-08-24)
+
+### `Cell` is deprecated in Recharts 3.10, removed in 4.0 — `<Chart>`'s bar variant depends on it
+
+`src/components/counter/surface/chart.tsx`'s bar variant renders one `<Cell>` per reading
+inside each `<Bar>` purely to drive the hover-dim contract (`fillOpacity` at 1 vs 0.42,
+keyed off `hoverIndex`). Recharts 3.10 deprecates `Cell` in favour of `shape`/`content`
+render props — which the same file already uses for the *growth* animation (the custom
+`shape` on `<Bar>`, driven by a hand-computed `animation-delay` per bar, documented inline
+as necessary because Recharts animates a whole `Bar` series on one shared timer). When
+Recharts 4.0 removes `Cell` outright, the dimming logic will need to move into that same
+`shape` render prop (reading `hoverIndex` via closure, same as the stagger delay already
+does) rather than living in a separate per-`Cell` `fillOpacity`. Whoever bumps past
+Recharts 3.x should expect this file's bar variant to need a rewrite, not just a version
+bump — `tests/components/counter/chart.test.tsx`'s "dims every bar except the hovered one"
+test is what will catch a regression here.
+
+### `<Chart>` has no `width` prop — a half-width panel can't request a narrower initial size
+
+`ChartProps` only exposes `height`; the `ResponsiveContainer`'s `initialDimension` is
+hard-coded to `DEFAULT_WIDTH = 640`. In a real browser this is invisible —
+`ResizeObserver` measures the actual container the instant it mounts and supersedes the
+initial guess. In any environment without `ResizeObserver` (jsdom under test, and any SSR
+pass before hydration), the chart renders at the fixed 640px fallback regardless of the
+panel it's actually going into. A page that puts two `Chart`s side by side in half-width
+panels gets no way to ask for a narrower initial paint, and — until hydration completes —
+briefly renders wider than its container. Not a bug today (no page does this yet); add a
+`width?: number` prop, threaded into both `ResponsiveContainer`'s `width` and
+`initialDimension.width`, the day one does.
+
+### `comparisonLabel` only touches the `aria-label` — no dashed comparison series renders
+
+`Chart`'s `comparisonLabel` prop is appended to the accessible name
+(`"${title}, compared to ${comparisonLabel}"`) and nothing else. There is no dashed/ghost
+series drawn for it — the Recharts spike marked a rendered comparison line UNPROVEN and it
+was never built. A caller who wants a visible comparison today has to pass it as an
+ordinary second `ChartSeries` (its own solid line/bar, its own band colour) — `Chart` has
+no dedicated comparison-series rendering path yet.
+
+### Runtime verification found `useCountUp` hydration-mismatches under real `no-preference`
+
+Not a dependency upgrade, but the same kind of "assumed, never run" gap this file tracks:
+Task 7's real-browser Playwright pass (`docs/counter/motion-verification.md`) found that
+`useCountUp` renders the *final* value during SSR (the server always defaults
+`useReducedMotion` to `true`, since `matchMedia` doesn't exist there) but a real
+`no-preference` client wants to start its count at `0` — a text-content hydration
+mismatch, reproduced on every fresh navigation in that session. React's recovery discards
+and remounts the affected subtree, and the freshly-mounted animation's first
+`requestAnimationFrame` tick can compute a negative `elapsed` (the frame-start timestamp
+`requestAnimationFrame` hands the callback can predate a `performance.now()` read taken
+after that frame began), producing one transient negative displayed value before the count
+corrects itself. No production page calls `useCountUp` yet (`Figure` still takes a
+pre-formatted string), so nothing ships this today. The fix, when something does wire it
+up: initialise `display` to `value` unconditionally so SSR and first client render always
+agree, start the animation from `0` only after mount, and clamp `t` to `[0, 1]` before
+applying the ease-out so a stray negative-`elapsed` frame can't produce an out-of-range
+result regardless of cause.

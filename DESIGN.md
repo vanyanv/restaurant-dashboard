@@ -290,3 +290,50 @@ tree a state is ever rendered.
 `.status` — `npm run tokens` fails the build if one does — and, with R3, a
 `Strip`/`Table`/`Meter`/`Cascade` never inspects it either, because they
 never receive it.
+
+## Motion
+
+All of it lives in `src/components/counter/motion/`, and nothing else in the
+codebase may import `framer-motion` — `npm run tokens` fails the build if it does.
+
+| What | Timing | Hook |
+|---|---|---|
+| Sections rise in reading order | 36ms apart, done by 330ms | `useEntry(index)` |
+| Figures count up | 480ms, landing exactly on the value | `useCountUp(value)` |
+| Lines stroke on | 720ms | `useChartDraw()` |
+| Bars grow from the baseline | 26ms apart | `useChartDraw()` |
+| Non-hovered bars dim | to 42% | `<Chart variant="bar">` |
+
+Every one of them is off under `prefers-reduced-motion`, decided in a single
+place — `useReducedMotion()` — which defaults to REDUCED when `matchMedia` is
+unavailable. A missed animation is cosmetic; an unwanted one can cause harm.
+Verified in a real browser: `docs/counter/motion-verification.md`.
+
+The bar variant carries more internal wiring than the line variant: dimming
+routes through `Cell` plus per-series mouse state, and the stagger through a
+custom `shape` render prop, because Recharts animates a bar series on one shared
+timer. Both sit behind the same `<Chart>` props — a page never learns which.
+
+**`useEntry` compresses, then stops.** Sections 0–3 get the full 220ms rise;
+sections 4–8 compress as their delay eats into the 330ms budget (index 6:
+216ms delay, 114ms duration remaining); index 9 and beyond appear instantly
+at the 330ms boundary, delay having consumed the whole thing. That's
+deliberate, not a bug: anything past index ~4 is below the fold on mount, so
+there is no reason to spend animation budget making it rise slowly — it's
+one `Math.min`/`Math.max` pair (see the doc comment on `useEntry`), not a
+special case.
+
+**Verifying reduced motion in a real browser found a real, narrow defect.**
+`docs/counter/motion-verification.md` records both media settings measured
+against a running `npm run dev`, not a stubbed `matchMedia`. The preference
+itself is honoured correctly in both directions — nothing animates under
+`reduce`, and every value lands on its correct final number either way — but
+`useCountUp` specifically hydration-mismatches on a real `no-preference`
+load: SSR always assumes reduced motion (the safe default, by design), so it
+always paints the *final* value, while a `no-preference` client wants to
+start its count at 0. React discards and remounts the subtree to recover,
+and the freshly-mounted animation's first frame can render a transient
+negative value before it corrects. `useCountUp` has no production caller
+yet (`Figure` still takes a pre-formatted string), so nothing ships this
+today — but it will the moment something calls it. See the doc for the
+measured numbers and the recommended fix.
