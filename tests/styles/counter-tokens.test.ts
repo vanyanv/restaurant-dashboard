@@ -451,6 +451,23 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
     expect(dE).toBeGreaterThanOrEqual(3)
   })
 
+  // Counter-argument to Amendment A, carried over from
+  // .superpowers/sdd/2026-08-23-counter-foundation/ before it stops being
+  // tracked (that directory is gitignored, so this reasoning would
+  // otherwise disappear at merge): Amendment A's "not a UI component or
+  // graphical object" reasoning was checked against how --ct-line-strong
+  // is used in counter.css and its own doc comment (a decorative
+  // separator) — but the prototype (docs/counter/counter-prototype.html)
+  // also uses --ct-line-strong as the BORDER on interactive chips, not
+  // just as a hairline separator. A border that is the only visual
+  // boundary of an interactive control is squarely inside WCAG 1.4.11's
+  // scope ("visual information required to identify user interface
+  // components"), so the "decorative, therefore exempt" argument may not
+  // hold once that usage is real. This was not re-decided here because no
+  // chip primitive exists yet in src/components/counter — re-litigate
+  // Amendment A against the real component (not the prototype mockup)
+  // when one is built, rather than assuming the exemption still applies.
+
   describe("mx bands — adjacency", () => {
     const cases = (Object.keys(DEFICIENCIES) as Vision[]).flatMap((vision) =>
       adjacentPairs(MX_BANDS).map(([a, b]) => [vision, a, b] as const),
