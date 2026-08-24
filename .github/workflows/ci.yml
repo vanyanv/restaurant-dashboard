@@ -86,6 +86,11 @@ jobs:
         run: npm run typecheck:scripts
       - name: Unit tests
         run: npm test
+      - name: Counter rules
+        # CLAUDE.md's whole-project gate and DESIGN.md both say this "fails
+        # the build" -- it needs the full-history checkout above (C2 fix) or
+        # it fails loudly for the wrong reason instead.
+        run: npm run tokens
 
   ml:
     runs-on: ubuntu-latest
