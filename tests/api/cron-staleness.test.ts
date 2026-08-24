@@ -6,9 +6,11 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// @/lib/auth pulls in welcome.ts -> "server-only", which doesn't resolve
-// under vitest. Same boundary the telemetry-page-view test mocks. The route
-// takes the cron-bearer path, so neither export is actually exercised.
+// @/lib/auth pulls in welcome.ts -> "server-only", which is aliased to
+// server-only/empty.js in vitest.config.ts to handle Vitest 4.1.11+'s
+// non-resolution of package export conditions. Same boundary the
+// telemetry-page-view test mocks. The route takes the cron-bearer path,
+// so neither export is actually exercised.
 vi.mock("next-auth", () => ({ getServerSession: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ authOptions: {}, hasOwnerAccess: () => true }))
 
