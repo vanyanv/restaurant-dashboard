@@ -12,13 +12,54 @@
  * other inherited defect this test found (chart-band ΔE separation — a
  * legibility trade a designer may make deliberately for palette harmony),
  * this one was corrected here rather than left documented-and-skipped.
- * Lightness only moved, from 55% to 53.5% — hue (50) and chroma (0.011) are
- * untouched. 53.5% clears both surfaces this token is used against: 4.640:1
- * on --ct-paper (was 4.356:1) and 4.951:1 on --ct-surface (was 4.648:1,
- * already passing). Both assertions are live/green in the test, not
- * skipped. Every other value in this file remains verbatim from the
- * prototype — see tests/styles/counter-tokens.test.ts for the three
- * remaining inherited ΔE defects that were knowingly left as-is.
+ *
+ * It has been corrected TWICE. The first pass (55% -> 53.5%) was solved
+ * against --ct-paper alone and did not check every surface --ct-ink-3
+ * actually renders on; a later audit of the prototype found it also used on
+ * --ct-chrome (the nav rail's captions, the topbar breadcrumbs, and more —
+ * see tests/styles/counter-tokens.test.ts), which is darker than paper
+ * (94.4% vs 96.2% L) and still failed at 53.5%: 4.396:1. The second pass
+ * (53.5% -> 52.5%, current) is solved against every surface it actually
+ * renders on, --ct-sunk correctly excluded (see below). Lightness only
+ * moved each time — hue (50) and chroma (0.011) are untouched throughout.
+ * Measured at 52.5%, cross-checked two ways (culori's wcagContrast and a
+ * hand-rolled WCAG luminance ratio, which agree to full float precision):
+ *
+ *   --ct-chrome       4.586:1  (was 4.396 at 53.5% — the failing surface,
+ *                               and the binding constraint on this value)
+ *   --ct-paper        4.841:1  (was 4.640 at 53.5%)
+ *   --ct-surface      5.166:1  (was 4.951 at 53.5%)
+ *   --ct-signal-wash  4.741:1  (was 4.544 at 53.5% — had only 0.044 of
+ *                               margin; now has real headroom)
+ *
+ * 52.5% is the smallest step that clears --ct-chrome with real margin
+ * (0.086) while keeping the --ct-ink-2 -> --ct-ink-3 gap at 5.5 lightness
+ * points (ink-2 is 47%). Going darker to 51.5% would also clear --ct-sunk,
+ * but --ct-sunk is not a surface --ct-ink-3 actually paints on (see below),
+ * so that would only narrow the ramp to 4.5 points for no benefit. Be
+ * aware: this is the SECOND correction to this token, and each one
+ * compresses the muted-ink hierarchy a little more — the ink-2/ink-3 gap
+ * has gone from 8pp (prototype) to 6.5pp (first correction) to 5.5pp
+ * (this one). Still a distinct, visible step, but a third correction in
+ * this direction would be worth stepping back on rather than repeating the
+ * same move a third time.
+ *
+ * --ct-ink-3 on --ct-sunk was checked and is NOT a real pairing: the only
+ * place --ct-ink-3 text sits inside a --ct-sunk-background element is
+ * `.interval .tg` in the prototype, and that label is
+ * `position:absolute;top:-19px` against a 32px-tall `.interval` bar — the
+ * offset places it entirely above the bar's own painted box, so what
+ * actually renders behind it is whatever sits above the bar (paper or
+ * surface, both already covered), not the sunk fill. Measured anyway for
+ * the record: 4.342:1 at 52.5% (would still fail even if it were real).
+ * Considered, not overlooked — do not re-derive this from scratch and
+ * darken the token further on the assumption that sunk was missed.
+ *
+ * Both --ct-ink-3 on --ct-paper and --ct-ink-3 on --ct-chrome are
+ * live/green assertions in the test, not skipped. Every other value in
+ * this file remains verbatim from the prototype — see
+ * tests/styles/counter-tokens.test.ts for the three remaining inherited ΔE
+ * defects that were knowingly left as-is.
  *
  * Every raw property is prefixed --ct- because src/app/globals.css already
  * defines --accent, --border, --ring and others as bare HSL triplets consumed
@@ -47,7 +88,7 @@
   /* ink */
   --ct-ink:          oklch(24% 0.014 40);
   --ct-ink-2:        oklch(47% 0.012 45);
-  --ct-ink-3:        oklch(53.5% 0.011 50);  /* corrected from 55% (prototype), see file header */
+  --ct-ink-3:        oklch(52.5% 0.011 50);  /* corrected from 55% (prototype) via 53.5%, see file header */
 
   /* action + state */
   --ct-accent:       oklch(52% 0.19 27);

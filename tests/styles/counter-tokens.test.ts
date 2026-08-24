@@ -156,36 +156,28 @@ function colorOf(tokens: Map<string, string>, name: string) {
 }
 
 /**
- * Known misses against the real, frozen light values (ruling C, plus the
- * fix-round-2 ink-token surface audit below). Keyed so each generated test
- * can look itself up. LIGHT ONLY: the dark instance of the same test is
- * never in this set, so it stays live.
+ * Known misses against the real, frozen light values (ruling C). Keyed so
+ * each generated test can look itself up. LIGHT ONLY: the dark instance of
+ * the same test is never in this set, so it stays live.
  *
- * NOTE: --ct-ink-3 on --ct-paper used to be in this map (4.356:1 vs the
- * 4.5:1 WCAG floor) but is NOT anymore — the user ruled that a sub-AA text
- * contrast ratio is a compliance floor, not a design trade, and had the
- * token corrected in counter.css instead. Its assertion is back in CONTRAST
- * below as a normal, live, passing test.
+ * NOTE: --ct-ink-3 is not in this map at all any more. Round 1 fixed it
+ * against --ct-paper (55% -> 53.5%); round 2's ink-token surface audit
+ * found it also renders on --ct-chrome and still failed there at 53.5%
+ * (4.396:1) — chrome is darker than paper, so the first fix didn't reach
+ * far enough. Round 3 fixed it again, this time against every surface it
+ * actually renders on (53.5% -> 52.5%; --ct-sunk excluded — see the comment
+ * by CONTRAST below). All --ct-ink-3 contrast assertions are now normal,
+ * live, passing tests, not skipped. See counter.css's header comment for
+ * the full before/after and the ramp-compression consequence of a second
+ * correction.
  *
- * Three entries are chart-band ΔE separation misses, which the same ruling
- * treated differently from a text-contrast floor: a legibility trade a
- * designer may make deliberately for palette harmony, so INHERITED and
- * KNOWINGLY ACCEPTED rather than fixed.
- *
- * One entry — contrast:--ct-ink-3:--ct-chrome — is a NEW discovery from
- * auditing docs/counter/counter-prototype.html for every surface each ink
- * token actually renders on (fix round 2, Finding 2): --ct-ink-3 on
- * --ct-chrome measures 4.396:1, also below the 4.5:1 floor, the same
- * category of defect as the ink-3/paper one that got fixed. It is
- * deliberately NOT auto-fixed the way ink-3/paper was — that fix followed a
- * specific user ruling after the options were laid out; this one is
- * reported the same way ink-3/paper originally was, for the same kind of
- * ruling, rather than assumed to deserve the same outcome.
- *
- * Someone reading a skipped test below must see: the measured value, the
- * threshold it misses, that it is inherited/newly-found rather than
- * introduced by carelessness, and that leaving it skipped was a deliberate,
- * informed call, not laziness.
+ * The three entries remaining here are chart-band ΔE separation misses,
+ * which the user's ruling treated differently from a text-contrast floor: a
+ * legibility trade a designer may make deliberately for palette harmony, so
+ * INHERITED and KNOWINGLY ACCEPTED rather than fixed. Someone reading a
+ * skipped test below must see: the measured value, the threshold it
+ * misses, that it is inherited from the prototype (not introduced by this
+ * project), and that it was a deliberate, informed call, not laziness.
  */
 const LIGHT_DEFECTS = new Map<string, string>([
   [
@@ -220,10 +212,6 @@ const LIGHT_DEFECTS = new Map<string, string>([
     "gp-adj:deuteranopia:--ct-gp-1:--ct-gp-2",
     "INHERITED prototype defect, knowingly accepted: measures dE 15.25 vs threshold 16 (deuteranopia)",
   ],
-  [
-    "contrast:--ct-ink-3:--ct-chrome",
-    "measures 4.396:1 vs the 4.5:1 threshold — NEWLY FOUND by the fix-round-2 ink-token surface audit (--ct-ink-3 renders on --ct-chrome via .rail__cap/.rail__store .mt/.rail__foot .rl, .crumbs/.crumbs .sep/.sync in .topbar, .mtop .dt, .mtab, .login__aside .who/.loginstat .k). Same category as the --ct-ink-3/--ct-paper defect fixed in the previous round (a compliance-floor miss, not a designer trade), but reported and skipped here rather than fixed unilaterally, pending a ruling",
-  ],
 ])
 
 function adjacentPairs(names: readonly string[]): Array<[string, string]> {
@@ -232,22 +220,33 @@ function adjacentPairs(names: readonly string[]): Array<[string, string]> {
 
 /**
  * Text-on-surface pairs and the WCAG ratio each must clear. Ruling A drops
- * the --ct-line-strong/--ct-paper row. --ct-ink-3/--ct-paper was previously
- * pulled out into its own gated test because it failed at the prototype's
- * original 55% lightness (4.356:1); the token has since been corrected to
- * 53.5% (see counter.css header) and this row is back to being a normal,
- * live assertion like every other row here.
+ * the --ct-line-strong/--ct-paper row.
+ *
+ * --ct-ink-3 has been corrected TWICE (see counter.css header for the full
+ * before/after): round 1 fixed it against --ct-paper alone (55% -> 53.5%);
+ * round 2's surface audit below found it also renders on --ct-chrome and
+ * still failed there at 53.5% (4.396:1, chrome being darker than paper);
+ * round 3 fixed it again against every surface it actually renders on
+ * (53.5% -> 52.5%). Every --ct-ink-3 row below is now a normal, live,
+ * passing assertion — none of them are gated.
  *
  * Fix round 2: audited docs/counter/counter-prototype.html for every
  * surface each of --ct-ink, --ct-ink-2 and --ct-ink-3 actually renders text
  * on (own-background CSS rules, plus BEM/descendant selectors confirmed
  * against the generated HTML), not just the surfaces this table happened to
- * already cover. Every real pairing found is added below. --ct-ink-3/
- * --ct-chrome measures 4.396:1 in light — below 4.5 — so per ruling it is
- * NOT touched here; it's pulled into its own gated test below, same pattern
- * as the other inherited defects, and reported. See task-11-report.md
- * "Fix round 2" for the full audit, including the pairing deliberately NOT
- * added (--ct-ink-3 on --ct-sunk, via `.interval .tg`) and why.
+ * already cover. Every real pairing found is added below.
+ *
+ * --ct-ink-3 on --ct-sunk was checked and deliberately NOT added: the only
+ * --ct-ink-3 text inside a --ct-sunk-background element in the prototype is
+ * `.interval .tg` (`.interval{height:32px;background:var(--sunk)}`,
+ * `.tg{position:absolute;top:-19px;color:var(--ink-3)}`) — the -19px offset
+ * places that label entirely above the 32px bar's own painted box, so what
+ * actually renders behind it is whatever sits above the bar (paper or
+ * surface, both already covered here), not the sunk fill. Measured anyway
+ * so this is a documented decision, not a gap to rediscover and "fix" by
+ * darkening the token further: at the current 52.5%, --ct-ink-3 on
+ * --ct-sunk is 4.342:1 (would still fail even if the pairing were real).
+ * Do not add this row on the assumption it was overlooked.
  */
 const CONTRAST: Array<[fg: string, bg: string, min: number, why: string]> = [
   ["--ct-ink", "--ct-paper", 4.5, "body text on the page"],
@@ -292,9 +291,13 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
   const isLightDefect = (key: string) => theme === "light" && LIGHT_DEFECTS.has(key)
 
   describe("contrast", () => {
-    // --ct-ink-3/--ct-paper used to be gated here (round 1) and no longer
-    // is — it was fixed at the token, not skipped. Round 2's surface audit
-    // found a new gated case: --ct-ink-3/--ct-chrome.
+    // No CONTRAST rows are gated here any more. --ct-ink-3/--ct-paper was
+    // gated in round 1 and fixed at the token instead; round 2 found
+    // --ct-ink-3/--ct-chrome also failing and gated that too; round 3 fixed
+    // --ct-ink-3 again (52.5%) against every real surface it renders on, so
+    // that gate is gone as well. `skipped` stays here, generating zero
+    // tests when empty, so the next inherited contrast defect (if any) has
+    // a ready-made place to land without restructuring this block again.
     const live = CONTRAST.filter(([fg, bg]) => !isLightDefect(`contrast:${fg}:${bg}`))
     const skipped = CONTRAST.filter(([fg, bg]) => isLightDefect(`contrast:${fg}:${bg}`))
 
