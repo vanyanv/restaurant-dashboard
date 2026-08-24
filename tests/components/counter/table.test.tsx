@@ -58,13 +58,26 @@ describe("Table", () => {
     expect(hollywood.querySelectorAll("a")).toHaveLength(1)
   })
 
-  it("the head is sticky, because a long table read without headers is unreadable", () => {
-    render(<Table columns={columns} rows={rows} />)
-    expect(screen.getAllByRole("columnheader")[0].className).toMatch(/sticky/)
-  })
-
   it("scrolls horizontally inside its own container rather than the page", () => {
     const { container } = render(<Table columns={columns} rows={rows} />)
     expect(container.querySelector("[data-table-scroll]")!.className).toMatch(/overflow-x-auto/)
+  })
+
+  describe("sticky head (2a: maxHeight)", () => {
+    // jsdom does no layout/scrolling, so this cannot prove the header stays
+    // fixed on scroll — only that the markup is right. Real sticking is
+    // verified in a browser; see the fix report for measured `top` values.
+    it("is NOT sticky when maxHeight is unset — overflow-x-auto alone doesn't create a vertical scrollport", () => {
+      render(<Table columns={columns} rows={rows} />)
+      expect(screen.getAllByRole("columnheader")[0].className).not.toMatch(/sticky/)
+    })
+
+    it("is sticky, and the wrapper is constrained to scroll vertically, when maxHeight is set", () => {
+      const { container } = render(<Table columns={columns} rows={rows} maxHeight="300px" />)
+      expect(screen.getAllByRole("columnheader")[0].className).toMatch(/sticky/)
+      const wrapper = container.querySelector("[data-table-scroll]") as HTMLElement
+      expect(wrapper.style.maxHeight).toBe("300px")
+      expect(wrapper.style.overflowY).toBe("auto")
+    })
   })
 })

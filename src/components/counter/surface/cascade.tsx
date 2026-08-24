@@ -32,17 +32,30 @@ export function Cascade({ steps }: { steps: CascadeStep[] }) {
             <span className="text-ct-body text-ct-ink">{r.label}</span>
             <span className={`text-ct-body text-ct-ink-2 ${TABULAR}`}>{money(r.amount, { cents: true })}</span>
           </div>
-          <div className="h-2 w-full rounded-ct-sm bg-ct-sunk">
+          <div className="h-2 w-full overflow-hidden rounded-ct-sm bg-ct-sunk">
             <span
               data-cascade-remaining
               className={`block h-2 rounded-ct-sm ${r.kind === "end" ? "bg-ct-accent" : "bg-ct-ink-3"}`}
-              style={{ width: `${round1((r.remaining / start) * 100)}%` }}
+              style={{ width: `${widthPct(r.remaining, start)}%` }}
             />
           </div>
         </div>
       ))}
     </div>
   )
+}
+
+/**
+ * `start` is a zero-revenue day's denominator (closed store, a channel filter
+ * with no orders). Dividing by it would produce "NaN%" or "Infinity%" — a
+ * `ready` state with no state guard to catch it. Zero start collapses every
+ * bar to 0%, and the result is clamped to [0, 100] so a negative `remaining`
+ * (a statement that ran below zero) doesn't paint outside the track either.
+ */
+function widthPct(remaining: number, start: number): number {
+  if (start === 0) return 0
+  const pct = (remaining / start) * 100
+  return round1(Math.min(100, Math.max(0, pct)))
 }
 
 function round1(n: number): number {

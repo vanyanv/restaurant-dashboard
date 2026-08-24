@@ -33,6 +33,37 @@ describe("Meter", () => {
     expect((container.querySelector("[data-meter-fill]") as HTMLElement).className)
       .not.toMatch(/bg-ct-bad\b/)
   })
+
+  it("a zero max cannot divide-by-zero into NaN%/Infinity% — every width collapses to 0%", () => {
+    const { container } = render(
+      <Meter label="Labor $" value={500} reference={800} max={0} format={(v) => `$${v}`} />,
+    )
+    const fill = container.querySelector("[data-meter-fill]") as HTMLElement
+    const ref = container.querySelector("[data-meter-reference]") as HTMLElement
+    expect(fill.style.width).toBe("0%")
+    expect(ref.style.left).toBe("0%")
+    expect(fill.style.width).not.toMatch(/NaN|Infinity/)
+  })
+
+  it("a value far past max is clamped to a 100% width, and the track clips overflow too", () => {
+    const { container } = render(
+      <Meter label="Cost" value={300} reference={100} max={100} format={(v) => `$${v}`} />,
+    )
+    const over = container.querySelector("[data-meter-overshoot]") as HTMLElement
+    // raw ratio would be (300-100)/100 = 200% — clamped to 100%
+    expect(over.style.width).toBe("100%")
+    const track = container.querySelector("[data-meter-fill]")!.parentElement as HTMLElement
+    expect(track.className).toMatch(/overflow-hidden/)
+  })
+
+  it("a negative value does not produce a negative width", () => {
+    const { container } = render(
+      <Meter label="Delta" value={-10} reference={5} max={100} format={(v) => `${v}`} />,
+    )
+    const fill = container.querySelector("[data-meter-fill]") as HTMLElement
+    expect(fill.style.width).toBe("0%")
+    expect(fill.style.width).not.toMatch(/^-/)
+  })
 })
 
 describe("Cascade", () => {
@@ -59,5 +90,26 @@ describe("Cascade", () => {
     render(<Cascade steps={steps} />)
     expect(screen.getByText("Sales (ex-tax)")).toBeTruthy()
     expect(screen.getByText("Net profit")).toBeTruthy()
+  })
+
+  it("a zero-revenue start (closed store, empty channel filter) does not divide into NaN%/Infinity%", () => {
+    const zeroSteps = [
+      { label: "Sales (ex-tax)", amount: 0, kind: "start" as const },
+      { label: "COGS", amount: 0, kind: "subtract" as const },
+      { label: "Net profit", amount: 0, kind: "end" as const },
+    ]
+    const { container } = render(<Cascade steps={zeroSteps} />)
+    const bars = container.querySelectorAll("[data-cascade-remaining]")
+    for (const bar of Array.from(bars)) {
+      const width = (bar as HTMLElement).style.width
+      expect(width).toBe("0%")
+      expect(width).not.toMatch(/NaN|Infinity/)
+    }
+  })
+
+  it("track clips overflow so a remaining figure past start can't paint outside the bar", () => {
+    const { container } = render(<Cascade steps={steps} />)
+    const track = container.querySelector("[data-cascade-remaining]")!.parentElement as HTMLElement
+    expect(track.className).toMatch(/overflow-hidden/)
   })
 })

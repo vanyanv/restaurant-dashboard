@@ -41,16 +41,32 @@ export interface Row {
  * the `relative` positioning context that stretch resolves against. One link
  * in the accessibility tree, correct keyboard/focus behaviour for free, and a
  * pointer that now tells the truth across the full row width.
+ *
+ * `maxHeight` is optional. When set, the wrapper is constrained to that
+ * height and scrolls vertically, and the header genuinely sticks inside it.
+ * When unset, there is nothing to scroll vertically inside, `overflow-y`
+ * resolves to visible, and the header is NOT sticky — `overflow-x-auto`
+ * alone makes the wrapper its own scroll container with
+ * `clientHeight === scrollHeight`, so a `sticky` header inside it never
+ * moves relative to that container and never sticks against the page.
+ * Verified in a real browser (2a): see the fix report for measured values.
  */
 export function Table({
   columns,
   rows,
+  maxHeight,
 }: {
   columns: Column[]
   rows: Row[]
+  /** e.g. "480px". Constrains the wrapper so it scrolls vertically and the head sticks. */
+  maxHeight?: string
 }) {
   return (
-    <div data-table-scroll className="overflow-x-auto">
+    <div
+      data-table-scroll
+      className="overflow-x-auto"
+      style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
+    >
       <table className="w-full border-collapse text-ct-body">
         <thead>
           <tr>
@@ -58,7 +74,7 @@ export function Table({
               <th
                 key={c.key}
                 scope="col"
-                className={`sticky top-0 z-10 border-b border-ct-line-strong bg-ct-surface px-3 py-2 font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3 ${
+                className={`${maxHeight ? "sticky top-0 z-10 " : ""}border-b border-ct-line-strong bg-ct-surface px-3 py-2 font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3 ${
                   c.numeric ? "text-right" : "text-left"
                 }`}
               >
