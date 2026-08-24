@@ -44,15 +44,33 @@ import type { Color } from "culori"
  * C) Light values are frozen (copied verbatim from the prototype). If a
  *    light assertion the prototype itself makes turns out false when
  *    measured, that is an inherited defect in the prototype, not something
- *    this test papers over. Measuring the real light values surfaced several:
- *    --ct-ink-3 on --ct-paper (4.356:1, needs 4.5), --ct-gp-3 on --ct-surface
- *    (2.980:1, needs 3), the mx-1/mx-2 adjacent pair (13.6-14.12 dE across
- *    all four vision models, needs 15), and the gp-1/gp-2 adjacent pair under
- *    normal/protanopia/deuteranopia (13.24-15.25 dE, needs 16). Each is kept
- *    as a real, named, skipped assertion — not deleted, not weakened, token
- *    not touched — with the measured number in the test name. The skip is
- *    LIGHT-ONLY: the identical assertion still runs live for dark, because
- *    dark values are not frozen and Task 12 must be held to the claim.
+ *    this test papers over by default. Measuring the real light values
+ *    surfaced four: --ct-ink-3 on --ct-paper (4.356:1, needs 4.5), --ct-gp-3
+ *    on --ct-surface (2.980:1, needs 3), the mx-1/mx-2 adjacent pair
+ *    (13.6-14.12 dE across all four vision models, needs 15), and the
+ *    gp-1/gp-2 adjacent pair under normal/protanopia/deuteranopia
+ *    (13.24-15.25 dE, needs 16).
+ *
+ *    These four were taken to the user for a ruling, because "inherited
+ *    defect" isn't automatically "leave it": a sub-AA text contrast ratio is
+ *    a hard compliance floor, not a design choice, where the three ΔE
+ *    misses are chart-band SEPARATION — a legibility trade a designer may
+ *    have made deliberately for palette harmony. The ruling split them:
+ *
+ *    FIXED: --ct-ink-3 was corrected in counter.css (55% -> 53.5% lightness
+ *    only; hue and chroma untouched) and both its contrast assertions are
+ *    live, ordinary, passing tests below — not skipped, not gated. See the
+ *    header comment in counter.css for the full before/after.
+ *
+ *    LEFT AS INHERITED, KNOWINGLY ACCEPTED (not fixed): --ct-gp-3 on
+ *    --ct-surface, the mx-1/mx-2 adjacency, and the gp-1/gp-2 adjacency
+ *    under three of four vision models. Each stays a real, named, skipped
+ *    assertion — not deleted, not weakened, token not touched — with the
+ *    measured value, the threshold, and "knowingly accepted" in the test
+ *    title, so nobody mistakes the skip for an oversight six months from
+ *    now. The skip is LIGHT-ONLY: the identical assertion still runs live
+ *    for dark, because dark values are not frozen and Task 12 must be held
+ *    to the claim.
  */
 
 const CSS = readFileSync(join(process.cwd(), "src", "styles", "counter.css"), "utf8")
@@ -112,20 +130,55 @@ function colorOf(tokens: Map<string, string>, name: string) {
 }
 
 /**
- * Known-false claims measured against the real, frozen light values (ruling
- * C above). Keyed so each generated test can look itself up. LIGHT ONLY: the
+ * Chart-band ΔE separation misses in the real, frozen light values (ruling C
+ * above). Keyed so each generated test can look itself up. LIGHT ONLY: the
  * dark instance of the same test is never in this set, so it stays live.
+ *
+ * NOTE: --ct-ink-3 on --ct-paper used to be in this map (4.356:1 vs the
+ * 4.5:1 WCAG floor) but is NOT anymore — the user ruled that a sub-AA text
+ * contrast ratio is a compliance floor, not a design trade, and had the
+ * token corrected in counter.css instead. Its assertion is back in CONTRAST
+ * below as a normal, live, passing test. The three defects remaining here
+ * are chart-band ΔE separation, which the same ruling treated differently:
+ * a legibility trade a designer may make deliberately for palette harmony,
+ * so INHERITED and KNOWINGLY ACCEPTED rather than fixed. Someone reading a
+ * skipped test below must see: the measured value, the threshold it misses,
+ * that it is inherited from the prototype (not introduced by this project),
+ * and that it was a deliberate, informed call, not laziness.
  */
 const LIGHT_DEFECTS = new Map<string, string>([
-  ["contrast:--ct-ink-3:--ct-paper", "measures 4.356:1 in light, needs 4.5:1"],
-  ["gp-surface:--ct-gp-3", "measures 2.980:1 in light, needs 3:1"],
-  ["mx-adj:normal:--ct-mx-1:--ct-mx-2", "measures dE 14.00 in light, needs 15"],
-  ["mx-adj:protanopia:--ct-mx-1:--ct-mx-2", "measures dE 13.60 in light, needs 15"],
-  ["mx-adj:deuteranopia:--ct-mx-1:--ct-mx-2", "measures dE 14.09 in light, needs 15"],
-  ["mx-adj:tritanopia:--ct-mx-1:--ct-mx-2", "measures dE 14.12 in light, needs 15"],
-  ["gp-adj:normal:--ct-gp-1:--ct-gp-2", "measures dE 14.95 in light, needs 16"],
-  ["gp-adj:protanopia:--ct-gp-1:--ct-gp-2", "measures dE 13.24 in light, needs 16"],
-  ["gp-adj:deuteranopia:--ct-gp-1:--ct-gp-2", "measures dE 15.25 in light, needs 16"],
+  [
+    "gp-surface:--ct-gp-3",
+    "INHERITED prototype defect, knowingly accepted: measures 2.980:1 vs the 3:1 threshold — misses by 0.02, a designer trade for palette harmony, not an oversight",
+  ],
+  [
+    "mx-adj:normal:--ct-mx-1:--ct-mx-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 14.00 vs threshold 15 (normal vision)",
+  ],
+  [
+    "mx-adj:protanopia:--ct-mx-1:--ct-mx-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 13.60 vs threshold 15 (protanopia)",
+  ],
+  [
+    "mx-adj:deuteranopia:--ct-mx-1:--ct-mx-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 14.09 vs threshold 15 (deuteranopia)",
+  ],
+  [
+    "mx-adj:tritanopia:--ct-mx-1:--ct-mx-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 14.12 vs threshold 15 (tritanopia)",
+  ],
+  [
+    "gp-adj:normal:--ct-gp-1:--ct-gp-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 14.95 vs threshold 16 (normal vision)",
+  ],
+  [
+    "gp-adj:protanopia:--ct-gp-1:--ct-gp-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 13.24 vs threshold 16 (protanopia)",
+  ],
+  [
+    "gp-adj:deuteranopia:--ct-gp-1:--ct-gp-2",
+    "INHERITED prototype defect, knowingly accepted: measures dE 15.25 vs threshold 16 (deuteranopia)",
+  ],
 ])
 
 function adjacentPairs(names: readonly string[]): Array<[string, string]> {
@@ -133,12 +186,16 @@ function adjacentPairs(names: readonly string[]): Array<[string, string]> {
 }
 
 /** Text-on-surface pairs and the WCAG ratio each must clear. Ruling A drops
- * the --ct-line-strong/--ct-paper row; ruling C pulls --ct-ink-3/--ct-paper
- * out into its own gated test below because it fails in light. */
+ * the --ct-line-strong/--ct-paper row. --ct-ink-3/--ct-paper was previously
+ * pulled out into its own gated test because it failed at the prototype's
+ * original 55% lightness (4.356:1); the token has since been corrected to
+ * 53.5% (see counter.css header) and this row is back to being a normal,
+ * live assertion like every other row here. */
 const CONTRAST: Array<[fg: string, bg: string, min: number, why: string]> = [
   ["--ct-ink", "--ct-paper", 4.5, "body text on the page"],
   ["--ct-ink", "--ct-surface", 4.5, "body text on a panel"],
   ["--ct-ink-2", "--ct-paper", 4.5, "secondary prose"],
+  ["--ct-ink-3", "--ct-paper", 4.5, "captions, folios, SKUs"],
   ["--ct-ink-3", "--ct-surface", 4.5, "captions on a panel"],
   ["--ct-accent", "--ct-paper", 4.5, "the proofmark, used as text"],
   ["--ct-accent", "--ct-accent-wash", 4.5, "accent text on its own wash"],
@@ -168,28 +225,14 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
   const isLightDefect = (key: string) => theme === "light" && LIGHT_DEFECTS.has(key)
 
   describe("contrast", () => {
-    const live = CONTRAST.filter(([fg, bg]) => !isLightDefect(`contrast:${fg}:${bg}`))
-
-    it.each(live)("%s on %s clears %s:1 (%s)", (fg, bg, min) => {
+    // No rows are gated here any more — --ct-ink-3/--ct-paper was the one
+    // contrast defect this file found, and it was fixed at the token rather
+    // than skipped (see counter.css header and the ruling-C comment above).
+    it.each(CONTRAST)("%s on %s clears %s:1 (%s)", (fg, bg, min) => {
       const t = tokens()
       const ratio = wcagContrast(colorOf(t, fg), colorOf(t, bg))
       expect(ratio).toBeGreaterThanOrEqual(min)
     })
-
-    const inkThreeKey = "contrast:--ct-ink-3:--ct-paper"
-    const inkThreeRunner = isLightDefect(inkThreeKey) ? it.skip : it
-    inkThreeRunner(
-      `--ct-ink-3 on --ct-paper clears 4.5:1 (captions, folios, SKUs)${
-        LIGHT_DEFECTS.has(inkThreeKey) && theme === "light"
-          ? ` — inherited prototype defect, ${LIGHT_DEFECTS.get(inkThreeKey)}`
-          : ""
-      }`,
-      () => {
-        const t = tokens()
-        const ratio = wcagContrast(colorOf(t, "--ct-ink-3"), colorOf(t, "--ct-paper"))
-        expect(ratio).toBeGreaterThanOrEqual(4.5)
-      },
-    )
   })
 
   // Amendment A: --ct-line-strong vs --ct-paper (WCAG 1.4.11, 3:1) is dropped
@@ -222,15 +265,14 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
       expect(dE).toBeGreaterThanOrEqual(15)
     })
 
-    it.skip.each(skipped)(
-      "%s: %s vs %s clears dE 15 (adjacent mx bands) — inherited prototype defect",
-      (vision, a, b) => {
-        const t = tokens()
-        const filter = DEFICIENCIES[vision]
-        const dE = differenceCiede2000()(filter(colorOf(t, a)), filter(colorOf(t, b)))
-        expect(dE).toBeGreaterThanOrEqual(15)
-      },
-    )
+    it.skip.each(
+      skipped.map(([vision, a, b]) => [vision, a, b, LIGHT_DEFECTS.get(`mx-adj:${vision}:${a}:${b}`)!] as const),
+    )("%s: %s vs %s clears dE 15 (adjacent mx bands) — %s", (vision, a, b) => {
+      const t = tokens()
+      const filter = DEFICIENCIES[vision]
+      const dE = differenceCiede2000()(filter(colorOf(t, a)), filter(colorOf(t, b)))
+      expect(dE).toBeGreaterThanOrEqual(15)
+    })
   })
 
   describe("gp ramp — adjacency", () => {
@@ -247,15 +289,14 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
       expect(dE).toBeGreaterThanOrEqual(16)
     })
 
-    it.skip.each(skipped)(
-      "%s: %s vs %s clears dE 16 (adjacent gp steps) — inherited prototype defect",
-      (vision, a, b) => {
-        const t = tokens()
-        const filter = DEFICIENCIES[vision]
-        const dE = differenceCiede2000()(filter(colorOf(t, a)), filter(colorOf(t, b)))
-        expect(dE).toBeGreaterThanOrEqual(16)
-      },
-    )
+    it.skip.each(
+      skipped.map(([vision, a, b]) => [vision, a, b, LIGHT_DEFECTS.get(`gp-adj:${vision}:${a}:${b}`)!] as const),
+    )("%s: %s vs %s clears dE 16 (adjacent gp steps) — %s", (vision, a, b) => {
+      const t = tokens()
+      const filter = DEFICIENCIES[vision]
+      const dE = differenceCiede2000()(filter(colorOf(t, a)), filter(colorOf(t, b)))
+      expect(dE).toBeGreaterThanOrEqual(16)
+    })
   })
 
   // Amendment B: "every mx band clears 3:1 on paper" is dropped entirely —
@@ -272,10 +313,13 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
       expect(wcagContrast(colorOf(t, n), colorOf(t, "--ct-surface"))).toBeGreaterThanOrEqual(3)
     })
 
-    it.skip.each(skipped)("%s clears 3:1 on surface — inherited prototype defect", (n) => {
-      const t = tokens()
-      expect(wcagContrast(colorOf(t, n), colorOf(t, "--ct-surface"))).toBeGreaterThanOrEqual(3)
-    })
+    it.skip.each(skipped.map((n) => [n, LIGHT_DEFECTS.get(`gp-surface:${n}`)!] as const))(
+      "%s clears 3:1 on surface — %s",
+      (n) => {
+        const t = tokens()
+        expect(wcagContrast(colorOf(t, n), colorOf(t, "--ct-surface"))).toBeGreaterThanOrEqual(3)
+      },
+    )
   })
 
   it("the surface stack is monotone, so panels read as lifted", () => {
