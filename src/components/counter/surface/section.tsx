@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useId, type ReactNode } from "react"
 import { hasData, type SectionData } from "@/lib/counter/section-data"
 import { Skeleton } from "@/components/counter/state/skeleton"
 import { Failed } from "@/components/counter/state/failed"
@@ -36,11 +36,12 @@ export function Section<T>({
 }) {
   const withData = hasData(data)
   const askTarget = askAbout === true ? title : askAbout
+  const headingId = useId()
 
   return (
-    <section className="rounded-ct border border-ct-line bg-ct-surface p-5">
+    <section aria-labelledby={headingId} className="rounded-ct border border-ct-line bg-ct-surface p-5">
       <div className="mb-4 flex items-baseline gap-3">
-        <h3 className="text-ct-mid text-ct-ink">{title}</h3>
+        <h3 id={headingId} className="text-ct-mid text-ct-ink">{title}</h3>
         {withData && meta ? (
           <span className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
             {meta}

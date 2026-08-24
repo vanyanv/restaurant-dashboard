@@ -10,8 +10,12 @@ const columns = [
 ]
 
 const rows = [
-  { key: "hollywood", cells: ["Hollywood", "376", "$7,468"], href: "/dashboard/stores/hollywood" },
-  { key: "glendale", cells: ["Glendale", "—", "—"] },
+  {
+    key: "hollywood",
+    cells: { store: "Hollywood", orders: "376", net: "$7,468" },
+    href: "/dashboard/stores/hollywood",
+  },
+  { key: "glendale", cells: { store: "Glendale", orders: "—", net: "—" } },
 ]
 
 describe("Table", () => {
@@ -61,6 +65,14 @@ describe("Table", () => {
   it("scrolls horizontally inside its own container rather than the page", () => {
     const { container } = render(<Table columns={columns} rows={rows} />)
     expect(container.querySelector("[data-table-scroll]")!.className).toMatch(/overflow-x-auto/)
+  })
+
+  it("a row with a cell missing relative to columns does not crash or mis-align — it just leaves a gap", () => {
+    // Row.cells is keyed by column key, not positional, so columns[i] is
+    // never dereferenced against a mismatched array index.
+    const sparse = [{ key: "x", cells: { store: "Partial" } }]
+    expect(() => render(<Table columns={columns} rows={sparse} />)).not.toThrow()
+    expect(screen.getByText("Partial")).toBeTruthy()
   })
 
   describe("sticky head (2a: maxHeight)", () => {

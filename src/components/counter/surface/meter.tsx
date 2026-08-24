@@ -6,6 +6,10 @@ import { TABULAR } from "@/lib/counter/format"
  * Note 35: colour the OVERSHOOT, not the measure. Painting the whole bar red on
  * a breach reads as "a lot of bad"; painting only the distance past the line
  * reads as "past the line by this much", which is the actual information.
+ *
+ * `format` and `target` are pre-formatted text, not a function — every other
+ * primitive (`Figure.value`) takes a string, and formatting belongs to
+ * `@/lib/counter/format`, not to a closure passed in as a prop.
  */
 export function Meter({
   label,
@@ -13,12 +17,16 @@ export function Meter({
   reference,
   max,
   format,
+  target,
 }: {
   label: string
   value: number
   reference: number
   max: number
-  format: (v: number) => string
+  /** Pre-formatted value, e.g. `"56.2%"`. */
+  format: string
+  /** Pre-formatted reference, e.g. `"60.0%"`. Defaults to `format`. */
+  target?: string
 }) {
   // `max === 0` is a `ready` state with nothing to divide by (no ceiling
   // published yet) — every width collapses to 0% rather than NaN/Infinity%.
@@ -34,7 +42,7 @@ export function Meter({
         <span className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
           {label}
         </span>
-        <span className={`text-ct-mid font-semibold text-ct-ink ${TABULAR}`}>{format(value)}</span>
+        <span className={`text-ct-mid font-semibold text-ct-ink ${TABULAR}`}>{format}</span>
       </div>
       <div className="relative h-3 w-full overflow-hidden rounded-ct-sm bg-ct-sunk">
         <span
@@ -56,7 +64,7 @@ export function Meter({
         />
       </div>
       <span className="font-ct-mono text-ct-micro text-ct-ink-3">
-        target {format(reference)}
+        target {target ?? format}
       </span>
     </div>
   )
