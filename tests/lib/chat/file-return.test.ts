@@ -9,8 +9,9 @@ import { describe, it, expect, vi } from "vitest"
 // module load. Stub the two boundaries so this file can assert registration
 // without a database.
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
-// @/lib/auth pulls in welcome.ts -> "server-only", which doesn't resolve under
-// vitest. Same boundary tests/api/cron-staleness.test.ts mocks.
+// @/lib/auth pulls in welcome.ts -> "server-only", which is aliased to
+// server-only/empty.js in vitest.config.ts. See cron-staleness.test.ts for
+// why this alias is necessary (Vitest 4.1.11+ doesn't respect export conditions).
 vi.mock("@/lib/auth", () => ({ authOptions: {}, hasOwnerAccess: () => true }))
 vi.mock("@/lib/chat/owner-scope", () => ({
   assertOwnerOwnsStores: vi.fn(),
