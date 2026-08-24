@@ -183,7 +183,8 @@ export function TrendCard({
                   fill={editorialChart.accent}
                   stroke={editorialChart.paper}
                   strokeWidth={2}
-                  isFront
+                  // Recharts 3 dropped `isFront`; z-order is now `zIndex`
+                  // (default 600, which already renders above chart series).
                 />
               ) : null}
             </LineChart>

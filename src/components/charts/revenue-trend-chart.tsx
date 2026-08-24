@@ -137,7 +137,7 @@ export function RevenueTrendChart({ className, compact }: RevenueTrendChartProps
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  labelFormatter={formatDate}
+                  labelFormatter={(label) => formatDate(String(label))}
                   formatter={(value) => {
                     const n = typeof value === "number" ? value : Number(value)
                     return formatCurrency(n)

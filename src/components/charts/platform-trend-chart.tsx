@@ -115,7 +115,7 @@ export function PlatformTrendChart({
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  labelFormatter={formatDate}
+                  labelFormatter={(label) => formatDate(String(label))}
                   formatter={(value, name) => {
                     const n = typeof value === "number" ? value : Number(value)
                     const label =

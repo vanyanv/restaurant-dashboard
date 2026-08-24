@@ -49,7 +49,10 @@ export function CostByCategoryDonut({
                 fontFamily: "var(--font-jetbrains-mono)",
                 fontSize: 11,
               }}
-              formatter={(value: number) => [`$${value.toFixed(0)}`, "COGS"]}
+              formatter={(value) => {
+                const n = typeof value === "number" ? value : Number(value)
+                return [`$${n.toFixed(0)}`, "COGS"]
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
