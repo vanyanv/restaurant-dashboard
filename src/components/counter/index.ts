@@ -9,6 +9,7 @@
  */
 export { Section } from "./surface/section"
 export { Strip } from "./surface/strip"
+export { Chart, type ChartProps, type ChartSeries } from "./surface/chart"
 export { Figure, type FigureProps } from "./surface/figure"
 export { Table, type Column, type Row } from "./surface/table"
 export { Meter } from "./surface/meter"
