@@ -2,9 +2,10 @@
 
 import { useState, useMemo } from "react"
 import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
+  useTable,
+  tableFeatures,
+  rowSortingFeature,
+  createSortedRowModel,
   flexRender,
   type SortingState,
   type ColumnDef,
@@ -39,6 +40,14 @@ interface IngredientVarianceTableProps {
 
 const NUM_CLASS =
   "[font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+
+// Static across renders — this table only needs client-side sorting, so
+// register just that feature and its row model rather than pulling in every
+// stock feature (filtering, pagination, grouping, pinning, ...).
+const features = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+})
 
 function varianceColor(pct: number): string {
   const abs = Math.abs(pct)
@@ -137,7 +146,7 @@ export function IngredientVarianceTable({
     { id: varianceReliable ? "wasteEstimatedCost" : "purchasedQuantity", desc: true },
   ])
 
-  const allColumns = useMemo<ColumnDef<IngredientUsageRow>[]>(
+  const allColumns = useMemo<ColumnDef<typeof features, IngredientUsageRow>[]>(
     () => [
       {
         accessorKey: "canonicalName",
@@ -283,13 +292,12 @@ export function IngredientVarianceTable({
         (c) => !DERIVED_COLUMNS.has((c as { accessorKey?: string }).accessorKey ?? ""),
       )
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   })
 
   return (
@@ -498,7 +506,7 @@ export function IngredientVarianceTable({
                   }}
                   onClick={() => onRowClick?.(row.original.canonicalName)}
                 >
-                  {row.getVisibleCells().map((cell) => (
+                  {row.getAllCells().map((cell) => (
                     <TableCell key={cell.id} className="pl-4">
                       {flexRender(
                         cell.column.columnDef.cell,

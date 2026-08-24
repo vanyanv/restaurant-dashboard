@@ -2,9 +2,10 @@
 
 import { useState, useMemo } from "react"
 import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
+  useTable,
+  tableFeatures,
+  rowSortingFeature,
+  createSortedRowModel,
   flexRender,
   type SortingState,
   type ColumnDef,
@@ -28,6 +29,14 @@ interface MenuItemCostTableProps {
 
 const NUM_CLASS =
   "[font-variant-numeric:tabular-nums_lining-nums] [font-feature-settings:'tnum','lnum']"
+
+// Static across renders — this table only needs client-side sorting, so
+// register just that feature and its row model rather than pulling in every
+// stock feature (filtering, pagination, grouping, pinning, ...).
+const features = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+})
 
 function marginToneColor(pct: number | null): string {
   if (pct === null) return "var(--ink-faint)"
@@ -138,7 +147,7 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
   const withRecipe = data.filter((d) => d.hasRecipe).length
   const coveragePct = data.length > 0 ? Math.round((withRecipe / data.length) * 100) : 100
 
-  const columns = useMemo<ColumnDef<MenuItemCostRow>[]>(
+  const columns = useMemo<ColumnDef<typeof features, MenuItemCostRow>[]>(
     () => [
       {
         accessorKey: "itemName",
@@ -263,7 +272,7 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
             </span>
           )
         },
-        sortingFn: (rowA, rowB) => {
+        sortFn: (rowA, rowB) => {
           const a = rowA.getValue("grossMarginPct") as number | null
           const b = rowB.getValue("grossMarginPct") as number | null
           if (a === null && b === null) return 0
@@ -294,13 +303,12 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
     []
   )
 
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   })
 
   return (
@@ -532,7 +540,7 @@ export function MenuItemCostTable({ data }: MenuItemCostTableProps) {
                   className="editorial-tr"
                   style={{ borderBottom: "1px solid var(--hairline)" }}
                 >
-                  {row.getVisibleCells().map((cell) => (
+                  {row.getAllCells().map((cell) => (
                     <TableCell key={cell.id} className="pl-4">
                       {flexRender(
                         cell.column.columnDef.cell,
