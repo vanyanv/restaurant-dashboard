@@ -68,63 +68,71 @@
  *
  * No #fff and no #000: every neutral is tinted warm.
  *
- * Task 12 converts every value below into light-dark(light, dark) so each
- * token is declared exactly ONCE. There is deliberately no second block and no
- * media query: a duplicated token set is what token-parity.test.ts exists to
- * catch, and it caught six copies drifting apart once already.
+ * Every colour token below is a light-dark(light, dark) pair, declared
+ * exactly ONCE. The light half is the frozen value described above; the
+ * dark half is authored (Task 12 — the prototype never drew a dark surface).
+ * Adding a second :root block or a dark-mode media query is a
+ * test failure: tests/styles/counter-tokens.test.ts asserts there is exactly
+ * one :root block and no such media query, because a duplicated token set is how
+ * six copies of --ink-faint drifted apart once already. The type scale
+ * (--ct-t-*), radii (--ct-r*) and easing curve are not colours and stay
+ * bare in both themes.
  */
 
 :root {
   color-scheme: light dark;
 
-  /* surfaces — content sits lighter than chrome */
-  --ct-surface:      oklch(98.4% 0.004 66);
-  --ct-paper:        oklch(96.2% 0.006 60);
-  --ct-chrome:       oklch(94.4% 0.008 56);
-  --ct-sunk:         oklch(92.6% 0.009 55);
-  --ct-line:         oklch(89.5% 0.009 58);
-  --ct-line-strong:  oklch(82.5% 0.013 55);
+  /* surfaces — content sits lighter than chrome, in both grounds */
+  --ct-surface:      light-dark(oklch(98.4% 0.004 66), oklch(22% 0.006 66));
+  --ct-paper:        light-dark(oklch(96.2% 0.006 60), oklch(19% 0.007 60));
+  --ct-chrome:       light-dark(oklch(94.4% 0.008 56), oklch(16.5% 0.008 56));
+  --ct-sunk:         light-dark(oklch(92.6% 0.009 55), oklch(14% 0.009 55));
+  --ct-line:         light-dark(oklch(89.5% 0.009 58), oklch(28% 0.009 58));
+  --ct-line-strong:  light-dark(oklch(82.5% 0.013 55), oklch(38% 0.013 55));
 
   /* ink */
-  --ct-ink:          oklch(24% 0.014 40);
-  --ct-ink-2:        oklch(47% 0.012 45);
-  --ct-ink-3:        oklch(52.5% 0.011 50);  /* corrected from 55% (prototype) via 53.5%, see file header */
+  --ct-ink:          light-dark(oklch(24% 0.014 40), oklch(93% 0.010 60));
+  --ct-ink-2:        light-dark(oklch(47% 0.012 45), oklch(74% 0.011 55));
+  --ct-ink-3:        light-dark(oklch(52.5% 0.011 50), oklch(65% 0.011 52));  /* light corrected from 55% (prototype) via 53.5%, see file header */
 
   /* action + state */
-  --ct-accent:       oklch(52% 0.19 27);
-  --ct-accent-hi:    oklch(44% 0.17 27);
-  --ct-accent-wash:  oklch(94.5% 0.028 27);
-  --ct-signal:       oklch(80% 0.155 78);
-  --ct-signal-wash:  oklch(95.5% 0.042 82);
-  --ct-signal-line:  oklch(87% 0.070 80);
-  --ct-signal-ink:   oklch(44% 0.095 70);
-  --ct-good:         oklch(47% 0.098 160);
-  --ct-good-wash:    oklch(95.5% 0.026 160);
-  --ct-warn:         oklch(53% 0.115 70);
-  --ct-warn-wash:    oklch(95.5% 0.035 78);
-  --ct-bad:          oklch(50% 0.175 25);
-  --ct-bad-wash:     oklch(94.5% 0.030 25);
+  --ct-accent:       light-dark(oklch(52% 0.19 27),    oklch(68% 0.170 27));
+  --ct-accent-hi:    light-dark(oklch(44% 0.17 27),    oklch(76% 0.150 27));
+  --ct-accent-wash:  light-dark(oklch(94.5% 0.028 27), oklch(27% 0.045 27));
+  --ct-signal:       light-dark(oklch(80% 0.155 78),   oklch(78% 0.150 78));
+  --ct-signal-wash:  light-dark(oklch(95.5% 0.042 82), oklch(26% 0.045 82));
+  --ct-signal-line:  light-dark(oklch(87% 0.070 80),   oklch(36% 0.060 80));
+  --ct-signal-ink:   light-dark(oklch(44% 0.095 70),   oklch(84% 0.090 78));
+  --ct-good:         light-dark(oklch(47% 0.098 160),  oklch(74% 0.115 160));
+  --ct-good-wash:    light-dark(oklch(95.5% 0.026 160), oklch(24% 0.030 160));
+  --ct-warn:         light-dark(oklch(53% 0.115 70),   oklch(78% 0.115 78));
+  --ct-warn-wash:    light-dark(oklch(95.5% 0.035 78), oklch(25% 0.035 78));
+  --ct-bad:          light-dark(oklch(50% 0.175 25),   oklch(70% 0.165 25));
+  --ct-bad-wash:     light-dark(oklch(94.5% 0.030 25), oklch(26% 0.040 25));
 
-  /* channel identity — brand marks, ALWAYS paired with a text label.
-     Never used to carry data: as a set these four clear only dE 8.5. */
-  --ct-ch-house: #4A4541;
-  --ct-ch-dd:    #EB1700;
-  --ct-ch-ue:    #16110F;
-  --ct-ch-gh:    #F15C26;
+  /* channel identity — brand marks, ALWAYS paired with a text label, lifted
+     for a dark ground. Never used to carry data: as a set these four clear
+     only dE 8.5. */
+  --ct-ch-house: light-dark(#4A4541, #B9B0A8);
+  --ct-ch-dd:    light-dark(#EB1700, #FF6A54);
+  --ct-ch-ue:    light-dark(#16110F, #E8E2DE);
+  --ct-ch-gh:    light-dark(#F15C26, #FF8A5C);
 
   /* stacked data bands — separated by lightness, not hue. Adjacent pairs
      clear dE 15 in normal vision and under all three CVD models. Fixed to
-     the channel, never to its rank (note 41). */
-  --ct-mx-1: oklch(29.5% 0.020 45);
-  --ct-mx-2: oklch(45.5% 0.027 45);
-  --ct-mx-3: oklch(60.5% 0.031 50);
-  --ct-mx-4: oklch(76% 0.025 58);
+     the channel, never to its rank (note 41). The dark ramp inverts
+     wholesale (light-adjacent-to-dark becomes dark-adjacent-to-light) but
+     keeps the same channel/hue-to-rank mapping. */
+  --ct-mx-1: light-dark(oklch(29.5% 0.020 45), oklch(89% 0.020 45));
+  --ct-mx-2: light-dark(oklch(45.5% 0.027 45), oklch(66% 0.027 45));
+  --ct-mx-3: light-dark(oklch(60.5% 0.031 50), oklch(49% 0.031 50));
+  --ct-mx-4: light-dark(oklch(76% 0.025 58),   oklch(26% 0.025 58));
 
   /* one overshoot, split into what made it. Sequential ramp of the bad hue,
      monotone in lightness, fixed to the cause rather than to its size. */
-  --ct-gp-1: oklch(35.5% 0.125 28);
-  --ct-gp-2: oklch(51.5% 0.158 30);
-  --ct-gp-3: oklch(67% 0.118 45);
+  --ct-gp-1: light-dark(oklch(35.5% 0.125 28), oklch(55.8% 0.125 28));
+  --ct-gp-2: light-dark(oklch(51.5% 0.158 30), oklch(71.5% 0.150 30));
+  --ct-gp-3: light-dark(oklch(67% 0.118 45),   oklch(91.8% 0.110 45));
 
   /* type scale, fixed px, ratio ~1.16 */
   --ct-t-micro: 10px;
