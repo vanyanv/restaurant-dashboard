@@ -16,5 +16,10 @@ export { Meter } from "./surface/meter"
 export { Cascade, type CascadeStep } from "./surface/cascade"
 export { Toast, type ToastTone } from "./surface/toast"
 
+export { useEntry, ENTRY_STAGGER_MS, ENTRY_DURATION_MS, ENTRY_TOTAL_MS } from "./motion/use-entry"
+export { useCountUp, COUNT_UP_MS } from "./motion/use-count-up"
+export { useChartDraw, LINE_DRAW_MS, BAR_STAGGER_MS } from "./motion/use-chart-draw"
+export { useReducedMotion } from "./motion/use-reduced-motion"
+
 export { CounterThemeProvider, useCounterTheme, themeNoFlashScript } from "./theme-provider"
 export { ThemeToggle } from "./theme-toggle"
