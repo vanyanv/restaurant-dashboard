@@ -1,6 +1,6 @@
 import {
   addDays, differenceInCalendarDays, startOfDay, startOfWeek, startOfMonth,
-  startOfQuarter, startOfYear, subYears,
+  startOfQuarter, startOfYear,
 } from "date-fns"
 
 /**
@@ -83,6 +83,29 @@ export function dayCount(r: DateRange): number {
   return differenceInCalendarDays(r.end, r.start) + 1
 }
 
+/**
+ * `src/app/actions/_shared/date-range.ts` ALREADY exports a DIFFERENT
+ * `DateRange` — `{ startDate, endDate }`, with `endDate` at 23:59:59 local,
+ * built for existing Prisma queries that treat it as an inclusive bound.
+ * Counter's `DateRange` here is `{ start, end }` at local midnight. The two
+ * are not interchangeable: an adapter that hands Counter's `end` straight
+ * into one of those existing queries silently drops the last day of every
+ * range (a query filtering `< endDate` excludes all of `end`'s calendar day
+ * when `endDate` is that day's midnight).
+ *
+ * `toQueryBounds` is the one place that conversion happens, so an adapter
+ * never has to reconstruct "add 23:59:59 to the end date" itself.
+ */
+export function toQueryBounds(r: DateRange): { startDate: Date; endDate: Date } {
+  const endDate = new Date(
+    r.end.getFullYear(),
+    r.end.getMonth(),
+    r.end.getDate(),
+    23, 59, 59,
+  )
+  return { startDate: r.start, endDate }
+}
+
 export type Bucket = "day" | "week" | "month"
 
 /**
@@ -137,7 +160,15 @@ export const COMPARISONS: readonly Comparison[] = [
  */
 export function comparisonRange(r: DateRange, mode: ComparisonId): DateRange | null {
   if (mode === "none") return null
-  if (mode === "year") return { start: subYears(r.start, 1), end: subYears(r.end, 1) }
+  // R4: NOT `subYears` — that lands on the same CALENDAR date a year back,
+  // which is a shifted WEEKDAY in most years (verified: Tue 18 Aug .. Mon 24
+  // Aug 2026 becomes Mon 18 Aug .. Sun 24 Aug 2025 under subYears), comparing
+  // a Mon–Sun trading week against a Sun–Sat one. A restaurant's week has a
+  // strong shape (weekend vs. weekday volume), so that's a structural
+  // distortion, not a rounding detail. A 364-day offset — exactly 52 weeks —
+  // preserves weekday alignment instead: every day in the comparison range
+  // falls on the same weekday as its counterpart in `r`.
+  if (mode === "year") return { start: addDays(r.start, -364), end: addDays(r.end, -364) }
   if (mode === "prev") {
     const span = dayCount(r)
     return { start: addDays(r.start, -span), end: addDays(r.end, -span) }
