@@ -55,6 +55,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history, not just the tip commit. scripts/counter-lint.ts's
+          # LEGACY exemption diffs each legacy file against its content at a
+          # fixed baseline commit (`git show <baseline>:<path>`); at the
+          # default fetch-depth: 1 that commit is unreachable and the check
+          # fails identically for every legacy file, which used to flood
+          # `npm run tokens` (and tests/styles/counter-lint.test.ts, which
+          # runs under `npm test`) with false violations. See
+          # BaselineUnreachableError in scripts/counter-lint.ts.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24

@@ -62,6 +62,23 @@
  *   - `no-status-branch` no longer applies under `src/lib/counter/**`. See
  *     the comment on `STATUS_BRANCH_ALLOWED` for why.
  *
+ * --- Fix round 2 (C2, final whole-branch review) ---
+ *
+ *   - `git show <baseline>:<path>` exiting non-zero was being treated as one
+ *     thing — "not exempt" — when it is actually two different things: the
+ *     path genuinely did not exist at the baseline (real signal, keep
+ *     linting it), or git could not read the baseline commit at all (an
+ *     environment problem — a shallow checkout, `actions/checkout@v6`'s
+ *     default `fetch-depth: 1` among them — that made EVERY legacy file
+ *     fail identically, degrading an ~80-page exemption to nothing and
+ *     flooding `npm run tokens` with false violations, which in turn failed
+ *     `tests/styles/counter-lint.test.ts`'s "still suppressing a real
+ *     violation" assertions on a shallow CI checkout). `isCommitReachable`
+ *     now checks commit reachability once, separately from any path, and
+ *     `isLegacyUnchanged` throws `BaselineUnreachableError` — loudly, naming
+ *     the cause and the remedy — instead of silently returning "not exempt"
+ *     for that case. See `BaselineUnreachableError`'s own doc comment.
+ *
  * --- Known holes, left as regex-over-text limitations (not fixed) ---
  *
  *   - Dynamic Tailwind classes: `` `bg-${color}-500` `` or
@@ -278,22 +295,81 @@ function legacyEntryFor(absPath: string): { path: string; reason: string } | und
   return LEGACY.find((e) => rel === e.path || rel.startsWith(e.path + "/"))
 }
 
-/** rel path (posix, repo-root-relative) -> content at LEGACY_BASELINE_COMMIT, or null if absent there. */
+/**
+ * Raised when the LEGACY exemption is asked to compare against a baseline
+ * commit that git cannot read locally at all — as opposed to a commit it
+ * CAN read, where a given path simply wasn't there yet (that case is a
+ * real, meaningful `null` from `baselineContentAt`, not this).
+ *
+ * The distinction matters because `actions/checkout@v6`'s default
+ * `fetch-depth: 1` gives a repo with only the tip commit — every
+ * `git show <baseline>:<path>` then fails identically, for every file,
+ * regardless of whether that file is genuinely new. Treating that the same
+ * as "not exempt" (the original bug) silently shrinks an ~80-page
+ * exemption to nothing and floods the lint with false violations. This
+ * error exists so that failure mode is loud and named, not indistinguishable
+ * from a real content mismatch.
+ */
+export class BaselineUnreachableError extends Error {
+  constructor(commit: string) {
+    super(
+      `LEGACY exemption check failed: commit ${commit} is not reachable in this ` +
+        `git checkout (git cat-file -e ${commit}^{commit} failed). This is almost always a ` +
+        `shallow clone — actions/checkout@v6 defaults to fetch-depth: 1, which fetches only ` +
+        `the tip commit, so 'git show <baseline>:<path>' fails identically for every legacy ` +
+        `file whether or not that file actually changed. That is an environment problem, not ` +
+        `a lint result: it must not be allowed to silently degrade into linting ~80 legacy ` +
+        `pages that are deliberately exempt.\n` +
+        `Remedy: fetch full history — set 'fetch-depth: 0' on the checkout step (or run ` +
+        `'git fetch --unshallow' locally) — then re-run.`,
+    )
+    this.name = "BaselineUnreachableError"
+  }
+}
+
+/** sha -> whether `git cat-file -e <sha>^{commit}` succeeds (the commit's object data is present locally). */
+const reachabilityCache = new Map<string, boolean>()
+
+/**
+ * Cheap, single check (no path argument) for whether `commit` can be read
+ * at all in this checkout — independent of any particular file. Exported
+ * so it (and the shallow-checkout failure mode it detects) can be tested
+ * directly with a deliberately-unreachable SHA, without needing an actual
+ * shallow clone to reproduce the condition.
+ */
+export function isCommitReachable(commit: string): boolean {
+  const cached = reachabilityCache.get(commit)
+  if (cached !== undefined) return cached
+  let ok: boolean
+  try {
+    execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], {
+      stdio: ["ignore", "ignore", "ignore"],
+    })
+    ok = true
+  } catch {
+    ok = false
+  }
+  reachabilityCache.set(commit, ok)
+  return ok
+}
+
+/** (commit, rel path) -> content at that commit, or null if that path did not exist there. */
 const baselineCache = new Map<string, string | null>()
 
-function baselineContent(rel: string): string | null {
-  const cached = baselineCache.get(rel)
+function baselineContentAt(commit: string, rel: string): string | null {
+  const key = `${commit}:${rel}`
+  const cached = baselineCache.get(key)
   if (cached !== undefined) return cached
   let content: string | null
   try {
-    content = execFileSync("git", ["show", `${LEGACY_BASELINE_COMMIT}:${rel}`], {
+    content = execFileSync("git", ["show", `${commit}:${rel}`], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     })
   } catch {
-    content = null // did not exist at baseline (or git unavailable) — treat as not exempt
+    content = null // the commit IS reachable (checked by the caller) — this path just wasn't there yet
   }
-  baselineCache.set(rel, content)
+  baselineCache.set(key, content)
   return content
 }
 
@@ -301,19 +377,27 @@ function baselineContent(rel: string): string | null {
  * True if `absPath` sits under a LEGACY entry AND its current content is
  * byte-identical to its content at the baseline commit. A new file, or an
  * edited legacy file, returns false and is linted normally.
+ *
+ * Throws BaselineUnreachableError — does not return false — if the baseline
+ * commit itself can't be read, so that condition can never masquerade as
+ * "not exempt" for every legacy file at once. See that class's doc comment.
  */
-function isLegacyUnchanged(absPath: string, currentContent: string): boolean {
+function isLegacyUnchanged(absPath: string, currentContent: string, baselineCommit: string): boolean {
   const entry = legacyEntryFor(absPath)
   if (!entry) return false
-  const base = baselineContent(repoRelative(absPath))
+  if (!isCommitReachable(baselineCommit)) {
+    throw new BaselineUnreachableError(baselineCommit)
+  }
+  const base = baselineContentAt(baselineCommit, repoRelative(absPath))
   if (base === null) return false
   return base === currentContent
 }
 
 export function lintCounter(
   roots: string[],
-  opts: { ignoreLegacy?: boolean } = {},
+  opts: { ignoreLegacy?: boolean; baselineCommit?: string } = {},
 ): Violation[] {
+  const baselineCommit = opts.baselineCommit ?? LEGACY_BASELINE_COMMIT
   const violations: Violation[] = []
   for (const root of roots) {
     let files: string[]
@@ -328,7 +412,7 @@ export function lintCounter(
       )
       if (rules.length === 0) continue
       const content = readFileSync(file, "utf8")
-      if (!opts.ignoreLegacy && isLegacyUnchanged(file, content)) continue
+      if (!opts.ignoreLegacy && isLegacyUnchanged(file, content, baselineCommit)) continue
       // Rule patterns run against comment-stripped text so a colour literal
       // or specifier mentioned only in a comment can't false-positive; the
       // legacy-content comparison above deliberately uses the raw file,
@@ -360,13 +444,23 @@ const ROOTS = [
 
 /** CLI entry. The test imports lintCounter directly; this is `npm run tokens`. */
 if (process.argv[1]?.endsWith("counter-lint.ts")) {
-  const found = lintCounter(ROOTS)
-  for (const v of found) {
-    console.error(`${v.file}:${v.line}  ${v.rule}\n    ${v.text}`)
+  try {
+    const found = lintCounter(ROOTS)
+    for (const v of found) {
+      console.error(`${v.file}:${v.line}  ${v.rule}\n    ${v.text}`)
+    }
+    if (found.length > 0) {
+      console.error(`\n${found.length} Counter rule violation(s). See DESIGN.md.`)
+      process.exit(1)
+    }
+    console.log("Counter rules: clean")
+  } catch (err) {
+    if (err instanceof BaselineUnreachableError) {
+      // Fail loudly with the cause and the remedy, not a wall of legacy
+      // false-positives — see the class doc comment.
+      console.error(err.message)
+      process.exit(1)
+    }
+    throw err
   }
-  if (found.length > 0) {
-    console.error(`\n${found.length} Counter rule violation(s). See DESIGN.md.`)
-    process.exit(1)
-  }
-  console.log("Counter rules: clean")
 }
