@@ -46,6 +46,19 @@ describe("Table", () => {
     expect(hollywood.className).toMatch(/cursor-pointer/)
   })
 
+  it("exactly one native link stretches over the row, so the whole row is clickable through it", () => {
+    // jsdom does no layout, so this cannot prove the overlay visually covers
+    // the row — only that the row is a positioning context and the link
+    // carries the stretch classes. Real coverage is verified in a browser.
+    render(<Table data={ready({})} columns={columns} rows={rows} />)
+    const link = screen.getByRole("link", { name: /Hollywood/ })
+    expect(link.className).toMatch(/after:absolute/)
+    expect(link.className).toMatch(/after:inset-0/)
+    const hollywood = link.closest("tr")!
+    expect(hollywood.className).toMatch(/relative\b/)
+    expect(hollywood.querySelectorAll("a")).toHaveLength(1)
+  })
+
   it("the head is sticky, because a long table read without headers is unreadable", () => {
     render(<Table data={ready({})} columns={columns} rows={rows} />)
     expect(screen.getAllByRole("columnheader")[0].className).toMatch(/sticky/)

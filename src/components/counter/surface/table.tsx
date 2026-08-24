@@ -25,6 +25,18 @@ export interface Row {
  * EVERY row of EVERY table, and not one of them led anywhere. A row that opens
  * nothing must not be focusable, must not wear a pointer, and must not light up
  * under the cursor — otherwise the table lies about what it can do.
+ *
+ * A navigable row uses the "stretched link" pattern rather than either
+ * extreme: wrapping every cell in click handlers (synthetic interactivity,
+ * wrong keyboard/focus/ARIA behaviour — the same lie note 47 warns about, just
+ * relocated) or leaving only column one clickable while the whole row still
+ * wears a pointer (a smaller version of the same lie — the affordance
+ * promises more than the behaviour delivers). Instead there is exactly one
+ * native `<a>`, in the first cell, whose `::after` is stretched with
+ * `after:absolute after:inset-0` to cover the row — the row itself supplies
+ * the `relative` positioning context that stretch resolves against. One link
+ * in the accessibility tree, correct keyboard/focus behaviour for free, and a
+ * pointer that now tells the truth across the full row width.
  */
 export function Table<T>({
   data,
@@ -63,7 +75,7 @@ export function Table<T>({
                 key={r.key}
                 className={
                   navigable
-                    ? "cursor-pointer border-b border-ct-line hover:bg-ct-accent-wash"
+                    ? "relative cursor-pointer border-b border-ct-line hover:bg-ct-accent-wash"
                     : "border-b border-ct-line"
                 }
               >
@@ -71,7 +83,13 @@ export function Table<T>({
                   const c = columns[i]
                   const content =
                     navigable && i === 0 ? (
-                      <Link href={r.href!} className="block">
+                      // Stretched over the whole `relative` row via `::after`.
+                      // If a row ever gains its own interactive control (a
+                      // checkbox, a row menu), that control MUST be given
+                      // `relative z-10` or this overlay will swallow its
+                      // clicks. Known, accepted cost: dragging to select this
+                      // cell's text is harder with the overlay in place.
+                      <Link href={r.href!} className="block after:absolute after:inset-0">
                         {cell}
                       </Link>
                     ) : (
