@@ -29,8 +29,15 @@ presence in the tree for it still being the target design.
 
 ## Type
 
-Two tiers, three faces. This is unchanged from the old system's typography
-rule, with the display face swapped.
+Two tiers, three faces on Counter pages — four are loaded overall. This is
+unchanged from the old system's typography rule, with the display face
+swapped. `src/app/layout.tsx` adds Bricolage Grotesque, but
+`src/app/dashboard/layout.tsx`, `src/app/login/layout.tsx`,
+`src/app/signup/layout.tsx` and `src/app/(mobile)/m/layout.tsx` all still
+also load Fraunces — a deliberate, sound deviation, since removing it would
+break the ~59 still-unrebuilt editorial pages that depend on it; it is
+deleted in Phase F, once every route in the spec's §6 phase table has moved
+to Counter.
 
 | Role | Face | Rule |
 |---|---|---|
@@ -68,14 +75,15 @@ by test, in both themes.
 **Ink** has three weights — `ct-ink` (body text, totals, headings),
 `ct-ink-2` (secondary prose, resting labels), `ct-ink-3` (captions, folios,
 SKUs, the smallest type layer). In the light theme these are not evenly
-spaced: `ct-ink-3` sits only 5.5 lightness points below `ct-ink-2` (47% vs
-52.5%), where the prototype's own design put 8 points between them. That gap
+spaced: `ct-ink-3` sits only 5.5 lightness points above `ct-ink-2` (52.5% vs
+47%), where the prototype's own design put 8 points between them. That gap
 was closed in two separate corrections, both to `--ct-ink-3` alone (hue and
 chroma never moved) — the prototype's original value, 55% lightness, failed
-WCAG AA (4.5:1) against `--ct-chrome` at 4.356:1 once every surface the token
-actually renders on was checked, not just `--ct-paper`. The first correction
-(55% → 53.5%) fixed the paper case but missed chrome, which is darker; the
-second (53.5% → 52.5%) was solved against every real surface. This is a real
+WCAG AA (4.5:1) against `--ct-paper` at 4.356:1. The first correction
+(55% → 53.5%) fixed the paper case but missed `--ct-chrome` — darker than
+paper, and only found once every surface the token actually renders on was
+audited, where it still failed at 4.396:1; the second correction
+(53.5% → 52.5%) was solved against every real surface. This is a real
 design cost — the muted-ink hierarchy reads flatter in light than the
 prototype intended — taken deliberately for a hard compliance floor, not an
 aesthetic call. The full before/after, including why 51.5% (which would have
