@@ -4,7 +4,7 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
  RUN  v4.1.11 /home/vardan/restaurant-dashboard
 
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-paper clears 4.5:1 (body text on the page) 2ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-paper clears 4.5:1 (body text on the page) 1ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-surface clears 4.5:1 (body text on a panel) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-sunk clears 4.5:1 (e.g. nav/date-picker hover states) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > contrast > --ct-ink on --ct-signal-wash clears 4.5:1 (emphasis inside a signal callout) 0ms
@@ -54,30 +54,30 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — contrast on surface > --ct-gp-1 clears 3:1 on surface 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — contrast on surface > --ct-gp-2 clears 3:1 on surface 0ms
  ↓ tests/styles/counter-tokens.test.ts > counter tokens — light > gp ramp — contrast on surface > --ct-gp-3 clears 3:1 on surface — INHERITED prototype defect, knowingly accepted: measures 2.980:1 vs the 3:1 threshold — misses by 0.02, a designer trade for palette harmony, not an oversight
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > normal: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 1ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > protanopia: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 1ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > deuteranopia: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > semantic pair separation > tritanopia: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > the surface stack is monotone, so panels read as lifted 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > declares no pure white and no pure black 1ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — light > declares every token exactly once, in a single :root block 0ms
@@ -131,36 +131,36 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — contrast on surface > --ct-gp-1 clears 3:1 on surface 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — contrast on surface > --ct-gp-2 clears 3:1 on surface 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > gp ramp — contrast on surface > --ct-gp-3 clears 3:1 on surface 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > normal: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > protanopia: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-signal vs --ct-warn clears dE 8 (an attention-seeking callout vs an off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-accent vs --ct-bad clears dE 2 (the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > deuteranopia: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 1ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-signal vs --ct-warn clears dE 12 (an attention-seeking callout vs an off-target status) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-accent vs --ct-bad clears dE 2.3981999879982174 (the proofmark vs "this is wrong" — both reds even in light) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-good vs --ct-warn clears dE 12 (on-target vs off-target status) 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-warn vs --ct-bad clears dE 6 (off-target status vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-good vs --ct-bad clears dE 9 (on-target vs "this is wrong") 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-accent vs --ct-signal clears dE 6 (the proofmark vs an attention-seeking callout) 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-warn vs --ct-bad clears dE 7.552942848561628 (off-target status vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-good vs --ct-bad clears dE 11.214102061648012 (on-target vs "this is wrong") 0ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > semantic pair separation > tritanopia: --ct-accent vs --ct-signal clears dE 12 (the proofmark vs an attention-seeking callout) 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > the surface stack is monotone, so panels read as lifted 0ms
- ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > declares no pure white and no pure black 1ms
+ ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > declares no pure white and no pure black 0ms
  ✓ tests/styles/counter-tokens.test.ts > counter tokens — dark > declares every token exactly once, in a single :root block 0ms
 
  Test Files  1 passed (1)
       Tests  146 passed | 8 skipped (154)
-   Start at  10:31:48
-   Duration  214ms (transform 30ms, setup 0ms, import 118ms, tests 20ms, environment 0ms)
+   Start at  10:50:24
+   Duration  215ms (transform 28ms, setup 0ms, import 113ms, tests 26ms, environment 0ms)
 

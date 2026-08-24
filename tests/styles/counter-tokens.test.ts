@@ -330,42 +330,68 @@ const GP_STEPS = ["--ct-gp-1", "--ct-gp-2", "--ct-gp-3"] as const
  * normal vision) and --ct-accent/--ct-bad tightened past their own light-
  * theme separation (3.35 -> 2.64) — both invisible to every assertion
  * above, both real to a human looking at the two colours side by side. This
- * is an ADDITIVE check (Task 12 fix round 1): it does not touch, weaken, or
- * skip anything that existed before it.
+ * is an ADDITIVE check (Task 12 fix round 1, thresholds reworked in fix
+ * round 2): it does not touch, weaken, or skip anything that existed
+ * before it.
  *
- * Thresholds are per-pair, not one shared constant, because the source
- * material is not uniform: some pairs (good/bad) were always wildly
- * separable and some (accent/bad, both reds) were always tight — even in
- * light, under deuteranopia, accent/bad measures 2.40, barely into the
- * "perceptible at a glance" dE00 2-10 band used elsewhere in this file's
- * comments. Each threshold is set to clear the WORST of the four
- * vision-model measurements on the frozen light values (so light passes on
- * the designer's real numbers, never on an invented exemption), while
- * staying low enough to have been genuinely violated by the collapsed dark
- * values this check exists to catch (signal/warn measured 5.41-5.66 across
- * visions before the fix; accent/bad measured 1.79-2.19). A threshold that
- * light cannot clear under all four models is a bug in this table, not a
- * reason to skip — see accent/bad below for the one pair this bites.
+ * THRESHOLD RULE (fix round 2): for each pair,
  *
- * accent/signal is included even though neither Task 12 fix round moved it
- * into danger (it drops from a light worst-case of 24.71 to a dark
- * worst-case of 7.83 under tritanopia — still comfortably perceptible, not
- * chased further per the round-1 review, which asked only that the
- * threshold not accidentally fail it).
+ *     threshold = min(worst-case dE00 across all 4 vision models on the
+ *                      FROZEN LIGHT values, 12)
+ *
+ * computed below from the light values themselves, not hardcoded — so the
+ * rule is visible and self-maintaining rather than a record of whatever
+ * happened to pass. Round 1's hand-picked thresholds (signal/warn: 8,
+ * accent/bad: 2, ...) were a bug disguised as a check: they were chosen so
+ * the CURRENT dark value passed, not so the invariant ("dark must not be
+ * less semantically separable than the light design it was built from")
+ * actually held — signal/warn passed round 1's floor of 8 at 9.16 while
+ * light achieves 26.68, three times better, and the floor never caught it.
+ * `min(..., 12)` fixes that two ways at once: light is guaranteed to pass
+ * on its own real numbers (never an invented exemption — a threshold this
+ * rule can't clear on light is a bug in SEMANTIC_PAIRS, not a reason to
+ * skip), and a genuinely tight light pair (accent/bad, both reds, 2.40
+ * under deuteranopia — barely into the "perceptible at a glance" dE00
+ * 2-10 band used elsewhere in this file's comments) sets an honest low bar
+ * instead of a manufactured one. 12 is the cap, not a floor every pair
+ * hits: it's a solid, clearly-perceptible separation to aim for, applied
+ * only when light's own worst case clears it (four of these six pairs are
+ * capped at 12; accent/bad and warn/bad are held to light's own, lower,
+ * worst case instead — see the printed table this produces below).
  */
-const SEMANTIC_PAIRS: Array<[a: string, b: string, min: number, why: string]> = [
-  ["--ct-signal", "--ct-warn", 8, "an attention-seeking callout vs an off-target status"],
+const SEMANTIC_PAIRS_TOKENS: Array<[a: string, b: string, why: string]> = [
+  ["--ct-signal", "--ct-warn", "an attention-seeking callout vs an off-target status"],
   [
     "--ct-accent",
     "--ct-bad",
-    2,
-    'the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models',
+    'the proofmark vs "this is wrong" — both reds even in light',
   ],
-  ["--ct-good", "--ct-warn", 12, "on-target vs off-target status"],
-  ["--ct-warn", "--ct-bad", 6, 'off-target status vs "this is wrong"'],
-  ["--ct-good", "--ct-bad", 9, 'on-target vs "this is wrong"'],
-  ["--ct-accent", "--ct-signal", 6, "the proofmark vs an attention-seeking callout"],
+  ["--ct-good", "--ct-warn", "on-target vs off-target status"],
+  ["--ct-warn", "--ct-bad", 'off-target status vs "this is wrong"'],
+  ["--ct-good", "--ct-bad", 'on-target vs "this is wrong"'],
+  ["--ct-accent", "--ct-signal", "the proofmark vs an attention-seeking callout"],
 ]
+
+const SEMANTIC_CAP = 12
+
+// Computed once, from the frozen light values, at module load — not inside
+// a test body — because it must be the same number regardless of which
+// theme's describe block is currently running. Uses colorOf/DEFICIENCIES,
+// both already defined above this point in the file.
+const LIGHT_TOKENS_FOR_SEMANTIC_PAIRS = parseTokens(CSS, "light")
+const SEMANTIC_PAIRS: Array<[a: string, b: string, min: number, why: string]> = SEMANTIC_PAIRS_TOKENS.map(
+  ([a, b, why]) => {
+    const lightWorstCase = Math.min(
+      ...Object.values(DEFICIENCIES).map((filter) =>
+        differenceCiede2000()(
+          filter(colorOf(LIGHT_TOKENS_FOR_SEMANTIC_PAIRS, a)),
+          filter(colorOf(LIGHT_TOKENS_FOR_SEMANTIC_PAIRS, b)),
+        ),
+      ),
+    )
+    return [a, b, Math.min(lightWorstCase, SEMANTIC_CAP), why]
+  },
+)
 
 const THEMES = ["light", "dark"] as const
 
@@ -497,10 +523,12 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
   })
 
   // No LIGHT_DEFECTS gating here, and none is expected: SEMANTIC_PAIRS'
-  // thresholds are chosen (see its doc comment) so the frozen light values
-  // clear every one of them under all four vision models already. This is
-  // an addition, not a weakening — see tests/styles/counter-tokens.test.ts
-  // fix-round-1 notes in the Task 12 report for why it was added.
+  // thresholds are DERIVED from the frozen light values (see its doc
+  // comment), so light clears every one of them by construction. This is
+  // an addition, not a weakening — see the Task 12 report's fix round 1
+  // (why this block exists) and fix round 2 (why the thresholds are
+  // computed rather than hardcoded, and why bad/warn/accent/signal were
+  // re-solved together).
   describe("semantic pair separation", () => {
     const cases = (Object.keys(DEFICIENCIES) as Vision[]).flatMap((vision) =>
       SEMANTIC_PAIRS.map(([a, b, min, why]) => [vision, a, b, min, why] as const),
