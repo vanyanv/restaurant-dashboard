@@ -1,5 +1,25 @@
 @import "tailwindcss";
+/*
+ * Tailwind's automatic source scanner reads every tracked file it can find
+ * (respecting .gitignore) looking for candidate utility-class strings —
+ * including inside markdown prose and fenced code examples, which is not
+ * "usage" at all. Task 10 found docs/superpowers/plans/**.md doing this and
+ * excluded docs/ wholesale. Task 16 reintroduced the same contamination
+ * from two more sources docs/ never covered:
+ *   - DESIGN.md lives at the REPO ROOT, not under docs/, and its own type
+ *     and colour tables cite `ct-` utility names as prose/examples.
+ *   - tests/styles/fixtures/counter-lint/*.tsx are lint fixtures, not
+ *     consumed by the app, but they use real `ct-` classNames (that's the
+ *     point — good.tsx is what a compliant file looks like) so the scanner
+ *     picks them up too.
+ * Both are excluded by path, not by an extension-wide rule, so no real
+ * source under src/ is affected. Proved two-sided (phantom count drops,
+ * genuine src/ usage still generates) the same way Task 10 proved the
+ * docs/ exclusion — see the final-fix-report for this review's numbers.
+ */
 @source not "../../docs";
+@source not "../../*.md";
+@source not "../../tests";
 @import "../styles/counter.css";
 
 @theme {
