@@ -80,7 +80,32 @@
  */
 
 :root {
-  color-scheme: light dark;
+  /* Pinned to `light`, not `light dark`. An OS dark preference must NOT
+   * silently flip every light-dark() token here, because ~95% of the app
+   * (everything under src/app/dashboard/** and the mobile shell, per
+   * DESIGN.md) is still the pre-Counter editorial design — light-only,
+   * built on plain shadcn HSL tokens that are frozen at light values and
+   * never repainted by anything (no `.dark` class is ever stamped; see
+   * theme-provider.tsx). With `light dark` here, OS dark did not just do
+   * nothing as before this branch — it half-inverted the app: Counter
+   * surfaces resolved dark while `body`, `--border`, `--muted`, `--primary`,
+   * the sidebar tokens and the chart tokens stayed light, producing
+   * combinations as broken as ink-on-ink at ~1:1 contrast in
+   * `<SidebarInset>` (`bg-background` dark over `#1a1613` text). Explicit
+   * theme choices are unaffected by this pin: CounterThemeProvider sets
+   * `style.colorScheme` inline on `<html>` for "light" / "dark", and an
+   * inline style always wins over this :root rule, so light-dark() still
+   * resolves to the requested half either way (verified: tests/app/counter-theme.test.tsx
+   * and a live Playwright check — see the C1 fix report). Only "system"
+   * (no inline style set) is affected, and what changed is what "system"
+   * means: light, not OS-followed.
+   *
+   * Flip this back to `light dark` only once every route in the app is
+   * Counter — i.e. the editorial tree under src/app/dashboard/** and the
+   * mobile shell is gone (spec §6 Phase F) and there is no more frozen-light
+   * shadcn token set left for a followed OS preference to fight with.
+   */
+  color-scheme: light;
 
   /* surfaces — content sits lighter than chrome, in both grounds */
   --ct-surface:      light-dark(oklch(98.4% 0.004 66), oklch(22% 0.006 66));
