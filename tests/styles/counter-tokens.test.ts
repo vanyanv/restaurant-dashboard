@@ -57,10 +57,15 @@ import type { Color } from "culori"
  *    misses are chart-band SEPARATION — a legibility trade a designer may
  *    have made deliberately for palette harmony. The ruling split them:
  *
- *    FIXED: --ct-ink-3 was corrected in counter.css (55% -> 53.5% lightness
- *    only; hue and chroma untouched) and both its contrast assertions are
- *    live, ordinary, passing tests below — not skipped, not gated. See the
- *    header comment in counter.css for the full before/after.
+ *    FIXED: --ct-ink-3 was corrected in counter.css — lightness only, hue
+ *    and chroma untouched throughout. Round 1 moved it 55% -> 53.5%, solved
+ *    against --ct-paper alone; round 2's ink-token surface audit found it
+ *    also renders on --ct-chrome (darker than paper) and still failed
+ *    there at 53.5%, so round 3 moved it again, 53.5% -> 52.5%, this time
+ *    solved against every surface it actually renders on. Every
+ *    --ct-ink-3 contrast assertion below is now live and passing — none
+ *    are skipped or gated. See the header comment in counter.css for the
+ *    full before/after and the measured ratio on each surface.
  *
  *    LEFT AS INHERITED, KNOWINGLY ACCEPTED (not fixed): --ct-gp-3 on
  *    --ct-surface, the mx-1/mx-2 adjacency, and the gp-1/gp-2 adjacency
@@ -247,22 +252,60 @@ function adjacentPairs(names: readonly string[]): Array<[string, string]> {
  * darkening the token further: at the current 52.5%, --ct-ink-3 on
  * --ct-sunk is 4.342:1 (would still fail even if the pairing were real).
  * Do not add this row on the assumption it was overlooked.
+ *
+ * Fix round 4: round 2's audit missed four real pairings — hover/selected
+ * table rows and error rows are exactly the places a first pass skips.
+ * Added: --ct-ink on --ct-accent-wash (`.tbl tbody tr[data-goto]:hover`,
+ * `tr.is-sel`, `tr[data-ln].is-on`, `.wkt tbody tr:hover`/`tr.is-here` —
+ * all set `background:var(--accent-wash)` on a row whose `td`s have no own
+ * colour and inherit ink; same via `.sh__r .i{color:var(--ink)}` under
+ * `.sh__r:hover`/`.sh__r.is-on`); --ct-ink-3 on --ct-accent-wash
+ * (`.storeopt[aria-pressed="true"]` overrides only `.storeopt b`, leaving
+ * `.storeopt span{color:var(--ink-3)}` on the wash; same via
+ * `.sh__r .g{color:var(--ink-3)}`); --ct-ink on --ct-bad-wash
+ * (`.tbl tbody tr.is-hole td{background:var(--bad-wash)}` recolours only
+ * `.hole`, other cells stay ink; same via a dynamic `.mhead` template);
+ * --ct-ink-3 on --ct-bad-wash (`.rowline.is-missing` — neither `.grip` nor
+ * `.nm span`, both ink-3, is recoloured).
+ *
+ * A follow-up targeted sweep of every `*-wash` background reachable via
+ * `:hover`/`.is-*`/`[aria-pressed]` (not just the four cited above) found
+ * two more, both via a direct child-selector colour declaration that beats
+ * an inherited colour from the state-triggering ancestor (CSS specificity
+ * doesn't matter here — a rule that targets the child directly always wins
+ * over an inherited value, regardless of the ancestor rule's specificity):
+ * --ct-ink-2 on --ct-accent-wash (`.stcard[aria-expanded="true"]` overrides
+ * only `.car`, leaving `.stcard .d{color:var(--ink-2)}` on the wash) and
+ * --ct-ink-2 on --ct-good-wash (`.loginmsg.is-ok` overrides `.fi` and `b`
+ * but not `.loginmsg p{color:var(--ink-2)}`; confirmed independently via
+ * `.vd.is-fit` overriding only `.vd b`, leaving `.vd span{color:var(--ink-2)}`
+ * on the same wash). No ink token pairs with --ct-warn-wash anywhere in the
+ * prototype (its one background use, `.statuspill.REVIEW`, recolours its
+ * text to --ct-warn, not an ink token) — checked and genuinely absent, not
+ * overlooked. No further ink-on-wash/state pairings were found beyond
+ * these six plus the ones already listed above.
  */
 const CONTRAST: Array<[fg: string, bg: string, min: number, why: string]> = [
   ["--ct-ink", "--ct-paper", 4.5, "body text on the page"],
   ["--ct-ink", "--ct-surface", 4.5, "body text on a panel"],
   ["--ct-ink", "--ct-sunk", 4.5, "e.g. nav/date-picker hover states"],
   ["--ct-ink", "--ct-signal-wash", 4.5, "emphasis inside a signal callout"],
+  ["--ct-ink", "--ct-accent-wash", 4.5, "e.g. a hovered/selected table row"],
+  ["--ct-ink", "--ct-bad-wash", 4.5, "e.g. a missing-line table row"],
   ["--ct-ink-2", "--ct-paper", 4.5, "secondary prose"],
   ["--ct-ink-2", "--ct-surface", 4.5, "e.g. the channel toggle, the share card"],
   ["--ct-ink-2", "--ct-chrome", 4.5, "e.g. the nav rail's resting label"],
   ["--ct-ink-2", "--ct-sunk", 4.5, "e.g. the segmented control, the compare toggle"],
   ["--ct-ink-2", "--ct-signal-wash", 4.5, "prose inside a signal callout"],
   ["--ct-ink-2", "--ct-bad-wash", 4.5, "prose inside a login error message"],
+  ["--ct-ink-2", "--ct-accent-wash", 4.5, "e.g. an expanded store card's detail line"],
+  ["--ct-ink-2", "--ct-good-wash", 4.5, "e.g. a fitting-variance note, an OK login message"],
   ["--ct-ink-3", "--ct-paper", 4.5, "captions, folios, SKUs"],
   ["--ct-ink-3", "--ct-surface", 4.5, "captions on a panel"],
   ["--ct-ink-3", "--ct-chrome", 4.5, "e.g. the nav rail's captions, the topbar breadcrumbs"],
   ["--ct-ink-3", "--ct-signal-wash", 4.5, "captions inside a signal callout"],
+  ["--ct-ink-3", "--ct-accent-wash", 4.5, "e.g. a pressed store-picker option's caption"],
+  ["--ct-ink-3", "--ct-bad-wash", 4.5, "captions in a missing-line row"],
   ["--ct-accent", "--ct-paper", 4.5, "the proofmark, used as text"],
   ["--ct-accent", "--ct-accent-wash", 4.5, "accent text on its own wash"],
   ["--ct-signal-ink", "--ct-signal-wash", 4.5, "signal text on signal wash"],
