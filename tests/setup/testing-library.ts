@@ -8,6 +8,11 @@
 import { afterEach } from "vitest"
 import { cleanup } from "@testing-library/react"
 
+// DOM matchers (toHaveAttribute, toBeVisible, …). Imported once here rather
+// than per file: every Counter component test needs them, and a test that
+// silently lacks a matcher fails in a confusing way.
+import "@testing-library/jest-dom/vitest"
+
 afterEach(() => {
   cleanup()
 })
