@@ -104,8 +104,20 @@ const ChartTooltip = RechartsPrimitive.Tooltip
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
+  // Recharts 3's outer <Tooltip> props omit `active`/`payload`/`label`
+  // (they're read from context internally and are non-optional on the
+  // `TooltipContentProps` a `content` render function actually receives at
+  // runtime via cloneElement). We add them back here, optional, so
+  // call sites that render <ChartTooltipContent formatter={...} /> without
+  // statically supplying them (Recharts injects them) still type-check.
+  RechartsPrimitive.TooltipProps<
+    RechartsPrimitive.TooltipValueType,
+    string | number
+  > &
     React.ComponentProps<"div"> & {
+      active?: boolean
+      payload?: RechartsPrimitive.TooltipPayload
+      label?: React.ReactNode
       hideLabel?: boolean
       hideIndicator?: boolean
       indicator?: "line" | "dot" | "dashed"
@@ -192,7 +204,13 @@ const ChartTooltipContent = React.forwardRef<
 
             return (
               <div
-                key={item.dataKey}
+                // Recharts 3's `DataKey<any>` admits a selector function, which
+                // isn't a valid React key; fall back to name/index for that case.
+                key={
+                  typeof item.dataKey === "function"
+                    ? (item.name ?? index)
+                    : (item.dataKey ?? item.name ?? index)
+                }
                 className={cn(
                   "flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
                   indicator === "dot" && "items-center"
@@ -260,8 +278,14 @@ const ChartLegend = RechartsPrimitive.Legend
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
+  // Recharts 3's outer LegendProps omits `payload` (read from context); the
+  // props a custom `content` render function receives come from
+  // DefaultLegendContentProps instead, which still has it.
   React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
+    Pick<
+      RechartsPrimitive.DefaultLegendContentProps,
+      "payload" | "verticalAlign"
+    > & {
       hideIcon?: boolean
       nameKey?: string
     }

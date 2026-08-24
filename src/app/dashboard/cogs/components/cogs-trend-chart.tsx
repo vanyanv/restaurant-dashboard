@@ -80,9 +80,10 @@ export function CogsTrendChart({
               fontFamily: "var(--font-jetbrains-mono)",
               fontSize: 11,
             }}
-            formatter={(value: number, name: string) => {
-              if (name === "cogsPct") return [`${value.toFixed(1)}%`, "COGS %"]
-              return [value, name]
+            formatter={(value, name) => {
+              const n = typeof value === "number" ? value : Number(value)
+              if (name === "cogsPct") return [`${n.toFixed(1)}%`, "COGS %"]
+              return [n, String(name)]
             }}
             labelFormatter={(k) => format(parseISO(k as string), "PPP")}
           />
