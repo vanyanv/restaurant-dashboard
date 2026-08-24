@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange, dayCount,
+  toQueryBounds,
 } from "@/lib/counter/date-range"
 
 const TODAY = new Date(2026, 7, 24) // Mon 24 Aug 2026, local midnight
@@ -114,10 +115,20 @@ describe("comparisonRange", () => {
     expect(c.end).toEqual(new Date(2026, 7, 17))
   })
 
-  it("last year is the same dates a year earlier", () => {
+  it("last year is 364 days earlier (52 weeks), not the same calendar date", () => {
+    // R4: NOT `subYears` — that lands on the same calendar date, which is a
+    // shifted weekday most years. A 364-day offset preserves it instead.
     const c = comparisonRange(week, "year")!
-    expect(c.start).toEqual(new Date(2025, 7, 18))
-    expect(c.end).toEqual(new Date(2025, 7, 24))
+    expect(c.start).toEqual(new Date(2025, 7, 19))
+    expect(c.end).toEqual(new Date(2025, 7, 25))
+  })
+
+  it("last year preserves the weekday of every day in the range — a restaurant's week has a strong shape", () => {
+    // Tue 18 Aug .. Mon 24 Aug 2026 — a subYears offset would land on
+    // Mon 18 Aug .. Sun 24 Aug 2025, comparing a Mon–Sun week against Sun–Sat.
+    const c = comparisonRange(week, "year")!
+    expect(week.start.getDay()).toBe(c.start.getDay())
+    expect(week.end.getDay()).toBe(c.end.getDay())
   })
 
   it("same weekdays walks back four weeks for a single day", () => {
@@ -146,5 +157,21 @@ describe("comparisonRange", () => {
 
   it("none returns null, so a caller must handle 'no comparison' explicitly", () => {
     expect(comparisonRange(week, "none")).toBeNull()
+  })
+})
+
+describe("toQueryBounds", () => {
+  it("converts Counter's {start, end} midnights into the inclusive-end {startDate, endDate} existing queries expect", () => {
+    const r = { start: new Date(2026, 7, 18), end: new Date(2026, 7, 24) }
+    const b = toQueryBounds(r)
+    expect(b.startDate).toEqual(r.start)
+    expect(b.endDate).toEqual(new Date(2026, 7, 24, 23, 59, 59))
+  })
+
+  it("a single-day range still covers the whole day, not zero seconds of it", () => {
+    const day = { start: TODAY, end: TODAY }
+    const b = toQueryBounds(day)
+    expect(b.startDate).toEqual(new Date(2026, 7, 24, 0, 0, 0))
+    expect(b.endDate).toEqual(new Date(2026, 7, 24, 23, 59, 59))
   })
 })

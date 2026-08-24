@@ -22,6 +22,13 @@ describe("format", () => {
     expect(moneyCompact(1500000)).toBe("$1.5M")
   })
 
+  it("moneyCompact rounds BEFORE picking a tier, so a value that rounds into the next magnitude is labelled correctly", () => {
+    // 999,999 rounds to 1000.0 inside the K tier — that's really 1M, not "1000K".
+    expect(moneyCompact(999999)).toBe("$1M")
+    // 999.6 rounds to 1000 whole dollars — that's really 1K, not the literal "$1000".
+    expect(moneyCompact(999.6)).toBe("$1K")
+  })
+
   it("pct carries one decimal, because a tenth of a point moves prime cost", () => {
     expect(pct(0.314)).toBe("31.4%")
     expect(pct(0.6)).toBe("60.0%")
@@ -51,5 +58,18 @@ describe("format", () => {
     expect(pct(null)).toBe("—")
     expect(count(null)).toBe("—")
     expect(delta(null)).toBe("—")
+  })
+
+  it("a non-finite figure is an em-dash too — NaN/Infinity are not values a reader should ever see", () => {
+    // pct(0/0) and money(Infinity) are exactly what an adapter computing
+    // pct(a/b) with b === 0 will produce, across any of the 53 pages that
+    // will eventually call this module.
+    expect(pct(0 / 0)).toBe("—")
+    expect(pct(Infinity)).toBe("—")
+    expect(money(Infinity)).toBe("—")
+    expect(money(-Infinity)).toBe("—")
+    expect(delta(NaN)).toBe("—")
+    expect(count(NaN)).toBe("—")
+    expect(count(Infinity)).toBe("—")
   })
 })
