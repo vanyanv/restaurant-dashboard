@@ -6,21 +6,42 @@ Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. 
 
 ---
 
-## Before touching any `/dashboard/**` UI, read this
+## Before touching any dashboard or mobile UI, read this
 
-**Read [`DESIGN.md`](DESIGN.md) before styling or composing any dashboard page.** The dashboard runs on an "editorial docket" design system — cream paper, Fraunces serif, JetBrains Mono tabular, hairline frames, red proofmark accent. Generic Tailwind/shadcn output will look wrong and will need to be redone.
+**Read [`DESIGN.md`](DESIGN.md).** This branch (`dashboardv2`) runs on **Counter**
+— Bricolage Grotesque for page titles and the wordmark only, DM Sans tabular
+figures for every number, JetBrains Mono for captions/folios/SKUs/status
+labels, `oklch()` `ct-` tokens in `src/styles/counter.css` as the only colour
+source, 8px/5px radii, both a light and a dark theme asserted by test. The old
+pre-Counter design system (a serif italic display face, cream-toned hex
+colours, hairline-bordered panels, a red hover-bar row pattern) is being
+deleted page by page as each route is rebuilt — it still runs a majority of
+`src/app/dashboard/**` and the mobile shell today, so don't mistake its
+presence in the tree for it still being the target. Generic Tailwind/shadcn
+output is wrong on a Counter page, and so is output copying the old serif
+system — neither is what a rebuilt page should look like.
 
-## The five tripwires Claude keeps hitting
+**The rules are a build failure, not prose to remember. Run `npm run tokens`.**
+It enforces, on `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
+`src/components/counter/**` and `src/lib/counter/**`: no colour literal
+outside `counter.css`, no generic Tailwind palette colour, no page branching
+on a `SectionData` status, no page importing Prisma or a server action
+directly, no page importing `framer-motion` directly. It has documented holes
+(regex, not an AST) — see `DESIGN.md` and the module comment in
+`scripts/counter-lint.ts`.
 
-1. **No generic Tailwind colors on `/dashboard/*`.** Use the editorial tokens: `--ink`, `--ink-muted`, `--ink-faint`, `--paper`, `--hairline`, `--hairline-bold`, `--accent`. Never `bg-sky-*`, `text-emerald-*`, `border-violet-*`, etc. on dashboard routes.
+Two things the linter cannot check, because they need judgment:
 
-2. **Two-tier typography.** Fraunces italic is for prose and display titles only. Numbers (KPI values, row totals, chart tooltip amounts, date ranges) render in **DM Sans weight 500–600 with `font-variant-numeric: tabular-nums lining-nums`**. Captions, folios, SKUs, status labels use JetBrains Mono.
-
-3. **Every interactive list row uses the `.inv-row` / `.order-row` hover pattern.** Red 4px `scaleY(0→1)` accent bar animates in from the left; background washes to `rgba(220,38,38,0.045)`; the total turns `var(--accent)` red. Plain `hover:bg-muted/50` is not the pattern.
-
-4. **Page sections are `.inv-panel`, not shadcn `<Card>`.** Hairline-bold border, 2px radius, warm paper background, no shadow. shadcn `<Card className="rounded-xl shadow-sm">` is wrong for dashboard composition.
-
-5. **Don't split or restructure files >400 lines without reading [`docs/refactor-playbook.md`](docs/refactor-playbook.md).** The methodology assumes a re-export shim at the original path (and that shim must NOT have `"use server"` — it breaks Next.js re-exports), contract tests with mocked Prisma, and an explicit mobile-import check (`src/app/(mobile)/m/**` ∪ `src/lib/mobile/**`). New patterns discovered during a split get added back to the playbook.
+- **A figure shown on two pages comes from one function in
+  `src/lib/counter/`.** (`src/lib/counter/*` doesn't exist yet — it's the
+  next phase — but the rule applies from the moment it does.)
+- **Don't split or restructure files >400 lines without reading
+  [`docs/refactor-playbook.md`](docs/refactor-playbook.md).** The methodology
+  assumes a re-export shim at the original path (and that shim must NOT have
+  `"use server"` — it breaks Next.js re-exports), contract tests with mocked
+  Prisma, and an explicit mobile-import check (`src/app/(mobile)/m/**` ∪
+  `src/lib/mobile/**`). New patterns discovered during a split get added back
+  to the playbook.
 
 ## Database migrations
 
