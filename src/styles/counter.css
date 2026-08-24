@@ -95,8 +95,22 @@
   --ct-ink-2:        light-dark(oklch(47% 0.012 45), oklch(74% 0.011 55));
   --ct-ink-3:        light-dark(oklch(52.5% 0.011 50), oklch(65% 0.011 52));  /* light corrected from 55% (prototype) via 53.5%, see file header */
 
-  /* action + state */
-  --ct-accent:       light-dark(oklch(52% 0.19 27),    oklch(68% 0.170 27));
+  /* action + state
+     Fix round 1 (post-review): three dark values below were corrected
+     because nothing in the original Task 12 pass checked whether two
+     DIFFERENT semantic tokens stayed distinguishable FROM EACH OTHER (every
+     original check compares a token to a surface or to its own ramp
+     neighbour — see tests/styles/counter-tokens.test.ts's SEMANTIC_PAIRS
+     comment). --ct-warn's dark half was oklch(78% 0.115 78) — identical
+     lightness and hue to --ct-signal, only chroma differed (dE00 5.66,
+     normal vision) — so it recovers its own hue and lightness here rather
+     than sitting on signal's coordinates, the same way it already does in
+     light (hue 70 vs signal's 78, L 53% vs 80%). --ct-accent and --ct-bad
+     tightened in dark (3.35 -> 2.64) relative to their own light-theme
+     separation, which is not acceptable even though the light pairing
+     itself is inherently tight (both reds); accent moved lighter and bad
+     moved darker, lightness only, hue and chroma on both untouched. */
+  --ct-accent:       light-dark(oklch(52% 0.19 27),    oklch(72.5% 0.170 27));  /* dark moved 68% -> 72.5% (fix round 1) */
   --ct-accent-hi:    light-dark(oklch(44% 0.17 27),    oklch(76% 0.150 27));
   --ct-accent-wash:  light-dark(oklch(94.5% 0.028 27), oklch(27% 0.045 27));
   --ct-signal:       light-dark(oklch(80% 0.155 78),   oklch(78% 0.150 78));
@@ -105,9 +119,9 @@
   --ct-signal-ink:   light-dark(oklch(44% 0.095 70),   oklch(84% 0.090 78));
   --ct-good:         light-dark(oklch(47% 0.098 160),  oklch(74% 0.115 160));
   --ct-good-wash:    light-dark(oklch(95.5% 0.026 160), oklch(24% 0.030 160));
-  --ct-warn:         light-dark(oklch(53% 0.115 70),   oklch(78% 0.115 78));
+  --ct-warn:         light-dark(oklch(53% 0.115 70),   oklch(68.7% 0.120 77.5));  /* dark moved off --ct-signal's coordinates (fix round 1) */
   --ct-warn-wash:    light-dark(oklch(95.5% 0.035 78), oklch(25% 0.035 78));
-  --ct-bad:          light-dark(oklch(50% 0.175 25),   oklch(70% 0.165 25));
+  --ct-bad:          light-dark(oklch(50% 0.175 25),   oklch(67% 0.165 25));  /* dark moved 70% -> 67% (fix round 1) */
   --ct-bad-wash:     light-dark(oklch(94.5% 0.030 25), oklch(26% 0.040 25));
 
   /* channel identity — brand marks, ALWAYS paired with a text label, lifted
