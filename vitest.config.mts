@@ -10,10 +10,12 @@ import { createRequire } from "module"
 const req = createRequire(import.meta.url)
 const serverOnlyEmptyPath = path.join(path.dirname(req.resolve("server-only")), "empty.js")
 
+// .mts is loaded as native ESM, where __dirname does not exist (it's a CJS
+// global) — import.meta.dirname is its ESM equivalent (Node 20.11+ / 21.2+).
 export default defineConfig({
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
       "server-only": serverOnlyEmptyPath,
     },
   },

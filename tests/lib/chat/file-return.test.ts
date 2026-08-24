@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from "vitest"
 // without a database.
 vi.mock("@/lib/prisma", () => ({ prisma: {} }))
 // @/lib/auth pulls in welcome.ts -> "server-only", which is aliased to
-// server-only/empty.js in vitest.config.ts. See cron-staleness.test.ts for
+// server-only/empty.js in vitest.config.mts. See cron-staleness.test.ts for
 // why this alias is necessary (Vitest 4.1.11+ doesn't respect export conditions).
 vi.mock("@/lib/auth", () => ({ authOptions: {}, hasOwnerAccess: () => true }))
 vi.mock("@/lib/chat/owner-scope", () => ({
