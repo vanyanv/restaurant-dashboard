@@ -46,6 +46,45 @@
  * suppressing at least one real violation" check for that entry until it is
  * deleted — that's what stops it from becoming a permanent, unjustified
  * exemption.
+ *
+ * --- Fix round 1 (closed holes) ---
+ *
+ *   - Comments are stripped (see `stripComments`) before any rule runs, so a
+ *     hex colour mentioned in a trailing `//` comment, or in a block comment
+ *     that opens on a line with real code, no longer false-positives
+ *     `no-colour-literal`. Stripping preserves line numbers (newlines are
+ *     kept; every other comment character becomes a space) so a reported
+ *     `Violation.line` still points at the real line.
+ *   - `no-direct-motion-import` and `no-direct-data-import` also match the
+ *     dynamic forms `import("framer-motion")` / `await import(...)` and
+ *     `require(...)`, not just static `from "..."` — those are exactly what
+ *     someone reaches for once the static form starts failing the gate.
+ *   - `no-status-branch` no longer applies under `src/lib/counter/**`. See
+ *     the comment on `STATUS_BRANCH_ALLOWED` for why.
+ *
+ * --- Known holes, left as regex-over-text limitations (not fixed) ---
+ *
+ *   - Dynamic Tailwind classes: `` `bg-${color}-500` `` or
+ *     `cn("bg-", color, "-500")` have no literal palette-name substring to
+ *     match. Catching these needs evaluating the string, which is out of
+ *     reach for a text check — and the workaround (banning template
+ *     interpolation in className) would be worse than the hole.
+ *   - Destructured status: `const { status } = section; if (status ===
+ *     "loading")` — `STATUS_BRANCH` only matches the literal `.status`
+ *     accessor, not a destructured local.
+ *   - Barrel re-export: `import { prisma } from "@/lib/db"` where
+ *     `@/lib/db` itself re-exports `@/lib/prisma` — only the exact
+ *     specifiers in `DIRECT_DATA_IMPORT` are matched.
+ *   - Legitimate dynamic `` `rgb(${r},${g},${b})` `` (e.g. a canvas pixel
+ *     buffer or a chart gradient stop built at runtime) still matches
+ *     `no-colour-literal` after the comment-stripping fix — it's the
+ *     substring `rgb(` the rule is looking for, not a static literal, and
+ *     the rule can't distinguish "raw colour bypassing the token system"
+ *     from "raw colour because the domain genuinely needs one". No consumer
+ *     of this exists yet; when the first Counter chart primitive needs it,
+ *     the honest options are a narrow allowlist for that one file, or an
+ *     inline suppression comment on that one line — do not build either
+ *     speculatively.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
@@ -63,15 +102,47 @@ const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(/
 /** Any Tailwind palette colour. Counter's own utilities are all `ct-` prefixed. */
 const TAILWIND_PALETTE =
   /\b(?:bg|text|border|ring|fill|stroke|from|via|to|decoration|outline|shadow|accent|caret|divide)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/
-/** State branching belongs to surface/, never to a page. */
+/**
+ * State branching on `SectionData.status` belongs to `surface/` and
+ * `state/`, which RENDER it — never to the app routes (pages) that consume
+ * it. That is the whole rule: `src/app/dashboard/**` and
+ * `src/app/(mobile)/m/**` are exactly where it needs to hold.
+ *
+ * It is intentionally not implemented as a positive "only inside
+ * src/app/**" allowlist — that would also swallow the fixture-based tests
+ * in tests/styles/counter-lint.test.ts, which deliberately live outside
+ * src/app so the rule can be exercised without a real page. Instead it is
+ * exempted everywhere it does NOT apply, via STATUS_BRANCH_ALLOWED below:
+ * the surface/state components that implement the branching, and
+ * `src/lib/counter/**`. Adapters under src/lib/counter CONSTRUCT
+ * SectionData — including branching on ordinary HTTP response statuses,
+ * which are not `SectionData.status` and were never what this rule was
+ * protecting — they don't render it, so an adapter checking
+ * `response.status === 404` is not a counter-example to the rule's intent
+ * and must not be flagged. Do not narrow STATUS_BRANCH_ALLOWED back to just
+ * `lib/counter/adapters/` thinking the wider `lib/counter/**` exemption was
+ * an oversight — it is deliberate, because nothing under src/lib/counter is
+ * a page.
+ */
 const STATUS_BRANCH =
   /\.status\s*(?:===|!==)|\bcase\s+["'](?:ready|stale|loading|failed|empty|not_computed)["']/
-const DIRECT_DATA_IMPORT =
-  /from\s+["'](?:@\/lib\/prisma|@\/app\/actions\/[^"']+|@prisma\/client)["']/
-const DIRECT_MOTION_IMPORT = /from\s+["'](?:framer-motion|motion\/react)["']/
+/**
+ * Matches both the static `from "..."` form and the dynamic
+ * `import("...")` / `require("...")` forms — the latter are exactly what
+ * someone reaches for once the static import starts failing this gate.
+ */
+const DIRECT_DATA_SPECIFIERS = String.raw`@\/lib\/prisma|@\/app\/actions\/[^"']+|@prisma\/client`
+const DIRECT_DATA_IMPORT = new RegExp(
+  String.raw`from\s+["'](?:${DIRECT_DATA_SPECIFIERS})["']|\b(?:import|require)\s*\(\s*["'](?:${DIRECT_DATA_SPECIFIERS})["']`,
+)
+const DIRECT_MOTION_SPECIFIERS = String.raw`framer-motion|motion\/react`
+const DIRECT_MOTION_IMPORT = new RegExp(
+  String.raw`from\s+["'](?:${DIRECT_MOTION_SPECIFIERS})["']|\b(?:import|require)\s*\(\s*["'](?:${DIRECT_MOTION_SPECIFIERS})["']`,
+)
 
-/** surface/ and state/ are where the exemptions live — they implement the rules. */
-const STATUS_BRANCH_ALLOWED = /[/\\]components[/\\]counter[/\\](?:surface|state)[/\\]/
+/** surface/ and state/ implement the status-branch rule; lib/counter constructs data, it doesn't render it — see the comment on STATUS_BRANCH above. */
+const STATUS_BRANCH_ALLOWED =
+  /[/\\]components[/\\]counter[/\\](?:surface|state)[/\\]|[/\\]lib[/\\]counter[/\\]/
 const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
 const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]adapters[/\\]/
 const COLOUR_ALLOWED = /counter\.css$/
@@ -116,6 +187,77 @@ export const LEGACY: Array<{ path: string; reason: string }> = [
       "Entire tree is the pre-Counter editorial mobile shell, deleted when mobile is rebuilt on Counter (see project_mobile_direction.md — mobile rebuild has not started as of this gate).",
   },
 ]
+
+/**
+ * Strips `//` line comments and block comments out of source
+ * text before any rule pattern runs, so a colour literal or specifier
+ * mentioned only in a comment can't false-positive a rule. Every stripped
+ * character (other than a newline) is replaced with a single space rather
+ * than deleted, so:
+ *   - the result has the exact same number of lines as the input, and
+ *   - column positions within a line are preserved too,
+ * which is what keeps `Violation.line` pointing at the real line rather
+ * than drifting once a comment above it is removed.
+ *
+ * String and template literals are tracked (with backslash-escape
+ * handling) so a `//` or block-comment-looking sequence *inside* a string is left
+ * alone — e.g. a URL string containing "//" is not treated as a comment
+ * start. This is a simplification, not a full tokenizer: a `${...}`
+ * expression inside a template literal is treated as opaque string content
+ * along with everything else between the backticks, so a genuine comment
+ * written inside a template expression (a rare, unidiomatic thing to write)
+ * would not be stripped. Not fixed — no known file does this.
+ */
+function stripComments(source: string): string {
+  let out = ""
+  let i = 0
+  const n = source.length
+  let inString: '"' | "'" | "`" | null = null
+  while (i < n) {
+    const c = source[i]
+    const c2 = i + 1 < n ? source[i + 1] : ""
+    if (inString) {
+      if (c === "\\" && i + 1 < n) {
+        out += c + source[i + 1]
+        i += 2
+        continue
+      }
+      out += c
+      if (c === inString) inString = null
+      i += 1
+      continue
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      inString = c
+      out += c
+      i += 1
+      continue
+    }
+    if (c === "/" && c2 === "/") {
+      while (i < n && source[i] !== "\n") {
+        out += " "
+        i += 1
+      }
+      continue
+    }
+    if (c === "/" && c2 === "*") {
+      out += "  "
+      i += 2
+      while (i < n && !(source[i] === "*" && source[i + 1] === "/")) {
+        out += source[i] === "\n" ? "\n" : " "
+        i += 1
+      }
+      if (i < n) {
+        out += "  "
+        i += 2
+      }
+      continue
+    }
+    out += c
+    i += 1
+  }
+  return out
+}
 
 function walk(dir: string): string[] {
   let out: string[] = []
@@ -187,9 +329,12 @@ export function lintCounter(
       if (rules.length === 0) continue
       const content = readFileSync(file, "utf8")
       if (!opts.ignoreLegacy && isLegacyUnchanged(file, content)) continue
-      const lines = content.split("\n")
+      // Rule patterns run against comment-stripped text so a colour literal
+      // or specifier mentioned only in a comment can't false-positive; the
+      // legacy-content comparison above deliberately uses the raw file,
+      // since a comment-only edit should still forfeit the exemption.
+      const lines = stripComments(content).split("\n")
       lines.forEach((text, i) => {
-        if (text.trimStart().startsWith("//") || text.trimStart().startsWith("*")) return
         for (const rule of rules) {
           if (rule.pattern.test(text)) {
             violations.push({

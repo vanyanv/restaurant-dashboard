@@ -61,6 +61,75 @@ describe("counter lint", () => {
 })
 
 /**
+ * Fix round 1, FIX 1: a hex colour mentioned only in a trailing `//`
+ * comment, or in a block comment that opens on a line with real code, must
+ * not fire `no-colour-literal` — and the one real violation in the fixture
+ * must still be reported on its true line number, not shifted by the
+ * comments around it.
+ */
+describe("FIX 1: comments are stripped before matching", () => {
+  const found = lintCounter([FIXTURES]).filter((v) => v.file.endsWith("comments.tsx"))
+
+  it("reports exactly one violation: the real one, on its real line", () => {
+    expect(found).toEqual([
+      {
+        file: expect.stringContaining("comments.tsx"),
+        line: 8,
+        rule: "no-tailwind-palette",
+        text: expect.stringContaining("bg-sky-500"),
+      },
+    ])
+  })
+
+  it("does not fire no-colour-literal for the commented-out hex values", () => {
+    expect(found.some((v) => v.rule === "no-colour-literal")).toBe(false)
+  })
+})
+
+/**
+ * Fix round 1, FIX 2: dynamic `import("...")` / `require("...")` forms are
+ * exactly what someone reaches for once a static `from "..."` import starts
+ * failing the gate, so both rules must catch them too.
+ */
+describe("FIX 2: dynamic import()/require() forms are caught", () => {
+  const found = lintCounter([FIXTURES]).filter((v) => v.file.endsWith("dynamic-imports.tsx"))
+
+  it("catches a dynamic framer-motion import", () => {
+    expect(found).toContainEqual(
+      expect.objectContaining({ rule: "no-direct-motion-import", line: 5 }),
+    )
+  })
+
+  it("catches a require()'d prisma import", () => {
+    expect(found).toContainEqual(
+      expect.objectContaining({ rule: "no-direct-data-import", line: 10 }),
+    )
+  })
+})
+
+/**
+ * Fix round 1, FIX 3: no-status-branch protects pages, not adapters.
+ * src/lib/counter/** constructs SectionData and may branch on whatever it
+ * likes (including an ordinary HTTP response status); an app route may
+ * still not branch on SectionData.status.
+ */
+describe("FIX 3: no-status-branch is scoped away from lib/counter", () => {
+  it("does not fire inside a path under lib/counter", () => {
+    const found = lintCounter([
+      join(FIXTURES, "status-scope", "lib", "counter", "adapters"),
+    ])
+    expect(found).toEqual([])
+  })
+
+  it("still fires for an app-route-shaped fixture outside lib/counter", () => {
+    const found = lintCounter([join(FIXTURES, "status-scope", "app", "dashboard")])
+    expect(found).toContainEqual(
+      expect.objectContaining({ rule: "no-status-branch" }),
+    )
+  })
+})
+
+/**
  * The LEGACY skip list is only trustworthy if it can never silently grow
  * stale. Every entry must:
  *   1. Point at a path that still exists (a deleted-path entry gives false
