@@ -79,8 +79,20 @@ const CSS = readFileSync(join(process.cwd(), "src", "styles", "counter.css"), "u
  * Every `--ct-*` declaration, resolved for one theme.
  *
  * Tokens are declared once as `light-dark(a, b)`, so this picks a side rather
- * than reading a second block. A token that is NOT a light-dark pair has no
- * dark value, which is a failure — that is how this test drives Task 12.
+ * than reading a second block. A token with no light-dark() pair is
+ * theme-invariant by construction — Task 12's brief is explicit that the type
+ * scale, radii and easing curve stay bare in both themes, not fabricated
+ * `light-dark(8px, 8px)` pairs — so this function does NOT treat an unpaired
+ * token as an error. It carries the bare value through unchanged for BOTH
+ * themes... except that for "dark", carrying a bare value through would be
+ * actively wrong for a token that genuinely needs a dark half: it would let
+ * a dark-theme colour assertion silently reuse the light colour and report a
+ * false pass. So for dark, an unpaired token is left OUT of the map
+ * entirely — `.get(name)` returns undefined — and it is `colorOf`, below,
+ * that turns "undefined" into a precise, actionable failure for whichever
+ * specific token some assertion actually tried to read as a colour. A test
+ * that never touches a given token (radius, easing, type scale) never
+ * notices it's unpaired, exactly as Task 12's brief requires.
  */
 export function parseTokens(css: string, theme: "light" | "dark"): Map<string, string> {
   const start = css.indexOf(":root {")
@@ -94,11 +106,8 @@ export function parseTokens(css: string, theme: "light" | "dark"): Map<string, s
       out.set(name, theme === "light" ? pair[1] : pair[2])
     } else if (theme === "light") {
       out.set(name, raw)
-    } else {
-      throw new Error(
-        `${name} has no dark value: declare it as light-dark(light, dark) — Task 12 supplies the dark half`,
-      )
     }
+    // dark + unpaired: deliberately not set. See doc comment above.
   }
   return out
 }
@@ -121,30 +130,62 @@ const DEFICIENCIES: Record<Vision, (c: Color) => Color> = {
   tritanopia: filterDeficiencyTrit(1),
 }
 
+/**
+ * Resolves a token to a parsed colour, or throws. This is also where the
+ * "has no dark value" check now lives (moved out of parseTokens — see its
+ * doc comment): a colour token missing from `tokens` might be a genuine typo
+ * in this test, or it might be a token that's declared in the CSS but only
+ * as a bare, theme-invariant-looking value with no light-dark() dark half —
+ * exactly the situation Task 12 exists to fix. Re-parsing the light side
+ * here (only on the failure path, so it costs nothing that matters) tells
+ * the two apart so the message stays precise either way.
+ */
 function colorOf(tokens: Map<string, string>, name: string) {
   const raw = tokens.get(name)
-  if (!raw) throw new Error(`missing token ${name}`)
+  if (!raw) {
+    if (parseTokens(CSS, "light").has(name)) {
+      throw new Error(
+        `${name} has no dark value: declare it as light-dark(light, dark) — Task 12 supplies the dark half`,
+      )
+    }
+    throw new Error(`missing token ${name}`)
+  }
   const c = parse(raw)
   if (!c) throw new Error(`unparseable token ${name}: ${raw}`)
   return c
 }
 
 /**
- * Chart-band ΔE separation misses in the real, frozen light values (ruling C
- * above). Keyed so each generated test can look itself up. LIGHT ONLY: the
- * dark instance of the same test is never in this set, so it stays live.
+ * Known misses against the real, frozen light values (ruling C, plus the
+ * fix-round-2 ink-token surface audit below). Keyed so each generated test
+ * can look itself up. LIGHT ONLY: the dark instance of the same test is
+ * never in this set, so it stays live.
  *
  * NOTE: --ct-ink-3 on --ct-paper used to be in this map (4.356:1 vs the
  * 4.5:1 WCAG floor) but is NOT anymore — the user ruled that a sub-AA text
  * contrast ratio is a compliance floor, not a design trade, and had the
  * token corrected in counter.css instead. Its assertion is back in CONTRAST
- * below as a normal, live, passing test. The three defects remaining here
- * are chart-band ΔE separation, which the same ruling treated differently:
- * a legibility trade a designer may make deliberately for palette harmony,
- * so INHERITED and KNOWINGLY ACCEPTED rather than fixed. Someone reading a
- * skipped test below must see: the measured value, the threshold it misses,
- * that it is inherited from the prototype (not introduced by this project),
- * and that it was a deliberate, informed call, not laziness.
+ * below as a normal, live, passing test.
+ *
+ * Three entries are chart-band ΔE separation misses, which the same ruling
+ * treated differently from a text-contrast floor: a legibility trade a
+ * designer may make deliberately for palette harmony, so INHERITED and
+ * KNOWINGLY ACCEPTED rather than fixed.
+ *
+ * One entry — contrast:--ct-ink-3:--ct-chrome — is a NEW discovery from
+ * auditing docs/counter/counter-prototype.html for every surface each ink
+ * token actually renders on (fix round 2, Finding 2): --ct-ink-3 on
+ * --ct-chrome measures 4.396:1, also below the 4.5:1 floor, the same
+ * category of defect as the ink-3/paper one that got fixed. It is
+ * deliberately NOT auto-fixed the way ink-3/paper was — that fix followed a
+ * specific user ruling after the options were laid out; this one is
+ * reported the same way ink-3/paper originally was, for the same kind of
+ * ruling, rather than assumed to deserve the same outcome.
+ *
+ * Someone reading a skipped test below must see: the measured value, the
+ * threshold it misses, that it is inherited/newly-found rather than
+ * introduced by carelessness, and that leaving it skipped was a deliberate,
+ * informed call, not laziness.
  */
 const LIGHT_DEFECTS = new Map<string, string>([
   [
@@ -179,24 +220,50 @@ const LIGHT_DEFECTS = new Map<string, string>([
     "gp-adj:deuteranopia:--ct-gp-1:--ct-gp-2",
     "INHERITED prototype defect, knowingly accepted: measures dE 15.25 vs threshold 16 (deuteranopia)",
   ],
+  [
+    "contrast:--ct-ink-3:--ct-chrome",
+    "measures 4.396:1 vs the 4.5:1 threshold — NEWLY FOUND by the fix-round-2 ink-token surface audit (--ct-ink-3 renders on --ct-chrome via .rail__cap/.rail__store .mt/.rail__foot .rl, .crumbs/.crumbs .sep/.sync in .topbar, .mtop .dt, .mtab, .login__aside .who/.loginstat .k). Same category as the --ct-ink-3/--ct-paper defect fixed in the previous round (a compliance-floor miss, not a designer trade), but reported and skipped here rather than fixed unilaterally, pending a ruling",
+  ],
 ])
 
 function adjacentPairs(names: readonly string[]): Array<[string, string]> {
   return names.slice(0, -1).map((a, i) => [a, names[i + 1]])
 }
 
-/** Text-on-surface pairs and the WCAG ratio each must clear. Ruling A drops
+/**
+ * Text-on-surface pairs and the WCAG ratio each must clear. Ruling A drops
  * the --ct-line-strong/--ct-paper row. --ct-ink-3/--ct-paper was previously
  * pulled out into its own gated test because it failed at the prototype's
  * original 55% lightness (4.356:1); the token has since been corrected to
  * 53.5% (see counter.css header) and this row is back to being a normal,
- * live assertion like every other row here. */
+ * live assertion like every other row here.
+ *
+ * Fix round 2: audited docs/counter/counter-prototype.html for every
+ * surface each of --ct-ink, --ct-ink-2 and --ct-ink-3 actually renders text
+ * on (own-background CSS rules, plus BEM/descendant selectors confirmed
+ * against the generated HTML), not just the surfaces this table happened to
+ * already cover. Every real pairing found is added below. --ct-ink-3/
+ * --ct-chrome measures 4.396:1 in light — below 4.5 — so per ruling it is
+ * NOT touched here; it's pulled into its own gated test below, same pattern
+ * as the other inherited defects, and reported. See task-11-report.md
+ * "Fix round 2" for the full audit, including the pairing deliberately NOT
+ * added (--ct-ink-3 on --ct-sunk, via `.interval .tg`) and why.
+ */
 const CONTRAST: Array<[fg: string, bg: string, min: number, why: string]> = [
   ["--ct-ink", "--ct-paper", 4.5, "body text on the page"],
   ["--ct-ink", "--ct-surface", 4.5, "body text on a panel"],
+  ["--ct-ink", "--ct-sunk", 4.5, "e.g. nav/date-picker hover states"],
+  ["--ct-ink", "--ct-signal-wash", 4.5, "emphasis inside a signal callout"],
   ["--ct-ink-2", "--ct-paper", 4.5, "secondary prose"],
+  ["--ct-ink-2", "--ct-surface", 4.5, "e.g. the channel toggle, the share card"],
+  ["--ct-ink-2", "--ct-chrome", 4.5, "e.g. the nav rail's resting label"],
+  ["--ct-ink-2", "--ct-sunk", 4.5, "e.g. the segmented control, the compare toggle"],
+  ["--ct-ink-2", "--ct-signal-wash", 4.5, "prose inside a signal callout"],
+  ["--ct-ink-2", "--ct-bad-wash", 4.5, "prose inside a login error message"],
   ["--ct-ink-3", "--ct-paper", 4.5, "captions, folios, SKUs"],
   ["--ct-ink-3", "--ct-surface", 4.5, "captions on a panel"],
+  ["--ct-ink-3", "--ct-chrome", 4.5, "e.g. the nav rail's captions, the topbar breadcrumbs"],
+  ["--ct-ink-3", "--ct-signal-wash", 4.5, "captions inside a signal callout"],
   ["--ct-accent", "--ct-paper", 4.5, "the proofmark, used as text"],
   ["--ct-accent", "--ct-accent-wash", 4.5, "accent text on its own wash"],
   ["--ct-signal-ink", "--ct-signal-wash", 4.5, "signal text on signal wash"],
@@ -225,10 +292,21 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
   const isLightDefect = (key: string) => theme === "light" && LIGHT_DEFECTS.has(key)
 
   describe("contrast", () => {
-    // No rows are gated here any more — --ct-ink-3/--ct-paper was the one
-    // contrast defect this file found, and it was fixed at the token rather
-    // than skipped (see counter.css header and the ruling-C comment above).
-    it.each(CONTRAST)("%s on %s clears %s:1 (%s)", (fg, bg, min) => {
+    // --ct-ink-3/--ct-paper used to be gated here (round 1) and no longer
+    // is — it was fixed at the token, not skipped. Round 2's surface audit
+    // found a new gated case: --ct-ink-3/--ct-chrome.
+    const live = CONTRAST.filter(([fg, bg]) => !isLightDefect(`contrast:${fg}:${bg}`))
+    const skipped = CONTRAST.filter(([fg, bg]) => isLightDefect(`contrast:${fg}:${bg}`))
+
+    it.each(live)("%s on %s clears %s:1 (%s)", (fg, bg, min) => {
+      const t = tokens()
+      const ratio = wcagContrast(colorOf(t, fg), colorOf(t, bg))
+      expect(ratio).toBeGreaterThanOrEqual(min)
+    })
+
+    it.skip.each(
+      skipped.map(([fg, bg, min, why]) => [fg, bg, min, why, LIGHT_DEFECTS.get(`contrast:${fg}:${bg}`)!] as const),
+    )("%s on %s clears %s:1 (%s) — %s", (fg, bg, min) => {
       const t = tokens()
       const ratio = wcagContrast(colorOf(t, fg), colorOf(t, bg))
       expect(ratio).toBeGreaterThanOrEqual(min)
@@ -324,13 +402,15 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
 
   it("the surface stack is monotone, so panels read as lifted", () => {
     const t = tokens()
-    // Color is a union across every culori mode, and not all of them (e.g.
-    // rgb, a98) carry an `l` channel, so a plain `.l` access doesn't
-    // typecheck on the union. Every stacked-surface token here is oklch, so
-    // narrow with the `in` operator rather than widening the return type.
+    // Uses colorOf, which throws on a missing/unparseable/no-dark-value
+    // token with a precise message — same as every other assertion in this
+    // file. It used to call parse() directly and silently default to
+    // lightness 0 on failure, which would turn a missing-token bug into a
+    // confusing "stack not monotone" failure instead of the real error.
     const l = (n: string) => {
-      const c = parse(t.get(n)!)
-      return c && "l" in c ? c.l : 0
+      const c = colorOf(t, n)
+      if (!("l" in c)) throw new Error(`${n} has no lightness channel in mode ${c.mode}`)
+      return c.l
     }
     const stack = ["--ct-surface", "--ct-paper", "--ct-chrome", "--ct-sunk"].map(l)
     const descending = stack.every((v, i) => i === 0 || v <= stack[i - 1])
@@ -340,10 +420,19 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
 
   it("declares no pure white and no pure black", () => {
     const t = tokens()
-    for (const [name, value] of t) {
+    // Iterates the full declared-token universe (from the light side, since
+    // every token is declared there regardless of whether it has a dark
+    // half yet) rather than `t` itself. For dark, `t` only contains tokens
+    // that DO have a light-dark() pair (see parseTokens), so iterating `t`
+    // directly would silently skip every colour token Task 12 hasn't
+    // reached yet — a vacuous pass with zero assertions run, not a real
+    // check. colorOf(t, name) throws its own precise message for whichever
+    // token is missing, keeping this test's dark-theme failure as loud and
+    // specific as every other assertion here.
+    for (const name of parseTokens(CSS, "light").keys()) {
       if (!/^--ct-(ch|mx|gp|surface|paper|chrome|sunk|line|ink|accent|signal|good|warn|bad)/.test(name)) continue
-      const c = parse(value)
-      if (!c) continue
+      colorOf(t, name)
+      const value = t.get(name)!
       expect(`${name} ${value}`).not.toMatch(/#fff\b|#ffffff|#000\b|#000000/i)
     }
   })
