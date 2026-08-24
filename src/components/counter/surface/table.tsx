@@ -10,7 +10,12 @@ export interface Column {
 
 export interface Row {
   key: string
-  cells: React.ReactNode[]
+  /**
+   * Keyed by column key, not positional. A row with a missing or extra cell
+   * relative to `columns` cannot mis-align or crash — it just renders a gap
+   * for whatever key it didn't supply.
+   */
+  cells: Record<string, React.ReactNode>
   /** Where this row opens. Omit it and the row is inert — see note 47. */
   href?: string
 }
@@ -95,8 +100,8 @@ export function Table({
                     : "border-b border-ct-line"
                 }
               >
-                {r.cells.map((cell, i) => {
-                  const c = columns[i]
+                {columns.map((c, i) => {
+                  const cell = r.cells[c.key]
                   const content =
                     navigable && i === 0 ? (
                       // Stretched over the whole `relative` row via `::after`.

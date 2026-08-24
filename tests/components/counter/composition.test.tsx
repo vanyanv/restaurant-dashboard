@@ -17,14 +17,14 @@ import { ready, stale, loading, failed, empty, notComputed, type SectionData } f
 
 interface Data {
   cells: { label: string; value: string }[]
-  rows: { key: string; cells: React.ReactNode[] }[]
+  rows: { key: string; cells: Record<string, React.ReactNode> }[]
 }
 
 const columns = [{ key: "name", label: "Name" }]
 
 const DATA: Data = {
   cells: [{ label: "Net sales", value: "$7,468" }],
-  rows: [{ key: "a", cells: ["Row A"] }],
+  rows: [{ key: "a", cells: { name: "Row A" } }],
 }
 
 function renderSection(data: SectionData<Data>) {
@@ -80,5 +80,12 @@ describe("Section + Strip + Table composition", () => {
     expect(screen.queryByText("$7,468")).toBeNull()
     expect(screen.queryByText("Row A")).toBeNull()
     expect(screen.getByText(/this ledger/)).toBeTruthy()
+  })
+
+  it("the heading is reachable from the section landmark via aria-labelledby", () => {
+    renderSection(ready(DATA))
+    const section = screen.getByRole("region")
+    const heading = screen.getByRole("heading", { name: "Net sales" })
+    expect(section.getAttribute("aria-labelledby")).toBe(heading.id)
   })
 })

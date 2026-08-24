@@ -26,8 +26,11 @@ export function Cascade({ steps }: { steps: CascadeStep[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {rows.map((r) => (
-        <div key={r.label} data-cascade-step className="flex flex-col gap-1">
+      {/* Keyed by index, not label: duplicate labels are plausible in a
+          cascade (two "Other" lines), and step order never changes at
+          runtime, so index is a safe, collision-free key here. */}
+      {rows.map((r, i) => (
+        <div key={i} data-cascade-step className="flex flex-col gap-1">
           <div className="flex items-baseline justify-between">
             <span className="text-ct-body text-ct-ink">{r.label}</span>
             <span className={`text-ct-body text-ct-ink-2 ${TABULAR}`}>{money(r.amount, { cents: true })}</span>
