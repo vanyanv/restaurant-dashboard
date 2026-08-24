@@ -256,3 +256,21 @@ computation is meant to live going forward, as a Phase 1 deliverable — it
 doesn't exist yet, and neither does the rest of `src/lib/counter/*`. Until
 it lands, don't let a second page reimplement a number another page already
 computes; when it lands, that's the file to import from, not to duplicate.
+
+## Primitives
+
+Import from `@/components/counter`. Never deeper — `state/` is private to
+`surface/` on purpose.
+
+| Primitive | Enforces |
+|---|---|
+| `<Section>` | All six `SectionData` states. `children` is a function, so it cannot run without data. Renders "Ask about this" only when there is an answer (note 55). |
+| `<Strip>` | Keeps its shape in every state, so the layout does not jump when figures land. Em-dashes, never zeroes. |
+| `<Figure>` | Tabular lining numerals on every value. |
+| `<Table>` | Rules only, sticky head, right-aligned figures. A row without `href` is not a link, not focusable, and wears no pointer (note 47). |
+| `<Meter>` | Colours the overshoot, not the measure (note 35). |
+| `<Cascade>` | Draws a statement as the sequence of subtractions it is, not a donut (note 52). |
+
+The data they all take is `SectionData<T>` from `@/lib/counter/section-data`.
+Six states: `ready`, `stale`, `loading`, `failed`, `empty`, `not_computed`.
+A page never inspects `.status` — `npm run tokens` fails the build if one does.
