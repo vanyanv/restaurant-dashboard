@@ -13,6 +13,7 @@ export { Figure, type FigureProps } from "./surface/figure"
 export { Table, type Column, type Row } from "./surface/table"
 export { Meter } from "./surface/meter"
 export { Cascade, type CascadeStep } from "./surface/cascade"
+export { Toast, type ToastTone } from "./surface/toast"
 
 export { CounterThemeProvider, useCounterTheme, themeNoFlashScript } from "./theme-provider"
 export { ThemeToggle } from "./theme-toggle"
