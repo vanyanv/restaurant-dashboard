@@ -44,6 +44,24 @@ describe("Chart — line", () => {
     const table = screen.getByRole("table", { name: /revenue trend/i })
     expect(table.textContent).toContain("Aug 20")
   })
+
+  it("renders the value axis compactly rather than in full", () => {
+    setReducedMotion(false)
+    const bigSeries = [{ name: "Net sales", data: [7100, 14000, 21000] }]
+    const { container } = render(
+      <Chart variant="line" labels={labels} series={bigSeries} title="Revenue trend" />,
+    )
+    // Scope to the chart picture, not the sr-only summary table — that
+    // table intentionally uses the full `money` formatter, only the axis
+    // should be compact.
+    // Recharts computes its own "nice" tick values rather than echoing the
+    // raw data points, so assert on the compact SHAPE (a bare "$<n>K"), not
+    // a specific number — and that the full, comma-grouped form never
+    // appears on the axis.
+    const picture = screen.getByRole("img", { name: /revenue trend/i })
+    expect(picture.textContent).toMatch(/\$\d+(\.\d+)?K/)
+    expect(picture.textContent).not.toMatch(/\$\d{1,3},\d{3}/)
+  })
 })
 
 describe("Chart — bar", () => {

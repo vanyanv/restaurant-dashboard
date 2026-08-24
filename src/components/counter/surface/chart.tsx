@@ -14,7 +14,7 @@ import {
   type BarShapeProps,
 } from "recharts"
 import { useChartDraw } from "@/components/counter/motion/use-chart-draw"
-import { TABULAR, money } from "@/lib/counter/format"
+import { TABULAR, money, moneyCompact } from "@/lib/counter/format"
 
 export interface ChartSeries {
   name: string
@@ -85,6 +85,13 @@ function toNumberOrNull(v: unknown): number | null {
  */
 export function Chart({ variant, labels, series, title, height, formatValue, comparisonLabel }: ChartProps) {
   const format = formatValue ?? ((v: number | null) => money(v))
+  // Axis ticks need something narrower than `format`: a value axis crowded
+  // with full `$7,468`-style labels is illegible, which is exactly why
+  // `moneyCompact` (`$7K`) exists. Honour a caller's own `formatValue` if
+  // they supplied one — it may already be compact for its domain (e.g. a
+  // percentage) — and only fall back to `moneyCompact` when they didn't.
+  const axisTick = (v: number) =>
+    formatValue ? formatValue(toNumberOrNull(v)) : moneyCompact(toNumberOrNull(v))
   const { animate, lineDurationMs, barStaggerMs } = useChartDraw()
   const ariaLabel = comparisonLabel ? `${title}, compared to ${comparisonLabel}` : title
   // Bar-only: which reading (by data index, not series) is under the
@@ -142,7 +149,7 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
           {variant === "line" ? (
             <LineChart data={rows}>
               <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
-              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
+              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} tickFormatter={axisTick} />
               <Tooltip
                 cursor={{ stroke: "var(--ct-line-strong)" }}
                 formatter={(value: unknown) => format(toNumberOrNull(value))}
@@ -171,7 +178,7 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
           ) : (
             <BarChart data={rows}>
               <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
-              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
+              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} tickFormatter={axisTick} />
               <Tooltip
                 cursor={{ fill: "var(--ct-accent-wash)" }}
                 formatter={(value: unknown) => format(toNumberOrNull(value))}
