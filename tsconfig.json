@@ -38,6 +38,7 @@
   "exclude": [
     "node_modules",
     "scripts",
-    "tmp"
+    "tmp",
+    "tests/styles/fixtures/counter-lint"
   ]
 }
