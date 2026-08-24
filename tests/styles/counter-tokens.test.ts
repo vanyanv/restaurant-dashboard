@@ -317,6 +317,56 @@ const CONTRAST: Array<[fg: string, bg: string, min: number, why: string]> = [
 const MX_BANDS = ["--ct-mx-1", "--ct-mx-2", "--ct-mx-3", "--ct-mx-4"] as const
 const GP_STEPS = ["--ct-gp-1", "--ct-gp-2", "--ct-gp-3"] as const
 
+/**
+ * Semantic pairs — tokens that carry genuinely different meaning (an
+ * attention-seeking callout vs an off-target status, the proofmark vs "this
+ * is wrong") and can plausibly render near each other in the UI. Nothing
+ * else in this file checks this: CONTRAST checks a token against a SURFACE;
+ * mx/gp adjacency checks a token against its own ramp neighbour. A token can
+ * individually clear every contrast floor and still be indistinguishable
+ * from a DIFFERENT token that means something else — that is exactly what
+ * happened to Task 12's first dark pass: --ct-signal and --ct-warn came out
+ * identical in lightness and hue (only chroma differed, dE00 5.66 under
+ * normal vision) and --ct-accent/--ct-bad tightened past their own light-
+ * theme separation (3.35 -> 2.64) — both invisible to every assertion
+ * above, both real to a human looking at the two colours side by side. This
+ * is an ADDITIVE check (Task 12 fix round 1): it does not touch, weaken, or
+ * skip anything that existed before it.
+ *
+ * Thresholds are per-pair, not one shared constant, because the source
+ * material is not uniform: some pairs (good/bad) were always wildly
+ * separable and some (accent/bad, both reds) were always tight — even in
+ * light, under deuteranopia, accent/bad measures 2.40, barely into the
+ * "perceptible at a glance" dE00 2-10 band used elsewhere in this file's
+ * comments. Each threshold is set to clear the WORST of the four
+ * vision-model measurements on the frozen light values (so light passes on
+ * the designer's real numbers, never on an invented exemption), while
+ * staying low enough to have been genuinely violated by the collapsed dark
+ * values this check exists to catch (signal/warn measured 5.41-5.66 across
+ * visions before the fix; accent/bad measured 1.79-2.19). A threshold that
+ * light cannot clear under all four models is a bug in this table, not a
+ * reason to skip — see accent/bad below for the one pair this bites.
+ *
+ * accent/signal is included even though neither Task 12 fix round moved it
+ * into danger (it drops from a light worst-case of 24.71 to a dark
+ * worst-case of 7.83 under tritanopia — still comfortably perceptible, not
+ * chased further per the round-1 review, which asked only that the
+ * threshold not accidentally fail it).
+ */
+const SEMANTIC_PAIRS: Array<[a: string, b: string, min: number, why: string]> = [
+  ["--ct-signal", "--ct-warn", 8, "an attention-seeking callout vs an off-target status"],
+  [
+    "--ct-accent",
+    "--ct-bad",
+    2,
+    'the proofmark vs "this is wrong" — both reds even in light; light itself measures only 2.40 under deuteranopia, so 2 is the highest floor light can clear on all four models',
+  ],
+  ["--ct-good", "--ct-warn", 12, "on-target vs off-target status"],
+  ["--ct-warn", "--ct-bad", 6, 'off-target status vs "this is wrong"'],
+  ["--ct-good", "--ct-bad", 9, 'on-target vs "this is wrong"'],
+  ["--ct-accent", "--ct-signal", 6, "the proofmark vs an attention-seeking callout"],
+]
+
 const THEMES = ["light", "dark"] as const
 
 describe.each(THEMES)("counter tokens — %s", (theme) => {
@@ -444,6 +494,24 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
         expect(wcagContrast(colorOf(t, n), colorOf(t, "--ct-surface"))).toBeGreaterThanOrEqual(3)
       },
     )
+  })
+
+  // No LIGHT_DEFECTS gating here, and none is expected: SEMANTIC_PAIRS'
+  // thresholds are chosen (see its doc comment) so the frozen light values
+  // clear every one of them under all four vision models already. This is
+  // an addition, not a weakening — see tests/styles/counter-tokens.test.ts
+  // fix-round-1 notes in the Task 12 report for why it was added.
+  describe("semantic pair separation", () => {
+    const cases = (Object.keys(DEFICIENCIES) as Vision[]).flatMap((vision) =>
+      SEMANTIC_PAIRS.map(([a, b, min, why]) => [vision, a, b, min, why] as const),
+    )
+
+    it.each(cases)("%s: %s vs %s clears dE %s (%s)", (vision, a, b, min) => {
+      const t = tokens()
+      const filter = DEFICIENCIES[vision]
+      const dE = differenceCiede2000()(filter(colorOf(t, a)), filter(colorOf(t, b)))
+      expect(dE).toBeGreaterThanOrEqual(min)
+    })
   })
 
   it("the surface stack is monotone, so panels read as lifted", () => {
