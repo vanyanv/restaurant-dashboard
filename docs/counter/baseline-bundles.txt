@@ -1,0 +1,82 @@
+
+> restaurant-dashboard@0.1.0 bundle:check
+> tsx scripts/check-bundle-size.ts
+
+route                                         uncompressed  gzipped     budget        status
+────────────────────────────────────────────────────────────────────────────────────────────────────
+/dashboard/labor/[storeId]                    1178.3 KB     340.2 KB    1562.5 KB     ✓
+/dashboard/labor                              1174.4 KB     339.0 KB    1562.5 KB     ✓
+/dashboard/menu-profit                        1163.9 KB     334.4 KB    1562.5 KB     ✓
+/dashboard/operations/product-usage           1137.0 KB     341.9 KB    1562.5 KB     ✓
+/dashboard                                    1056.7 KB     323.4 KB    1562.5 KB     ✓
+/dashboard/stores/new                         1053.0 KB     300.0 KB    1562.5 KB     ✓
+/dashboard/analytics/[storeId]                1052.4 KB     319.8 KB    1562.5 KB     ✓
+/dashboard/invoices                           1038.9 KB     317.6 KB    1562.5 KB     ✓
+/dashboard/analytics                          1034.6 KB     315.3 KB    1562.5 KB     ✓
+/dashboard/orders                             918.7 KB      275.9 KB    1562.5 KB     ✓
+/dashboard/operations/packaging               898.7 KB      269.3 KB    1562.5 KB     ✓
+/dashboard/operations                         894.3 KB      268.7 KB    1562.5 KB     ✓
+/dashboard/pnl                                884.6 KB      266.1 KB    1562.5 KB     ✓
+/dashboard/pnl/[storeId]                      882.5 KB      265.7 KB    1562.5 KB     ✓
+/dashboard/ingredients                        881.7 KB      262.9 KB    1562.5 KB     ✓
+/dashboard/recipes                            834.3 KB      249.6 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/ingredient-audit  818.5 KB      245.9 KB    1562.5 KB     ✓
+/dashboard/invoices/[id]                      805.3 KB      241.3 KB    1562.5 KB     ✓
+/dashboard/operations/inventory               802.3 KB      239.9 KB    1562.5 KB     ✓
+/dashboard/decisions                          797.1 KB      238.6 KB    1562.5 KB     ✓
+/dashboard/stores                             793.7 KB      237.3 KB    1562.5 KB     ✓
+/dashboard/operations/inventory/count/new     787.1 KB      235.9 KB    1562.5 KB     ✓
+/dashboard/menu/catalog                       785.9 KB      235.0 KB    1562.5 KB     ✓
+/dashboard/ingredients/prices                 785.7 KB      235.0 KB    1562.5 KB     ✓
+/dashboard/cogs/[storeId]                     784.7 KB      234.1 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/people            769.0 KB      230.5 KB    1562.5 KB     ✓
+/dashboard/menu/catalog/[id]                  768.2 KB      229.7 KB    1562.5 KB     ✓
+/dashboard/orders/[id]                        767.7 KB      229.5 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring                   767.2 KB      229.9 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/activity          767.2 KB      229.9 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/costs             767.2 KB      229.9 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/cache             765.4 KB      228.8 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/infrastructure    765.4 KB      228.8 KB    1562.5 KB     ✓
+/dashboard/admin/monitoring/ml                765.4 KB      228.8 KB    1562.5 KB     ✓
+/signup/[token]                               763.4 KB      228.1 KB    781.3 KB      ✓
+/dashboard/settings/account                   761.5 KB      227.3 KB    1562.5 KB     ✓
+/login                                        760.4 KB      227.0 KB    781.3 KB      ✓
+/dashboard/settings/notifications             757.4 KB      226.6 KB    1562.5 KB     ✓
+/dashboard/alerts                             756.5 KB      226.2 KB    1562.5 KB     ✓
+/dashboard/settings/preferences               754.3 KB      225.4 KB    1562.5 KB     ✓
+/dashboard/chat                               754.2 KB      224.9 KB    1709.0 KB     ✓
+/dashboard/settings                           751.5 KB      223.9 KB    1562.5 KB     ✓
+/dashboard/cogs                               746.5 KB      221.9 KB    1562.5 KB     ✓
+/dashboard/operations/costs                   746.5 KB      221.9 KB    1562.5 KB     ✓
+/dashboard/operations/inventory/counts        746.5 KB      221.9 KB    1562.5 KB     ✓
+/dashboard/operations/inventory/counts/[id]   746.5 KB      221.9 KB    1562.5 KB     ✓
+/dashboard/operations/recipes                 746.5 KB      221.9 KB    1562.5 KB     ✓
+/dashboard/operations/vendors                 746.5 KB      221.9 KB    1562.5 KB     ✓
+/dashboard/menu                               744.8 KB      221.1 KB    1562.5 KB     ✓
+/dashboard/product-mix                        744.8 KB      221.1 KB    1562.5 KB     ✓
+/dashboard/stores/[id]                        744.8 KB      221.1 KB    1562.5 KB     ✓
+/dashboard/stores/[id]/edit                   744.8 KB      221.1 KB    1562.5 KB     ✓
+/m/ingredients                                668.3 KB      195.9 KB    683.6 KB      ✓
+/m/recipes                                    667.6 KB      195.6 KB    683.6 KB      ✓
+/m/menu                                       666.7 KB      195.4 KB    683.6 KB      ✓
+/m/count                                      639.6 KB      187.1 KB    683.6 KB      ✓
+/m/labor                                      631.3 KB      184.9 KB    683.6 KB      ✓
+/m/chat                                       630.8 KB      184.6 KB    683.6 KB      ✓
+/m                                            626.4 KB      183.4 KB    683.6 KB      ✓
+/m/operations                                 626.4 KB      183.4 KB    683.6 KB      ✓
+/m/orders                                     626.4 KB      183.4 KB    683.6 KB      ✓
+/m/pnl/[storeId]                              625.7 KB      183.1 KB    683.6 KB      ✓
+/m/pnl                                        625.2 KB      182.9 KB    683.6 KB      ✓
+/m/invoices/[id]                              623.5 KB      182.4 KB    683.6 KB      ✓
+/m/more                                       621.1 KB      181.3 KB    683.6 KB      ✓
+/m/[...notFound]                              620.4 KB      180.8 KB    683.6 KB      ✓
+/m/invoices                                   620.4 KB      180.8 KB    683.6 KB      ✓
+/m/monitoring                                 620.4 KB      180.8 KB    683.6 KB      ✓
+/m/orders/[id]                                620.4 KB      180.8 KB    683.6 KB      ✓
+/m/product-mix                                620.4 KB      180.8 KB    683.6 KB      ✓
+/m/settings                                   620.4 KB      180.8 KB    683.6 KB      ✓
+/                                             604.9 KB      174.4 KB    781.3 KB      ✓
+/_not-found                                   604.9 KB      174.4 KB    1464.8 KB     ✓
+/shutdown                                     604.9 KB      174.4 KB    1464.8 KB     ✓
+
+✓ all 74 routes under budget
