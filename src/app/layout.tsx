@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { DM_Sans, JetBrains_Mono } from "next/font/google"
 import { NextAuthSessionProvider } from "@/lib/session-provider"
 import { QueryProvider } from "@/lib/query-client"
+import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
 import { Toaster } from "sonner"
 import "./globals.css"
 
@@ -36,14 +37,19 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeNoFlashScript }} />
+      </head>
       <body className={`${dmSans.variable} ${jetbrainsMono.variable} ${dmSans.className}`}>
-        <NextAuthSessionProvider>
-          <QueryProvider>
-            {children}
-            <Toaster richColors position="top-right" />
-          </QueryProvider>
-        </NextAuthSessionProvider>
+        <CounterThemeProvider>
+          <NextAuthSessionProvider>
+            <QueryProvider>
+              {children}
+              <Toaster richColors position="top-right" />
+            </QueryProvider>
+          </NextAuthSessionProvider>
+        </CounterThemeProvider>
       </body>
     </html>
   )
