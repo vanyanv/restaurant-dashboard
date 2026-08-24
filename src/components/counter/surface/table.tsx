@@ -1,7 +1,5 @@
 import Link from "next/link"
 import { TABULAR } from "@/lib/counter/format"
-import { hasData, type SectionData } from "@/lib/counter/section-data"
-import { Skeleton } from "@/components/counter/state/skeleton"
 
 export interface Column {
   key: string
@@ -19,6 +17,12 @@ export interface Row {
 
 /**
  * Horizontal rules only, sticky head, right-aligned figures.
+ *
+ * Sole state renderer is `Section` (R3): a `Table` takes `columns` and `rows`
+ * directly and has no loading/empty/failed branches of its own — nest it
+ * inside a `Section` to get the six-state contract. That also means the old
+ * double-render risk (the same data reaching both a `Section` and a `Table`)
+ * cannot happen: only `Section` ever sees a `SectionData`.
  *
  * Note 47 is why the `href` handling is written the way it is: in the
  * prototype, `.tbl tbody tr` set `cursor:pointer` and an accent hover wash on
@@ -38,17 +42,13 @@ export interface Row {
  * in the accessibility tree, correct keyboard/focus behaviour for free, and a
  * pointer that now tells the truth across the full row width.
  */
-export function Table<T>({
-  data,
+export function Table({
   columns,
   rows,
 }: {
-  data: SectionData<T>
   columns: Column[]
-  rows: (data: T) => Row[]
+  rows: Row[]
 }) {
-  const items = hasData(data) ? rows(data.data) : []
-
   return (
     <div data-table-scroll className="overflow-x-auto">
       <table className="w-full border-collapse text-ct-body">
@@ -68,7 +68,7 @@ export function Table<T>({
           </tr>
         </thead>
         <tbody>
-          {items.map((r) => {
+          {rows.map((r) => {
             const navigable = Boolean(r.href)
             return (
               <tr
@@ -111,11 +111,6 @@ export function Table<T>({
           })}
         </tbody>
       </table>
-      {data.status === "loading" ? (
-        <div className="p-3">
-          <Skeleton rows={4} />
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -3,7 +3,6 @@ import { describe, it, expect } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { Figure } from "@/components/counter/surface/figure"
 import { Strip } from "@/components/counter/surface/strip"
-import { ready, loading, empty } from "@/lib/counter/section-data"
 
 describe("Figure", () => {
   it("renders label, value and caption", () => {
@@ -33,25 +32,24 @@ describe("Figure", () => {
 })
 
 describe("Strip", () => {
-  const cells = () => [
+  const cells = [
     { label: "Net sales", value: "$7,468" },
     { label: "Orders", value: "376" },
     { label: "Avg ticket", value: "$19.86" },
   ]
 
-  it("renders one cell per figure when data is present", () => {
-    const { container } = render(<Strip data={ready({})} cells={cells} />)
+  it("renders one cell per figure", () => {
+    const { container } = render(<Strip cells={cells} />)
     expect(container.querySelectorAll("[data-figure-value]")).toHaveLength(3)
   })
 
-  it("renders skeleton cells while loading, keeping the shape", () => {
-    const { container } = render(<Strip data={loading()} cells={cells} cellCount={3} />)
-    expect(container.querySelectorAll("[data-skeleton-cell]")).toHaveLength(3)
+  it("the cell count is just the length of what it's given — no separate count to pass or drift", () => {
+    const { container } = render(<Strip cells={cells.slice(0, 2)} />)
+    expect(container.querySelectorAll("[data-figure-value]")).toHaveLength(2)
   })
 
-  it("renders em-dashes rather than zeroes when empty", () => {
-    render(<Strip data={empty("pre_open")} cells={cells} cellCount={3} />)
-    expect(screen.getAllByText("—")).toHaveLength(3)
-    expect(screen.queryByText("$0")).toBeNull()
+  it("renders whatever values it's handed, including a caller-supplied em-dash", () => {
+    render(<Strip cells={[{ label: "Net sales", value: "—" }]} />)
+    expect(screen.getByText("—")).toBeTruthy()
   })
 })
