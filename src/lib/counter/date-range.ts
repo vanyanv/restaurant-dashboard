@@ -1,5 +1,5 @@
 import {
-  addDays, differenceInCalendarDays, startOfWeek, startOfMonth,
+  addDays, differenceInCalendarDays, startOfDay, startOfWeek, startOfMonth,
   startOfQuarter, startOfYear, subYears,
 } from "date-fns"
 
@@ -62,10 +62,20 @@ export const PRESETS: readonly Preset[] = [
   { id: "ytd", name: "Year-to-date", resolve: (t) => ({ start: startOfYear(t), end: t }) },
 ] as const
 
+/**
+ * Normalises `today` to a local midnight ONCE, here, rather than trusting
+ * every preset's `resolve` to do it. The module's contract says "all dates
+ * are local midnights", but a caller passes `new Date()` — a `Date` with
+ * whatever time-of-day it was constructed at — and every preset built on it
+ * (`today`, `yesterday`, every trailing window) passed that time-of-day
+ * through unchanged. A `d7` resolved at 14:32 returned `Tue 14:32 .. Mon
+ * 14:32` instead of two midnights; any query using `end` as an inclusive
+ * bound then silently dropped the rest of that day.
+ */
 export function resolvePreset(id: PresetId, today: Date): DateRange {
   const p = PRESETS.find((x) => x.id === id)
   if (!p) throw new Error(`unknown preset: ${id}`)
-  return p.resolve(today)
+  return p.resolve(startOfDay(today))
 }
 
 /** Inclusive of both ends — a single day is 1, not 0. */

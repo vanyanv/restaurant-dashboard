@@ -48,6 +48,26 @@ describe("presets", () => {
   it("year-to-date starts on 1 January", () => {
     expect(resolvePreset("ytd", TODAY).start).toEqual(new Date(2026, 0, 1))
   })
+
+  it("normalises a mid-afternoon `today` to local midnight before resolving, for every preset (2c)", () => {
+    // The module's own contract: "all dates are local midnights." A caller
+    // passes `new Date()`, whatever time of day it is constructed — verified
+    // that `d7` at 14:32 used to return `Tue 14:32 .. Mon 14:32` instead of
+    // two midnights, silently dropping the rest of today from any query
+    // using `end` as an inclusive bound.
+    const midAfternoon = new Date(2026, 7, 24, 14, 32, 10, 500)
+    for (const p of PRESETS) {
+      const r = resolvePreset(p.id, midAfternoon)
+      expect(r.start.getHours()).toBe(0)
+      expect(r.start.getMinutes()).toBe(0)
+      expect(r.start.getSeconds()).toBe(0)
+      expect(r.start.getMilliseconds()).toBe(0)
+      expect(r.end.getHours()).toBe(0)
+      expect(r.end.getMinutes()).toBe(0)
+      expect(r.end.getSeconds()).toBe(0)
+      expect(r.end.getMilliseconds()).toBe(0)
+    }
+  })
 })
 
 describe("bucketFor", () => {

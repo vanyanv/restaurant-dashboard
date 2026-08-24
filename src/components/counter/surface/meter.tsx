@@ -20,7 +20,12 @@ export function Meter({
   max: number
   format: (v: number) => string
 }) {
-  const pctOf = (v: number) => `${round1((v / max) * 100)}%`
+  // `max === 0` is a `ready` state with nothing to divide by (no ceiling
+  // published yet) — every width collapses to 0% rather than NaN/Infinity%.
+  // Widths are also clamped to [0, 100]: a negative value would otherwise
+  // produce a negative width, and a value past `max` would paint outside the
+  // track now that the track clips its own overflow.
+  const pctOf = (v: number) => `${clampPct(max === 0 ? 0 : (v / max) * 100)}%`
   const over = value > reference
 
   return (
@@ -31,7 +36,7 @@ export function Meter({
         </span>
         <span className={`text-ct-mid font-semibold text-ct-ink ${TABULAR}`}>{format(value)}</span>
       </div>
-      <div className="relative h-3 w-full rounded-ct-sm bg-ct-sunk">
+      <div className="relative h-3 w-full overflow-hidden rounded-ct-sm bg-ct-sunk">
         <span
           data-meter-fill
           className="absolute inset-y-0 left-0 rounded-ct-sm bg-ct-ink-3"
@@ -57,6 +62,6 @@ export function Meter({
   )
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10
+function clampPct(n: number): number {
+  return Math.round(Math.min(100, Math.max(0, n)) * 10) / 10
 }
