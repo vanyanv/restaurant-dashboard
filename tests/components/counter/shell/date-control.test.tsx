@@ -86,4 +86,37 @@ describe("DateControl", () => {
     expect(screen.queryByRole("menu", { name: /range/i })).toBeNull()
     expect(onPreset).not.toHaveBeenCalled()
   })
+
+  it('labels a custom range by its ends, not "Today"', () => {
+    render(
+      <DateControl
+        presetId="custom"
+        comparisonId="prev"
+        range={{ start: new Date(2026, 7, 3), end: new Date(2026, 7, 9) }}
+        onPreset={() => {}}
+        onComparison={() => {}}
+        onStep={() => {}}
+      />,
+    )
+    expect(screen.getByText("Aug 3 – Aug 9")).toBeInTheDocument()
+    expect(screen.queryByText("Today")).not.toBeInTheDocument()
+  })
+
+  it("checks no preset while a custom range is showing", () => {
+    render(
+      <DateControl
+        presetId="custom"
+        comparisonId="prev"
+        range={{ start: new Date(2026, 7, 3), end: new Date(2026, 7, 9) }}
+        onPreset={() => {}}
+        onComparison={() => {}}
+        onStep={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByText("Aug 3 – Aug 9"))
+    const checked = screen
+      .getAllByRole("menuitemradio")
+      .filter((el) => el.getAttribute("aria-checked") === "true")
+    expect(checked).toHaveLength(0)
+  })
 })

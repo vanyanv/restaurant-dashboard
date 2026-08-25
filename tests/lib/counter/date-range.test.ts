@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange, dayCount,
-  toQueryBounds,
+  toQueryBounds, isoDay, parseIsoDay, rangeLabel,
 } from "@/lib/counter/date-range"
 
 const TODAY = new Date(2026, 7, 24) // Mon 24 Aug 2026, local midnight
@@ -173,5 +173,54 @@ describe("toQueryBounds", () => {
     const b = toQueryBounds(day)
     expect(b.startDate).toEqual(new Date(2026, 7, 24, 0, 0, 0))
     expect(b.endDate).toEqual(new Date(2026, 7, 24, 23, 59, 59))
+  })
+})
+
+describe("isoDay / parseIsoDay", () => {
+  it("round-trips a local date without a UTC shift", () => {
+    // 2026-01-01 at 00:30 local. toISOString() on this in any timezone west
+    // of UTC returns the PREVIOUS day — which is exactly the bug this pair
+    // exists to avoid.
+    const d = new Date(2026, 0, 1, 0, 30)
+    expect(isoDay(d)).toBe("2026-01-01")
+    expect(parseIsoDay(isoDay(d))).toEqual(new Date(2026, 0, 1))
+  })
+
+  it("pads single-digit months and days", () => {
+    expect(isoDay(new Date(2026, 8, 5))).toBe("2026-09-05")
+  })
+
+  it("returns null for anything that is not a calendar date", () => {
+    for (const bad of ["", "nope", "2026-13-01", "2026-02-30", "2026-2-1", "2026-01-01T00:00:00Z"]) {
+      expect(parseIsoDay(bad)).toBeNull()
+    }
+  })
+
+  it("returns a local midnight, not a UTC one", () => {
+    const d = parseIsoDay("2026-08-25")!
+    expect(d.getHours()).toBe(0)
+    expect(d.getDate()).toBe(25)
+  })
+})
+
+describe("rangeLabel", () => {
+  it("names a preset by its own name", () => {
+    expect(rangeLabel({ start: new Date(2026, 7, 24), end: new Date(2026, 7, 24) }, "yesterday"))
+      .toBe("Yesterday")
+  })
+
+  it("names a custom multi-day window by its ends", () => {
+    expect(rangeLabel({ start: new Date(2026, 7, 3), end: new Date(2026, 7, 9) }, "custom"))
+      .toBe("Aug 3 – Aug 9")
+  })
+
+  it("names a custom single day once, not twice", () => {
+    expect(rangeLabel({ start: new Date(2026, 7, 3), end: new Date(2026, 7, 3) }, "custom"))
+      .toBe("Aug 3")
+  })
+
+  it("spans a year boundary without dropping the year", () => {
+    expect(rangeLabel({ start: new Date(2025, 11, 29), end: new Date(2026, 0, 4) }, "custom"))
+      .toBe("Dec 29, 2025 – Jan 4, 2026")
   })
 })

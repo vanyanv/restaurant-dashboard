@@ -189,3 +189,68 @@ export function comparisonRange(r: DateRange, mode: ComparisonId): DateRange | n
   if (span > 7) return null
   return { start: addDays(r.start, -28), end: addDays(r.end, -7) }
 }
+
+/**
+ * A named preset, or an arbitrary window the reader chose.
+ *
+ * "custom" is not a thirteenth preset — it has no `resolve`, because it does
+ * not resolve against today at all. It is the range that is already in the
+ * URL. Note 53's eight pressable weeks and the date control's own steppers
+ * both produce one.
+ */
+export type RangeId = PresetId | "custom"
+
+/**
+ * A calendar date as `YYYY-MM-DD`, read off the LOCAL fields.
+ *
+ * `toISOString().slice(0, 10)` is the obvious version and it is wrong here:
+ * this module's dates are local midnights, and in any timezone west of UTC
+ * a local midnight serialises as the previous calendar day. A range written
+ * to the URL and read back would walk one day earlier on every round trip.
+ */
+export function isoDay(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * The inverse, treating the string as UNTRUSTED — it arrives from a query
+ * string a reader can hand-edit. Anything that is not a real calendar date at
+ * local midnight returns null, and the caller falls back to a preset.
+ *
+ * The round-trip check catches overflow that `new Date(y, m, d)` accepts
+ * silently: February 30th becomes March 2nd rather than an error.
+ */
+export function parseIsoDay(s: string): Date | null {
+  const m = ISO_DAY.exec(s)
+  if (!m) return null
+  const [, y, mo, d] = m
+  const date = new Date(Number(y), Number(mo) - 1, Number(d))
+  return isoDay(date) === s ? date : null
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+/** `Aug 3`, or `Dec 29, 2025` when the range straddles a year boundary. */
+function dayLabel(d: Date, withYear: boolean): string {
+  const base = `${MONTHS[d.getMonth()]} ${d.getDate()}`
+  return withYear ? `${base}, ${d.getFullYear()}` : base
+}
+
+/**
+ * What the date control prints, and what the Ask context sentence says.
+ *
+ * A custom range has no name of its own, so it is named by its ends. Before
+ * this existed, `PRESETS.find(...) ?? PRESETS[0]` in `date-control.tsx`
+ * silently labelled anything unrecognised **"Today"** — a range that says one
+ * thing and shows another, which is note 19's lie in its purest form.
+ */
+export function rangeLabel(r: DateRange, id: RangeId): string {
+  if (id !== "custom") return PRESETS.find((p) => p.id === id)?.name ?? "Custom"
+  const spansYears = r.start.getFullYear() !== r.end.getFullYear()
+  if (r.start.getTime() === r.end.getTime()) return dayLabel(r.start, spansYears)
+  return `${dayLabel(r.start, spansYears)} – ${dayLabel(r.end, spansYears)}`
+}
