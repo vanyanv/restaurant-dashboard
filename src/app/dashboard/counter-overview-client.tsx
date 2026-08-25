@@ -168,6 +168,11 @@ export function CounterOverviewClient({
       storeName={selectedStore?.name ?? null}
       user={user}
       today={today}
+      // The ⌘K palette's "Change the range" group, from the same state the
+      // date control above is drawn from — so the two can never disagree
+      // about which preset is current.
+      presetId={counterParams.presetId}
+      onSelectPreset={(id) => push({ presetId: id })}
     >
       {/* `.dispatch` is the first thing inside the screen, above everything.
           No `.go` action: the prototype's points at its alerts queue and ours
