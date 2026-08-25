@@ -59,22 +59,21 @@ export function AppShell({
      * to `.ct-root` and the prototype's own roots. Until this class exists on
      * a real element, all 1030 ported rules apply to nothing.
      *
-     * It is a token scope, not a layout class: the prototype's `.frame` also
-     * carries `display:grid`, a fixed 212px column and a demo card's border and
-     * shadow, and none of that is ported onto `.ct-root`. The layout below
-     * stays ours.
+     * It carries the design's base with it — 13px DM Sans, tabular lining
+     * figures, `var(--ink)` on `var(--paper)`, and the `fr` container every
+     * `@container` rule in the port is written against. That base lives in
+     * `counter-components.css`'s own `.ct-root` block, restated there from
+     * `.frame`. So this element deliberately declares NO ground, NO ink and NO
+     * type of its own: a `bg-`/`text-` utility here would be a second opinion
+     * about something the ported stylesheet already decides, which is the
+     * drift this whole phase exists to undo.
      *
-     * `text-ct-ink` IS NOT DECORATION. `.frame` also declares
-     * `color: var(--ink)`, and the extractor left that on `.frame` with the
-     * rest of the demo-card properties — so `.ct-root` inherits the document's
-     * colour instead. Every ported rule that sets a font size but no colour
-     * (`.strip .v`, `.headline .v`, `.fig`) then renders in whatever the page
-     * ground happens to be, which in dark theme was near-black figures on a
-     * near-black surface: measured, and visible in the first dark screenshot
-     * of this task. This is the one line of `.frame`'s base typography the
-     * shell has to restate. See task-3-report.md.
+     * What is NOT ported from `.frame` is its demo-card layout —
+     * `display:grid`, a fixed 212px column, a border, a shadow,
+     * `min-height:840px`. That element is a page-of-documentation wrapper.
+     * The layout below stays ours.
      */
-    <div className="ct-root flex min-h-dvh bg-ct-paper text-ct-ink">
+    <div className="ct-root flex min-h-dvh">
       <a
         href="#ct-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-ct-sm focus:bg-ct-ink focus:px-3 focus:py-2 focus:text-ct-mid focus:text-ct-paper"

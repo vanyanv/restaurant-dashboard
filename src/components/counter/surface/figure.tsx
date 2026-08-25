@@ -1,4 +1,3 @@
-import { TABULAR } from "@/lib/counter/format"
 import { bstat, bwords, isJudged, type Reference } from "@/lib/counter/bullet-state"
 import { Bullet } from "./bullet"
 import { Spark } from "./spark"
@@ -48,10 +47,13 @@ export interface FigureProps {
  * `<div class="fig">`, matching `headBlock()` at line 3692, and its band
  * becomes `.hfloor` to match `floorMeter()` at line 3793.
  *
- * The value keeps DM Sans tabular lining numerals explicitly. The ported
- * stylesheet declares those on `.frame` — the prototype's own root — not on
- * `.ct-root`, so nothing inherits them here; without them a column of figures
- * does not align, which is the whole reason the design mandates them.
+ * `.v` carries no numeral utility of its own, and that is not an omission.
+ * The prototype's value inherits `font-variant-numeric: tabular-nums
+ * lining-nums` from its root, and `counter-components.css`'s `.ct-root` block
+ * now declares exactly that — so a figure inside an `AppShell` aligns in a
+ * column for the same reason the prototype's does, one declaration rather than
+ * one per figure. `tests/styles/counter-components.test.ts` holds that
+ * declaration in place.
  *
  * `Section` is the sole state renderer (R3). A `Figure` takes plain data and
  * knows nothing about loading, empty or failed.
@@ -76,7 +78,7 @@ export function Figure({
   return (
     <div className={lead ? "fig" : undefined}>
       <span className="k">{label}</span>
-      <span data-figure-value className={`v ${TABULAR}`}>
+      <span data-figure-value className="v">
         {value}
       </span>
       {reference?.series ? <Spark series={reference.series} breach={breach} /> : null}
