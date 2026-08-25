@@ -57,6 +57,45 @@ export default defineConfig({
       },
       dependencies: ["setup"],
     },
+
+    /*
+     * The fidelity gate — e2e/fidelity/. Same authentication and the same two
+     * device profiles as the suite above, deliberately: a fidelity script
+     * would have had to reimplement sign-in, which is the mistake
+     * scripts/shot-page.ts's module comment records getting made repeatedly
+     * and written off as "the credentials don't work."
+     *
+     * reducedMotion is set on both. The prototype animates its figures from
+     * 86% of their value on every render (tickNumbers) and skips that entirely
+     * under prefers-reduced-motion, so the text it renders is final rather
+     * than mid-tween. Our own motion is stilled for the same reason.
+     */
+    {
+      name: "fidelity",
+      testDir: "./e2e/fidelity",
+      // One fidelity test drives two pages (the prototype and ours), extracts
+      // from both and attaches two screenshots. The 30s default is not enough
+      // against a cold production build.
+      timeout: 90_000,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        storageState: STORAGE_STATE,
+        contextOptions: { reducedMotion: "reduce" },
+      },
+      dependencies: ["setup"],
+    },
+    {
+      name: "fidelity-mobile",
+      testDir: "./e2e/fidelity",
+      timeout: 90_000,
+      use: {
+        ...devices["Pixel 7"],
+        storageState: STORAGE_STATE,
+        contextOptions: { reducedMotion: "reduce" },
+      },
+      dependencies: ["setup"],
+    },
   ],
 
   webServer: {
