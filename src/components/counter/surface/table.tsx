@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, isValidElement, type KeyboardEvent, type ReactNode } from "react"
+import { Fragment, isValidElement, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 
 export interface Column {
@@ -97,20 +97,63 @@ function cellOf(cell: Cell): CellObject {
  * `<a class="block after:absolute after:inset-0">` in the first cell and made
  * the `<tr>` `relative`, so one native link covered the row. That pattern
  * cannot coexist with the ported sheet, and the sheet is now the design:
- * `.tbl tbody tr[data-goto] td:first-child{position:relative}` (line 268)
+ * `.tbl tbody tr[data-goto] td:first-child{position:relative}` (line 202)
  * makes the FIRST CELL the containing block, so the stretch resolves against
- * the cell instead of the row and covers one column. Line 270 does the same to
+ * the cell instead of the row and covers one column. Line 204 does the same to
  * the last cell and hangs the chevron off it. So the row-level affordance and
  * the cell-level overlay are two designs for the same job, and only one of
  * them is the one every rule in `counter-components.css` was written for.
  *
  * Note 47 states the replacement outright: "because a row is not a button, it
- * carries `role="link"`, a tab stop, and an Enter/Space handler". The cost is
- * real and worth naming: a `<tr role="link">` is no longer a `row` in the
- * accessibility tree, and there is no href for middle-click or "open in new
- * tab". That is the prototype's trade, made deliberately here rather than
- * inherited by accident.
+ * carries `role="link"`, a tab stop, and an Enter/Space handler". THREE costs
+ * are real and worth naming, and none of them is fixed here because each
+ * follows from matching the prototype:
+ *
+ *   1. a `<tr role="link">` is no longer a `row` in the accessibility tree;
+ *   2. there is no href, so no middle-click and no "open in new tab" (a real
+ *      `<a>` on the first cell's own text was investigated in task 5 and
+ *      declined: it restores the gesture for one word rather than the row, and
+ *      costs a second focusable element inside a `role="link"` whose children
+ *      are presentational — six tab stops on a three-row table, three of them
+ *      announcing nothing — plus a double navigation);
+ *   3. the `<td>`s inside a `role="link"` row lose their implicit `cell` role,
+ *      so a screen reader reads the row as ONE concatenated link label instead
+ *      of column by column. The stretched anchor kept the table intact; this
+ *      is what the prototype's row-level affordance costs.
+ *
+ * What IS fixed is a bug that was hiding inside cost 2. `onClick` on the whole
+ * `<tr>` fires for any click anywhere in it — including the mouseup that ends a
+ * text-selection drag, and including a click on any control a cell gains later.
+ * A native anchor did neither. `rowClick` below guards both.
  */
+/**
+ * Anything inside a row that has its own click behaviour. A click that lands on
+ * one of these is that control's, not the row's — which is how a native anchor
+ * behaved, and what an `onClick` on the whole `<tr>` silently took away.
+ *
+ * `[tabindex]:not([tabindex="-1"])` would match the ROW itself, so the match is
+ * always tested against the row it started from before it is honoured.
+ */
+const INTERACTIVE_IN_ROW =
+  'a[href],button,input,select,textarea,label,summary,[role="button"],[role="link"],' +
+  '[role="checkbox"],[role="menuitem"],[contenteditable="true"],[tabindex]:not([tabindex="-1"])'
+
+/**
+ * True when the reader has text selected. A drag that starts in one cell and
+ * ends in another fires `click` on the row at mouseup, and navigating away from
+ * the figures someone just selected is the worst possible response to
+ * "I wanted to copy this".
+ *
+ * Guarded for the environments where `getSelection` is absent rather than
+ * assumed present — this component renders under jsdom in tests and inside a
+ * server-rendered tree in production.
+ */
+function hasTextSelection(): boolean {
+  if (typeof window === "undefined" || typeof window.getSelection !== "function") return false
+  const selection = window.getSelection()
+  return !!selection && !selection.isCollapsed && selection.toString().length > 0
+}
+
 export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
   const router = useRouter()
 
@@ -140,7 +183,30 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
                   }
                 }
               : undefined
-            const classes = [r.className, r.selected ? "is-sel" : null].filter(Boolean).join(" ")
+            // The guard the stretched anchor used to give for free. Keyboard
+            // activation deliberately does NOT go through it: Enter on a
+            // focused row is unambiguous, and it can neither land on a
+            // descendant nor end a drag.
+            const rowClick = act
+              ? (e: MouseEvent<HTMLTableRowElement>) => {
+                  const target = e.target as Element | null
+                  const control = target?.closest?.(INTERACTIVE_IN_ROW) ?? null
+                  if (control && control !== e.currentTarget) return
+                  if (hasTextSelection()) return
+                  act()
+                }
+              : undefined
+            // `is-on`, NOT `is-sel`. Task 4's report claimed both were unused
+            // hooks and picked the wrong one; the prototype emits
+            // `data-ln="…" tabindex="0" role="button"` (counter-prototype.html
+            // 6770, 6773) and its own `select()` toggles `is-on` (8968–8976).
+            // The sheet follows: `.tbl tbody tr[data-ln].is-on td` washes the
+            // row (line 305) and `…td:first-child` adds the accent rail and the
+            // bold first cell (306), while `.is-sel` (207–209) has the wash and
+            // the bold cell but NO rail and is emitted by nothing. The selector
+            // needs BOTH the attribute and the class, which is why `is-on` is
+            // only ever set on a row that already carries `data-ln`.
+            const classes = [r.className, r.selected ? "is-on" : null].filter(Boolean).join(" ")
 
             return (
               <Fragment key={r.key}>
@@ -148,13 +214,14 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
                   className={classes || undefined}
                   // `data-goto` on a link row is what the sheet paints; a
                   // pressable row uses the sheet's other pressable-row hook,
-                  // `data-ln` (line 304: `.tbl tbody tr[data-ln]{cursor:pointer}`).
+                  // `data-ln` (line 304: `.tbl tbody tr[data-ln]{cursor:pointer}`),
+                  // which the `is-on` selector above also depends on.
                   data-goto={r.href}
                   data-ln={r.onSelect ? r.key : undefined}
                   role={r.href ? "link" : r.onSelect ? "button" : undefined}
                   tabIndex={act ? 0 : undefined}
                   aria-label={act ? r.ariaLabel : undefined}
-                  onClick={act}
+                  onClick={rowClick}
                   onKeyDown={keyDown}
                 >
                   {columns.map((c) => {
