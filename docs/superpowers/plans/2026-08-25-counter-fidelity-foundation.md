@@ -736,6 +736,37 @@ markup and must be rewritten onto these classes. `.drill` is the collapsible
 
 ---
 
+### Task 9: The ⌘K palette
+
+Found missing by Task 6, which wired the ask bar to a surface that is still
+entirely Tailwind utilities while the ported sheet already carries the
+prototype's full palette — **34 rules across 10 classes**: `.cmdkwrap`,
+`.cmdk`, `.cmdk__in`, `.cmdk__ctx`, `.cmdk__k`, `.cmdk__list`, `.cmdk__row`,
+`.cmdk__mid`, `.cmdk__pane`, `.cmdk__foot`. Neither Task 7 nor Task 8 covers
+it, so Phase B would have ended with the one surface every page mounts left
+unported.
+
+**Files:** rewrite `src/components/counter/ask/ask-surface.tsx`;
+tests in `tests/components/counter/ask/`.
+
+**Prototype source:** `cmdk()` at line 8664 of
+`docs/counter/counter-prototype.html`.
+
+**This is the task that must portal.** `AskSurface` is the only
+`position: fixed` element under `.ct-root`, and the addendum's inherited-hazard
+section explains why that is now a live problem rather than a theoretical one:
+every direct child of `.screen` carries a filling `transform: none`, which
+Chromium computes as the identity matrix, making each section a containing
+block for fixed descendants. Measured — a fixed child of a filled element sits
+at `top: 9` instead of `top: 0`. Portal to `document.body` and assert, in a
+browser, that the palette's box is the viewport's and not a section's.
+
+Keep the ⌘K binding, the context sentence (note 43 — it must never name a
+different range or store than what is on screen) and the existing
+`[data-askabout]` delegation that Task 6 wired the ask bar through.
+
+---
+
 ## Self-review
 
 **Spec coverage.** The addendum's Phase A is Tasks 1–2; Phase B is Tasks 3–8.
