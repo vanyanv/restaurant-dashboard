@@ -257,3 +257,44 @@ export function rangeLabel(r: DateRange, id: RangeId): string {
   if (r.start.getTime() === r.end.getTime()) return dayLabel(r.start, spansYears)
   return `${dayLabel(r.start, spansYears)} – ${dayLabel(r.end, spansYears)}`
 }
+
+const WEEKDAYS = [
+  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+]
+
+/**
+ * The page head's TITLE — "7 days to Aug 21", or "Tuesday's numbers" for a
+ * single day.
+ *
+ * The prototype's `P.<page>.title()` is a function of the RANGE, not the page's
+ * name (line 4217): "Overview" is what the breadcrumb calls this page, and a
+ * title that repeats it tells a reader nothing they did not already know from
+ * the lit rail item. What they do not know, and what every figure below is a
+ * claim about, is the window.
+ *
+ * Lives here, beside `rangeLabel`, because every Counter page's head will want
+ * it and a second copy is a second answer to the same question.
+ */
+export function rangeTitle(r: DateRange): string {
+  const n = dayCount(r)
+  if (n === 1) return `${WEEKDAYS[r.end.getDay()]}'s numbers`
+  return `${n} days to ${MONTHS[r.end.getMonth()]} ${r.end.getDate()}`
+}
+
+/**
+ * The page head's SUBTITLE — the prototype's `R.head()` (line 3651):
+ * "Hollywood · Aug 15 – 21 · vs the same 4 weekdays".
+ *
+ * Three facts, in the order a reader needs them: WHICH store, WHICH window,
+ * WHAT it is measured against. `.pagehead .sub` uppercases it, so the caller
+ * writes it in sentence case.
+ */
+export function rangeSubtitle(
+  storeName: string,
+  r: DateRange,
+  comparisonId: ComparisonId,
+): string {
+  const cmp = COMPARISONS.find((c) => c.id === comparisonId)
+  const window = rangeLabel(r, "custom")
+  return cmp ? `${storeName} · ${window} · ${cmp.label}` : `${storeName} · ${window}`
+}

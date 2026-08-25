@@ -1,25 +1,45 @@
 import Link from "next/link"
 import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
-import type { ReactNode } from "react"
+import { SyncChip, type SyncState } from "./sync-chip"
 
 /**
- * The header every Counter page sits under, inside `AppShell`'s topbar slot.
+ * The topbar carries THREE things and nothing else — the third of task 5's
+ * structural corrections. `deskFor()` (prototype line 8715):
  *
- * Note 48: "the route strings already knew the way." `/dashboard/invoices/I28517`
- * makes Invoices the parent — of the breadcrumb here AND the phone's back
- * button — and nothing about that is hand-wired. The breadcrumb is derived
- * from `pathname` against the same `NAV_GROUPS` / `isActive` the rail uses to
- * light its own current item, so the two can never name a different parent
- * for the same route. A page passing its own `parent` prop is exactly the
- * bug note 48 describes: fourteen detail pages went unreachable in the
- * prototype when a hand-wired parent drifted from the rail's own idea of the
- * hierarchy.
+ * ```
+ * <div class="topbar">{crumbs}<span class="spacer"></span>{syncChip}
+ *   <button class="askbtn" data-cmdopen>Ask the numbers <kbd>⌘K</kbd></button>
+ * </div>
+ * ```
+ *
+ * The page title, the subtitle, the store switcher and the date control are
+ * all gone from here: the first two are `PageHead`'s, the switcher is the
+ * rail's, and the date control is `PageHead`'s `.phactions`.
+ *
+ * `crumbs()` (prototype line 8213) opens with the STORE, then every step above
+ * this page, then the page itself in `<b>`:
+ *
+ * ```
+ * <span class="crumbs">Hollywood<span class="sep">/</span>
+ *   <button class="crumb">Invoices</button><span class="sep">/</span>
+ *   <b>I28517</b></span>
+ * ```
+ *
+ * Note 48: "the route strings already knew the way."
+ * `/dashboard/invoices/I28517` makes Invoices the parent, derived from
+ * `pathname` against the same `NAV_GROUPS`/`isActive` the rail uses to light
+ * its own current item — so the two can never name a different parent for the
+ * same route.
+ *
+ * The ask button opens the ⌘K surface through the SAME delegated
+ * `[data-askabout]` listener every `.askmini` uses (`ask-surface.tsx`), with an
+ * empty question: the prototype's `data-cmdopen` opens the palette with nothing
+ * typed. One listener, three ways in.
  */
 
 /**
- * The nav destination that owns `pathname` — the same match `Rail` makes
- * when it lights a rail item, reused rather than re-derived so the two can
- * never disagree about which destination a route belongs to.
+ * The nav destination that owns `pathname` — the same match `Rail` makes when
+ * it lights a rail item, reused rather than re-derived.
  */
 function owningDestination(pathname: string): NavItem | null {
   for (const group of NAV_GROUPS) {
@@ -30,57 +50,64 @@ function owningDestination(pathname: string): NavItem | null {
   return null
 }
 
-function formatSyncedAt(d: Date): string {
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-}
-
 export function Topbar({
   pathname,
-  title,
-  syncedAt,
-  children,
+  storeName,
+  leaf,
+  sync,
 }: {
   pathname: string
-  title: string
-  syncedAt?: Date
-  children?: ReactNode
+  /** The store the page is scoped to; the crumb trail starts there. */
+  storeName?: string
+  /**
+   * What this page is called in the trail. Defaults to the owning
+   * destination's own label, which is right for a top-level page; a detail
+   * route should pass the record's name ("I28517" beats "An invoice").
+   */
+  leaf?: string
+  /** Omitted renders no chip — a dot that means nothing is worse than none. */
+  sync?: { state: SyncState; at?: Date; now: Date }
 }) {
   const destination = owningDestination(pathname)
-  // A crumb only when the route runs deeper than the destination's own
-  // href — a top-level page (pathname === destination.href) has nothing
-  // above it worth naming.
+  // A crumb only when the route runs deeper than the destination's own href —
+  // a top-level page has nothing above it worth naming.
   const crumb = destination && pathname !== destination.href ? destination : null
+  const leafText = leaf ?? destination?.label ?? ""
 
   return (
-    <header className="flex items-center gap-4 border-b border-ct-line bg-ct-chrome px-4 py-2.5">
-      <div className="min-w-0 flex-1">
-        {crumb && (
-          <nav
-            aria-label="Breadcrumb"
-            className="mb-0.5 flex items-center gap-1.5 font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3"
-          >
-            <Link href={crumb.href} className="hover:text-ct-accent">
-              {crumb.label}
-            </Link>
-            <span aria-hidden="true" className="opacity-60">
+    <div className="topbar">
+      {/* `<nav class="crumbs">` rather than the prototype's `<span>`: it
+          computes identically (the class sets `display:flex`) and it is what
+          makes the trail a breadcrumb landmark. */}
+      <nav aria-label="Breadcrumb" className="crumbs">
+        {storeName ? (
+          <>
+            {storeName}
+            <span className="sep" aria-hidden="true">
               /
             </span>
-            <span className="truncate text-ct-ink-2">{title}</span>
-          </nav>
-        )}
-        <h1 className="truncate font-ct-display text-ct-lg font-bold text-ct-ink">
-          {title}
-        </h1>
-      </div>
+          </>
+        ) : null}
+        {crumb ? (
+          <>
+            <Link className="crumb" href={crumb.href}>
+              {crumb.label}
+            </Link>
+            <span className="sep" aria-hidden="true">
+              /
+            </span>
+          </>
+        ) : null}
+        <b>{leafText}</b>
+      </nav>
 
-      {syncedAt && (
-        <p className="flex items-center gap-1.5 whitespace-nowrap font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-ct-good" />
-          Synced {formatSyncedAt(syncedAt)}
-        </p>
-      )}
+      <span className="spacer" />
 
-      {children && <div className="flex items-center gap-2">{children}</div>}
-    </header>
+      {sync ? <SyncChip state={sync.state} at={sync.at} now={sync.now} /> : null}
+
+      <button className="askbtn" type="button" data-askabout="">
+        Ask the numbers <kbd>⌘K</kbd>
+      </button>
+    </div>
   )
 }

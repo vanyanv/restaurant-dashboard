@@ -162,7 +162,7 @@ export function Section<T>({
             nothing — and it carries the question with it so the Ask surface
             does not have to guess. */}
         {withData && question ? (
-          <button type="button" className="askmini" data-ask-about={question}>
+          <button type="button" className="askmini" data-askabout={question}>
             <AskGlyph />
             Ask about this
           </button>

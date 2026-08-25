@@ -54,7 +54,7 @@ the button check above is the one that actually exercises it.)
 
 This is the one to verify end to end rather than trust the delegation
 test, because note 55 is fifty buttons that were wired to nothing. Clicked
-the real `<button data-ask-about="Prime cost">Ask about this</button>`
+the real `<button data-askabout="Prime cost">Ask about this</button>`
 rendered by `Section` for the "Prime cost" section. The accessibility
 snapshot immediately after:
 
@@ -67,7 +67,7 @@ snapshot immediately after:
 ```
 
 The dialog opened, the textbox held focus, and its value was `Prime cost` —
-the section's own title, carried by `data-ask-about` and picked up by the
+the section's own title, carried by `data-askabout` and picked up by the
 surface's delegated `document` click listener with no prop on `Section` at
 any point in the chain. `Section` is unmodified from Plan 2; nothing in
 this plan touched it.

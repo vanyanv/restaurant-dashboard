@@ -4,18 +4,18 @@ import { useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   AppShell,
-  EntryItem,
-  Topbar,
-  StoreSwitcher,
+  Dispatch,
   DateControl,
   Section,
   Strip,
   Figure,
   Table,
+  type DispatchItem,
+  type RailUser,
   type SwitchableStore,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { rangeLabel, rangeSubtitle, rangeTitle, stepRange } from "@/lib/counter/date-range"
 import { money, pct, delta } from "@/lib/counter/format"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -51,10 +51,51 @@ export interface OverviewClientSections {
   modelCall: SectionData<null>
 }
 
+/**
+ * The dispatch line's facts, and nowhere else to get them.
+ *
+ * The prototype's three are "3 need you · 1,284 orders trading · synced 12 min
+ * ago". We have none of those yet: the needs-you count is an owed section, the
+ * order count lives inside a `SectionData` this page may not open (a page never
+ * branches on `.status` — `npm run tokens` fails the build on it), and this
+ * application has no last-sync reading at all. What it DOES have, at page level
+ * and with no status to inspect, is the store lifecycle — which is exactly the
+ * third thing the design's own note asks this line for: "whether the figures
+ * can be trusted". A pre-open store is why a page below is empty, and saying so
+ * here is the difference between an empty dashboard and a broken one.
+ *
+ * Everything printed is derived. Nothing is invented, and the line goes short
+ * rather than padded.
+ */
+function dispatchItems(
+  stores: SwitchableStore[],
+  selected: SwitchableStore | null,
+): DispatchItem[] {
+  if (selected) {
+    if (selected.stage === "pre_open") {
+      return [{ tone: "hot", text: `${selected.name} is not trading yet — nothing below counts it` }]
+    }
+    if (selected.stage === "warming_up") {
+      return [{ tone: "quiet", text: `${selected.name} is warming up — its figures are still settling` }]
+    }
+    return [{ tone: "quiet", text: `${selected.name} is trading` }]
+  }
+  const trading = stores.filter((s) => s.stage === "trading").length
+  const items: DispatchItem[] = [
+    { tone: "quiet", text: `${trading} of ${stores.length} stores trading` },
+  ]
+  const rest = stores.length - trading
+  if (rest > 0) {
+    items.push({ tone: "quiet", text: `${rest} not trading yet, and nothing below counts them` })
+  }
+  return items
+}
+
 export function CounterOverviewClient({
   pathname,
   params: paramsString,
   stores,
+  user,
   today,
   sections,
 }: {
@@ -73,6 +114,8 @@ export function CounterOverviewClient({
    */
   params: string
   stores: SwitchableStore[]
+  /** The signed-in reader, for the rail's account row. */
+  user: RailUser
   today: Date
   sections: OverviewClientSections
 }) {
@@ -98,120 +141,109 @@ export function CounterOverviewClient({
     <AppShell
       pathname={pathname}
       params={params}
-      storeName={selectedStore?.name ?? null}
-      today={today}
-      topbar={
-        <Topbar pathname={pathname} title="Overview">
-          <StoreSwitcher
-            stores={stores}
-            selectedId={counterParams.storeId}
-            onSelect={(id) => push({ storeId: id })}
-          />
-          <DateControl
-            presetId={counterParams.presetId}
-            comparisonId={counterParams.comparisonId}
-            range={counterParams.range}
-            onPreset={(id) => push({ presetId: id })}
-            onComparison={(id) => push({ comparisonId: id })}
-            onStep={(direction) => push({ range: stepRange(counterParams.range, direction) })}
-          />
-        </Topbar>
+      // The title is a sentence about the WINDOW — "7 days to Aug 21" — not the
+      // word "Overview", which the breadcrumb already says. Both strings come
+      // from `date-range.ts` so no second page can word them differently.
+      title={rangeTitle(counterParams.range)}
+      sub={rangeSubtitle(
+        selectedStore?.name ?? "All stores",
+        counterParams.range,
+        counterParams.comparisonId,
+      )}
+      crumbLeaf="Overview"
+      actions={
+        <DateControl
+          presetId={counterParams.presetId}
+          comparisonId={counterParams.comparisonId}
+          range={counterParams.range}
+          onPreset={(id) => push({ presetId: id })}
+          onComparison={(id) => push({ comparisonId: id })}
+          onStep={(direction) => push({ range: stepRange(counterParams.range, direction) })}
+          onRange={(range) => push({ range })}
+        />
       }
+      stores={stores}
+      selectedStoreId={counterParams.storeId}
+      onSelectStore={(id) => push({ storeId: id })}
+      storeName={selectedStore?.name ?? null}
+      user={user}
+      today={today}
     >
-      <div className="flex flex-col gap-5 p-5">
-        <EntryItem index={0}>
-          {/* A single Figure, not a Strip — Strip's grid is 2/4 tracks wide
-              and one cell inside it left the other tracks as bare hairline
-              background (a grey rectangle beside the number). "lead" size
-              is exactly for this: the one headline figure on a page.
+      {/* `.dispatch` is the first thing inside the screen, above everything.
+          No `.go` action: the prototype's points at its alerts queue and ours
+          would point at `/dashboard/needs-you`, which `nav.ts` declares and
+          this application does not serve yet. A link to a 404 is worse than no
+          link. */}
+      <Dispatch items={dispatchItems(stores, selectedStore)} />
 
-              The `.headline` wrapper is not decoration. `size="lead"` emits
-              the prototype's `<div class="fig">`, and every rule that sizes a
-              lead figure is written as a DESCENDANT of `.headline`
-              (`.headline .fig`, `.headline .k`, `.headline .v` — see
-              counter-components.css). Outside one, `.fig` has no display:grid
-              and the label and the figure run together at body size. The
-              prototype never emits a `.fig` anywhere else either. The real
-              headline block — two figures and the `.say` sentence beside them
-              — is a later task; this is the one-child form of the same
-              element. */}
-          <Section title="Net sales" data={sections.sales} askAbout>
-            {(d) => (
-              <div className="headline">
-                <Figure label="Net sales" value={money(d.netSales)} size="lead" />
-              </div>
-            )}
-          </Section>
-        </EntryItem>
+      {/* No `EntryItem` wrappers. `.screen > *` in the ported sheet already
+          staggers these six in reading order, with its own reduced-motion
+          branch — see the note on `EntryItem` itself. */}
+      <Section title="Net sales" data={sections.sales} askAbout>
+        {(d) => (
+          <div className="headline">
+            <Figure label="Net sales" value={money(d.netSales)} size="lead" />
+          </div>
+        )}
+      </Section>
 
-        <EntryItem index={1}>
-          <Section title="Sales per labour hour" data={sections.splh}>
-            {() => null}
-          </Section>
-        </EntryItem>
+      <Section title="Sales per labour hour" data={sections.splh}>
+        {() => null}
+      </Section>
 
-        <EntryItem index={2}>
-          <Section
-            title="Stores"
-            meta={rangeLabel(counterParams.range, counterParams.presetId)}
-            data={sections.ledger}
-            askAbout="the per-store ledger"
-            // `raw()` in the prototype: a table fills its section edge to
-            // edge. `.tbl` rules its own rows the full width of the box, so a
-            // `.sec__body` gutter around it would stop every hairline 15px
-            // short of the section's border. Every `sec(… tbl(…) …)` call in
-            // the prototype does the same.
-            pad={false}
-          >
-            {(rows) => (
-              <Table
-                columns={[
-                  { key: "store", label: "Store" },
-                  { key: "net", label: "Net sales", numeric: true },
-                  { key: "cogsPct", label: "COGS %", numeric: true },
-                  { key: "target", label: "vs target", numeric: true },
-                ]}
-                rows={rows.map((r) => ({
-                  key: r.storeId,
-                  cells: {
-                    store: r.store,
-                    net: money(r.net),
-                    cogsPct: pct(r.cogsPct, { scaled: true }),
-                    target: delta(r.deltaVsTargetPp, { scaled: true }),
-                  },
-                }))}
-              />
-            )}
-          </Section>
-        </EntryItem>
+      <Section
+        title="Stores"
+        meta={rangeLabel(counterParams.range, counterParams.presetId)}
+        data={sections.ledger}
+        askAbout="the per-store ledger"
+        // `raw()` in the prototype: a table fills its section edge to
+        // edge. `.tbl` rules its own rows the full width of the box, so a
+        // `.sec__body` gutter around it would stop every hairline 15px
+        // short of the section's border. Every `sec(… tbl(…) …)` call in
+        // the prototype does the same.
+        pad={false}
+      >
+        {(rows) => (
+          <Table
+            columns={[
+              { key: "store", label: "Store" },
+              { key: "net", label: "Net sales", numeric: true },
+              { key: "cogsPct", label: "COGS %", numeric: true },
+              { key: "target", label: "vs target", numeric: true },
+            ]}
+            rows={rows.map((r) => ({
+              key: r.storeId,
+              cells: {
+                store: r.store,
+                net: money(r.net),
+                cogsPct: pct(r.cogsPct, { scaled: true }),
+                target: delta(r.deltaVsTargetPp, { scaled: true }),
+              },
+            }))}
+          />
+        )}
+      </Section>
 
-        <EntryItem index={3}>
-          <Section title="Invoices" data={sections.invoices} askAbout>
-            {(d) => (
-              <Strip
-                cells={[
-                  { label: "Spend", value: money(d.spend) },
-                  { label: "Invoices", value: d.count.toLocaleString("en-US") },
-                  { label: "Needs review", value: d.needsReview.toLocaleString("en-US") },
-                  { label: "Avg invoice", value: money(d.avgInvoice) },
-                ]}
-              />
-            )}
-          </Section>
-        </EntryItem>
+      <Section title="Invoices" data={sections.invoices} askAbout>
+        {(d) => (
+          <Strip
+            cells={[
+              { label: "Spend", value: money(d.spend) },
+              { label: "Invoices", value: d.count.toLocaleString("en-US") },
+              { label: "Needs review", value: d.needsReview.toLocaleString("en-US") },
+              { label: "Avg invoice", value: money(d.avgInvoice) },
+            ]}
+          />
+        )}
+      </Section>
 
-        <EntryItem index={4}>
-          <Section title="Needs you" data={sections.needsYou}>
-            {() => null}
-          </Section>
-        </EntryItem>
+      <Section title="Needs you" data={sections.needsYou}>
+        {() => null}
+      </Section>
 
-        <EntryItem index={5}>
-          <Section title="The model's call" data={sections.modelCall}>
-            {() => null}
-          </Section>
-        </EntryItem>
-      </div>
+      <Section title="The model's call" data={sections.modelCall}>
+        {() => null}
+      </Section>
     </AppShell>
   )
 }

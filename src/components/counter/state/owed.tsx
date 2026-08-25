@@ -7,19 +7,27 @@
  *
  * OUR sixth state — the prototype has five and no equivalent of this one, so
  * there is no `bodyNotComputed()` to port and this keeps its own treatment.
- * What DID change in the Section port is where it sits: `Section` now renders
- * it inside `.sec__body`, where the loading and failed bodies go, rather than
- * loose in a section that had no body element at all. It has never replaced
- * the section, and must not — the head is what tells a reader WHICH piece of
- * work is owed.
+ *
+ * IT BRINGS NO PADDING AND NO BOX OF ITS OWN. It renders inside `.sec__body`,
+ * where the loading and failed bodies go, and `.sec__body` is already
+ * `padding:13px 15px`. The first version wrapped the text in a dashed,
+ * chrome-filled `p-6` panel, which put a second 24px inset inside the first and
+ * — on an Overview where three of six sections are owed — made the thing the
+ * page CANNOT show the loudest element on it. Compare `.failed`, the state
+ * nearest to this one: `padding:6px 0`, no border, no fill. This follows it.
+ *
+ * Deliberately NOT given the `.empty` class, even though it is the same kind of
+ * absence. `.empty` is a fidelity landmark, and `e2e/fidelity/landmarks.ts`
+ * counts one: three owed sections would report as three EXTRA `.empty`
+ * landmarks — a measurement of our data gap, reported as a DOM defect.
  */
 export function Owed({ owed }: { owed: string }) {
   return (
-    <div className="rounded-ct border border-dashed border-ct-line-strong bg-ct-chrome p-6 text-center">
+    <div>
       <p className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
         Not computed yet
       </p>
-      <p className="mx-auto mt-2 max-w-prose text-ct-body text-ct-ink-2">
+      <p className="mt-1.5 max-w-[52ch] text-ct-cap text-ct-ink-2">
         {owed} — designed, not yet built. Nothing is shown rather than a figure that would be wrong.
       </p>
     </div>

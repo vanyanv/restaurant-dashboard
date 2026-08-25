@@ -171,7 +171,7 @@ describe("Section", () => {
       </Section>,
     )
     expect(screen.getByRole("button", { name: /ask about this/i })).toHaveAttribute(
-      "data-ask-about",
+      "data-askabout",
       "Net sales",
     )
     unmount()
@@ -181,7 +181,7 @@ describe("Section", () => {
       </Section>,
     )
     expect(screen.getByRole("button", { name: /ask about this/i })).toHaveAttribute(
-      "data-ask-about",
+      "data-askabout",
       "the per-store ledger",
     )
   })
@@ -196,7 +196,7 @@ describe("Section", () => {
       </Section>,
     )
     expect(screen.getByRole("button", { name: /ask about this/i })).toHaveAttribute(
-      "data-ask-about",
+      "data-askabout",
       'why is food cost over "plan"?',
     )
   })

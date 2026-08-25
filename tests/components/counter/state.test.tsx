@@ -96,3 +96,23 @@ describe("Owed", () => {
     expect(screen.queryByText("0")).toBeNull()
   })
 })
+
+describe("Owed, after task 5's de-padding", () => {
+  it("brings no box and no padding of its own — .sec__body already inset it", () => {
+    // Three of six Overview sections are owed, and each one was a dashed,
+    // chrome-filled `p-6` panel sitting inside `.sec__body`'s own 13/15px.
+    // That put the thing the page CANNOT show at the visual centre of it.
+    // `.failed`, the state nearest to this one, is `padding:6px 0` with no
+    // border and no fill; this follows it.
+    const { container } = render(<Owed owed="the alerts queue" />)
+    const box = container.firstElementChild as HTMLElement
+    expect(box.className).toBe("")
+  })
+
+  it("is NOT given the .empty class, even though it is the same kind of absence", () => {
+    // `.empty` is a fidelity landmark. Three owed sections would report as
+    // three EXTRA `.empty` landmarks — our data gap, reported as a DOM defect.
+    const { container } = render(<Owed owed="the alerts queue" />)
+    expect(container.querySelector(".empty")).toBeNull()
+  })
+})
