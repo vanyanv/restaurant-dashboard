@@ -177,13 +177,20 @@ describe("toQueryBounds", () => {
 })
 
 describe("isoDay / parseIsoDay", () => {
-  it("round-trips a local date without a UTC shift", () => {
-    // 2026-01-01 at 00:30 local. toISOString() on this in any timezone west
-    // of UTC returns the PREVIOUS day — which is exactly the bug this pair
-    // exists to avoid.
-    const d = new Date(2026, 0, 1, 0, 30)
-    expect(isoDay(d)).toBe("2026-01-01")
-    expect(parseIsoDay(isoDay(d))).toEqual(new Date(2026, 0, 1))
+  it("reads local calendar fields, not UTC ones", () => {
+    // A `toISOString().slice(0, 10)` implementation shifts the date whenever
+    // the local offset crosses a midnight: BACKWARDS east of UTC at early
+    // times, FORWARDS west of UTC at late ones. Asserting one time of day
+    // only catches one of those directions — and this repo's own machines sit
+    // west of UTC, where the early-morning case agrees with UTC and proves
+    // nothing. Both ends of the same local day is the assertion that holds in
+    // every zone. (Under TZ=UTC the two implementations genuinely agree;
+    // there is no bug to catch there.)
+    const early = new Date(2026, 0, 1, 0, 30)
+    const late = new Date(2026, 0, 1, 23, 59, 59, 999)
+    expect(isoDay(early)).toBe("2026-01-01")
+    expect(isoDay(late)).toBe("2026-01-01")
+    expect(parseIsoDay(isoDay(late))).toEqual(new Date(2026, 0, 1))
   })
 
   it("pads single-digit months and days", () => {
