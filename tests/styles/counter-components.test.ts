@@ -290,6 +290,57 @@ describe("counter-components.css", () => {
     expect(aliasRule?.prelude).toBe(".ct-root, .frame, .pframe, .login")
   })
 
+  /*
+   * `.ct-root` carries `.frame`'s BASE as well as its tokens.
+   *
+   * The port originally gave `.ct-root` the token declarations alone and left
+   * the base — type, ink, ground, container — on `.frame`, which nothing in
+   * this application carries. The whole base of the design system was
+   * therefore dead: every ported rule that sets a size but no colour painted
+   * in the document's ink (near-black on near-black in dark theme), figures
+   * inherited 16px/24px/`normal` instead of 13px/19.5px/tabular, and every
+   * `@container fr` rule in the file — the strip's 6->3->2 reflow among them —
+   * never fired, because `container-name: fr` is declared in exactly one
+   * place. Each assertion below is one of those failures, pinned.
+   */
+  it("gives .ct-root the base .frame carries, so the design has a ground to stand on", () => {
+    const base = RULES.find((r) => r.prelude === ".ct-root")
+    expect(base, "counter-components.css declares no .ct-root base rule").toBeDefined()
+    for (const decl of [
+      "font-family: var(--sans)",
+      "font-size: var(--t-body)",
+      "line-height: 1.5",
+      // Without this, a column of figures does not align — and no figure
+      // restates it, because the prototype's figures do not either.
+      "font-variant-numeric: tabular-nums lining-nums",
+      // Without these two, a ported rule that sets a size but no colour paints
+      // in whatever ink the document has.
+      "color: var(--ink)",
+      "background: var(--paper)",
+    ]) {
+      expect(base!.body).toContain(decl)
+    }
+  })
+
+  it("names AND types the container, or every @container rule in the file is dead", () => {
+    const base = RULES.find((r) => r.prelude === ".ct-root")!
+    expect(base.body).toContain("container-name: fr")
+    expect(base.body).toContain("container-type: inline-size")
+    // Not a hypothetical: the file is written against this container.
+    const queries = [...CSS.matchAll(/@container\s+fr\b/g)].length
+    expect(queries).toBeGreaterThan(10)
+  })
+
+  it("does NOT give .ct-root .frame's demo-card layout", () => {
+    // `.frame` is a page-of-documentation wrapper: a fixed 212px grid column,
+    // a border, a shadow and a 840px floor. An application shell composes its
+    // own layout, and porting these would fight it.
+    const base = RULES.find((r) => r.prelude === ".ct-root")!
+    for (const banned of ["display:", "grid-template-columns", "min-height", "box-shadow", "border:"]) {
+      expect(base.body).not.toContain(banned)
+    }
+  })
+
   it("is imported by globals.css after counter.css, so the aliases resolve", () => {
     const counterAt = GLOBALS.indexOf('@import "../styles/counter.css"')
     const componentsAt = GLOBALS.indexOf('@import "../styles/counter-components.css"')

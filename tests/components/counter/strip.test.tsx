@@ -71,12 +71,14 @@ describe("Figure — the prototype's cell, in the prototype's order", () => {
     expect(container.firstElementChild!.className).toBe("fig")
   })
 
-  it("every figure carries tabular lining numerals, or columns do not line up", () => {
-    // The ported stylesheet declares these on `.frame`, the prototype's own
-    // root — not on `.ct-root` — so nothing inherits them here.
+  it("emits a bare `.v`, exactly as the prototype does — no numeral utility", () => {
+    // Tabular lining numerals are inherited from the root, not restated per
+    // figure: `counter-components.css`'s `.ct-root` block declares
+    // `font-variant-numeric: tabular-nums lining-nums`, and
+    // tests/styles/counter-components.test.ts is what holds it there. A
+    // utility here would be a second opinion about the same property.
     render(<Figure label="Net sales" value="$7,468" />)
-    expect(screen.getByText("$7,468").className).toMatch(/tabular-nums/)
-    expect(screen.getByText("$7,468").className).toMatch(/lining-nums/)
+    expect(screen.getByText("$7,468").className).toBe("v")
   })
 
   it("renders label, value and caption", () => {

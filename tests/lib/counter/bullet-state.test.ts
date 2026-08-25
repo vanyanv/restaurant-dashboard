@@ -110,6 +110,25 @@ describe("bstat — a target, whose span is 12% of its own magnitude", () => {
     expect(bstat(target(1012))).toBe("ok")
   })
 
+  it("the two multipliers COMPOUND — the near zone is 1.2% of the target, not 12%", () => {
+    /*
+     * The brief for this task stated both constants without noticing they
+     * multiply, and reading 0.12 as the warning width is off by a factor of
+     * ten in exactly the direction that matters: it makes "at the edge" fire
+     * on figures that are comfortably fine.
+     *
+     * This fixture is chosen to DISCRIMINATE. A figure 5% above its target is
+     * unambiguously ok. Under a 12% reading the near zone runs to 1120 and
+     * this same figure reads "at the edge". If someone "fixes" bstat back to
+     * the brief, this is the test that stops them.
+     */
+    expect(bstat(target(1050))).toBe("ok")
+    expect(bstat(target(1100))).toBe("ok")
+    // ...while the real 1.2% boundary still behaves:
+    expect(bstat(target(1011.9))).toBe("near")
+    expect(bstat(target(1012))).toBe("ok")
+  })
+
   it("mirrors for a target where good is low", () => {
     expect(bstat(target(1000.001, "low"))).toBe("breach")
     expect(bstat(target(1000, "low"))).toBe("near")
