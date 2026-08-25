@@ -5,7 +5,7 @@
 // constant, so it can't drift away from the number the impact was computed over.
 
 import { describe, it, expect } from "vitest"
-import { deadlineFor } from "@/app/dashboard/decisions/lib/deadline"
+import { deadlineFor } from "@/app/dashboard/(editorial)/decisions/lib/deadline"
 
 const TODAY = "2026-08-18" // a Tuesday
 

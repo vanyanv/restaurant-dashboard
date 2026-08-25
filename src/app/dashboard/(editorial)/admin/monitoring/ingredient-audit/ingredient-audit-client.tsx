@@ -19,7 +19,7 @@ import type {
 } from "@/lib/monitoring/ingredient-audit"
 
 const PdfViewerClient = dynamic(
-  () => import("@/app/dashboard/invoices/[id]/components/pdf-viewer-client"),
+  () => import("@/app/dashboard/(editorial)/invoices/[id]/components/pdf-viewer-client"),
   {
     ssr: false,
     loading: () => (

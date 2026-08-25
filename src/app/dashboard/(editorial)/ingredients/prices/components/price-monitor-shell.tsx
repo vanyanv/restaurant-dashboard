@@ -4,7 +4,7 @@ import { useDeferredValue, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { AlertTriangle, Check, ChevronRight, Lock, Search, TrendingUp } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { prettifyIngredientName } from "@/app/dashboard/recipes/components/ingredient-picker-utils"
+import { prettifyIngredientName } from "@/app/dashboard/(editorial)/recipes/components/ingredient-picker-utils"
 import type {
   IngredientPriceIssueStatus,
   IngredientPriceMonitoringData,

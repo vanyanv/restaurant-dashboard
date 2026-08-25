@@ -3,7 +3,7 @@ import Link from "next/link"
 import { ArrowLeft, Receipt } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
+import { EditorialTopbar } from "@/app/dashboard/(editorial)/components/editorial-topbar"
 import {
   KpiCardsSkeleton,
   ChartSkeleton,

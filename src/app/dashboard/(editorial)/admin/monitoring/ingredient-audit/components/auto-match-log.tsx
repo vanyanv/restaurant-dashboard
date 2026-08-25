@@ -14,7 +14,7 @@
 import { useState, useTransition } from "react"
 import { ChevronDown, Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { prettifyIngredientName } from "@/app/dashboard/recipes/components/ingredient-picker-utils"
+import { prettifyIngredientName } from "@/app/dashboard/(editorial)/recipes/components/ingredient-picker-utils"
 import { undoAutoMatch } from "@/app/actions/ingredient-auto-match-actions"
 import type { RecentAutoMatch } from "@/app/actions/ingredient-auto-match-actions"
 

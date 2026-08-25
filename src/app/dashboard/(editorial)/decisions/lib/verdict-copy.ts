@@ -13,7 +13,7 @@
  * own test. The page always has a verdict.
  */
 
-import type { GapStatus, Vitals } from "@/app/dashboard/decisions/lib/vitals"
+import type { GapStatus, Vitals } from "@/app/dashboard/(editorial)/decisions/lib/vitals"
 
 /** The masthead sets the verdict at display size; past this it wraps badly. */
 export const VERDICT_MAX_CHARS = 170

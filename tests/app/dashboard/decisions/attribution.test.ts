@@ -12,7 +12,7 @@ import { describe, it, expect } from "vitest"
 import {
   mergeAttributions,
   parseAttribution,
-} from "@/app/dashboard/decisions/lib/attribution"
+} from "@/app/dashboard/(editorial)/decisions/lib/attribution"
 
 const wf = (base: number, groups: [string, number][]) => ({
   base,

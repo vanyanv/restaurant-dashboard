@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SectionErrorBoundary } from "@/components/analytics/section-error"
-import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
+import { EditorialTopbar } from "@/app/dashboard/(editorial)/components/editorial-topbar"
 import { CogsDateControls } from "../components/cogs-date-controls"
 import { TargetChip } from "../components/target-chip"
 import { OperatorLedgerSection } from "../components/sections/operator-ledger-section"

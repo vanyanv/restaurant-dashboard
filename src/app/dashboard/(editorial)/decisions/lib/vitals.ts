@@ -14,8 +14,8 @@
  */
 
 import { SPLH_TOLERANCE } from "@/lib/splh"
-import type { LaborLaneStatus } from "@/app/dashboard/decisions/lib/labor-lane"
-import type { Scorecard } from "@/app/dashboard/decisions/lib/scorecard"
+import type { LaborLaneStatus } from "@/app/dashboard/(editorial)/decisions/lib/labor-lane"
+import type { Scorecard } from "@/app/dashboard/(editorial)/decisions/lib/scorecard"
 
 /** The slice of a `DecisionDay` this reading needs. */
 export interface VitalsDay {

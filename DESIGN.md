@@ -32,7 +32,7 @@ presence in the tree for it still being the target design.
 Two tiers, three faces on Counter pages — four are loaded overall. This is
 unchanged from the old system's typography rule, with the display face
 swapped. `src/app/layout.tsx` adds Bricolage Grotesque, but
-`src/app/dashboard/layout.tsx`, `src/app/login/layout.tsx`,
+`src/app/dashboard/(editorial)/layout.tsx`, `src/app/login/layout.tsx`,
 `src/app/signup/layout.tsx` and `src/app/(mobile)/m/layout.tsx` all still
 also load Fraunces — a deliberate, sound deviation, since removing it would
 break the ~59 still-unrebuilt editorial pages that depend on it; it is
@@ -571,7 +571,55 @@ Overview (`/dashboard`, `src/app/dashboard/page.tsx` +
 this way — see `docs/counter/overview-verification.md` for what it looks
 like end to end in a real browser, including a second real bug that
 session found (`Strip`'s fixed 2/4-column grid leaves bare hairline
-tracks when fed fewer cells than its layout expects) and the still-open
-structural gap that is not this page's to fix: `/dashboard` currently
-renders inside two navigation shells at once, because the pre-Counter
-`src/app/dashboard/layout.tsx` hasn't been rebuilt yet.
+tracks when fed fewer cells than its layout expects) and the structural gap
+found alongside it — `/dashboard` rendering inside two navigation shells at
+once, with a ⌘K collision to match — which the `(editorial)` route group
+below fixed.
+
+## The `(editorial)` route group, and how a page migrates
+
+`src/app/dashboard/(editorial)/` holds every page still on the pre-Counter
+design — ~19 directories as of the 2026-08-25 split, everything under
+`src/app/dashboard/` except `page.tsx` and `counter-overview-client.tsx`.
+Its `layout.tsx` carries the editorial chrome: the cream `AppSidebarClient`
+sidebar, `ChatDrawerProvider`/`ChatDrawerClient` (the "Owner Analyst" drawer
+and its own ⌘K listener), `WelcomeMarquee`, the four editorial stylesheets,
+and Fraunces. `src/app/dashboard/layout.tsx` — the layout Counter pages
+get instead — carries only what every route under `/dashboard` needs
+regardless of design system: a session read and `PageViewTracker`.
+
+Parenthesised segments are a Next.js route group: they organise the file
+tree without becoming a URL segment, so `(editorial)/orders/page.tsx` still
+serves `/dashboard/orders`, not `/dashboard/(editorial)/orders` — verified
+against the real `next build` route manifest, not assumed. This is also the
+mechanism for the rest of the Counter migration: a page moves off the old
+design by moving out of `(editorial)/` (and, for a `page.tsx`, being
+rewritten against the rules on this page) — no routing change, no redirect,
+just `git mv` and a rewrite. `ls src/app/dashboard/(editorial)` answers
+"what's still editorial" at any point in the migration.
+
+Before this split, `/dashboard` rendered inside two navigation shells at
+once — Counter's own `AppShell` nested inside the pre-Counter
+`AppSidebarClient` sidebar, because the one `dashboard/layout.tsx` wrapped
+every route, Counter's new Overview page included. The same layout also
+mounted `ChatDrawerClient`, whose own ⌘K listener fired alongside Counter's
+`AskSurface` on every route, Counter's included — pressing ⌘K on
+`/dashboard` opened both dialogs at once. Moving the chrome into
+`(editorial)/layout.tsx` fixes both: Counter routes no longer mount
+`AppSidebarClient` or `ChatDrawerClient` at all, so there is exactly one
+shell and one ⌘K target per route, editorial or Counter. See
+`docs/counter/overview-verification.md` for what was measured after the
+fix (route manifest, browser screenshots, ⌘K on each kind of route,
+console errors, bundle size).
+
+A legacy page moved into `(editorial)/` without being rewritten keeps its
+`npm run tokens` LEGACY exemption: `scripts/counter-lint.ts`'s baseline
+comparison tolerates the route-group segment in the file path and the
+mechanical `@/app/dashboard/(editorial)/...` import-path rewrite the move
+itself forces on the handful of files that reach a moved sibling by
+absolute import — see `stripRouteGroups` and
+`normalizeRouteGroupImports` in that file for the exact mechanism, and why
+`git cat-file`, not `git show`, is used for the baseline lookup (a
+dynamic-route folder like `[id]` is valid pathspec glob syntax, and `git
+show <rev>:<path>` silently returns an empty, successful result for a
+non-existent bracketed path instead of failing).
