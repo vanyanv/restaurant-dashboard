@@ -1,75 +1,86 @@
-import { TABULAR } from "@/lib/counter/format"
-
 /**
- * A measure against a published reference.
+ * A fixed-domain meter, so a column of them can be compared down the page.
  *
- * Note 35: colour the OVERSHOOT, not the measure. Painting the whole bar red on
- * a breach reads as "a lot of bad"; painting only the distance past the line
- * reads as "past the line by this much", which is the actual information.
+ * Ported from `meter()` at line 5423 of `docs/counter/counter-prototype.html`:
  *
- * `format` and `target` are pre-formatted text, not a function — every other
- * primitive (`Figure.value`) takes a string, and formatting belongs to
- * `@/lib/counter/format`, not to a closure passed in as a prop.
+ * ```
+ * <span class="mtr is-over">
+ *   <i class="mtr__f" style="width:62.4%"></i>
+ *   <i class="mtr__t" style="left:55.0%"></i>
+ * </span>
+ * ```
+ *
+ * ## What changed, and why this was rewritten
+ *
+ * The previous version drew a label row, a track and a caption out of Tailwind
+ * utilities (`bg-ct-sunk`, `bg-ct-ink-3`, `data-meter-fill`) and emitted none
+ * of the ported sheet's four rules. It rendered plausibly and matched nothing:
+ * `.mtr` is one of the fidelity gate's landmark classes and nothing in the tree
+ * emitted it. Phase B's rule is that a component that renders unstyled has the
+ * wrong DOM — and the inverse failure, a component styled by utilities that
+ * duplicate the sheet, is the same defect with the evidence hidden.
+ *
+ * The label and the caption went with it, because the prototype's meter has
+ * neither: it is a bare mark that sits INSIDE a table cell or beside a row's
+ * own label, and drawing its own label row made it impossible to put one in a
+ * column. The caller supplies the words it already has.
+ *
+ * ## Fixed domain is the whole point
+ *
+ * `lo` and `hi` are the domain of the COLUMN, not of this row. Scaling each
+ * meter to its own value would make a stack of them look identical and mean
+ * nothing — the reason they can be read down a page is that 60% is the same
+ * distance in every one of them.
+ *
+ * ## Note 35, and where the overshoot colour actually lives
+ *
+ * `is-over` recolours the fill, and it is set by the CALLER, not derived from
+ * `value > target`: "over" depends on which direction is bad, which the meter
+ * cannot know (a sales meter under its target is the bad one). The
+ * paint-only-the-overshoot treatment note 35 asks for belongs to `.blt`
+ * (`Bullet`), which draws `.blt__over` as its own segment; `.mtr` is the
+ * smaller mark used where a bullet does not fit, and the ported sheet colours
+ * its whole fill. That is the prototype's own split and it is kept.
  */
 export function Meter({
-  label,
   value,
-  reference,
-  max,
-  format,
+  lo,
+  hi,
   target,
+  over,
+  label,
 }: {
-  label: string
   value: number
-  reference: number
-  max: number
-  /** Pre-formatted value, e.g. `"56.2%"`. */
-  format: string
-  /** Pre-formatted reference, e.g. `"60.0%"`. Defaults to `format`. */
-  target?: string
+  /** The bottom of the shared domain. */
+  lo: number
+  /** The top of the shared domain. */
+  hi: number
+  /** The published reference, drawn as a tick. Omitted when there is none. */
+  target?: number
+  /** Whether this reading is on the wrong side of its reference. The caller's call. */
+  over?: boolean
+  /**
+   * The sentence a screen reader gets. The prototype's `.mtr` has none — its
+   * sibling mark `.blt` emits `role="img" aria-label`, so the omission reads as
+   * an oversight rather than a decision, and a bar with no accessible name is
+   * simply absent from the reading.
+   */
+  label: string
 }) {
-  // `max === 0` is a `ready` state with nothing to divide by (no ceiling
-  // published yet) — every width collapses to 0% rather than NaN/Infinity%.
-  // Widths are also clamped to [0, 100]: a negative value would otherwise
-  // produce a negative width, and a value past `max` would paint outside the
-  // track now that the track clips its own overflow.
-  const pctOf = (v: number) => `${clampPct(max === 0 ? 0 : (v / max) * 100)}%`
-  const over = value > reference
+  // `hi === lo` is a domain with no width — a column where every row read the
+  // same, or a range whose bounds were never published. Every position
+  // collapses to 0% rather than dividing into NaN%/Infinity%.
+  const x = (n: number) => {
+    if (hi === lo) return 0
+    return Math.max(0, Math.min(100, ((n - lo) / (hi - lo)) * 100))
+  }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between">
-        <span className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
-          {label}
-        </span>
-        <span className={`text-ct-mid font-semibold text-ct-ink ${TABULAR}`}>{format}</span>
-      </div>
-      <div className="relative h-3 w-full overflow-hidden rounded-ct-sm bg-ct-sunk">
-        <span
-          data-meter-fill
-          className="absolute inset-y-0 left-0 rounded-ct-sm bg-ct-ink-3"
-          style={{ width: pctOf(Math.min(value, reference)) }}
-        />
-        {over ? (
-          <span
-            data-meter-overshoot
-            className="absolute inset-y-0 bg-ct-bad"
-            style={{ left: pctOf(reference), width: pctOf(value - reference) }}
-          />
-        ) : null}
-        <span
-          data-meter-reference
-          className="absolute inset-y-[-2px] w-px bg-ct-line-strong"
-          style={{ left: pctOf(reference) }}
-        />
-      </div>
-      <span className="font-ct-mono text-ct-micro text-ct-ink-3">
-        target {target ?? format}
-      </span>
-    </div>
+    <span className={over ? "mtr is-over" : "mtr"} role="img" aria-label={label}>
+      <i className="mtr__f" style={{ width: `${x(value).toFixed(1)}%` }} />
+      {target === undefined ? null : (
+        <i className="mtr__t" style={{ left: `${x(target).toFixed(1)}%` }} />
+      )}
+    </span>
   )
-}
-
-function clampPct(n: number): number {
-  return Math.round(Math.min(100, Math.max(0, n)) * 10) / 10
 }
