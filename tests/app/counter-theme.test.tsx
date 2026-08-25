@@ -67,6 +67,64 @@ describe("counter theme", () => {
 })
 
 /**
+ * Hydration-safety regression test, mirroring
+ * tests/components/counter/motion/use-reduced-motion.test.tsx's technique.
+ *
+ * A naive "render, then read the DOM" assertion cannot catch this class of
+ * bug under React Testing Library: `render()` wraps the whole mount
+ * (including the passive mount effect) in a single synchronous `act()`, so
+ * by the time `render()` returns, the effect has already reconciled state
+ * and the render-time read and the post-effect read are indistinguishable.
+ * The only way to observe what the FIRST render body produced — which is
+ * what a real SSR pass would also produce, since SSR runs no effects at all
+ * — is to capture the value during render itself, before any effect fires.
+ */
+describe("theme-provider hydration safety", () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.removeAttribute("data-theme")
+  })
+
+  it("the very first render is SSR-safe regardless of what's stored or the OS preference", () => {
+    localStorage.setItem("counter-theme", "dark")
+    const values: Array<{ theme: string; resolved: string }> = []
+    function Harness() {
+      const { theme, resolved } = useCounterTheme()
+      values.push({ theme, resolved }) // captured during render, before any effect runs
+      return null
+    }
+    render(<CounterThemeProvider><Harness /></CounterThemeProvider>)
+    // The FIRST push is what render produced before the mount effect ever
+    // ran — exactly what SSR (no effects at all) also produces. It must be
+    // the SSR-safe default, not the stored choice.
+    expect(values[0]).toEqual({ theme: "system", resolved: "light" })
+  })
+
+  it("reconciles to the stored choice once the mount effect runs", () => {
+    localStorage.setItem("counter-theme", "dark")
+    render(<CounterThemeProvider><Probe /></CounterThemeProvider>)
+    expect(screen.getByTestId("theme").textContent).toBe("dark")
+    expect(screen.getByTestId("resolved").textContent).toBe("dark")
+  })
+
+  it("still resolves system to the OS preference after mount", () => {
+    render(<CounterThemeProvider><Probe /></CounterThemeProvider>)
+    expect(screen.getByTestId("theme").textContent).toBe("system")
+    expect(screen.getByTestId("resolved").textContent).toMatch(/^(light|dark)$/)
+  })
+
+  it("survives a storage accessor that throws", () => {
+    const original = Storage.prototype.getItem
+    try {
+      Storage.prototype.getItem = () => { throw new Error("blocked") }
+      expect(() => render(<CounterThemeProvider><Probe /></CounterThemeProvider>)).not.toThrow()
+    } finally {
+      Storage.prototype.getItem = original
+    }
+  })
+})
+
+/**
  * C1 regression (review finding, 2026-08-23): counter.css's `:root` used to
  * declare `color-scheme: light dark`, which hands every `light-dark()`
  * token to the OS preference — including on the "system" theme, where

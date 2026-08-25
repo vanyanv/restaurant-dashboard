@@ -32,10 +32,6 @@ function writeStored(t: Theme): void {
   }
 }
 
-function systemPrefersDark(): boolean {
-  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches
-}
-
 /**
  * "system" stamps NOTHING, so bare :root (color-scheme: light dark, resolving
  * every light-dark() token against the OS preference) does the work. An
@@ -55,16 +51,39 @@ function applyTheme(t: Theme): void {
 }
 
 export function CounterThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => readStored())
-  const [systemDark, setSystemDark] = useState<boolean>(() => systemPrefersDark())
+  // Both initialisers are SSR-safe constants, not client-only reads. This is
+  // the same shape (and the same fix) as use-reduced-motion.ts: reading
+  // localStorage or matchMedia during render makes the server's answer
+  // (neither exists there) and the client's first render disagree, and that
+  // exact split is what produced real, reproduced-every-time hydration
+  // failures in useCountUp and useEntry — React discarded and remounted the
+  // subtree because the first client commit didn't match the server markup.
+  // "system"/false are also what themeNoFlashScript's absence of a stamp
+  // implies, so React's first render agrees with the DOM the script left
+  // behind for the "system" case without needing to read anything.
+  //
+  // themeNoFlashScript already stamps data-theme on <html> before React ever
+  // renders (for an explicit light/dark choice). React's first render must
+  // NOT try to read that stamp back to "agree" with it — that would just be
+  // this same bug in a new costume. Instead, the mount effect below is the
+  // one and only place a client-only value is allowed to reach `theme` or
+  // `systemDark`, exactly mirroring useReducedMotion's effect.
+  const [theme, setThemeState] = useState<Theme>("system")
+  const [systemDark, setSystemDark] = useState<boolean>(false)
 
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
 
+  // The one and only place a client-only value is allowed to reach `theme`
+  // or `systemDark` — mirrors useReducedMotion's mount effect. Reconciles
+  // the real stored choice and the real OS preference once, post-mount,
+  // then keeps listening for OS preference changes.
   useEffect(() => {
+    setThemeState(readStored())
     if (typeof matchMedia !== "function") return
     const mq = matchMedia("(prefers-color-scheme: dark)")
+    setSystemDark(mq.matches)
     const onChange = () => setSystemDark(mq.matches)
     mq.addEventListener("change", onChange)
     return () => mq.removeEventListener("change", onChange)
