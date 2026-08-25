@@ -30,6 +30,14 @@ export interface FidelityPage {
    * "counter" and the suite actually visits it.
    */
   route: string
+  /**
+   * Where the mobile projects actually land after asking for `route`. The
+   * middleware rewrites /dashboard/* to /m/*, and the fidelity suite asserts
+   * the landed path so that a 404 or a guard redirect is reported as a page
+   * that did not load rather than as a design difference. Omit it when the
+   * mobile projects land on `route` unchanged.
+   */
+  mobileRoute?: string
   /** "editorial" pages are not rebuilt yet and are SKIPPED, not failed. */
   status: PageStatus
   /**
@@ -51,7 +59,7 @@ export interface FidelityPage {
 }
 
 export const PAGES: FidelityPage[] = [
-  { protoId: "overview", name: "Overview", protoRoute: "/dashboard", route: "/dashboard", status: "editorial", report: true },
+  { protoId: "overview", name: "Overview", protoRoute: "/dashboard", route: "/dashboard", mobileRoute: "/m", status: "editorial", report: true },
   { protoId: "ask", name: "Ask", protoRoute: "/dashboard/chat", route: "/dashboard/chat", status: "editorial" },
   { protoId: "decisions", name: "Needs you", protoRoute: "/dashboard/decisions", route: "/dashboard/decisions", status: "editorial" },
   { protoId: "alerts", name: "Needs you", protoRoute: "/dashboard/alerts", route: "/dashboard/alerts", status: "editorial" },
@@ -112,5 +120,3 @@ export function pageById(protoId: string): FidelityPage {
   return p
 }
 
-/** Pages the suite actually opens: gated ones, plus the ones we report on. */
-export const VISITED = PAGES.filter((p) => p.status === "counter" || p.report)

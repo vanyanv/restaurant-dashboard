@@ -19,12 +19,13 @@
  * "__name is not defined". Nothing is wrong with the extractor when that
  * happens; run it through the Playwright projects.
  */
-import type { Landmark, ThemedLandmark } from "./landmarks"
+import type { Landmark, ThemedNode } from "./landmarks"
 
 export interface ExtractArgs {
   rootSelector: string
   landmarkClasses: readonly string[]
   checkedProperties: readonly string[]
+  comparedAttributes: readonly string[]
 }
 
 /** Depth-first landmark sweep, with the three normalisations CHECKED_PROPERTIES documents. */
@@ -72,10 +73,21 @@ export function extractLandmarksInPage(args: ExtractArgs): Landmark[] {
       style[prop] = v
     }
 
+    // `data-n` is the strip's cell count, and the prototype's strip cells carry
+    // no class of their own — without this, a strip of four passes clean
+    // against a design that specifies six.
+    const attrs: Record<string, string> = {}
+    for (let k = 0; k < args.comparedAttributes.length; k++) {
+      const name = args.comparedAttributes[k]
+      const v = el.getAttribute(name)
+      if (v !== null) attrs[name] = v
+    }
+
     const rect = el.getBoundingClientRect()
     out.push({
       order: order++,
       classes,
+      attrs,
       text: (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60),
       box: { w: Math.round(rect.width), h: Math.round(rect.height) },
       style,
@@ -85,7 +97,22 @@ export function extractLandmarksInPage(args: ExtractArgs): Landmark[] {
 }
 
 export interface ThemedExtract {
-  landmarks: ThemedLandmark[]
+  /**
+   * Every element under the root that paints a colour of its own or carries
+   * text, attributed to the landmark it sits inside. NOT only the landmarks —
+   * see the "FIX ROUND 1" note in landmarks.ts. `.qbtn .n`, the element this
+   * whole pass was written for, carries no landmark class.
+   */
+  nodes: ThemedNode[]
+  /**
+   * How many landmarks the root actually contains. The pass asserts on this
+   * separately: the node sweep finds hundreds of elements on any page at all,
+   * so it can no longer stand in for "this page rendered something Counter".
+   */
+  landmarkCount: number
+  /** How many elements were swept, and how many of them painted a colour. */
+  elementCount: number
+  paintingCount: number
   /** Every --ct-* colour token, resolved in the theme currently rendered. */
   tokenValues: string[]
   /** Names of the tokens that resolved, for the failure message. */
@@ -93,7 +120,7 @@ export interface ThemedExtract {
 }
 
 /**
- * The dark-mode sweep: what each landmark paints, and what the --ct-* tokens
+ * The dark-mode sweep: what each element paints, and what the --ct-* tokens
  * resolve to right now. Comparing the two is `findThemeDefects`'s job.
  *
  * Custom properties cannot be read back resolved — `getPropertyValue("--ct-ink")`
@@ -106,8 +133,16 @@ export function extractThemedInPage(args: {
   rootSelector: string
   landmarkClasses: readonly string[]
 }): ThemedExtract {
+  const empty: ThemedExtract = {
+    nodes: [],
+    landmarkCount: 0,
+    elementCount: 0,
+    paintingCount: 0,
+    tokenValues: [],
+    tokenNames: [],
+  }
   const root = document.querySelector(args.rootSelector) as HTMLElement | null
-  if (!root) return { landmarks: [], tokenValues: [], tokenNames: [] }
+  if (!root) return empty
 
   // -- the token sweep -----------------------------------------------------
   const names: string[] = []
@@ -165,18 +200,26 @@ export function extractThemedInPage(args: {
   canvas.width = 1
   canvas.height = 1
   const ctx = canvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D
+  const rasterCache: Record<string, { r: number; g: number; b: number; a: number } | null> = {}
   const raster = (value: string): { r: number; g: number; b: number; a: number } | null => {
+    // The sweep is now the whole page rather than 53 elements, and the same
+    // handful of token values recur on nearly every one of them.
+    if (Object.prototype.hasOwnProperty.call(rasterCache, value)) return rasterCache[value]
     ctx.clearRect(0, 0, 1, 1)
     ctx.fillStyle = "#000000"
     ctx.fillStyle = value
     if (ctx.fillStyle === "#000000" && value.replace(/\s/g, "").toLowerCase() !== "#000000") {
-      // fillStyle rejected the value and kept the previous one
-      if (value.indexOf("rgba(0, 0, 0, 0)") < 0 && value !== "transparent") return null
+      if (value.indexOf("rgba(0, 0, 0, 0)") < 0 && value !== "transparent") {
+        rasterCache[value] = null
+        return null
+      }
     }
     ctx.clearRect(0, 0, 1, 1)
     ctx.fillRect(0, 0, 1, 1)
     const d = ctx.getImageData(0, 0, 1, 1).data
-    return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 }
+    const out = { r: d[0], g: d[1], b: d[2], a: d[3] / 255 }
+    rasterCache[value] = out
+    return out
   }
   const over = (
     fg: { r: number; g: number; b: number; a: number },
@@ -187,35 +230,91 @@ export function extractThemedInPage(args: {
     b: Math.round(fg.b * fg.a + bg.b * (1 - fg.a)),
   })
 
-  // -- the landmark sweep --------------------------------------------------
-  const landmarks: ThemedLandmark[] = []
-  let order = 0
+  // -- pass one: number the landmarks, in the same depth-first order the
+  //    structural sweep uses, so a defect's `order` names the same element in
+  //    both reports.
   const elements = root.querySelectorAll("*")
+  const landmarkOrder = new Map<Element, number>()
+  const landmarkClassesOf = new Map<Element, string[]>()
+  let order = 0
   for (let i = 0; i < elements.length; i++) {
-    const el = elements[i] as HTMLElement
+    const el = elements[i]
     const classes: string[] = []
     for (let k = 0; k < args.landmarkClasses.length; k++) {
       const c = args.landmarkClasses[k]
       if (el.classList.contains(c)) classes.push(c)
     }
     if (classes.length === 0) continue
+    landmarkOrder.set(el, order++)
+    landmarkClassesOf.set(el, classes)
+  }
 
+  // -- pass two: every element that decides a colour or carries text --------
+  const nodes: ThemedNode[] = []
+  let paintingCount = 0
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement
     const cs = getComputedStyle(el)
-    const painted: Array<{ property: string; value: string }> = []
-    const push = (property: string, value: string) => {
-      const v = (value || "").trim()
-      if (!v || v === "transparent" || v.indexOf("rgba(0, 0, 0, 0)") === 0) return
-      painted.push({ property, value: v })
+    const isLandmark = landmarkOrder.has(el)
+
+    // The nearest landmark ancestor, and this element's path down from it.
+    let host: Element | null = null
+    const steps: string[] = []
+    let walk: Element | null = el
+    while (walk && walk !== root) {
+      if (landmarkOrder.has(walk)) {
+        host = walk
+        break
+      }
+      // A short, readable descriptor: the element's first class, else its tag.
+      const cls = walk.classList.length ? "." + walk.classList[0] : walk.tagName.toLowerCase()
+      if (steps.length < 4) steps.unshift(cls)
+      walk = walk.parentElement
     }
-    push("color", cs.color)
-    push("background-color", cs.backgroundColor)
+
+    const parent = el.parentElement
+    const inheritedColour = parent ? getComputedStyle(parent).color.trim() : ""
+
+    const painted: Array<{ property: string; value: string }> = []
+    const ownColour = cs.color.trim()
+    // A landmark's own colour is always checked. A descendant's is checked
+    // only when it DIFFERS from what it inherited — otherwise one literal on
+    // a container is reported once per descendant and buries the element that
+    // actually chose it.
+    if (
+      ownColour &&
+      ownColour !== "transparent" &&
+      ownColour.indexOf("rgba(0, 0, 0, 0)") !== 0 &&
+      (isLandmark || ownColour !== inheritedColour)
+    ) {
+      painted.push({ property: "color", value: ownColour })
+    }
+    const bg = cs.backgroundColor.trim()
+    if (bg && bg !== "transparent" && bg.indexOf("rgba(0, 0, 0, 0)") !== 0) {
+      painted.push({ property: "background-color", value: bg })
+    }
+    // Borders are never inherited, so a painted one is always this element's
+    // own decision.
     const sides = ["top", "right", "bottom", "left"]
     for (let s = 0; s < sides.length; s++) {
       if (cs.getPropertyValue("border-" + sides[s] + "-width").trim() === "0px") continue
-      push("border-" + sides[s] + "-color", cs.getPropertyValue("border-" + sides[s] + "-color"))
+      const bc = cs.getPropertyValue("border-" + sides[s] + "-color").trim()
+      if (!bc || bc === "transparent" || bc.indexOf("rgba(0, 0, 0, 0)") === 0) continue
+      painted.push({ property: "border-" + sides[s] + "-color", value: bc })
     }
+    if (painted.length) paintingCount++
 
-    const colours: ThemedLandmark["colours"] = []
+    let ownText = ""
+    for (let n = 0; n < el.childNodes.length; n++) {
+      const node = el.childNodes[n]
+      if (node.nodeType === 3) ownText += node.nodeValue || ""
+    }
+    ownText = ownText.replace(/\s+/g, " ").trim()
+
+    // Nothing painted and nothing said: not a node.
+    if (painted.length === 0 && !ownText) continue
+
+    const colours: ThemedNode["colours"] = []
     for (let c = 0; c < painted.length; c++) {
       const px = raster(painted[c].value)
       if (!px) continue
@@ -226,10 +325,12 @@ export function extractThemedInPage(args: {
       })
     }
 
-    let ownText = ""
-    for (let n = 0; n < el.childNodes.length; n++) {
-      const node = el.childNodes[n]
-      if (node.nodeType === 3) ownText += node.nodeValue || ""
+    // Contrast needs the element's own colour even when it inherited it —
+    // inherited ink on a wrong background is still invisible text.
+    let textColour = colours.filter((c) => c.property === "color")[0]
+    if (!textColour && ownText) {
+      const px = raster(ownColour)
+      if (px) textColour = { property: "color", value: ownColour, rgb: { r: px.r, g: px.g, b: px.b } }
     }
 
     // The surface behind this element's own text: the nearest painted
@@ -239,8 +340,7 @@ export function extractThemedInPage(args: {
     let node: HTMLElement | null = el
     const layers: Array<{ r: number; g: number; b: number; a: number }> = []
     while (node) {
-      const bg = getComputedStyle(node).backgroundColor
-      const px = raster(bg)
+      const px = raster(getComputedStyle(node).backgroundColor)
       if (px && px.a > 0) {
         layers.push(px)
         if (px.a >= 0.999) break
@@ -253,16 +353,24 @@ export function extractThemedInPage(args: {
       surface = acc
     }
 
-    landmarks.push({
-      order: order++,
-      classes,
-      colours,
-      ownText: ownText.replace(/\s+/g, " ").trim(),
+    nodes.push({
+      order: host ? (landmarkOrder.get(host) as number) : -1,
+      classes: host ? (landmarkClassesOf.get(host) as string[]) : [],
+      within: steps.join(" "),
+      colours: textColour && colours.indexOf(textColour) < 0 ? [textColour].concat(colours) : colours,
+      ownText,
       fontSizePx: parseFloat(cs.fontSize) || 0,
       fontWeight: parseInt(cs.fontWeight, 10) || 400,
       surface,
     })
   }
 
-  return { landmarks, tokenValues, tokenNames }
+  return {
+    nodes,
+    landmarkCount: landmarkOrder.size,
+    elementCount: elements.length,
+    paintingCount,
+    tokenValues,
+    tokenNames,
+  }
 }

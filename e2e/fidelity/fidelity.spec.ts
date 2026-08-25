@@ -32,8 +32,10 @@ import { openPrototype, SURFACE_ROOT, type Surface } from "./prototype"
 import { extractLandmarksInPage, extractThemedInPage } from "./extract"
 import {
   CHECKED_PROPERTIES,
+  COMPARED_ATTRIBUTES,
   LANDMARK_CLASSES,
   compareLandmarks,
+  defectWhere,
   matchedCount,
   findThemeDefects,
   landmarkTally,
@@ -62,11 +64,22 @@ function surfaceOf(testInfo: TestInfo): Surface {
   return testInfo.project.name === "fidelity-mobile" ? "phone" : "desk"
 }
 
+/**
+ * The path we expect to be standing on after asking for `entry.route`. The
+ * mobile middleware rewrites /dashboard/* to /m/*, so the mobile projects have
+ * their own expectation — recorded in the manifest, not inferred here.
+ */
+function expectedPath(entry: FidelityPage, page: Page): string {
+  const isMobile = (page.viewportSize()?.width ?? 1440) < 900
+  return (isMobile && entry.mobileRoute) || entry.route
+}
+
 async function extractOurs(page: Page): Promise<Landmark[]> {
   return page.evaluate(extractLandmarksInPage, {
     rootSelector: OUR_ROOT,
     landmarkClasses: [...LANDMARK_CLASSES],
     checkedProperties: [...CHECKED_PROPERTIES],
+    comparedAttributes: [...COMPARED_ATTRIBUTES],
   })
 }
 
@@ -75,6 +88,7 @@ async function extractProto(page: Page, surface: Surface): Promise<Landmark[]> {
     rootSelector: SURFACE_ROOT[surface],
     landmarkClasses: [...LANDMARK_CLASSES],
     checkedProperties: [...CHECKED_PROPERTIES],
+    comparedAttributes: [...COMPARED_ATTRIBUTES],
   })
 }
 
@@ -110,13 +124,37 @@ async function openOurs(
     },
     theme,
   )
-  await page.goto(entry.route, { waitUntil: "domcontentloaded" })
+  const response = await page.goto(entry.route, { waitUntil: "domcontentloaded" })
   await expect(
     page,
     `${entry.protoId}: landed on the login page — the fidelity projects run on ` +
       `the same storageState as the rest of the suite, so this is an auth ` +
       `failure, not a fidelity finding`,
   ).not.toHaveURL(/\/login/)
+
+  // A page that was never served must not be reported as a design difference.
+  // Without these two, a 500, a 404 or a guard redirect surfaces as "every
+  // landmark missing" — red, but named as a fidelity finding, which would send
+  // someone rebuilding a page that rendered fine and simply did not load.
+  const status = response ? response.status() : 0
+  expect(
+    status,
+    `${entry.protoId}: ${entry.route} answered ${status}. That is a page that ` +
+      `did not load, not a page that does not match its design — nothing below ` +
+      `this line would mean anything.`,
+  ).toBeGreaterThanOrEqual(200)
+  expect(
+    status,
+    `${entry.protoId}: ${entry.route} answered ${status}.`,
+  ).toBeLessThan(300)
+
+  const expected = expectedPath(entry, page)
+  expect(
+    new URL(page.url()).pathname,
+    `${entry.protoId}: asked for ${entry.route} and landed on ` +
+      `${new URL(page.url()).pathname}. A redirect is not a fidelity finding; ` +
+      `fix the route or the manifest's mobileRoute before reading anything below.`,
+  ).toBe(expected)
   // The content root, before anything else waits on the network. Measured: a
   // cold `npm run build && npm run start` never reaches networkidle on
   // /dashboard (TanStack Query keeps a request in flight), and waiting on it
@@ -363,6 +401,18 @@ for (const entry of PAGES) {
       landmarkClasses: [...LANDMARK_CLASSES],
     })
 
+    // The node sweep walks the WHOLE root now, so it finds hundreds of
+    // elements on any page at all and can no longer stand in for "this page
+    // rendered something Counter". That has to be asserted separately, or a
+    // page with no Counter markup would be checked for colour literals and
+    // called themed.
+    expect(
+      themed.landmarkCount,
+      `${entry.protoId} (${surface}, dark): the page has no Counter landmarks ` +
+        `at all, so there is nothing here that dark mode can be right about. ` +
+        `This is a page that was not built, not a page that is themed.`,
+    ).toBeGreaterThan(0)
+
     await testInfo
       .attach("ours-dark.png", {
         body: await page.screenshot({ fullPage: true, timeout: 15_000 }),
@@ -370,10 +420,13 @@ for (const entry of PAGES) {
       })
       .catch(() => {})
 
-    const defects = findThemeDefects(themed.landmarks, themed.tokenValues)
+    const defects = findThemeDefects(themed.nodes, themed.tokenValues)
     writeData(testInfo, entry, surface, {
       dark: {
-        landmarks: themed.landmarks.length,
+        landmarks: themed.landmarkCount,
+        nodes: themed.nodes.length,
+        elements: themed.elementCount,
+        painting: themed.paintingCount,
         tokens: themed.tokenNames.length,
         defects: defects.slice(0, 200),
       },
@@ -383,7 +436,7 @@ for (const entry of PAGES) {
     const contrast = defects.filter((d) => d.kind === "contrast")
 
     expect(
-      literals.map((d) => `LITERAL  #${d.order} .${d.classes.join(".")}  ${d.property}: ${d.value}`),
+      literals.map((d) => `LITERAL  #${d.order} ${defectWhere(d)}  ${d.property}: ${d.value}`),
       `${entry.protoId} (${surface}, dark): colours that do not come from a ` +
         `--ct-* token. They will not move when the theme does. Fix them in the ` +
         `task that emits their class — see the addendum, "inherited literals ` +
@@ -391,7 +444,7 @@ for (const entry of PAGES) {
     ).toEqual([])
 
     expect(
-      contrast.map((d) => `CONTRAST #${d.order} .${d.classes.join(".")}  ${d.detail}`),
+      contrast.map((d) => `CONTRAST #${d.order} ${defectWhere(d)}  ${d.detail}`),
       `${entry.protoId} (${surface}, dark): text that does not keep its ` +
         `contrast against the surface it sits on. This is the .qbtn defect ` +
         `class — a token that themes to near-white behind ink that does not.`,

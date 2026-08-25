@@ -56,6 +56,17 @@
  *     rather than passed — the guard works — but throwing on every mobile page
  *     is not a gate.)
  *   - ADDED "sug", "chan__row", "kv" for the container/item reason above.
+ *   - ADDED (fix round 1) "sp", "band", "sec__head", "sec__body", "btnrow",
+ *     "btn". Every one of these is named in the addendum's sixteen-element
+ *     table and none of them was on the list: "each cell carrying value +
+ *     delta + sparkline + bullet meter + band words" is five things, and only
+ *     the value, the delta and the bullet (`blt`) were checked. A strip cell
+ *     with no `.sp` and no `.band` is missing two of the five things that make
+ *     it a Counter figure, and before this it was invisible to the gate.
+ *     `.sec__head` / `.sec__body` are a section's own two halves — a section
+ *     rendered as a bare box with no head was also invisible — and
+ *     `.btnrow` / `.btn` are the row actions ("two actions" in the channel
+ *     row, "with a link to it" in the verdict block).
  */
 export const LANDMARK_CLASSES = [
   // the head of a page
@@ -87,6 +98,14 @@ export const LANDMARK_CLASSES = [
   "mtr",
   "wf",
   "kv",
+  // the parts of a figure that make it a Counter figure rather than a number
+  "sp",
+  "band",
+  // a section's own two halves, and the actions a row offers
+  "sec__head",
+  "sec__body",
+  "btnrow",
+  "btn",
   // the state the page fell into
   "empty",
   // the phone's own compositions
@@ -159,10 +178,33 @@ export const CHECKED_PROPERTIES = [
 
 export type CheckedProperty = (typeof CHECKED_PROPERTIES)[number]
 
+/**
+ * Attributes compared alongside the computed properties.
+ *
+ * `data-n` is the strip's cell count. It is compared but deliberately NOT part
+ * of the alignment signature: a strip of four against a strip of six is one
+ * strip rendered wrong, and should report as that, not as a missing strip plus
+ * an extra one.
+ */
+export const COMPARED_ATTRIBUTES = ["data-n"] as const
+
 export interface Landmark {
   /** Depth-first index, so order is part of the comparison. */
   order: number
   classes: string[]
+  /**
+   * Structural attributes that carry a design decision no class name does.
+   *
+   * Only `data-n` so far, and it is not optional detail: the prototype's
+   * `strip()` (line 3008) emits its cells as BARE `<div>`s with no class at
+   * all, and records how many there are in `data-n` on the strip. Without
+   * this field a rebuilt strip of four passes the structure pass clean
+   * against a design that specifies six — which is the addendum's own
+   * "a four-cell strip of plain figures" defect, sailing through the gate
+   * built to catch it. Fix round 1; the first version of this file claimed
+   * item counting covered the strip, and it did not.
+   */
+  attrs: Record<string, string>
   /** Trimmed to 60 chars. Compared only for presence, never for equality. */
   text: string
   /**
@@ -225,6 +267,21 @@ export function compareLandmarks(proto: Landmark[], ours: Landmark[]): Differenc
       continue
     }
     if (!p || !o) continue
+
+    for (const key of COMPARED_ATTRIBUTES) {
+      const a = p.attrs?.[key]
+      const b = o.attrs?.[key]
+      if (a === undefined && b === undefined) continue
+      if (a === b) continue
+      diffs.push({
+        kind: "style",
+        order: p.order,
+        classes: p.classes,
+        property: key,
+        prototype: a ?? "",
+        ours: b ?? "",
+      })
+    }
 
     if (p.text.length > 0 && o.text.length === 0) {
       diffs.push({
@@ -339,8 +396,34 @@ export function landmarkTally(landmarks: Landmark[]): Record<string, number> {
    would call it a perfect match, because the prototype does exactly the same.
 
    So dark is asserted against two rules of its own:
-     1. every colour a landmark renders resolves through a --ct-* token;
+     1. every colour rendered resolves through a --ct-* token;
      2. text keeps its contrast against the surface it actually sits on.
+
+   FIX ROUND 1 — WHAT THIS SWEEP COVERS, AND WHY IT IS NOT "LANDMARKS".
+   The first version of these rules inspected only elements that themselves
+   carried a landmark class. Measured on the prototype's own Overview desk
+   render: 543 elements, 53 of them landmarks, and 297 of them painting a
+   colour or a background of their own — of which 30 were landmarks. It
+   covered about a tenth of the page.
+
+   Worse, it covered the wrong tenth. `.qbtn` and `.qbtn .n` — the exact
+   elements the addendum, the README and the commit message all name as the
+   REASON dark is asserted separately rather than compared — carry no landmark
+   class at all, so they were unreachable by the check written for them. The
+   end-to-end proof injected those colours onto elements that DID carry a
+   landmark class, which is why it read as complete.
+
+   So the sweep now walks every element under the extraction root and
+   attributes each finding to its nearest landmark ancestor, so a report still
+   reads structurally: `.qitem -> .qbtn .n`. An element with no landmark
+   ancestor is still checked and attributed to "(outside any landmark)" —
+   a hardcoded grey on a page's own head block is exactly as invisible in dark
+   as one inside a section.
+
+   Contrast was thinner still, for a second reason: it needs the element's OWN
+   text nodes, and only 4 of 53 desk landmarks (2 of 30 on phone) have any.
+   Containers keep their text in `.k` / `.v` / `.t` children, so the rule
+   skipped almost the whole page. The descendant sweep is what fixes that too.
    ========================================================================= */
 
 export interface Rgb {
@@ -357,10 +440,27 @@ export interface ThemedColour {
   rgb: Rgb
 }
 
-export interface ThemedLandmark {
+/**
+ * One element that paints a colour or carries text, attributed to the landmark
+ * it sits inside. NOT necessarily a landmark itself — see the section header.
+ */
+export interface ThemedNode {
+  /** The order of the nearest landmark ancestor, or -1 when there is none. */
   order: number
+  /** The landmark ancestor's landmark classes. Empty when there is no landmark ancestor. */
   classes: string[]
-  /** Only the colours this element actually paints. Transparent ones are dropped. */
+  /**
+   * This element's position inside that landmark, e.g. ".qbtn .n". Empty
+   * string when this element IS the landmark. This is what makes a finding on
+   * a class-less `<div>` deep inside a section readable.
+   */
+  within: string
+  /**
+   * Only the colours this element DECIDES. A transparent background is
+   * dropped, and so is an inherited `color` on a non-landmark element — the
+   * ancestor that introduced it is swept too, and reporting it again on every
+   * descendant would bury the one element that actually chose it.
+   */
   colours: ThemedColour[]
   /** Text in this element's OWN text nodes. Inherited text is somebody else's contrast problem. */
   ownText: string
@@ -374,9 +474,17 @@ export interface ThemeDefect {
   kind: "literal" | "contrast"
   order: number
   classes: string[]
+  /** Where inside the landmark, e.g. ".qbtn .n". */
+  within: string
   property: string
   value: string
   detail: string
+}
+
+/** How a defect names its element in a failure message. */
+export function defectWhere(d: ThemeDefect): string {
+  const landmark = d.classes.length ? `.${d.classes.join(".")}` : "(outside any landmark)"
+  return d.within ? `${landmark} -> ${d.within}` : landmark
 }
 
 /** WCAG 2.x relative luminance of an sRGB colour. */
@@ -404,15 +512,17 @@ export function requiredContrast(fontSizePx: number, fontWeight: number): number
 /**
  * Both rules, over one theme's render.
  *
- * @param landmarks    what the page painted, in the theme under test.
+ * @param nodes        every element that paints a colour or carries text, in
+ *                     the theme under test — not only the landmarks.
  * @param tokenValues  every --ct-* colour token, resolved in that same theme.
  *                     A colour not in this set is a literal: it will not move
  *                     when the theme does.
  */
 export function findThemeDefects(
-  landmarks: ThemedLandmark[],
+  nodes: ThemedNode[],
   tokenValues: string[],
 ): ThemeDefect[] {
+  const landmarks = nodes
   if (landmarks.length === 0) {
     throw new Error(
       "findThemeDefects: no landmarks, so there is nothing to assert and a " +
@@ -436,6 +546,7 @@ export function findThemeDefects(
           kind: "literal",
           order: l.order,
           classes: l.classes,
+          within: l.within,
           property: c.property,
           value: c.value,
           detail:
@@ -456,6 +567,7 @@ export function findThemeDefects(
         kind: "contrast",
         order: l.order,
         classes: l.classes,
+        within: l.within,
         property: "color",
         value: fg.value,
         detail: `${ratio.toFixed(2)}:1 against its surface, needs ${need}:1 at ${l.fontSizePx}px/${l.fontWeight}`,
