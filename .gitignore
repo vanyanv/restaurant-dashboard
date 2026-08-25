@@ -76,6 +76,9 @@ scripts/eval-chat/runs/
 # graphify knowledge graph output
 /graphify-out/
 
+# Fidelity gate raw measurements (docs/counter/fidelity/*.md IS committed)
+/.fidelity/
+
 # Playwright e2e artifacts
 /test-results/
 /playwright-report/
