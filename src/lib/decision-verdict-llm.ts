@@ -18,13 +18,13 @@ import {
   composeVerdict,
   verdictFactBlock,
   type VerdictFacts,
-} from "@/app/dashboard/decisions/lib/verdict-copy"
+} from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
 
 export const VERDICT_MODEL = "gpt-4.1-mini"
 
 // Owned by verdict-copy so the composer can respect the same budget without a
 // circular import. Re-exported here because the guard is its main consumer.
-export { VERDICT_MAX_CHARS } from "@/app/dashboard/decisions/lib/verdict-copy"
+export { VERDICT_MAX_CHARS } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
 
 /**
  * The budget the PROMPT asks for. Deliberately below VERDICT_MAX_CHARS, which

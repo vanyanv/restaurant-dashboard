@@ -63,22 +63,29 @@ specific work owed ("sales per labour hour scoped to the selected range",
 sentence explaining why nothing is shown instead. Nothing invites the
 reader to mistake it for a zero.
 
-**The caveat: `/dashboard` currently renders inside TWO navigation shells at
-once.** `src/app/dashboard/layout.tsx` — untouched by this plan, out of
-scope per the brief ("delete nothing") — still wraps every `/dashboard/*`
-route in the old editorial `AppSidebarClient` (the cream sidebar: "Chris N
-Eddy's" wordmark, "Vol. 04 · No. 25", the old nav list). Counter's own
-`AppShell` then renders *inside* that, with its own wordmark and its own
-17-item rail. The result, visible in both screenshots, is two sidebars side
-by side with two different navigation structures and two different sets of
-labels for the same destinations (the old sidebar's "Decisions"/"Alerts"
-have no Counter-rail equivalent yet; Counter's "Needs you" has no
-old-sidebar equivalent). This is not a regression this task introduced —
-it is the expected, structural state of "first Counter page, legacy layout
-still standing" that the plan's own "Next plan" note anticipates clearing
-page by page — but it is the single most significant thing that does *not*
-yet read as a finished page, and it is worth being explicit that a reader
-seeing this today would reasonably ask which sidebar is real.
+**FIXED 2026-08-25: the double navigation shell.** `/dashboard` used to
+render inside TWO navigation shells at once — `src/app/dashboard/
+layout.tsx` wrapped every `/dashboard/*` route in the old editorial
+`AppSidebarClient` (the cream sidebar: "Chris N Eddy's" wordmark, "Vol. 04
+· No. 25", the old nav list), and Counter's own `AppShell` then rendered
+*inside* that, with its own wordmark and its own 17-item rail. Fixed by
+moving the editorial chrome — `AppSidebarClient`, `SidebarProvider`/
+`SidebarInset`, `ChatDrawerProvider`/`ChatDrawerClient`, `WelcomeMarquee`,
+the editorial stylesheets, Fraunces — into a new
+`src/app/dashboard/(editorial)/layout.tsx`, and moving every still-editorial
+page directory (~19 of them) into that route group alongside it.
+`src/app/dashboard/layout.tsx` now holds only what both worlds need: a
+session read and `PageViewTracker`. Route groups don't change the URL, so
+`/dashboard/orders` still serves from `(editorial)/orders/page.tsx` — a
+Counter page (starting with Overview, `src/app/dashboard/page.tsx`, left
+outside the group) now gets *only* the shared layout, with no editorial
+chrome mounted at all. Verified in a real browser post-fix: `/dashboard`
+shows exactly one sidebar (Counter's), `/dashboard/orders` and
+`/dashboard/analytics` still show the old cream sidebar unchanged, and the
+`next build` route manifest lists every editorial route at its original
+URL. See DESIGN.md's "`(editorial)` route group" section for the mechanism
+and `.superpowers/sdd/2026-08-25-counter-overview/shell-separation-report.md`
+for the full verification.
 
 **The two lead numbers, per note 30.** Net sales ($7,122 for Yesterday · All
 stores) is the first thing under the topbar — a bare `Figure` at `size="lead"`,
@@ -97,12 +104,17 @@ for "vs target" (no target set is not the same as "on target").
 **Nothing disappeared in dark.** See "Corroboration" below — every Counter
 surface (topbar, sections, table, owed cards) re-rendered with light text on
 a dark background and passed a computed-style check, not just a screenshot.
-The one thing that stays light in dark mode is the OLD editorial sidebar
-(cream, unchanged) — a known, already-documented issue (see the `C1`
-regression comment in `tests/app/counter-theme.test.tsx`: shadcn tokens
-under the legacy layout are frozen at light HSL values and never respond to
-`.dark`/`data-theme`). Expected, not new, but visible in the dark screenshot
-as the one part of the page that stays cream.
+At the time this was written, the one thing that stayed light in dark mode
+was the OLD editorial sidebar (cream, unchanged) — a known,
+already-documented issue (see the `C1` regression comment in `tests/app/
+counter-theme.test.tsx`: shadcn tokens under the legacy layout are frozen
+at light HSL values and never respond to `.dark`/`data-theme`). That was
+visible on `/dashboard` specifically because of the double-shell bug fixed
+2026-08-25 (see below) — the editorial sidebar was rendering on the Counter
+route at all. Post-fix, `/dashboard` no longer mounts `AppSidebarClient`,
+so there is nothing cream left on that route in either theme; `C1` itself
+is unrelated to the shell split and remains open on editorial routes, where
+the old sidebar was always light-only by design.
 
 ## Corroboration (not just the screenshot)
 
@@ -137,13 +149,19 @@ second line of evidence, matching both the computed-style numbers above.
 | Reload | Hard navigation to `/dashboard?range=d7&store=<hollywood-id>` | Store switcher and range control both restored to "Chris N Eddys - Hollywood" / "Last 7 days" on load; net sales rendered `$43,598` immediately (no flash of the default "Yesterday · All stores" state). |
 | `not_computed` reachability | Observed on every load | "Sales per labour hour", "Needs you" and "The model's call" all rendered the dashed "Not computed yet" card with their specific owed-work sentence — no zero anywhere. |
 
-**One thing worth flagging plainly:** pressing ⌘K opens Counter's
+**FIXED 2026-08-25: the ⌘K collision.** Pressing ⌘K used to open Counter's
 `AskSurface` **and** the old editorial "Owner Analyst · Ask" chat drawer
-simultaneously — the old drawer's own footer also reads "⌘K to toggle · Esc
-to close". Both are real dialogs, stacked. This is a collision between the
-new surface and layout.tsx's pre-existing chat drawer, not something this
-page's own code causes directly, but it is a real, visible defect a reader
-would hit immediately.
+simultaneously — the old drawer's own footer also read "⌘K to toggle · Esc
+to close". Both were real dialogs, stacked. Cause was the same shared
+`dashboard/layout.tsx` that caused the double sidebar: it mounted
+`ChatDrawerProvider`, whose keydown listener fires on every `/dashboard/*`
+route regardless of design system. Fixed by the same `(editorial)` route
+group move above — `ChatDrawerProvider`/`ChatDrawerClient` now mount only
+inside `(editorial)/layout.tsx`, so Counter routes never register that
+listener. Re-verified in a real browser: ⌘K on `/dashboard` opens only
+Counter's `AskSurface` (`role="dialog"`, "Answering about..."); ⌘K on
+`/dashboard/orders` opens only the old "Owner Analyst · Ask" drawer, full
+quick-question grid and all — no cross-contamination either direction.
 
 ## Console errors
 
@@ -158,15 +176,22 @@ new here.
 
 `npm run bundle:check` against `docs/counter/baseline-bundles.txt`:
 
-| | Baseline (editorial `/dashboard`) | Now (Counter `/dashboard`) | Change |
-|---|---|---|---|
-| Uncompressed | 1056.7 KB | 750.6 KB | **−306.1 KB (−29.0%)** |
-| Gzipped | 323.4 KB | 231.3 KB | **−92.1 KB (−28.5%)** |
+| | Baseline (editorial `/dashboard`) | After Counter Overview shipped | After the `(editorial)` shell split | Change (split only) |
+|---|---|---|---|---|
+| Uncompressed | 1056.7 KB | 750.6 KB | 606.5 KB | **−144.1 KB (−19.2%)** |
+| Gzipped | 323.4 KB | 231.3 KB | 183.8 KB | **−47.5 KB (−20.5%)** |
 
-Lighter, not heavier — the Counter page replaces a heavier editorial one and
-comes in under budget (1562.5 KB uncompressed budget for this route).
+Lighter still. `/dashboard` was already lighter than the editorial baseline
+once Counter Overview shipped, but it was still loading the editorial
+chrome's own bundle (sidebar, chat drawer, Fraunces, editorial CSS)
+alongside Counter's, because of the double-shell bug — that's the extra
+144.1 KB the `(editorial)` route group split removed. All 74 routes stayed
+under budget after the split (`npm run bundle:check`: "all 74 routes under
+budget"); no route regressed.
 
 ## Gate
 
 `npm test && npm run tokens && npx tsc --noEmit && npm run build` — all
-green. `npm test`: 192 files, 2079 passed, 8 skipped (unchanged skip count).
+green, both when Overview first shipped and again after the 2026-08-25
+`(editorial)` shell-separation split. `npm test`: 192 files, 2079 passed,
+8 skipped (unchanged skip count both times).

@@ -9,7 +9,7 @@
 // a claim the data can actually support.
 
 import { describe, it, expect } from "vitest"
-import { computeLaborLane } from "@/app/dashboard/decisions/lib/labor-lane"
+import { computeLaborLane } from "@/app/dashboard/(editorial)/decisions/lib/labor-lane"
 
 const base = { forecastRevenue: 8000, scheduledHours: 70, targetSplh: 100, unfilledSlots: 0 }
 

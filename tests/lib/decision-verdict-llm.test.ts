@@ -14,7 +14,7 @@ import {
 import {
   composeVerdict,
   type VerdictFacts,
-} from "@/app/dashboard/decisions/lib/verdict-copy"
+} from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
 
 const facts = (over: Partial<VerdictFacts> = {}): VerdictFacts => ({
   storeName: "Hollywood",

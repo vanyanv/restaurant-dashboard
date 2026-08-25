@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { EditorialTopbar } from "@/app/dashboard/components/editorial-topbar"
+import { EditorialTopbar } from "@/app/dashboard/(editorial)/components/editorial-topbar"
 import { ChapterRail } from "./components/chapter-rail"
 
 export default function SettingsLayout({

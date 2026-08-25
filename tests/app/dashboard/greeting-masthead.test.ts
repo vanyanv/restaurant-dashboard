@@ -3,8 +3,8 @@ import {
   firstNameOf,
   greetingFor,
   storeLocalHour,
-} from "@/app/dashboard/components/greeting-masthead"
-import { formatBandCaption } from "@/app/dashboard/components/hero-kpi"
+} from "@/app/dashboard/(editorial)/components/greeting-masthead"
+import { formatBandCaption } from "@/app/dashboard/(editorial)/components/hero-kpi"
 
 describe("greetingFor", () => {
   it("says morning before noon", () => {

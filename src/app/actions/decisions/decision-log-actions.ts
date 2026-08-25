@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { ymdUTC as ymd } from "@/lib/date-utils"
 import type { OpportunityType } from "@/types/growth"
-import type { FrozenDay } from "@/app/dashboard/decisions/lib/decision-outcome"
+import type { FrozenDay } from "@/app/dashboard/(editorial)/decisions/lib/decision-outcome"
 
 /**
  * Recording what the owner decided, and freezing the counterfactual.

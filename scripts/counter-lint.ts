@@ -377,13 +377,34 @@ export function isCommitReachable(commit: string): boolean {
 /** (commit, rel path) -> content at that commit, or null if that path did not exist there. */
 const baselineCache = new Map<string, string | null>()
 
+/**
+ * `git cat-file -p <commit>:<rel>`, not `git show <commit>:<rel>`.
+ *
+ * `git show`'s `<rev>:<path>` form silently falls back to pathspec matching
+ * against the *working tree* when the object lookup itself fails, and a
+ * `path` containing `[...]` (every Next.js dynamic-segment folder —
+ * `[id]`, `[storeId]`, ...) is valid glob syntax: a nonexistent bracketed
+ * path then resolves as "pathspec matched nothing" and `git show` exits 0
+ * with empty stdout instead of failing loudly like it does for a
+ * nonexistent path with no glob metacharacters. That silent-empty-success
+ * would be indistinguishable from a real (and real-ly empty) file, so a
+ * moved dynamic-route legacy page — `orders/[id]/page.tsx` under the
+ * `(editorial)` route group, say — would compare `"" === currentContent`,
+ * find them unequal, and lose its LEGACY exemption even though the fallback
+ * path lookup in `isLegacyUnchanged` should have recovered it.
+ * `git cat-file -p <rev>:<path>` resolves the object name directly with no
+ * pathspec fallback, so a missing path fails (throws) exactly like any
+ * other missing path, bracket segments included. Caught during the
+ * `(editorial)` route-group move (see `stripRouteGroups`) — every dynamic
+ * legacy route silently failed its exemption until this switched.
+ */
 function baselineContentAt(commit: string, rel: string): string | null {
   const key = `${commit}:${rel}`
   const cached = baselineCache.get(key)
   if (cached !== undefined) return cached
   let content: string | null
   try {
-    content = execFileSync("git", ["show", `${commit}:${rel}`], {
+    content = execFileSync("git", ["cat-file", "-p", `${commit}:${rel}`], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     })
@@ -395,9 +416,56 @@ function baselineContentAt(commit: string, rel: string): string | null {
 }
 
 /**
+ * Strips route-group segments (`(name)`) from a repo-relative path.
+ *
+ * The 2026-08-25 `(editorial)` move relocates ~19 legacy dashboard pages one
+ * directory deeper without changing a single byte of their content —
+ * `src/app/dashboard/orders/page.tsx` becomes
+ * `src/app/dashboard/(editorial)/orders/page.tsx`. Route groups are inert
+ * for the URL, but very much part of a file path, so a direct
+ * `git show <baseline>:<new-path>` lookup fails (the parenthesised segment
+ * didn't exist at baseline) and a pure move would silently forfeit the
+ * LEGACY exemption for every file it touches, flooding `npm run tokens`
+ * with violations in files nobody rewrote. `isLegacyUnchanged` tries the
+ * direct path first and only falls back to this stripped path, so a
+ * genuinely new file placed under a route group still isn't accidentally
+ * exempted.
+ */
+function stripRouteGroups(rel: string): string {
+  return rel
+    .split("/")
+    .filter((seg) => !(seg.startsWith("(") && seg.endsWith(")")))
+    .join("/")
+}
+
+/**
+ * Undoes the one mechanical content edit the `(editorial)` move itself
+ * forces: a handful of legacy files reach a sibling that also moved via an
+ * absolute `@/app/dashboard/...` import (rather than a relative one), and
+ * that import string has to gain the same `(editorial)/` segment the
+ * sibling's file path gained, or the build doesn't compile. That is part of
+ * the move, not an edit to the file's own logic — conflating the two would
+ * mean every such file (two, as of the 2026-08-25 move:
+ * `ingredient-audit-client.tsx`'s dynamic import of the invoices PDF
+ * viewer, `price-monitor-shell.tsx`'s import of `ingredient-picker-utils`)
+ * loses its LEGACY exemption for a one-line path rewrite it didn't
+ * otherwise ask for, and starts failing on real pre-existing violations
+ * (`no-status-branch`, in both actual cases) that were never this move's to
+ * fix. Used only as a second fallback in `isLegacyUnchanged`, after a
+ * direct byte-for-byte match already failed — a file with a genuine logic
+ * edit sitting alongside an import-path fix still won't match, since only
+ * this one substitution is undone.
+ */
+function normalizeRouteGroupImports(content: string): string {
+  return content.replace(/@\/app\/dashboard\/\([^/)]+\)\//g, "@/app/dashboard/")
+}
+
+/**
  * True if `absPath` sits under a LEGACY entry AND its current content is
- * byte-identical to its content at the baseline commit. A new file, or an
- * edited legacy file, returns false and is linted normally.
+ * byte-identical to its content at the baseline commit (allowing for the
+ * two mechanical rewrites the `(editorial)` move itself forces — see
+ * `stripRouteGroups` and `normalizeRouteGroupImports`). A new file, or a
+ * genuinely edited legacy file, returns false and is linted normally.
  *
  * Throws BaselineUnreachableError — does not return false — if the baseline
  * commit itself can't be read, so that condition can never masquerade as
@@ -409,9 +477,15 @@ function isLegacyUnchanged(absPath: string, currentContent: string, baselineComm
   if (!isCommitReachable(baselineCommit)) {
     throw new BaselineUnreachableError(baselineCommit)
   }
-  const base = baselineContentAt(baselineCommit, repoRelative(absPath))
+  const rel = repoRelative(absPath)
+  let base = baselineContentAt(baselineCommit, rel)
+  if (base === null) {
+    const strippedRel = stripRouteGroups(rel)
+    if (strippedRel !== rel) base = baselineContentAt(baselineCommit, strippedRel)
+  }
   if (base === null) return false
-  return base === currentContent
+  if (base === currentContent) return true
+  return base === normalizeRouteGroupImports(currentContent)
 }
 
 export function lintCounter(
