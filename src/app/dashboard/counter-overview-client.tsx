@@ -10,6 +10,7 @@ import {
   DateControl,
   Section,
   Strip,
+  Figure,
   Table,
   type SwitchableStore,
 } from "@/components/counter"
@@ -45,28 +46,38 @@ export interface OverviewClientSections {
       deltaVsTargetPp: number | null
     }>
   >
-  invoices: SectionData<{ spend: number; count: number; needsReview: number }>
+  invoices: SectionData<{ spend: number; count: number; needsReview: number; avgInvoice: number }>
   needsYou: SectionData<null>
   modelCall: SectionData<null>
 }
 
 export function CounterOverviewClient({
   pathname,
-  params,
+  params: paramsString,
   stores,
   today,
   sections,
 }: {
   pathname: string
-  /** The URL Overview was rendered for. Read for the controls' state AND
-   *  passed straight into `AppShell` so the Ask surface's context sentence
-   *  can never name a different range or store than what's on screen. */
-  params: URLSearchParams
+  /**
+   * The query string Overview was rendered for, as PLAIN TEXT — not a
+   * `URLSearchParams` instance. A page.tsx (Server Component) rendering this
+   * client island passes props across the RSC boundary, which only carries
+   * plain serialisable values; a `URLSearchParams` arrives on the client with
+   * its prototype stripped (a real bug, caught only by loading this page in
+   * an actual browser — a unit test that constructs the component directly,
+   * with no serialisation boundary in between, cannot see it). Read for the
+   * controls' state AND passed straight into `AppShell` so the Ask surface's
+   * context sentence can never name a different range or store than what's
+   * on screen.
+   */
+  params: string
   stores: SwitchableStore[]
   today: Date
   sections: OverviewClientSections
 }) {
   const router = useRouter()
+  const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   const push = useCallback(
@@ -114,8 +125,12 @@ export function CounterOverviewClient({
     >
       <div className="flex flex-col gap-5 p-5">
         <EntryItem index={0}>
+          {/* A single Figure, not a Strip — Strip's grid is 2/4 tracks wide
+              and one cell inside it left the other tracks as bare hairline
+              background (a grey rectangle beside the number). "lead" size
+              is exactly for this: the one headline figure on a page. */}
           <Section title="Net sales" data={sections.sales} askAbout>
-            {(d) => <Strip cells={[{ label: "Net sales", value: money(d.netSales), size: "lead" }]} />}
+            {(d) => <Figure label="Net sales" value={money(d.netSales)} size="lead" />}
           </Section>
         </EntryItem>
 
@@ -162,6 +177,7 @@ export function CounterOverviewClient({
                   { label: "Spend", value: money(d.spend) },
                   { label: "Invoices", value: d.count.toLocaleString("en-US") },
                   { label: "Needs review", value: d.needsReview.toLocaleString("en-US") },
+                  { label: "Avg invoice", value: money(d.avgInvoice) },
                 ]}
               />
             )}

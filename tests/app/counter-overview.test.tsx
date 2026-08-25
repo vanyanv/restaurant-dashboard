@@ -15,7 +15,11 @@ import { ready, failed, notComputed, empty } from "@/lib/counter/section-data"
 
 const base = {
   pathname: "/dashboard",
-  params: new URLSearchParams(),
+  // A plain query string, not a URLSearchParams instance — see the
+  // component's own doc comment on why (RSC serialisation strips a class
+  // instance's prototype; a real browser catches this, a unit test that
+  // constructs the component directly does not).
+  params: "",
   stores: [{ id: "hollywood", name: "Hollywood", stage: "trading" as const }],
   today: new Date(2026, 7, 25),
 }
@@ -35,7 +39,7 @@ const sections = {
   sales: ready({ netSales: 7468 }),
   splh: notComputed("sales per labour hour scoped to the selected range"),
   ledger: ready([{ storeId: "hollywood", store: "Hollywood", net: 7468, cogsPct: 28.4, deltaVsTargetPp: -1.2 }]),
-  invoices: ready({ spend: 63203, count: 34, needsReview: 6 }),
+  invoices: ready({ spend: 63203, count: 34, needsReview: 6, avgInvoice: 1858.9 }),
   needsYou: notComputed("alerts and decisions queue"),
   modelCall: notComputed("the model's call for this day"),
 }
@@ -87,7 +91,7 @@ describe("Counter Overview", () => {
     // All six states render through Section. If a page ever branched on status
     // it would diverge from the others; this catches the symptom.
     for (const s of [
-      ready({ spend: 0, count: 0, needsReview: 0 }),
+      ready({ spend: 0, count: 0, needsReview: 0, avgInvoice: 0 }),
       failed("x", "y"),
       notComputed("z"),
       empty("no_match" as const),
