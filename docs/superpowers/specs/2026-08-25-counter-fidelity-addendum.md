@@ -138,7 +138,26 @@ For every page it runs **two independent passes**:
 2. **Rendering.** For every landmark present on both sides, the computed value
    of sixteen checked properties (`font-family`, `font-size`, `color`,
    `background-color`, `border-radius`, `grid-template-columns`, …) must
-   agree — **in both themes**.
+   agree.
+
+**Light mode is compared against the prototype. Dark mode is not.** The
+prototype's application tokens are declared light-only; dark mode is this
+project's own design (brainstorm decision 8), and `counter.css` carries all 33
+colours as `light-dark()` pairs. So the rendering pass compares our light
+render to the prototype's, and asserts dark mode separately — for internal
+consistency rather than against a reference that does not exist:
+
+- every colour a landmark renders resolves through a `--ct-*` token, never a
+  literal, so it actually changes with the theme;
+- text keeps its contrast against whatever it sits on.
+
+This distinction is not pedantry. The ported stylesheet carries 35 colour
+literals inherited from the prototype, and at least 13 are solid `color:` or
+`background:` declarations. `.qbtn[aria-pressed="true"]` sets its background to
+`var(--ink)` — which themes to near-white in dark — while its `.n` child keeps
+a hardcoded light grey, giving invisible text. A gate that compared dark mode
+against the prototype would call that a perfect match, because the prototype
+does exactly the same thing.
 
 Two passes rather than one because they fail for different reasons and want
 different fixes. "You did not build this element" and "you built it and it
@@ -152,6 +171,12 @@ invented and ours come from a real database, so an image diff is pure noise. A
 missing `.dispatch` is signal. Text is therefore compared for *presence* only:
 an element that should carry text and carries none is a defect; an element
 carrying a different number is not.
+
+**Inherited literals are fixed by the task that first emits their class.**
+Not in one sweep. The task building `.qbtn` is the only one positioned to
+choose the right token and see the result in both themes, and its own fidelity
+run is what proves it. A page may not flip its manifest entry to `"counter"`
+while any class it emits still resolves a colour to a literal.
 
 **And the check is run twice.** Once while building, against the dev server;
 once more after the final fix, against a cold `npm run build && npm run start`.
