@@ -32,7 +32,20 @@ export function AppShell({
         Skip to content
       </a>
 
-      <div className="flex w-[212px] shrink-0 flex-col border-r border-ct-line bg-ct-chrome">
+      {/*
+       * `sticky top-0 h-dvh overflow-y-auto`: the rail must stay put while
+       * the page underneath it scrolls — see docs/counter/shell-verification.md,
+       * "Does the rail fit in one glance at 900px" (five real sections
+       * already produce 1435px of content against a 900px viewport, and
+       * without this the whole page — rail included — scrolled away).
+       * `overflow-y-auto` is a safety net, not the normal case: all
+       * seventeen destinations plus five group captions were measured
+       * fitting inside a 900px viewport with no internal scrollbar
+       * (`nav.scrollHeight === nav.clientHeight`). Don't remove it as
+       * "dead" — it's what keeps the rail itself usable if a future group
+       * ever pushes past viewport height.
+       */}
+      <div className="sticky top-0 flex h-dvh w-[212px] shrink-0 flex-col overflow-y-auto border-r border-ct-line bg-ct-chrome">
         <div className="p-2.5">
           <Wordmark />
         </div>
