@@ -52,7 +52,29 @@ export function AppShell({
   const resolvedToday = useMemo(() => today ?? new Date(), [today])
 
   return (
-    <div className="flex min-h-dvh bg-ct-paper">
+    /*
+     * `ct-root` is what switches the ported prototype stylesheet on.
+     * `counter-components.css` declares the prototype's unprefixed token names
+     * (`--ink`, `--paper`, `--line`, …) as aliases of the `--ct-*` set, scoped
+     * to `.ct-root` and the prototype's own roots. Until this class exists on
+     * a real element, all 1030 ported rules apply to nothing.
+     *
+     * It is a token scope, not a layout class: the prototype's `.frame` also
+     * carries `display:grid`, a fixed 212px column and a demo card's border and
+     * shadow, and none of that is ported onto `.ct-root`. The layout below
+     * stays ours.
+     *
+     * `text-ct-ink` IS NOT DECORATION. `.frame` also declares
+     * `color: var(--ink)`, and the extractor left that on `.frame` with the
+     * rest of the demo-card properties — so `.ct-root` inherits the document's
+     * colour instead. Every ported rule that sets a font size but no colour
+     * (`.strip .v`, `.headline .v`, `.fig`) then renders in whatever the page
+     * ground happens to be, which in dark theme was near-black figures on a
+     * near-black surface: measured, and visible in the first dark screenshot
+     * of this task. This is the one line of `.frame`'s base typography the
+     * shell has to restate. See task-3-report.md.
+     */
+    <div className="ct-root flex min-h-dvh bg-ct-paper text-ct-ink">
       <a
         href="#ct-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-ct-sm focus:bg-ct-ink focus:px-3 focus:py-2 focus:text-ct-mid focus:text-ct-paper"

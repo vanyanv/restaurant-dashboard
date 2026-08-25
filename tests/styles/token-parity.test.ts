@@ -78,20 +78,49 @@ function contrast(a: string, b: string): number {
  * disjoint, so that condition is asserted rather than described.
  *
  * `counter-components.css` styles `.ct-root`, `.frame`, `.pframe` and `.login`
- * with the Counter values of `--ink`, `--paper` and friends. Nothing in the app
- * carries any of those four as a bare class today — the login page uses
- * `login-shell`, `login-headline` and so on, and the only `frame` is
- * `m-chart-frame` — so no editorial surface can inherit a Counter token.
+ * with the Counter values of `--ink`, `--paper` and friends.
  *
- * WHEN THIS GOES RED: Task 3 of the Counter fidelity plan puts `ct-root` on
- * AppShell, which is a legitimate change and will fail this. Do not delete the
- * assertion to make it pass. Re-examine the exclusion instead: from that point
- * an editorial surface rendered inside the Counter root inherits `--ink` and
- * `--paper` from the alias layer unless it restates its own, and the answer is
- * either to prove no editorial surface renders there or to prefix the ported
- * token names. Narrow this list to the classes still unused, and say why.
+ * `frame`, `pframe` and `login` are still carried by nothing in the app — the
+ * login page uses `login-shell`, `login-headline` and so on, and the only
+ * `frame` is `m-chart-frame`. They stay banned outright.
+ *
+ * `ct-root` NO LONGER IS. Task 3 of the Counter fidelity plan puts it on
+ * `AppShell`'s outermost element, which is what switches the ported stylesheet
+ * on at all; without it the whole port applies to nothing. So the ban is
+ * narrowed rather than deleted: exactly one file may emit exactly `ct-root`,
+ * and `COUNTER_ROOT_EXCEPTIONS` names it.
+ *
+ * WHY THAT STAYS SAFE. The hazard is one specific thing — an element that
+ * READS an unprefixed editorial token without restating it, rendered inside
+ * `.ct-root`, where the alias layer now answers with a Counter value. That
+ * requires an editorial element to be a descendant of `AppShell`, and the
+ * second test below asserts that none can be:
+ *
+ *   1. Only `src/app/dashboard/counter-overview-client.tsx` renders
+ *      `<AppShell>`. `/dashboard/page.tsx` is a sibling of the `(editorial)`
+ *      route group, not a parent of it, so no editorial page nests inside it.
+ *   2. The four editorial stylesheets are imported by
+ *      `(editorial)/layout.tsx`, `login/layout.tsx`, `(mobile)/m/layout.tsx`,
+ *      `not-found.tsx` and `shutdown/page.tsx` — none of which is on a Counter
+ *      route, so on `/dashboard` those rules are not even in the document.
+ *   3. Nothing in the Counter tree, or in the file that mounts it, imports
+ *      Radix, `@/components/ui/**`, or an editorial stylesheet, and none of
+ *      them emits an `editorial-*` class. The six mirrored token copies exist
+ *      because Radix PORTALS its surfaces to `document.body`; there is no
+ *      Radix under `AppShell` to portal, and nothing else there wants an
+ *      editorial token.
+ *
+ * The day any of those three stops holding, the second test goes red before
+ * the colours do. If it ever needs to hold with an editorial surface genuinely
+ * nested inside a Counter root, the fix is to prefix the ported token names in
+ * `scripts/extract-prototype-css.ts`, not to widen this exception.
  */
 const COUNTER_ROOT_CLASSES = ["ct-root", "frame", "pframe", "login"]
+
+/** `file suffix -> the one class it may emit`. Nothing else, nowhere else. */
+const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
+  { file: "components/counter/shell/app-shell.tsx", token: "ct-root" },
+]
 
 function tsxFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -101,10 +130,19 @@ function tsxFiles(dir: string): string[] {
   })
 }
 
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = join(dir, e.name)
+    if (e.isDirectory()) return sourceFiles(full)
+    return e.isFile() && (full.endsWith(".tsx") || full.endsWith(".ts")) ? [full] : []
+  })
+}
+
 describe("the Counter/editorial token-name collision stays harmless", () => {
-  it("emits none of the Counter root classes from any component", () => {
+  it("emits none of the Counter root classes, except the one file that mounts ct-root", () => {
     const offenders: string[] = []
     for (const file of tsxFiles(join(process.cwd(), "src"))) {
+      const rel = file.split("/src/")[1]
       const text = readFileSync(file, "utf8")
       // Every className/class value in the file, however it is written:
       // a plain attribute, a braced literal, or a cn()/clsx() argument.
@@ -117,11 +155,47 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
             : [...value.matchAll(/["'\`]([^"'\`]*)["'\`]/g)].map((q) => q[1])
         for (const chunk of chunks) {
           for (const token of chunk.split(/[\s${}]+/)) {
-            if (COUNTER_ROOT_CLASSES.includes(token)) {
-              offenders.push(`${file.split("/src/")[1]}: ${token}`)
-            }
+            if (!COUNTER_ROOT_CLASSES.includes(token)) continue
+            const allowed = COUNTER_ROOT_EXCEPTIONS.some(
+              (x) => rel === x.file && token === x.token
+            )
+            if (!allowed) offenders.push(`${rel}: ${token}`)
           }
         }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it("still bans the three root classes nothing carries", () => {
+    // The exception list must never quietly grow into a blanket exemption.
+    expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual(["ct-root"])
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(1)
+  })
+
+  it("keeps every editorial surface out of the Counter root", () => {
+    // The three conditions from the comment above, as one sweep: the Counter
+    // component tree, plus whatever file mounts <AppShell> — everything that
+    // can render INSIDE .ct-root — must be free of editorial anything.
+    const all = sourceFiles(join(process.cwd(), "src"))
+    const mounts = all.filter((f) => /<AppShell[\s>]/.test(readFileSync(f, "utf8")))
+    expect(mounts.length, "expected at least one file to mount AppShell").toBeGreaterThan(0)
+
+    const underRoot = new Set([
+      ...all.filter((f) => f.includes("/components/counter/")),
+      ...mounts,
+    ])
+
+    const offenders: string[] = []
+    for (const file of underRoot) {
+      const text = readFileSync(file, "utf8")
+      for (const [what, re] of [
+        ["an editorial class", /editorial-[a-z]/],
+        ["an editorial stylesheet", /@\/styles\/editorial-/],
+        ["a Radix portal surface", /@radix-ui\//],
+        ["a shadcn surface", /@\/components\/ui\//],
+      ] as const) {
+        if (re.test(text)) offenders.push(`${file.split("/src/")[1]}: ${what}`)
       }
     }
     expect(offenders).toEqual([])
