@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest"
 import { render, screen } from "@testing-library/react"
@@ -41,20 +43,34 @@ describe("PageHead", () => {
   })
 
   it("cancels the entry animation's FORWARDS fill, which is what traps the date popover", () => {
-    // Measured in Chromium, on the prototype as well as on us: `.screen > *`
-    // animates `cnter` with `fill-mode: both`, whose `to` state is
-    // `transform:none` — and a FILLED `transform:none` computes as
-    // `matrix(1, 0, 0, 1, 0, 0)`, not `none`. That identity matrix makes
-    // `.pagehead` a permanent stacking context (so every later `.sec` paints
-    // over the open `.drpop`) and a permanent containing block for fixed
-    // positioning (so below 640px the date sheet anchors to the page head and
-    // lands 295px above the viewport). `.pagehead` is `.screen`'s first child,
-    // so its animation-delay is 0 and the BACKWARDS half of the fill never
-    // applied; and `cnter`'s `to` state is this element's default state, so
-    // dropping the forwards half changes nothing that is drawn.
+    // The repair is no longer inline on this element — it is a stylesheet
+    // rule covering EVERY `.screen > *`, because the defect was never the page
+    // head's. A FILLING `transform: none` computes as `matrix(1,0,0,1,0,0)`,
+    // not `none`, which makes each direct child of `.screen` a stacking
+    // context and a containing block for fixed positioning. Measured live:
+    // `.dispatch` and all three `.sec` elements trapped a `position:fixed`
+    // probe at 127/181/352/493px, while this element — repaired inline at the
+    // time — held it at 0. Repairing one element left every section broken.
+    //
+    // Asserted against the source, because jsdom applies no stylesheet: the
+    // rule's ABSENCE is the regression, and nothing else in the tree can see
+    // it. `backwards` and not `none`, because these children carry staggered
+    // delays and only `backwards` applies the `from` state during the delay —
+    // `none` would flash each section at full opacity before animating it in.
+    const repairs = readFileSync(
+      resolve(process.cwd(), "src/styles/counter-repairs.css"),
+      "utf8",
+    )
+    const rule = repairs.replace(/\s+/g, " ")
+    expect(rule).toContain(".screen > *")
+    expect(rule).toContain(".mscroll > *")
+    expect(rule).toContain("animation-fill-mode: backwards")
+    expect(rule).not.toContain("animation-fill-mode: none")
+
+    // And the element itself carries no inline style any more.
     const { container } = render(<PageHead title="Monday's numbers" />)
     const head = container.querySelector(".pagehead") as HTMLElement
-    expect(head.style.animationFillMode).toBe("none")
+    expect(head.style.animationFillMode).toBe("")
   })
 
   it("carries the heading id a landmark can be labelled by", () => {
