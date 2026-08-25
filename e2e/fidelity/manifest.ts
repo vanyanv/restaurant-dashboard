@@ -13,7 +13,7 @@
  */
 export type PageStatus = "counter" | "editorial"
 
-export interface FidelityPage {
+interface FidelityPageBase {
   /** The prototype's own page module id, e.g. "overview". */
   protoId: string
   /** The prototype's name for it, for report headings. */
@@ -52,11 +52,36 @@ export interface FidelityPage {
    */
   report?: boolean
   /**
-   * Landmark counts on the day the page first passed. A later run finding
-   * fewer is a silent regression, not a pass. Set it when the page goes green.
+   * Named contrast exceptions, for elements the 4.5:1 rule flags but which are
+   * genuinely fine (ruling F-R6). The threshold NEVER moves — an exception is
+   * a reviewable line naming the element and the ratio it actually measures,
+   * the same pattern `src/styles/counter.css` already uses for its documented
+   * WCAG exceptions. A lowered threshold would silently forgive every element
+   * on the page; this forgives exactly one, in writing, with its number.
    */
-  baseline?: { desktop: number; mobile: number }
+  contrastAllowances?: Array<{ selector: string; reason: string; measured: number }>
 }
+
+/**
+ * A page is either not rebuilt yet, or it is rebuilt AND carries the landmark
+ * counts it passed with.
+ *
+ * `baseline` is required on a "counter" page and forbidden on an "editorial"
+ * one, so a page cannot be declared done without acquiring a regression floor
+ * in the same edit (ruling F-R4). A later run finding fewer landmarks than the
+ * baseline is a silent regression, not a pass.
+ *
+ * This is a type rather than a lint because `npm run fidelity` needs a running
+ * server and so cannot join `npm test`. The manifest carries the weight
+ * instead: marking a page done without a floor fails `tsc`, which every gate
+ * already runs.
+ */
+export type FidelityPage =
+  | (FidelityPageBase & { status: "editorial"; baseline?: never })
+  | (FidelityPageBase & {
+      status: "counter"
+      baseline: { desktop: number; mobile: number }
+    })
 
 export const PAGES: FidelityPage[] = [
   { protoId: "overview", name: "Overview", protoRoute: "/dashboard", route: "/dashboard", mobileRoute: "/m", status: "editorial", report: true },
