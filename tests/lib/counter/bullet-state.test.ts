@@ -277,7 +277,9 @@ describe("shaped", () => {
   })
 
   it("does not divide by a zero mean", () => {
-    // Without Math.max(0.0001, m) this is Infinity and the spark disappears.
+    // Without Math.max(0.0001, m) the scale factor is Infinity and every
+    // point becomes 0 * Infinity = NaN, so the spark's path is unparseable
+    // and it disappears. (Not Infinity itself — the multiply is what breaks.)
     expect(shaped([0, 0, 0], 5)).toEqual([0, 0, 0])
   })
 
