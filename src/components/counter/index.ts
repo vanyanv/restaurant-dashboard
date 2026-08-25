@@ -21,6 +21,7 @@ export { Rail } from "./shell/rail"
 export { Wordmark } from "./shell/wordmark"
 export { StoreSwitcher, type SwitchableStore } from "./shell/store-switcher"
 export { DateControl, type DateControlProps } from "./shell/date-control"
+export { Topbar } from "./shell/topbar"
 
 export { useEntry, ENTRY_STAGGER_MS, ENTRY_DURATION_MS, ENTRY_TOTAL_MS } from "./motion/use-entry"
 export { useCountUp, COUNT_UP_MS } from "./motion/use-count-up"
