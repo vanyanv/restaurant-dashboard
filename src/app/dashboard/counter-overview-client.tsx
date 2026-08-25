@@ -123,9 +123,24 @@ export function CounterOverviewClient({
           {/* A single Figure, not a Strip — Strip's grid is 2/4 tracks wide
               and one cell inside it left the other tracks as bare hairline
               background (a grey rectangle beside the number). "lead" size
-              is exactly for this: the one headline figure on a page. */}
+              is exactly for this: the one headline figure on a page.
+
+              The `.headline` wrapper is not decoration. `size="lead"` emits
+              the prototype's `<div class="fig">`, and every rule that sizes a
+              lead figure is written as a DESCENDANT of `.headline`
+              (`.headline .fig`, `.headline .k`, `.headline .v` — see
+              counter-components.css). Outside one, `.fig` has no display:grid
+              and the label and the figure run together at body size. The
+              prototype never emits a `.fig` anywhere else either. The real
+              headline block — two figures and the `.say` sentence beside them
+              — is a later task; this is the one-child form of the same
+              element. */}
           <Section title="Net sales" data={sections.sales} askAbout>
-            {(d) => <Figure label="Net sales" value={money(d.netSales)} size="lead" />}
+            {(d) => (
+              <div className="headline">
+                <Figure label="Net sales" value={money(d.netSales)} size="lead" />
+              </div>
+            )}
           </Section>
         </EntryItem>
 
