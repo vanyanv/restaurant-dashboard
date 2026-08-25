@@ -21,6 +21,16 @@ Screenshots were written to `tmp-screenshots/controls-verification/`
 (gitignored, not part of this commit); paths below are relative to the repo
 root for reference within this session.
 
+**Sections 1–5 below are the original session.** It found one real defect —
+`StoreSwitcher` mounted as a bare radiogroup produced a four-row stack next
+to `DateControl`'s one-line trigger (§5). That was fixed by giving
+`StoreSwitcher` the same single-line-trigger-plus-popover shape
+`DateControl` already had, reusing the same frame-placement logic (now
+extracted into `src/components/counter/shell/frame-placement.ts`, imported
+by both). **§6 is the re-verification session against that fix** — the
+harness was rebuilt, the store popover was measured at the same three
+widths the range menu was, and the topbar was looked at again.
+
 ## 1. Does the popover stay on screen? (note 21)
 
 The range menu (`role="menu" aria-label="Range"`) was opened at three
@@ -133,28 +143,28 @@ reason).
 
 ## 5. Look at it and say what you see
 
-**The range and comparison read as a header, but the store switcher does
-not — and stacking them together breaks the strip.** `DateControl` renders
-as a tight single-line row (‹ Last 7 days › | vs the prior period) that
-reads exactly like a header control: compact, right-aligned, legible at a
-glance. `StoreSwitcher`, though, is the bare `role="radiogroup"` from Task
-2 — a vertical `grid` of one button per store — rendered directly in
-`Topbar`'s children slot with no trigger or popover wrapping it. Placed
-next to a one-line date control, it turns the whole right side of the
-topbar into a **four-row stack** (All stores / Hollywood / Glendale opening
-soon / Van Nuys warming up) that the single-line date/comparison controls
-sit oddly centered against — see `controls-light-closed.png`. The topbar
-reads less like a header and more like a panel of loosely stacked controls
-crammed into the top-right corner. This is a genuine finding, not a nitpick:
-`StoreSwitcher` was built (Task 2) as a bare primitive with no opinion about
-where it's mounted, and `Topbar` (Task 4) was built with a generic children
-slot and no opinion either — nothing in either task's brief called for
-wrapping the switcher in its own trigger+popover, so this is what "contains
-a StoreSwitcher and a DateControl" produces today. Before a real page ships
-with both in the topbar, the store switcher needs the same
-trigger-collapsed-to-a-chip treatment the date control already has for
-itself, or a different home entirely (the prototype puts it in the rail,
-not the topbar, behind its own `.storepop`).
+**Original finding (fixed — see §6): the range and comparison read as a
+header, but the store switcher did not, and stacking them together broke
+the strip.** `DateControl` rendered as a tight single-line row (‹ Last 7
+days › | vs the prior period) that read exactly like a header control:
+compact, right-aligned, legible at a glance. `StoreSwitcher`, though, was
+the bare `role="radiogroup"` from Task 2 — a vertical `grid` of one button
+per store — rendered directly in `Topbar`'s children slot with no trigger
+or popover wrapping it. Placed next to a one-line date control, it turned
+the whole right side of the topbar into a **four-row stack** (All stores /
+Hollywood / Glendale opening soon / Van Nuys warming up) that the
+single-line date/comparison controls sat oddly centered against — see
+`controls-light-closed.png`. The topbar read less like a header and more
+like a panel of loosely stacked controls crammed into the top-right corner.
+This was a genuine finding, not a nitpick: `StoreSwitcher` was built (Task
+2) as a bare primitive with no opinion about where it's mounted, and
+`Topbar` (Task 4) was built with a generic children slot and no opinion
+either — nothing in either task's brief called for wrapping the switcher in
+its own trigger+popover, so this is what "contains a StoreSwitcher and a
+DateControl" produced at the time. **Fixed in the same session this doc was
+finished in:** `StoreSwitcher` now has the same trigger-collapsed-to-a-chip
+shape `DateControl` already had for itself. §6 has the re-verification —
+measurements, screenshots, and what the topbar reads as now.
 
 **The current range is legible at a glance.** "Last 7 days" — or whichever
 preset is active — sits in its own bordered chip in JetBrains-Mono-adjacent
@@ -184,19 +194,85 @@ doing their job.
 Sans", …`, `font-weight: 700` — `font-ct-display`, and only there, per
 CLAUDE.md's tripwire #3.
 
+## 6. Re-verification: `StoreSwitcher`'s trigger + popover
+
+`StoreSwitcher` now renders a single-line trigger (`aria-haspopup="menu"`,
+showing "All stores" or the selected store's name) with a popover behind
+it, built on the same `useFramePlacement` hook `DateControl`'s two menus
+already used — extracted verbatim into
+`src/components/counter/shell/frame-placement.ts` rather than copied a
+second time, and imported by both components. `StoreSwitcher` calls it with
+narrower bounds (`maxWidth: 280, minWidth: 200`, vs. the range menu's
+438/280) since a store name never needs the range picker's width; the 10px
+minimum-left-margin flip is identical for both. The harness was rebuilt
+(same shape as §1–5: `AppShell` + `Topbar` + both controls) and driven
+again with the Playwright MCP browser.
+
+### Does the topbar read as a header now?
+
+Yes — screenshot: `tmp-screenshots/controls-verification/v2-1440-topbar-
+closed.png`. The whole right side of the topbar is now one line: a small
+green-dot "SYNCED 6:42 PM", then three bordered chips in a row — "All
+stores ⌄", "‹ Yesterday ⌄ ›", "VS THE PRIOR PERIOD ⌄" — all vertically
+centered against the "Overview" title on the left. Nothing stacks. The
+four-row panel from §5 is gone; this is what "contains a StoreSwitcher and
+a DateControl" was always meant to produce.
+
+### Store popover frame (note 21), the same three widths as §1
+
+| Viewport | `left` | `right` | `width` | `innerWidth` | On screen? |
+|---|---|---|---|---|---|
+| 1440×900 | 808 | 1088 | 280 | 1440 | yes — `left ≥ 0`, `right ≤ 1440` |
+| 900×900  | 268 | 548  | 280 | 900  | yes — `left ≥ 0`, `right ≤ 900`  |
+| 390×844  | 95.09 | 375.09 | 280 | 390 | yes — `left ≥ 0`, `right ≤ 390` |
+
+All three on screen, the 390px case included. Unlike the range menu at 390
+(§1), the store popover didn't need to flip to an explicit `left` offset
+here — at 280px wide, right-anchoring under the trigger (which itself sits
+further from the viewport's right edge than the range trigger does) already
+lands its left edge at 95px, well past the 10px minimum — but it's the same
+`computeFramePlacement` function deciding that, not a different code path
+that happens not to be exercised. Screenshot at 390:
+`tmp-screenshots/controls-verification/v2-390-store-popover.png` — "All
+stores", "Hollywood", "Glendale OPENING SOON", "Van Nuys WARMING UP" all
+fully legible inside the popover, which sits entirely within the frame even
+though the page behind it is horizontally scrolled (the known, expected
+`AppShell`-at-390 shell limitation from §1 — left untouched, as directed).
+
+### Console errors
+
+**0 in both themes**, re-checked after this fix: a fresh light load, a
+fresh dark load (`localStorage.setItem("counter-theme", "dark")` + a real
+navigation), and again after opening/closing the store popover and the
+range menu several times in each. Screenshots:
+`tmp-screenshots/controls-verification/v2-dark-store-popover.png` (dark,
+open) alongside `v2-1440-store-popover.png` (light, open). In dark the
+popover separates from the page the same way the range menu's did in §5 —
+a visibly lighter charcoal surface, crisp hairline border, warm-red wash on
+"All stores" (the current selection) — consistent with, not a regression
+of, the earlier finding.
+
+### Sanity check: did the refactor change `DateControl`'s own behaviour?
+
+No. The range menu was re-measured at 1440 post-refactor as a control:
+`left: 787.5, right: 1225.5, width: 438` — identical to §1's original
+number. Extracting the shared helper didn't move `DateControl`'s own
+popover.
+
 ## Summary
 
-The two things this task set out to prove both hold, measured, in a real
-browser: the popover never leaves the viewport at any of the three widths
-tested, including the 390px case note 21 called out by name, and the
-weekday comparison disappears from the menu exactly at the 7-day boundary
-`date-range.ts` draws, not a day earlier or later. The URL round-trips a
-preset, a comparison and a store through an actual reload, and drops all
-three back to nothing when every control is returned to its default. Zero
-console errors in both themes, confirmed after real interaction, not just a
-cold load. One real finding came out of actually looking rather than just
-measuring: `Topbar` containing both `StoreSwitcher` and `DateControl`
-directly, as this task's own brief describes, produces a lopsided
-four-row-vs-one-row header — not because either primitive is broken, but
-because neither task gave `StoreSwitcher` a collapsed/triggered form for
-this context. Read this before mounting both in a real page's topbar.
+The two things this task originally set out to prove both hold, measured,
+in a real browser: the popover never leaves the viewport at any of the
+three widths tested, including the 390px case note 21 called out by name,
+and the weekday comparison disappears from the menu exactly at the 7-day
+boundary `date-range.ts` draws, not a day earlier or later. The URL
+round-trips a preset, a comparison and a store through an actual reload,
+and drops all three back to nothing when every control is returned to its
+default. Zero console errors in both themes, confirmed after real
+interaction, not just a cold load. The one real finding from actually
+looking — `Topbar` containing both `StoreSwitcher` and `DateControl`
+directly produced a lopsided four-row-vs-one-row header — is now fixed
+(§6): `StoreSwitcher` has its own single-line trigger and frame-measured
+popover, built on the same placement helper `DateControl` uses, and the
+topbar reads as a single-line header at 1440, 900 and (modulo the
+already-known, out-of-scope `AppShell` rail-collapse limitation) 390.
