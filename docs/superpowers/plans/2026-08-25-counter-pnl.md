@@ -31,6 +31,13 @@
   `Table`, `Cascade`, `Meter` take plain `T` and know nothing about states.
 - Prices, percents and deltas are formatted **only** by `src/lib/counter/format.ts`.
 - Never run `prisma migrate dev`. This plan changes no schema.
+- **Tests live in a top-level `tests/` tree, mirroring `src/` — never in a
+  `__tests__/` folder beside the code.** `vitest.config.mts` is the authority.
+  `src/lib/counter/statement.ts` is tested by `tests/lib/counter/statement.ts`;
+  `src/components/counter/shell/app-shell.tsx` by
+  `tests/components/counter/shell/app-shell.test.tsx`. Before adding cases to
+  an existing file, read it: module-level constants there may already own the
+  names you were about to declare.
 
 ---
 
@@ -145,9 +152,9 @@ thing: an arbitrary window the URL can carry.
 - Modify: `src/lib/counter/url-state.ts`
 - Modify: `src/components/counter/shell/date-control.tsx:98`
 - Modify: `src/app/dashboard/counter-overview-client.tsx` (the inert `onStep`)
-- Test: `src/lib/counter/__tests__/date-range.test.ts` (exists — extend)
-- Test: `src/lib/counter/__tests__/url-state.test.ts` (exists — extend)
-- Test: `src/components/counter/__tests__/date-control.test.tsx` (exists — extend)
+- Test: `tests/lib/counter/date-range.test.ts` (exists — extend)
+- Test: `tests/lib/counter/url-state.test.ts` (exists — extend)
+- Test: `tests/components/counter/shell/date-control.test.tsx` (exists — extend)
 
 **Interfaces:**
 - Consumes: `DateRange {start,end}`, `PresetId`, `PRESETS`, `resolvePreset`,
@@ -164,7 +171,7 @@ thing: an arbitrary window the URL can carry.
 
 - [ ] **Step 1: Write the failing tests for the date-range helpers**
 
-Append to `src/lib/counter/__tests__/date-range.test.ts`:
+Append to `tests/lib/counter/date-range.test.ts`:
 
 ```ts
 import { isoDay, parseIsoDay, rangeLabel } from "@/lib/counter/date-range"
@@ -221,7 +228,7 @@ describe("rangeLabel", () => {
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `npx vitest run src/lib/counter/__tests__/date-range.test.ts`
+Run: `npx vitest run tests/lib/counter/date-range.test.ts`
 Expected: FAIL — `isoDay`, `parseIsoDay`, `rangeLabel` are not exported.
 
 - [ ] **Step 3: Implement the helpers**
@@ -297,12 +304,12 @@ export function rangeLabel(r: DateRange, id: RangeId): string {
 
 - [ ] **Step 4: Run them and watch them pass**
 
-Run: `npx vitest run src/lib/counter/__tests__/date-range.test.ts`
+Run: `npx vitest run tests/lib/counter/date-range.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Write the failing tests for the URL round trip**
 
-Append to `src/lib/counter/__tests__/url-state.test.ts`:
+Append to `tests/lib/counter/url-state.test.ts`:
 
 ```ts
 const TODAY = new Date(2026, 7, 25) // Tue 25 Aug 2026
@@ -379,7 +386,7 @@ describe("custom ranges in the URL", () => {
 
 - [ ] **Step 6: Run them and watch them fail**
 
-Run: `npx vitest run src/lib/counter/__tests__/url-state.test.ts`
+Run: `npx vitest run tests/lib/counter/url-state.test.ts`
 Expected: FAIL — `from`/`to` are ignored; `writeCounterParams` rejects `range`.
 
 - [ ] **Step 7: Implement the URL round trip**
@@ -507,12 +514,12 @@ passes `range`.
 
 - [ ] **Step 8: Run them and watch them pass**
 
-Run: `npx vitest run src/lib/counter/__tests__/url-state.test.ts`
+Run: `npx vitest run tests/lib/counter/url-state.test.ts`
 Expected: PASS.
 
 - [ ] **Step 9: Write the failing test for the control's label**
 
-Append to `src/components/counter/__tests__/date-control.test.tsx`:
+Append to `tests/components/counter/shell/date-control.test.tsx`:
 
 ```tsx
 it('labels a custom range by its ends, not "Today"', () => {
@@ -554,7 +561,7 @@ that file already queries — read it before writing this.
 
 - [ ] **Step 10: Run it and watch it fail**
 
-Run: `npx vitest run src/components/counter/__tests__/date-control.test.tsx`
+Run: `npx vitest run tests/components/counter/shell/date-control.test.tsx`
 Expected: FAIL — the trigger reads "Today", because
 `PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]` falls back to the first
 preset for an id it does not recognise.
@@ -580,7 +587,7 @@ In `src/components/counter/shell/date-control.tsx`:
 
 - [ ] **Step 12: Run it and watch it pass**
 
-Run: `npx vitest run src/components/counter/__tests__/date-control.test.tsx`
+Run: `npx vitest run tests/components/counter/shell/date-control.test.tsx`
 Expected: PASS.
 
 - [ ] **Step 13: Make Overview's steppers real**
@@ -624,8 +631,8 @@ Expected: PASS, with a higher test count than the 2079 baseline.
 
 ```bash
 git add src/lib/counter/date-range.ts src/lib/counter/url-state.ts \
-  src/lib/counter/__tests__ src/components/counter/shell/date-control.tsx \
-  src/components/counter/__tests__ src/app/dashboard/counter-overview-client.tsx
+  tests/lib/counter src/components/counter/shell/date-control.tsx \
+  tests/components/counter src/app/dashboard/counter-overview-client.tsx
 git commit -m "feat(counter): a range you pressed is a range you can link to"
 ```
 
@@ -635,7 +642,7 @@ git commit -m "feat(counter): a range you pressed is a range you can link to"
 
 **Files:**
 - Create: `src/lib/counter/prime-cost.ts`
-- Test: `src/lib/counter/__tests__/prime-cost.test.ts`
+- Test: `tests/lib/counter/prime-cost.test.ts`
 
 **Interfaces:**
 - Consumes: nothing. This module is pure arithmetic with no imports.
@@ -660,7 +667,7 @@ export function primeCost(input: PrimeCostInput): PrimeCost
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/lib/counter/__tests__/prime-cost.test.ts`:
+Create `tests/lib/counter/prime-cost.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest"
@@ -735,7 +742,7 @@ describe("primeCost", () => {
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `npx vitest run src/lib/counter/__tests__/prime-cost.test.ts`
+Run: `npx vitest run tests/lib/counter/prime-cost.test.ts`
 Expected: FAIL — cannot resolve `@/lib/counter/prime-cost`.
 
 - [ ] **Step 3: Implement it**
@@ -858,13 +865,13 @@ export function primeCost(input: PrimeCostInput): PrimeCost {
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `npx vitest run src/lib/counter/__tests__/prime-cost.test.ts`
+Run: `npx vitest run tests/lib/counter/prime-cost.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/counter/prime-cost.ts src/lib/counter/__tests__/prime-cost.test.ts
+git add src/lib/counter/prime-cost.ts tests/lib/counter/prime-cost.test.ts
 git commit -m "feat(counter): the number that had two definitions gets one"
 ```
 
@@ -879,7 +886,7 @@ merely its symptom.
 
 **Files:**
 - Create: `src/lib/counter/statement.ts`
-- Test: `src/lib/counter/__tests__/statement.test.ts`
+- Test: `tests/lib/counter/statement.test.ts`
 
 **Interfaces:**
 - Consumes: `getAllStoresPnL` from `@/app/actions/store-actions`;
@@ -928,7 +935,7 @@ the six states are the adapter's job, not this module's.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/lib/counter/__tests__/statement.test.ts`:
+Create `tests/lib/counter/statement.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -1087,7 +1094,7 @@ describe("loadStatement", () => {
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `npx vitest run src/lib/counter/__tests__/statement.test.ts`
+Run: `npx vitest run tests/lib/counter/statement.test.ts`
 Expected: FAIL — cannot resolve `@/lib/counter/statement`.
 
 - [ ] **Step 3: Implement it**
@@ -1296,13 +1303,13 @@ export async function loadStatement(input: StatementInput): Promise<Statement> {
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `npx vitest run src/lib/counter/__tests__/statement.test.ts`
+Run: `npx vitest run tests/lib/counter/statement.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/counter/statement.ts src/lib/counter/__tests__/statement.test.ts
+git add src/lib/counter/statement.ts tests/lib/counter/statement.test.ts
 git commit -m "feat(counter): one statement, one shape, two pages"
 ```
 
@@ -1312,7 +1319,7 @@ git commit -m "feat(counter): one statement, one shape, two pages"
 
 **Files:**
 - Create: `src/lib/counter/adapters/pnl.ts`
-- Test: `src/lib/counter/adapters/__tests__/pnl.test.ts`
+- Test: `tests/lib/counter/adapters/pnl.test.ts`
 
 **Interfaces:**
 - Consumes: `loadStatement`, `granularityFor`, `type Statement`,
@@ -1384,7 +1391,7 @@ the result in, exactly as `src/app/dashboard/page.tsx` already does.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/lib/counter/adapters/__tests__/pnl.test.ts`. Mock `../statement`
+Create `tests/lib/counter/adapters/pnl.test.ts`. Mock `../statement`
 rather than the action — Task 3 already proved the action reduction, and this
 task is about classification.
 
@@ -1587,7 +1594,7 @@ describe("getPnlSections", () => {
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `npx vitest run src/lib/counter/adapters/__tests__/pnl.test.ts`
+Run: `npx vitest run tests/lib/counter/adapters/pnl.test.ts`
 Expected: FAIL — cannot resolve `@/lib/counter/adapters/pnl`.
 
 - [ ] **Step 3: Implement it**
@@ -1917,7 +1924,7 @@ to miss. The tests above assert both reasons, so this is not optional.
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `npx vitest run src/lib/counter/adapters/__tests__/pnl.test.ts`
+Run: `npx vitest run tests/lib/counter/adapters/pnl.test.ts`
 Expected: PASS, including both empty-reason cases.
 
 Note the "one weekly call" test asserts `loadStatement.mock.calls` has length
@@ -1943,7 +1950,7 @@ Record the change and the reason in the task report.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/counter/adapters/pnl.ts src/lib/counter/adapters/__tests__/pnl.test.ts
+git add src/lib/counter/adapters/pnl.ts tests/lib/counter/adapters/pnl.test.ts
 git commit -m "feat(counter): the P&L's data, classified"
 ```
 
@@ -1958,8 +1965,8 @@ with.
 **Files:**
 - Modify: `src/lib/counter/adapters/overview.ts`
 - Modify: `src/app/dashboard/counter-overview-client.tsx`
-- Test: `src/lib/counter/adapters/__tests__/overview.test.ts` (exists — extend)
-- Test: `src/lib/counter/__tests__/note-60.test.ts` (create)
+- Test: `tests/lib/counter/adapters/overview.test.ts` (exists — extend)
+- Test: `tests/lib/counter/note-60.test.ts` (create)
 
 **Interfaces:**
 - Consumes: `loadStatement` from `../statement`; `getPnlSections` from `./pnl`.
@@ -1969,7 +1976,7 @@ with.
 
 - [ ] **Step 1: Write the failing regression test — note 60 itself**
 
-Create `src/lib/counter/__tests__/note-60.test.ts`:
+Create `tests/lib/counter/note-60.test.ts`:
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -2049,7 +2056,7 @@ it("prints the same prime cost on both pages for the same range", async () => {
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `npx vitest run src/lib/counter/__tests__/note-60.test.ts`
+Run: `npx vitest run tests/lib/counter/note-60.test.ts`
 Expected: FAIL — `OverviewSections` has no `prime`.
 
 - [ ] **Step 3: Add `prime` to Overview's adapter**
@@ -2064,7 +2071,7 @@ In `src/lib/counter/adapters/overview.ts`:
    * Note 31: prime cost moved into the strip beside the two figures it is
    * made of. Note 60: it comes from `prime-cost.ts` via `statement.ts`, the
    * same call the P&L makes — not from a second sum of food and labour here.
-   * `src/lib/counter/__tests__/note-60.test.ts` asserts the two pages agree.
+   * `tests/lib/counter/note-60.test.ts` asserts the two pages agree.
    */
   prime: SectionData<{
     primePct: number | null
@@ -2104,7 +2111,7 @@ In `src/lib/counter/adapters/overview.ts`:
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `npx vitest run src/lib/counter/__tests__/note-60.test.ts src/lib/counter/adapters/__tests__/overview.test.ts`
+Run: `npx vitest run tests/lib/counter/note-60.test.ts tests/lib/counter/adapters/overview.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Show it on Overview**
@@ -2153,7 +2160,7 @@ Expected: PASS.
 
 ```bash
 git add src/lib/counter/adapters/overview.ts src/app/dashboard/counter-overview-client.tsx \
-  src/lib/counter/__tests__/note-60.test.ts src/lib/counter/adapters/__tests__/overview.test.ts
+  tests/lib/counter/note-60.test.ts tests/lib/counter/adapters/overview.test.ts
 git commit -m "feat(counter): note 60, as a test that fails if it ever comes back"
 ```
 
@@ -2167,7 +2174,7 @@ git commit -m "feat(counter): note 60, as a test that fails if it ever comes bac
 - Create: `src/app/dashboard/pnl/[storeId]/page.tsx`
 - Delete: `src/app/dashboard/(editorial)/pnl/` (the whole directory, after the
   new one is proven — see Step 6)
-- Test: `src/app/dashboard/__tests__/counter-pnl-client.test.tsx`
+- Test: `tests/app/counter-pnl.test.tsx`
 
 **Interfaces:**
 - Consumes: `getPnlSections`, `type PnlSections` from
@@ -2517,14 +2524,14 @@ with `const pressable = Boolean(r.onSelect) && !r.href` beside the existing
 `navigable`, the same `relative cursor-pointer hover:bg-ct-accent-wash` row
 classes applied when either is true, and `bg-ct-sunk` added when
 `r.selected`. Extend
-`src/components/counter/__tests__/table.test.tsx` with: a pressed row calls
+`tests/components/counter/table.test.tsx` with: a pressed row calls
 `onSelect` (use `fireEvent.click`, not `.click()` — under React 19 + RTL 16
 only `fireEvent` commits state); a row with both `href` and `onSelect` renders
 the link and not the button; and `selected` sets `aria-pressed="true"`.
 
 - [ ] **Step 4: Write the client island's test**
 
-Create `src/app/dashboard/__tests__/counter-pnl-client.test.tsx`, mirroring the
+Create `tests/app/counter-pnl.test.tsx`, mirroring the
 Overview client's existing test file. Cover at minimum:
 
 ```tsx
@@ -2560,7 +2567,7 @@ it("never inspects a status — every state comes from Section", () => {
 
 - [ ] **Step 5: Run the tests**
 
-Run: `npx vitest run src/app/dashboard/__tests__ src/components/counter/__tests__/table.test.tsx`
+Run: `npx vitest run tests/app tests/components/counter/table.test.tsx`
 Expected: PASS.
 
 - [ ] **Step 6: Graduate the route out of `(editorial)`**
@@ -2611,7 +2618,7 @@ and `/dashboard/pnl/[storeId]`, and contains no `(editorial)` string.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A src/app/dashboard src/components/counter/surface/table.tsx src/components/counter/__tests__
+git add -A src/app/dashboard src/components/counter/surface/table.tsx tests/components/counter
 git commit -m "feat(counter): the P&L, on Counter"
 ```
 
@@ -2627,8 +2634,8 @@ that shipped in Plan 7.
 - Modify: `src/components/counter/shell/app-shell.tsx`
 - Modify: `src/components/counter/shell/topbar.tsx`
 - Modify: `src/middleware.ts`
-- Test: `src/components/counter/__tests__/app-shell.test.tsx` (exists — extend)
-- Test: `src/__tests__/middleware.test.ts` (exists — extend; if it does not,
+- Test: `tests/components/counter/shell/app-shell.test.tsx` (exists — extend)
+- Test: `tests/lib/middleware.test.ts` (exists — extend; if it does not,
   create it and assert the map directly)
 
 **Interfaces:**
@@ -2637,7 +2644,7 @@ that shipped in Plan 7.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `src/components/counter/__tests__/app-shell.test.tsx`:
+Append to `tests/components/counter/shell/app-shell.test.tsx`:
 
 ```tsx
 it("offers a way into the rail on a narrow screen", () => {
@@ -2686,7 +2693,7 @@ exported.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `npx vitest run src/components/counter/__tests__/app-shell.test.tsx src/__tests__/middleware.test.ts`
+Run: `npx vitest run tests/components/counter/shell/app-shell.test.tsx tests/lib/middleware.test.ts`
 Expected: FAIL — no "Sections" button; the map still carries both routes.
 
 - [ ] **Step 3: Give the shell its phone composition**
@@ -2766,7 +2773,7 @@ the rest of the mobile shell, not to a page plan.
 
 - [ ] **Step 5: Run them and watch them pass**
 
-Run: `npx vitest run src/components/counter/__tests__/app-shell.test.tsx src/__tests__/middleware.test.ts`
+Run: `npx vitest run tests/components/counter/shell/app-shell.test.tsx tests/lib/middleware.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Run the whole gate**
@@ -2777,7 +2784,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/components/counter/shell src/components/counter/__tests__ src/middleware.ts src/__tests__
+git add src/components/counter/shell tests/components/counter src/middleware.ts tests/lib
 git commit -m "feat(counter): the phone gets the pages it was being redirected away from"
 ```
 
