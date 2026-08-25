@@ -205,6 +205,39 @@ gate at all, because it would be believed. `compareLandmarks` is unit-tested
 against hand-written fixtures, including the case where both sides are empty,
 which throws rather than passing.
 
+## A hazard the port inherits, and every page must respect
+
+`counter-components.css:780` gives every direct child of `.screen` (and of the
+phone's `.mscroll`) a filling entry animation:
+
+```css
+.screen > *, .mscroll > * { animation: cnter .34s cubic-bezier(.22,1,.36,1) both }
+@keyframes cnter { from{opacity:0;transform:translateY(9px)} to{opacity:1;transform:none} }
+```
+
+`both` means the `to` state persists forever — and **Chromium computes a
+filling `transform: none` as the identity matrix, not as `none`**. Measured:
+
+```
+filling animation, transform:none in `to`   →  computed transform  matrix(1,0,0,1,0,0)
+same element, no animation                  →  computed transform  none
+position:fixed child of the filled element  →  top: 9   (trapped by the parent)
+position:fixed child of the plain element   →  top: 0   (resolves to the viewport)
+```
+
+So every section on every Counter page is a permanent stacking context and a
+permanent containing block for fixed descendants. Task 5 hit both halves: the
+open date popover painted *behind* the sections at 1440, and the 390px sheet
+landed 295px above the top of the screen. The prototype has the same defect —
+`elementFromPoint` at the centre of its own popover returns an element outside
+it.
+
+**Any Counter element that is `position: fixed` — a popover, a sheet, a modal,
+the ⌘K overlay — must either sit outside `.screen`, be portalled to
+`document.body`, or live under an ancestor with `animation-fill-mode: none`.**
+The repair belongs on our side; the vendored artifact stays untouched, the same
+ruling as the unterminated `/*` at `counter-prototype.html:1167`.
+
 ## Phases, replacing §5 of the original spec
 
 | # | Ships |
