@@ -308,7 +308,8 @@ suite rather than a script somebody remembers to run.
 
 **Interfaces:**
 - Produces:
-  - `npm run fidelity` — every page in the manifest, both viewports, both themes
+  - `npm run fidelity` — every page in the manifest, both viewports; light
+    compared against the prototype, dark asserted on its own terms (F-R2)
   - `npm run fidelity -- --grep overview` — one page
   - `docs/counter/fidelity/<pageId>.md` — the committed report
   - `compareLandmarks(a, b)` from `landmarks.ts`, unit-testable without a browser
@@ -437,9 +438,20 @@ for (const p of PAGES.filter((x) => x.status === "counter")) {
   })
 
   test(`${p.protoId}: rendering matches the prototype`, async ({ page, context }) => {
-    // Pass 2 — computed style, for landmarks present on both sides.
-    // Runs in BOTH themes: data-theme="light" and data-theme="dark".
-    // A property is a mismatch only if it differs in either theme.
+    // Pass 2 — computed style, for landmarks present on both sides, in LIGHT.
+  })
+
+  test(`${p.protoId}: dark mode is themed, not merely different`, async ({ page }) => {
+    // Pass 3 — dark is NOT compared to the prototype (ruling F-R2): the
+    // prototype's application tokens are light-only and dark mode is this
+    // project's own design. Asserted on its own terms instead:
+    //   · every colour a landmark renders resolves through a --ct-* token
+    //   · text keeps contrast against the surface it sits on
+    // The ported sheet carries 35 inherited colour literals, 13 of them solid
+    // color/background declarations. `.qbtn[aria-pressed="true"]` sets its
+    // background to var(--ink) — near-white in dark — with a hardcoded light
+    // grey child, giving invisible text. The prototype does exactly the same,
+    // so a gate that compared dark against it would call that a perfect match.
   })
 }
 ```
