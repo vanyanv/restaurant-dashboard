@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import {
   COMPARISONS, PRESETS, comparisonRange, dayCount, stepRange,
   type ComparisonId, type DateRange, type PresetId,
 } from "@/lib/counter/date-range"
+import { useFramePlacement } from "./frame-placement"
 
 /**
  * The most-used control in the product. Every figure on every page is a
@@ -18,52 +19,16 @@ import {
  * onPreset/onComparison/onStep fires. This component is only the surface
  * over that logic: two menus and two steppers.
  *
- * Note 21: "A popover that leaves its frame is broken, not clever." The
- * prototype's own `place()` function (docs/counter/counter-prototype.html)
- * right-anchors the popover by default, sizes it to
- * `clamp(280, viewport - 24px, 438)`, and — only when right-anchoring would
- * push its left edge past the viewport's left edge — pins it to an explicit
- * `left` offset instead of the CSS default. `useFramePlacement` below ports
- * that same algorithm rather than inventing a new one. jsdom reports
- * zero-sized boxes for every element, so this cannot be proven by a unit
- * test — Task 5 measures it in a real browser at three widths.
+ * Note 21: "A popover that leaves its frame is broken, not clever." Frame
+ * placement (right-anchor by default, clamp the width, flip to an explicit
+ * `left` only when right-anchoring would overflow) lives in
+ * `./frame-placement` — shared with `StoreSwitcher`'s own popover — rather
+ * than duplicated here. jsdom reports zero-sized boxes for every element, so
+ * none of it can be proven by a unit test; see
+ * docs/counter/controls-verification.md for the real-browser measurements.
  */
 
 type MenuId = "range" | "comparison" | null
-
-interface Placement {
-  width: number
-  /** null means the CSS default (right-aligned to the trigger, `right: 0`). Set only when that would overflow the viewport's left edge. */
-  left: number | null
-}
-
-const DEFAULT_PLACEMENT: Placement = { width: 280, left: null }
-/** Mirrors the prototype's own frame padding and clamp bounds — see the module doc comment. */
-const MAX_WIDTH = 438
-const MIN_WIDTH = 280
-const FRAME_PADDING = 24
-const MIN_LEFT = 10
-
-function computePlacement(triggerRect: DOMRect, viewportWidth: number): Placement {
-  const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, viewportWidth - FRAME_PADDING))
-  const rightAlignedLeft = triggerRect.right - width
-  if (rightAlignedLeft < MIN_LEFT) {
-    return { width, left: MIN_LEFT - triggerRect.left }
-  }
-  return { width, left: null }
-}
-
-/** Recomputes placement each time the menu opens — the same moment the prototype's `place(dr)` runs. */
-function useFramePlacement(open: boolean, triggerRef: RefObject<HTMLElement | null>): Placement {
-  const [placement, setPlacement] = useState<Placement>(DEFAULT_PLACEMENT)
-  useLayoutEffect(() => {
-    if (!open) return
-    const trigger = triggerRef.current
-    if (!trigger) return
-    setPlacement(computePlacement(trigger.getBoundingClientRect(), window.innerWidth))
-  }, [open, triggerRef])
-  return placement
-}
 
 function fmtDay(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
