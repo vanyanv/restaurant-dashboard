@@ -119,13 +119,57 @@ not a component. Rules 2–5 are untouched and matter more than before.
 
 ## The new rule, and how it is enforced
 
-**A page is not done until it has been diffed against the prototype's own
-render of that page.** `npm run tokens` cannot see a missing dispatch line or a
-table that should be cards. So Task 2 builds a fidelity harness: it renders the
-prototype's page and our route at the same viewport, extracts the element
-inventory and computed styles for both, and reports what is missing, extra or
-different. Every page ships with that report committed beside it, the way
-`docs/counter/*-verification.md` already works.
+**A page is not done until Playwright has compared it against the prototype's
+own render of that page, twice, and found nothing.**
+
+`npm run tokens` cannot see a missing dispatch line or a table that should be
+cards. Nothing in this repo could, which is why the gap survived seven plans
+and a permanently green gate. So fidelity becomes a Playwright project, not a
+script somebody remembers to run — `e2e/fidelity/`, reusing the authentication
+and the two device profiles `playwright.config.ts` already defines.
+
+For every page it runs **two independent passes**:
+
+1. **Structure.** The ordered sequence of structural landmarks — dispatch,
+   head block, strip, section, queue, store cards, channel rows, charts — must
+   match the prototype's. Fails by naming every missing and every extra
+   element. This is the pass that would have caught a table where note 33
+   specifies cards.
+2. **Rendering.** For every landmark present on both sides, the computed value
+   of sixteen checked properties (`font-family`, `font-size`, `color`,
+   `background-color`, `border-radius`, `grid-template-columns`, …) must
+   agree — **in both themes**.
+
+Two passes rather than one because they fail for different reasons and want
+different fixes. "You did not build this element" and "you built it and it
+looks wrong" collapse into a single unreadable failure otherwise.
+
+Both passes run on both device projects: desktop at 1440×900 against the
+prototype's `desk()` composition, and a Pixel 7 against its `phone()` one.
+
+**Compared by structure, never by pixel.** The prototype's numbers are
+invented and ours come from a real database, so an image diff is pure noise. A
+missing `.dispatch` is signal. Text is therefore compared for *presence* only:
+an element that should carry text and carries none is a defect; an element
+carrying a different number is not.
+
+**And the check is run twice.** Once while building, against the dev server;
+once more after the final fix, against a cold `npm run build && npm run start`.
+Dev-mode rendering has hidden fidelity defects on this project twice already —
+the doubled navigation shell and the dead `border-ct-*` utilities both looked
+correct until a production build.
+
+`e2e/fidelity/manifest.ts` lists all 53 pages with a status. A page is
+`"editorial"` — skipped, not failed — until its rebuild lands, and flips to
+`"counter"` in the same commit that rebuilds it. That makes `npm run fidelity`
+a live count of how much of the design is genuinely built, and makes it
+impossible to call a page done without turning its own gate on.
+
+**The harness is itself under test.** A comparison that finds nothing on either
+side would report "no differences" and pass forever — a worse outcome than no
+gate at all, because it would be believed. `compareLandmarks` is unit-tested
+against hand-written fixtures, including the case where both sides are empty,
+which throws rather than passing.
 
 ## Phases, replacing §5 of the original spec
 

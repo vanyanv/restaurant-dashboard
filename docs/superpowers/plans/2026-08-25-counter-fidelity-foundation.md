@@ -289,74 +289,295 @@ anything DOES change visually, a bare selector leaked; find it before moving on.
 
 ---
 
-## Task 2: The fidelity harness
+## Task 2: The fidelity gate, in Playwright
 
 `npm run tokens` cannot see a missing dispatch line or a table that should be
-cards. Nothing in this repo can, which is why the gap survived a green gate.
+cards. Nothing in this repo can, which is why the gap survived a green gate for
+seven plans. This task builds the thing that can, and makes it a real test
+suite rather than a script somebody remembers to run.
 
 **Files:**
-- Create: `scripts/fidelity.ts`
+- Create: `e2e/fidelity/fidelity.spec.ts`
+- Create: `e2e/fidelity/prototype.ts` (driving the vendored prototype)
+- Create: `e2e/fidelity/landmarks.ts` (the shared comparison logic)
+- Create: `e2e/fidelity/manifest.ts` (page id ↔ route ↔ status)
+- Modify: `playwright.config.ts` (two new projects)
+- Modify: `package.json` (`fidelity` scripts)
 - Create: `docs/counter/fidelity/README.md`
-- Test: `tests/scripts/fidelity.test.ts`
+- Test: `tests/e2e/landmarks.test.ts` (unit-tests the comparison itself)
 
 **Interfaces:**
-- Produces: `npm run fidelity -- <prototypePageId> <route> [width]`, writing
-  `docs/counter/fidelity/<pageId>.md` plus two PNGs.
+- Produces:
+  - `npm run fidelity` — every page in the manifest, both viewports, both themes
+  - `npm run fidelity -- --grep overview` — one page
+  - `docs/counter/fidelity/<pageId>.md` — the committed report
+  - `compareLandmarks(a, b)` from `landmarks.ts`, unit-testable without a browser
 
-- [ ] **Step 1: Learn how to drive the prototype**
+**Why Playwright and not a script.** The repo already has the hard part
+solved: `playwright.config.ts` authenticates once via `auth.setup.ts` into
+`e2e/.auth/user.json`, and runs a `desktop` project at 1440×900 and a `mobile`
+project on a Pixel 7. A fidelity script would reimplement sign-in — the exact
+mistake `scripts/shot-page.ts`'s module comment says kept getting made and
+written off as "the credentials don't work." Reuse the projects.
 
-The prototype is a single file with 53 page modules (`P.<id>`) and its own
-router. Navigation is by `data-goto="<id>"` and `href` — read `go()` near line
-630 of the prototype's script. Confirm in a real browser that
-`page.evaluate(() => go("pnl"))` (or whatever the actual entry point is)
-switches the rendered `.frame`, and write down what worked.
+- [ ] **Step 1: Learn to drive the prototype, and write down what worked**
 
-- [ ] **Step 2: Extract a comparable inventory from both sides**
+The prototype is one file with 53 page modules (`P.<id>`) and its own router;
+`go()` lives near line 630 of its script block. Open it in a real browser and
+find the entry point that switches the rendered `.frame`. Confirm that after
+navigating, `document.querySelector('.frame')` contains that page's content and
+not the previous one's.
 
-For each side, produce an ordered list of "structural landmarks" — every
-element carrying a class from a known set of section-level classes
-(`dispatch`, `headline`, `say`, `strip`, `sec`, `moving`, `askbar`, `queue`,
-`qitem`, `stores`, `chan`, `ch`, `wkt`, `tbl`, `blt`, `hfloor`, …), with its
-class list, its text content trimmed to 60 characters, and its box.
+Write `e2e/fidelity/prototype.ts` exposing:
 
-Compare by class sequence, not by pixel diff. A pixel diff between fabricated
-prototype numbers and real database numbers is noise; a missing `.dispatch` or
-a `.tbl` where the prototype has `.stores` is the finding.
-
-- [ ] **Step 3: Write the report**
-
-`docs/counter/fidelity/<pageId>.md` gets three tables: **Missing** (in the
-prototype, absent from ours), **Extra** (ours only), and **Differing** (present
-in both, but the computed value of a checked property — `font-family`,
-`font-size`, `border-radius`, `background-color`, `color` — disagrees). Plus
-both screenshots and a one-line verdict.
-
-- [ ] **Step 4: Run it against Overview and commit the "before"**
-
-```bash
-npm run fidelity -- overview /dashboard 1440
+```ts
+/** Opens the vendored prototype and navigates to one page module. */
+export async function openPrototype(page: Page, pageId: string): Promise<Locator>
 ```
 
-Commit that report unchanged. It is the baseline this whole plan is measured
-against, and it should read as damningly as the addendum's table.
+It returns the `.frame` locator. It must **assert** that navigation happened —
+a silent no-op that leaves the previous page rendered would make every
+comparison after the first one compare the wrong page, and every report would
+be confidently wrong.
 
-- [ ] **Step 5: Test the harness itself**
+- [ ] **Step 2: Extract landmarks from either side**
 
-A harness that reports "no differences" because it found nothing on either side
-is the worst possible outcome. `tests/scripts/fidelity.test.ts` runs the
-comparison over two fixed HTML fixtures — one matching, one with a section
-removed and one class changed — and asserts the missing section and the changed
-property are both reported. Prove it: make the fixtures identical and confirm
-the test goes red.
+`e2e/fidelity/landmarks.ts`, browser-agnostic so it can be unit-tested:
 
-- [ ] **Step 6: Gate and commit**
+```ts
+/**
+ * The classes that mark a structural element of a Counter page. A landmark is
+ * something a reader would name if asked what is on the screen: the dispatch
+ * line, the head block, a strip, a section, the queue, the store cards.
+ *
+ * NOT every class — matching all 452 would report a diff for every hover
+ * state and every utility. This list is what the page IS.
+ */
+export const LANDMARK_CLASSES = [
+  "dispatch", "headline", "fig", "say", "hfloor", "strip", "sec", "moving",
+  "askbar", "sugs", "queue", "qitem", "stores", "chan", "cbar", "gap",
+  "ch", "drill", "tbl", "wkt", "blt", "mtr", "wf", "cascade", "empt",
+] as const
+
+export interface Landmark {
+  /** Depth-first index, so order is part of the comparison. */
+  order: number
+  classes: string[]
+  /** Trimmed to 60 chars. Compared only for presence, never for equality. */
+  text: string
+  box: { w: number; h: number }
+  style: Record<string, string>
+}
+
+/** The computed properties a fidelity mismatch would actually show up in. */
+export const CHECKED_PROPERTIES = [
+  "font-family", "font-size", "font-weight", "line-height", "letter-spacing",
+  "color", "background-color", "border-radius", "border-top-width",
+  "border-left-color", "padding-top", "padding-left", "gap",
+  "grid-template-columns", "text-transform", "font-variant-numeric",
+] as const
+
+export interface Difference {
+  kind: "missing" | "extra" | "style"
+  order: number
+  classes: string[]
+  property?: string
+  prototype?: string
+  ours?: string
+}
+
+export function compareLandmarks(proto: Landmark[], ours: Landmark[]): Difference[]
+```
+
+**Compare by class sequence, not by pixel.** The prototype's numbers are
+invented (142 guest reviews, "3 need you") and ours come from a real database,
+so a pixel diff is nothing but noise. A missing `.dispatch`, or a `.tbl` where
+the prototype has `.stores`, is the finding. Text is compared for
+*presence only* — an element that should hold text and holds none is a real
+defect; an element holding a different number is not.
+
+- [ ] **Step 3: The manifest, which doubles as the project's progress board**
+
+```ts
+// e2e/fidelity/manifest.ts
+export type PageStatus = "counter" | "editorial"
+
+export interface FidelityPage {
+  /** The prototype's own page module id, e.g. "overview". */
+  protoId: string
+  /** Our route. */
+  route: string
+  /** "editorial" pages are not rebuilt yet and are SKIPPED, not failed. */
+  status: PageStatus
+  /** Set once the page has passed. Prevents silent regression. */
+  baseline?: { desktop: number; mobile: number }
+}
+
+export const PAGES: FidelityPage[] = [
+  { protoId: "overview", route: "/dashboard", status: "counter" },
+  { protoId: "pnl", route: "/dashboard/pnl", status: "editorial" },
+  // …51 more, all "editorial" until their Phase C plan lands
+]
+```
+
+A page flips to `"counter"` in the same commit that rebuilds it. That makes
+`npm run fidelity` a live count of how much of the design is actually built,
+and makes it impossible to declare a page done without turning its gate on.
+
+- [ ] **Step 4: The spec**
+
+`e2e/fidelity/fidelity.spec.ts` iterates the manifest. For each `"counter"`
+page it runs **two independent passes**, and both must be clean:
+
+```ts
+for (const p of PAGES.filter((x) => x.status === "counter")) {
+  test(`${p.protoId}: structure matches the prototype`, async ({ page, context }) => {
+    // Pass 1 — structure. Class sequence and nesting.
+    // Fails listing every missing and extra landmark by name.
+  })
+
+  test(`${p.protoId}: rendering matches the prototype`, async ({ page, context }) => {
+    // Pass 2 — computed style, for landmarks present on both sides.
+    // Runs in BOTH themes: data-theme="light" and data-theme="dark".
+    // A property is a mismatch only if it differs in either theme.
+  })
+}
+```
+
+Two passes rather than one because they fail for different reasons and want
+different fixes: pass 1 says "you did not build this element", pass 2 says "you
+built it and it does not look right." Collapsing them produces a single
+failure listing forty style diffs that are all downstream of one missing
+wrapper.
+
+Both passes attach the prototype and our screenshots to the Playwright report
+via `testInfo.attach`, so a failure is inspectable without re-running.
+
+- [ ] **Step 5: Two projects in `playwright.config.ts`**
+
+```ts
+    {
+      name: "fidelity",
+      testDir: "./e2e/fidelity",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ["setup"],
+    },
+    {
+      name: "fidelity-mobile",
+      testDir: "./e2e/fidelity",
+      use: { ...devices["Pixel 7"], storageState: STORAGE_STATE },
+      dependencies: ["setup"],
+    },
+```
+
+The mobile project compares against the prototype's `phone()` composition, not
+its `desk()` one — `openPrototype` needs a surface argument. The prototype
+switches surface by its own control; find how, and assert the switch happened
+for the same reason as Step 1.
+
+Add to `package.json`:
+
+```json
+"fidelity": "playwright test --project=fidelity --project=fidelity-mobile",
+"fidelity:report": "tsx scripts/fidelity-report.ts"
+```
+
+- [ ] **Step 6: Unit-test the comparison, and prove it can fail**
+
+This is the step that matters most. **A harness that finds nothing on both
+sides reports "no differences" and passes forever.** That failure mode would
+be worse than having no gate at all, because it would be believed.
+
+`tests/e2e/landmarks.test.ts` runs `compareLandmarks` over hand-written fixtures:
+
+```ts
+it("reports a section the prototype has and we do not", () => {
+  const diffs = compareLandmarks(withDispatch, withoutDispatch)
+  expect(diffs).toContainEqual(expect.objectContaining({ kind: "missing", classes: ["dispatch"] }))
+})
+
+it("reports a table where the prototype has cards", () => {
+  // The exact defect that shipped: note 33's per-store cards rendered as a table.
+  const diffs = compareLandmarks(withStores, withTable)
+  expect(diffs.some((d) => d.kind === "missing" && d.classes.includes("stores"))).toBe(true)
+  expect(diffs.some((d) => d.kind === "extra" && d.classes.includes("tbl"))).toBe(true)
+})
+
+it("reports a style difference on a landmark present in both", () => {
+  const diffs = compareLandmarks(radius8, radius0)
+  expect(diffs).toContainEqual(expect.objectContaining({ kind: "style", property: "border-radius" }))
+})
+
+it("reports NOTHING when the two sides genuinely match", () => {
+  expect(compareLandmarks(withDispatch, withDispatch)).toEqual([])
+})
+
+it("does not report a difference merely because the numbers differ", () => {
+  // Prototype figures are invented; ours come from the database. Text is
+  // compared for presence, never for equality.
+  expect(compareLandmarks(sales34525, sales7122)).toEqual([])
+})
+
+it("reports an element that should carry text and carries none", () => {
+  expect(compareLandmarks(sales34525, salesEmpty)).toContainEqual(
+    expect.objectContaining({ kind: "style", property: "text" }),
+  )
+})
+
+it("returns every difference when BOTH sides are empty — never a false pass", () => {
+  // A selector typo, a failed navigation, an unauthenticated page: all three
+  // produce two empty landmark lists. Silence here would be a green gate over
+  // a blank screen.
+  expect(() => compareLandmarks([], [])).toThrow(/no landmarks/i)
+})
+```
+
+That last case is the one this whole task exists to guarantee. Prove every case
+can fail: make each fixture pair identical in turn and confirm the
+corresponding assertion goes red. Report the outputs.
+
+- [ ] **Step 7: Capture the "before", and commit it unchanged**
 
 ```bash
-git add scripts/fidelity.ts docs/counter/fidelity tests/scripts/fidelity.test.ts package.json
+npm run dev &
+npm run fidelity -- --grep overview
+npm run fidelity:report
+```
+
+`docs/counter/fidelity/overview.md` is the baseline this entire project is
+measured against. It must read as damningly as the addendum's table — sixteen
+landmarks against six. **Commit it unedited.** If it reads clean, the harness
+is broken; go back to Step 6.
+
+Run this BEFORE any Phase B task lands. A "before" captured after the
+primitives are rebuilt is not a before.
+
+- [ ] **Step 8: Write the protocol down**
+
+`docs/counter/fidelity/README.md` states the rule that binds every Phase C
+plan:
+
+> **A page is not done until `npm run fidelity -- --grep <pageId>` is clean on
+> both projects and both themes, its manifest entry says `"counter"`, and its
+> report is committed.**
+>
+> Run it twice: once while building, and once more after the last fix, from a
+> cold `npm run build && npm run start` rather than the dev server. Dev-mode
+> rendering has hidden fidelity defects on this project before — the doubled
+> shell and the dead `border-ct-*` utilities both looked fine until a
+> production build.
+
+- [ ] **Step 9: Gate and commit**
+
+```bash
+rm -rf .next && npm test && npm run tokens && npx tsc --noEmit && npm run build
+git add e2e/fidelity playwright.config.ts package.json docs/counter/fidelity tests/e2e
 git commit -m "feat(counter): a gate that can see a missing section"
 ```
-
----
 
 ## Phase B: the primitives
 
