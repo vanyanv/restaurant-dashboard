@@ -9,6 +9,7 @@ import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
 import { AskSurface } from "@/components/counter/ask/ask-surface"
 import type { AskContext } from "@/lib/counter/ask-context"
+import type { PresetId, RangeId } from "@/lib/counter/date-range"
 
 /** Stable across renders — a caller that doesn't pass `params` should not
  *  cause `AskSurface` to re-derive context off a fresh object every render. */
@@ -71,6 +72,9 @@ export function AppShell({
   user,
   sync,
   today,
+  presetId,
+  onSelectPreset,
+  askSuggestions,
   onAsk,
   children,
 }: {
@@ -92,6 +96,16 @@ export function AppShell({
   user?: RailUser
   sync?: { state: SyncState; at?: Date; now: Date }
   today?: Date
+  /**
+   * The current range preset and the way to change it. `AskSurface` draws the
+   * prototype's "Change the range" group from these; without `onSelectPreset`
+   * it draws no such group, because a palette row that changes nothing is the
+   * defect note 46 names.
+   */
+  presetId?: RangeId
+  onSelectPreset?: (id: PresetId) => void
+  /** The page's own suggested questions — the palette's "Ask about {page}" group. */
+  askSuggestions?: string[]
   /** Wired up by the plan that gives the surface something to answer with. */
   onAsk?: (question: string, context: AskContext) => void
   children: ReactNode
@@ -177,11 +191,27 @@ export function AppShell({
           </div>
         </div>
 
+        {/*
+         * Mounted here, but it PORTALS to `document.body` — see its own doc
+         * comment for the measurements. Its position in this tree decides
+         * nothing about where it paints; what it decides is that every Counter
+         * page gets ⌘K without opting in (note 46).
+         *
+         * The store list and the range preset are handed straight through, so
+         * the palette offers exactly what the rail and the date control offer
+         * and cannot drift from either.
+         */}
         <AskSurface
           pathname={pathname}
           params={params}
           storeName={storeName}
           today={resolvedToday}
+          stores={stores}
+          selectedStoreId={selectedStoreId}
+          onSelectStore={onSelectStore}
+          presetId={presetId}
+          onSelectPreset={onSelectPreset}
+          suggestions={askSuggestions}
           onSubmit={onAsk}
         />
       </div>

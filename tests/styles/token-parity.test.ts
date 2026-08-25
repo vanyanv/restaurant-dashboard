@@ -114,12 +114,33 @@ function contrast(a: string, b: string): number {
  * the colours do. If it ever needs to hold with an editorial surface genuinely
  * nested inside a Counter root, the fix is to prefix the ported token names in
  * `scripts/extract-prototype-css.ts`, not to widen this exception.
+ *
+ * THE SECOND EXCEPTION (task 9, the ⌘K palette). `AskSurface` PORTALS to
+ * `document.body` — `.cmdkwrap` is `position:absolute;inset:0`, and both
+ * `.appwrap` (`position:relative`) and `.ct-root` itself
+ * (`container-type:inline-size`, which applies layout containment) would
+ * otherwise be its containing block. A portal to the body lands OUTSIDE the
+ * app's own `.ct-root`, where the alias layer is declared, so all 34 `.cmdk*`
+ * rules would resolve `--surface`, `--line` and `--mono` to nothing. The class
+ * has to travel with it, and it has to be on `.cmdkwrap` itself: a wrapping
+ * `.ct-root` would be a containing block of auto height and collapse an
+ * `inset:0` child to zero.
+ *
+ * The hazard above still does not apply, for the same reason and one more.
+ * This `.ct-root` is a SIBLING of every editorial root, not an ancestor —
+ * custom properties inherit downward only — and its entire subtree is the
+ * palette's own ported markup: no Radix, no `@/components/ui/**`, no
+ * `editorial-*` class. The third test below asserts that subtree stays that
+ * way.
  */
 const COUNTER_ROOT_CLASSES = ["ct-root", "frame", "pframe", "login"]
 
 /** `file suffix -> the one class it may emit`. Nothing else, nowhere else. */
 const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   { file: "components/counter/shell/app-shell.tsx", token: "ct-root" },
+  // The ⌘K palette, which portals to document.body and must carry the alias
+  // layer out with it. See the note above.
+  { file: "components/counter/ask/ask-surface.tsx", token: "ct-root" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -169,8 +190,8 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
 
   it("still bans the three root classes nothing carries", () => {
     // The exception list must never quietly grow into a blanket exemption.
-    expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual(["ct-root"])
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(1)
+    expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual(["ct-root", "ct-root"])
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(2)
   })
 
   it("keeps every editorial surface out of the Counter root", () => {
