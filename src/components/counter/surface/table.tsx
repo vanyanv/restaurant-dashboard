@@ -1,88 +1,126 @@
-import Link from "next/link"
-import { TABULAR } from "@/lib/counter/format"
+"use client"
+
+import { Fragment, isValidElement, type KeyboardEvent, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 
 export interface Column {
   key: string
   label: string
-  /** Right-aligned and tabular. Every figure column should set this. */
+  /** The prototype's `c.n`. Puts `class="num"` on BOTH the `th` and every `td`. */
   numeric?: boolean
 }
 
-export interface Row {
+/**
+ * The prototype's `{ v, cls }` cell. A bare value is the common case and stays
+ * bare; the object form exists for the one thing a value cannot carry — a class
+ * on the `td` itself (`hot`, `hole`), which is how the ported sheet paints a
+ * cell that is over target or missing from a document.
+ */
+export interface CellObject {
+  v: ReactNode
+  cls?: string
+}
+
+export type Cell = ReactNode | CellObject
+
+interface RowBase {
   key: string
   /**
    * Keyed by column key, not positional. A row with a missing or extra cell
    * relative to `columns` cannot mis-align or crash — it just renders a gap
-   * for whatever key it didn't supply.
+   * for whatever key it didn't supply. (The prototype's rows ARE positional;
+   * this is the one place we keep our own shape, because a positional array
+   * silently shifts every figure one column left when a cell is omitted.)
    */
-  cells: Record<string, React.ReactNode>
-  /** Where this row opens. Omit it and the row is inert — see note 47. */
-  href?: string
+  cells: Record<string, Cell>
+  /** The prototype's `r.attrs` class, e.g. `is-hole`, `is-flagged`. */
+  className?: string
+  /** The prototype's `r.aria`, on a row that opens something. */
+  ariaLabel?: string
+  /**
+   * The prototype's `r.after` — a drawer that travels with the row that owns
+   * it. It is concatenated AFTER `</tr>`, so it must be a SIBLING `<tr>`, not
+   * a child: a `<tr>`, `<td>` or `<div>` nested inside a row is invalid table
+   * markup that browsers silently reparent, and the reparented DOM would not
+   * match the prototype's. Pass a `<tr>`.
+   */
+  after?: ReactNode
 }
 
 /**
- * Horizontal rules only, sticky head, right-aligned figures.
+ * A row that opens a page. Note 47: the cursor, the hover wash, the focus rail
+ * and the chevron all belong to `tr[data-goto]` and arrive with the
+ * destination or not at all.
+ */
+type RowLink = RowBase & { href: string; onSelect?: never; selected?: never }
+/**
+ * A row that moves a control rather than navigating — note 53's eight
+ * pressable weeks. `href` and `onSelect` are mutually exclusive at the type
+ * level, because a row that is both has two meanings for Enter.
+ */
+type RowPress = RowBase & { onSelect: () => void; selected?: boolean; href?: never }
+/** A row that opens nothing, and says so by not being focusable. */
+type RowInert = RowBase & { href?: never; onSelect?: never; selected?: never }
+
+export type Row = RowLink | RowPress | RowInert
+
+function cellOf(cell: Cell): CellObject {
+  if (
+    cell !== null &&
+    typeof cell === "object" &&
+    !isValidElement(cell) &&
+    !Array.isArray(cell) &&
+    "v" in cell
+  ) {
+    return cell as CellObject
+  }
+  return { v: cell as ReactNode }
+}
+
+/**
+ * The prototype's `tbl()`, line 3055 of `docs/counter/counter-prototype.html`:
+ *
+ *   <div class="tblscroll">
+ *     <table class="tbl">
+ *       <thead><tr><th scope="col" class="num"?>…</th></tr></thead>
+ *       <tbody>
+ *         <tr {attrs}{nav}><td class="num? cls">…</td>…</tr>
+ *         {row.after}
+ *       </tbody>
+ *     </table>
+ *   </div>
  *
  * Sole state renderer is `Section` (R3): a `Table` takes `columns` and `rows`
- * directly and has no loading/empty/failed branches of its own — nest it
- * inside a `Section` to get the six-state contract. That also means the old
- * double-render risk (the same data reaching both a `Section` and a `Table`)
- * cannot happen: only `Section` ever sees a `SectionData`.
+ * directly and has no loading/empty/failed branches of its own.
  *
- * Note 47 is why the `href` handling is written the way it is: in the
- * prototype, `.tbl tbody tr` set `cursor:pointer` and an accent hover wash on
- * EVERY row of EVERY table, and not one of them led anywhere. A row that opens
- * nothing must not be focusable, must not wear a pointer, and must not light up
- * under the cursor — otherwise the table lies about what it can do.
+ * WHY THE STRETCHED LINK IS GONE. The version this replaces put a single
+ * `<a class="block after:absolute after:inset-0">` in the first cell and made
+ * the `<tr>` `relative`, so one native link covered the row. That pattern
+ * cannot coexist with the ported sheet, and the sheet is now the design:
+ * `.tbl tbody tr[data-goto] td:first-child{position:relative}` (line 268)
+ * makes the FIRST CELL the containing block, so the stretch resolves against
+ * the cell instead of the row and covers one column. Line 270 does the same to
+ * the last cell and hangs the chevron off it. So the row-level affordance and
+ * the cell-level overlay are two designs for the same job, and only one of
+ * them is the one every rule in `counter-components.css` was written for.
  *
- * A navigable row uses the "stretched link" pattern rather than either
- * extreme: wrapping every cell in click handlers (synthetic interactivity,
- * wrong keyboard/focus/ARIA behaviour — the same lie note 47 warns about, just
- * relocated) or leaving only column one clickable while the whole row still
- * wears a pointer (a smaller version of the same lie — the affordance
- * promises more than the behaviour delivers). Instead there is exactly one
- * native `<a>`, in the first cell, whose `::after` is stretched with
- * `after:absolute after:inset-0` to cover the row — the row itself supplies
- * the `relative` positioning context that stretch resolves against. One link
- * in the accessibility tree, correct keyboard/focus behaviour for free, and a
- * pointer that now tells the truth across the full row width.
- *
- * `maxHeight` is optional. When set, the wrapper is constrained to that
- * height and scrolls vertically, and the header genuinely sticks inside it.
- * When unset, there is nothing to scroll vertically inside, `overflow-y`
- * resolves to visible, and the header is NOT sticky — `overflow-x-auto`
- * alone makes the wrapper its own scroll container with
- * `clientHeight === scrollHeight`, so a `sticky` header inside it never
- * moves relative to that container and never sticks against the page.
- * Verified in a real browser (2a): see the fix report for measured values.
+ * Note 47 states the replacement outright: "because a row is not a button, it
+ * carries `role="link"`, a tab stop, and an Enter/Space handler". The cost is
+ * real and worth naming: a `<tr role="link">` is no longer a `row` in the
+ * accessibility tree, and there is no href for middle-click or "open in new
+ * tab". That is the prototype's trade, made deliberately here rather than
+ * inherited by accident.
  */
-export function Table({
-  columns,
-  rows,
-  maxHeight,
-}: {
-  columns: Column[]
-  rows: Row[]
-  /** e.g. "480px". Constrains the wrapper so it scrolls vertically and the head sticks. */
-  maxHeight?: string
-}) {
+export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
+  const router = useRouter()
+
   return (
-    <div
-      data-table-scroll
-      className="overflow-x-auto"
-      style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}
-    >
-      <table className="w-full border-collapse text-ct-body">
+    <div className="tblscroll">
+      <table className="tbl">
         <thead>
           <tr>
             {columns.map((c) => (
-              <th
-                key={c.key}
-                scope="col"
-                className={`${maxHeight ? "sticky top-0 z-10 " : ""}border-b border-ct-line-strong bg-ct-surface px-3 py-2 font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3 ${
-                  c.numeric ? "text-right" : "text-left"
-                }`}
-              >
+              <th key={c.key} scope="col" className={c.numeric ? "num" : undefined}>
                 {c.label}
               </th>
             ))}
@@ -90,44 +128,48 @@ export function Table({
         </thead>
         <tbody>
           {rows.map((r) => {
-            const navigable = Boolean(r.href)
-            return (
-              <tr
-                key={r.key}
-                className={
-                  navigable
-                    ? "relative cursor-pointer border-b border-ct-line hover:bg-ct-accent-wash"
-                    : "border-b border-ct-line"
+            const href = r.href
+            const act = href ? () => router.push(href) : r.onSelect
+            // Enter AND Space — note 47's own words. A row that opens nothing
+            // gets no handler, no tab stop and no role, so it wears no cursor.
+            const keyDown = act
+              ? (e: KeyboardEvent<HTMLTableRowElement>) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    act()
+                  }
                 }
-              >
-                {columns.map((c, i) => {
-                  const cell = r.cells[c.key]
-                  const content =
-                    navigable && i === 0 ? (
-                      // Stretched over the whole `relative` row via `::after`.
-                      // If a row ever gains its own interactive control (a
-                      // checkbox, a row menu), that control MUST be given
-                      // `relative z-10` or this overlay will swallow its
-                      // clicks. Known, accepted cost: dragging to select this
-                      // cell's text is harder with the overlay in place.
-                      <Link href={r.href!} className="block after:absolute after:inset-0">
-                        {cell}
-                      </Link>
-                    ) : (
-                      cell
+              : undefined
+            const classes = [r.className, r.selected ? "is-sel" : null].filter(Boolean).join(" ")
+
+            return (
+              <Fragment key={r.key}>
+                <tr
+                  className={classes || undefined}
+                  // `data-goto` on a link row is what the sheet paints; a
+                  // pressable row uses the sheet's other pressable-row hook,
+                  // `data-ln` (line 304: `.tbl tbody tr[data-ln]{cursor:pointer}`).
+                  data-goto={r.href}
+                  data-ln={r.onSelect ? r.key : undefined}
+                  role={r.href ? "link" : r.onSelect ? "button" : undefined}
+                  tabIndex={act ? 0 : undefined}
+                  aria-label={act ? r.ariaLabel : undefined}
+                  onClick={act}
+                  onKeyDown={keyDown}
+                >
+                  {columns.map((c) => {
+                    const { v, cls } = cellOf(r.cells[c.key])
+                    const className = `${c.numeric ? "num " : ""}${cls ?? ""}`.trim()
+                    return (
+                      <td key={c.key} className={className || undefined}>
+                        {v}
+                      </td>
                     )
-                  return (
-                    <td
-                      key={c.key}
-                      className={`px-3 py-2 text-ct-ink ${
-                        c.numeric ? `text-right ${TABULAR}` : "text-left"
-                      }`}
-                    >
-                      {content}
-                    </td>
-                  )
-                })}
-              </tr>
+                  })}
+                </tr>
+                {/* A sibling of the row, never a child of it. */}
+                {r.after}
+              </Fragment>
             )
           })}
         </tbody>
