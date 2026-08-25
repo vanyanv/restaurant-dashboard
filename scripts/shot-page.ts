@@ -68,9 +68,13 @@ async function signIn(page: Page): Promise<void> {
 }
 
 async function main() {
-  const [route, out, width] = process.argv.slice(2)
+  const [route, out, width, theme] = process.argv.slice(2)
   if (!route || !out) {
-    console.error("usage: npm run shot -- <route> <out.png> [width]")
+    console.error("usage: npm run shot -- <route> <out.png> [width] [light|dark]")
+    process.exit(1)
+  }
+  if (theme && theme !== "light" && theme !== "dark") {
+    console.error(`unknown theme "${theme}" — expected light or dark`)
     process.exit(1)
   }
 
@@ -78,6 +82,24 @@ async function main() {
   const context = await browser.newContext({
     viewport: { width: Number(width) || 1440, height: 1000 },
   })
+  // Counter's dark theme is NOT the OS preference. `counter.css` pins
+  // `:root { color-scheme: light }` deliberately (the ~95% of the app that is
+  // still the pre-Counter editorial design is frozen at light values, and a
+  // followed OS preference half-inverted it), so Playwright's `colorScheme`
+  // context option does nothing here — verified: it produced a byte-identical
+  // screenshot. The only lever is an EXPLICIT choice, which
+  // CounterThemeProvider reads from localStorage and applies as an inline
+  // `style.color-scheme` on <html>. Seeding that key is the same thing the
+  // theme toggle does, without needing to find and click it.
+  if (theme) {
+    await context.addInitScript((t) => {
+      try {
+        localStorage.setItem("counter-theme", t as string)
+      } catch {
+        /* a context with site data blocked just renders the default */
+      }
+    }, theme)
+  }
   const page = await context.newPage()
 
   // A page that throws on the client can still screenshot as a plausible
