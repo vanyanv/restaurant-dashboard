@@ -6,6 +6,7 @@ const BARREL = join(process.cwd(), "src/components/counter/index.ts")
 const SURFACE = join(process.cwd(), "src/components/counter/surface")
 const STATE = join(process.cwd(), "src/components/counter/state")
 const SHELL = join(process.cwd(), "src/components/counter/shell")
+const ASK = join(process.cwd(), "src/components/counter/ask")
 
 describe("the Counter public surface", () => {
   it("re-exports every surface primitive, so a page imports from one place", () => {
@@ -27,6 +28,21 @@ describe("the Counter public surface", () => {
     for (const f of readdirSync(SHELL).filter((f) => f.endsWith(".tsx"))) {
       const name = f.replace(/\.tsx$/, "")
       expect(barrel).toMatch(new RegExp(`from "\\./shell/${name}"`))
+    }
+  })
+
+  // ask/ is the ⌘K surface — a single file today, but the same "a page
+  // imports from one place" reasoning as surface/ and shell/ applies: a
+  // page has no business reaching src/components/counter/ask/ask-surface
+  // directly when the barrel already re-exports it. Held to the identical
+  // rule so a second ask/*.tsx file (a results pane, a history list, ...)
+  // fails this test the same way a forgotten surface/ or shell/ export
+  // would, rather than silently working unexported.
+  it("re-exports every ask primitive, so a page imports from one place", () => {
+    const barrel = readFileSync(BARREL, "utf8")
+    for (const f of readdirSync(ASK).filter((f) => f.endsWith(".tsx"))) {
+      const name = f.replace(/\.tsx$/, "")
+      expect(barrel).toMatch(new RegExp(`from "\\./ask/${name}"`))
     }
   })
 

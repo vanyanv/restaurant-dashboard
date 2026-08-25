@@ -16,6 +16,8 @@ export { Meter } from "./surface/meter"
 export { Cascade, type CascadeStep } from "./surface/cascade"
 export { Toast, type ToastTone } from "./surface/toast"
 
+export { AskSurface } from "./ask/ask-surface"
+
 export { AppShell, EntryItem } from "./shell/app-shell"
 export { Rail } from "./shell/rail"
 export { Wordmark } from "./shell/wordmark"
