@@ -1,34 +1,87 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { startOfMonth } from "date-fns"
 import {
-  COMPARISONS, PRESETS, comparisonRange, dayCount, rangeLabel, stepRange,
+  COMPARISONS, PRESETS, bucketFor, comparisonRange, dayCount, rangeLabel, stepRange,
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { useFramePlacement } from "./frame-placement"
+import { Calendar } from "./calendar"
 
 /**
- * The most-used control in the product. Every figure on every page is a
- * claim about a window of time, so the window is a first-class control
- * here, not a filter buried in a settings menu.
+ * `bar()`, prototype line 1915 — the most-used control in the product, and the
+ * one ours was furthest from. Four things it did not have, all of them here now:
  *
- * All the date arithmetic already lives in date-range.ts — note 19 ("a
- * range that only changes the label is a lie") is why: regenerating the
- * series, not just relabelling it, is the CALLER's job once
- * onPreset/onComparison/onStep fires. This component is only the surface
- * over that logic: two menus and two steppers.
+ *   1. A TWO-LINE TRIGGER. `.dr__main > span > .lb + .cmp`: the range in
+ *      figures on top, `presetName · cmpShort` in mono caps under it. Ours
+ *      printed the preset NAME on the trigger and hid the actual dates, so the
+ *      one thing every figure on the page is a claim about was not on screen.
+ *   2. A `Today` BUTTON (`.dr__today`), outside the stepper group — the way
+ *      back from any amount of stepping, in one click.
+ *   3. DAY COUNTS ON EVERY PRESET (`<span class="n">7d</span>`), so a reader
+ *      picks by span rather than by name.
+ *   4. A CALENDAR, for a range no preset names. Two clicks pick it; the second
+ *      one calls `onRange`, which `writeCounterParams({ range })` already
+ *      writes as `?from=…&to=…` and `rangeLabel(range, "custom")` already names.
  *
- * Note 21: "A popover that leaves its frame is broken, not clever." Frame
- * placement (right-anchor by default, clamp the width, flip to an explicit
- * `left` only when right-anchoring would overflow) lives in
- * `./frame-placement` — shared with `StoreSwitcher`'s own popover — rather
- * than duplicated here. jsdom reports zero-sized boxes for every element, so
- * none of it can be proven by a unit test; see
- * docs/counter/controls-verification.md for the real-browser measurements.
+ * ```
+ * <div class="dr" data-dr>
+ *   <button class="dr__step" data-shift="-1">‹
+ *   <button class="dr__main" data-open><span><span class="lb">…<span class="cmp">…</span>⌄
+ *   <button class="dr__step dr__next" data-shift="1">›
+ *   <button class="dr__today" data-preset="today">Today
+ *   <div class="drpop">
+ *     <div class="drpop__presets"><span class="drpop__k">Presets</span>.drp × 12
+ *     <div class="drpop__cal"><div class="drcals">{cal}
+ *     <div class="drpop__foot">Compare to · .drcmp · spacer · grain · .btn--primary
+ * ```
+ *
+ * THE POPOVER IS ALWAYS IN THE DOM. `.drpop` is `display:none` until
+ * `.dr.is-open` (counter-components.css:925–926), exactly as the prototype
+ * writes it — the open state is a class, not a mount. That is also why the
+ * fidelity gate sees a `.btn` as the FIRST landmark of the Overview screen:
+ * the Apply button lives inside `.pagehead`, whether or not the popover is
+ * showing.
+ *
+ * WHAT IS DELIBERATELY NOT THE PROTYPE'S:
+ *
+ *   - The comparison list drops "4 same weekdays" past a 7-day range, because
+ *     `comparisonRange` returns null for it there and a control that offers a
+ *     comparison the page cannot compute renders an empty delta — which reads
+ *     as "no change" rather than "that question does not apply here".
+ *   - `.lb` omits the year when the range does not straddle one ("Aug 15 – 21",
+ *     where the prototype always writes "Aug 15 – 21, 2026"). `rangeLabel` is
+ *     this project's single range-naming function and it already decides the
+ *     year rule, deliberately and with a comment; a second formatter here to
+ *     add a comma and a year is the drift that rule exists to prevent.
+ *   - Buttons carry `aria-pressed`, not `role="menuitemradio"`/`aria-checked`.
+ *     `.drp[aria-pressed="true"]` and `.drcmp button[aria-pressed="true"]` are
+ *     the ONLY selectors that paint the current choice, so the attribute is
+ *     load-bearing; `role="menuitemradio"` does not take it.
+ *
+ * All the date arithmetic stays in `date-range.ts` — note 19 ("a range that
+ * only changes the label is a lie") is why: regenerating the series, not just
+ * relabelling it, is the CALLER's job once one of these callbacks fires.
  */
 
-type MenuId = "range" | "comparison" | null
+function Chevron({ dir }: { dir: "left" | "right" | "down" }) {
+  const d =
+    dir === "left" ? "M10 3.5L5.5 8 10 12.5" : dir === "right" ? "M6 3.5L10.5 8 6 12.5" : "M4 6.5L8 10.5 12 6.5"
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={d} />
+    </svg>
+  )
+}
 
 function fmtDay(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -38,12 +91,6 @@ function fmtRange(r: DateRange): string {
   return r.start.getTime() === r.end.getTime() ? fmtDay(r.start) : `${fmtDay(r.start)} – ${fmtDay(r.end)}`
 }
 
-function menuItemClass(checked: boolean): string {
-  return checked
-    ? "flex items-center justify-between gap-3 px-3 py-1.5 text-left font-semibold text-ct-accent-hi bg-ct-accent-wash"
-    : "flex items-center justify-between gap-3 px-3 py-1.5 text-left text-ct-ink-2 hover:bg-ct-sunk hover:text-ct-ink"
-}
-
 export interface DateControlProps {
   presetId: RangeId
   comparisonId: ComparisonId
@@ -51,6 +98,8 @@ export interface DateControlProps {
   onPreset: (id: PresetId) => void
   onComparison: (id: ComparisonId) => void
   onStep: (direction: -1 | 1) => void
+  /** An arbitrary window picked off the calendar. Two clicks make one. */
+  onRange: (range: DateRange) => void
 }
 
 export function DateControl({
@@ -60,24 +109,28 @@ export function DateControl({
   onPreset,
   onComparison,
   onStep,
+  onRange,
 }: DateControlProps) {
-  const [openMenu, setOpenMenu] = useState<MenuId>(null)
+  const [open, setOpen] = useState(false)
+  // null = "follow the range", which is what the prototype's setPreset/shift do
+  // when they reset `state.view` to the month the range ENDS in. A month the
+  // reader navigated to survives a comparison change and a half-finished pick,
+  // and is dropped the moment the range itself is replaced.
+  const [viewMonth, setViewMonth] = useState<Date | null>(null)
+  const [pending, setPending] = useState<Date | null>(null)
+  const cmpLabelId = useId()
   const containerRef = useRef<HTMLDivElement>(null)
-  const rangeTriggerRef = useRef<HTMLButtonElement>(null)
-  const cmpTriggerRef = useRef<HTMLButtonElement>(null)
+  const mainRef = useRef<HTMLButtonElement>(null)
 
-  // Escape and an outside click both close whatever is open without
-  // choosing anything — a stray click or a reflex Escape must never fire
-  // onPreset or onComparison.
+  // Escape and an outside click both close without choosing anything — a stray
+  // click or a reflex Escape must never fire one of the callbacks.
   useEffect(() => {
-    if (!openMenu) return
+    if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenMenu(null)
+      if (e.key === "Escape") setOpen(false)
     }
     const onPointerDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpenMenu(null)
-      }
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener("keydown", onKeyDown)
     document.addEventListener("mousedown", onPointerDown)
@@ -85,157 +138,167 @@ export function DateControl({
       document.removeEventListener("keydown", onKeyDown)
       document.removeEventListener("mousedown", onPointerDown)
     }
-  }, [openMenu])
+  }, [open])
 
-  // Preset lengths ("Last 30 days · 30 days") are each preset's OWN span,
-  // not the currently selected range's — so a reader picks by span, not by
-  // name. Most presets have a fixed length; the calendar-anchored ones
-  // (this week, month-to-date, ...) need SOME "today" to resolve against,
-  // and the real one is fine here since it only feeds display text, never
-  // the actual range (that stays entirely the caller's job).
+  // Preset lengths ("7d") are each preset's OWN span, not the selected range's.
+  // Most are fixed; the calendar-anchored ones need SOME "today" to resolve
+  // against, and the real one is fine here because it only feeds display text.
   const today = useMemo(() => new Date(), [])
 
-  // NOT `PRESETS.find(...) ?? PRESETS[0]`: that labelled every unrecognised
-  // id "Today" — a control naming a range it is not showing. `rangeLabel`
-  // names a custom window by its ends instead.
-  const label = rangeLabel(range, presetId)
+  // `.drpop` is 438px wide and right-anchored; below 640px the stylesheet turns
+  // it into a bottom sheet and this returns "position nothing". Note 21.
+  const placement = useFramePlacement(open, mainRef, { sheetBelow: 640 })
+
+  const label = rangeLabel(range, "custom")
+  // The prototype's `presetName()`: the preset's name, or "Custom range" when
+  // the window is one no preset names. NOT `rangeLabel(range, presetId)` —
+  // that returns the DATES for a custom range, which `.lb` is already showing.
+  const presetName = PRESETS.find((p) => p.id === presetId)?.name ?? "Custom range"
   const comparison = COMPARISONS.find((c) => c.id === comparisonId) ?? COMPARISONS[0]
 
-  const rangePlacement = useFramePlacement(openMenu === "range", rangeTriggerRef)
-  const cmpPlacement = useFramePlacement(openMenu === "comparison", cmpTriggerRef)
-
-  // Filter by what comparisonRange ACTUALLY returns for this range, rather
-  // than a hardcoded length check — that is what drops "weekday" past 7
-  // days without the component re-deriving date-range.ts's own rule.
-  //
-  // "none" is a deliberate exception: comparisonRange(range, "none") always
-  // returns null BY DESIGN (see date-range.ts) — it is not a range that
-  // failed to resolve, it is the caller opting out of a comparison
-  // entirely. Filtering it out alongside "weekday" would leave only 3
-  // options even on a short range, which is not what the option means.
+  // Filter by what comparisonRange ACTUALLY returns for this range, rather than
+  // a hardcoded length check. "none" is a deliberate exception: it always
+  // returns null BY DESIGN — the caller opting out, not a range that failed to
+  // resolve.
   const comparisonOptions = COMPARISONS.filter(
     (c) => c.id === "none" || comparisonRange(range, c.id) !== null,
   )
 
+  const compare = comparisonRange(range, comparisonId)
+  const anchorMonth = viewMonth ?? startOfMonth(range.end)
+  const days = dayCount(range)
+
   const prevPreview = stepRange(range, -1)
   const nextPreview = stepRange(range, 1)
 
-  const toggle = (menu: MenuId) => setOpenMenu((m) => (m === menu ? null : menu))
+  function replaceRange(fn: () => void) {
+    fn()
+    setPending(null)
+    setViewMonth(null)
+  }
+
+  function pickDay(day: Date) {
+    if (!pending) {
+      setPending(day)
+      return
+    }
+    const [start, end] = day < pending ? [day, pending] : [pending, day]
+    setPending(null)
+    onRange({ start, end })
+  }
 
   return (
-    <div ref={containerRef} className="inline-flex items-stretch gap-2 font-ct-sans text-ct-body text-ct-ink">
-      <div className="inline-flex items-stretch">
-        <button
-          type="button"
-          aria-label={`Previous period (${fmtRange(prevPreview)})`}
-          onClick={() => onStep(-1)}
-          className="grid w-[26px] place-items-center rounded-l-ct-sm border border-r-0 border-ct-line-strong bg-ct-surface text-ct-ink-2 hover:bg-ct-sunk hover:text-ct-ink"
-        >
-          <span aria-hidden>‹</span>
-        </button>
+    <div ref={containerRef} className={open ? "dr is-open" : "dr"} data-dr>
+      <button
+        className="dr__step"
+        type="button"
+        aria-label={`Earlier (${fmtRange(prevPreview)})`}
+        onClick={() => replaceRange(() => onStep(-1))}
+      >
+        <Chevron dir="left" />
+      </button>
 
-        <div className="relative">
-          <button
-            type="button"
-            ref={rangeTriggerRef}
-            aria-haspopup="menu"
-            aria-expanded={openMenu === "range"}
-            onClick={() => toggle("range")}
-            className="flex h-full items-center gap-2 whitespace-nowrap border border-ct-line-strong bg-ct-surface px-2.5 py-1 hover:bg-ct-sunk"
-          >
-            <span className="font-semibold">{label}</span>
-            <ChevronDown aria-hidden className="size-[11px] text-ct-ink-3" />
-          </button>
-          {openMenu === "range" && (
-            <div
-              role="menu"
-              aria-label="Range"
-              style={{
-                width: rangePlacement.width,
-                ...(rangePlacement.left != null ? { left: rangePlacement.left } : { right: 0 }),
-              }}
-              className="absolute top-[calc(100%+7px)] z-30 grid max-h-[420px] overflow-y-auto rounded-ct border border-ct-line-strong bg-ct-surface py-1"
-            >
-              {PRESETS.map((p) => {
-                const len = dayCount(p.resolve(today))
-                const checked = p.id === presetId
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={checked}
-                    onClick={() => {
-                      onPreset(p.id)
-                      setOpenMenu(null)
-                    }}
-                    className={menuItemClass(checked)}
-                  >
-                    <span>{p.name}</span>
-                    <span className="font-ct-mono text-ct-micro text-ct-ink-3">
-                      · {len} {len === 1 ? "day" : "days"}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
+      <button
+        className="dr__main"
+        type="button"
+        ref={mainRef}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span>
+          <span className="lb">{label}</span>
+          <span className="cmp">
+            {presetName} · {comparison.short}
+          </span>
+        </span>
+        <Chevron dir="down" />
+      </button>
+
+      <button
+        className="dr__step dr__next"
+        type="button"
+        aria-label={`Later (${fmtRange(nextPreview)})`}
+        onClick={() => replaceRange(() => onStep(1))}
+      >
+        <Chevron dir="right" />
+      </button>
+
+      <button
+        className="dr__today"
+        type="button"
+        onClick={() => replaceRange(() => onPreset("today"))}
+      >
+        Today
+      </button>
+
+      <div
+        className={placement.left != null ? "drpop is-clamped" : "drpop"}
+        style={{
+          ...(placement.width != null ? { width: placement.width } : null),
+          ...(placement.left != null ? { left: placement.left } : null),
+        }}
+      >
+        <div className="drpop__presets" role="group" aria-label="Presets">
+          <span className="drpop__k">Presets</span>
+          {PRESETS.map((p) => {
+            const len = dayCount(p.resolve(today))
+            return (
+              <button
+                key={p.id}
+                className="drp"
+                type="button"
+                aria-pressed={p.id === presetId}
+                onClick={() => {
+                  replaceRange(() => onPreset(p.id))
+                  setOpen(false)
+                }}
+              >
+                {p.name}
+                <span className="n">{len}d</span>
+              </button>
+            )
+          })}
         </div>
 
-        <button
-          type="button"
-          aria-label={`Next period (${fmtRange(nextPreview)})`}
-          onClick={() => onStep(1)}
-          className="grid w-[26px] place-items-center rounded-r-ct-sm border border-l-0 border-ct-line-strong bg-ct-surface text-ct-ink-2 hover:bg-ct-sunk hover:text-ct-ink"
-        >
-          <span aria-hidden>›</span>
-        </button>
-      </div>
-
-      <div className="relative">
-        <button
-          type="button"
-          ref={cmpTriggerRef}
-          aria-haspopup="menu"
-          aria-expanded={openMenu === "comparison"}
-          onClick={() => toggle("comparison")}
-          className="flex items-center gap-2 whitespace-nowrap rounded-ct-sm border border-ct-line-strong bg-ct-surface px-2.5 py-1 hover:bg-ct-sunk"
-        >
-          <span className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
-            {comparison.label}
-          </span>
-          <ChevronDown aria-hidden className="size-[11px] text-ct-ink-3" />
-        </button>
-        {openMenu === "comparison" && (
-          <div
-            role="menu"
-            aria-label="Comparison"
-            style={{
-              width: Math.max(200, Math.min(cmpPlacement.width, 260)),
-              ...(cmpPlacement.left != null ? { left: cmpPlacement.left } : { right: 0 }),
-            }}
-            className="absolute top-[calc(100%+7px)] z-30 grid overflow-hidden rounded-ct border border-ct-line-strong bg-ct-surface py-1"
-          >
-            {comparisonOptions.map((c) => {
-              const checked = c.id === comparisonId
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={checked}
-                  onClick={() => {
-                    onComparison(c.id)
-                    setOpenMenu(null)
-                  }}
-                  className={menuItemClass(checked)}
-                >
-                  <span>{c.name}</span>
-                </button>
-              )
-            })}
+        <div className="drpop__cal">
+          <div className="drcals">
+            <Calendar
+              month={anchorMonth}
+              range={range}
+              compare={compare}
+              today={today}
+              pending={pending}
+              onPickDay={pickDay}
+              onMonthChange={setViewMonth}
+            />
           </div>
-        )}
+        </div>
+
+        <div className="drpop__foot">
+          <span className="lbl" id={cmpLabelId}>
+            Compare to
+          </span>
+          <div className="drcmp" role="group" aria-labelledby={cmpLabelId}>
+            {comparisonOptions.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                aria-pressed={c.id === comparisonId}
+                onClick={() => onComparison(c.id)}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+          <span className="spacer" />
+          <span className="lbl">
+            {bucketFor(range)} buckets · {days} {days === 1 ? "day" : "days"}
+          </span>
+          <button className="btn btn--primary" type="button" onClick={() => setOpen(false)}>
+            Apply
+          </button>
+        </div>
       </div>
     </div>
   )

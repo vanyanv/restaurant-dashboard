@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange, dayCount,
-  toQueryBounds, isoDay, parseIsoDay, rangeLabel,
+  toQueryBounds, isoDay, parseIsoDay, rangeLabel, rangeTitle, rangeSubtitle,
 } from "@/lib/counter/date-range"
 
 const TODAY = new Date(2026, 7, 24) // Mon 24 Aug 2026, local midnight
@@ -229,5 +229,49 @@ describe("rangeLabel", () => {
   it("spans a year boundary without dropping the year", () => {
     expect(rangeLabel({ start: new Date(2025, 11, 29), end: new Date(2026, 0, 4) }, "custom"))
       .toBe("Dec 29, 2025 – Jan 4, 2026")
+  })
+})
+
+describe("rangeTitle", () => {
+  it("names a multi-day window by its span and where it ends", () => {
+    expect(rangeTitle({ start: new Date(2026, 7, 15), end: new Date(2026, 7, 21) })).toBe(
+      "7 days to Aug 21",
+    )
+  })
+
+  it("names a single day by its weekday, because that is what makes it different", () => {
+    // The prototype's `P.overview.title()`: "Tuesday's numbers". A restaurant's
+    // week has a strong shape, so which weekday it is IS the context.
+    expect(rangeTitle({ start: new Date(2026, 7, 25), end: new Date(2026, 7, 25) })).toBe(
+      "Tuesday's numbers",
+    )
+  })
+
+  it("never says the page's name — that is the breadcrumb's job", () => {
+    const title = rangeTitle({ start: new Date(2026, 0, 1), end: new Date(2026, 7, 21) })
+    expect(title).toBe("233 days to Aug 21")
+  })
+})
+
+describe("rangeSubtitle", () => {
+  it("is the store, the window and what it is measured against, in that order", () => {
+    expect(
+      rangeSubtitle("Hollywood", { start: new Date(2026, 7, 15), end: new Date(2026, 7, 21) }, "weekday"),
+    ).toBe("Hollywood · Aug 15 – Aug 21 · vs the same 4 weekdays")
+  })
+
+  it("still names the comparison when it is switched off, rather than going silent", () => {
+    // "with no comparison" is a fact a reader needs: a page showing no deltas
+    // because none were asked for reads exactly like one showing no deltas
+    // because they failed.
+    expect(
+      rangeSubtitle("All stores", { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) }, "none"),
+    ).toBe("All stores · Aug 21 · with no comparison")
+  })
+
+  it("carries the year when the window straddles one, via rangeLabel", () => {
+    expect(
+      rangeSubtitle("Hollywood", { start: new Date(2025, 11, 29), end: new Date(2026, 0, 4) }, "prev"),
+    ).toBe("Hollywood · Dec 29, 2025 – Jan 4, 2026 · vs the prior period")
   })
 })

@@ -61,7 +61,7 @@ describe("AskSurface", () => {
     // surface does not have to guess what the reader meant.
     render(
       <>
-        <button data-ask-about="Prime cost">Ask about this</button>
+        <button data-askabout="Prime cost">Ask about this</button>
         <AskSurface {...props} />
       </>,
     )

@@ -5,6 +5,11 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getOverviewSections, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOverviewClient } from "./counter-overview-client"
 
+/** `OWNER` -> `Owner`. The rail prints a role, not an enum member. */
+function titleCase(role: string): string {
+  return role.charAt(0) + role.slice(1).toLowerCase()
+}
+
 /**
  * Counter Overview — the first Counter page (Plan 7). A page composes
  * primitives and calls exactly one adapter; it never imports Prisma or an
@@ -48,6 +53,9 @@ export default async function DashboardPage({
       pathname="/dashboard"
       params={params.toString()}
       stores={stores}
+      // The rail's account row. Real session values, not a placeholder — the
+      // prototype's "Chris K. / Owner · settings" is the same two facts.
+      user={{ name: session.user.name, role: titleCase(session.user.role) }}
       today={today}
       sections={sections}
     />

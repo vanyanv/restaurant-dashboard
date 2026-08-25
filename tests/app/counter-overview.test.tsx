@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 
 // CounterOverviewClient calls useRouter() (for the controls' router.push)
 // unconditionally on every render. Outside a real Next.js App Router tree —
@@ -21,6 +21,7 @@ const base = {
   // constructs the component directly does not).
   params: "",
   stores: [{ id: "hollywood", name: "Hollywood", stage: "trading" as const }],
+  user: { name: "Chris Karimian", role: "Owner" },
   today: new Date(2026, 7, 25),
 }
 
@@ -45,9 +46,65 @@ const sections = {
 }
 
 describe("Counter Overview", () => {
-  it("renders the page title", () => {
+  it("titles the page with the WINDOW, and leaves its name to the breadcrumb", () => {
+    // The prototype's `P.overview.title()` is a function of the range, not the
+    // page's name (line 4217). With no `range` param the default preset is
+    // "yesterday" — one day, Monday 24 Aug 2026.
     render(<CounterOverviewClient {...base} sections={sections} />)
-    expect(screen.getByRole("heading", { name: /overview/i })).toBeTruthy()
+    expect(screen.getByRole("heading", { level: 2, name: "Monday's numbers" })).toBeTruthy()
+    // `crumbs()` always opens with a store; with no `store` param that is the
+    // aggregate, which the prototype carries as an "All stores" pseudo-store.
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i }).textContent).toBe(
+      "All stores/Overview",
+    )
+  })
+
+  it("subtitles it with the store, the window and what it is measured against", () => {
+    const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
+    expect(container.querySelector(".pagehead .sub")?.textContent).toBe(
+      "All stores · Aug 24 · vs the prior period",
+    )
+  })
+
+  it("puts the dispatch line at PAGE level, above every section — never inside one", () => {
+    // Task 4 measured our head figure sitting inside the first `.sec` while the
+    // prototype's head block sits above all six, and the fidelity gate reported
+    // it as four EXTRA landmarks. The dispatch line is the first element of the
+    // screen in `P.overview.desk()` (line 4231), and it has to be here.
+    const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
+    const main = container.querySelector("main#ct-main") as HTMLElement
+    const dispatch = main.querySelector(".dispatch") as HTMLElement
+    expect(dispatch.parentElement).toBe(main)
+    expect(dispatch.closest(".sec")).toBeNull()
+    // .pagehead first, .dispatch second, then the sections.
+    const kids = [...main.children].map((c) => c.className.split(" ")[0])
+    expect(kids.slice(0, 2)).toEqual(["pagehead", "dispatch"])
+    expect(kids.slice(2)).toEqual(new Array(6).fill("sec"))
+  })
+
+  it("says which stores are trading, because that is why a figure below may be empty", () => {
+    render(<CounterOverviewClient {...base} sections={sections} />)
+    expect(screen.getByText("1 of 1 stores trading")).toBeTruthy()
+  })
+
+  it("says a pre-open store is not trading, rather than leaving an empty page unexplained", () => {
+    render(
+      <CounterOverviewClient
+        {...base}
+        params="store=glendale"
+        stores={[
+          { id: "hollywood", name: "Hollywood", stage: "trading" as const },
+          { id: "glendale", name: "Glendale", stage: "pre_open" as const },
+        ]}
+        sections={sections}
+      />,
+    )
+    expect(screen.getByText(/Glendale is not trading yet/)).toBeTruthy()
+  })
+
+  it("does not offer the queue link the prototype does — /dashboard/needs-you is not served yet", () => {
+    const { container } = render(<CounterOverviewClient {...base} sections={sections} />)
+    expect(container.querySelector(".dispatch .go")).toBeNull()
   })
 
   it("shows net sales, the first of the two numbers an owner checks", () => {
@@ -76,8 +133,9 @@ describe("Counter Overview", () => {
       />,
     )
     expect(screen.getByRole("alert")).toBeTruthy()
-    // The ledger still rendered.
-    expect(screen.getByText("Hollywood")).toBeTruthy()
+    // The ledger still rendered. Scoped to the table: "Hollywood" also appears
+    // in the rail's store popover, which is always in the DOM now.
+    expect(within(screen.getByRole("table")).getByText("Hollywood")).toBeTruthy()
   })
 
   it("renders a pre-open store's empty state with its reason", () => {
@@ -99,7 +157,7 @@ describe("Counter Overview", () => {
       const { unmount } = render(
         <CounterOverviewClient {...base} sections={{ ...sections, invoices: s }} />,
       )
-      expect(screen.getByRole("heading", { name: /overview/i })).toBeTruthy()
+      expect(screen.getByRole("heading", { level: 2, name: "Monday's numbers" })).toBeTruthy()
       unmount()
     }
   })

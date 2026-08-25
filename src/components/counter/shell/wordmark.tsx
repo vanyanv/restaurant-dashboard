@@ -7,7 +7,13 @@
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`font-ct-display text-ct-lg font-extrabold tracking-tight text-ct-accent ${className}`}
+      // `whitespace-nowrap` because `.rail__logo` holds an `<img class="logo">`
+      // in the prototype and a line of type here. Below 900px the sheet turns
+      // the rail into a horizontal strip (`.rail{flex-direction:row}`), and a
+      // shrinking flex item broke "Chris N Eddy's" over three lines at 390px.
+      // An image would not have wrapped; the ported sheet has no rule for a
+      // wordmark set in type, so this is the one property it needs.
+      className={`whitespace-nowrap font-ct-display text-ct-lg font-extrabold tracking-tight text-ct-accent ${className}`}
     >
       Chris N Eddy&apos;s
     </span>

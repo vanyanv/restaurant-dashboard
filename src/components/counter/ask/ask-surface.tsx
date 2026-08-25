@@ -14,7 +14,7 @@ import { describeAskContext, type AskContext } from "@/lib/counter/ask-context"
  * derived from the same `pathname`/`params` the page itself reads, never a
  * prop a caller could let go stale (note 43).
  *
- * `[data-ask-about]` reaches this surface by EVENT DELEGATION: one `click`
+ * `[data-askabout]` reaches this surface by EVENT DELEGATION: one `click`
  * listener on `document` walks up from the click target. `Section` — the
  * sole renderer of `SectionData`'s six states — stays a server component
  * because of this; an `onAsk` prop on `Section` would force it client-side
@@ -49,7 +49,7 @@ export function AskSurface({
     setOpen(true)
   }
 
-  // ⌘K / Ctrl+K opens the surface, from anywhere. Delegated `[data-ask-about]`
+  // ⌘K / Ctrl+K opens the surface, from anywhere. Delegated `[data-askabout]`
   // clicks open it pre-filled. Both listeners are mounted once, for the life
   // of the component — a reader can summon the surface whether or not it is
   // already open.
@@ -62,8 +62,8 @@ export function AskSurface({
     }
     function onClick(e: MouseEvent) {
       const target = e.target as HTMLElement | null
-      const askEl = target?.closest("[data-ask-about]")
-      if (askEl) openSurface(askEl.getAttribute("data-ask-about") ?? "")
+      const askEl = target?.closest("[data-askabout]")
+      if (askEl) openSurface(askEl.getAttribute("data-askabout") ?? "")
     }
     document.addEventListener("keydown", onKeyDown)
     document.addEventListener("click", onClick)
