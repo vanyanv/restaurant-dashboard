@@ -1,11 +1,20 @@
 # Motion verification: `prefers-reduced-motion` in a real browser
 
-**Status: the `useCountUp` defect documented below is FIXED** (Plan 3
-closing commit, same day). See "Fix verification" at the end of this file
-for the re-measured, real-browser numbers. The finding is kept in place,
-unedited, as the record of what real-browser testing caught that stubbed
-`matchMedia` unit tests could not — the fix section that follows it is the
-proof the fix actually holds under the same conditions that found the bug.
+**Status: FIXED — systemically, not per-consumer.** The root cause was
+`useReducedMotion`'s own initialiser reading `matchMedia` (a client-only
+value) during render, which every consumer inherited. Three components
+shared it: `useCountUp` (a hard hydration failure, patched locally first),
+`useEntry` (a milder, previously-*masked* attribute-only version of the
+same thing, uncovered only once the `useCountUp` failure stopped hiding
+it), and `theme-provider.tsx` (latent, no mounted consumer yet). Fixing the
+cause once, in `useReducedMotion`, closed both known instances and the
+`theme-provider.tsx` one whenever it gets a consumer. See "Systemic fix
+verification" at the end of this file for the final real-browser numbers —
+**0 console errors under both media settings**, including the `useEntry`
+warning being gone outright, not merely quieter. The two sections below
+("Finding" and the earlier "Fix verification") are kept unedited as the
+record of what real-browser testing caught, and how the first, narrower
+fix was arrived at, before the shared cause was found.
 
 Task 7 of Plan 3. The Recharts spike (Plan 3 planning) claimed "reduced motion
 works by default" on the strength of reading Recharts' `.d.ts` files. Every
@@ -242,3 +251,90 @@ approximating them:
 
 7 of 7 pass (`npx vitest run tests/components/counter/motion/use-count-up.test.tsx`),
 5 pre-existing plus these 2.
+
+## Systemic fix verification
+
+The per-consumer `useCountUp` fix above treated the symptom. The actual
+cause was `useReducedMotion`'s own initialiser:
+
+```ts
+const [reduced, setReduced] = useState<boolean>(() =>
+  typeof matchMedia === "function" ? matchMedia(QUERY).matches : true,
+)
+```
+
+This reads the *client's* preference during render. The server has no
+client to ask (`matchMedia` doesn't exist there, so it always got `true`),
+and a real `no-preference` client's first render got `false` — disagreeing
+by construction, on every single consumer, not just `useCountUp`. Fixed in
+`src/components/counter/motion/use-reduced-motion.ts`: the initial state is
+now unconditionally `true`, full stop, no `matchMedia` call in the
+initialiser at all. The existing effect — unchanged — reads the real
+preference on mount and subscribes to changes, so motion switches on one
+tick after hydration succeeds rather than never disagreeing with the server
+in the first place.
+
+`useCountUp`'s local `useState(value)` guard was kept rather than removed:
+with the systemic fix, `reduced` is now *always* `true` at `useCountUp`'s
+first render too, so the local guard and the systemic fix now produce an
+identical result — but the local one is retained as defense-in-depth (it
+doesn't rely on trusting `useReducedMotion`'s internal contract forever,
+and costs nothing). See that hook's module comment for the full reasoning.
+
+Same harness, same method, rebuilt and re-run against `npm run dev` after
+the systemic fix (fresh dev server, fresh login, `page.emulateMedia` exactly
+as before):
+
+### `reduce`, post-systemic-fix
+
+12 samples, t=204ms→1226ms. `7468` at every sample. No bar/section
+`animation-name` or `animation-delay` at any sample. Line `stroke-dasharray`
+`null` throughout. **0 console errors, 0 page errors.**
+
+### `no-preference`, post-systemic-fix
+
+12 samples, t=86ms→1173ms:
+
+```
+ 86ms   7468   (SSR/pre-hydration paint — server and client now AGREE, no mismatch)
+191ms      0   (mount effect: the one accepted settled-then-reset frame, now silent)
+231ms   3933
+272ms   4795
+312ms   5506
+352ms   6318
+412ms   6866
+472ms   7280
+572ms   7463
+672ms   7468   (landed — 481ms after the 191ms mount-effect start, ~COUNT_UP_MS)
+873ms   7468
+1173ms  7468
+```
+
+Strictly monotonic 0 → 7468, no negative value anywhere.
+
+**Staggers, confirmed still running correctly** (a fix that silenced
+hydration by never animating would be worse than the bug it replaced):
+
+- Bars: `animation-name` = `"ct-bar-grow"` on all 7 from t=191ms onward;
+  `animation-delay` = `0ms, 26ms, 52ms, 78ms, 104ms, 130ms, 156ms` — exact
+  26ms stagger.
+- Entry sections: `animation-name` = `"ct-entry"` on all 3;
+  `animation-delay` = `0ms, 36ms, 72ms` — exact 36ms stagger.
+- Line: `stroke-dasharray` grows `0px` → `967.97px` → `1387.45px` →
+  `1511.58px` (of `1516.17px` total) then the attribute disappears between
+  t=873ms and t=1173ms — completion ~682–982ms after the t=191ms mount,
+  consistent with `LINE_DRAW_MS = 720`.
+
+**Console errors: 0 under `reduce`, 0 under `no-preference`.** The
+`useEntry` "won't be patched up" attribute-mismatch warning documented in
+"Fix verification" above is **gone outright**, not merely quieter — direct
+confirmation that it shared `useCountUp`'s root cause, and that fixing the
+cause in `useReducedMotion` closed both.
+
+### Why this is the better fix
+
+Patching each consumer (`useCountUp` today, `useEntry` next, whatever the
+next one turns out to be) treats an infinite list of symptoms one at a time.
+`useReducedMotion` is the one place every motion hook in Counter goes
+through — fixing its initialiser once means no future consumer can
+reintroduce this class of bug by construction, rather than by discipline.

@@ -15,17 +15,25 @@ export const COUNT_UP_MS = 480
  * animating at all.
  *
  * Two defects were found by driving this in a real browser
- * (`docs/counter/motion-verification.md`) that stubbed-`matchMedia` unit
- * tests could not see, and both are fixed here:
+ * (`docs/counter/motion-verification.md`):
  *
- * 1. Hydration safety. `useReducedMotion` can only know "reduced" during
- *    SSR (no `matchMedia` on the server), so the server always paints
- *    `value`. The initial client render MUST paint the same thing, or React
- *    sees a text mismatch, throws "Hydration failed", and discards and
- *    regenerates the whole subtree — far more expensive, and more visibly
- *    broken, than the thing this is trying to avoid. So `display` always
- *    initialises to `value`, on the server and on the client's first
- *    render, regardless of `reduced`. The count-DOWN-then-up-again for a
+ * 1. Hydration safety. This USED to be fixed locally, here: `display`
+ *    forced to initialise to `value` regardless of `reduced`, because
+ *    `useReducedMotion` used to read `matchMedia` during render, which
+ *    disagreed between the server (always "reduced", no `matchMedia`
+ *    there) and a `no-preference` client's first render — a real,
+ *    reproduced-every-time hydration mismatch. That root cause is now
+ *    fixed systemically, in `useReducedMotion` itself (its initial state
+ *    is unconditionally `true`, full stop — see that hook's module
+ *    comment), which means `reduced` is now ALSO always `true` on this
+ *    hook's first render, on the server and the client alike. The local
+ *    `useState(value)` below is therefore redundant with that fix — but
+ *    kept anyway, deliberately, as defense-in-depth: it doesn't rely on a
+ *    caller trusting `useReducedMotion`'s internal contract to hold
+ *    forever, it costs nothing (the two forms produce an identical first
+ *    render today), and it keeps this hook's own hydration-safety
+ *    invariant readable in one place without having to go verify it
+ *    against another module. The count-DOWN-then-up-again for a
  *    `no-preference` visitor happens only in the mount effect, after
  *    hydration has already succeeded: one settled frame at the target,
  *    then it drops to 0 and animates back up. That single settled frame is
@@ -33,11 +41,12 @@ export const COUNT_UP_MS = 480
  *    against a hydration error, which is neither. Don't "optimise" it back
  *    to starting at 0 immediately; that's what caused the mismatch.
  *
- *    (`CounterThemeProvider`/`ThemeToggle` in `theme-provider.tsx` reads
- *    client-only state during render for the same reason this hook used
- *    to — same latent hydration risk, not fixed here because it has no
- *    mounted consumer yet. Whoever mounts `ThemeToggle` should look at
- *    this fix first.)
+ *    (`CounterThemeProvider`/`ThemeToggle` in `theme-provider.tsx` reads a
+ *    different client-only value — `localStorage`, not motion preference —
+ *    during render, for the same underlying reason this hook used to.
+ *    `useReducedMotion`'s fix does not cover it. Not fixed here because it
+ *    has no mounted consumer yet; whoever mounts `ThemeToggle` should look
+ *    at both fixes first.)
  *
  * 2. Clock safety. `requestAnimationFrame`'s timestamp is the time its
  *    frame began, not the time the callback runs — it can predate a
@@ -53,8 +62,9 @@ export function useCountUp(value: number, opts: { durationMs?: number } = {}): n
   const duration = opts.durationMs ?? COUNT_UP_MS
   const reduced = useReducedMotion()
   // Always the target on the server AND on the client's first render —
-  // see the hydration-safety note above. Only the mount effect below ever
-  // moves it to `from`.
+  // redundant with useReducedMotion's own fix now, kept as local
+  // defense-in-depth (see the hydration-safety note above). Only the
+  // mount effect below ever moves it to `from`.
   const [display, setDisplay] = useState(value)
   const frame = useRef<number | null>(null)
 

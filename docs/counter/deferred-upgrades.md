@@ -168,7 +168,7 @@ was never built. A caller who wants a visible comparison today has to pass it as
 ordinary second `ChartSeries` (its own solid line/bar, its own band colour) — `Chart` has
 no dedicated comparison-series rendering path yet.
 
-### `useCountUp` hydration-mismatch under real `no-preference` — FIXED (Plan 3 closing commit)
+### Hydration mismatch in `useReducedMotion` — FIXED SYSTEMICALLY (Plan 3 closing commit)
 
 Not a dependency upgrade, but the same kind of "assumed, never run" gap this file tracks:
 Task 7's real-browser Playwright pass (`docs/counter/motion-verification.md`) found that
@@ -182,30 +182,34 @@ and remounted the affected subtree, and the freshly-mounted animation's first
 after that frame began), producing one transient negative displayed value before the count
 corrected itself.
 
-Fixed before Plan 4 could wire `Figure` up to it (which would have shipped this):
-`display` now initialises to `value` unconditionally, so SSR and the client's first render
-always agree — the mount effect is the only place that ever moves it to `from` (0), after
-hydration has already succeeded (one settled frame at the target, then it drops and counts
-up — an accepted, documented cost). `elapsed` is floored at 0 and the eased fraction
-clamped to `[0, 1]`, so no rAF/`performance.now()` ordering quirk can paint outside
-`[start, target]`. Re-verified with the same real-browser harness: `Hydration failed` went
-from reproducing on every navigation to 0 occurrences; the `no-preference` sequence is now
-strictly monotonic start-to-target (`0 → 3686 → 4983 → 5944 → 6422 → 6788 → 7244 → 7430 →
-7468`) with no negative value anywhere. Full numbers and two new unit tests (hydration
-safety, and a stubbed backwards-rAF-timestamp reproduction) in
-`docs/counter/motion-verification.md`.
+**First pass** patched `useCountUp` locally: `display` initialised to `value`
+unconditionally so SSR and the client's first render always agree, plus `elapsed` floored
+at 0 and the eased fraction clamped to `[0, 1]` so no rAF/`performance.now()` ordering
+quirk can paint outside `[start, target]`. That fix uncovered a second, milder, previously
+*masked* hydration warning in `useEntry`'s `EntrySection` elements (animation `style` props
+absent vs. present, same underlying cause) — the harder `useCountUp` failure had been
+aborting hydration before React got far enough to report the softer one separately.
 
-**Residual, separate, not fixed here**: fixing this uncovered a second, milder hydration
-warning that was previously *masked* by this one — `useEntry`'s `EntrySection` elements
-also differ between server and client (animation `style` props absent vs. present, same
-SSR-always-reduced root cause), which React reports as *"A tree hydrated but some
-attributes of the server rendered HTML didn't match the client properties. This won't be
-patched up"* rather than discarding the subtree. Lower severity — no remount, and the
-measured stagger numbers (26ms bars, 36ms entry sections) confirm the animations end up
-correct regardless — but real, and worth whoever next touches `useEntry` knowing it's
-there. Not addressed here; this task's fix was scoped to `useCountUp` specifically.
+**Second pass fixed the actual cause**, in `useReducedMotion` itself
+(`src/components/counter/motion/use-reduced-motion.ts`): its initial `useState` used to
+call `matchMedia` — a client-only value — during render, which every consumer inherited.
+The initial state is now unconditionally `true`, full stop, with no `matchMedia` call in
+the initialiser; the existing mount effect (unchanged) reads the real preference and
+subscribes to changes, so motion turns on one tick after hydration succeeds instead of
+disagreeing with the server in the first place. `useCountUp`'s local guard was kept as
+defense-in-depth (now redundant with the systemic fix, but free, and doesn't depend on
+trusting another module's contract) — see that hook's module comment.
 
-`theme-provider.tsx`'s `CounterThemeProvider`/`ThemeToggle` reads client-only state during
-render for the same underlying reason `useCountUp` used to — same latent hydration risk.
-Not fixed here either; it has no mounted consumer yet, flagged so whoever mounts
-`ThemeToggle` looks at this fix first.
+Re-verified with the same real-browser harness after the systemic fix: **0 console errors
+under both `reduce` and `no-preference`**, including the `useEntry` warning being gone
+*outright*, not merely quieter — direct confirmation it shared `useCountUp`'s root cause.
+The `no-preference` count-up sequence is strictly monotonic 0 → 7468 with no negative value
+anywhere, and every stagger still measures correctly (26ms bars, 36ms entry sections, line
+draw completing near 720ms) — the fix silences the hydration noise without silencing the
+animations themselves. Full numbers, both passes, in `docs/counter/motion-verification.md`.
+
+`theme-provider.tsx`'s `CounterThemeProvider`/`ThemeToggle` reads a *different* client-only
+value — `localStorage`, not motion preference — during render, for the same underlying
+reason `useCountUp` used to. `useReducedMotion`'s fix does not cover it, and it wasn't
+touched here: it has no mounted consumer yet. Flagged so whoever mounts `ThemeToggle`
+looks at both fixes above first.
