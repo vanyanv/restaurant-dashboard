@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   CHANNELS, channelById, bandClassFor, markClassFor, commissionFor,
+  bandVarFor, markVarFor,
 } from "@/lib/counter/channels"
 
 describe("channels", () => {
@@ -29,6 +30,26 @@ describe("channels", () => {
   it("mark classes ARE the brand colours — identity, used beside a label", () => {
     expect(markClassFor("doordash")).toBe("text-ct-ch-dd")
     expect(markClassFor("house")).toBe("text-ct-ch-house")
+  })
+
+  it("the var form names the SAME two decisions the class form does", () => {
+    // A component emitting the prototype's DOM cannot reach either colour
+    // through a utility class — `.chip i` reads `var(--pc)` and the band steps
+    // are custom properties — so both forms exist. They must not be able to
+    // disagree: each is derived from one entry in CHANNELS.
+    for (const c of CHANNELS) {
+      expect(markVarFor(c.id)).toBe(`var(--${markClassFor(c.id).replace("text-ct-", "")})`)
+      expect(bandVarFor(c.id)).toBe(`var(--${bandClassFor(c.id).replace("bg-ct-", "")})`)
+    }
+  })
+
+  it("the var forms are tokens, never literals, and stay one-per-channel", () => {
+    for (const c of CHANNELS) {
+      expect(markVarFor(c.id)).toMatch(/^var\(--ch-[a-z]+\)$/)
+      expect(bandVarFor(c.id)).toMatch(/^var\(--mx-[1-4]\)$/)
+    }
+    expect(new Set(CHANNELS.map((c) => markVarFor(c.id))).size).toBe(4)
+    expect(new Set(CHANNELS.map((c) => bandVarFor(c.id))).size).toBe(4)
   })
 
   it("channelById is exhaustive and throws on an unknown id rather than returning undefined", () => {

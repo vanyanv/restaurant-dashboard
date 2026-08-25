@@ -72,6 +72,33 @@ async function signIn(page: Page): Promise<void> {
   }
 }
 
+/**
+ * The dev server paints two things over the app that production never ships,
+ * and both land exactly where something real is.
+ *
+ * `<nextjs-portal>` is Next 16's dev-tools indicator: a fixed circle in the
+ * BOTTOM-LEFT corner, ~40px across, which at 1440 sits directly on top of the
+ * rail's account footer — over the 25px `.avatar` and the first letter of the
+ * user's name. It reads as "the account footer's text overlaps its avatar",
+ * and it is not our layout: measured, `.rail__foot` computes `display:flex`
+ * with the sheet's 9px gap, the avatar occupies x 19–44 and the name starts at
+ * x 53. Nothing overlaps. `document.elementsFromPoint` at the badge's centre
+ * returns NEXTJS-PORTAL above SPAN.avatar, which is the whole story.
+ *
+ * `.tsqd-parent-container` is the TanStack Query devtools launcher, in the
+ * bottom-right corner.
+ *
+ * Both are hidden here rather than switched off in `next.config.ts`, because
+ * they are useful while developing and useless in a screenshot. This exists so
+ * the next person to shoot a Counter route does not spend an hour debugging a
+ * CSS bug that belongs to a dev overlay.
+ */
+async function hideDevChrome(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: "nextjs-portal, .tsqd-parent-container { display: none !important }",
+  })
+}
+
 async function main() {
   const [route, out, width, theme] = process.argv.slice(2)
   if (!route || !out) {
@@ -142,6 +169,7 @@ async function main() {
       .first()
       .waitFor({ state: "visible", timeout: 60_000 })
     await page.waitForTimeout(2_000)
+    await hideDevChrome(page)
     await page.screenshot({ path: out, fullPage: true })
     console.log(`${page.url()} → ${out}`)
     if (errors.length > 0) {
