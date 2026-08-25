@@ -172,6 +172,15 @@ missing `.dispatch` is signal. Text is therefore compared for *presence* only:
 an element that should carry text and carries none is a defect; an element
 carrying a different number is not.
 
+**A page may not be marked `"counter"` while the gate reports any EXTRA
+landmark.** An extra is not untidiness — Task 4 found that an element which
+becomes "extra" silently leaves the rendering comparison, so extras shrink what
+is checked. Overview's rendering-difference count fell from 2 to 0 in that task
+without either difference being fixed: the strip stopped being a matched
+landmark and stopped being compared. Every fidelity report therefore states its
+denominator — "0 property differences **on the 17 landmarks present on both
+sides**" — and a bare zero is never enough to call a page done.
+
 **Inherited literals are fixed by the task that first emits their class.**
 Not in one sweep. The task building `.qbtn` is the only one positioned to
 choose the right token and see the result in both themes, and its own fidelity
