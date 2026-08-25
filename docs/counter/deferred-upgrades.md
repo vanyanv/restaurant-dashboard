@@ -168,21 +168,44 @@ was never built. A caller who wants a visible comparison today has to pass it as
 ordinary second `ChartSeries` (its own solid line/bar, its own band colour) — `Chart` has
 no dedicated comparison-series rendering path yet.
 
-### Runtime verification found `useCountUp` hydration-mismatches under real `no-preference`
+### `useCountUp` hydration-mismatch under real `no-preference` — FIXED (Plan 3 closing commit)
 
 Not a dependency upgrade, but the same kind of "assumed, never run" gap this file tracks:
 Task 7's real-browser Playwright pass (`docs/counter/motion-verification.md`) found that
-`useCountUp` renders the *final* value during SSR (the server always defaults
+`useCountUp` rendered the *final* value during SSR (the server always defaults
 `useReducedMotion` to `true`, since `matchMedia` doesn't exist there) but a real
-`no-preference` client wants to start its count at `0` — a text-content hydration
-mismatch, reproduced on every fresh navigation in that session. React's recovery discards
-and remounts the affected subtree, and the freshly-mounted animation's first
-`requestAnimationFrame` tick can compute a negative `elapsed` (the frame-start timestamp
+`no-preference` client wanted to start its count at `0` — a text-content hydration
+mismatch, reproduced on every fresh navigation in that session. React's recovery discarded
+and remounted the affected subtree, and the freshly-mounted animation's first
+`requestAnimationFrame` tick could compute a negative `elapsed` (the frame-start timestamp
 `requestAnimationFrame` hands the callback can predate a `performance.now()` read taken
 after that frame began), producing one transient negative displayed value before the count
-corrects itself. No production page calls `useCountUp` yet (`Figure` still takes a
-pre-formatted string), so nothing ships this today. The fix, when something does wire it
-up: initialise `display` to `value` unconditionally so SSR and first client render always
-agree, start the animation from `0` only after mount, and clamp `t` to `[0, 1]` before
-applying the ease-out so a stray negative-`elapsed` frame can't produce an out-of-range
-result regardless of cause.
+corrected itself.
+
+Fixed before Plan 4 could wire `Figure` up to it (which would have shipped this):
+`display` now initialises to `value` unconditionally, so SSR and the client's first render
+always agree — the mount effect is the only place that ever moves it to `from` (0), after
+hydration has already succeeded (one settled frame at the target, then it drops and counts
+up — an accepted, documented cost). `elapsed` is floored at 0 and the eased fraction
+clamped to `[0, 1]`, so no rAF/`performance.now()` ordering quirk can paint outside
+`[start, target]`. Re-verified with the same real-browser harness: `Hydration failed` went
+from reproducing on every navigation to 0 occurrences; the `no-preference` sequence is now
+strictly monotonic start-to-target (`0 → 3686 → 4983 → 5944 → 6422 → 6788 → 7244 → 7430 →
+7468`) with no negative value anywhere. Full numbers and two new unit tests (hydration
+safety, and a stubbed backwards-rAF-timestamp reproduction) in
+`docs/counter/motion-verification.md`.
+
+**Residual, separate, not fixed here**: fixing this uncovered a second, milder hydration
+warning that was previously *masked* by this one — `useEntry`'s `EntrySection` elements
+also differ between server and client (animation `style` props absent vs. present, same
+SSR-always-reduced root cause), which React reports as *"A tree hydrated but some
+attributes of the server rendered HTML didn't match the client properties. This won't be
+patched up"* rather than discarding the subtree. Lower severity — no remount, and the
+measured stagger numbers (26ms bars, 36ms entry sections) confirm the animations end up
+correct regardless — but real, and worth whoever next touches `useEntry` knowing it's
+there. Not addressed here; this task's fix was scoped to `useCountUp` specifically.
+
+`theme-provider.tsx`'s `CounterThemeProvider`/`ThemeToggle` reads client-only state during
+render for the same underlying reason `useCountUp` used to — same latent hydration risk.
+Not fixed here either; it has no mounted consumer yet, flagged so whoever mounts
+`ThemeToggle` looks at this fix first.
