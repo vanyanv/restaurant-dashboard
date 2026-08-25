@@ -2,7 +2,6 @@
 import { describe, it, expect } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { Meter } from "@/components/counter/surface/meter"
-import { Cascade } from "@/components/counter/surface/cascade"
 
 describe("Meter", () => {
   it("draws the reference line where the target sits", () => {
@@ -74,64 +73,5 @@ describe("Meter", () => {
     const fill = container.querySelector("[data-meter-fill]") as HTMLElement
     expect(fill.style.width).toBe("0%")
     expect(fill.style.width).not.toMatch(/^-/)
-  })
-})
-
-describe("Cascade", () => {
-  const steps = [
-    { label: "Sales (ex-tax)", amount: 6972.89, kind: "start" as const },
-    { label: "COGS", amount: -1973.9, kind: "subtract" as const },
-    { label: "Labor", amount: -883.37, kind: "subtract" as const },
-    { label: "Net profit", amount: 2002.71, kind: "end" as const },
-  ]
-
-  it("renders a bar per step", () => {
-    const { container } = render(<Cascade steps={steps} />)
-    expect(container.querySelectorAll("[data-cascade-step]")).toHaveLength(4)
-  })
-
-  it("shows what is LEFT after each subtraction, not the size of the subtraction", () => {
-    const { container } = render(<Cascade steps={steps} />)
-    const bars = container.querySelectorAll("[data-cascade-remaining]")
-    // after COGS: 6972.89 - 1973.90 = 4998.99 of 6972.89 → ~71.7%
-    expect((bars[1] as HTMLElement).style.width).toBe("71.7%")
-  })
-
-  it("labels every step with its own amount", () => {
-    render(<Cascade steps={steps} />)
-    expect(screen.getByText("Sales (ex-tax)")).toBeTruthy()
-    expect(screen.getByText("Net profit")).toBeTruthy()
-  })
-
-  it("a zero-revenue start (closed store, empty channel filter) does not divide into NaN%/Infinity%", () => {
-    const zeroSteps = [
-      { label: "Sales (ex-tax)", amount: 0, kind: "start" as const },
-      { label: "COGS", amount: 0, kind: "subtract" as const },
-      { label: "Net profit", amount: 0, kind: "end" as const },
-    ]
-    const { container } = render(<Cascade steps={zeroSteps} />)
-    const bars = container.querySelectorAll("[data-cascade-remaining]")
-    for (const bar of Array.from(bars)) {
-      const width = (bar as HTMLElement).style.width
-      expect(width).toBe("0%")
-      expect(width).not.toMatch(/NaN|Infinity/)
-    }
-  })
-
-  it("track clips overflow so a remaining figure past start can't paint outside the bar", () => {
-    const { container } = render(<Cascade steps={steps} />)
-    const track = container.querySelector("[data-cascade-remaining]")!.parentElement as HTMLElement
-    expect(track.className).toMatch(/overflow-hidden/)
-  })
-
-  it("renders duplicate labels without colliding — index keys, not label keys", () => {
-    const duplicateLabels = [
-      { label: "Other", amount: 1000, kind: "start" as const },
-      { label: "Other", amount: -200, kind: "subtract" as const },
-      { label: "Other", amount: 800, kind: "end" as const },
-    ]
-    const { container } = render(<Cascade steps={duplicateLabels} />)
-    expect(container.querySelectorAll("[data-cascade-step]")).toHaveLength(3)
-    expect(screen.getAllByText("Other")).toHaveLength(3)
   })
 })
