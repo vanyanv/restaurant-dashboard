@@ -2,27 +2,8 @@
 
 import { Fragment, useState } from "react"
 import Link from "next/link"
-import type { LucideIcon } from "lucide-react"
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Bell,
-  Receipt,
-  ChartLine,
-  Wallet,
-  Coins,
-  Users,
-  BookOpen,
-  ChefHat,
-  FileText,
-  Package,
-  Carrot,
-  Truck,
-  Store,
-  Settings2,
-  Activity,
-} from "lucide-react"
 import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
+import { NAV_ICONS } from "./nav-icons"
 import { Wordmark } from "./wordmark"
 import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
 
@@ -66,33 +47,6 @@ import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
  * to an `<a>` unchanged.
  */
 
-/**
- * `nav.ts` deliberately stores `icon` as a plain string (note 24: it stays
- * render-free) so this is the one place a name resolves to a component. Kept
- * as a static map rather than `(lucide as Record<string, LucideIcon>)[name]`
- * so an icon that doesn't exist in the installed version is a build-time
- * TypeScript error, not a silently blank rail row discovered in production.
- */
-const ICONS: Record<string, LucideIcon> = {
-  LayoutDashboard,
-  MessageSquare,
-  Bell,
-  Receipt,
-  ChartLine,
-  Wallet,
-  Coins,
-  Users,
-  BookOpen,
-  ChefHat,
-  FileText,
-  Package,
-  Carrot,
-  Truck,
-  Store,
-  Settings2,
-  Activity,
-}
-
 export interface RailUser {
   name: string
   /** "Owner", "Developer" — printed under the name, beside "settings". */
@@ -101,7 +55,7 @@ export interface RailUser {
 
 function RailLink({ item, pathname }: { item: NavItem; pathname: string }) {
   const active = isActive(item, pathname)
-  const Icon = ICONS[item.icon]
+  const Icon = NAV_ICONS[item.icon]
   return (
     <Link href={item.href} aria-current={active ? "page" : undefined} className="navbtn">
       {/* The label beside it is the accessible name — an icon announced
