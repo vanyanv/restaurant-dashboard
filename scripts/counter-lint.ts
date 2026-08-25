@@ -175,7 +175,28 @@ const STATUS_BRANCH_ALLOWED =
   /[/\\]components[/\\]counter[/\\](?:surface|state)[/\\]|[/\\]lib[/\\]counter[/\\]/
 const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
 const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]adapters[/\\]/
-const COLOUR_ALLOWED = /counter\.css$/
+/**
+ * Rule 1's exemption: the Counter stylesheets, and only those.
+ *
+ * `counter-components.css` is 1030 rules ported verbatim from
+ * docs/counter/counter-prototype.html by scripts/extract-prototype-css.ts. It
+ * carries the prototype's own colour values in the places a token cannot
+ * reach — shadow and gradient stops, mostly — and it is a stylesheet, not a
+ * component. Rule 1 exists to stop colours appearing in TSX, and it still
+ * does. Its colour TOKENS are not exempt from anything: the extractor strips
+ * every colour-valued custom property out of the port and re-declares them as
+ * `var(--ct-*)` aliases, so counter.css remains the only place a colour token
+ * is decided — asserted by tests/styles/counter-components.test.ts.
+ *
+ * Deliberately NOT widened to all of `src/styles/*.css`, which is the obvious
+ * shape and is wrong: LEGACY below carries a `src/styles` entry for the four
+ * editorial stylesheets, `.css` files are reachable by rule 1 alone (rules 2-5
+ * are .ts/.tsx only), so a directory-wide exemption would make that entry
+ * suppress nothing and fail its own "still suppressing at least one real
+ * violation" check in tests/styles/counter-lint.test.ts. Verified by trying
+ * it: 1 failed, "expected 0 to be greater than 0".
+ */
+const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$/
 
 const RULES: Array<{
   name: string

@@ -1,0 +1,289 @@
+import { describe, it, expect } from "vitest"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { generate } from "../../scripts/extract-prototype-css"
+
+/**
+ * `src/styles/counter-components.css` is not written by hand: it is the
+ * prototype's own stylesheet, lifted out of docs/counter/counter-prototype.html
+ * by scripts/extract-prototype-css.ts. Everything below is asserted against the
+ * COMMITTED file, because that is what ships — the generator is only checked
+ * for agreeing with it.
+ *
+ * The parsing here is deliberately its own small implementation rather than an
+ * import of the extractor's helpers. The extractor decides what to port; this
+ * file decides whether what was ported is safe. Sharing the filter functions
+ * between the two would mean a bug in the filter could never be seen from here.
+ *
+ * The two load-bearing cases are "reads no custom property the alias layer does
+ * not supply" and "keeps counter.css the only place a colour VALUE is decided".
+ * Both were proved red before being accepted — see task-1-report.md for the
+ * exact failures (delete one alias; turn one alias into a literal).
+ */
+
+const ROOT = process.cwd()
+const CSS = readFileSync(join(ROOT, "src", "styles", "counter-components.css"), "utf-8")
+const COUNTER_CSS = readFileSync(join(ROOT, "src", "styles", "counter.css"), "utf-8")
+const GLOBALS = readFileSync(join(ROOT, "src", "app", "globals.css"), "utf-8")
+const LAYOUT = readFileSync(join(ROOT, "src", "app", "layout.tsx"), "utf-8")
+
+/** `--len`, `--pc` and `--qc` are set inline per element (chart lengths, bar
+ *  percentages). A default in the alias layer would mask a component that
+ *  forgot to set one, so they are expected to be read and never declared. */
+const RUNTIME_VARS = new Set(["--len", "--pc", "--qc"])
+
+function stripComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, " ")
+}
+
+/** Remove every `@keyframes name{…}` block, matching braces. Keyframe
+ *  selectors (`from`, `to`, `40%`) name no class because they cannot, and are
+ *  not what the bare-element-selector rule is about. */
+function withoutKeyframes(css: string): string {
+  let out = ""
+  let i = 0
+  while (i < css.length) {
+    const at = css.indexOf("@keyframes", i)
+    if (at === -1) {
+      out += css.slice(i)
+      break
+    }
+    out += css.slice(i, at)
+    const open = css.indexOf("{", at)
+    let depth = 1
+    let j = open + 1
+    while (j < css.length && depth > 0) {
+      if (css[j] === "{") depth += 1
+      else if (css[j] === "}") depth -= 1
+      j += 1
+    }
+    i = j
+  }
+  return out
+}
+
+/** Every `prelude{…}` block in the sheet, at any nesting depth. */
+function blocks(css: string): Array<{ prelude: string; body: string }> {
+  const out: Array<{ prelude: string; body: string }> = []
+  const open: Array<{ prelude: string; from: number }> = []
+  let start = 0
+  for (let i = 0; i < css.length; i += 1) {
+    const ch = css[i]
+    if (ch === "{") {
+      open.push({ prelude: css.slice(start, i).trim(), from: i + 1 })
+      start = i + 1
+    } else if (ch === "}") {
+      const frame = open.pop()
+      if (frame) out.push({ prelude: frame.prelude, body: css.slice(frame.from, i) })
+      start = i + 1
+    } else if (ch === ";") {
+      start = i + 1
+    }
+  }
+  return out
+}
+
+const RULES = blocks(stripComments(withoutKeyframes(CSS)))
+const SELECTORS = RULES.map((r) => r.prelude).filter((p) => !p.startsWith("@"))
+
+function classNames(css: string): Set<string> {
+  const out = new Set<string>()
+  for (const sel of blocks(stripComments(css)).map((r) => r.prelude)) {
+    if (sel.startsWith("@")) continue
+    for (const m of sel.matchAll(/\.([a-zA-Z][\w-]*)/g)) out.add(m[1])
+  }
+  return out
+}
+
+/** Split a grouped selector on top-level commas only — the commas inside
+ *  `:is(…)`, `:where(…)` and `[data-n="1,2"]` are not group separators. */
+function splitGroup(sel: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let cur = ""
+  for (const ch of sel) {
+    if (ch === "(" || ch === "[") depth += 1
+    else if (ch === ")" || ch === "]") depth -= 1
+    if (ch === "," && depth === 0) {
+      out.push(cur)
+      cur = ""
+    } else cur += ch
+  }
+  out.push(cur)
+  return out.map((s) => s.trim()).filter(Boolean)
+}
+
+function namesAClass(sel: string): boolean {
+  return /\.[a-zA-Z][\w-]*/.test(sel)
+}
+
+function varsRead(css: string): Set<string> {
+  const out = new Set<string>()
+  for (const m of stripComments(css).matchAll(/var\(\s*(--[A-Za-z][\w-]*)/g)) out.add(m[1])
+  return out
+}
+
+function varsDeclared(css: string): Set<string> {
+  const out = new Set<string>()
+  for (const m of stripComments(css).matchAll(/(?:^|[;{\s])(--[A-Za-z][\w-]*)\s*:/g)) out.add(m[1])
+  return out
+}
+
+/** Every custom-property declaration, as name + value. */
+function customPropertyDeclarations(css: string): Array<{ name: string; value: string }> {
+  const out: Array<{ name: string; value: string }> = []
+  for (const m of stripComments(css).matchAll(/(?:^|[;{\s])(--[A-Za-z][\w-]*)\s*:([^;{}]*)/g)) {
+    out.push({ name: m[1], value: m[2].trim() })
+  }
+  return out
+}
+
+/** Same shape as scripts/counter-lint.ts's COLOUR_LITERAL. */
+const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(|\bcolor-mix\(/
+
+const DOC_CHROME = [
+  "masthead",
+  "scene",
+  "idx",
+  "pchip",
+  "notegrid",
+  "speccol",
+  "eyebrow",
+  "devcap",
+  "bareviews",
+  "stagehead",
+  "notes",
+  "spec",
+]
+
+const APP_COMPONENTS = [
+  "strip",
+  "sec",
+  "blt",
+  "dispatch",
+  "headline",
+  "askbar",
+  "moving",
+  "qitem",
+  "chan",
+  "cbar",
+  "wkt",
+  "mlist",
+  "rail",
+  "rt",
+]
+
+describe("counter-components.css", () => {
+  it("ports the whole application stylesheet and none of the documentation site", () => {
+    // The reference extraction keeps 1030 rules and 452 classes. These floors
+    // are what stop a regeneration silently shrinking; they are not the number
+    // itself, so a genuine prototype edit does not have to touch this test.
+    expect(SELECTORS.length).toBeGreaterThanOrEqual(1000)
+    const classes = classNames(CSS)
+    expect(classes.size).toBeGreaterThanOrEqual(440)
+    for (const doc of DOC_CHROME) expect(classes.has(doc)).toBe(false)
+    for (const app of APP_COMPONENTS) expect(classes.has(app)).toBe(true)
+  })
+
+  it("declares no bare element selector, so nothing leaks past a Counter page", () => {
+    // A selector naming no class would apply to the whole application the
+    // moment globals.css imports this file — including /login and the ~19
+    // editorial routes, which are not Counter at all.
+    const bare = SELECTORS.flatMap(splitGroup).filter((part) => !namesAClass(part))
+    expect(bare).toEqual([])
+  })
+
+  it("reads no custom property the alias layer does not supply", () => {
+    const declared = varsDeclared(CSS)
+    // Two suppliers outside this file, both verified rather than assumed:
+    // counter.css for every --ct-* token, and next/font for the three family
+    // variables that src/app/layout.tsx declares.
+    const fromCounterCss = varsDeclared(COUNTER_CSS)
+    const fromNextFont = new Set(
+      [...LAYOUT.matchAll(/variable:\s*"(--[\w-]+)"/g)].map((m) => m[1]),
+    )
+    expect(fromNextFont).toEqual(
+      new Set(["--font-dm-sans", "--font-jetbrains-mono", "--font-bricolage"]),
+    )
+
+    const missing = [...varsRead(CSS)].filter(
+      (v) =>
+        !declared.has(v) &&
+        !RUNTIME_VARS.has(v) &&
+        !fromCounterCss.has(v) &&
+        !fromNextFont.has(v),
+    )
+    expect(missing.sort()).toEqual([])
+  })
+
+  it("supplies no default for the three properties set inline per element", () => {
+    // The mirror of the case above: a default here would hide a component
+    // that forgot to set one, which is a silently wrong chart, not a crash.
+    const declared = varsDeclared(CSS)
+    for (const v of RUNTIME_VARS) expect(declared.has(v)).toBe(false)
+  })
+
+  it("keeps counter.css the only place a colour VALUE is decided", () => {
+    // The port may REFERENCE a token; it may not DEFINE one as a literal.
+    // The prototype declares its 33 colour tokens light-only, three times over
+    // (.frame, .pframe, .login). Carrying those across would shadow
+    // counter.css's light-dark() pairs with a light value and kill dark mode
+    // inside exactly the elements this sheet styles — with every existing test
+    // still green, because counter.css itself would be untouched.
+    const literals = customPropertyDeclarations(CSS).filter((d) =>
+      COLOUR_LITERAL.test(d.value),
+    )
+    expect(literals).toEqual([])
+  })
+
+  it("aliases every colour token onto its counter.css source", () => {
+    const aliased = new Map(
+      customPropertyDeclarations(CSS)
+        .filter((d) => /^var\(--ct-[\w-]+\)$/.test(d.value))
+        .map((d) => [d.name, d.value.slice(4, -1)]),
+    )
+    const counterTokens = varsDeclared(COUNTER_CSS)
+    for (const [, source] of aliased) expect(counterTokens.has(source)).toBe(true)
+    // The 33 colours, plus the type scale, radii and easing curve.
+    expect(aliased.size).toBeGreaterThanOrEqual(43)
+  })
+
+  it("scopes the alias layer to the Counter roots and nothing wider", () => {
+    const aliasRule = RULES.find((r) => r.body.includes("--ct-surface"))
+    expect(aliasRule?.prelude).toBe(".ct-root, .frame, .pframe, .login")
+  })
+
+  it("is imported by globals.css after counter.css, so the aliases resolve", () => {
+    const counterAt = GLOBALS.indexOf('@import "../styles/counter.css"')
+    const componentsAt = GLOBALS.indexOf('@import "../styles/counter-components.css"')
+    expect(counterAt).toBeGreaterThan(-1)
+    expect(componentsAt).toBeGreaterThan(counterAt)
+  })
+
+  it("is exactly what the extractor produces from the prototype today", () => {
+    // Regeneration is deterministic, and the committed file is not stale.
+    expect(generate()).toBe(CSS)
+  })
+
+  it("carries the @keyframes its own rules animate with", () => {
+    // A keyframe selector names no class because it cannot, so the
+    // class-name filter would drop every keyframes block and leave the ported
+    // `animation:` declarations pointing at names that no longer exist —
+    // silently dead motion. They are carried across separately instead.
+    const defined = new Set(
+      [...stripComments(CSS).matchAll(/@keyframes\s+([A-Za-z_-][\w-]*)/g)].map((m) => m[1]),
+    )
+    const used = new Set<string>()
+    for (const m of stripComments(withoutKeyframes(CSS)).matchAll(
+      /\banimation(?:-name)?\s*:\s*([^;}]*)/g,
+    )) {
+      for (const w of m[1].matchAll(/[A-Za-z_-][\w-]*/g)) {
+        if (defined.has(w[0])) used.add(w[0])
+      }
+    }
+    expect(used.size).toBeGreaterThan(0)
+    expect([...used].filter((n) => !defined.has(n))).toEqual([])
+    // Nothing is carried across that no rule animates with.
+    expect([...defined].filter((n) => !used.has(n))).toEqual([])
+  })
+})

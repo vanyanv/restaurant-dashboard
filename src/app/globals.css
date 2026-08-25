@@ -21,6 +21,10 @@
 @source not "../../*.md";
 @source not "../../tests";
 @import "../styles/counter.css";
+/* The prototype's own stylesheet, ported verbatim by
+ * scripts/extract-prototype-css.ts. AFTER counter.css, so its alias layer
+ * resolves against tokens that are already declared. */
+@import "../styles/counter-components.css";
 
 @theme {
   --color-background: var(--ct-paper);
