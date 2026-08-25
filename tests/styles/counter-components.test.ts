@@ -32,6 +32,20 @@ const LAYOUT = readFileSync(join(ROOT, "src", "app", "layout.tsx"), "utf-8")
  *  forgot to set one, so they are expected to be read and never declared. */
 const RUNTIME_VARS = new Set(["--len", "--pc", "--qc"])
 
+/**
+ * `--t-small` is read twice and declared nowhere, in the prototype itself, and
+ * is left that way on purpose — for a different reason than RUNTIME_VARS.
+ *
+ * Every read is invalid-at-computed-value-time on an inherited property, so it
+ * resolves to the inherited `--t-body`: 13px under `.frame`, 14px under
+ * `.pframe`, 13.5px under `.login`. Aliasing it to any one of those pins it to
+ * a single value and renders `.pframe .wf__p` (prototype :853) a pixel small.
+ * The three-scale invariant that makes this true is asserted below.
+ *
+ * RUNTIME_VARS are set inline per element; this one is never set at all.
+ */
+const UNRESOLVED_BY_DESIGN = new Set(["--t-small"])
+
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, " ")
 }
@@ -210,6 +224,7 @@ describe("counter-components.css", () => {
       (v) =>
         !declared.has(v) &&
         !RUNTIME_VARS.has(v) &&
+        !UNRESOLVED_BY_DESIGN.has(v) &&
         !fromCounterCss.has(v) &&
         !fromNextFont.has(v),
     )
@@ -221,6 +236,28 @@ describe("counter-components.css", () => {
     // that forgot to set one, which is a silently wrong chart, not a crash.
     const declared = varsDeclared(CSS)
     for (const v of RUNTIME_VARS) expect(declared.has(v)).toBe(false)
+  })
+
+  it("leaves --t-small undeclared so it keeps resolving per scope", () => {
+    // Declaring it anywhere — the alias layer included — turns a reference
+    // that resolves to its scope's own --t-body into one fixed value.
+    expect(varsDeclared(CSS).has("--t-small")).toBe(false)
+    expect(varsRead(CSS).has("--t-small")).toBe(true)
+  })
+
+  it("keeps a distinct --t-body at each of the three prototype scopes", () => {
+    // This is the invariant --t-small rides on, and the reason the extractor
+    // strips only COLOUR-valued custom properties: a blanket strip of every
+    // custom property in .frame/.pframe/.login would have flattened all three
+    // of these onto the alias layer's single value, and .pframe's whole type
+    // scale is a step up from the desk's, not a copy of it.
+    const scale = new Map(
+      RULES.filter((r) => /^\.(frame|pframe|login)$/.test(r.prelude) && r.body.includes("--t-body"))
+        .map((r) => [r.prelude, /--t-body:\s*([\d.]+px)/.exec(r.body)?.[1]]),
+    )
+    expect(scale.get(".frame")).toBe("13px")
+    expect(scale.get(".pframe")).toBe("14px")
+    expect(scale.get(".login")).toBe("13.5px")
   })
 
   it("keeps counter.css the only place a colour VALUE is decided", () => {

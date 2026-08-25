@@ -102,6 +102,17 @@
  *     the honest options are a narrow allowlist for that one file, or an
  *     inline suppression comment on that one line — do not build either
  *     speculatively.
+ *   - `COLOUR_ALLOWED` matches on BASENAME, unanchored: any file called
+ *     `counter.css` or `counter-components.css` anywhere in ROOTS is exempt
+ *     from `no-colour-literal`, not only the two under `src/styles/`. The
+ *     `counter\.css$` half has always been this shape (and one test in
+ *     tests/styles/counter-lint.test.ts depends on it, allowlisting a
+ *     `style-scope/counter.css` fixture that is not under src/styles);
+ *     `counter-components\.css$` was added in the same shape rather than
+ *     anchored, so it is the existing hole reused, not a wider one. Anchoring
+ *     both to `src/styles/` is a real option, but it changes what that
+ *     fixture test means and so is its own decision, not a side effect of
+ *     adding the second file.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
