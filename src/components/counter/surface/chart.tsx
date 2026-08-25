@@ -31,7 +31,12 @@ export interface ChartProps {
   variant: "line" | "bar"
   labels: string[]
   series: ChartSeries[]
-  /** Accessible name (`aria-label`/`role="img"`) and the hidden summary table's caption. */
+  /**
+   * Applied as `aria-label` on both the `role="img"` picture and the
+   * sr-only summary table (there is no `<caption>` element) — the same
+   * accessible name for the chart and for the reachable text it stands in
+   * for.
+   */
   title: string
   height?: number
   /** Defaults to `money`, which already renders an em-dash for `null`. */
@@ -129,6 +134,17 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
 
   return (
     <div className="flex flex-col gap-2">
+      {/*
+        `role="img"` makes this whole SVG subtree presentational: there is no
+        keyboard path into Recharts' own tooltip/focus handling, and the
+        sr-only table below (not the SVG) is what carries every reading to a
+        screen reader or keyboard user instead. That's the trade-off, made
+        deliberately, not an oversight to "fix" by turning on Recharts'
+        `accessibilityLayer` — that prop sets `role="application"` and
+        `tabIndex` on the SVG, which directly contradicts `role="img"` here.
+        Enabling it without removing `role="img"` (or vice versa) leaves the
+        chart in an inconsistent accessibility state.
+      */}
       <div
         role="img"
         aria-label={ariaLabel}
@@ -171,7 +187,12 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
                   activeDot={{ r: 4 }}
                   isAnimationActive={animate}
                   animationDuration={lineDurationMs}
-                  connectNulls
+                  // No `connectNulls`: `format.ts`'s em-dash rule says a
+                  // missing value must never read as a measurement ("zero is
+                  // a measurement and absence is not"). Drawing a straight
+                  // segment across a null reading is the visual equivalent
+                  // of that — a continuous line where there was a gap in the
+                  // data. Let a gap read as a gap.
                 />
               ))}
             </LineChart>
@@ -203,8 +224,16 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
                   // driven by CSS keyframes (`ct-bar-grow` in counter.css)
                   // with a hand-computed `animation-delay`.
                   shape={(shapeProps: BarShapeProps) => {
-                    const { x, y, width: w, height: h, index, fillOpacity } = shapeProps
-                    const barIndex = (shapeProps as unknown as Record<string, unknown>)["data-bar-index"] ?? index
+                    const { x, y, width: w, height: h, fillOpacity } = shapeProps
+                    // `Cell` always supplies `data-bar-index` (see the
+                    // `Cell` map below) — it's the pre-filter data index,
+                    // and it's the one index space this shape uses for
+                    // everything derived from "which reading is this",
+                    // `animationDelay` included, so the attribute and the
+                    // stagger never disagree about which bar they mean.
+                    const { "data-bar-index": barIndex } = shapeProps as BarShapeProps & {
+                      "data-bar-index": number
+                    }
                     // `height` goes negative whenever the reading falls below
                     // the baseline (`baseValue = 0` on a domain that
                     // straddles zero) — Recharts' own `Rectangle` draws a
@@ -219,7 +248,7 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
                             animationName: "ct-bar-grow",
                             animationDuration: "300ms",
                             animationTimingFunction: "var(--ct-ease)",
-                            animationDelay: `${index * barStaggerMs}ms`,
+                            animationDelay: `${barIndex * barStaggerMs}ms`,
                             animationFillMode: "both",
                             // The grow animation should still start from the
                             // baseline, not from whichever edge `top` ended
@@ -269,7 +298,10 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={labels[i]}>
+            // Index, not `labels[i]`: labels repeat (repeated hours,
+            // repeated channel names) and a duplicate key produces a React
+            // warning. Row order is the data order, so the index is stable.
+            <tr key={i}>
               <td>{labels[i]}</td>
               {series.map((s) => (
                 <td key={s.name}>{format(toNumberOrNull(row[s.name]))}</td>

@@ -45,12 +45,28 @@ describe("Chart — line", () => {
     expect(table.textContent).toContain("Aug 20")
   })
 
+  it("breaks the drawn path at a null reading instead of connecting across it", () => {
+    setReducedMotion(false)
+    // A gap must read as a gap (format.ts's em-dash rule: absence is not a
+    // measurement). Without `connectNulls`, Recharts' path generator starts
+    // a new subpath (a second "M") at the null instead of drawing a
+    // straight segment across it — assert on that discontinuity in the
+    // emitted `d` attribute, since jsdom has no layout to paint a visible
+    // gap against.
+    const gappyLabels = ["Aug 18", "Aug 19", "Aug 20", "Aug 21"]
+    const gappySeries = [{ name: "Net sales", data: [7100, null, 7400, 7468] }]
+    const { container } = render(
+      <Chart variant="line" labels={gappyLabels} series={gappySeries} title="Revenue trend" />,
+    )
+    const path = container.querySelector(".recharts-line-curve")
+    const d = path?.getAttribute("d") ?? ""
+    expect(d.match(/M/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+  })
+
   it("renders the value axis compactly rather than in full", () => {
     setReducedMotion(false)
     const bigSeries = [{ name: "Net sales", data: [7100, 14000, 21000] }]
-    const { container } = render(
-      <Chart variant="line" labels={labels} series={bigSeries} title="Revenue trend" />,
-    )
+    render(<Chart variant="line" labels={labels} series={bigSeries} title="Revenue trend" />)
     // Scope to the chart picture, not the sr-only summary table — that
     // table intentionally uses the full `money` formatter, only the axis
     // should be compact.
@@ -75,7 +91,7 @@ describe("Chart — bar", () => {
     expect(container.querySelectorAll(".recharts-rectangle").length).toBeGreaterThanOrEqual(3)
   })
 
-  it("dims every bar except the hovered one to 42%", () => {
+  it("leaves every bar at full opacity before any hover (jsdom can't simulate the hover-dim itself)", () => {
     setReducedMotion(false)
     const { container } = render(
       <Chart variant="bar" labels={labels} series={series} title="Orders" />,
