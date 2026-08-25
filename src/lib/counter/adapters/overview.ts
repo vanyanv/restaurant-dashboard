@@ -1,28 +1,34 @@
-import { getSplhSeries, type SplhSeries } from "@/app/actions/splh-actions"
+import { getStores } from "@/app/actions/store/crud-actions"
 import { getCogsKpis, getCogsStoreOverview } from "@/lib/cogs"
 import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import type { InvoiceKpis } from "@/types/invoice"
 import type { LifecycleStage } from "@/generated/prisma/enums"
-import { partitionByLifecycle, LIFECYCLE_LABEL } from "@/lib/store-lifecycle"
+import { partitionByLifecycle } from "@/lib/store-lifecycle"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { classify } from "@/lib/counter/adapters/types"
-import type { SectionData } from "@/lib/counter/section-data"
+import {
+  empty, failed, loading, notComputed, ready, stale, type SectionData,
+} from "@/lib/counter/section-data"
+import type { SwitchableStore } from "@/components/counter"
 
 /**
  * Overview's data, classified.
  *
  * This is the ONLY new server code the Overview page needs — `npm run tokens`
  * fails a page that imports an action or Prisma directly, so every figure on
- * the page has to arrive through here already resolved into a `SectionData`.
+ * the page has to arrive through here already resolved into a `SectionData`,
+ * shaped exactly the way the page's client island renders it. No mapping from
+ * a library's own return type happens outside this file — `.status`
+ * inspection is banned everywhere else, so the map from `RawLedgerRow` (what
+ * `@/lib/cogs` returns) to `LedgerRow` (what the Table renders) has to live
+ * beside the classification, not in the page.
  *
- * `lead` and `ledger` both normalise to an ARRAY OF ROWS even when a single
- * store is selected (a one-row array), matching note 22's "states belong in
- * the builders" — a page that always receives a list never special-cases the
- * single-store view.
- *
- * Every real section (`lead`, `ledger`, `invoices`) is loaded concurrently
- * with `Promise.all`. A slow COGS rollup must not hold up SPLH or invoices —
- * they don't share a query.
+ * Two entry points: `getOverviewStores` loads the account's stores for the
+ * `StoreSwitcher` (not itself a `SectionData` — a page always needs SOME
+ * store list to render the control, so it fails closed to `[]` the same way
+ * `getStores` already does rather than becoming a sixth "control failed to
+ * load" state). `getOverviewSections` loads the page's actual sections,
+ * concurrently, so a slow COGS rollup does not hold up invoices.
  */
 
 export interface OverviewSectionsInput {
@@ -39,72 +45,90 @@ export interface OverviewSectionsInput {
    * the same way `src/app/dashboard/cogs/page.tsx` does.
    */
   accountId: string
+  /**
+   * The page's own `getOverviewStores()` result, reused (not re-fetched) only
+   * to resolve the SELECTED store's display name for the single-store ledger
+   * row — `getCogsKpis` (the single-store query) returns no name of its own.
+   * Omit it and that row's `store` field falls back to the store id.
+   */
+  stores?: SwitchableStore[]
 }
 
-/**
- * One COGS row, whether it came from the whole-account rollup or was
- * synthesised for a single selected store. `lifecycleStage` is only ever
- * known in the all-stores case — `getCogsKpis` (single store) does not
- * return it, so a pre-open store filtered down to one selection currently
- * reads as a plain zero rather than "pre-open" (flagged in the task report;
- * not fixable without a second query this task doesn't call for).
- */
+/** One row of the per-store ledger, as the Table renders it. */
 export interface LedgerRow {
   storeId: string
-  storeName: string | null
-  cogsPct: number
-  cogsDollars: number
-  foodCogsDollars: number
-  packagingCogsDollars: number
-  revenueDollars: number
-  costedRevenueDollars: number
-  targetCogsPct: number | null
+  store: string
+  net: number
+  cogsPct: number | null
   deltaVsTargetPp: number | null
-  warningCount: number | null
-  lifecycleStage: LifecycleStage | null
-  lifecycleLabel: string | null
 }
 
 export interface OverviewSections {
-  lead: SectionData<SplhSeries[]>
+  /**
+   * Note 30: net sales says whether the day happened. Derived from the SAME
+   * query as `ledger` (see `deriveSales`) — not a second fetch.
+   */
+  sales: SectionData<{ netSales: number }>
+  /**
+   * Note 30's second number — sales per labour hour, which says whether the
+   * day was worth having. `getSplhSeries` cannot be scoped to Counter's
+   * selected date range at all: its real signature takes no range or store
+   * (`getSplhSeries(granularity)`), deriving its own trailing 14-day/12-week
+   * window internally (see task-1-2-report.md). Showing that number beside a
+   * range-scoped net sales figure would answer a DIFFERENT QUESTION under
+   * the same label — exactly note 60's defect class (prime cost read 56.2%
+   * on one page and 57.9% on another for the same range) and note 39's ("a
+   * total is the sum of the series drawn beside it"). Unconditionally owed
+   * until `getSplhSeries` grows a range parameter — not shown with a caption
+   * explaining it means something else.
+   */
+  splh: SectionData<null>
   ledger: SectionData<LedgerRow[]>
-  invoices: SectionData<InvoiceKpis>
+  invoices: SectionData<{ spend: number; count: number; needsReview: number }>
   needsYou: SectionData<null>
   modelCall: SectionData<null>
 }
 
-async function loadLead(storeId: string | null): Promise<SplhSeries[]> {
-  // getSplhSeries computes its own trailing window (14 days / 12 weeks) and
-  // takes no date-range or store parameter — it cannot be scoped to
-  // Counter's selected range at all. See task report: a real mismatch with
-  // what the brief assumed. Filtering the result to the selected store is
-  // the only scoping available to this adapter.
-  const all = await getSplhSeries("day")
-  return storeId ? all.filter((s) => s.storeId === storeId) : all
+const STAGE_FOR: Record<LifecycleStage, SwitchableStore["stage"]> = {
+  pre_open: "pre_open",
+  warming_up: "warming_up",
+  ready: "trading",
 }
 
-async function loadLedger(
+/** The account's stores, for the `StoreSwitcher`. Fails closed to `[]`, same as `getStores` itself. */
+export async function getOverviewStores(): Promise<SwitchableStore[]> {
+  const stores = await getStores()
+  return stores.map((s) => ({ id: s.id, name: s.name, stage: STAGE_FOR[s.lifecycleStage] }))
+}
+
+/** One COGS row, whether it came from the whole-account rollup or was synthesised for a single selected store. */
+interface RawLedgerRow {
+  storeId: string
+  storeName: string | null
+  cogsPct: number
+  revenueDollars: number
+  targetCogsPct: number | null
+  deltaVsTargetPp: number | null
+  lifecycleStage: LifecycleStage | null
+}
+
+async function loadLedgerRaw(
   bounds: { startDate: Date; endDate: Date },
   storeId: string | null,
   accountId: string,
-): Promise<LedgerRow[]> {
+  stores: SwitchableStore[] | undefined,
+): Promise<RawLedgerRow[]> {
   if (storeId) {
     const kpis = await getCogsKpis(storeId, bounds.startDate, bounds.endDate)
     return [
       {
         storeId,
-        storeName: null,
+        storeName: stores?.find((s) => s.id === storeId)?.name ?? null,
         cogsPct: kpis.cogsPct,
-        cogsDollars: kpis.cogsDollars,
-        foodCogsDollars: kpis.foodCogsDollars,
-        packagingCogsDollars: kpis.packagingCogsDollars,
         revenueDollars: kpis.revenueDollars,
-        costedRevenueDollars: kpis.costedRevenueDollars,
         targetCogsPct: kpis.targetCogsPct,
         deltaVsTargetPp: kpis.deltaVsTargetPp,
-        warningCount: null,
         lifecycleStage: null,
-        lifecycleLabel: null,
       },
     ]
   }
@@ -114,16 +138,10 @@ async function loadLedger(
     storeId: r.storeId,
     storeName: r.storeName,
     cogsPct: r.cogsPct,
-    cogsDollars: r.cogsDollars,
-    foodCogsDollars: r.foodCogsDollars,
-    packagingCogsDollars: r.packagingCogsDollars,
     revenueDollars: r.revenueDollars,
-    costedRevenueDollars: r.costedRevenueDollars,
     targetCogsPct: r.targetCogsPct,
     deltaVsTargetPp: r.deltaVsTargetPp,
-    warningCount: r.warningCount,
     lifecycleStage: r.lifecycleStage,
-    lifecycleLabel: LIFECYCLE_LABEL[r.lifecycleStage],
   }))
 }
 
@@ -131,13 +149,14 @@ async function loadLedger(
  * The all-stores ledger is "empty" only when every store on the account is
  * still pre-open (isOperational, via partitionByLifecycle) — a trading store
  * with genuinely zero COGS activity this period still gets a row. The
- * single-store case has no lifecycle data to reason about (see LedgerRow's
- * doc comment) so it falls back to a plain row count.
+ * single-store case has no lifecycle data to reason about, so it falls back
+ * to a plain row count (known gap: a pre-open store selected individually
+ * reads as "nothing matched" rather than "not trading yet").
  */
-function ledgerIsEmpty(rows: LedgerRow[], storeId: string | null): boolean {
+function ledgerIsEmpty(rows: RawLedgerRow[], storeId: string | null): boolean {
   if (storeId) return rows.length === 0
   const withStage = rows.filter(
-    (r): r is LedgerRow & { lifecycleStage: LifecycleStage } => r.lifecycleStage !== null,
+    (r): r is RawLedgerRow & { lifecycleStage: LifecycleStage } => r.lifecycleStage !== null,
   )
   return withStage.length > 0 && partitionByLifecycle(withStage).operational.length === 0
 }
@@ -150,30 +169,57 @@ function isoDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+function sumNetSales(rows: RawLedgerRow[]): number {
+  return rows.reduce((total, r) => total + r.revenueDollars, 0)
+}
+
+function toLedgerRow(r: RawLedgerRow): LedgerRow {
+  return {
+    storeId: r.storeId,
+    store: r.storeName ?? r.storeId,
+    net: r.revenueDollars,
+    cogsPct: r.cogsPct,
+    deltaVsTargetPp: r.deltaVsTargetPp,
+  }
+}
+
+/**
+ * Re-classifies an already-classified `SectionData` through `f`, keeping
+ * every non-data status (failed/empty/not_computed/loading) exactly as it
+ * was. This is how `sales` and `ledger` both derive from ONE ledger query —
+ * `f` only ever runs on a value that already loaded.
+ */
+function mapReady<T, U>(sd: SectionData<T>, f: (value: T) => U): SectionData<U> {
+  switch (sd.status) {
+    case "ready":
+      return ready(f(sd.data))
+    case "stale":
+      return stale(f(sd.data), sd.lastGoodAt)
+    case "failed":
+      return failed(sd.error, sd.retryAction)
+    case "empty":
+      return empty(sd.reason)
+    case "not_computed":
+      return notComputed(sd.owed)
+    case "loading":
+      return loading()
+  }
+}
+
 export async function getOverviewSections(
   input: OverviewSectionsInput,
 ): Promise<OverviewSections> {
-  const { range, storeId, accountId } = input
+  const { range, storeId, accountId, stores } = input
   const bounds = toQueryBounds(range)
 
-  const [lead, ledger, invoices, needsYou, modelCall] = await Promise.all([
-    classify(() => loadLead(storeId), {
-      retryAction: "retryLead",
-      isEmpty: (rows) => rows.length === 0,
-      // Absence from getSplhSeries means no labor hours at all — for a
-      // single selected store that is exactly what a construction-stage
-      // store looks like per that function's own doc comment (omitted, not
-      // zeroed).
-      emptyReason: storeId ? "pre_open" : "no_match",
-    }),
-
-    classify(() => loadLedger(bounds, storeId, accountId), {
+  const [ledgerRaw, invoicesRaw, needsYou, modelCall] = await Promise.all([
+    classify(() => loadLedgerRaw(bounds, storeId, accountId, stores), {
       retryAction: "retryLedger",
       isEmpty: (rows) => ledgerIsEmpty(rows, storeId),
       emptyReason: "pre_open",
     }),
 
-    classify(
+    classify<InvoiceKpis>(
       () =>
         getInvoiceSummary({
           storeId: storeId ?? undefined,
@@ -197,5 +243,22 @@ export async function getOverviewSections(
     }),
   ])
 
-  return { lead, ledger, invoices, needsYou, modelCall }
+  // Owed short-circuits before any loader runs — see classify. No query.
+  const splh = await classify<null>(() => Promise.resolve(null), {
+    retryAction: "retrySplh",
+    owed: "sales per labour hour scoped to the selected range",
+  })
+
+  return {
+    sales: mapReady(ledgerRaw, (rows) => ({ netSales: sumNetSales(rows) })),
+    splh,
+    ledger: mapReady(ledgerRaw, (rows) => rows.map(toLedgerRow)),
+    invoices: mapReady(invoicesRaw, (k) => ({
+      spend: k.totalSpend,
+      count: k.invoiceCount,
+      needsReview: k.pendingReviewCount,
+    })),
+    needsYou,
+    modelCall,
+  }
 }
