@@ -1,0 +1,134 @@
+// @vitest-environment jsdom
+/**
+ * `headBlock()`'s inner block — prototype lines 3689 (the wrapper we do NOT
+ * port) and 4244 (Overview's two-figure body).
+ */
+import { describe, it, expect } from "vitest"
+import { render } from "@testing-library/react"
+import { HeadBlock } from "@/components/counter/surface/head-block"
+import { Say } from "@/components/counter/surface/say"
+import { FloorMeter } from "@/components/counter/surface/floor-meter"
+
+const SAY = <Say headline="On plan">Everything is fine.</Say>
+
+describe("HeadBlock", () => {
+  it("two figures: the duo modifier, and the second figure ruled off as the co-lead", () => {
+    const { container } = render(
+      <HeadBlock
+        figures={[
+          { label: "Net sales today", value: "$7,468", detail: "▲ 5.1% vs last Tuesday" },
+          { label: "Sales per labor hour", value: "$71.40", detail: "104 hours bought" },
+        ]}
+      >
+        {SAY}
+      </HeadBlock>,
+    )
+    const head = container.querySelector(".headline") as HTMLElement
+    expect(head.className).toBe("headline headline--duo")
+    expect([...head.children].map((c) => c.className)).toEqual(["fig", "fig fig--co", "say"])
+  })
+
+  it("one figure: a bare .headline, because the two-track rule is the one that fits it", () => {
+    const { container } = render(
+      <HeadBlock figures={[{ label: "Hourly labor", value: "24.8%" }]}>{SAY}</HeadBlock>,
+    )
+    const head = container.querySelector(".headline") as HTMLElement
+    // `.headline` is minmax(210px,auto) 1fr; `--duo` is three tracks. One
+    // figure in three tracks leaves an empty column between it and the say.
+    expect(head.className).toBe("headline")
+    expect([...head.children].map((c) => c.className)).toEqual(["fig", "say"])
+  })
+
+  it("the modifier follows the figure count — a caller cannot forget it or get it wrong", () => {
+    const one = render(
+      <HeadBlock figures={[{ label: "a", value: "1" }]}>{SAY}</HeadBlock>,
+    ).container.querySelector(".headline")!.className
+    const two = render(
+      <HeadBlock
+        figures={[
+          { label: "a", value: "1" },
+          { label: "b", value: "2" },
+        ]}
+      >
+        {SAY}
+      </HeadBlock>,
+    ).container.querySelector(".headline")!.className
+    expect(one).not.toContain("headline--duo")
+    expect(two).toContain("headline--duo")
+  })
+
+  it("a figure is k, then v, then d — the prototype's order", () => {
+    const { container } = render(
+      <HeadBlock figures={[{ label: "Net sales today", value: "$7,468", detail: "▲ 5.1%" }]}>
+        {SAY}
+      </HeadBlock>,
+    )
+    const fig = container.querySelector(".fig") as HTMLElement
+    expect([...fig.children].map((c) => c.className)).toEqual(["k", "v", "d"])
+    expect(fig.querySelector(".k")?.textContent).toBe("Net sales today")
+    expect(fig.querySelector(".v")?.textContent).toBe("$7,468")
+    expect(fig.querySelector(".d")?.textContent).toBe("▲ 5.1%")
+  })
+
+  it("omits .d entirely when a figure has not moved against anything", () => {
+    const { container } = render(
+      <HeadBlock figures={[{ label: "Net sales", value: "$7,468" }]}>{SAY}</HeadBlock>,
+    )
+    expect(container.querySelector(".d")).toBeNull()
+  })
+
+  it("the meter goes INSIDE the co-lead figure, after .d", () => {
+    const { container } = render(
+      <HeadBlock
+        figures={[
+          { label: "Net sales today", value: "$7,468" },
+          {
+            label: "Sales per labor hour",
+            value: "$71.40",
+            detail: "104 hours bought",
+            meter: <FloorMeter value={71.4} floor={68} />,
+          },
+        ]}
+      >
+        {SAY}
+      </HeadBlock>,
+    )
+    const co = container.querySelector(".fig--co") as HTMLElement
+    expect([...co.children].map((c) => c.className)).toEqual([
+      "k",
+      "v",
+      "d",
+      "blt blt--lead",
+      "hfloor",
+    ])
+    // And nowhere else: the lead figure carries no meter of its own.
+    expect(container.querySelectorAll(".blt")).toHaveLength(1)
+  })
+
+  it("puts the verdict LAST, in the track the say rule occupies", () => {
+    const { container } = render(
+      <HeadBlock
+        figures={[
+          { label: "a", value: "1" },
+          { label: "b", value: "2" },
+        ]}
+      >
+        {SAY}
+      </HeadBlock>,
+    )
+    const head = container.querySelector(".headline") as HTMLElement
+    expect(head.lastElementChild?.className).toBe("say")
+  })
+
+  it("renders no state of its own — headBlock()'s loading and empty branches are NOT ported", () => {
+    // R3: Section is the sole state renderer. The prototype's headBlock()
+    // substitutes a `.skb` skeleton body for loading; if that ever arrives
+    // here, a page would have two components deciding what loading looks
+    // like.
+    const { container } = render(
+      <HeadBlock figures={[{ label: "a", value: "1" }]}>{SAY}</HeadBlock>,
+    )
+    expect(container.querySelector(".skb")).toBeNull()
+    expect(container.querySelector(".empty")).toBeNull()
+  })
+})
