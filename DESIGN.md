@@ -392,3 +392,69 @@ utility, checked on the rail, `Section`, and `Table`) silently falls back to
 a generic, non-theme-reactive grey instead of the design's hairline token,
 in both themes — are open, not fixed by that task. Read them before
 building on top of either.
+
+## Controls
+
+`StoreSwitcher` and `DateControl` (`src/components/counter/shell/`) are the
+range and store pickers every page's figures are a claim about. `Topbar`
+(`src/components/counter/shell/topbar.tsx`) wraps them in its children
+slot, and derives its own breadcrumb from `pathname` against `NAV_GROUPS` —
+see the Shell section above for that derivation; nothing about it repeats
+here.
+
+**The range and the store live in the URL, not component state.** A figure
+an owner is looking at should survive a reload and be shareable — "look at
+this week's prime cost" is a link to send, not a description of which
+controls to click — and it means the back button works on a range change,
+matching what a reader expects when a page's numbers changed underneath
+them. `readCounterParams` / `writeCounterParams`
+(`src/lib/counter/url-state.ts`) are the only place this happens: reading
+treats the URL as untrusted (a hand-edited, stale, or truncated param falls
+back to a sane default rather than throwing), and writing drops any param
+that's already at its default, so a shared link stays as short as
+`?range=d30` rather than `?range=d30&cmp=prev&store=`. Verified against a
+real address bar, not just a `URLSearchParams` object, in
+`docs/counter/controls-verification.md` — a preset, a comparison and a
+store all round-trip through an actual page reload, and setting all three
+back to their defaults empties the query string completely.
+
+**Each of the twelve presets shows its own span, not the current
+selection's.** The range menu's `· 30 days` / `· 7 days` caption beside
+each preset name is that preset's own `dayCount(p.resolve(today))`
+(`src/lib/counter/date-range.ts`), so a reader picks by span before they've
+even committed to a name — "Last 30 days" and "Month-to-date" read as
+30 days and ~24 days apart at a glance, before either is selected.
+
+**Steppers walk by the span you're on, not a calendar unit.** `stepRange`
+shifts both ends of the current range by exactly its own length
+(`dayCount(r) * direction`) — a 7-day range steps 7 days, a 30-day range
+steps 30. Stepping a "last 30 days" window by a calendar month would
+silently change how many days it covers every time a reader clicked ‹; this
+keeps the window's length invariant across every step, which is the only
+way "previous period" means the same thing twice in a row.
+
+**The weekday comparison is withheld past a week, not offered and left
+empty.** `comparisonRange(range, "weekday")` returns `null` once the range
+exceeds 7 days (see the doc comment on it in `date-range.ts` for why:
+past a week, "the four preceding occurrences of this period" stops naming a
+coherent window). `DateControl` filters the comparison menu by that same
+function rather than re-deriving the 7-day cutoff itself, so the menu can
+never drift from the rule the range logic actually enforces. An offered
+comparison that renders empty reads as "no change happened"; withholding it
+reads as "that question doesn't apply here," which is the true state.
+Verified end to end — not just the unit test — in
+`docs/counter/controls-verification.md`: the menu shows three options on a
+30-day range and four, weekday included, on a 7-day one.
+
+**The popover measures its own frame before it opens (note 21): "a popover
+that leaves its frame is broken, not clever."** The range menu's natural
+width (438px, ported verbatim from the prototype's own `place()`) is wider
+than a 390px phone. Rather than fix a width and hope, `useFramePlacement`
+measures the trigger's `getBoundingClientRect()` and `window.innerWidth` the
+moment the menu opens, clamps the width to
+`clamp(280, viewportWidth - 24, 438)`, and — only when right-anchoring at
+that width would push the left edge past a 10px margin — pins an explicit
+`left` offset instead of the CSS default. Measured in a real browser at
+1440, 900 and 390px in `docs/counter/controls-verification.md`: the menu
+stays fully on screen at all three, the 390px case included, with the flip
+firing exactly where the arithmetic predicts it should.
