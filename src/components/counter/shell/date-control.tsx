@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import {
-  COMPARISONS, PRESETS, comparisonRange, dayCount, stepRange,
-  type ComparisonId, type DateRange, type PresetId,
+  COMPARISONS, PRESETS, comparisonRange, dayCount, rangeLabel, stepRange,
+  type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "@/lib/counter/date-range"
 import { useFramePlacement } from "./frame-placement"
 
@@ -45,7 +45,7 @@ function menuItemClass(checked: boolean): string {
 }
 
 export interface DateControlProps {
-  presetId: PresetId
+  presetId: RangeId
   comparisonId: ComparisonId
   range: DateRange
   onPreset: (id: PresetId) => void
@@ -95,7 +95,10 @@ export function DateControl({
   // the actual range (that stays entirely the caller's job).
   const today = useMemo(() => new Date(), [])
 
-  const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]
+  // NOT `PRESETS.find(...) ?? PRESETS[0]`: that labelled every unrecognised
+  // id "Today" — a control naming a range it is not showing. `rangeLabel`
+  // names a custom window by its ends instead.
+  const label = rangeLabel(range, presetId)
   const comparison = COMPARISONS.find((c) => c.id === comparisonId) ?? COMPARISONS[0]
 
   const rangePlacement = useFramePlacement(openMenu === "range", rangeTriggerRef)
@@ -140,7 +143,7 @@ export function DateControl({
             onClick={() => toggle("range")}
             className="flex h-full items-center gap-2 whitespace-nowrap border border-ct-line-strong bg-ct-surface px-2.5 py-1 hover:bg-ct-sunk"
           >
-            <span className="font-semibold">{preset.name}</span>
+            <span className="font-semibold">{label}</span>
             <ChevronDown aria-hidden className="size-[11px] text-ct-ink-3" />
           </button>
           {openMenu === "range" && (

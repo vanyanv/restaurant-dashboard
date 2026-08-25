@@ -14,8 +14,8 @@ import {
   Table,
   type SwitchableStore,
 } from "@/components/counter"
-import { readCounterParams, writeCounterParams, type CounterParams } from "@/lib/counter/url-state"
-import { PRESETS } from "@/lib/counter/date-range"
+import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { money, pct, delta } from "@/lib/counter/format"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -81,7 +81,7 @@ export function CounterOverviewClient({
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   const push = useCallback(
-    (next: Partial<Pick<CounterParams, "presetId" | "comparisonId" | "storeId">>) => {
+    (next: Parameters<typeof writeCounterParams>[1]) => {
       const nextParams = writeCounterParams(params, next)
       const qs = nextParams.toString()
       // push, not replace: note 19's "a range that only changes the label is
@@ -113,12 +113,7 @@ export function CounterOverviewClient({
             range={counterParams.range}
             onPreset={(id) => push({ presetId: id })}
             onComparison={(id) => push({ comparisonId: id })}
-            // Known gap: url-state.ts's CounterParams only stores a NAMED
-            // preset, not an arbitrary start/end — every preset resolves
-            // against `today`, so there is no way to express "one period
-            // back" as a preset id. Stepping needs a raw custom-range param
-            // this plan does not add. Left inert rather than faked.
-            onStep={() => {}}
+            onStep={(direction) => push({ range: stepRange(counterParams.range, direction) })}
           />
         </Topbar>
       }
@@ -143,7 +138,7 @@ export function CounterOverviewClient({
         <EntryItem index={2}>
           <Section
             title="Stores"
-            meta={PRESETS.find((p) => p.id === counterParams.presetId)?.name}
+            meta={rangeLabel(counterParams.range, counterParams.presetId)}
             data={sections.ledger}
             askAbout="the per-store ledger"
           >
