@@ -54,7 +54,12 @@ async function signIn(page: Page): Promise<void> {
   await page.locator('input[type="password"]').press("Enter")
 
   try {
-    await page.waitForURL(/\/dashboard(\/|$|\?)/, { timeout: 45_000 })
+    // 90s: on a cold `.next` the first hit to the sign-in path pays for a
+    // full Turbopack compile, which outruns 45 seconds. Same root cause as
+    // e2e/auth.setup.ts's raised ceiling — and the same misreading it caused
+    // there ("the credentials don't work") is exactly what this file's module
+    // comment exists to prevent. A warm server signs in in under a second.
+    await page.waitForURL(/\/dashboard(\/|$|\?)/, { timeout: 90_000 })
   } catch (err) {
     // Say which of the three usual suspects it is, rather than "login failed".
     const body = (await page.locator("body").innerText().catch(() => "")).slice(0, 300)
@@ -112,10 +117,30 @@ async function main() {
 
   try {
     await signIn(page)
+    /*
+     * `domcontentloaded`, not `networkidle`.
+     *
+     * A Counter route never reaches network idle — something (a poll, a
+     * stream, an open connection) keeps a request in flight indefinitely, so
+     * `networkidle` sat until the 120s timeout and every screenshot of
+     * `/dashboard` failed. That is not a page problem; it is the wrong
+     * readiness signal for this app. Task 7 hit it on all four of its shots
+     * and had to write throwaway drivers to get a picture at all.
+     *
+     * The real signal is the Counter shell being painted: `#ct-main` exists
+     * once the page has rendered, and the settle below covers fonts and the
+     * entry animation (`cnter`, 0.34s plus a per-child delay). A route that
+     * genuinely fails to render still fails, and fast — it just fails on a
+     * missing selector rather than on a timeout that says nothing.
+     */
     await page.goto(`${BASE_URL}${route}`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
       timeout: 120_000,
     })
+    await page
+      .locator("#ct-main, main")
+      .first()
+      .waitFor({ state: "visible", timeout: 60_000 })
     await page.waitForTimeout(2_000)
     await page.screenshot({ path: out, fullPage: true })
     console.log(`${page.url()} → ${out}`)
