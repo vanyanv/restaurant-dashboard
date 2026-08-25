@@ -172,7 +172,16 @@ export function narrow(sel: string): string {
 
 /**
  * A colour written as a value rather than referenced through a token.
- * Deliberately the same shape as `scripts/counter-lint.ts`'s COLOUR_LITERAL.
+ *
+ * Deliberately BROADER than `scripts/counter-lint.ts`'s COLOUR_LITERAL, which
+ * this otherwise mirrors: it also matches `color-mix(`. The lint rule is
+ * looking for a colour someone typed by hand, and a `color-mix()` of two
+ * tokens is not that. This is deciding whether a custom property is a THEMED
+ * value that counter.css must own, and a `color-mix()` of two light-only
+ * token values is exactly as light-only as a literal — it has to be stripped
+ * too. Nothing in the prototype uses it today; the extra alternative is here
+ * so that a prototype that starts to would not slip a light-only token past
+ * this and kill dark mode silently, which is the whole point of the strip.
  */
 const COLOUR_VALUE = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(|\bcolor-mix\(/
 
@@ -244,6 +253,14 @@ export function stripColourTokens(body: string): { body: string; stripped: numbe
  * `--len`, `--pc` and `--qc` are deliberately absent: they are set inline per
  * element at runtime (chart lengths, bar percentages) and a default here would
  * mask a component that forgot to set one.
+ *
+ * --t-small is read twice and declared nowhere, in the prototype itself. It
+ * is left undeclared here deliberately. Every read is
+ * invalid-at-computed-value-time on an inherited property, so it resolves to
+ * the inherited --t-body — which is 13px under .frame, 14px under .pframe and
+ * 13.5px under .login. Aliasing it to any one of those pins it to a single
+ * value and renders .pframe .wf__p a pixel small. Unlike --len/--pc/--qc,
+ * which are set inline per element, this one is never set at all.
  */
 const ALIAS_LAYER = `.ct-root, .frame, .pframe, .login {
   /* surfaces */
@@ -279,15 +296,6 @@ const ALIAS_LAYER = `.ct-root, .frame, .pframe, .login {
   --t-hero: var(--ct-t-hero);
   --r: var(--ct-r);                      --r-sm: var(--ct-r-sm);
   --ease: var(--ct-ease);
-
-  /* --t-small is READ by the prototype (.wf__p and .wkt .pt) and DECLARED
-     nowhere in it — a dangling reference, not a token we failed to copy.
-     An unresolvable var() makes font-size invalid at computed-value time, so
-     font-size falls back to inherited, which at both sites is the ancestor's
-     var(--t-body). 13px is therefore what the prototype actually renders
-     there, and mapping it to --t-body reproduces the prototype exactly
-     rather than inventing a fourteenth step in a seven-step scale. */
-  --t-small: var(--ct-t-body);
 
   /* The prototype's own documentation-page tokens, read by a handful of
      ported rules. Mapped onto their application equivalents rather than

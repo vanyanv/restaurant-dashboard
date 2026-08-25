@@ -47,15 +47,6 @@
   --r: var(--ct-r);                      --r-sm: var(--ct-r-sm);
   --ease: var(--ct-ease);
 
-  /* --t-small is READ by the prototype (.wf__p and .wkt .pt) and DECLARED
-     nowhere in it — a dangling reference, not a token we failed to copy.
-     An unresolvable var() makes font-size invalid at computed-value time, so
-     font-size falls back to inherited, which at both sites is the ancestor's
-     var(--t-body). 13px is therefore what the prototype actually renders
-     there, and mapping it to --t-body reproduces the prototype exactly
-     rather than inventing a fourteenth step in a seven-step scale. */
-  --t-small: var(--ct-t-body);
-
   /* The prototype's own documentation-page tokens, read by a handful of
      ported rules. Mapped onto their application equivalents rather than
      reintroduced, so they theme with everything else. */

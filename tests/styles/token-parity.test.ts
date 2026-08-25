@@ -73,6 +73,61 @@ function contrast(a: string, b: string): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
 }
 
+/**
+ * The exclusion above is only safe while the two systems' selectors are
+ * disjoint, so that condition is asserted rather than described.
+ *
+ * `counter-components.css` styles `.ct-root`, `.frame`, `.pframe` and `.login`
+ * with the Counter values of `--ink`, `--paper` and friends. Nothing in the app
+ * carries any of those four as a bare class today — the login page uses
+ * `login-shell`, `login-headline` and so on, and the only `frame` is
+ * `m-chart-frame` — so no editorial surface can inherit a Counter token.
+ *
+ * WHEN THIS GOES RED: Task 3 of the Counter fidelity plan puts `ct-root` on
+ * AppShell, which is a legitimate change and will fail this. Do not delete the
+ * assertion to make it pass. Re-examine the exclusion instead: from that point
+ * an editorial surface rendered inside the Counter root inherits `--ink` and
+ * `--paper` from the alias layer unless it restates its own, and the answer is
+ * either to prove no editorial surface renders there or to prefix the ported
+ * token names. Narrow this list to the classes still unused, and say why.
+ */
+const COUNTER_ROOT_CLASSES = ["ct-root", "frame", "pframe", "login"]
+
+function tsxFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = join(dir, e.name)
+    if (e.isDirectory()) return tsxFiles(full)
+    return e.isFile() && full.endsWith(".tsx") ? [full] : []
+  })
+}
+
+describe("the Counter/editorial token-name collision stays harmless", () => {
+  it("emits none of the Counter root classes from any component", () => {
+    const offenders: string[] = []
+    for (const file of tsxFiles(join(process.cwd(), "src"))) {
+      const text = readFileSync(file, "utf8")
+      // Every className/class value in the file, however it is written:
+      // a plain attribute, a braced literal, or a cn()/clsx() argument.
+      for (const m of text.matchAll(/class(?:Name)?\s*=\s*(?:"([^"]*)"|'([^']*)'|\{([\s\S]*?)\})/g)) {
+        const value = m[1] ?? m[2] ?? m[3] ?? ""
+        // Inside a braced expression only the string literals are class names.
+        const chunks =
+          m[3] === undefined
+            ? [value]
+            : [...value.matchAll(/["'\`]([^"'\`]*)["'\`]/g)].map((q) => q[1])
+        for (const chunk of chunks) {
+          for (const token of chunk.split(/[\s${}]+/)) {
+            if (COUNTER_ROOT_CLASSES.includes(token)) {
+              offenders.push(`${file.split("/src/")[1]}: ${token}`)
+            }
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})
+
 describe("editorial token parity", () => {
   it("declares --ink-faint identically in every copy", () => {
     const decls = declarationsOf("--ink-faint")
