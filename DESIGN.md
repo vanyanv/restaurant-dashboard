@@ -458,3 +458,55 @@ that width would push the left edge past a 10px margin — pins an explicit
 1440, 900 and 390px in `docs/counter/controls-verification.md`: the menu
 stays fully on screen at all three, the 390px case included, with the flip
 firing exactly where the arithmetic predicts it should.
+
+## Ask
+
+`AskSurface` (`src/components/counter/ask/ask-surface.tsx`) is the ⌘K
+palette, mounted once in `AppShell` so every Counter page gets it without
+opting in. It fixes two numbered defects from the prototype's own log —
+note 46 ("two surfaces promised ⌘K and nothing opened... fourteen rules of
+dead CSS behind an advertised shortcut") and note 55 (fifty `Section`
+"Ask about this" buttons wired to nothing) — and answers note 43's finding
+that Ask was the longest-held page in the product because it answered for a
+store the reader was not looking at.
+
+**⌘K opens it, from anywhere.** A `keydown` listener on `document` opens
+the surface on `(metaKey || ctrlKey) && key === "k"`, preventing the
+browser's own default for that combination, and closes it on `Escape`,
+restoring focus to whatever held it before the surface opened. A bare `k`
+does nothing, deliberately — it would otherwise fire while a reader is
+typing anywhere else on the page.
+
+**The context sentence is derived, never passed (note 43).**
+`describeAskContext` (`src/lib/counter/ask-context.ts`) reads the same
+`pathname` and `params` the page itself reads — the same `NAV_GROUPS` /
+`isActive` the rail and the breadcrumb already use, the same `PRESETS` the
+date control already uses — so the sentence above the input ("Answering
+about P&L · Hollywood · Last 7 days") cannot name a different store or
+range than the one on screen. A caller cannot pass a stale value because
+there is no value to pass: `AskSurface` takes `pathname`/`params`/
+`storeName`/`today`, the same inputs the page already has, and derives the
+rest itself.
+
+**`data-ask-about` reaches the surface by event delegation, not a prop
+(note 55).** `Section` — the sole renderer of `SectionData`'s six states —
+is deliberately not a client component (see the Shell section above). One
+`click` listener on `document`, owned by `AskSurface`, walks up from the
+click target looking for `[data-ask-about]`; when it finds one, it opens
+the surface with that attribute's value pre-filled into the input. This is
+why `Section`'s "Ask about this" button — rendered on every section that
+has an answer, note 55's fifty dead buttons — needed no change here and
+`Section` needed no `onAsk` prop: adding one would force `Section` client-
+side and drag every page's data rendering across the boundary with it, just
+to wire up a button.
+
+Verified end to end in a real browser, not just the delegation unit test:
+`docs/counter/ask-verification.md`. ⌘K and Ctrl+K both open the surface on
+a real page; a real `Section`'s "Ask about this" button opens it pre-filled
+with that section's title; the context sentence matched a real URL's store
+and range and changed when the range did; both themes showed zero console
+errors. That session also found that `page.screenshot({ scale: "css" })`
+is not reliable evidence for `light-dark()`/`oklch()` backgrounds on this
+headless Chromium build — `getComputedStyle` and `scale: "device"`
+screenshots told the true story where a first-pass screenshot looked
+suspiciously identical between themes.

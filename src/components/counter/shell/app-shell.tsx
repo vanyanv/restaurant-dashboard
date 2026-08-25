@@ -1,9 +1,15 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useMemo, type ReactNode } from "react"
 import { Rail } from "./rail"
 import { Wordmark } from "./wordmark"
 import { useEntry } from "@/components/counter/motion/use-entry"
+import { AskSurface } from "@/components/counter/ask/ask-surface"
+import type { AskContext } from "@/lib/counter/ask-context"
+
+/** Stable across renders — a caller that doesn't pass `params` should not
+ *  cause `AskSurface` to re-derive context off a fresh object every render. */
+const EMPTY_PARAMS = new URLSearchParams()
 
 /**
  * The frame every page sits inside: a skip link, the rail in its own
@@ -13,16 +19,38 @@ import { useEntry } from "@/components/counter/motion/use-entry"
  * A client component because the rail needs `pathname` to light the
  * current destination and, via `EntryItem` below, pages need `useEntry` —
  * neither is available to a server component.
+ *
+ * `AskSurface` is mounted here, once, so every Counter page gets ⌘K without
+ * opting in (note 46). `params`, `storeName` and `today` are optional with
+ * sane defaults — a caller that doesn't pass them still gets a working
+ * surface, just one describing "All stores" / "Yesterday" rather than the
+ * page's real selection; a page that reads its own URL state should pass
+ * these through so the context sentence can't drift from what's on screen
+ * (note 43).
  */
 export function AppShell({
   pathname,
+  params = EMPTY_PARAMS,
+  storeName = null,
+  today,
   topbar,
+  onAsk,
   children,
 }: {
   pathname: string
+  params?: URLSearchParams
+  storeName?: string | null
+  today?: Date
   topbar?: ReactNode
+  /** Wired up by the plan that gives the surface something to answer with. */
+  onAsk?: (question: string, context: AskContext) => void
   children: ReactNode
 }) {
+  // Same "resolve once, at mount" contract as DateControl's own default —
+  // a caller not passing `today` should not get a moving target on every
+  // render (see date-control.tsx).
+  const resolvedToday = useMemo(() => today ?? new Date(), [today])
+
   return (
     <div className="flex min-h-dvh bg-ct-paper">
       <a
@@ -58,6 +86,14 @@ export function AppShell({
           {children}
         </main>
       </div>
+
+      <AskSurface
+        pathname={pathname}
+        params={params}
+        storeName={storeName}
+        today={resolvedToday}
+        onSubmit={onAsk}
+      />
     </div>
   )
 }
