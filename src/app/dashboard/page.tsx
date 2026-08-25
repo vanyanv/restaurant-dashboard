@@ -46,7 +46,7 @@ export default async function DashboardPage({
   return (
     <CounterOverviewClient
       pathname="/dashboard"
-      params={params}
+      params={params.toString()}
       stores={stores}
       today={today}
       sections={sections}

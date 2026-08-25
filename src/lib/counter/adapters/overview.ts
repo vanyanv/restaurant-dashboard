@@ -84,7 +84,7 @@ export interface OverviewSections {
    */
   splh: SectionData<null>
   ledger: SectionData<LedgerRow[]>
-  invoices: SectionData<{ spend: number; count: number; needsReview: number }>
+  invoices: SectionData<{ spend: number; count: number; needsReview: number; avgInvoice: number }>
   needsYou: SectionData<null>
   modelCall: SectionData<null>
 }
@@ -257,6 +257,7 @@ export async function getOverviewSections(
       spend: k.totalSpend,
       count: k.invoiceCount,
       needsReview: k.pendingReviewCount,
+      avgInvoice: k.avgInvoiceTotal,
     })),
     needsYou,
     modelCall,

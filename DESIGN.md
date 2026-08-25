@@ -510,3 +510,68 @@ is not reliable evidence for `light-dark()`/`oklch()` backgrounds on this
 headless Chromium build — `getComputedStyle` and `scale: "device"`
 screenshots told the true story where a first-pass screenshot looked
 suspiciously identical between themes.
+
+## Pages
+
+A Counter page is a server component that composes primitives. It calls
+**exactly one adapter** and renders what comes back — it computes nothing
+and reasons about nothing, because every place that needs to reason (is
+this section empty, did it fail, is it owed) is already implemented once,
+inside `Section` and the six state components under `src/components/
+counter/state/`.
+
+**The adapter contract** (`src/lib/counter/adapters/types.ts`) is the only
+new server code a page needs. `classify(load, opts)` runs one loader and
+turns whatever happens — a value, a thrown error, an empty result, an
+explicitly `owed` section — into exactly one of the six `SectionData`
+states, and never throws: a page that 500s because one query timed out
+throws away every other figure the reader could still have used. An
+adapter under `src/lib/counter/adapters/**` is the one place allowed to
+import `@/lib/prisma` or `@/app/actions/**` directly and the one place
+allowed to branch on ordinary values it constructs into `SectionData` —
+`npm run tokens` enforces both restrictions everywhere else.
+
+**A page never touches `.status`.** `Section` is the sole renderer of that
+union; a page hands it a title and a `SectionData` and gets all six
+renderings — loading, failed, empty, not-computed, stale, ready — with no
+opportunity to get one wrong. `npm run tokens`'s `no-status-branch` rule
+fails the build on a `.status ===` comparison anywhere under
+`src/app/dashboard/**`, so this isn't a convention a page author has to
+remember — it's enforced.
+
+**`owed`, not a fake number.** A section the design calls for but no server
+code computes yet renders `Owed` — a named, honest "not computed yet" card
+— rather than a zero, which reads as a real measurement, or a silently
+missing section, which reads as a design that never wanted one. Overview's
+`splh` section is the first real instance of a subtler rule: when the only
+data source for a figure *cannot* be scoped to the page's selected date
+range at all, showing it anyway — even correctly labelled — answers a
+different question under the same heading as the range-scoped figures
+beside it. That is worse than an honest gap, so it is `owed` too, not shown
+with a caveat.
+
+**One adapter call, not one call per section.** `getOverviewSections`
+returns a record of named `SectionData`s from a single `Promise.all`, so a
+slow section never serialises a fast one — and derived figures (Overview's
+`sales` total) are computed from a section's own already-loaded rows rather
+than fetched a second time under a different name.
+
+**A `URLSearchParams` instance does not survive the server→client
+boundary.** A page passing one directly as a prop to a client island will
+compile, typecheck and pass a unit test that constructs the client
+component directly — and throw at runtime in a real browser, because
+React's Flight serialisation carries plain values, not a class instance's
+prototype. Pass the query string (`params.toString()`) and reconstruct
+`new URLSearchParams(...)` inside the client component instead. Found
+during Overview's own verification — see `docs/counter/
+overview-verification.md`.
+
+Overview (`/dashboard`, `src/app/dashboard/page.tsx` +
+`src/app/dashboard/counter-overview-client.tsx`) is the first page built
+this way — see `docs/counter/overview-verification.md` for what it looks
+like end to end in a real browser, including a second real bug that
+session found (`Strip`'s fixed 2/4-column grid leaves bare hairline
+tracks when fed fewer cells than its layout expects) and the still-open
+structural gap that is not this page's to fix: `/dashboard` currently
+renders inside two navigation shells at once, because the pre-Counter
+`src/app/dashboard/layout.tsx` hasn't been rebuilt yet.
