@@ -5,29 +5,7 @@ import { Failed } from "@/components/counter/state/failed"
 import { Empty } from "@/components/counter/state/empty"
 import { StaleBanner } from "@/components/counter/state/stale"
 import { Owed } from "@/components/counter/state/owed"
-
-/**
- * The prototype's `ask` glyph, from `IC` at line 2930 of
- * `docs/counter/counter-prototype.html`, emitted exactly as `svg('ask')` does.
- * `.askmini svg` sizes it to 11px in `counter-components.css`, so it carries no
- * width or height of its own — as in the prototype.
- */
-function AskGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M13.5 9.5a1.6 1.6 0 01-1.6 1.6H5.6L2.5 13.8V4.1a1.6 1.6 0 011.6-1.6h7.8a1.6 1.6 0 011.6 1.6z" />
-      <path d="M6 6.4h4M6 8.6h2.4" />
-    </svg>
-  )
-}
+import { AskGlyph } from "./ask-glyph"
 
 /**
  * The keystone. Prototype note 22 in one component, on the prototype's own DOM.
