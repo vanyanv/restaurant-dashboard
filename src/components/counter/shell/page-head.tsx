@@ -46,50 +46,24 @@ export function PageHead({
 }) {
   return (
     /*
-     * DO NOT DELETE THIS TO "RESTORE FIDELITY". `animationFillMode: "none"` is
-     * a REPAIR OF A DEFECT IN THE PROTOTYPE, not a style, and it is the only
-     * inline style in this component. Delete it and the open date popover
-     * paints BEHIND the page's sections, and below 640px the date sheet renders
-     * 295px above the top of the screen. Both symptoms were measured, on the
-     * prototype as well as on us. The vendored artifact is deliberately NOT
-     * patched — it is the source of truth as it renders, and editing it starts
-     * a second drifting copy of the design (same ruling as the unterminated
-     * `/*` at counter-prototype.html:1167 that task 1 found). So the repair
-     * lives here, and this comment is why it stays.
+     * The entry-animation repair that used to be an inline style HERE now
+     * lives in `src/styles/counter-repairs.css`, applied to every
+     * `.screen > *` rather than to this one element.
      *
-     * Measured, in Chromium, on the prototype itself as well as on us:
+     * Why it moved: the defect is not the pagehead's. A FILLING
+     * `transform: none` computes as the identity matrix in Chromium, making
+     * every direct child of `.screen` a containing block for `position: fixed`
+     * descendants. Measured live — `.dispatch` and all three `.sec` elements
+     * trapped a fixed probe at 127/181/352/493px while this element, already
+     * repaired, held it at 0. Fixing one element left every section broken and
+     * made the next popover someone puts in a section a fresh bug.
      *
-     *   `.screen > *{animation:cnter .34s … both}` (counter-components.css:780)
-     *   ends on `@keyframes cnter{to{…transform:none}}`. With `fill-mode: both`
-     *   that `to` state is applied FOREVER after the 340ms, and Chromium
-     *   computes a filled `transform:none` as `matrix(1, 0, 0, 1, 0, 0)` — the
-     *   identity matrix, which is "a value other than none". So `.pagehead`
-     *   becomes, permanently: (1) a STACKING CONTEXT, which traps
-     *   `.drpop{z-index:60}` inside it, so every later `.sec` sibling paints
-     *   OVER the open date popover; and (2) a CONTAINING BLOCK for fixed
-     *   positioning, so below 640px — where the sheet turns `.drpop` into
-     *   `position:fixed;left:10;right:10;bottom:10` — the sheet anchors to the
-     *   page head instead of the viewport and lands 295px above its top.
-     *
-     *   Verified on `docs/counter/counter-prototype.html` at 1440×900:
-     *   `document.elementFromPoint()` at the open popover's own centre returns
-     *   a `<p>` that is NOT inside the popover. The design has this bug; we
-     *   inherited it by being faithful.
-     *
-     * Why THIS repair and not a z-index: `.pagehead` is `.screen`'s first child,
-     * so `.screen > *:nth-child(1)` gives it `animation-delay: 0ms` — which
-     * means `fill-mode`'s BACKWARDS half never applies to it — and `cnter`'s
-     * `to` state (`opacity:1; transform:none`) is exactly this element's
-     * default state, so dropping the FORWARDS half changes nothing that is
-     * drawn. The entry animation still runs. Only the permanent identity
-     * matrix goes, and both symptoms go with it. A z-index would have fixed
-     * the painting and left the 390px sheet where it was.
-     *
-     * This does not belong in a stylesheet: `counter-components.css` is
-     * GENERATED from the prototype by `scripts/extract-prototype-css.ts`, and
-     * hand-editing it would be overwritten by the next `npm run css:extract`.
+     * The replacement is `animation-fill-mode: backwards`, not `none`: these
+     * children carry staggered delays, and only `backwards` applies the `from`
+     * state during the delay. `none` would flash each section at full opacity
+     * before it animated in.
      */
-    <div className="pagehead" style={{ animationFillMode: "none" }}>
+    <div className="pagehead">
       <div>
         <h2 id={id}>{title}</h2>
         {sub ? <p className="sub">{sub}</p> : null}
