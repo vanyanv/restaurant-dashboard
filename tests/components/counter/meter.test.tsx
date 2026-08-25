@@ -3,75 +3,78 @@ import { describe, it, expect } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { Meter } from "@/components/counter/surface/meter"
 
+function parts(container: HTMLElement) {
+  return {
+    root: container.querySelector(".mtr") as HTMLElement,
+    fill: container.querySelector(".mtr__f") as HTMLElement,
+    tick: container.querySelector(".mtr__t") as HTMLElement | null,
+  }
+}
+
 describe("Meter", () => {
-  it("draws the reference line where the target sits", () => {
+  it("emits the prototype's DOM — .mtr > .mtr__f + .mtr__t — and no utilities of its own", () => {
     const { container } = render(
-      <Meter label="Prime cost" value={0.562} reference={0.6} max={1} format="56.2%" />,
+      <Meter value={70} lo={50} hi={90} target={80} label="Prime cost against target" />,
     )
-    const ref = container.querySelector("[data-meter-reference]") as HTMLElement
-    expect(ref.style.left).toBe("60%")
+    const { root, fill, tick } = parts(container)
+    expect(root.tagName).toBe("SPAN")
+    expect(root.className).toBe("mtr")
+    expect(fill).toBeTruthy()
+    expect(tick).toBeTruthy()
+    // nothing in here is styled by a class this file invented
+    expect(container.innerHTML).not.toMatch(/bg-ct-|data-meter-/)
   })
 
-  it("under the reference, nothing is coloured as a breach", () => {
+  it("positions both marks in the SHARED domain, not in the row's own range", () => {
     const { container } = render(
-      <Meter label="Prime cost" value={0.562} reference={0.6} max={1} format="0.562" />,
+      <Meter value={70} lo={50} hi={90} target={80} label="l" />,
     )
-    expect(container.querySelector("[data-meter-overshoot]")).toBeNull()
+    const { fill, tick } = parts(container)
+    // (70 − 50) / (90 − 50) = 50%; (80 − 50) / 40 = 75%
+    expect(fill.style.width).toBe("50%")
+    expect(tick!.style.left).toBe("75%")
   })
 
-  it("over the reference, ONLY the distance past it is coloured", () => {
-    const { container } = render(
-      <Meter label="Prime cost" value={0.65} reference={0.6} max={1} format="0.65" />,
-    )
-    const over = container.querySelector("[data-meter-overshoot]") as HTMLElement
-    expect(over).toBeTruthy()
-    // 0.65 - 0.60 = 0.05 of a max of 1 → 5% wide, starting at the reference.
-    expect(over.style.width).toBe("5%")
-    expect(over.style.left).toBe("60%")
-    // the measure itself is NOT painted as bad — note 35
-    expect((container.querySelector("[data-meter-fill]") as HTMLElement).className)
-      .not.toMatch(/bg-ct-bad\b/)
+  it("a column of meters shares one domain, so the same value lands in the same place", () => {
+    const a = render(<Meter value={60} lo={0} hi={100} label="a" />)
+    const b = render(<Meter value={60} lo={0} hi={100} label="b" />)
+    expect(parts(a.container).fill.style.width).toBe(parts(b.container).fill.style.width)
   })
 
-  it("takes pre-formatted strings, not a formatting function, consistent with Figure.value", () => {
-    render(<Meter label="Prime cost" value={0.562} reference={0.6} max={1} format="56.2%" target="60.0%" />)
-    expect(screen.getByText("56.2%")).toBeTruthy()
-    expect(screen.getByText(/target 60\.0%/)).toBeTruthy()
+  it("is-over is the CALLER's judgement — the meter cannot know which side is bad", () => {
+    // A sales meter UNDER its target is the bad one; a cost meter over it is.
+    const under = render(<Meter value={40} lo={0} hi={100} target={80} over label="sales short" />)
+    expect(parts(under.container).root.className).toBe("mtr is-over")
+
+    const above = render(<Meter value={90} lo={0} hi={100} target={80} label="sales ahead" />)
+    expect(parts(above.container).root.className).toBe("mtr")
   })
 
-  it("target falls back to format when not given separately", () => {
-    render(<Meter label="Prime cost" value={0.562} reference={0.6} max={1} format="56.2%" />)
-    expect(screen.getByText(/target 56\.2%/)).toBeTruthy()
+  it("no target means no tick, rather than a tick at zero", () => {
+    const { container } = render(<Meter value={70} lo={50} hi={90} label="l" />)
+    expect(parts(container).tick).toBeNull()
   })
 
-  it("a zero max cannot divide-by-zero into NaN%/Infinity% — every width collapses to 0%", () => {
-    const { container } = render(
-      <Meter label="Labor $" value={500} reference={800} max={0} format="$500" />,
-    )
-    const fill = container.querySelector("[data-meter-fill]") as HTMLElement
-    const ref = container.querySelector("[data-meter-reference]") as HTMLElement
+  it("carries an accessible name, which the prototype's own .mtr does not", () => {
+    render(<Meter value={70} lo={50} hi={90} label="Week of Aug 4, 62% of the domain" />)
+    expect(screen.getByRole("img", { name: /Week of Aug 4/ })).toBeTruthy()
+  })
+
+  it("a value outside the domain is clamped rather than painted outside the track", () => {
+    const over = render(<Meter value={500} lo={0} hi={100} target={200} label="l" />)
+    expect(parts(over.container).fill.style.width).toBe("100%")
+    expect(parts(over.container).tick!.style.left).toBe("100%")
+
+    const under = render(<Meter value={-30} lo={0} hi={100} label="l" />)
+    expect(parts(under.container).fill.style.width).toBe("0%")
+    expect(parts(under.container).fill.style.width).not.toMatch(/^-/)
+  })
+
+  it("a domain with no width collapses to 0% rather than NaN%/Infinity%", () => {
+    const { container } = render(<Meter value={5} lo={5} hi={5} target={5} label="l" />)
+    const { fill, tick } = parts(container)
     expect(fill.style.width).toBe("0%")
-    expect(ref.style.left).toBe("0%")
+    expect(tick!.style.left).toBe("0%")
     expect(fill.style.width).not.toMatch(/NaN|Infinity/)
-  })
-
-  it("a value far past max is clamped to a 100% width, and the track clips overflow too", () => {
-    const { container } = render(
-      <Meter label="Cost" value={300} reference={100} max={100} format="$300" />,
-    )
-    const over = container.querySelector("[data-meter-overshoot]") as HTMLElement
-    // raw ratio would be (300-100)/100 = 200% — clamped to 100%
-    expect(over.style.width).toBe("100%")
-    const track = container.querySelector("[data-meter-fill]")!.parentElement as HTMLElement
-    expect(track.className).toMatch(/overflow-hidden/)
-  })
-
-  it("a negative value does not produce a negative width", () => {
-    const { container } = render(
-      <Meter label="Delta" value={-10} reference={5} max={100} format="-10" />,
-    )
-    const fill = container.querySelector("[data-meter-fill]") as HTMLElement
-    expect(fill.style.width).toBe("0%")
-    expect(fill.style.width).not.toMatch(/^-/)
   })
 })
