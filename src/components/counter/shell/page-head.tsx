@@ -46,9 +46,18 @@ export function PageHead({
 }) {
   return (
     /*
-     * `animationFillMode: "none"` is a REPAIR, not a style, and it is the only
-     * inline style in this component. Measured, in Chromium, on the prototype
-     * itself as well as on us:
+     * DO NOT DELETE THIS TO "RESTORE FIDELITY". `animationFillMode: "none"` is
+     * a REPAIR OF A DEFECT IN THE PROTOTYPE, not a style, and it is the only
+     * inline style in this component. Delete it and the open date popover
+     * paints BEHIND the page's sections, and below 640px the date sheet renders
+     * 295px above the top of the screen. Both symptoms were measured, on the
+     * prototype as well as on us. The vendored artifact is deliberately NOT
+     * patched — it is the source of truth as it renders, and editing it starts
+     * a second drifting copy of the design (same ruling as the unterminated
+     * `/*` at counter-prototype.html:1167 that task 1 found). So the repair
+     * lives here, and this comment is why it stays.
+     *
+     * Measured, in Chromium, on the prototype itself as well as on us:
      *
      *   `.screen > *{animation:cnter .34s … both}` (counter-components.css:780)
      *   ends on `@keyframes cnter{to{…transform:none}}`. With `fill-mode: both`
