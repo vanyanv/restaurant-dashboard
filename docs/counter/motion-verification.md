@@ -1,5 +1,12 @@
 # Motion verification: `prefers-reduced-motion` in a real browser
 
+**Status: the `useCountUp` defect documented below is FIXED** (Plan 3
+closing commit, same day). See "Fix verification" at the end of this file
+for the re-measured, real-browser numbers. The finding is kept in place,
+unedited, as the record of what real-browser testing caught that stubbed
+`matchMedia` unit tests could not — the fix section that follows it is the
+proof the fix actually holds under the same conditions that found the bug.
+
 Task 7 of Plan 3. The Recharts spike (Plan 3 planning) claimed "reduced motion
 works by default" on the strength of reading Recharts' `.d.ts` files. Every
 unit test in this plan stubs `matchMedia` — that proves `useReducedMotion`'s
@@ -149,3 +156,89 @@ default (assume reduced) guarantees a hydration mismatch, a full-subtree
 remount, and a one-frame negative-value glitch for the common case
 (`no-preference`) the moment `useCountUp` gets a real caller. Filed above
 rather than papered over, per this task's brief.
+
+## Fix verification
+
+Plan 4 wires `Figure` to `useCountUp`, so the defect above would have
+shipped. Fixed in `src/components/counter/motion/use-count-up.ts`:
+
+1. **Hydration mismatch** — `display` now initialises to `value`
+   unconditionally (server render, and the client's first render, always
+   agree), and the mount effect is the only thing that ever moves it to
+   `from` — after hydration has already succeeded. One settled frame at the
+   target, then it drops to 0 and counts up: an accepted, deliberate cost,
+   documented in the hook's own comment so it doesn't get "optimised" back
+   into the mismatch.
+2. **Negative `elapsed`** — clamped to a floor of 0, and the eased fraction
+   is separately clamped to `[0, 1]`, so no rAF-timestamp/`performance.now()`
+   ordering quirk can produce a displayed value outside `[start, target]`.
+
+Same harness, same method, re-run against `npm run dev` after the fix
+(source rebuilt, dev server restarted, fresh login, `page.emulateMedia`
+exactly as before):
+
+### `reduce`, post-fix
+
+12 samples, t=128ms→1191ms. `7468` at every single sample, including the
+very first (t=128ms). 0 console errors, 0 page errors.
+
+### `no-preference`, post-fix
+
+12 samples, t=178ms→1203ms:
+
+```
+178ms   0
+220ms   3686
+260ms   4983
+302ms   5944
+342ms   6422
+382ms   6788
+442ms   7244
+502ms   7430
+602ms   7468   (landed, holds through 1203ms)
+```
+
+Monotonically increasing, start-to-target, every sample — **no negative
+value anywhere**, in contrast to the pre-fix `7468 → -542/-664 → 4786 → …`
+sequence measured above. `Hydration failed` (the error tied to
+`useCountUp`'s text mismatch): **0 occurrences**, down from reproducing on
+every one of 6 fresh navigations pre-fix.
+
+**Residual, separate, and out of scope**: 2 raw console `error`-level
+events still fire under `no-preference`, both the same distinct message —
+*"A tree hydrated but some attributes of the server rendered HTML didn't
+match the client properties. This won't be patched up."* — pointing not at
+`CountedFigure` (clean now) but at the `EntrySection` elements'
+`animation-*` inline styles. This is exactly the attribute-only mismatch
+predicted earlier in this document for `useEntry`/`useChartDraw` (SSR
+always omits animation styles; a `no-preference` client adds them) — it was
+never actually *absent* before, it was masked: the harder `Hydration
+failed` error aborted hydration of the whole subtree before React got far
+enough to separately evaluate the entry sections' attributes. Fixing the
+harder bug let the softer, pre-existing one surface. It is lower severity
+(no subtree discard, no remount) and does not affect the rendered result —
+the stagger numbers above (26ms bars, 36ms sections, measured earlier in
+this document) are already proof the animations end up correct regardless.
+Not fixed here — the coordinator's ask was scoped to the `useCountUp`
+hydration/negative-value defect specifically — but recorded here rather
+than left to be rediscovered as a surprise. See
+`docs/counter/deferred-upgrades.md`.
+
+### Unit tests added
+
+`tests/components/counter/motion/use-count-up.test.tsx` gained two tests,
+both reproducing the exact conditions measured above rather than
+approximating them:
+
+- **Hydration safety**: renders the hook inside a small harness component
+  that records the displayed value during the render body (before any
+  effect runs) — the same thing SSR would produce — for both `reduced`
+  settings, and asserts it's always the target.
+- **Backwards rAF timestamp**: stubs `requestAnimationFrame` to capture
+  the callback without scheduling it, then invokes that callback with a
+  timestamp guaranteed earlier than the real `start` — the exact `now <
+  start` condition measured in the browser (115.7ms vs. 125.5ms) — and
+  asserts the displayed value stays within `[0, target]`.
+
+7 of 7 pass (`npx vitest run tests/components/counter/motion/use-count-up.test.tsx`),
+5 pre-existing plus these 2.
