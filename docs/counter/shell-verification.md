@@ -136,6 +136,44 @@ quietly than what's on screen today. This should be fixed — and every
 other `border-ct-*` callsite re-checked — before Plan 5 adds more surfaces
 that lean on the same token.
 
+**FIXED (2026-08-24).** Root cause: `src/app/globals.css` declared
+`* { border-color: hsl(var(--border)); }` *outside* any `@layer` block.
+Tailwind v4 puts every utility class — including every `border-ct-*` — inside
+`@layer utilities`, and an unlayered rule always beats a layered one in the
+cascade regardless of specificity, so this one bare `*` selector silently
+defeated all 14 `border-ct-*` usages across 9 files (`Section`, `Table`'s row
+rules and sticky head, `Toast`, `Failed`, `Empty`, `Owed`, the theme toggle,
+and the shell rail's own separator) in both themes. Fix: wrap the rule in
+`@layer base` — this keeps it as the default border colour the ~80
+pre-Counter editorial pages still rely on (base sits below utilities, so it
+still beats browser UA styles) while letting any explicit `border-ct-*`
+utility win. A comment at the rule and a new regression test
+(`tests/styles/border-cascade-layer.test.ts`, reading `globals.css` as text
+for an unlayered universal `border-color` rule) guard against this being
+"tidied" away again.
+
+Re-measured via `getComputedStyle` on the same three kinds of element,
+against the harness rebuilt for this task, in both themes:
+
+| Element | Before (both themes) | After — light | After — dark |
+|---|---|---|---|
+| `Section` panel `border-color` | `rgb(229, 231, 235)` | `oklch(0.895 0.009 58)` | `oklch(0.28 0.009 58)` |
+| Rail column `border-right-color` | `rgb(229, 231, 235)` | `oklch(0.895 0.009 58)` | `oklch(0.28 0.009 58)` |
+| `Table` row `border-bottom-color` | `rgb(229, 231, 235)` | `oklch(0.895 0.009 58)` | `oklch(0.28 0.009 58)` |
+| `Table` head `border-bottom-color` (`--ct-line-strong`) | — | `oklch(0.825 0.013 55)` | `oklch(0.38 0.013 55)` |
+
+Before: identical `rgb(229, 231, 235)` in every element, in both themes —
+confirmed by re-running the exact same harness and measurement against the
+pre-fix code (stashed, measured, restored). After: light and dark values
+differ as designed, and none of them is `rgb(229, 231, 235)`. The built CSS
+was also checked directly (`rm -rf .next && npm run build`): the
+`*{border-color:hsl(var(--border))}` rule now sits inside the emitted
+`@layer base{...}` block, closing right before `@layer components;@layer
+utilities{...}` begins. A pre-Counter editorial page
+(`/dashboard/analytics`) was screenshotted after the fix and every panel
+still has its hairline border — the base-layer default the rest of the app
+depends on was not lost.
+
 ## Anything else that looked wrong
 
 - The bug above is systemic, not shell-specific — it affects `Section` and

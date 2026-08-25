@@ -181,8 +181,30 @@
   --sidebar-ring: 0 76% 60%;           /* Red ring */
 }
 
-* {
-  border-color: hsl(var(--border));
+/*
+ * MUST stay inside `@layer base`. Tailwind v4 puts every utility class —
+ * including every `border-ct-*` in the counter design system — inside
+ * `@layer utilities`. CSS layers are ordered by first declaration, and an
+ * UNLAYERED rule beats every layered one regardless of selector specificity,
+ * so a bare `* { border-color: ... }` written outside any `@layer` silently
+ * wins over `.border-ct-line{border-color:var(--ct-line)}` everywhere in the
+ * app. That's exactly what happened here: this rule sat unlayered from Plan
+ * 2 through Plan 4, and every `border-ct-*` usage — Section's panel border,
+ * Table's row rules and sticky head, Toast/Failed/Empty/Owed borders, the
+ * shell rail's separator — rendered Tailwind's generic preflight grey
+ * (`rgb(229,231,235)`, identical in both themes) instead of the `--ct-line`
+ * token, in both light and dark, and no test caught it because jsdom never
+ * computes the cascade. Wrapping it in `@layer base` keeps it as the default
+ * border colour every pre-Counter editorial page still relies on (base sits
+ * below utilities, so this still beats the browser's own UA styles) while
+ * letting any explicit `border-ct-*` utility win, which is what this rule
+ * was always meant to allow. Do not remove the `@layer` wrapper to "simplify"
+ * this — that reintroduces the exact bug described above.
+ */
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
 }
 
 body {
