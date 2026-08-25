@@ -316,24 +316,25 @@ timer. Both sit behind the same `<Chart>` props — a page never learns which.
 
 **`useEntry` compresses, then stops.** Sections 0–3 get the full 220ms rise;
 sections 4–8 compress as their delay eats into the 330ms budget (index 6:
-216ms delay, 114ms duration remaining); index 9 and beyond appear instantly
-at the 330ms boundary, delay having consumed the whole thing. That's
+216ms delay, 114ms duration remaining; index 9: 324ms delay, 6ms duration);
+index 10 and beyond appear instantly at the 330ms boundary, delay having
+consumed the whole thing. That's
 deliberate, not a bug: anything past index ~4 is below the fold on mount, so
 there is no reason to spend animation budget making it rise slowly — it's
 one `Math.min`/`Math.max` pair (see the doc comment on `useEntry`), not a
 special case.
 
-**Verifying reduced motion in a real browser found a real, narrow defect.**
-`docs/counter/motion-verification.md` records both media settings measured
-against a running `npm run dev`, not a stubbed `matchMedia`. The preference
-itself is honoured correctly in both directions — nothing animates under
-`reduce`, and every value lands on its correct final number either way — but
-`useCountUp` specifically hydration-mismatches on a real `no-preference`
-load: SSR always assumes reduced motion (the safe default, by design), so it
-always paints the *final* value, while a `no-preference` client wants to
-start its count at 0. React discards and remounts the subtree to recover,
-and the freshly-mounted animation's first frame can render a transient
-negative value before it corrects. `useCountUp` has no production caller
-yet (`Figure` still takes a pre-formatted string), so nothing ships this
-today — but it will the moment something calls it. See the doc for the
-measured numbers and the recommended fix.
+**Reduced motion was verified in a real browser, and a real hydration defect
+it found is now fixed systemically.** `docs/counter/motion-verification.md`
+records both media settings measured against a running `npm run dev`, not a
+stubbed `matchMedia`. `useReducedMotion` deliberately does not read
+`matchMedia` during render: its initial state is unconditionally `true` (the
+safe, reduced default) on both server and client, full stop, and the
+existing effect reads the real preference on mount and subscribes to
+changes after that. That is what keeps SSR and the first client render in
+agreement — every consumer, `useCountUp` included, paints the same *final*
+value on the server and on hydration, and motion only switches on one frame
+later once the effect confirms a real `no-preference` client. See
+`docs/counter/motion-verification.md` for the measured before/after numbers,
+including the post-fix real-browser run showing 0 console errors under both
+media settings.
