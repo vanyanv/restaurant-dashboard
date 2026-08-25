@@ -1,315 +1,430 @@
 "use client"
 
-import { useState, type CSSProperties } from "react"
+import { useId, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  Cell,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  type BarShapeProps,
-} from "recharts"
+  axisTicks,
+  chartMarks,
+  chartReading,
+  chartScale,
+  CH_H,
+  CH_W,
+  type ChartSeries,
+  type ChartSpec,
+} from "@/lib/counter/chart-geometry"
+import { money } from "@/lib/counter/format"
 import { useChartDraw } from "@/components/counter/motion/use-chart-draw"
-import { TABULAR, money, moneyCompact } from "@/lib/counter/format"
+import { Figure } from "./figure"
 
-export interface ChartSeries {
-  name: string
-  data: (number | null)[]
-  /**
-   * A Tailwind band class from `bandClassFor` (e.g. "bg-ct-mx-2"). Only the
-   * `ct-mx-N` token name is read out of it — see `colorVarFor` below — so the
-   * class itself never has to be applied to any element.
-   */
-  bandClass?: string
-}
+export type { ChartSeries, ChartSpec }
 
-export interface ChartProps {
-  variant: "line" | "bar"
-  labels: string[]
-  series: ChartSeries[]
-  /**
-   * Applied as `aria-label` on both the `role="img"` picture and the
-   * sr-only summary table (there is no `<caption>` element) — the same
-   * accessible name for the chart and for the reachable text it stands in
-   * for.
-   */
-  title: string
-  height?: number
-  /** Defaults to `money`, which already renders an em-dash for `null`. */
-  formatValue?: (v: number | null) => string
-  /** What every series in this chart is being judged against, appended to the accessible name. */
-  comparisonLabel?: string
-}
-
-const DEFAULT_WIDTH = 640
-const DEFAULT_HEIGHT = 240
-
-/**
- * The ramp a chart actually uses for a channel's numbers (DESIGN.md "Data
- * bands"): separated by lightness, not hue, and fixed to the channel rather
- * than to its rank. Used, in order, for series that don't name their own
- * band via `bandClassFor`.
- */
-const DEFAULT_BAND_VARS = ["--ct-mx-1", "--ct-mx-2", "--ct-mx-3", "--ct-mx-4"]
-
-/**
- * Recharts colour props want a colour STRING, and `npm run tokens`'
- * `no-colour-literal` rule forbids writing one in this file (hex/oklch/rgb/
- * hsl literals are banned outside `counter.css`). The fix is not to invent a
- * colour here at all: `var(--ct-mx-N)` is a reference to a custom property
- * declared once in `counter.css`, not a literal, so the linter's substring
- * check (`#`, `oklch(`, `rgb(`, `hsl(`) never matches it — and the browser
- * resolves it against whichever theme (light/dark) is active on `:root` at
- * paint time, same as any other CSS consumer of these tokens.
- */
-function colorVarFor(s: ChartSeries, index: number): string {
-  const match = s.bandClass ? /ct-(mx-\d+)/.exec(s.bandClass) : null
-  const varName = match ? `--ct-${match[1]}` : DEFAULT_BAND_VARS[index % DEFAULT_BAND_VARS.length]
-  return `var(${varName})`
-}
-
-function toNumberOrNull(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null
+export interface ChartProps extends ChartSpec {
+  /** How a reading is written. Defaults to `money`. */
+  fmt?: (v: number) => string
+  /** How the band's bounds are written, when they want to be shorter than a reading. */
+  bandFmt?: (v: number) => string
 }
 
 /**
- * The primitive every Counter page draws data with.
+ * The chart, drawn the way the design draws it.
  *
- * Per Plan 2's R3, `Section` is the sole renderer of `SectionData` — a
- * `Chart` takes plain `labels`/`series` and has no loading/empty/failed
- * branches of its own. Nest it inside a `Section` to get the six-state
- * contract.
+ * Ported from `chart()`/`mountChart()` at lines 3135 and 3175 of
+ * `docs/counter/counter-prototype.html`. The arithmetic lives in
+ * `@/lib/counter/chart-geometry`; this file is the DOM.
  *
- * A single reading is not a chart (see the guard at the top of the body):
- * the prototype draws it as a label/value pair instead of a one-bar chart
- * that fills the panel edge to edge and says nothing.
+ * ## Why this is not Recharts
+ *
+ * The previous implementation was Recharts 3, chosen by
+ * `docs/counter/recharts-3-spike.md` — which answered a BEHAVIOUR question
+ * (hover-anywhere, 42% dim, touch-drag: all reachable) and never a DOM one.
+ * The fidelity gate compares landmark classes and computed styles, and the
+ * ported stylesheet targets `.ch svg path.chref`, `.ch-cross`, `.ch-dot`,
+ * `.ch-tip`, `.ch-lab`, `.chbar` and `.ch-legend` — element for element.
+ * Recharts cannot emit any of them:
+ *
+ * - **`path.chref`** — `Line` builds its curve props as
+ *   `{...svgPropertiesAndEvents(others), className: 'recharts-line-curve'}`
+ *   (`recharts/es6/cartesian/Line.js:269`): a `className` passed to `<Line>`
+ *   is spread first and then OVERWRITTEN. The class is not settable.
+ * - **`.ch-cross` and `.ch-dot`** are HTML `<div>`s positioned over the plot
+ *   (`top/bottom`, `background`, `border-radius`, `box-shadow`,
+ *   `translate(-50%,-50%)`). Recharts' cursor is a `<path>` and its active
+ *   dot a `<circle>`, both INSIDE the `<svg>` — where every one of those
+ *   declarations is inert. A `<div>` cannot be put there at all.
+ * - **`.axis` and `.ch-legend` are siblings of `.ch`**, not descendants:
+ *   `chart()` returns three elements. Recharts renders its axis inside the
+ *   surface and its legend inside `.recharts-legend-wrapper`.
+ * - **The `.ch-tip` card** is `position:absolute` inside `.ch`, shown by
+ *   `.ch.is-live .ch-tip` — a rule about an ancestor Recharts does not own.
+ *   Its own wrapper (`recharts-tooltip-wrapper`) is positioned by an inline
+ *   `transform` that fights `.ch-tip`'s `translate(-50%,-100%)`.
+ * - **`.ch-lab`** (a direct label written on a stacked band, at a percentage
+ *   of the plot's height) and the 2px `var(--surface)` seam between bands
+ *   have no Recharts equivalent at all.
+ *
+ * What was given up is real and is now this file's job: hit-testing
+ * (`chartReading`), tooltip placement and its edge clamp, and the touch
+ * drag — which is `pointermove` plus `.ch { touch-action: pan-y }`, already
+ * in the stylesheet. What was gained is that every ported rule above now
+ * applies to something. `Cell` — deprecated in Recharts 3.10, removed in 4.0
+ * — is gone with it: the 42% dim is `.ch.is-live .chbar` / `.chbar.on`, pure
+ * CSS, no per-datum React element.
+ *
+ * `recharts` stays in `package.json`: 28 files under `src/components/charts/`
+ * and `src/app/dashboard/(editorial)/**` still import it. This removes it
+ * from Counter, which is the only part of the tree this plan governs.
+ *
+ * ## States
+ *
+ * `Section` is the sole renderer of `SectionData` (R3), so there is no
+ * loading or empty branch here — the prototype's `chart()` has both, and
+ * ours may not. The ONE guard that stays is the prototype's other one, which
+ * is about the shape of the data rather than about a status: a single
+ * reading is not a chart.
  */
-export function Chart({ variant, labels, series, title, height, formatValue, comparisonLabel }: ChartProps) {
-  const format = formatValue ?? ((v: number | null) => money(v))
-  // Axis ticks need something narrower than `format`: a value axis crowded
-  // with full `$7,468`-style labels is illegible, which is exactly why
-  // `moneyCompact` (`$7K`) exists. Honour a caller's own `formatValue` if
-  // they supplied one — it may already be compact for its domain (e.g. a
-  // percentage) — and only fall back to `moneyCompact` when they didn't.
-  const axisTick = (v: number) =>
-    formatValue ? formatValue(toNumberOrNull(v)) : moneyCompact(toNumberOrNull(v))
-  const { animate, lineDurationMs, barStaggerMs } = useChartDraw()
-  const ariaLabel = comparisonLabel ? `${title}, compared to ${comparisonLabel}` : title
-  // Bar-only: which reading (by data index, not series) is under the
-  // pointer. Shared across every series' `Bar` so hovering any of them dims
-  // the rest of the plot at that reading, per the spike's dimming contract.
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+export function Chart(props: ChartProps) {
+  const { fmt = (v: number) => money(v), bandFmt, ...spec } = props
+  const { animate, barStaggerMs } = useChartDraw()
 
-  // The single-reading degradation runs BEFORE any Recharts path — see the
-  // module doc comment. This is intentionally not a `SectionData` state:
-  // it is a property of the data shape (`labels.length < 2`), not one of
-  // the six section states, and Chart never branches on those (R3).
-  if (labels.length < 2) {
+  // Every hook runs before the single-reading return below — that branch is
+  // decided by props, so it is stable for a given mount, but React still
+  // requires the call order not to depend on it.
+  const rawId = useId()
+  // `useId` returns `:r1:`-shaped strings; a colon inside `url(#…)` is not
+  // worth finding out about in one browser.
+  const uid = rawId.replace(/[^a-zA-Z0-9_-]/g, "")
+
+  // Recomputed every render rather than memoised: `spec` is a fresh object
+  // out of the rest-spread above, so a `useMemo` keyed on it would recompute
+  // anyway while claiming not to. The work is a few hundred `toFixed(1)`s;
+  // React then diffs identical `d` attributes and writes nothing.
+  const sc = chartScale(spec)
+  const marks = chartMarks(spec, sc)
+  const ticks = axisTicks(spec)
+
+  const tipRef = useRef<HTMLDivElement>(null)
+  // One entry per drawn line, filled by callback refs — a marker attribute
+  // would have been simpler and would have put something in the DOM that the
+  // prototype does not have.
+  const linePaths = useRef<Array<SVGPathElement | null>>([])
+  const [hover, setHover] = useState<{ ratio: number; hostW: number } | null>(null)
+  const [tipW, setTipW] = useState(130)
+  // Set only once `--len` has actually been written onto each path. Adding
+  // `data-draw` first would start `cndraw` against an unresolved
+  // `stroke-dasharray: var(--len)` — i.e. no dash at all, so the first frame
+  // of the draw-on would show the whole finished line.
+  const [drawable, setDrawable] = useState(false)
+
+  const lineKey = marks.lines.map((l) => l.d).join("|")
+  useLayoutEffect(() => {
+    if (!animate) {
+      setDrawable(false)
+      return
+    }
+    for (const p of linePaths.current) {
+      if (!p) continue
+      let len = 0
+      // jsdom has no `getTotalLength`, and neither does a detached path.
+      try {
+        len = p.getTotalLength()
+      } catch {
+        len = 1200
+      }
+      p.style.setProperty("--len", (len || 1200).toFixed(0))
+    }
+    setDrawable(true)
+  }, [animate, lineKey])
+
+  // The tooltip is clamped by its own width, which is only knowable after it
+  // has rendered its content. Measured here, fed back as state, and settled
+  // in one extra pass because the guard stops it re-entering.
+  useLayoutEffect(() => {
+    const w = tipRef.current?.offsetWidth
+    if (w && w !== tipW) setTipW(w)
+  })
+
+  // A single day is one reading, not a chart. Drawing it as a bar fills the
+  // panel edge to edge and says nothing — the prototype renders a fitted
+  // strip instead, and reuses `strip()`'s own cells to do it. `Strip` is not
+  // reused here because it emits `data-n`, which IS the grid's track count;
+  // `.strip--fit` is flex and the prototype's degraded strip carries no such
+  // attribute, so emitting one would put a number in front of the fidelity
+  // gate that the design never wrote.
+  if (spec.labels.length < 2) {
     return (
-      <div className="flex flex-col gap-2 rounded-ct bg-ct-surface p-3">
-        <span className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-ink-3">
-          {labels[0] ?? "—"}
-        </span>
-        {series.map((s) => (
-          <div key={s.name} className="flex items-baseline justify-between gap-3">
-            <span className="text-ct-body text-ct-ink-2">{s.name}</span>
-            <span className={`text-ct-mid font-semibold text-ct-ink ${TABULAR}`}>
-              {format(toNumberOrNull(s.data[0]))}
-            </span>
-          </div>
+      <div className="strip strip--fit">
+        {spec.series.map((s) => (
+          <Figure
+            key={s.name}
+            label={s.name}
+            value={s.data[0] == null ? "—" : fmt(s.data[0])}
+            delta={spec.labels[0]}
+            deltaTone="is-flat"
+            size="cell"
+          />
         ))}
       </div>
     )
   }
 
-  const rows: Array<Record<string, string | number | null>> = labels.map((label, i) => {
-    const row: Record<string, string | number | null> = { label }
-    for (const s of series) row[s.name] = s.data[i] ?? null
-    return row
-  })
+  const reading = hover ? chartReading(spec, sc, hover.ratio, fmt, bandFmt) : null
+  const cssX = reading && hover ? reading.ratio * hover.hostW : 0
+  const tipLeft =
+    reading && hover
+      ? Math.max(tipW / 2 + 2, Math.min(hover.hostW - tipW / 2 - 2, cssX))
+      : 0
+
+  function read(e: ReactPointerEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect()
+    if (!r.width) return
+    setHover({ ratio: (e.clientX - r.left) / r.width, hostW: r.width })
+  }
+
+  const h = spec.h ?? CH_H
 
   return (
-    <div className="flex flex-col gap-2">
-      {/*
-        `role="img"` makes this whole SVG subtree presentational: there is no
-        keyboard path into Recharts' own tooltip/focus handling, and the
-        sr-only table below (not the SVG) is what carries every reading to a
-        screen reader or keyboard user instead. That's the trade-off, made
-        deliberately, not an oversight to "fix" by turning on Recharts'
-        `accessibilityLayer` — that prop sets `role="application"` and
-        `tabIndex` on the SVG, which directly contradicts `role="img"` here.
-        Enabling it without removing `role="img"` (or vice versa) leaves the
-        chart in an inconsistent accessibility state.
-      */}
+    <>
       <div
-        role="img"
-        aria-label={ariaLabel}
-        className="w-full"
-        style={{ height: height ?? DEFAULT_HEIGHT }}
+        className={reading ? "ch is-live" : "ch"}
+        onPointerMove={read}
+        onPointerDown={read}
+        onPointerLeave={() => setHover(null)}
       >
-        <ResponsiveContainer
-          width="100%"
-          height={height ?? DEFAULT_HEIGHT}
-          // In a real browser, `ResizeObserver` measures the actual
-          // container the moment it mounts and this value is immediately
-          // superseded — real responsiveness, unaffected. In jsdom (no
-          // `ResizeObserver`), Recharts never gets a measurement and falls
-          // back to exactly this size, so the chart still renders
-          // deterministically under test.
-          initialDimension={{ width: DEFAULT_WIDTH, height: height ?? DEFAULT_HEIGHT }}
+        <svg
+          viewBox={`0 0 ${CH_W} ${h}`}
+          preserveAspectRatio="none"
+          style={{ height: h }}
+          role="img"
+          aria-label={spec.alt ?? spec.series[0]?.name ?? ""}
         >
-          {variant === "line" ? (
-            <LineChart data={rows}>
-              <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
-              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} tickFormatter={axisTick} />
-              <Tooltip
-                cursor={{ stroke: "var(--ct-line-strong)" }}
-                formatter={(value: unknown) => format(toNumberOrNull(value))}
-                contentStyle={{
-                  background: "var(--ct-surface)",
-                  border: "1px solid var(--ct-line-strong)",
-                  borderRadius: "var(--radius-ct-sm)",
-                }}
-              />
-              {series.map((s, i) => (
-                <Line
-                  key={s.name}
-                  type="monotone"
-                  dataKey={s.name}
-                  name={s.name}
-                  stroke={colorVarFor(s, i)}
+          {marks.grid.map((y, i) => (
+            <line
+              key={`g${i}`}
+              x1={0}
+              y1={y.toFixed(1)}
+              x2={CH_W}
+              y2={y.toFixed(1)}
+              stroke="var(--line)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+
+          {/* The comparison band: blocks behind bars, a ribbon behind a line. */}
+          {marks.bandRects.map((r, i) => (
+            <rect
+              key={`b${i}`}
+              x={r.x.toFixed(1)}
+              y={r.y.toFixed(1)}
+              width={r.w.toFixed(1)}
+              height={r.h.toFixed(1)}
+              fill="var(--sunk)"
+              rx={1}
+            />
+          ))}
+          {marks.bandPath ? <path d={marks.bandPath} fill="var(--sunk)" opacity={0.9} /> : null}
+
+          {/* Accent is for a line you must not cross. An average is not one. */}
+          {marks.rule ? (
+            <line
+              x1={0}
+              y1={marks.rule.y.toFixed(1)}
+              x2={CH_W}
+              y2={marks.rule.y.toFixed(1)}
+              stroke={marks.rule.quiet ? "var(--ink-3)" : "var(--accent)"}
+              strokeWidth={1}
+              strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
+              opacity={0.7}
+            />
+          ) : null}
+
+          {marks.stack.map((layer, i) => (
+            <g key={`s${i}`}>
+              <path data-fill="" d={layer.area} fill={layer.color} />
+              {layer.seam ? (
+                <path
+                  d={layer.seam}
+                  fill="none"
+                  stroke="var(--surface)"
                   strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                  isAnimationActive={animate}
-                  animationDuration={lineDurationMs}
-                  // No `connectNulls`: `format.ts`'s em-dash rule says a
-                  // missing value must never read as a measurement ("zero is
-                  // a measurement and absence is not"). Drawing a straight
-                  // segment across a null reading is the visual equivalent
-                  // of that — a continuous line where there was a gap in the
-                  // data. Let a gap read as a gap.
+                  vectorEffect="non-scaling-stroke"
                 />
-              ))}
-            </LineChart>
-          ) : (
-            <BarChart data={rows}>
-              <XAxis dataKey="label" stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} />
-              <YAxis stroke="var(--ct-line-strong)" tick={{ fill: "var(--ct-ink-3)" }} tickFormatter={axisTick} />
-              <Tooltip
-                cursor={{ fill: "var(--ct-accent-wash)" }}
-                formatter={(value: unknown) => format(toNumberOrNull(value))}
-                contentStyle={{
-                  background: "var(--ct-surface)",
-                  border: "1px solid var(--ct-line-strong)",
-                  borderRadius: "var(--radius-ct-sm)",
+              ) : null}
+            </g>
+          ))}
+
+          {marks.bars.map((b, i) => (
+            <rect
+              key={`r${i}`}
+              className={reading && reading.i === b.i ? "chbar on" : "chbar"}
+              data-i={b.i}
+              x={b.x.toFixed(1)}
+              y={b.y.toFixed(1)}
+              width={b.w.toFixed(1)}
+              height={b.h.toFixed(1)}
+              fill={b.color}
+              rx={1}
+              style={
+                animate ? { animationDelay: `${Math.min(320, b.i * barStaggerMs)}ms` } : undefined
+              }
+            />
+          ))}
+
+          {marks.lines.map((l) => (
+            <g key={`l${l.si}`}>
+              {/* Colour the overshoot, not the measure (note 35): only the
+                  area past the rule is red, clipped at the rule so a crossing
+                  is handled by geometry rather than by branching. */}
+              {l.overshootPath ? (
+                <>
+                  <clipPath id={`k${uid}${l.si}`}>
+                    <rect x={0} y={0} width={CH_W} height={(l.overshootClipH ?? 0).toFixed(1)} />
+                  </clipPath>
+                  <path
+                    data-fill=""
+                    clipPath={`url(#k${uid}${l.si})`}
+                    d={l.overshootPath}
+                    fill="var(--bad)"
+                    opacity={0.18}
+                  />
+                </>
+              ) : null}
+              {l.fillPath ? (
+                <>
+                  <defs>
+                    <linearGradient id={`g${uid}${l.si}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={l.color} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={l.color} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <path data-fill="" d={l.fillPath} fill={`url(#g${uid}${l.si})`} />
+                </>
+              ) : null}
+              <path
+                // The comparison is a DASHED reference, not a second solid
+                // line — `.ch svg path.chref` is what dashes it.
+                ref={(el) => {
+                  linePaths.current[l.si] = el
                 }}
+                className={l.dash ? "chref" : undefined}
+                data-draw={!l.dash && drawable ? "" : undefined}
+                d={l.d}
+                fill="none"
+                stroke={l.color}
+                strokeWidth={l.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
               />
-              {series.map((s, si) => (
-                <Bar
+            </g>
+          ))}
+        </svg>
+
+        <div className="ch-cross" style={{ left: cssX }} />
+
+        {sc.stacked
+          ? null
+          : spec.series.map((s, si) => {
+              const dot = reading?.dots[si]
+              return (
+                <div
                   key={s.name}
-                  dataKey={s.name}
-                  name={s.name}
-                  isAnimationActive={false}
-                  onMouseEnter={(_, index) => setHoverIndex(index)}
-                  onMouseLeave={() => setHoverIndex(null)}
-                  // Recharts animates a whole `Bar` series on one shared
-                  // timer (`animationBegin`/`animationDuration` are read
-                  // once per `<Bar>`, not per rect — see the spike). A
-                  // per-item 26ms stagger needs a custom `shape` instead,
-                  // driven by CSS keyframes (`ct-bar-grow` in counter.css)
-                  // with a hand-computed `animation-delay`.
-                  shape={(shapeProps: BarShapeProps) => {
-                    const { x, y, width: w, height: h, fillOpacity } = shapeProps
-                    // `Cell` always supplies `data-bar-index` (see the
-                    // `Cell` map below) — it's the pre-filter data index,
-                    // and it's the one index space this shape uses for
-                    // everything derived from "which reading is this",
-                    // `animationDelay` included, so the attribute and the
-                    // stagger never disagree about which bar they mean.
-                    const { "data-bar-index": barIndex } = shapeProps as BarShapeProps & {
-                      "data-bar-index": number
-                    }
-                    // `height` goes negative whenever the reading falls below
-                    // the baseline (`baseValue = 0` on a domain that
-                    // straddles zero) — Recharts' own `Rectangle` draws a
-                    // path, which tolerates that, but a raw `<rect>` treats
-                    // a negative `height` as invalid SVG and simply doesn't
-                    // render. Flip the top up to the lower edge and use the
-                    // absolute extent so a below-baseline bar still paints.
-                    const top = h < 0 ? y + h : y
-                    const style: CSSProperties | undefined =
-                      animate && barStaggerMs > 0
-                        ? {
-                            animationName: "ct-bar-grow",
-                            animationDuration: "300ms",
-                            animationTimingFunction: "var(--ct-ease)",
-                            animationDelay: `${barIndex * barStaggerMs}ms`,
-                            animationFillMode: "both",
-                            // The grow animation should still start from the
-                            // baseline, not from whichever edge `top` ended
-                            // up being: for a below-baseline bar that's the
-                            // rect's top (the baseline is its bottom).
-                            transformOrigin: h < 0 ? "top" : "bottom",
-                            transformBox: "fill-box",
-                          }
-                        : undefined
-                    return (
-                      <rect
-                        className="recharts-rectangle"
-                        data-bar-index={barIndex}
-                        x={x}
-                        y={top}
-                        width={w}
-                        height={Math.abs(h)}
-                        fill={colorVarFor(s, si)}
-                        fillOpacity={fillOpacity}
-                        style={style}
-                      />
-                    )
+                  className="ch-dot"
+                  data-s={si}
+                  style={{
+                    background: s.color,
+                    left: cssX,
+                    top: dot ? dot.topPx : 0,
+                    display: dot ? undefined : "none",
                   }}
-                >
-                  {rows.map((_, i) => (
-                    <Cell
-                      key={i}
-                      data-bar-index={i}
-                      fillOpacity={hoverIndex === null || hoverIndex === i ? 1 : 0.42}
-                    />
-                  ))}
-                </Bar>
+                />
+              )
+            })}
+
+        {/* Four names written on four bands, so identity is never colour
+            alone. A share band carries its own last figure because the figure
+            IS the share; a stack of parts carries a name only. */}
+        {sc.stacked && spec.direct !== false
+          ? marks.directLabels.map((d) => (
+              <span key={d.name} className="ch-lab" style={{ top: `${d.topPct.toFixed(1)}%` }}>
+                {d.name}
+                {spec.stack === "sum" ? null : <b>{Math.round(d.v)}%</b>}
+              </span>
+            ))
+          : null}
+
+        <div ref={tipRef} className="ch-tip" style={{ left: tipLeft, top: reading?.tipTop ?? 0 }}>
+          {reading ? (
+            <>
+              <span className="lb">{spec.labels[reading.i]}</span>
+              {reading.rows.map((r) => (
+                <span key={r.name} className="rw">
+                  <i style={{ background: r.color }} />
+                  {r.name}
+                  <b>{fmt(r.v)}</b>
+                </span>
               ))}
-            </BarChart>
-          )}
-        </ResponsiveContainer>
+              {reading.extras.map((x) => (
+                <span key={x} className="ex">
+                  {x}
+                </span>
+              ))}
+            </>
+          ) : null}
+        </div>
       </div>
-      {/* Reachable without the picture: every reading, in reading order. */}
-      <table aria-label={title} className="sr-only">
+
+      {spec.ticks === false ? null : (
+        <div className="axis">
+          {ticks.map((t, i) => (
+            <span key={`${t}-${i}`}>{t}</span>
+          ))}
+        </div>
+      )}
+
+      {spec.legend ? (
+        <div className="ch-legend">
+          {spec.series.map((s) => (
+            <span key={s.name}>
+              <i
+                className={s.dash ? "dsh" : undefined}
+                style={s.dash ? { borderColor: s.color } : { background: s.color }}
+              />
+              {s.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {/*
+        Reachable without the picture: every reading, in reading order. The
+        prototype has no such table — its `<svg role="img">` is the whole
+        accessible surface, and a pointer is the only way to read a value off
+        it. That is the one place this component departs from the design, and
+        it departs in the direction the design's own notes argue for.
+      */}
+      <table aria-label={spec.alt ?? spec.series[0]?.name ?? ""} className="sr-only">
         <thead>
           <tr>
-            <th>Date</th>
-            {series.map((s) => (
+            <th>Label</th>
+            {spec.series.map((s) => (
               <th key={s.name}>{s.name}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            // Index, not `labels[i]`: labels repeat (repeated hours,
-            // repeated channel names) and a duplicate key produces a React
-            // warning. Row order is the data order, so the index is stable.
+          {spec.labels.map((label, i) => (
+            // Index, not the label: labels repeat (repeated hours, repeated
+            // channel names) and a duplicate key produces a React warning.
             <tr key={i}>
-              <td>{labels[i]}</td>
-              {series.map((s) => (
-                <td key={s.name}>{format(toNumberOrNull(row[s.name]))}</td>
+              <td>{label}</td>
+              {spec.series.map((s) => (
+                <td key={s.name}>{s.data[i] == null ? "—" : fmt(s.data[i] as number)}</td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
+    </>
   )
 }
