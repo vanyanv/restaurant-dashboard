@@ -18,15 +18,17 @@ import { describe, it, expect } from "vitest"
 
 import {
   CHECKED_PROPERTIES,
+  COMPARED_ATTRIBUTES,
   compareLandmarks,
   contrastRatio,
+  defectWhere,
   findThemeDefects,
   landmarkTally,
   matchedCount,
   relativeLuminance,
   requiredContrast,
   type Landmark,
-  type ThemedLandmark,
+  type ThemedNode,
 } from "../../e2e/fidelity/landmarks"
 
 /** A landmark carrying the prototype's own Overview values, so a fixture reads like a real render. */
@@ -37,6 +39,7 @@ function lm(classes: string[], over: Partial<Landmark> = {}): Landmark {
   return {
     order: 0,
     classes,
+    attrs: {},
     text: "some text",
     box: { w: 640, h: 96 },
     ...rest,
@@ -87,6 +90,14 @@ const withTable: Landmark[] = [
   lm(["tbl"], { order: 1, text: "Hollywood — — —" }),
 ]
 
+/**
+ * The prototype's strip emits its cells as bare <div>s with no class, and
+ * records the count in data-n. Six against four is the addendum's own
+ * "a four-cell strip of plain figures" defect.
+ */
+const stripOfSix: Landmark[] = [lm(["strip"], { order: 0, attrs: { "data-n": "6" } })]
+const stripOfFour: Landmark[] = [lm(["strip"], { order: 0, attrs: { "data-n": "4" } })]
+
 const radius8: Landmark[] = [lm(["strip"], { order: 0 })]
 const radius0: Landmark[] = [lm(["strip"], { order: 0, style: { "border-radius": "0px" } })]
 
@@ -115,6 +126,24 @@ describe("compareLandmarks", () => {
     expect(diffs).toContainEqual(
       expect.objectContaining({ kind: "style", property: "border-radius" }),
     )
+  })
+
+  it("reports a strip of four where the prototype has six", () => {
+    // The strip's cells carry no class of their own, so the class sequence is
+    // identical either way and only data-n can tell these apart. Before fix
+    // round 1 this passed clean.
+    const diffs = compareLandmarks(stripOfSix, stripOfFour)
+    expect(diffs).toContainEqual(
+      expect.objectContaining({ kind: "style", property: "data-n", prototype: "6", ours: "4" }),
+    )
+    expect(COMPARED_ATTRIBUTES).toContain("data-n")
+  })
+
+  it("aligns a mis-sized strip as one strip, not as a missing and an extra one", () => {
+    // data-n is compared but must NOT join the alignment signature: a strip
+    // built with the wrong number of cells is one strip rendered wrong.
+    const diffs = compareLandmarks(stripOfSix, stripOfFour)
+    expect(diffs.some((d) => d.kind === "missing" || d.kind === "extra")).toBe(false)
   })
 
   it("reports NOTHING when the two sides genuinely match", () => {
@@ -183,10 +212,11 @@ const INK_DARK = "oklch(0.93 0.006 60)"
 const PAPER_DARK = "oklch(0.19 0.008 55)"
 const TOKENS = [INK_DARK, PAPER_DARK]
 
-function themed(over: Partial<ThemedLandmark> = {}): ThemedLandmark {
+function themed(over: Partial<ThemedNode> = {}): ThemedNode {
   return {
     order: 0,
     classes: ["strip"],
+    within: "",
     colours: [
       { property: "color", value: INK_DARK, rgb: { r: 232, g: 230, b: 226 } },
       { property: "background-color", value: PAPER_DARK, rgb: { r: 26, g: 24, b: 22 } },
@@ -220,6 +250,44 @@ describe("findThemeDefects", () => {
     expect(defects).toContainEqual(
       expect.objectContaining({ kind: "literal", property: "color" }),
     )
+  })
+
+  it("reports a defect on an element that is NOT itself a landmark", () => {
+    // `.qbtn .n` — the element the whole dark pass was written for — carries
+    // no landmark class. Before fix round 1 the sweep only looked at elements
+    // that did, so this defect was unreachable by the check named after it.
+    const defects = findThemeDefects(
+      [
+        themed({
+          classes: ["sec"],
+          within: ".qbtn .n",
+          colours: [{ property: "color", value: "oklch(0.78 0.01 55)", rgb: { r: 199, g: 194, b: 189 } }],
+          ownText: "12",
+        }),
+      ],
+      TOKENS,
+    )
+    expect(defects).toContainEqual(
+      expect.objectContaining({ kind: "literal", within: ".qbtn .n", classes: ["sec"] }),
+    )
+    expect(defectWhere(defects[0])).toBe(".sec -> .qbtn .n")
+  })
+
+  it("names an element with no landmark ancestor rather than dropping it", () => {
+    const defects = findThemeDefects(
+      [
+        themed({
+          order: -1,
+          classes: [],
+          within: ".pagehead .sub",
+          colours: [{ property: "color", value: "rgb(216, 216, 216)", rgb: { r: 216, g: 216, b: 216 } }],
+          ownText: "12 days to Aug 25",
+        }),
+      ],
+      TOKENS,
+    )
+    expect(defects).toHaveLength(1)
+    expect(defectWhere(defects[0])).toBe("(outside any landmark) -> .pagehead .sub")
   })
 
   it("reports text that loses its contrast against the surface it sits on", () => {
@@ -258,12 +326,45 @@ describe("findThemeDefects", () => {
 })
 
 describe("contrast maths", () => {
+  const white = { r: 255, g: 255, b: 255 }
+  const black = { r: 0, g: 0, b: 0 }
+
   it("agrees with WCAG on the extremes", () => {
-    const white = { r: 255, g: 255, b: 255 }
-    const black = { r: 0, g: 0, b: 0 }
     expect(contrastRatio(white, black)).toBeCloseTo(21, 5)
     expect(contrastRatio(white, white)).toBeCloseTo(1, 5)
     expect(relativeLuminance(white)).toBeCloseTo(1, 5)
     expect(relativeLuminance(black)).toBeCloseTo(0, 5)
+  })
+
+  it("agrees with WCAG on mid-tones, where the transfer function actually matters", () => {
+    // The extremes are the ONE place a wrong decode still looks right: with
+    // `return s` in place of the piecewise sRGB curve, black-on-white is still
+    // 21:1 and white-on-white is still 1:1, so every other case in this file
+    // stayed green when that curve was mutated. A wrong transfer function
+    // shifts every real ratio, and text sitting near the 4.5:1 floor flips
+    // either way — which is precisely the text this gate is meant to protect.
+    //
+    // #767676 on white is the canonical AA-boundary grey: 4.542:1 correctly
+    // decoded (luminance 0.1812), 2.048:1 with the curve replaced by the
+    // identity (luminance 0.4627).
+    const grey767676 = { r: 118, g: 118, b: 118 }
+    expect(contrastRatio(grey767676, white)).toBeCloseTo(4.5422, 3)
+    expect(relativeLuminance(grey767676)).toBeCloseTo(0.1812, 4)
+
+    // A second pair, further from the boundary and on a dark surface, so the
+    // assertion is not one lucky point: 6.770:1 correct, 4.665:1 identity.
+    const paleGrey = { r: 160, g: 160, b: 160 }
+    const darkPaper = { r: 26, g: 24, b: 22 }
+    expect(contrastRatio(paleGrey, darkPaper)).toBeCloseTo(6.7703, 3)
+  })
+
+  it("puts #767676 on white on the correct side of the AA floor", () => {
+    // 4.542 clears 4.5 for small text — barely, which is the point. Under the
+    // identity decode it reads 2.05 and this text would be failed. The gate
+    // has to agree with WCAG here or it fails real pages and passes invisible
+    // ones.
+    const grey767676 = { r: 118, g: 118, b: 118 }
+    expect(contrastRatio(grey767676, white)).toBeGreaterThan(requiredContrast(13, 400))
+    expect(contrastRatio(grey767676, white)).toBeLessThan(5)
   })
 })

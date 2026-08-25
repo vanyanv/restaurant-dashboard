@@ -27,6 +27,8 @@ interface ThemeDefect {
   kind: "literal" | "contrast"
   order: number
   classes: string[]
+  /** Where inside the landmark, e.g. ".qbtn .n". Empty when it IS the landmark. */
+  within: string
   property: string
   value: string
   detail: string
@@ -46,14 +48,27 @@ interface Data {
   ours?: { count: number; tally: Record<string, number> }
   differences?: Difference[]
   differencesTruncated?: number
-  dark?: { landmarks: number; tokens: number; defects: ThemeDefect[] }
+  dark?: {
+    landmarks: number
+    nodes: number
+    elements: number
+    painting: number
+    tokens: number
+    defects: ThemeDefect[]
+  }
 }
 
 const DATA_DIR = path.resolve(__dirname, "../.fidelity")
 const OUT_DIR = path.resolve(__dirname, "../docs/counter/fidelity")
 
-function where(d: Difference | ThemeDefect): string {
+function where(d: Difference): string {
   return `\`#${d.order} .${d.classes.join(".")}\``
+}
+
+/** A theme defect names its landmark AND the element inside it: `.qitem -> .qbtn .n`. */
+function whereThemed(d: ThemeDefect): string {
+  const landmark = d.classes.length ? `.${d.classes.join(".")}` : "(outside any landmark)"
+  return `\`#${d.order} ${d.within ? `${landmark} -> ${d.within}` : landmark}\``
 }
 
 function section(d: Data): string[] {
@@ -130,12 +145,15 @@ function section(d: Data): string[] {
     out.push("### Dark mode — asserted on its own terms, never against the prototype")
     out.push("")
     out.push(
-      `${d.dark.landmarks} landmarks checked against ${d.dark.tokens} resolved ` +
-        `\`--ct-*\` tokens. ${d.dark.defects.length} defects.`,
+      `${d.dark.painting} of ${d.dark.elements} elements paint a colour of ` +
+        `their own; ${d.dark.nodes} were swept (every element that paints or ` +
+        `carries text, not only the ${d.dark.landmarks} landmarks — see the ` +
+        `"FIX ROUND 1" note in landmarks.ts). Checked against ${d.dark.tokens} ` +
+        `resolved \`--ct-*\` tokens. ${d.dark.defects.length} defects.`,
     )
     out.push("")
     for (const x of d.dark.defects) {
-      out.push(`- **${x.kind}** ${where(x)} \`${x.property}\` — ${x.value}: ${x.detail}`)
+      out.push(`- **${x.kind}** ${whereThemed(x)} \`${x.property}\` — ${x.value}: ${x.detail}`)
     }
     out.push("")
   }

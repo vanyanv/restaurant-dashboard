@@ -49,12 +49,28 @@ Ruling F-R2: three, not two.
    behind a hardcoded light grey. A gate that compared dark against the
    prototype would call that invisible text a perfect match, because the
    prototype does exactly the same. So dark asserts two rules of its own:
-   every colour a landmark renders resolves through a `--ct-*` token, and text
-   keeps its contrast against the surface it actually sits on.
+   every colour rendered resolves through a `--ct-*` token, and text keeps its
+   contrast against the surface it actually sits on.
+
+   This pass sweeps **every element** under the extraction root, not only the
+   landmarks, and attributes each finding to its nearest landmark ancestor so a
+   report still reads structurally (`.qitem -> .qbtn .n`). That is not a
+   detail: `.qbtn` and `.qbtn .n` carry no landmark class, so the first version
+   of this pass could not see the very defect it is named after. Measured on
+   the prototype's own Overview desk render, it covered 30 of the 297 elements
+   that paint a colour of their own, and the contrast rule reached 4 of 53
+   landmarks — containers keep their text in `.k` / `.v` / `.t` children.
 
 Two separate structure and rendering passes because they fail for different
 reasons and want different fixes. "You did not build this element" and "you
 built it and it looks wrong" collapse into one unreadable failure otherwise.
+
+Structure compares the landmark class sequence **and `data-n`**. The
+prototype's `strip()` emits its cells as bare `<div>`s with no class at all and
+records how many there are in `data-n`, so without that attribute a rebuilt
+strip of four passes clean against a design that specifies six — the addendum's
+own "a four-cell strip of plain figures" defect, walking through the gate built
+to catch it.
 
 **Compared by structure, never by pixel.** The prototype's figures are invented
 (142 guest reviews, "3 need you", a $4.12→$4.86 beef price) and ours come from a
