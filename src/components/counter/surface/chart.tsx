@@ -205,6 +205,14 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
                   shape={(shapeProps: BarShapeProps) => {
                     const { x, y, width: w, height: h, index, fillOpacity } = shapeProps
                     const barIndex = (shapeProps as unknown as Record<string, unknown>)["data-bar-index"] ?? index
+                    // `height` goes negative whenever the reading falls below
+                    // the baseline (`baseValue = 0` on a domain that
+                    // straddles zero) — Recharts' own `Rectangle` draws a
+                    // path, which tolerates that, but a raw `<rect>` treats
+                    // a negative `height` as invalid SVG and simply doesn't
+                    // render. Flip the top up to the lower edge and use the
+                    // absolute extent so a below-baseline bar still paints.
+                    const top = h < 0 ? y + h : y
                     const style: CSSProperties | undefined =
                       animate && barStaggerMs > 0
                         ? {
@@ -213,7 +221,11 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
                             animationTimingFunction: "var(--ct-ease)",
                             animationDelay: `${index * barStaggerMs}ms`,
                             animationFillMode: "both",
-                            transformOrigin: "bottom",
+                            // The grow animation should still start from the
+                            // baseline, not from whichever edge `top` ended
+                            // up being: for a below-baseline bar that's the
+                            // rect's top (the baseline is its bottom).
+                            transformOrigin: h < 0 ? "top" : "bottom",
                             transformBox: "fill-box",
                           }
                         : undefined
@@ -222,9 +234,9 @@ export function Chart({ variant, labels, series, title, height, formatValue, com
                         className="recharts-rectangle"
                         data-bar-index={barIndex}
                         x={x}
-                        y={y}
+                        y={top}
                         width={w}
-                        height={h}
+                        height={Math.abs(h)}
                         fill={colorVarFor(s, si)}
                         fillOpacity={fillOpacity}
                         style={style}

@@ -94,4 +94,24 @@ describe("Chart — bar", () => {
     const bar = container.querySelector("[data-bar-index]") as HTMLElement | null
     expect(bar?.style.animationName ?? "").toBe("")
   })
+
+  it("emits a positive-height rect for a below-baseline value (geometry, not paint — jsdom has no layout)", () => {
+    setReducedMotion(false)
+    const negativeSeries = [{ name: "Variance", data: [-40, 12, -8] }]
+    const { container } = render(
+      <Chart variant="bar" labels={labels} series={negativeSeries} title="Variance" />,
+    )
+    const bars = container.querySelectorAll(".recharts-rectangle")
+    expect(bars.length).toBeGreaterThanOrEqual(3)
+    // A raw SVG `<rect>` is invalid (and Recharts computes a negative
+    // `baseValueScale - currentValueScale` extent for any below-baseline
+    // reading) whenever `height` is negative — the shape must always emit
+    // a non-negative height, regardless of which side of the baseline the
+    // value fell on.
+    for (const bar of bars) {
+      const height = Number(bar.getAttribute("height"))
+      expect(Number.isNaN(height)).toBe(false)
+      expect(height).toBeGreaterThanOrEqual(0)
+    }
+  })
 })
