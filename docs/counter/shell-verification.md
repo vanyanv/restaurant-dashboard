@@ -92,6 +92,21 @@ not thirty-two, fit the rail without scrolling the rail) — that part holds
 — but a reader will reasonably expect persistent navigation from a rail this
 information-dense, and today it scrolls away like part of the page.
 
+**FIXED (2026-08-24).** `AppShell`'s rail column now carries
+`sticky top-0 h-dvh overflow-y-auto` (`src/components/counter/shell/app-shell.tsx`).
+Re-verified in a real browser against a rebuilt harness with five `Section`s
+(18/12/10/14-row `Table`s plus a `Strip`) — 2742px of page content against a
+900px viewport, taller than the 1435px this task originally measured.
+`getComputedStyle` on the rail column returned `position: sticky` and
+`getBoundingClientRect().top === 0` both before any scroll and after
+scrolling to `window.scrollY = 1792` (`scrollHeight - viewportHeight - 50`,
+i.e. near the bottom of the page). The active rail item
+(`[aria-current="page"]`) stayed within the viewport at every scroll
+position tested (`rect = { top: 557, bottom: 591.5 }` at `y=1792`, inside
+`[0, 900]`). The internal `overflow-y-auto` remains a safety net, not the
+normal case, per the comment left at the callsite — today's seventeen items
+still fit 900px with no internal scrollbar.
+
 ## In dark, does the rail column separate from the page?
 
 Yes — but not for the reason the design intends, and the real mechanism is
@@ -237,3 +252,11 @@ scrolls away on any page taller than a viewport (which five sections
 already is); and `border-ct-line` — and by extension every `border-ct-*`
 utility — silently falls back to a generic, non-theme-reactive grey instead
 of the design's hairline token, in every primitive checked, in both themes.
+
+**Both fixed 2026-08-24** — see the "FIXED" notes inline above for the
+measurements. The rail is now `sticky top-0 h-dvh overflow-y-auto` and stays
+in view (with active-item visibility confirmed) on a page over 3× the
+viewport height. The universal border rule now lives in `@layer base`, so
+every `border-ct-*` utility resolves to its real token in both themes, and a
+regression test (`tests/styles/border-cascade-layer.test.ts`) guards the
+unlayered-rule failure mode going forward.
