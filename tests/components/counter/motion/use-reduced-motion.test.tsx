@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { renderHook, act } from "@testing-library/react"
+import { renderHook, act, render } from "@testing-library/react"
 import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion"
 
 function mockMatchMedia(matches: boolean) {
@@ -54,5 +54,28 @@ describe("useReducedMotion", () => {
     const spy = vi.spyOn(mql, "removeEventListener")
     renderHook(() => useReducedMotion()).unmount()
     expect(spy).toHaveBeenCalled()
+  })
+
+  // docs/counter/motion-verification.md: reading matchMedia in the
+  // initialiser made the server (always "reduced") and a no-preference
+  // client's FIRST render disagree — a real, reproduced-every-time
+  // hydration mismatch in useCountUp, and a milder one in useEntry. This
+  // is the regression test for the fix: the very first render must be
+  // `true` no matter what the client's real preference is, because SSR
+  // has no way to know it yet and the two renders must agree.
+  it("is true on the very first render regardless of the client's real preference — the hydration-safety property", () => {
+    for (const matches of [true, false]) {
+      mockMatchMedia(matches)
+      const values: boolean[] = []
+      function Harness() {
+        const reduced = useReducedMotion()
+        values.push(reduced) // captured during render, before any effect runs
+        return null
+      }
+      render(<Harness />)
+      // The FIRST push is what render produced before the mount effect
+      // ever ran — exactly what SSR (no effects at all) also produces.
+      expect(values[0]).toBe(true)
+    }
   })
 })
