@@ -338,3 +338,57 @@ later once the effect confirms a real `no-preference` client. See
 `docs/counter/motion-verification.md` for the measured before/after numbers,
 including the post-fix real-browser run showing 0 console errors under both
 media settings.
+
+## Shell
+
+`AppShell` (`src/components/counter/shell/app-shell.tsx`) is the frame every
+Counter page sits inside: a skip link, a 212px rail column (`Wordmark` above
+`Rail`), an optional topbar slot, and `<main id="ct-main">` for the page.
+
+**Seventeen destinations, in five groups, declared once.** They live in
+`src/lib/counter/nav.ts` as `NAV_GROUPS`, and nowhere else builds this list —
+`Rail` only renders it. Note 24: "a rail item is a decision, not an
+inventory." The pre-Counter dashboard had thirty-two entries, which is a
+table of contents, not navigation. Seventeen is a deliberate cut, not an
+oversight: pages that absorbed another page keep it as a *view* rather than
+a rail item (Menu holds Items, Profit and Mix; COGS holds
+theoretical-vs-actual), and a per-store page is the store switcher's
+destination, not an eighteenth item. `docs/counter/shell-verification.md`
+verified the payoff of that cut in a real browser: at a 900px viewport, all
+seventeen items and their five captions render without the rail needing to
+scroll internally — confirm this again rather than trusting it, the way
+that file's Step 1 did, before adding an eighteenth destination.
+
+**A destination stays lit for its children, because the route *is* the
+hierarchy (note 48).** `isActive()` in `nav.ts` lights an item on an exact
+match *or* a path-prefix match (`pathname === item.href ||
+pathname.startsWith(item.href + "/")`), so `/dashboard/invoices/I28517` is
+still Invoices. This is also where the breadcrumb and the phone's back
+button come from — there is no separate hierarchy data structure to keep in
+sync with the URL, because the URL already is the hierarchy.
+
+**`aria-current="page"` — not colour — is what announces the current
+destination.** `RailLink` sets both from the same `isActive()` call in the
+same expression, so they cannot disagree: `aria-current={active ?
+"page" : undefined}` alongside the `bg-ct-accent-wash` / `text-ct-accent-hi`
+classes that give it colour. A screen reader never has to infer "current"
+from an accent wash it can't see; a sighted user gets the wash as the fast
+path to the same fact `aria-current` already carries.
+
+**`EntryItem` exists because `Section` must stay a server component.**
+`Section` (`surface/section.tsx`) is the sole renderer of `SectionData`'s
+six states (R3) — if it called `useEntry` itself it would become a client
+component, and every page's data rendering would cross the client boundary
+with it, just for an entrance animation. `AppShell` owns the entry index
+instead: a page (itself a server component) writes `<EntryItem
+index={i}><Section .../></EntryItem>`, and only `EntryItem` — a thin client
+wrapper around `useEntry` — crosses that boundary. `Section` never does.
+
+Verified in a real browser, at real content size, in both themes:
+`docs/counter/shell-verification.md`. That session's two findings — the
+rail is not sticky, so it scrolls away with the page once a page is taller
+than the viewport; and `border-ct-line` (and every other `border-ct-*`
+utility, checked on the rail, `Section`, and `Table`) silently falls back to
+a generic, non-theme-reactive grey instead of the design's hairline token,
+in both themes — are open, not fixed by that task. Read them before
+building on top of either.
