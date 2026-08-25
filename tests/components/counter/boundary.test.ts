@@ -5,6 +5,7 @@ import { join } from "node:path"
 const BARREL = join(process.cwd(), "src/components/counter/index.ts")
 const SURFACE = join(process.cwd(), "src/components/counter/surface")
 const STATE = join(process.cwd(), "src/components/counter/state")
+const SHELL = join(process.cwd(), "src/components/counter/shell")
 
 describe("the Counter public surface", () => {
   it("re-exports every surface primitive, so a page imports from one place", () => {
@@ -12,6 +13,20 @@ describe("the Counter public surface", () => {
     for (const f of readdirSync(SURFACE).filter((f) => f.endsWith(".tsx"))) {
       const name = f.replace(/\.tsx$/, "")
       expect(barrel).toMatch(new RegExp(`from "\\./surface/${name}"`))
+    }
+  })
+
+  // shell/ is the visible frame (Wordmark, Rail, AppShell, EntryItem) — the
+  // same "a page imports from one place" reasoning as surface/ applies: a
+  // page has no business reaching src/components/counter/shell/rail
+  // directly when the barrel exists. Held to the identical rule rather than
+  // a shell-specific one, so a new shell/*.tsx file fails this test the
+  // same way a new surface/*.tsx file would if someone forgot the export.
+  it("re-exports every shell primitive, so a page imports from one place", () => {
+    const barrel = readFileSync(BARREL, "utf8")
+    for (const f of readdirSync(SHELL).filter((f) => f.endsWith(".tsx"))) {
+      const name = f.replace(/\.tsx$/, "")
+      expect(barrel).toMatch(new RegExp(`from "\\./shell/${name}"`))
     }
   })
 
