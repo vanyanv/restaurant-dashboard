@@ -204,9 +204,12 @@ export type RangeId = PresetId | "custom"
  * A calendar date as `YYYY-MM-DD`, read off the LOCAL fields.
  *
  * `toISOString().slice(0, 10)` is the obvious version and it is wrong here:
- * this module's dates are local midnights, and in any timezone west of UTC
- * a local midnight serialises as the previous calendar day. A range written
- * to the URL and read back would walk one day earlier on every round trip.
+ * this module's dates are local midnights and times-of-day, and converting
+ * to UTC shifts the calendar date whenever the local offset crosses a
+ * midnight — BACKWARDS a day east of UTC, FORWARDS a day west of UTC,
+ * depending on the local offset and time of day. A range written to the URL
+ * and read back would drift by a day on the round trip, in one direction or
+ * the other depending where the server or reader's clock sits.
  */
 export function isoDay(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0")
