@@ -242,16 +242,21 @@ describe("AskSurface", () => {
     expect(marked()).toBe(visibleRows()[visibleRows().length - 1])
   })
 
-  it("never leaves the mark on a row the filter has hidden", () => {
-    // The prototype's own bug note: "a row that the filter hid kept its mark
-    // and Enter opened something nobody could see."
+  it("puts the mark back on the top row after every filter", () => {
+    // `cmdkMark(0)` at the end of `cmdkFilter`, and the prototype's own bug
+    // note for why: "a row that the filter hid kept its mark and Enter opened
+    // something nobody could see."
     render(<AskSurface {...props} />)
     openWith("k", { metaKey: true })
     fireEvent.keyDown(document, { key: "ArrowDown" })
     fireEvent.keyDown(document, { key: "ArrowDown" })
-    type("vendors")
+    expect(wrap().querySelector(".cmdk__row.on")).toBe(visibleRows()[2])
+    // One character, so the free row stays hidden and ten destinations match —
+    // enough rows left that a stale index would still land on a real one.
+    type("s")
     const marked = wrap().querySelector<HTMLElement>(".cmdk__row.on")!
     expect(marked.hidden).toBe(false)
+    expect(marked).toBe(visibleRows()[0])
   })
 
   it("Enter activates the marked row", () => {
@@ -359,13 +364,20 @@ describe("AskSurface", () => {
   it("PRE-FILLS from a suggestion row instead of discarding the question (F-R10)", () => {
     const onSubmit = vi.fn()
     render(
-      <AskSurface
-        {...props}
-        suggestions={["Why is food cost over plan?"]}
-        onSubmit={onSubmit}
-      />,
+      <>
+        <button data-askabout="">Ask the numbers</button>
+        <AskSurface
+          {...props}
+          suggestions={["Why is food cost over plan?"]}
+          onSubmit={onSubmit}
+        />
+      </>,
     )
-    openWith("k", { metaKey: true })
+    // Opened from a real trigger, so "focus went back to the opener" is
+    // observable if the row closes the palette on its way past.
+    const trigger = screen.getByText("Ask the numbers")
+    trigger.focus()
+    fireEvent.click(trigger)
     const suggestion = rowByLabel("Why is food cost over plan?")
     expect(suggestion.getAttribute("data-askabout")).toBe("Why is food cost over plan?")
     fireEvent.click(suggestion)
@@ -373,6 +385,11 @@ describe("AskSurface", () => {
     expect(screen.getByRole("dialog", { name: /ask/i })).toBeTruthy()
     expect(input().value).toBe("Why is food cost over plan?")
     expect(onSubmit).not.toHaveBeenCalled()
+    // And the palette never CLOSED on the way past. A row that acts and then
+    // closes, only for the delegation to reopen it, throws focus back to
+    // whatever opened the palette — leaving the reader looking at a question
+    // they now have to click into before they can edit it.
+    expect(document.activeElement).toBe(input())
   })
 
   it("does not re-aim the focus restore when a row inside it is clicked", () => {
