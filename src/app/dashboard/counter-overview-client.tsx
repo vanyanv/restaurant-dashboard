@@ -156,6 +156,12 @@ export function CounterOverviewClient({
             meta={rangeLabel(counterParams.range, counterParams.presetId)}
             data={sections.ledger}
             askAbout="the per-store ledger"
+            // `raw()` in the prototype: a table fills its section edge to
+            // edge. `.tbl` rules its own rows the full width of the box, so a
+            // `.sec__body` gutter around it would stop every hairline 15px
+            // short of the section's border. Every `sec(… tbl(…) …)` call in
+            // the prototype does the same.
+            pad={false}
           >
             {(rows) => (
               <Table

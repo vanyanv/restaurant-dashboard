@@ -17,12 +17,29 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   },
 }
 
+/**
+ * Ported from `bodyEmpty(title)` at line ~2960 of
+ * `docs/counter/counter-prototype.html`:
+ *
+ *   <div class="empty"><span class="t">…</span><span class="s">…</span>
+ *                      <button class="btn">…</button></div>
+ *
+ * `.empty` is `padding:46px 20px` in its own right, which is why `Section`
+ * renders this WITHOUT a `.sec__body` around it — the prototype's `sec()` does
+ * the same, and wrapping it would inset a tall centred state a second time.
+ *
+ * The prototype's third child, a `.btn` ("Clear filters" / "Open the store
+ * file"), is deliberately not ported. In the prototype both are demo
+ * navigations; here `Empty` has no filter model to clear and no route to open,
+ * and this codebase does not ship a control that does nothing (see `Failed`).
+ * It comes back the day this component is given something to do.
+ */
 export function Empty({ reason }: { reason: EmptyReason }) {
   const { head, body } = COPY[reason]
   return (
-    <div className="rounded-ct border border-ct-line bg-ct-chrome p-6 text-center">
-      <p className="text-ct-mid text-ct-ink">{head}</p>
-      <p className="mx-auto mt-1 max-w-prose text-ct-body text-ct-ink-2">{body}</p>
+    <div className="empty">
+      <span className="t">{head}</span>
+      <span className="s">{body}</span>
     </div>
   )
 }
