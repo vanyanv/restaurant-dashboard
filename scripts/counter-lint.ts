@@ -246,7 +246,9 @@ export const LEGACY: Array<{ path: string; reason: string }> = [
   {
     path: "src/app/(mobile)/m",
     reason:
-      "Entire tree is the pre-Counter editorial mobile shell, deleted when mobile is rebuilt on Counter (see project_mobile_direction.md — mobile rebuild has not started as of this gate).",
+      "Pre-Counter editorial mobile shell, deleted page by page as mobile is rebuilt on Counter (see project_mobile_direction.md). The rebuild HAS started: /m itself is " +
+      "Counter Overview's phone surface as of Phase C task 4, and is fully linted already — the exemption is content-based, so a rewritten file forfeits it automatically. " +
+      "Narrow this to the remaining editorial subtrees (chat, count, invoices, labor, menu, operations, orders, pnl, product-mix, recipes, ingredients, more, settings, monitoring) as each is rebuilt.",
   },
   {
     path: "src/styles",
