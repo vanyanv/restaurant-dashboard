@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   ready, stale, loading, failed, empty, notComputed, hasData,
-  dataOf, mapReady, mapReadyTo,
+  dataOf, isMissing, mapReady, mapReadyTo,
   type SectionData,
 } from "@/lib/counter/section-data"
 
@@ -39,6 +39,19 @@ describe("SectionData", () => {
     expect(hasData(failed("x", "y"))).toBe(false)
     expect(hasData(empty("no_match"))).toBe(false)
     expect(hasData(notComputed("x"))).toBe(false)
+  })
+
+  it("isMissing is true for `empty` ALONE — a failed load is not a missing record", () => {
+    // The distinction a detail page 404s on. If this ever returned true for
+    // `failed`, /dashboard/orders/[id] would answer "no such order" during a
+    // database outage — a lie told to the one reader who needs the truth.
+    expect(isMissing(empty("no_match"))).toBe(true)
+    expect(isMissing(empty("pre_open"))).toBe(true)
+    expect(isMissing(failed("db down", "retryOrder"))).toBe(false)
+    expect(isMissing(loading())).toBe(false)
+    expect(isMissing(notComputed("x"))).toBe(false)
+    expect(isMissing(ready(1))).toBe(false)
+    expect(isMissing(stale(1, new Date("2026-08-24T09:00:00Z")))).toBe(false)
   })
 
   it("hasData narrows the type so .data is reachable without a cast", () => {

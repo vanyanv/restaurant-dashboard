@@ -182,6 +182,13 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // alias layer too.
   { file: "app/(mobile)/m/orders/counter-phone-orders-client.tsx", token: "ct-root" },
   { file: "app/(mobile)/m/orders/counter-phone-orders-client.tsx", token: "ct-phone" },
+  // The FOURTH phone surface: `/m/orders/[id]` is one order on a phone
+  // (`src/middleware.ts` rewrites `/dashboard/orders/<id>` there on a phone
+  // user agent). A detail route, but the arrangement is the list's exactly —
+  // no `AppShell`, the island mounts the alias layer itself one element above
+  // `.mscroll`, and `.mtop` is inside it.
+  { file: "app/(mobile)/m/orders/[id]/counter-phone-order-client.tsx", token: "ct-root" },
+  { file: "app/(mobile)/m/orders/[id]/counter-phone-order-client.tsx", token: "ct-phone" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -237,11 +244,11 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
       new Set(["ct-root", "ct-phone"]),
     )
     // Pinned, so the list cannot grow a file without someone reading this
-    // note. Five files: the desk shell, the ⌘K palette, and the three phone
-    // surfaces (/m, /m/pnl, /m/orders) — each of the phones carrying both
-    // classes.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(8)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(5)
+    // note. Six files: the desk shell, the ⌘K palette, and the four phone
+    // surfaces (/m, /m/pnl, /m/orders, /m/orders/[id]) — each of the phones
+    // carrying both classes.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(10)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(6)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
