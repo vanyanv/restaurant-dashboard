@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({
 
 import { CounterOverviewClient } from "@/app/dashboard/counter-overview-client"
 import { ready, failed, notComputed, empty } from "@/lib/counter/section-data"
+import type { OverviewSections } from "@/lib/counter/adapters/overview"
 
 const base = {
   pathname: "/dashboard",
@@ -26,22 +27,43 @@ const base = {
 }
 
 // The brief's original fixture put netSales, orders, avgTicket and splh all
-// under one `lead` section with one status. R1 (Plan 7) makes that
-// impossible: SPLH is unconditionally `not_computed` while net sales stays
-// `ready`, and a single SectionData can only carry one status. `sales` and
-// `splh` replace `lead` as two sections — see the adapter's own doc comment
-// on OverviewSections. "orders" and "avgTicket" are dropped rather than
-// invented: note 30 names exactly two figures an owner checks (net sales,
-// sales per labour hour), and nothing in the adapter's real data sources
-// (getCogsKpis/getCogsStoreOverview) supplies an order count or an average
-// ticket — showing them would be exactly the "cell that quietly answers a
-// different question" the ruling forbids.
-const sections = {
-  sales: ready({ netSales: 7468 }),
-  splh: notComputed("sales per labour hour scoped to the selected range"),
-  ledger: ready([{ storeId: "hollywood", store: "Hollywood", net: 7468, cogsPct: 28.4, deltaVsTargetPp: -1.2 }]),
-  invoices: ready({ spend: 63203, count: 34, needsReview: 6, avgInvoice: 1858.9 }),
+// under one `lead` section with one status. A single SectionData can only
+// carry one status and the two figures come from different rollups, so
+// `sales` and `splh` replace `lead` as two sections — see the adapter's own
+// doc comment on OverviewSections.
+//
+// Task 2 grew the adapter from four sections to twelve. This island composes
+// the ones it already had; the rest are present so the fixture types, and are
+// composed by Task 3.
+const sections: OverviewSections = {
+  sales: ready({ netSales: 7468, comparison: "▲ 4.1% vs the prior period" }),
+  splh: ready({ value: 71.4, floor: null, series: [68, 70, 71.4] }),
+  strip: ready([{ label: "Orders", value: "1,024" }]),
+  verdict: notComputed("a published target for any headline figure"),
+  moving: ready([{ label: "Range", value: "1 days", note: "1 daily buckets · no comparison" }]),
   needsYou: notComputed("alerts and decisions queue"),
+  salesChart: ready({ labels: ["Mon"], series: [{ name: "Net sales", color: "var(--ink)", data: [7468] }] }),
+  splhChart: ready({ labels: ["Mon"], series: [{ name: "SPLH", color: "var(--ink)", data: [71.4] }] }),
+  stores: ready([
+    {
+      kind: "trading",
+      id: "hollywood",
+      name: "Hollywood",
+      netSales: 7468,
+      series: [7468],
+      comparison: "no comparison set",
+      orders: 291,
+      ticket: 25.66,
+      salesPerHour: 71.4,
+    },
+  ]),
+  ledger: ready([{ storeId: "hollywood", store: "Hollywood", net: 7468, cogsPct: 28.4, deltaVsTargetPp: -1.2 }]),
+  channels: ready([{ channel: "house", net: 4000, orders: 160, commission: 0, ticket: 25 }]),
+  invoices: ready([
+    { label: "Received", value: "34 · $63,203" },
+    { label: "In review", value: "6 · $2,140", tone: "warn" },
+    { label: "Posted to COGS", value: "28 · $61,063", total: true },
+  ]),
   modelCall: notComputed("the model's call for this day"),
 }
 
@@ -118,10 +140,9 @@ describe("Counter Overview", () => {
     expect(screen.getAllByText("$7,468").length).toBeGreaterThan(0)
   })
 
-  it("names owed sections instead of showing a zero, including SPLH itself", () => {
+  it("names owed sections instead of showing a zero", () => {
     render(<CounterOverviewClient {...base} sections={sections} />)
     expect(screen.getByText(/alerts and decisions queue/)).toBeTruthy()
-    expect(screen.getByText(/sales per labour hour scoped to the selected range/)).toBeTruthy()
     expect(screen.queryByText("$0")).toBeNull()
   })
 
@@ -149,7 +170,7 @@ describe("Counter Overview", () => {
     // All six states render through Section. If a page ever branched on status
     // it would diverge from the others; this catches the symptom.
     for (const s of [
-      ready({ spend: 0, count: 0, needsReview: 0, avgInvoice: 0 }),
+      ready([{ label: "Received", value: "0 · $0" }]),
       failed("x", "y"),
       notComputed("z"),
       empty("no_match" as const),

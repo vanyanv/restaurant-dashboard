@@ -36,16 +36,17 @@ export default async function DashboardPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  // Stores load first — cheap, and getOverviewSections reuses the result to
-  // resolve the selected store's display name for the single-store ledger
-  // row (getCogsKpis returns none of its own) rather than issuing a second
-  // query for it.
+  // Stores load first — cheap, and the switcher needs SOME list to render
+  // whatever else happens below it.
   const stores = await getOverviewStores()
   const sections = await getOverviewSections({
     range: counterParams.range,
+    // The comparison is part of the range (spec §5.3), so the adapter needs it
+    // to load the second rollup the dashed line and every delta are read
+    // against. Without it nothing on the page may claim a comparison.
+    comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
-    stores,
   })
 
   return (
