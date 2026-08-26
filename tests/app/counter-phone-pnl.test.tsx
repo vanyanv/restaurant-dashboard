@@ -195,6 +195,18 @@ describe("Counter P&L — the phone", () => {
     expect(container.querySelector(".msub")?.textContent).toBe("Aug 17 – Aug 23 · 7 days")
   })
 
+  it("names the window by its ENDS on a preset too, never by the preset's name", () => {
+    // `CD.rangeLabel()` is `fmtRange()` — two dates, no preset branch. With
+    // the preset's name here the sub reads "Last 7 days · 7 days", which says
+    // the same thing twice and never says WHICH seven days. The two section
+    // metas take the same label and have the same problem.
+    const { container } = renderPhone("?range=d7")
+    expect(container.querySelector(".msub")?.textContent).toBe("Aug 19 – Aug 25 · 7 days")
+    expect(
+      Array.from(container.querySelectorAll(".sec__head .k")).map((e) => e.textContent),
+    ).toEqual(["Aug 19 – Aug 25", "tap a week", "Aug 19 – Aug 25"])
+  })
+
   /* ── The strip ─────────────────────────────────────────────────────── */
 
   it("draws the PHONE's two cells, not the first two of the desk's five", () => {
