@@ -235,6 +235,71 @@ describe("bucketHourlyRows baseline averaging", () => {
   })
 })
 
+/**
+ * Task 4b: the per-hour spread, published rather than averaged away.
+ *
+ * `avgOrderCount` is the MEAN of the four baseline weeks at an hour, and a
+ * `{lo,hi}` built from a mean is a zero-width band drawn as if it were a
+ * range. The rows behind that mean are already in hand, so each week's own
+ * count for the hour is published beside it — and the mean itself is left
+ * exactly as it was, because the Overview's pace lines read it.
+ */
+describe("bucketHourlyRows per-hour spread", () => {
+  const spec = deriveRangeSpec({ kind: "days", days: -1 }, NOW)
+
+  function at(hour: number, dates: Record<string, number>): AggregateHourlyRow[] {
+    return Object.entries(dates).map(([date, orderCount]) => ({
+      date,
+      hour,
+      orderCount,
+      netSales: orderCount * 10,
+    }))
+  }
+
+  const uneven = at(12, {
+    "2026-08-17": 12, // the current day
+    "2026-08-10": 10,
+    "2026-08-03": 4,
+    "2026-07-27": 7,
+    // 2026-07-20 never traded: a week with NO data, not a week of zero.
+  })
+
+  it("publishes each baseline week's own count for the hour, and leaves the mean alone", () => {
+    const { hourly } = bucketHourlyRows({ rows: uneven, spec, period: "range" })
+    expect(hourly[12].groupOrderCounts).toEqual([10, 4, 7])
+    // Unchanged — (10 + 4 + 7) over four slots. The Overview reads this.
+    expect(hourly[12].avgOrderCount).toBe(5.3)
+  })
+
+  it("gives an hour no baseline week has data for no spread at all", () => {
+    const { hourly } = bucketHourlyRows({ rows: uneven, spec, period: "range" })
+    // An empty array, not [0, 0, 0]: nothing is known about 3 AM, and a floor
+    // of zero drawn as a band would claim the kitchen normally takes none.
+    expect(hourly[3].groupOrderCounts).toEqual([])
+  })
+
+  it("scales each group to its own day count, so a week-long band sits beside week-long bars", () => {
+    const weekSpec = deriveRangeSpec(
+      { kind: "custom", startDate: "2026-08-10", endDate: "2026-08-16" },
+      NOW,
+    )
+    const { hourly } = bucketHourlyRows({
+      rows: [
+        { date: "2026-08-10", hour: 12, orderCount: 14, netSales: 140 },
+        { date: "2026-08-03", hour: 12, orderCount: 8, netSales: 80 },
+        { date: "2026-08-04", hour: 12, orderCount: 6, netSales: 60 },
+      ],
+      spec: weekSpec,
+      period: "range",
+    })
+    // The bar is a per-day average over the seven-day range (14 / 7), so the
+    // band has to be one too — a group SUM would draw a band seven times the
+    // height of the bars it is meant to explain.
+    expect(hourly[12].orderCount).toBe(2)
+    expect(hourly[12].groupOrderCounts).toEqual([2])
+  })
+})
+
 describe("P&L pace", () => {
   const periodDates = ["2026-07-20", "2026-07-27", "2026-08-03", "2026-08-10"]
   const rows: PnLRow[] = [

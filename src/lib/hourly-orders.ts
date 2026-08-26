@@ -72,6 +72,7 @@ export function emptyHourly(): HourlyOrderPoint[] {
     totalSales: 0,
     avgOrderCount: 0,
     avgTotalSales: 0,
+    groupOrderCounts: [],
   }))
 }
 
@@ -247,6 +248,12 @@ export interface AggregateHourlyRow {
  * shape consumed by the chart. Mirrors the logic that lived inside
  * `getHourlyOrderDistributionWithComparison`, but operates on already-aggregated
  * rows (orderCount/netSales) rather than per-order increments.
+ *
+ * Every baseline week's rows are already in hand here, so the hour's spread is
+ * published as `HourlyOrderPoint.groupOrderCounts` beside the mean it is the
+ * mean of — a `{lo, hi}` built from `avgOrderCount` alone is a zero-width band
+ * drawn as if it were a range. `avgOrderCount` itself is deliberately
+ * untouched: the Counter Overview's pace lines read it.
  */
 export function bucketHourlyRows(args: {
   rows: AggregateHourlyRow[]
@@ -266,6 +273,14 @@ export function bucketHourlyRows(args: {
 
   const currentByHour = Array.from({ length: 24 }, () => ({ count: 0, sales: 0 }))
   const comparisonByHour = Array.from({ length: 24 }, () => ({ count: 0, sales: 0 }))
+
+  // The spread `avgOrderCount` is the mean of, kept per (group, hour). `seen`
+  // is what separates "this week took no orders in this hour" (a row of zero,
+  // which belongs in the band) from "this week has no data for this hour"
+  // (no row at all, which must not floor the band at zero).
+  const groupByHour = spec.comparisonGroups.map(() =>
+    Array.from({ length: 24 }, () => ({ count: 0, seen: false }))
+  )
 
   const groupTotals = spec.comparisonGroups.map(() => 0)
   const groupSalesTotals = spec.comparisonGroups.map(() => 0)
@@ -315,6 +330,16 @@ export function bucketHourlyRows(args: {
           groupSalesTotals[gi] += netSales
         }
       }
+
+      // Outside the cutoff branch on purpose: the cutoff exists so a day in
+      // progress is not compared against four complete days *in total*. Each
+      // hour's own baseline is valid whatever hour it is now, and the bars
+      // beside the band are not cut off either.
+      const gi = comparisonDateToGroup.get(date)
+      if (gi != null) {
+        groupByHour[gi][hour].count += orderCount
+        groupByHour[gi][hour].seen = true
+      }
     }
   }
 
@@ -338,6 +363,13 @@ export function bucketHourlyRows(args: {
       baselineInstances > 0
         ? Math.round((comparisonByHour[h].sales / baselineInstances) * 100) / 100
         : 0
+    hourly[h].groupOrderCounts = groupByHour
+      .map((g, gi) => {
+        const days = spec.comparisonGroups[gi].length
+        if (!g[h].seen || days === 0) return null
+        return Math.round((g[h].count / days) * 10) / 10
+      })
+      .filter((v): v is number => v !== null)
   }
 
   if (currentInstances === 1) {

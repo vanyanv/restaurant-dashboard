@@ -39,6 +39,8 @@ import type { HourlyOrderPoint, OrderPatternsHourlyComparison } from "@/types/an
 import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { comparisonContext, type ComparisonContext } from "@/lib/counter/comparison"
 import { hasData } from "@/lib/counter/section-data"
+import { getOrdersList } from "@/app/actions/order-actions"
+import { getHourlyPatternsForRange } from "@/app/actions/hourly-orders-actions"
 import {
   buildNeedsYou,
   buildOrderHead,
@@ -53,6 +55,8 @@ import {
   buildRecipeBySku,
   commissionRateOf,
   flattenOrderLines,
+  getOrdersSections,
+  platformsForChannels,
   type OrderLine,
 } from "@/lib/counter/adapters/orders"
 
@@ -245,7 +249,7 @@ describe("buildOrdersList", () => {
           listRow({ id: "d1", platform: "doordash", commission: 3.55, subtotal: 14.2 }),
         ],
       }),
-      { search: "", platform: null },
+      { search: "", channels: [] },
     )
 
     expect(list.rows[0].fees).toBe(DASH)
@@ -255,65 +259,144 @@ describe("buildOrdersList", () => {
   })
 
   it("reads the clock off the store's own wall time, not the server's", () => {
-    const list = buildOrdersList(listResponse(), { search: "", platform: null })
+    const list = buildOrdersList(listResponse(), { search: "", channels: [] })
     expect(list.rows[0].time).toBe("9:32pm")
     expect(list.rows[0].id).toBe("#4821")
     expect(list.rows[0].href).toBe("/dashboard/orders/o1")
   })
 
-  it("counts what is shown of what matched, and offers a toggle per platform on file", () => {
-    const list = buildOrdersList(listResponse(), { search: "", platform: "doordash" })
+  it("counts what is shown of what matched, and offers one toggle per CHANNEL", () => {
+    // Per channel, not per raw slug: `css-pos` and `bnm-web` are both the
+    // house channel, so "In-house" cannot be said with a slug toggle at all.
+    const list = buildOrdersList(listResponse(), { search: "", channels: ["house"] })
     expect(list.count).toBe("1 of 187")
-    expect(list.toggles.map((t) => t.id)).toEqual(["css-pos", "doordash", "ubereats"])
-    expect(list.toggles.map((t) => t.pressed)).toEqual([false, true, false])
+    expect(list.toggles.map((t) => t.id)).toEqual([
+      "house",
+      "doordash",
+      "ubereats",
+      "grubhub",
+    ])
+    expect(list.toggles.map((t) => t.label)).toEqual([
+      "In-house",
+      "DoorDash",
+      "Uber Eats",
+      "Grubhub",
+    ])
+    expect(list.toggles.map((t) => t.pressed)).toEqual([true, false, false, false])
+    // A BARE custom-property name — `Filters` writes the `var(...)` itself.
+    expect(list.toggles[0].tint).toBe("--ch-house")
     expect(list.toggles[1].tint).toBe("--ch-dd")
+  })
+
+  it("expands a selected channel to every raw slug behind it", () => {
+    expect(platformsForChannels(["house"])).toEqual(["css-pos", "bnm-web"])
+    expect(platformsForChannels(["house", "grubhub"])).toEqual([
+      "css-pos",
+      "bnm-web",
+      "grubhub",
+    ])
+    // No channel selected is not "no channel matches" — it is every channel.
+    expect(platformsForChannels([])).toEqual([])
   })
 })
 
 describe("buildOrdersByHour", () => {
-  it("names the baseline from the range's own weekday and never hardcodes one", () => {
-    const hourly: HourlyOrderPoint[] = Array.from({ length: 24 }, (_, h) => ({
+  /** 24 hours whose baseline weeks disagree — min h, max h + 5. */
+  function hours(
+    over: (h: number) => Partial<HourlyOrderPoint> = () => ({}),
+  ): HourlyOrderPoint[] {
+    return Array.from({ length: 24 }, (_, h) => ({
       hour: h,
       label: `${h}`,
       orderCount: h,
       totalSales: h * 20,
       avgOrderCount: h * 0.9,
       avgTotalSales: h * 18,
+      groupOrderCounts: [h + 2, h, h + 5],
+      ...over(h),
     }))
-    const cmp = { weekdayLabel: "Fri" } as OrderPatternsHourlyComparison
+  }
 
-    // 2026-08-21 is a Friday; 2026-08-20 a Thursday.
-    const friday = buildOrdersByHour(hourly, cmp, {
-      start: new Date(2026, 7, 21),
-      end: new Date(2026, 7, 21),
-    })
-    expect(friday.meta).toBe("baseline = the last four Fridays")
+  const cmp = { weekdayLabel: "Fri" } as OrderPatternsHourlyComparison
+  // 2026-08-21 is a Friday; 2026-08-20 a Thursday.
+  const friday = { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) }
 
-    const thursday = buildOrdersByHour(hourly, cmp, {
-      start: new Date(2026, 7, 20),
-      end: new Date(2026, 7, 20),
-    })
-    expect(thursday.meta).toBe("baseline = the last four Thursdays")
+  it("names the band from the range's own weekday and never hardcodes one", () => {
+    expect(buildOrdersByHour(hours(), cmp, friday).meta).toBe(
+      "band = the last four Fridays",
+    )
+    expect(
+      buildOrdersByHour(hours(), cmp, {
+        start: new Date(2026, 7, 20),
+        end: new Date(2026, 7, 20),
+      }).meta,
+    ).toBe("band = the last four Thursdays")
 
-    expect(friday.chart.type).toBe("bars")
-    expect(friday.chart.series[0].data).toHaveLength(24)
+    expect(buildOrdersByHour(hours(), cmp, friday).chart.type).toBe("bars")
+    expect(buildOrdersByHour(hours(), cmp, friday).chart.series[0].data).toHaveLength(24)
   })
 
-  it("draws no baseline line when there is nothing to compare against", () => {
-    const hourly: HourlyOrderPoint[] = Array.from({ length: 24 }, (_, h) => ({
-      hour: h,
-      label: `${h}`,
-      orderCount: h,
-      totalSales: 0,
-      avgOrderCount: 0,
-      avgTotalSales: 0,
-    }))
-    const spec = buildOrdersByHour(hourly, null, {
+  it("draws the band from each baseline week's own count for that hour", () => {
+    const spec = buildOrdersByHour(hours(), cmp, friday)
+    // ONE series. A dashed baseline line beside a band is an EXTRA landmark,
+    // and the prototype draws a band alone.
+    expect(spec.chart.series).toHaveLength(1)
+    expect(spec.chart.series[0].name).toBe("Orders")
+    expect(spec.chart.band?.lo).toHaveLength(24)
+    expect(spec.chart.band?.lo[10]).toBe(10)
+    expect(spec.chart.band?.hi[10]).toBe(15)
+    // Nothing to read one series against, so no legend and no reference.
+    expect(spec.chart.legend).toBe(false)
+    expect(spec.chart.vs).toBeNull()
+  })
+
+  it("leaves the band open at an hour no baseline week has data for", () => {
+    const spec = buildOrdersByHour(
+      hours((h) => (h === 3 ? { groupOrderCounts: [] } : {})),
+      cmp,
+      friday,
+    )
+    // A hole, not a floor of zero: nothing is known about 3 AM.
+    expect(spec.chart.band?.lo[3]).toBeNull()
+    expect(spec.chart.band?.hi[3]).toBeNull()
+    expect(spec.chart.band?.lo[4]).toBe(4)
+    expect(spec.chart.band?.hi[4]).toBe(9)
+  })
+
+  it("draws no band at all when no hour has a baseline week behind it", () => {
+    const spec = buildOrdersByHour(
+      hours(() => ({ groupOrderCounts: [], avgOrderCount: 0 })),
+      cmp,
+      friday,
+    )
+    expect(spec.chart.band).toBeUndefined()
+    expect(spec.meta).toBe("no baseline for this range")
+  })
+
+  it("draws nothing to compare against when there is no comparison at all", () => {
+    const spec = buildOrdersByHour(hours(), null, {
       start: new Date(2026, 7, 17),
       end: new Date(2026, 7, 23),
     })
     expect(spec.chart.series).toHaveLength(1)
+    expect(spec.chart.band).toBeUndefined()
     expect(spec.meta).toBe("no baseline for this range")
+  })
+})
+
+describe("getOrdersSections — the channel filter reaching the action", () => {
+  it("asks for every raw slug behind the selected channels", async () => {
+    vi.mocked(getOrdersList).mockResolvedValue(listResponse())
+    vi.mocked(getHourlyPatternsForRange).mockResolvedValue(null)
+
+    await getOrdersSections({
+      range: { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) },
+      storeId: null,
+      channels: ["house"],
+    })
+
+    const filters = vi.mocked(getOrdersList).mock.calls[0][0]
+    expect(filters?.platforms).toEqual(["css-pos", "bnm-web"])
   })
 })
 
@@ -655,7 +738,7 @@ describe("one order, one ticket", () => {
     const res = listResponse({
       rows: [listRow({ subtotal: PARTIAL.subtotal, discount: PARTIAL.discount, commission: PARTIAL.commission })],
     })
-    return buildOrdersList(res, { platform: null, search: "" }).rows[0].ticket
+    return buildOrdersList(res, { channels: [], search: "" }).rows[0].ticket
   }
 
   it("prints the same ticket on the list and on the order's own page", () => {

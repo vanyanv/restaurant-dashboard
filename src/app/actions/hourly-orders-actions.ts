@@ -70,7 +70,10 @@ async function readHourlyPatterns(
     const earliestDate = new Date(earliest + "T00:00:00.000Z")
     const latestDate = new Date(latest + "T00:00:00.000Z")
 
-    // Single Prisma query covering the union window. Always scope to the
+    // Single Prisma query covering the union window — every (date, hour) row
+    // for the current dates AND all four comparison groups, which is why
+    // `bucketHourlyRows` can publish each baseline week's own count for an
+    // hour (`groupOrderCounts`) and not just their mean. Always scope to the
     // caller's account so a foreign storeId can't read another tenant's sales.
     const rows = await prisma.otterHourlySummary.findMany({
       where: {

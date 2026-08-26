@@ -176,3 +176,54 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
     expect(JSON.stringify(thirdPartyCall.where)).toMatch(/css-pos/)
   })
 })
+
+/**
+ * Task 4b: a filter that can express "In-house".
+ *
+ * `css-pos` and `bnm-web` are both the `house` channel, so a per-channel
+ * toggle cannot be said with the single `platform` string. `platforms` widens
+ * it to a set — and an EMPTY set means "every channel", which is what a reader
+ * who has deselected every toggle (or pressed Clear) is asking for. A naive
+ * `in: []` gets that backwards and returns nothing at all.
+ */
+describe("getOrdersList — the platforms filter", () => {
+  function whereOf(): { platform?: unknown } {
+    const call = vi.mocked(prisma.otterOrder.findMany).mock.calls[0][0] as {
+      where?: { platform?: unknown }
+    }
+    return call.where ?? {}
+  }
+
+  it("matches any slug in the set, so one channel can mean two platforms", async () => {
+    await getOrdersList({ platforms: ["css-pos", "bnm-web"] })
+    expect(whereOf().platform).toEqual({ in: ["css-pos", "bnm-web"] })
+  })
+
+  it("treats an empty set as no platform filter at all, not as matching nothing", async () => {
+    await getOrdersList({ platforms: [] })
+    expect(whereOf().platform).toBeUndefined()
+  })
+
+  it("still honours a single `platform` for callers that pass one", async () => {
+    await getOrdersList({ platform: "doordash" })
+    expect(whereOf().platform).toBe("doordash")
+  })
+
+  it("lets a non-empty set supersede a single `platform`", async () => {
+    await getOrdersList({ platform: "doordash", platforms: ["grubhub"] })
+    expect(whereOf().platform).toEqual({ in: ["grubhub"] })
+  })
+
+  it("keeps the platform filter inside the third-party aggregate", async () => {
+    // `thirdPartyNetSales` is what "X% of 3P" is a percentage OF. Spreading
+    // `...where` and then re-keying `platform` DROPPED the reader's own filter
+    // from that aggregate: filter to DoorDash and the strip would divide
+    // DoorDash fees by every marketplace's sales. Both conditions have to hold.
+    await getOrdersList({ platforms: ["doordash"] })
+    const calls = vi.mocked(prisma.otterOrder.aggregate).mock.calls
+    expect(calls.length).toBe(2)
+    const thirdParty = JSON.stringify(calls[1][0])
+    expect(thirdParty).toMatch(/doordash/)
+    expect(thirdParty).toMatch(/css-pos/)
+  })
+})

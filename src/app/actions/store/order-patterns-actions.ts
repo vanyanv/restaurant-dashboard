@@ -27,6 +27,12 @@ function emptyHourly(): import("@/types/analytics").HourlyOrderPoint[] {
     totalSales: 0,
     avgOrderCount: 0,
     avgTotalSales: 0,
+    // This live-Otter path publishes no per-hour spread: its only consumer
+    // (the editorial hourly chart) reads `avgOrderCount`. Empty means "nothing
+    // is known about this hour", which is exactly what a band drawn from it
+    // would have to say. The precomputed path in `@/lib/hourly-orders` does
+    // publish it.
+    groupOrderCounts: [],
   }))
 }
 

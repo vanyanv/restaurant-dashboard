@@ -63,6 +63,12 @@ describe("chartScale", () => {
     expect(sc.max).toBeCloseTo(40 * 1.1, 5)
   })
 
+  it("ignores a hole in the band rather than reading it as a floor of zero", () => {
+    const sc = chartScale(spec({ band: { lo: [7000, null, 7050], hi: [7300, null, 7400] } }))
+    expect(sc.min).toBeGreaterThan(6000)
+    expect(Number.isNaN(sc.max)).toBe(false)
+  })
+
   it("widens the domain to hold the band and the rule, not just the readings", () => {
     const sc = chartScale(
       spec({ band: { lo: [1000, 1000, 1000], hi: [9000, 9000, 9000] }, rule: { v: 500, label: "Floor" } }),
@@ -192,6 +198,21 @@ describe("chartMarks — lines, band, rule, stack", () => {
     for (const r of bars.bandRects) expect(r.h).toBeGreaterThanOrEqual(1)
   })
 
+  it("leaves a hole in the band where a column has no comparison", () => {
+    // `null` is a gap, not a zero — the same convention a series' own data
+    // uses. An hour no baseline week traded in gets NO band block; a block of
+    // zero height at the axis would claim a baseline of none.
+    const band = { lo: [7000, null, 7200], hi: [7300, null, 7700] }
+    const barSpec = spec({ band, type: "bars" })
+    const bars = chartMarks(barSpec, chartScale(barSpec))
+    expect(bars.bandRects).toHaveLength(2)
+
+    const lineSpec = spec({ band })
+    const line = chartMarks(lineSpec, chartScale(lineSpec))
+    expect(line.bandPath).toMatch(/^M/)
+    expect(line.bandPath).not.toMatch(/NaN/)
+  })
+
   it("marks a quiet rule as quiet — accent is for a line you must not cross", () => {
     const loud = spec({ rule: { v: 7200, label: "Floor" } })
     const quiet = spec({ rule: { v: 7200, label: "Average", tone: "quiet" } })
@@ -307,6 +328,17 @@ describe("chartReading", () => {
     })
     const r = chartReading(s, chartScale(s), 0.5, fmt)
     expect(r.extras).toEqual(["4-week band $7100–$7500", "Floor $7200", "Closed at 4pm"])
+  })
+
+  it("says nothing about the band at a column that has none", () => {
+    const s = spec({
+      band: { lo: [null, 7100, 7200], hi: [null, 7500, 7700] },
+      bandLabel: "4-week band",
+    })
+    expect(chartReading(s, chartScale(s), 0, fmt).extras).toEqual([])
+    expect(chartReading(s, chartScale(s), 0.5, fmt).extras).toEqual([
+      "4-week band $7100–$7500",
+    ])
   })
 
   it("reads the measure against the reference, per bucket", () => {
