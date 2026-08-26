@@ -197,8 +197,24 @@ export interface PnlStoreLine {
   id: string
   name: string
   stage: "trading" | "warming_up" | "pre_open"
-  /** `null` when the store took nothing in this range — never `0`. */
-  netSales: number | null
+  /**
+   * `StoreStatement.grossSales` — the statement's own top line for this store,
+   * named for the field it holds rather than for the word a column header
+   * happens to use. `null` when the store took nothing in this range, never `0`.
+   *
+   * IT WAS CALLED `netSales`, AND THAT NAME WAS A TRAP. The value has always
+   * been `grossSales`; the name invited the next page to print it under a
+   * "Net" heading, which is note 60 with no arithmetic in it at all — one
+   * number, two names, and a gate that cannot see the difference because both
+   * are just strings.
+   *
+   * The prototype is the origin of the confusion and contradicts itself:
+   * `pnl().gross = R.netTotal()` (line 5099), so its statement heads that
+   * function's output "Gross sales" while its by-store column heads the same
+   * output "Net". Ours follows the statement, because the by-store table sits
+   * under it and says "every line above is …".
+   */
+  grossSales: number | null
   /** Points. `null` when there is no denominator, or no labour posted against it. */
   primePct: number | null
   /** Rent charged to this range by the rollup. `null` when the file carries no rent. */
@@ -292,16 +308,66 @@ function marginPoints(s: Statement | StoreStatement): number | null {
   return s.marginPct === null ? null : s.marginPct * 100
 }
 
-/** A `Reference` from a published target, or nothing. Never a band this schema does not have. */
+/**
+ * A `Reference` carrying whatever this schema actually publishes about a
+ * figure: a target or a band when one exists, a trajectory when the eight
+ * weeks loaded, or nothing at all.
+ *
+ * The two halves are INDEPENDENT and that is the whole point. `isJudged`
+ * (`bullet-state.ts`) is `lo != null || target != null`, so a reference with
+ * only a series draws the sparkline and NO bullet — which is exactly the
+ * labour cell's true state: a trajectory this schema can plot, against a band
+ * it does not publish. Returning `undefined` for an unjudged figure, as this
+ * did, threw the trajectory away with the band.
+ *
+ * Still never a band this schema does not have: `target === null` puts no
+ * `lo`/`hi`/`target` on the reference, so nothing is drawn against nothing.
+ */
 function referenceFor(
   v: number,
   target: Target,
   better: "low" | "high",
   label: string,
+  series?: number[],
 ): Reference | undefined {
-  if (target === null) return undefined
-  if (target.kind === "band") return { v, lo: target.lo, hi: target.hi, better: target.better, label }
-  return { v, target: target.value, better: target.better, label }
+  const trail = series && series.length >= 2 ? { series } : {}
+  if (target === null) {
+    // No published number to judge it against. A bare reference is only worth
+    // making when it carries the trajectory; otherwise it is an empty object
+    // that would open a `.band` this figure has not earned.
+    return series && series.length >= 2 ? { v, better, ...trail } : undefined
+  }
+  if (target.kind === "band") {
+    return { v, lo: target.lo, hi: target.hi, better: target.better, label, ...trail }
+  }
+  return { v, target: target.value, better: target.better, label, ...trail }
+}
+
+/**
+ * One rate across the eight weeks, oldest first — the trajectory behind a
+ * strip figure.
+ *
+ * `null` weeks are DROPPED rather than plotted as zero: a week with no labour
+ * posted has no labour rate, and a 0 in the middle of the line would draw a
+ * collapse that did not happen. Fewer than two readings returns nothing, which
+ * is `sparkGeometry`'s own floor.
+ *
+ * The weeks are a SEPARATE load from the statement this strip is drawn from,
+ * and they fail independently. A sparkline is decoration on a figure that
+ * stands without it, so `weeks` is nullable here and a null simply draws no
+ * spark — the strip must never inherit the week table's failure.
+ */
+function weeklyRates(
+  weeks: Statement[] | null,
+  pick: (s: Statement) => number | null,
+): number[] | undefined {
+  if (weeks === null) return undefined
+  const out: number[] = []
+  for (const w of weeks) {
+    const v = pick(w)
+    if (v !== null && Number.isFinite(v)) out.push(v)
+  }
+  return out.length >= 2 ? out : undefined
 }
 
 /** The comparison window's figure for one period — the divisor applied once. */
@@ -328,9 +394,22 @@ function moveVs(now: number | null, then: number | null | undefined, cmp: Compar
  * the bottom line and gross sales are judged against nothing, because nothing
  * publishes a number for them.
  */
-function buildStrip(p: Statement, cmp: ComparisonContext, targets: StripTargets | null): StripCell[] {
+function buildStrip(
+  p: Statement,
+  cmp: ComparisonContext,
+  targets: StripTargets | null,
+  weeks: Statement[] | null,
+): StripCell[] {
   const cells: StripCell[] = []
   const c = cmp.on ? cmp.scope : null
+
+  // The three sparked cells, and only those three — the prototype sparks prime,
+  // food and labour and leaves the bottom line and gross sales bare. Every rate
+  // is read off that week's own `prime`, the same scale the cell above it
+  // prints, so the line and the figure cannot be in different units.
+  const primeTrail = weeklyRates(weeks, (w) => (laborKnown(w) ? w.prime.primePct : null))
+  const foodTrail = weeklyRates(weeks, (w) => w.prime.cogsPct)
+  const laborTrail = weeklyRates(weeks, (w) => (laborKnown(w) ? w.prime.laborPct : null))
 
   const margin = marginPoints(p)
   cells.push({
@@ -362,6 +441,7 @@ function buildStrip(p: Statement, cmp: ComparisonContext, targets: StripTargets 
         label:
           `Prime cost ${pct(prime.primePct, { scaled: true })} against a ` +
           `${pct(prime.ceilingPct, { scaled: true })} ceiling`,
+        ...(primeTrail ? { series: primeTrail } : {}),
       },
     })
   }
@@ -377,7 +457,7 @@ function buildStrip(p: Statement, cmp: ComparisonContext, targets: StripTargets 
       deltaTone: move !== null && move > 0 ? "is-down" : undefined,
       caption:
         foodPlan?.kind === "target" ? `Target ${pct(foodPlan.value, { scaled: true })}` : undefined,
-      reference: referenceFor(p.prime.cogsPct, foodPlan, "low", `Food cost ${value}`),
+      reference: referenceFor(p.prime.cogsPct, foodPlan, "low", `Food cost ${value}`, foodTrail),
     })
   }
 
@@ -392,11 +472,17 @@ function buildStrip(p: Statement, cmp: ComparisonContext, targets: StripTargets 
       // exists nowhere in this schema, and `targets.labor` is null. If a
       // column ever publishes one, `referenceFor` picks it up here.
       caption: money(p.laborValue),
+      // A trajectory with no band under it. `targets.labor` is null and nothing
+      // in this schema publishes a labour band, so `isJudged` is false and no
+      // bullet is drawn — but the eight weeks CAN be plotted, and throwing the
+      // line away because there is no band to judge it against was this cell
+      // reporting a data gap it does not have.
       reference: referenceFor(
         prime.laborPct,
         targets?.labor ?? null,
         "low",
         `Labor ${pct(prime.laborPct, { scaled: true })}`,
+        laborTrail,
       ),
     })
   }
@@ -763,7 +849,7 @@ function buildByStore(files: StoreFile[], rollup: StoreStatement[]): PnlStoreLin
       id: f.id,
       name: f.name,
       stage: STAGE_FOR[f.lifecycleStage],
-      netSales: traded ? s.grossSales : null,
+      grossSales: traded ? s.grossSales : null,
       primePct: s && laborKnown(s) ? s.prime.primePct : null,
       // The rollup's own prorated rent for this range. Absent when the file
       // carries no rent at all — which is a different thing from $0 of rent,
@@ -876,7 +962,11 @@ export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSectio
 
   return {
     headline: mapReady(scopeSd, (p) => ({
-      cells: buildStrip(p, cmp, targets),
+      // `dataOf(weeksSd)`, not the section: the weeks are their own load and
+      // fail on their own, and a strip that went blank because its sparklines
+      // could not be drawn would be a worse page than one whose three figures
+      // are simply bare for a render. Decoration degrades; the figure does not.
+      cells: buildStrip(p, cmp, targets, dataOf(weeksSd)),
       reading: buildReading(p, targets),
     })),
 

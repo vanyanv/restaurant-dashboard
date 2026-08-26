@@ -100,8 +100,8 @@ const sections: PnlSections = {
     ],
   }),
   byStore: ready([
-    { id: "hollywood", name: "Hollywood", stage: "trading", netSales: 25_879, primePct: 56.2, fixedOnFile: 2_100, rentOnFile: true },
-    { id: "glendale", name: "Glendale", stage: "pre_open", netSales: null, primePct: null, fixedOnFile: null, rentOnFile: false },
+    { id: "hollywood", name: "Hollywood", stage: "trading", grossSales: 25_879, primePct: 56.2, fixedOnFile: 2_100, rentOnFile: true },
+    { id: "glendale", name: "Glendale", stage: "pre_open", grossSales: null, primePct: null, fixedOnFile: null, rentOnFile: false },
   ]),
   trust: { status: "not_computed", owed: "a per-line provenance model" },
   foodCause: { status: "not_computed", owed: "a cause-attribution model" },
@@ -289,9 +289,10 @@ describe("Counter P&L", () => {
   })
 
   it("heads the by-store money column GROSS, because that is the figure in it", () => {
-    // `PnlStoreLine.netSales` carries `StoreStatement.grossSales`. The
-    // prototype's column says "Net"; printing its word over our figure would
-    // be note 60 in a column header.
+    // `PnlStoreLine.grossSales` IS `StoreStatement.grossSales`. The prototype's
+    // column says "Net" while its own statement heads the identical value
+    // "Gross sales" (`pnl().gross = R.netTotal()`); this table sits under the
+    // statement and follows its word.
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     const table = container.querySelectorAll("table.tbl")[1] as HTMLElement
     expect(Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent)).toEqual([
@@ -339,8 +340,8 @@ describe("Counter P&L", () => {
         sections={{
           ...sections,
           byStore: ready([
-            { id: "a", name: "Hollywood", stage: "trading", netSales: 1, primePct: 50, fixedOnFile: 1, rentOnFile: true },
-            { id: "b", name: "Glendale", stage: "trading", netSales: 2, primePct: 50, fixedOnFile: 1, rentOnFile: true },
+            { id: "a", name: "Hollywood", stage: "trading", grossSales: 1, primePct: 50, fixedOnFile: 1, rentOnFile: true },
+            { id: "b", name: "Glendale", stage: "trading", grossSales: 2, primePct: 50, fixedOnFile: 1, rentOnFile: true },
           ]),
         }}
       />,

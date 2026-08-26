@@ -34,6 +34,7 @@ import { loadStripTargets } from "@/lib/counter/targets"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { toQueryBounds, trailingWeeks } from "@/lib/counter/date-range"
 import { hasData, type SectionData } from "@/lib/counter/section-data"
+import { isJudged, type Reference } from "@/lib/counter/bullet-state"
 import {
   getPnlSections,
   type PnlSections,
@@ -322,8 +323,22 @@ describe("absences", () => {
   it("draws no meter on labour, because this schema publishes no labour band", async () => {
     const s = await load()
     // The prototype's 23.9–26.2% "plus salaried" exists nowhere but the
-    // prototype. A bare figure is the true state of the data.
-    expect(cellOf(s, "Labor")?.reference).toBeUndefined()
+    // prototype. `isJudged` is `lo != null || target != null` — the labour
+    // cell carries neither, so `Figure` draws no bullet.
+    //
+    // NOT `reference === undefined`, which is what this asserted before the
+    // sparklines landed. A reference is also how a figure carries its
+    // TRAJECTORY, and the two are independent: throwing the reference away to
+    // avoid a band threw the eight weeks away with it. What must stay absent
+    // is the JUDGEMENT, and that is what this now says.
+    const labor = cellOf(s, "Labor")?.reference
+    expect(labor).toBeDefined()
+    expect(isJudged(labor as Reference)).toBe(false)
+    expect(labor?.target).toBeUndefined()
+    expect(labor?.lo).toBeUndefined()
+    expect(labor?.hi).toBeUndefined()
+    // These two carry no reference at all — no band and no spark, exactly as
+    // the prototype leaves them.
     expect(cellOf(s, "Bottom line")?.reference).toBeUndefined()
     expect(cellOf(s, "Gross sales")?.reference).toBeUndefined()
   })
@@ -331,11 +346,83 @@ describe("absences", () => {
   it("draws no meter on food either when the store has set no target", async () => {
     vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
     const s = await load()
-    expect(cellOf(s, "Food")?.reference).toBeUndefined()
+    const food = cellOf(s, "Food")?.reference
+    expect(isJudged(food as Reference)).toBe(false)
+    expect(food?.target).toBeUndefined()
     expect(cellOf(s, "Food")?.caption).toBeUndefined()
     expect(must(s.weeks, "weeks").foodTargetPct).toBeNull()
     // And it does not claim either half is inside anything.
     expect(reads(s)).toContain("Neither half of it is judged here")
+  })
+
+  /* ── The sparklines ─────────────────────────────────────────────────── */
+
+  it("sparks prime, food and labour off the eight weeks it already loaded, and nothing else", async () => {
+    // The prototype sparks three of five cells and leaves the bottom line and
+    // gross sales bare (`sp: 3` on its own desk render). The data is the eight
+    // weekly statements this page loads anyway for the week table — no extra
+    // query, and the same `prime` the cell above prints, so the line and the
+    // figure cannot be in different units.
+    const s = await load()
+    expect(cellOf(s, "Prime cost")?.reference?.series).toHaveLength(8)
+    expect(cellOf(s, "Food")?.reference?.series).toHaveLength(8)
+    expect(cellOf(s, "Labor")?.reference?.series).toHaveLength(8)
+    expect(cellOf(s, "Bottom line")?.reference).toBeUndefined()
+    expect(cellOf(s, "Gross sales")?.reference).toBeUndefined()
+    // Points, not fractions — the scale the cell prints and the scale the
+    // sparkline is drawn at have to be one scale.
+    expect(cellOf(s, "Food")?.reference?.series?.[0]).toBeCloseTo(31.4, 1)
+    expect(cellOf(s, "Prime cost")?.reference?.series?.[0]).toBeCloseTo(56.2, 1)
+  })
+
+  it("keeps the strip when the WEEKS fail, and drops only the sparklines", async () => {
+    // The ruling: a sparkline is decoration on a figure that stands alone, and
+    // the strip must never inherit the week table's failure. The weeks are
+    // their own `classify`, so this is the case that decides which of the two
+    // a reader loses.
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
+      arg.startDate.getTime() === toQueryBounds(range).startDate.getTime()
+        ? rollup()
+        : { error: "the weekly rollup timed out" }) as never)
+
+    const s = await load()
+    expect(s.weeks.status).toBe("failed")
+    // Every figure still there, in full.
+    expect(must(s.headline, "headline").cells.map((c) => c.label)).toEqual([
+      "Bottom line", "Prime cost", "Food", "Labor", "Gross sales",
+    ])
+    expect(cellOf(s, "Prime cost")?.value).toBe("56.2%")
+    // And the judgement survives too — it comes from the targets, not the weeks.
+    expect(cellOf(s, "Prime cost")?.reference?.target).toBe(PRIME_CEILING_PCT)
+    expect(cellOf(s, "Food")?.reference?.target).toBe(29)
+    // Only the trajectory is gone.
+    expect(cellOf(s, "Prime cost")?.reference?.series).toBeUndefined()
+    expect(cellOf(s, "Food")?.reference?.series).toBeUndefined()
+    // Labour had nothing BUT the trajectory, so its reference goes entirely
+    // rather than becoming an empty object that would open a band.
+    expect(cellOf(s, "Labor")?.reference).toBeUndefined()
+  })
+
+  it("drops a week with no labour from the labour line rather than plotting it as zero", async () => {
+    // A week with no labour posted has no labour rate. A 0 in the middle of a
+    // sparkline draws a collapse that did not happen — the same lie as a
+    // "0.0%" labour cell, one element over.
+    const weeks = trailingWeeks(today, 8)
+    const silent = toQueryBounds({ start: weeks[3].start, end: weeks[3].end }).startDate.getTime()
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
+      arg.startDate.getTime() === silent
+        ? rollup({
+            combined: kpis({ laborValue: 0, laborPct: 0 }),
+            perStore: [store("holly", "Hollywood", { laborValue: 0, laborPct: 0 })],
+          })
+        : rollup()) as never)
+
+    const s = await load()
+    const labor = cellOf(s, "Labor")?.reference?.series
+    expect(labor).toHaveLength(7)
+    expect(labor).not.toContain(0)
+    // Food had a reading that week, so its line keeps all eight.
+    expect(cellOf(s, "Food")?.reference?.series).toHaveLength(8)
   })
 
   it("judges food when the store HAS set a target", async () => {
@@ -589,7 +676,7 @@ describe("by store", () => {
     const s = await load()
     const gln = must(s.byStore, "byStore").find((x) => x.id === "gln")
     expect(gln?.stage).toBe("pre_open")
-    expect(gln?.netSales).toBeNull()
+    expect(gln?.grossSales).toBeNull()
     expect(gln?.primePct).toBeNull()
     expect(gln?.fixedOnFile).toBeNull()
     expect(gln?.rentOnFile).toBe(false)

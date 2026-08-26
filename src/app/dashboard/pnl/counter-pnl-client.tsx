@@ -74,10 +74,12 @@ import type {
  * ## Two words that are NOT the prototype's, and both are deliberate
  *
  * 1. **The by-store money column is headed "Gross", not the prototype's
- *    "Net".** `PnlStoreLine.netSales` carries `StoreStatement.grossSales` —
- *    the same figure the statement above heads "Gross sales". Printing the
- *    prototype's word over our figure would be note 60 in a column header:
- *    one page, two names, one number.
+ *    "Net".** `PnlStoreLine.grossSales` IS `StoreStatement.grossSales` — the
+ *    same figure the statement above heads "Gross sales". The prototype
+ *    contradicts itself here: `pnl().gross = R.netTotal()`, so its statement
+ *    heads that value "Gross sales" and its by-store column heads it "Net".
+ *    This table sits under the statement and opens by referring to it, so it
+ *    follows the statement's word. One page, one number, one name.
  * 2. **"not on file" is a token utility, not an inline colour.** The prototype writes
  *    `style="color:var(--warn)"`; a Counter page's only colour source is the
  *    `ct-` token layer, and `text-ct-warn` resolves to the same token.
@@ -371,15 +373,15 @@ const BY_STORE_COLUMNS: Column[] = [
  * gets a different one.
  */
 function ByStore({ lines }: { lines: PnlStoreLine[] }) {
-  const trading = lines.filter((l) => l.netSales !== null)
-  const silent = lines.filter((l) => l.netSales === null)
+  const trading = lines.filter((l) => l.grossSales !== null)
+  const silent = lines.filter((l) => l.grossSales === null)
   const noRent = lines.filter((l) => !l.rentOnFile)
 
   const rows: Row[] = lines.map((l) => ({
     key: l.id,
     cells: {
       store: <b>{l.name}</b>,
-      gross: money(l.netSales),
+      gross: money(l.grossSales),
       prime: pct(l.primePct, { scaled: true }),
       // The prototype's own treatment: ONE warn-coloured cell, and the row
       // left alone. The sheet's `is-hole` pair was tried here and is wrong —
