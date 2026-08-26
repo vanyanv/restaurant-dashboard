@@ -32,8 +32,6 @@ const mockPnL = vi.mocked(getAllStoresPnL)
 
 /* ── Fixtures ─────────────────────────────────────────────────────────── */
 
-const accountId = "acct_1"
-
 /** Two daily buckets, 2026-08-18 → 2026-08-19. */
 const range: DateRange = { start: new Date(2026, 7, 18), end: new Date(2026, 7, 19) }
 
@@ -96,7 +94,7 @@ function rollup(over: Record<string, unknown> = {}) {
 }
 
 function load(over: Partial<Parameters<typeof loadStatement>[0]> = {}): Promise<Statement> {
-  return loadStatement({ range, storeId: null, accountId, ...over })
+  return loadStatement({ range, storeId: null, ...over })
 }
 
 beforeEach(() => {
@@ -320,6 +318,40 @@ describe("loadStatement — scope", () => {
     expect(s.grossSales).toBe(0)
     expect(s.marginPct).toBeNull()
     expect(s.perStore).toEqual([])
+  })
+
+
+  it("publishes EVERY store on the account, unfiltered by the selection", async () => {
+    // The P&L's "By store" section lists all three stores while the rest of
+    // the page is scoped to one — the prototype prints Hollywood, Glendale and
+    // Van Nuys in that table whatever the switcher says. `perStore` is the
+    // selection and cannot answer that; `allStores` is the same rollup's whole
+    // answer, off the SAME call, because a second query is how two sections of
+    // one page start disagreeing about how many stores there are.
+    mockPnL.mockResolvedValue(two() as never)
+    const s = await load({ storeId: "gln" })
+    expect(s.perStore.map((p) => p.storeId)).toEqual(["gln"])
+    expect(s.allStores.map((p) => p.storeId)).toEqual(["holly", "gln"])
+    expect(mockPnL).toHaveBeenCalledTimes(1)
+  })
+
+  it("still lists the account's stores when the selected store is not one of them", async () => {
+    // The scope is `no_match` and its lines are zeroed, but "which stores does
+    // this account have" is still answered — that is the section that tells a
+    // reader what they CAN look at.
+    mockPnL.mockResolvedValue(two() as never)
+    const s = await load({ storeId: "nobody" })
+    expect(s.storeNotFound).toBe(true)
+    expect(s.perStore).toEqual([])
+    expect(s.allStores.map((p) => p.storeId)).toEqual(["holly", "gln"])
+  })
+
+  it("gives every store in `allStores` its own prime cost, on its own denominator", async () => {
+    mockPnL.mockResolvedValue(two() as never)
+    const s = await load({ storeId: "holly" })
+    const gln = s.allStores.find((p) => p.storeId === "gln")
+    expect(gln?.prime.primeValue).toBe(1000)
+    expect(gln?.prime.primePct).toBeCloseTo(39.5, 1)
   })
 
   it("sums its per-store lines to its own headline (note 39)", async () => {

@@ -50,38 +50,38 @@ describe("SectionData", () => {
   it("dataOf reads the two states that carry data and nothing else", () => {
     expect(dataOf(ready({ n: 1 }))).toEqual({ n: 1 })
     expect(dataOf(stale({ n: 1 }, new Date("2026-08-24T09:00:00Z")))).toEqual({ n: 1 })
-    expect(dataOf(loading<{ n: number }>())).toBeNull()
-    expect(dataOf(failed<{ n: number }>("x", "y"))).toBeNull()
-    expect(dataOf(empty<{ n: number }>("pre_open"))).toBeNull()
-    expect(dataOf(notComputed<{ n: number }>("x"))).toBeNull()
+    const blank: SectionData<{ n: number }>[] = [
+      loading(), failed("x", "y"), empty("pre_open"), notComputed("x"),
+    ]
+    for (const sd of blank) expect(dataOf(sd)).toBeNull()
   })
 
   it("mapReady runs the mapper on data and carries every other status through UNCHANGED", () => {
     // The whole point: one query answers many sections, so a failure that
     // reached one of them must reach all of them with its own words intact.
     const at = new Date("2026-08-24T09:00:00Z")
-    expect(mapReady(ready(2), (n) => n * 3)).toEqual({ status: "ready", data: 6 })
-    expect(mapReady(stale(2, at), (n) => n * 3)).toEqual({ status: "stale", data: 6, lastGoodAt: at })
-    expect(mapReady(failed<number>("Otter timed out", "retrySales"), (n) => n * 3)).toEqual({
+    const triple = (sd: SectionData<number>) => mapReady(sd, (n) => n * 3)
+    expect(triple(ready(2))).toEqual({ status: "ready", data: 6 })
+    expect(triple(stale(2, at))).toEqual({ status: "stale", data: 6, lastGoodAt: at })
+    expect(triple(failed("Otter timed out", "retrySales"))).toEqual({
       status: "failed", error: "Otter timed out", retryAction: "retrySales",
     })
-    expect(mapReady(empty<number>("pre_open"), (n) => n * 3)).toEqual({
-      status: "empty", reason: "pre_open",
-    })
-    expect(mapReady(notComputed<number>("a provenance model"), (n) => n * 3)).toEqual({
+    expect(triple(empty("pre_open"))).toEqual({ status: "empty", reason: "pre_open" })
+    expect(triple(notComputed("a provenance model"))).toEqual({
       status: "not_computed", owed: "a provenance model",
     })
-    expect(mapReady(loading<number>(), (n) => n * 3)).toEqual({ status: "loading" })
+    expect(triple(loading())).toEqual({ status: "loading" })
   })
 
   it("mapReady never calls the mapper on a status that carries no data", () => {
     let calls = 0
-    for (const sd of [
-      loading<number>(),
-      failed<number>("x", "y"),
-      empty<number>("no_match"),
-      notComputed<number>("x"),
-    ]) {
+    const blank: SectionData<number>[] = [
+      loading(),
+      failed("x", "y"),
+      empty("no_match"),
+      notComputed("x"),
+    ]
+    for (const sd of blank) {
       mapReady(sd, (n) => {
         calls += 1
         return n

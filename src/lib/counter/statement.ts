@@ -128,6 +128,25 @@ export interface Statement extends StatementLines {
    */
   perStore: StoreStatement[]
   /**
+   * EVERY store the rollup answered for, whatever the selection — the same
+   * call's whole answer, not a second query.
+   *
+   * `perStore` is the right list for a section that must sum to the headline
+   * above it, and the wrong one for a section that is ABOUT the stores: the
+   * P&L's "By store" table lists all three stores while the rest of the page
+   * is scoped to one, because the reader's question there is which stores are
+   * in the statement and which are not. Deriving that from a second
+   * `getAllStoresPnL` call with `storeId: null` would be a second set of
+   * bounds and a second rollup for one page — exactly the shape note 60 came
+   * back through — so it is taken off the call already made.
+   *
+   * Identical to `perStore` when nothing is selected. Populated even when the
+   * selected store is not on the account (`storeNotFound`), because "which
+   * stores does this account have" is still an answer, and it is the one that
+   * tells the reader what they can look at instead.
+   */
+  allStores: StoreStatement[]
+  /**
    * A `storeId` the rollup has no row for. The lines are zeroed and `perStore`
    * is empty — never a silent fall back to the whole account, which is a page
    * that answers a question nobody asked.
@@ -193,23 +212,22 @@ const NO_LINES: StatementLines = {
   laborPct: 0,
 }
 
+/**
+ * NOTE ON THE ACCOUNT, because its absence here is deliberate and every other
+ * Counter loader takes one. `getAllStoresPnL` reads the account off the
+ * SESSION and caches under it, so an `accountId` passed here was forwarded
+ * nowhere and judged nothing — two callers could hand it two different
+ * accounts and get the same answer. Task 1 kept it for symmetry with
+ * `loadChannelMix` and `loadStripTargets`, which genuinely scope their own
+ * queries by it; Task 3 found no use for it and removed it, because a
+ * parameter that looks load-bearing and is not is worse than none. The
+ * adapters still take an account — they need it for the loaders that DO use
+ * it — they simply stop passing it here.
+ */
 export interface StatementInput {
   range: DateRange
   /** `null` = every store on the account. */
   storeId: string | null
-  /**
-   * The account the reader is on.
-   *
-   * `getAllStoresPnL` takes no account of its own — it reads the session's and
-   * caches under it — so this is not forwarded anywhere today. It is on the
-   * input because every other Counter loader takes it (`loadChannelMix`,
-   * `loadStripTargets`), because a caller that cannot name its account has no
-   * business asking for a statement, and because the alternative — an adapter
-   * fetching its own session — imports `@/lib/auth` → `@/lib/prisma`, which
-   * throws at MODULE LOAD without a `DATABASE_URL` and takes the whole page's
-   * import graph down with it, tests included.
-   */
-  accountId: string
   /** Overrides the granularity the range implies. See `granularityFor`. */
   granularity?: Granularity
 }
@@ -231,12 +249,15 @@ export async function loadStatement(input: StatementInput): Promise<Statement> {
   const days = dayCount(range)
   const selected = result.perStore.filter((s) => storeId === null || s.storeId === storeId)
 
+  const allStores = result.perStore.map(storeStatement)
+
   if (storeId !== null && selected.length === 0) {
     return {
       ...NO_LINES,
       days,
       prime: primeFor(NO_LINES),
       perStore: [],
+      allStores,
       storeNotFound: true,
       rows: [],
       periods: result.periods,
@@ -249,7 +270,12 @@ export async function loadStatement(input: StatementInput): Promise<Statement> {
     ...lines,
     days,
     prime: primeFor(lines),
-    perStore: selected.map(storeStatement),
+    // Filtered out of the list already built, rather than mapped a second
+    // time: one `StoreStatement` per store, so a figure read off `perStore`
+    // and the same figure read off `allStores` are the same object.
+    perStore:
+      storeId === null ? allStores : allStores.filter((p) => p.storeId === storeId),
+    allStores,
     storeNotFound: false,
     rows: storeId === null ? result.consolidatedRows : selected[0].rows,
     periods: result.periods,
