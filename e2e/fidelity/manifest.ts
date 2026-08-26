@@ -157,8 +157,9 @@ export const PAGES: FidelityPage[] = [
     route: "/dashboard",
     query: "?range=d7&cmp=weekday",
     mobileRoute: "/m",
-    status: "editorial",
+    status: "counter",
     report: true,
+    baseline: { desktop: 76, mobile: 44 },
     absentLandmarks: [
       {
         landmark: "blt",

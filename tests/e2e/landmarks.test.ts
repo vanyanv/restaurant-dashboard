@@ -37,6 +37,7 @@ import {
   type Landmark,
   type ThemedNode,
 } from "../../e2e/fidelity/landmarks"
+import { pageById } from "../../e2e/fidelity/manifest"
 
 /** A landmark carrying the prototype's own Overview values, so a fixture reads like a real render. */
 function lm(classes: string[], over: Partial<Landmark> = {}): Landmark {
@@ -266,6 +267,31 @@ describe("applyAbsenceAllowances — landmarks the database cannot fill", () => 
       ours: "b",
     }
     expect(applyAbsenceAllowances([style], {})).toEqual({ unexplained: [], stale: [] })
+  })
+})
+
+describe("the Overview manifest entry accounts for what it cannot render", () => {
+  it("is marked counter, carries a baseline, and records every absence with a reason", () => {
+    const overview = pageById("overview")
+    expect(overview.status).toBe("counter")
+    if (overview.status !== "counter") throw new Error("unreachable")
+    expect(overview.baseline.desktop).toBeGreaterThan(0)
+    expect(overview.baseline.mobile).toBeGreaterThan(0)
+
+    // Every allowance names something, on at least one surface, and says why
+    // in more than a word. A blank reason is how "not built yet" gets
+    // laundered into "the database has nothing to say".
+    for (const a of overview.absentLandmarks ?? []) {
+      expect(a.desktop + a.mobile, `${a.landmark} forgives nothing`).toBeGreaterThan(0)
+      expect(a.reason.length, `${a.landmark} has no reason`).toBeGreaterThan(80)
+    }
+  })
+
+  it("asks for the window the prototype's own date control opens in", () => {
+    // Without it, `Chart`'s single-reading degrade — which is the prototype's
+    // own `chart()` behaviour — reports as a missing `.ch` plus an extra
+    // `.strip`, for a rule behaving identically on both sides.
+    expect(pageById("overview").query).toBe("?range=d7&cmp=weekday")
   })
 })
 
