@@ -18,7 +18,7 @@ const HOLLYWOOD: TradingStore = {
   id: "hollywood",
   name: "Hollywood",
   stage: "trading",
-  netSales: 25_879,
+  grossSales: 25_879,
   series: [820, 910, 1_040, 990, 1_120, 1_260, 1_180],
   comparison: "▲ 4.1% vs the prior period",
   orders: 1_024,

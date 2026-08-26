@@ -169,7 +169,7 @@ export function CounterPhoneOverviewClient({
       ...c,
       panel: (
         <ChannelRows
-          caption={`Where ${c.name}'s ${money(c.netSales)} came from · ${windowLabel}`}
+          caption={`Where ${c.name}'s ${money(c.grossSales)} came from · ${windowLabel}`}
           rows={c.channels}
           footer={
             c.channels.length === 0
@@ -253,7 +253,7 @@ export function CounterPhoneOverviewClient({
           {(d) => (
             <MHead
               label={days === 1 ? "Net sales" : `Net sales · ${count(days)} days`}
-              value={money(d.netSales)}
+              value={money(d.grossSales)}
               // Only when a comparison is on: with it off the string is "no
               // comparison set", which is what `.msub` above already says.
               //

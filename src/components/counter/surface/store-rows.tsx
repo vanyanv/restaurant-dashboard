@@ -83,7 +83,7 @@ export function StoreRows({
                 <em>{stageLabel(s)}</em>
               </span>
               <span className="pv">
-                {s.kind === "trading" ? money(s.netSales) : opensWord(s.opensOn)}
+                {s.kind === "trading" ? money(s.grossSales) : opensWord(s.opensOn)}
                 <em>{s.kind === "trading" ? `${count(s.orders)} orders` : "opens"}</em>
               </span>
             </button>

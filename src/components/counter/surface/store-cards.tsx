@@ -46,9 +46,9 @@ import { shortDate } from "@/lib/counter/date-range"
  * ## The type is the enforcement
  *
  * `StoreCard` is a discriminated union and the two arms have **no field in
- * common beyond identity**. A trading card carries `netSales: number` — not
+ * common beyond identity**. A trading card carries `grossSales: number` — not
  * `number | null`, so there is no null to render as a dash. A pre-open card has
- * no `netSales` field at all, so there is nothing to pass one to. The rule
+ * no `grossSales` field at all, so there is nothing to pass one to. The rule
  * "a card never prints an em-dash for a figure that does not apply to it" is
  * therefore not a review note; it is a type error.
  *
@@ -94,7 +94,7 @@ export interface TradingStore {
    */
   stage: "trading" | "warming_up"
   /** Net sales over the range. A trading store HAS this figure. */
-  netSales: number
+  grossSales: number
   /** The shape behind the figure. `Spark` renders nothing under two points. */
   series: number[]
   /** Pre-formatted: "▲ 4.1% vs the prior period", or "no comparison set". */
@@ -238,7 +238,7 @@ function TradingBody({ store }: { store: TradingStore }) {
   return (
     <>
       <span className="k">Net sales</span>
-      <span className="v">{money(store.netSales)}</span>
+      <span className="v">{money(store.grossSales)}</span>
       <Spark series={store.series} />
       <span className="d">{store.comparison}</span>
       <dl className="stfig">

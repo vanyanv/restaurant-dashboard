@@ -219,7 +219,7 @@ describe("note 60 — one prime cost, on every page that prints one", () => {
     // A prime cost that agrees over two different denominators agrees by luck.
     expect(find(pnl, "Gross sales").value).toBe("$152,400")
     const sales = await getOverviewSections({ range, storeId: null, accountId })
-    expect(must(sales.sales, "overview sales").netSales).toBe(GROSS)
+    expect(must(sales.sales, "overview sales").grossSales).toBe(GROSS)
     expect(find(overview, "Food cost").reference?.v).toBeCloseTo(31.4, 1)
   })
 })
