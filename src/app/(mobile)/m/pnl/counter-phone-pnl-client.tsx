@@ -129,7 +129,16 @@ export function CounterPhonePnlClient({
   )
 
   const { range, presetId, comparisonId } = counterParams
-  const windowLabel = rangeLabel(range, presetId)
+  /**
+   * The window's own ENDS — "Aug 20 – Aug 26" — never the preset's name.
+   *
+   * `CD.rangeLabel()` in the prototype is `fmtRange()` (line 1862), which
+   * formats the two dates and has no preset branch at all; `presetName()` is
+   * a separate function that only the date control calls. Passing `presetId`
+   * here instead prints "Last 7 days · 7 days" under the title, which says
+   * the same thing twice and never says which seven days.
+   */
+  const windowLabel = rangeLabel(range, "custom")
   const days = dayCount(range)
 
   return (
