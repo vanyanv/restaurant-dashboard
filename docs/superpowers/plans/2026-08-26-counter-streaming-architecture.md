@@ -152,6 +152,51 @@ git commit -m "feat(counter): a page that paints before its data arrives"
 
 ---
 
+## Task 2b: Make the regression impossible to reintroduce
+
+**Files:**
+- Modify: `scripts/counter-lint.ts`
+- Modify: `CLAUDE.md`, `DESIGN.md`
+- Test: `tests/scripts/counter-lint.test.ts`
+
+This project's own principle is that **the rules are a build failure, not prose
+to remember** — `npm run tokens` already enforces five of them. The regression
+this plan repairs happened because nothing checked for it, and fifty-one pages
+remain to be built by copying the last one.
+
+Two new rules on `src/app/dashboard/**` and `src/app/(mobile)/m/**`:
+
+1. **`no-shell-in-page`** — a page or page client may not import or render
+   `AppShell`. After Task 1 it belongs to a layout, and a page that mounts its
+   own is the exact defect measured in the spec (4 mount sites, 0 layouts).
+2. **`no-route-without-loading`** — every Counter route directory containing a
+   `page.tsx` must contain a `loading.tsx`. This is a directory check rather
+   than a regex, so it does not share the regex rules' documented holes.
+
+Both must be checked against the same `LEGACY_BASELINE_COMMIT` exemption
+mechanism the existing rules use, so the ~19 remaining editorial pages do not
+fail the build before they are deleted.
+
+Then record both in `CLAUDE.md` and `DESIGN.md` beside the five that exist —
+the linter is the enforcement, the docs are the explanation, and this project
+keeps both.
+
+- [ ] **Step 1: Write the failing test** — a fixture page importing `AppShell`
+  fails `no-shell-in-page`; a fixture route directory with a `page.tsx` and no
+  `loading.tsx` fails `no-route-without-loading`.
+- [ ] **Step 2: Run and watch fail.**
+- [ ] **Step 3: Implement both rules.**
+- [ ] **Step 4: Run and watch pass, then run `npm run tokens` on the real tree**
+  and confirm it is clean — if it is not, Tasks 1 and 2 are incomplete and the
+  linter has just told you where.
+- [ ] **Step 5: Commit**
+
+```
+git commit -m "build(counter): a page that mounts its own shell now fails the build"
+```
+
+---
+
 ## Task 3: Sections stream independently
 
 **Files:**
@@ -314,7 +359,7 @@ with dynamic APIs in ways that need measuring rather than assuming.
 
 ## Self-review
 
-**Spec coverage.** A→Task 1, B→Task 2, C→Task 3, "loading reachable"→Task 4,
+**Spec coverage.** A→Task 1, B→Task 2, enforcement→Task 2b, C→Task 3, "loading reachable"→Task 4,
 D/E→Task 5, F→Task 7. The spec's sequencing note→Task 6.
 
 **Placeholder scan.** Tasks 2, 4, 5 and 6 give test intent and assertions rather
