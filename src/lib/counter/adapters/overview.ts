@@ -867,14 +867,14 @@ export async function getOverviewSections(
     ratingsSd,
     perStoreMixSd,
   ] = await Promise.all([
-    classify(() => loadStatement({ range, storeId, accountId, granularity }), {
+    classify(() => loadStatement({ range, storeId, granularity }), {
       retryAction: "retrySales",
     }),
 
     classify<Statement | null>(
       () =>
         cmpRange
-          ? loadStatement({ range: cmpRange, storeId, accountId, granularity })
+          ? loadStatement({ range: cmpRange, storeId, granularity })
           : Promise.resolve(null),
       { retryAction: "retryComparison" },
     ),
