@@ -645,7 +645,11 @@ describe("buildNeedsYou", () => {
 
     const sd = buildNeedsYou(lines, costs, new Map())
     expect(sd.status).toBe("empty")
-    expect(sd).toMatchObject({ status: "empty", reason: "no_match" })
+    // `all_clear`, NOT `no_match`. `no_match`'s copy reads "No rows fall
+    // inside the current filters and date range. Widen either to see figures."
+    // — on a page with neither a filter nor a range. An empty worklist is good
+    // news and has to read as good news.
+    expect(sd).toMatchObject({ status: "empty", reason: "all_clear" })
     expect(hasData(sd)).toBe(false)
   })
 
@@ -662,8 +666,13 @@ describe("buildNeedsYou", () => {
     expect(items[0].lead).toBe("188")
     expect(items[0].unit).toBe("orders")
     expect(items[0].title).toContain("Add Grilled Onion")
-    // A function cannot cross the RSC boundary, so the adapter never wires one.
-    expect(items[0].act).toBeUndefined()
+    // A function cannot cross the RSC boundary — but a DESTINATION can, which
+    // is the arm `QueueItem` grew. Without it this page had no `.do` at all:
+    // a worklist item telling a reader to fix something, with no way to go and
+    // fix it.
+    expect(items[0].act).toBe("Map the modifier")
+    expect(items[0].href).toBe("/dashboard/ingredients")
+    expect(items[0].onAct).toBeUndefined()
   })
 
   it("counts a sku once however many lines carry it", () => {
@@ -841,5 +850,39 @@ describe("fees nobody recorded", () => {
     const cell = fees({ netSales: 8000, commission: 0, thirdPartyNetSales: 0 })
     expect(cell?.value).toBe("$0")
     expect(cell?.delta).toBe("no marketplace sales")
+  })
+})
+
+describe("where an unmapped line sends you", () => {
+  /*
+   * An unmapped ITEM is given a recipe in the catalogue; an unmapped MODIFIER
+   * is mapped against an ingredient. Two different pages, so one destination
+   * for both would be a button that lands the reader somewhere they cannot do
+   * the thing it just named.
+   */
+  it("sends a modifier to ingredients and an item to the catalogue", () => {
+    const o = order({
+      items: [
+        {
+          id: "i1", skuId: "SKU-UNKNOWN", name: "Mystery Plate", quantity: 1, price: 9,
+          subItems: [
+            { id: "s1", skuId: "SKU-ONION", name: "Add Grilled Onion", quantity: 1, price: 0.75, subHeader: null },
+          ],
+        },
+      ],
+    })
+    const lines = flattenOrderLines(o)
+    const costs = resolveLineCosts({
+      lines, recipeBySku: new Map(), costByRecipe: new Map(), commissionRate: 0.25,
+    })
+
+    const sd = buildNeedsYou(lines, costs, new Map())
+    const items = hasData(sd) ? sd.data : []
+    const byKey = new Map(items.map((i) => [i.key, i]))
+
+    expect(byKey.get("SKU-UNKNOWN")?.act).toBe("Map the item")
+    expect(byKey.get("SKU-UNKNOWN")?.href).toBe("/dashboard/menu/catalog")
+    expect(byKey.get("SKU-ONION")?.act).toBe("Map the modifier")
+    expect(byKey.get("SKU-ONION")?.href).toBe("/dashboard/ingredients")
   })
 })
