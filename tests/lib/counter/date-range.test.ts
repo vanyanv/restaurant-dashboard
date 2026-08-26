@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest"
 import {
   PRESETS, COMPARISONS, resolvePreset, bucketFor, stepRange, comparisonRange, dayCount,
   toQueryBounds, isoDay, parseIsoDay, rangeLabel, rangeTitle, rangeSubtitle,
+  monthDay, trailingWeeks,
 } from "@/lib/counter/date-range"
+import { addDays as addDaysFor } from "date-fns"
 
 const TODAY = new Date(2026, 7, 24) // Mon 24 Aug 2026, local midnight
 
@@ -273,5 +275,88 @@ describe("rangeSubtitle", () => {
     expect(
       rangeSubtitle("Hollywood", { start: new Date(2025, 11, 29), end: new Date(2026, 0, 4) }, "prev"),
     ).toBe("Hollywood · Dec 29, 2025 – Jan 4, 2026 · vs the prior period")
+  })
+})
+
+describe("monthDay", () => {
+  it("writes a date the way a week row heads itself — no year", () => {
+    expect(monthDay(new Date(2026, 7, 3))).toBe("Aug 3")
+    expect(monthDay(new Date(2025, 11, 29))).toBe("Dec 29")
+  })
+})
+
+/**
+ * Note 53's eight weeks. The anchoring is the whole test: every case below
+ * passes NO range, because there is no range to pass — the list is a function
+ * of today and nothing else.
+ */
+describe("trailingWeeks", () => {
+  // Thu 20 Aug 2026. Its week starts Mon 17 Aug and has four days in it.
+  const THU = new Date(2026, 7, 20)
+
+  it("returns n windows, oldest first, each starting on a Monday", () => {
+    const ws = trailingWeeks(THU, 8)
+    expect(ws).toHaveLength(8)
+    for (const w of ws) expect(w.start.getDay()).toBe(1)
+    expect(isoDay(ws[0].start)).toBe("2026-06-29")
+    expect(isoDay(ws[7].start)).toBe("2026-08-17")
+  })
+
+  it("steps exactly seven days between one window and the next", () => {
+    const ws = trailingWeeks(THU, 8)
+    for (let i = 1; i < ws.length; i += 1) {
+      expect(dayCount({ start: ws[i - 1].start, end: ws[i].start })).toBe(8)
+    }
+  })
+
+  it("draws every finished week as seven whole days", () => {
+    const ws = trailingWeeks(THU, 8)
+    for (const w of ws.slice(0, 7)) {
+      expect(w.days).toBe(7)
+      expect(w.partial).toBe(false)
+      expect(isoDay(w.end)).toBe(isoDay(addDaysFor(w.start, 6)))
+    }
+  })
+
+  it("clips the running week to today and says it is short", () => {
+    const last = trailingWeeks(THU, 8)[7]
+    expect(isoDay(last.start)).toBe("2026-08-17")
+    expect(isoDay(last.end)).toBe("2026-08-20")
+    expect(last.days).toBe(4)
+    expect(last.partial).toBe(true)
+  })
+
+  it("does not call a week short on the day it finishes", () => {
+    // Sun 23 Aug 2026 — the last day of its own week.
+    const last = trailingWeeks(new Date(2026, 7, 23), 8)[7]
+    expect(last.days).toBe(7)
+    expect(last.partial).toBe(false)
+    expect(isoDay(last.end)).toBe("2026-08-23")
+  })
+
+  it("draws a Monday as one day, not as a week that has not happened", () => {
+    const last = trailingWeeks(new Date(2026, 7, 24), 8)[7]
+    expect(isoDay(last.start)).toBe("2026-08-24")
+    expect(isoDay(last.end)).toBe("2026-08-24")
+    expect(last.days).toBe(1)
+    expect(last.partial).toBe(true)
+  })
+
+  it("normalises a today carrying a time of day, so no window is 6 days 23 hours", () => {
+    const ws = trailingWeeks(new Date(2026, 7, 20, 14, 32, 5), 8)
+    expect(isoDay(ws[7].end)).toBe("2026-08-20")
+    expect(ws[7].end.getHours()).toBe(0)
+    expect(ws[0].start.getHours()).toBe(0)
+    expect(ws[0].days).toBe(7)
+  })
+
+  it("crosses a year boundary without losing a week", () => {
+    const ws = trailingWeeks(new Date(2026, 0, 7), 8)
+    expect(isoDay(ws[0].start)).toBe("2025-11-17")
+    expect(isoDay(ws[7].end)).toBe("2026-01-07")
+  })
+
+  it("returns nothing rather than a made-up week when asked for none", () => {
+    expect(trailingWeeks(THU, 0)).toEqual([])
   })
 })

@@ -308,3 +308,76 @@ export function rangeSubtitle(
   const window = rangeLabel(r, "custom")
   return cmp ? `${storeName} · ${window} · ${cmp.label}` : `${storeName} · ${window}`
 }
+
+/**
+ * `Aug 3` — a date with no year, which is how a week row heads itself.
+ *
+ * Exported beside `shortDate` rather than as a second month table somewhere
+ * else: the prototype's `wkLabel()` (line 5074) keeps its own `MO` array and
+ * its own formatting, and a copy of that in a component is exactly note 60's
+ * defect class in miniature — two functions, one question, two answers.
+ */
+export function monthDay(d: Date): string {
+  return dayLabel(d, false)
+}
+
+/**
+ * One of note 53's weeks: a Monday-start window, plus what it actually covers.
+ *
+ * `days` and `partial` are carried rather than re-derived by the reader,
+ * because the ONLY honest way to draw a running week is to draw it short and
+ * say so — and a caller that has to work out for itself whether a window is
+ * short will eventually forget to.
+ */
+export interface WeekWindow extends DateRange {
+  /** Calendar days the window covers. 7, or fewer for the week still running. */
+  days: number
+  /** True when the window stops short of its own week's Sunday. */
+  partial: boolean
+}
+
+/**
+ * The last `n` weeks, oldest first, ANCHORED ON TODAY.
+ *
+ * Note 53: "weekly is the cadence the trade runs on — a prime-cost variance
+ * found in week one can be fixed in week two, and the same variance found in a
+ * monthly close has already run for four weeks."
+ *
+ * **Anchored on today, never on the selected range**, and that is the whole
+ * design of the thing. These weeks are drawn as a list a reader PRESSES to
+ * move the range; if the list were derived from the range, pressing a row
+ * would rebuild the list around the row that was pressed and slide the other
+ * seven out from under the finger that pressed it. The rows stay put and the
+ * marker moves — which is why this function takes no range at all, and cannot
+ * be given one.
+ *
+ * The running week is CLIPPED to today and reports `partial: true` with its
+ * real `days`. It is never extended to the Sunday that has not happened, and
+ * it is never scaled up to a notional seven days: a part-week's dollars are
+ * smaller for that reason alone, and the surface drawing it says so out loud
+ * (`WeekTable`'s short-week note) rather than letting the column imply a
+ * collapse in trade.
+ *
+ * `today` is normalised to a local midnight here, for the reason
+ * `resolvePreset` normalises: a caller passes `new Date()`, and an unnormalised
+ * end would make the running week `6 days 23 hours` and every `dayCount`
+ * downstream a rounding question.
+ */
+export function trailingWeeks(today: Date, n: number): WeekWindow[] {
+  const end = startOfDay(today)
+  const thisWeek = weekStart(end)
+  const out: WeekWindow[] = []
+
+  for (let i = n - 1; i >= 0; i -= 1) {
+    const start = addDays(thisWeek, -7 * i)
+    const whole = addDays(start, 6)
+    const partial = whole.getTime() > end.getTime()
+    const last = partial ? end : whole
+    // A week that has not started at all yields nothing, rather than a window
+    // whose end precedes its start and whose day count is negative.
+    if (last.getTime() < start.getTime()) continue
+    out.push({ start, end: last, days: dayCount({ start, end: last }), partial })
+  }
+
+  return out
+}
