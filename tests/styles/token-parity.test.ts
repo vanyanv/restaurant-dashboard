@@ -169,6 +169,12 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
   // desk's ink and ground, which is a defect worth failing on.
   { file: "app/(mobile)/m/counter-phone-overview-client.tsx", token: "ct-phone" },
+  // The SECOND phone surface: `/m/pnl` is the Counter P&L on a phone
+  // (`src/middleware.ts` rewrites `/dashboard/pnl` there on a phone user
+  // agent). Same arrangement as `/m` above, same pair of classes, and the
+  // same reason it mounts the alias layer itself.
+  { file: "app/(mobile)/m/pnl/counter-phone-pnl-client.tsx", token: "ct-root" },
+  { file: "app/(mobile)/m/pnl/counter-phone-pnl-client.tsx", token: "ct-phone" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -220,13 +226,14 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // The exception list must never quietly grow into a blanket exemption.
     // `frame`, `pframe` and `login` stay banned outright; the two Counter
     // roots are named file by file.
-    expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual([
-      "ct-root",
-      "ct-root",
-      "ct-root",
-      "ct-phone",
-    ])
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(4)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token))).toEqual(
+      new Set(["ct-root", "ct-phone"]),
+    )
+    // Pinned, so the list cannot grow a file without someone reading this
+    // note. Four files: the desk shell, the ⌘K palette, and the two phone
+    // surfaces — each of the phones carrying both classes.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(6)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(4)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
