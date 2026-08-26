@@ -23,13 +23,18 @@ test.describe("@smoke mobile", () => {
   test("mobile date sheet sits above its backdrop (m-sheet collision regression)", async ({
     page,
   }) => {
-    // `/m/orders`, not `/m/pnl`. This regression belongs to the EDITORIAL
-    // date sheet (`.m-sheet`, opened by `CustomPillTrigger`), and `/m/pnl` is
-    // Counter now — its date control is `MDateSheet`, a different element with
-    // a different stacking context. Orders still runs `MToolbar`, so this
-    // still guards the sheet it was written for; the day that page is rebuilt
-    // too, this test goes with the last `MToolbar`.
-    await page.goto("/m/orders")
+    // `/m/operations`, not `/m/pnl` and no longer `/m/orders`. This regression
+    // belongs to the EDITORIAL date sheet (`.m-sheet`, opened by
+    // `CustomPillTrigger`); a Counter page's date control is `MDateSheet`, a
+    // different element in a different stacking context.
+    //
+    // This test moved here as the previous comment said it would — "the day
+    // that page is rebuilt too, this test goes with the last `MToolbar`".
+    // `/m/orders` became Counter, and `/m/operations` is now the last route
+    // mounting `MToolbar`. When THAT page is rebuilt, this test has nothing
+    // left to guard and should be deleted with the component, not repointed
+    // again at a route that never had the sheet.
+    await page.goto("/m/operations")
     await page.waitForLoadState("networkidle")
 
     // The trigger is the CUSTOM pill (`CustomPillTrigger`). The previous
@@ -39,7 +44,7 @@ test.describe("@smoke mobile", () => {
     // that cannot fail is worse than no test: it reports the regression as
     // covered. Assert the trigger exists so a rename fails loudly here instead.
     const dateTrigger = page.getByRole("button", { name: /custom/i }).first()
-    await expect(dateTrigger, "date sheet trigger is on /m/orders").toBeVisible()
+    await expect(dateTrigger, "date sheet trigger is on /m/operations").toBeVisible()
 
     await dateTrigger.click()
 

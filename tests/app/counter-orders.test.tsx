@@ -65,6 +65,7 @@ const ROWS: OrdersList["rows"] = [
     items: "3",
     ticket: "$36.65",
     fees: "$9.16",
+    feesRecorded: true,
     net: "$27.49",
   },
   {
@@ -76,6 +77,7 @@ const ROWS: OrdersList["rows"] = [
     items: "2",
     ticket: "$24.80",
     fees: "—",
+    feesRecorded: true,
     net: "$24.80",
   },
 ]

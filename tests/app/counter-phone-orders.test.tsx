@@ -58,14 +58,14 @@ const TOGGLES = [
  * item, which is the only row that can catch "1 items".
  */
 const ROWS: OrdersList["rows"] = [
-  { key: "o1", href: "/dashboard/orders/o1", id: "#4821", time: "9:32pm", channel: { label: "DoorDash", tint: "var(--ch-dd)" }, items: "3", ticket: "$36.65", fees: "$9.16", net: "$27.49" },
-  { key: "o2", href: "/dashboard/orders/o2", id: "#4820", time: "9:26pm", channel: { label: "In-house", tint: "var(--ch-house)" }, items: "2", ticket: "$24.80", fees: "—", net: "$24.80" },
-  { key: "o3", href: "/dashboard/orders/o3", id: "#4819", time: "9:18pm", channel: { label: "Uber Eats", tint: "var(--ch-ue)" }, items: "4", ticket: "$48.10", fees: "$14.43", net: "$33.67" },
-  { key: "o4", href: "/dashboard/orders/o4", id: "#4818", time: "9:09pm", channel: { label: "Grubhub", tint: "var(--ch-gh)" }, items: "2", ticket: "$31.20", fees: "$6.24", net: "$24.96" },
-  { key: "o5", href: "/dashboard/orders/o5", id: "#4817", time: "9:02pm", channel: { label: "In-house", tint: "var(--ch-house)" }, items: "3", ticket: "$22.40", fees: "—", net: "$22.40" },
-  { key: "o6", href: "/dashboard/orders/o6", id: "#4816", time: "8:58pm", channel: { label: "DoorDash", tint: "var(--ch-dd)" }, items: "2", ticket: "$29.90", fees: "$8.97", net: "$20.93" },
-  { key: "o7", href: "/dashboard/orders/o7", id: "#4815", time: "8:51pm", channel: { label: "In-house", tint: "var(--ch-house)" }, items: "1", ticket: "$14.20", fees: "—", net: "$14.20" },
-  { key: "o8", href: "/dashboard/orders/o8", id: "#4814", time: "8:44pm", channel: { label: "DoorDash", tint: "var(--ch-dd)" }, items: "5", ticket: "$61.80", fees: "$18.54", net: "$43.26" },
+  { key: "o1", href: "/dashboard/orders/o1", id: "#4821", time: "9:32pm", channel: { label: "DoorDash", tint: "var(--ch-dd)" }, items: "3", ticket: "$36.65", fees: "$9.16", feesRecorded: true, net: "$27.49" },
+  { key: "o2", href: "/dashboard/orders/o2", id: "#4820", time: "9:26pm", channel: { label: "In-house", tint: "var(--ch-house)" }, items: "2", ticket: "$24.80", fees: "—", feesRecorded: true, net: "$24.80" },
+  { key: "o3", href: "/dashboard/orders/o3", id: "#4819", time: "9:18pm", channel: { label: "Uber Eats", tint: "var(--ch-ue)" }, items: "4", ticket: "$48.10", fees: "$14.43", feesRecorded: true, net: "$33.67" },
+  { key: "o4", href: "/dashboard/orders/o4", id: "#4818", time: "9:09pm", channel: { label: "Grubhub", tint: "var(--ch-gh)" }, items: "2", ticket: "$31.20", fees: "$6.24", feesRecorded: true, net: "$24.96" },
+  { key: "o5", href: "/dashboard/orders/o5", id: "#4817", time: "9:02pm", channel: { label: "In-house", tint: "var(--ch-house)" }, items: "3", ticket: "$22.40", fees: "—", feesRecorded: true, net: "$22.40" },
+  { key: "o6", href: "/dashboard/orders/o6", id: "#4816", time: "8:58pm", channel: { label: "DoorDash", tint: "var(--ch-dd)" }, items: "2", ticket: "$29.90", fees: "$8.97", feesRecorded: true, net: "$20.93" },
+  { key: "o7", href: "/dashboard/orders/o7", id: "#4815", time: "8:51pm", channel: { label: "In-house", tint: "var(--ch-house)" }, items: "1", ticket: "$14.20", fees: "—", feesRecorded: true, net: "$14.20" },
+  { key: "o8", href: "/dashboard/orders/o8", id: "#4814", time: "8:44pm", channel: { label: "DoorDash", tint: "var(--ch-dd)" }, items: "5", ticket: "$61.80", fees: "$18.54", feesRecorded: true, net: "$43.26" },
 ]
 
 const list = (over: Partial<OrdersList> = {}): OrdersList => ({
@@ -290,6 +290,36 @@ describe("Counter Orders — the phone", () => {
     // `order-signs.ts`: this page does no arithmetic on either column.
     expect(first.querySelector(".rt")?.textContent).toBe("$27.49$9.16 fees")
     expect(first.querySelector(".rt em")?.className).toBe("")
+  })
+
+  it("does not tell a marketplace row it paid no fees when the fee never synced", () => {
+    // `adjusted_commission` coverage is erratic — 0 of 6,307 marketplace orders
+    // in Aug 2026. Those rows carry the SAME em dash an in-house order does,
+    // and the phone's two-cell strip has no "not recorded for this range" to
+    // qualify it, so the row's own words are the page's only fee statement.
+    const { container } = renderPhone("", {
+      list: ready(
+        list({
+          rows: [
+            {
+              key: "u1",
+              href: "/dashboard/orders/u1",
+              id: "#9001",
+              time: "7:14pm",
+              channel: { label: "DoorDash", tint: "var(--ch-dd)" },
+              items: "2",
+              ticket: "$31.00",
+              fees: "—",
+              feesRecorded: false,
+              net: "$31.00",
+            },
+          ],
+        }),
+      ),
+    })
+    const note = container.querySelector(".mlist .rt em")
+    expect(note?.textContent).toBe("fees not recorded")
+    expect(note?.textContent).not.toBe("no fees")
   })
 
   it("says 'no fees' where the channel took none, never '— fees'", () => {

@@ -230,7 +230,15 @@ function toListRow(r: OrdersRow): MListRow {
     detail: `${r.time} · ${r.items} item${r.items === "1" ? "" : "s"}`,
     // Already `ticket + commission`, already formatted. See the file note.
     value: r.net,
-    note: r.fees === NO_FIGURE ? "no fees" : `${r.fees} fees`,
+    // Three states, not two. "no fees" is a CLAIM and it is only true of an
+    // in-house order; a marketplace row whose commission never synced shows
+    // the same em dash and means something else entirely. See
+    // `OrdersRow.feesRecorded`.
+    note: !r.feesRecorded
+      ? "fees not recorded"
+      : r.fees === NO_FIGURE
+        ? "no fees"
+        : `${r.fees} fees`,
     href: phoneHref(r.href),
   }
 }
