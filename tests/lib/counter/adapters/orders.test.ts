@@ -91,7 +91,11 @@ function listRow(over: Partial<OrderListResponse["rows"][number]> = {}) {
     discount: 0,
     total: 39.95,
     detailsFetched: true,
-    commission: 9.16,
+    // NEGATIVE, as the column is actually stored — see
+    // `src/lib/counter/order-signs.ts`. Every fixture here used a positive
+    // commission until 2026-08-26, which is a shape the database has 0 rows of,
+    // and that is why `ticket − commission` passed review.
+    commission: -9.16,
     ...over,
   }
 }
@@ -125,7 +129,7 @@ function order(over: Partial<OrderDetail> = {}): OrderDetail {
     subtotal: 20.75,
     tax: 1.87,
     tip: 0,
-    commission: 5.19,
+    commission: -5.19,
     discount: 0,
     total: 22.62,
     detailsFetchedAt: new Date(Date.UTC(2026, 7, 21, 23, 2, 0)),
@@ -246,7 +250,7 @@ describe("buildOrdersList", () => {
       listResponse({
         rows: [
           listRow({ id: "h1", platform: "css-pos", commission: 0, subtotal: 14.2 }),
-          listRow({ id: "d1", platform: "doordash", commission: 3.55, subtotal: 14.2 }),
+          listRow({ id: "d1", platform: "doordash", commission: -3.55, subtotal: 14.2 }),
         ],
       }),
       { search: "", channels: [] },
@@ -715,7 +719,7 @@ describe("one order, one ticket", () => {
   const PARTIAL = {
     subtotal: 36.65,
     discount: 0,
-    commission: 9.16,
+    commission: -9.16,
     // Only ONE of the three lines has been drained from Otter so far.
     items: [
       { id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 12.0, subItems: [] },
@@ -757,7 +761,7 @@ describe("a margin nothing can be believed about", () => {
     // commission exceeds the lines on file. `(keep − cost) / keep` then divides
     // by a negative and returns a finite 400.0% — the kind of wrong number a
     // reader acts on because nothing about it looks wrong.
-    const o = order({ subtotal: 10, discount: 0, commission: 14 })
+    const o = order({ subtotal: 10, discount: 0, commission: -14 })
     const lines = flattenOrderLines(o)
     const costs: LineCost[] = lines.map((l, i) => ({
       key: l.key, name: l.name, modifier: l.modifier, quantity: l.quantity,
@@ -767,5 +771,44 @@ describe("a margin nothing can be believed about", () => {
     for (const row of buildOrderItems(o, costs).rows) {
       expect(row.margin).toBe(DASH)
     }
+  })
+})
+
+/*
+ * The signs, at the adapter's own level.
+ *
+ * `order-signs.test.ts` pins the three helpers against a real row. This pins
+ * the thing a reader would actually SEE: a marketplace order must never report
+ * keeping more than it sold for, and a discount must never make the ticket
+ * bigger.
+ */
+describe("money that moves the right way", () => {
+  // A real DoorDash row, read from the database on 2026-08-26.
+  const REAL = { subtotal: 74.94, discount: -37.47, commission: -9.37 }
+
+  it("nets a marketplace order DOWN, never up", () => {
+    const list = buildOrdersList(
+      listResponse({ rows: [listRow({ platform: "doordash", ...REAL })] }),
+      { search: "", channels: [] },
+    )
+    expect(list.rows[0].ticket).toBe("$37.47")
+    expect(list.rows[0].fees).toBe("$9.37")
+    expect(list.rows[0].net).toBe("$28.10")
+  })
+
+  it("charges the marketplace's rate on the discounted ticket", () => {
+    // 9.37 / 37.47 is DoorDash's own 25%. Against the undiscounted 74.94 it
+    // would read 12.5%, and against `subtotal − discount` just 8.3%.
+    expect(commissionRateOf(order(REAL)) * 100).toBeCloseTo(25, 1)
+  })
+
+  it("keeps the strip's marketplace fees positive", () => {
+    const cells = buildOrdersStrip(
+      listResponse({ totals: { netSales: 1000, commission: 250, thirdPartyNetSales: 1000 } }),
+      null,
+      noComparison,
+    )
+    const fees = cells.find((c) => c.label === "Marketplace fees")
+    expect(fees?.value).toBe("$250")
   })
 })

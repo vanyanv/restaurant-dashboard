@@ -7,6 +7,7 @@ import type { HourlyOrderPoint, OrderPatternsHourlyComparison } from "@/types/an
 import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { CHANNEL_FOR_PLATFORM } from "@/lib/counter/channel-mix"
 import { CHANNELS, channelById, markVarFor, type Channel, type ChannelId } from "@/lib/counter/channels"
+import { ticketOf, feeAmount, netOf } from "@/lib/counter/order-signs"
 import { count, money, pct } from "@/lib/counter/format"
 import {
   comparisonContext,
@@ -119,7 +120,8 @@ export interface OrdersRow {
   channel: { label: string; tint: string }
   items: string
   /**
-   * `subtotal − discount`, which is what `OrderListTotals.netSales` sums.
+   * `subtotal + discount` (the column is negative), which is what
+   * `OrderListTotals.netSales` sums. See `src/lib/counter/order-signs.ts`.
    *
    * The column is headed "Ticket" and the strip cell above it is headed "Net
    * sales" — the prototype's own two names for the same arithmetic. They are
@@ -128,7 +130,7 @@ export interface OrdersRow {
   ticket: string
   /** An em dash when the channel took nothing — never `$0.00`. */
   fees: string
-  /** `ticket − commission`. What this order left behind before food. */
+  /** `ticket + commission` (the column is negative). What this order left behind before food. */
   net: string
 }
 
@@ -362,7 +364,11 @@ function instantStamp(d: Date): string {
  * has no marketplace at all, so there is nothing to state.
  */
 function feeFigure(commission: number, opts: { cents?: boolean } = {}): string {
-  return money(commission > 0 ? commission : null, opts)
+  // `feeAmount`, not `commission > 0`: the column is stored NEGATIVE, so the
+  // old test was false for every marketplace order on file and this cell read
+  // an em dash on all 25,648 of them. See `order-signs.ts`.
+  const fee = feeAmount({ commission })
+  return money(fee > 0 ? fee : null, opts)
 }
 
 /** A margin, or an em dash where the division has no reading — rule 2. */
@@ -506,7 +512,7 @@ export function buildOrdersList(
         items: count(r.itemCount),
         ticket: money(ticket, { cents: true }),
         fees: feeFigure(r.commission, { cents: true }),
-        net: money(ticket - r.commission, { cents: true }),
+        net: money(netOf(r), { cents: true }),
       }
     }),
   }
@@ -690,12 +696,15 @@ export function buildRecipeBySku(
  */
 export function commissionRateOf(order: Pick<OrderDetail, "subtotal" | "discount" | "commission">): number {
   const ticket = ticketOf(order)
-  return ticket > 0 ? order.commission / ticket : 0
+  // `feeAmount`, not `order.commission`: the column is negative, and a negative
+  // rate makes `price × (1 − rate)` GREATER than the price — every line would
+  // report keeping more than it sold for.
+  return ticket > 0 ? feeAmount(order) / ticket : 0
 }
 
 /** Every money figure the order page prints, derived once from the lines. */
 interface OrderMoney {
-  /** Σ line price — and `subtotal − discount` only when there are no lines at all. */
+  /** The order's ticket, from `ticketOf` — `subtotal + discount`. */
   ticket: number
   commission: number
   rate: number
@@ -706,28 +715,6 @@ interface OrderMoney {
   uncosted: number
 }
 
-/**
- * What the customer was charged for an order, from the order's own columns.
- *
- * ONE definition, because two pages print it. The list row and the detail's
- * strip and math panel all read this; before it existed the list computed
- * `subtotal − discount` while the detail summed `Σ line.price`, so a
- * PARTIALLY-drained order printed one ticket on the list and a smaller one on
- * its own page. The single fixture had them coincidentally equal, so no test
- * could see it — it took a reviewer reading both call sites.
- *
- * `subtotal − discount` is the right side of that disagreement: it is complete
- * whatever has been drained, while `Σ line.price` is only complete once every
- * line is on file.
- *
- * This does NOT touch rule 1. The Items table's total row still sums the rows
- * drawn above it — that is the table's total, a different figure from the
- * order's ticket, and where the two differ the gap IS the undrained lines,
- * which the Items section's own meta names.
- */
-export function ticketOf(order: Pick<OrderDetail, "subtotal" | "discount">): number {
-  return order.subtotal - order.discount
-}
 
 function orderMoney(order: OrderDetail, costs: LineCost[]): OrderMoney {
   // With no lines on file, the order's own columns are all there is — and the
@@ -736,9 +723,9 @@ function orderMoney(order: OrderDetail, costs: LineCost[]): OrderMoney {
     const ticket = ticketOf(order)
     return {
       ticket,
-      commission: order.commission,
-      rate: ticket > 0 ? order.commission / ticket : 0,
-      keep: ticket - order.commission,
+      commission: feeAmount(order),
+      rate: commissionRateOf(order),
+      keep: netOf(order),
       cost: null,
       uncosted: 0,
     }
@@ -747,12 +734,12 @@ function orderMoney(order: OrderDetail, costs: LineCost[]): OrderMoney {
   // NOT `Σ l.price`. See `ticketOf`: summing the drained lines under-reports a
   // partially-drained order, and the list beside it does not.
   const ticket = ticketOf(order)
-  const keep = ticket - order.commission
+  const keep = netOf(order)
   const costed = costs.filter((l) => l.cost !== null)
   return {
     ticket,
-    commission: order.commission,
-    rate: ticket > 0 ? order.commission / ticket : 0,
+    commission: feeAmount(order),
+    rate: commissionRateOf(order),
     keep,
     // Zero costed lines is an absence, not a free order. A `0` here would
     // print a 100% contribution margin on an order nobody has priced.
