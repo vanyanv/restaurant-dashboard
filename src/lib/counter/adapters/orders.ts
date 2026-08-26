@@ -1211,13 +1211,28 @@ async function countCarried(
   /*
    * ANNOTATED, and that is load-bearing rather than decorative.
    *
-   * `groupBy`'s `args` parameter is a `Subset<T, …>` generic, and TypeScript
-   * does NOT excess-property-check an object literal passed into one: this
-   * file shipped `orderItem: scope` written as `item: scope` — a relation name
+   * This file shipped `orderItem: scope` written as `item: scope` — a relation
    * that does not exist on `OtterOrderSubItem` — and `npx tsc --noEmit` was
-   * clean on it. Verified by substituting `thisKeyDoesNotExist` and getting
-   * the same clean run. A `WhereInput` annotation on a plain `const` restores
-   * the check, because a variable declaration IS excess-property-checked.
+   * clean on it.
+   *
+   * The reason is excess-property checking, which applies only to a FRESH
+   * object literal at the point of assignment. A `where:` written inline in
+   * the `groupBy` call is fresh, so a bad key there IS caught. A `where:` that
+   * names an UNANNOTATED `const` is not fresh at the call site and its keys go
+   * unchecked — that was the shape this code had. Annotating the const makes
+   * its own declaration the fresh literal, which is checked.
+   *
+   * All four behaviours were measured against this repo's generated client, not
+   * inferred:
+   *
+   *   where: { badKey: … }                    inline literal   -> TS2353 ✓
+   *   const w: Prisma.XWhereInput = { badKey } annotated const  -> TS2353 ✓
+   *   const w = { badKey }; where: w           unannotated      -> CLEAN ✗
+   *
+   * So the rule is the opposite of the intuitive one: hoisting a `where` out of
+   * a call to tidy it up SILENTLY REMOVES a type check unless you annotate it.
+   * `grep -rn "where: [a-z][A-Za-z0-9_]*,$" src` finds the hoisted ones; ten of
+   * them elsewhere in this repo are still unannotated.
    */
   const scope: Prisma.OtterOrderWhereInput = {
     store: { accountId: ctx.accountId },
