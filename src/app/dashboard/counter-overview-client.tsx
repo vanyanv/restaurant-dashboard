@@ -7,9 +7,9 @@ import {
   Dispatch,
   DateControl,
   Section,
-  Strip,
   Figure,
   Table,
+  MoneyLines,
   type DispatchItem,
   type RailUser,
   type SwitchableStore,
@@ -17,7 +17,7 @@ import {
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel, rangeSubtitle, rangeTitle, stepRange } from "@/lib/counter/date-range"
 import { money, pct, delta } from "@/lib/counter/format"
-import type { SectionData } from "@/lib/counter/section-data"
+import type { OverviewSections } from "@/lib/counter/adapters/overview"
 
 /**
  * What `page.tsx` hands this island — already shaped exactly the way each
@@ -26,30 +26,24 @@ import type { SectionData } from "@/lib/counter/section-data"
  * renderings all live inside `Section`) and never formats a number a second
  * way.
  *
+ * The type is the adapter's own, imported rather than restated: the adapter
+ * shapes twelve sections for this page, and a second hand-written copy of
+ * those shapes here would be twelve chances for the two to drift. It is a
+ * TYPE-ONLY import, so nothing of the adapter's server code reaches the
+ * client bundle.
+ *
  * `sales` and `splh` are two sections, not one. Note 30: net sales says
  * whether the day happened, sales per labour hour says whether it was worth
- * having — but SPLH's real data source (`getSplhSeries`) cannot be scoped to
- * Counter's selected range at all, so it is unconditionally `not_computed`
- * (R1, Plan 7) while net sales stays `ready`. One `SectionData` can only
- * carry one status, so the two numbers this page leads with cannot share a
- * section.
+ * having. One `SectionData` can only carry one status, and the two figures
+ * come from different rollups that can fail independently, so the two numbers
+ * this page leads with cannot share a section.
+ *
+ * Only part of what the adapter now supplies is composed below. The head
+ * block, the strip, the verdict, the moving band, the two charts, the store
+ * cards and the channel panels are Task 3's — this island renders the
+ * sections it already had, against their new shapes.
  */
-export interface OverviewClientSections {
-  sales: SectionData<{ netSales: number }>
-  splh: SectionData<null>
-  ledger: SectionData<
-    Array<{
-      storeId: string
-      store: string
-      net: number
-      cogsPct: number | null
-      deltaVsTargetPp: number | null
-    }>
-  >
-  invoices: SectionData<{ spend: number; count: number; needsReview: number; avgInvoice: number }>
-  needsYou: SectionData<null>
-  modelCall: SectionData<null>
-}
+export type OverviewClientSections = OverviewSections
 
 /**
  * The dispatch line's facts, and nowhere else to get them.
@@ -229,17 +223,12 @@ export function CounterOverviewClient({
         )}
       </Section>
 
+      {/* Four figures became money lines: what arrived, what is held up, and
+          what actually reached COGS. `MoneyLines` is the prototype's own
+          element for a short reconciliation, and the adapter writes the lines
+          because a page never formats a number a second way. */}
       <Section title="Invoices" data={sections.invoices} askAbout>
-        {(d) => (
-          <Strip
-            cells={[
-              { label: "Spend", value: money(d.spend) },
-              { label: "Invoices", value: d.count.toLocaleString("en-US") },
-              { label: "Needs review", value: d.needsReview.toLocaleString("en-US") },
-              { label: "Avg invoice", value: money(d.avgInvoice) },
-            ]}
-          />
-        )}
+        {(rows) => <MoneyLines rows={rows} />}
       </Section>
 
       <Section title="Needs you" data={sections.needsYou}>
