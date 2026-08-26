@@ -322,6 +322,52 @@ describe("the filters, which live in the URL", () => {
     expect(push).toHaveBeenCalledWith("/dashboard/orders?q=4821", { scroll: false })
   })
 
+  /*
+   * The debounce racing the controls beside it.
+   *
+   * `router.push` does not land synchronously, so between an action and its
+   * re-render the settle timer was still holding the params from BEFORE the
+   * action — and firing on them. These two are the reader-visible symptoms.
+   */
+  it("does not let a settling draft put back the filter Clear just removed", () => {
+    vi.useFakeTimers()
+    const { container } = render(
+      <CounterOrdersClient
+        {...base}
+        params="range=d7&channels=doordash&q=burger"
+        sections={sections({
+          list: ready(list({ toggles: toggles(["doordash"]), search: "burger" })),
+        })}
+      />,
+    )
+    // The URL already HOLDS a search, which is what makes this race reachable:
+    // Clear empties the box, but `search` stays "burger" until the navigation
+    // lands, so the effect still sees draft ≠ search and arms one more write.
+    fireEvent.change(container.querySelector(".search input")!, { target: { value: "burgers" } })
+    fireEvent.click(container.querySelector(".filters .clear")!)
+    act(() => void vi.advanceTimersByTime(400))
+
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith("/dashboard/orders?range=d7", { scroll: false })
+  })
+
+  it("carries a half-typed word along with a channel pressed mid-word", () => {
+    vi.useFakeTimers()
+    const { container } = render(
+      <CounterOrdersClient {...base} params="range=d7" sections={sections()} />,
+    )
+    fireEvent.change(container.querySelector(".search input")!, { target: { value: "burger" } })
+    fireEvent.click(container.querySelectorAll(".togs .tog")[1]!)
+    act(() => void vi.advanceTimersByTime(400))
+
+    // One write, holding BOTH: the toggle is not overwritten by the draft, and
+    // the reader does not watch their own typing disappear.
+    expect(push).toHaveBeenCalledTimes(1)
+    const url = push.mock.calls[0][0] as string
+    expect(url).toContain("channels=doordash")
+    expect(url).toContain("q=burger")
+  })
+
   it("reads the search back out of the URL, so a shared link opens filtered", () => {
     const { container } = render(
       <CounterOrdersClient

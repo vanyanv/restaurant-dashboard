@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useRouter } from "next/navigation"
 import {
   AppShell,
@@ -171,6 +171,26 @@ export function CounterOrdersClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
+  /*
+   * The pending search write, cleared by the effect's own cleanup.
+   *
+   * `push` deliberately does NOT cancel it, and neither does it read the
+   * params through a ref. Both were tried: both passed every test, because
+   * `push` already re-creates itself whenever `params` changes and the effect
+   * re-arms with it. Machinery nothing can measure is either dead or wrong,
+   * and the cancel was wrong — changing the date range mid-word would have
+   * thrown the half-typed word away instead of letting it settle into the
+   * params that change just wrote. What actually fixes the race is
+   * `committed`, below.
+   */
+  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelSettle = useCallback(() => {
+    if (settleRef.current !== null) {
+      clearTimeout(settleRef.current)
+      settleRef.current = null
+    }
+  }, [])
+
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
       const nextParams = writeCounterParams(params, next)
@@ -188,28 +208,61 @@ export function CounterOrdersClient({
   // stays the source of truth: whenever it changes under us (a shared link, a
   // back button, a Clear) the box is reseeded from it. See SEARCH_SETTLE_MS.
   const [draft, setDraft] = useState(search)
+  // Read by `onToggle`, which must not re-create itself on every keystroke.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+
+  /*
+   * What we believe the URL's `q` is — which is NOT the same as `search`.
+   *
+   * `search` is the URL as it was when this render began, and a `router.push`
+   * does not land synchronously. Comparing the draft against `search` meant
+   * that immediately after Clear (draft "", `search` still "burger") the
+   * effect saw a difference and armed one more write — on the pre-Clear
+   * params — which put the cleared filters straight back 300ms later.
+   *
+   * Comparing against what we last COMMITTED closes that window: an explicit
+   * action records its own search, so there is no difference left to settle.
+   * The URL is still the source of truth — when `search` changes under us (a
+   * shared link, the back button) both this and the box are reseeded from it.
+   */
+  const [committed, setCommitted] = useState(search)
   const [seeded, setSeeded] = useState(search)
   if (seeded !== search) {
     setSeeded(search)
     setDraft(search)
+    setCommitted(search)
   }
 
   useEffect(() => {
-    if (draft.trim() === search) return
-    const t = setTimeout(() => push({ search: draft }), SEARCH_SETTLE_MS)
-    return () => clearTimeout(t)
-  }, [draft, search, push])
+    if (draft.trim() === committed) return
+    settleRef.current = setTimeout(() => {
+      settleRef.current = null
+      setCommitted(draft.trim())
+      push({ search: draft })
+    }, SEARCH_SETTLE_MS)
+    return cancelSettle
+  }, [draft, committed, push, cancelSettle])
 
   const onToggle = useCallback(
     (id: string) => {
       const pressed = new Set<ChannelId>(channels)
       if (pressed.has(id as ChannelId)) pressed.delete(id as ChannelId)
       else pressed.add(id as ChannelId)
+      // The half-typed word travels WITH the toggle. `push` cancels the
+      // pending settle, so without this the draft would simply be thrown away
+      // by pressing a channel — the reader would watch their own typing
+      // vanish.
+      const carry = draftRef.current.trim()
+      setCommitted(carry)
       // Canonical CHANNELS order rather than press order, so two readers who
       // pressed the same two toggles end up holding the same link.
-      push({ channels: CHANNELS.filter((c) => pressed.has(c.id)).map((c) => c.id) })
+      push({
+        channels: CHANNELS.filter((c) => pressed.has(c.id)).map((c) => c.id),
+        ...(carry === search ? {} : { search: carry }),
+      })
     },
-    [channels, push],
+    [channels, push, search],
   )
 
   /*
@@ -222,6 +275,7 @@ export function CounterOrdersClient({
   const filtering = channels.length > 0 || search !== ""
   const onClear = useCallback(() => {
     setDraft("")
+    setCommitted("")
     push({ channels: [], search: "" })
   }, [push])
 
