@@ -182,10 +182,21 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
     // the in-house platform (css-pos) for thirdPartyNetSales.
     const calls = vi.mocked(prisma.otterOrder.aggregate).mock.calls
     expect(calls.length).toBe(2)
-    const thirdPartyCall = calls[1][0] as { where?: { platform?: unknown } }
-    // The in-house platform must be excluded via a `not` (or `notIn`)
-    // condition, not simply absent.
-    expect(JSON.stringify(thirdPartyCall.where)).toMatch(/css-pos/)
+    //
+    // Asserted on the QUERY SHAPE, not on a stringified `where`.
+    // `JSON.stringify(where).toMatch(/css-pos/)` is true of `notIn: ["css-pos"]`
+    // and equally true of `in: ["css-pos"]` — the exact inversion that would
+    // divide marketplace fees by IN-HOUSE sales. It passed both ways, so it
+    // pinned nothing; the operator has to be read by name.
+    const thirdPartyCall = calls[1][0] as {
+      where?: { AND?: Array<{ platform?: { in?: string[]; notIn?: string[] } }> }
+    }
+    const platformClause = thirdPartyCall.where?.AND?.find((c) => c.platform)?.platform
+    expect(platformClause).toBeDefined()
+    expect(platformClause?.notIn).toEqual(expect.arrayContaining(["css-pos", "bnm-web"]))
+    // Not merely "mentions css-pos": the in-house slugs must be the set being
+    // EXCLUDED, never the set being matched.
+    expect(platformClause?.in).toBeUndefined()
   })
 })
 
@@ -234,8 +245,14 @@ describe("getOrdersList — the platforms filter", () => {
     await getOrdersList({ platforms: ["doordash"] })
     const calls = vi.mocked(prisma.otterOrder.aggregate).mock.calls
     expect(calls.length).toBe(2)
-    const thirdParty = JSON.stringify(calls[1][0])
-    expect(thirdParty).toMatch(/doordash/)
-    expect(thirdParty).toMatch(/css-pos/)
+    // Read by shape for the same reason as above: a stringified match cannot
+    // tell `in` from `notIn`, and both conditions have to hold at once.
+    const where = calls[1][0].where as {
+      AND?: Array<{ platform?: unknown }>
+    }
+    expect(where.AND?.[0]).toMatchObject({ platform: { in: ["doordash"] } })
+    expect(where.AND?.[1]).toMatchObject({
+      platform: { notIn: expect.arrayContaining(["css-pos", "bnm-web"]) },
+    })
   })
 })

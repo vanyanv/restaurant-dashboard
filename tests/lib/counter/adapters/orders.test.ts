@@ -735,8 +735,21 @@ describe("one order, one ticket", () => {
     ],
   }
 
-  function ticketOnDetail() {
-    const o = order(PARTIAL)
+  /*
+   * A REAL DoorDash row with a discount against it, read from the database on
+   * 2026-08-26 — the same row `order-signs.ts` works through.
+   *
+   * Until this fixture existed, EVERY order fed to `orderMoney`,
+   * `buildOrderStrip`, `buildOrderKeep` or `buildOrderItems` had `discount: 0`,
+   * on which `subtotal + discount` and `subtotal − discount` agree to the cent.
+   * So reverting `orderMoney` to the wrong one left all 3,043 tests green while
+   * the page printed $112.41 for a $37.47 ticket. A discount is what tells the
+   * two expressions apart, and this file had none on the detail path.
+   */
+  const DISCOUNTED = { subtotal: 74.94, discount: -37.47, commission: -9.37 }
+
+  function ticketOnDetail(over: Partial<OrderDetail> = PARTIAL) {
+    const o = order(over)
     const lines = flattenOrderLines(o)
     const costs = resolveLineCosts({
       lines,
@@ -747,9 +760,9 @@ describe("one order, one ticket", () => {
     return buildOrderStrip(o, costs).find((c) => c.label === "Ticket")?.value
   }
 
-  function ticketOnList() {
+  function ticketOnList(over: { subtotal: number; discount: number; commission: number } = PARTIAL) {
     const res = listResponse({
-      rows: [listRow({ subtotal: PARTIAL.subtotal, discount: PARTIAL.discount, commission: PARTIAL.commission })],
+      rows: [listRow({ subtotal: over.subtotal, discount: over.discount, commission: over.commission })],
     })
     return buildOrdersList(res, { channels: [], search: "" }).rows[0].ticket
   }
@@ -761,6 +774,23 @@ describe("one order, one ticket", () => {
   it("reads the ticket off the order's columns, not off the lines drained so far", () => {
     // Σ line.price is $12.00 here. The customer was charged $36.65.
     expect(ticketOnDetail()).toBe("$36.65")
+  })
+
+  it("prints the same ticket on both surfaces when the order carried a DISCOUNT", () => {
+    expect(ticketOnDetail(DISCOUNTED)).toBe(ticketOnList(DISCOUNTED))
+  })
+
+  it("adds the negative discount rather than subtracting it, on the detail page too", () => {
+    // `subtotal − discount` reads as the obvious formula and returns $112.41
+    // on this row — three times the ticket, in the direction that flatters.
+    expect(ticketOnDetail(DISCOUNTED)).toBe("$37.47")
+    expect(ticketOnDetail(DISCOUNTED)).not.toBe("$112.41")
+  })
+
+  it("carries the same ticket into the money chain, not just the strip", () => {
+    const o = order(DISCOUNTED)
+    const chain = buildOrderKeep(o, costsFor(o))
+    expect(chain.rows.find((r) => r.key === "ticket")?.value).toBe("$37.47")
   })
 })
 
@@ -850,6 +880,48 @@ describe("fees nobody recorded", () => {
     const cell = fees({ netSales: 8000, commission: 0, thirdPartyNetSales: 0 })
     expect(cell?.value).toBe("$0")
     expect(cell?.delta).toBe("no marketplace sales")
+  })
+})
+
+/*
+ * The same three states, one row at a time.
+ *
+ * `OrdersRow.feesRecorded` is the flag a surface reads to tell "this order
+ * paid no fees" from "this order's fee never synced" — the two look identical
+ * in a right-aligned money column, because both print an em dash. Nothing
+ * asserted it against `buildOrdersList`'s own output until now: hardcoding
+ * `feesRecorded: true` left all 3,043 tests green, which re-ships the phone
+ * telling six marketplace orders they paid nothing.
+ */
+describe("an em dash that means two different things", () => {
+  const rowFor = (over: Parameters<typeof listRow>[0]) =>
+    buildOrdersList(listResponse({ rows: [listRow(over)] }), { search: "", channels: [] }).rows[0]
+
+  it("marks a marketplace order with no commission on file as NOT recorded", () => {
+    const row = rowFor({ platform: "doordash", commission: 0 })
+    // The figure and the flag disagree on purpose: the cell has nothing to
+    // print, and the flag is how a surface knows the blank is an absence.
+    expect(row.fees).toBe(DASH)
+    expect(row.feesRecorded).toBe(false)
+  })
+
+  it("marks an in-house order's em dash as recorded, because zero is the truth there", () => {
+    const row = rowFor({ platform: "css-pos", commission: 0 })
+    expect(row.fees).toBe(DASH)
+    expect(row.feesRecorded).toBe(true)
+  })
+
+  it("marks a marketplace order that DID sync its commission as recorded", () => {
+    const row = rowFor({ platform: "doordash", commission: -9.16 })
+    expect(row.fees).toBe("$9.16")
+    expect(row.feesRecorded).toBe(true)
+  })
+
+  it("does not call a slug with no Counter channel unrecorded", () => {
+    // `chownow` maps to no channel, so there is no marketplace rate to expect
+    // and nothing is known to be missing.
+    const row = rowFor({ platform: "chownow", commission: 0 })
+    expect(row.feesRecorded).toBe(true)
   })
 })
 
