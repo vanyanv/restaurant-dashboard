@@ -101,14 +101,20 @@ describe("getOrdersList — commission on the row", () => {
         tip: 3,
         discount: 0,
         total: 25,
-        commission: 5,
+        commission: -5,
         detailsFetchedAt: new Date("2026-08-20T13:00:00Z"),
         _count: { items: 2 },
       },
     ] as never)
 
     const result = await getOrdersList()
-    expect(result.rows[0].commission).toBe(5)
+    // The ROW carries the column RAW, negative sign and all. Only the range
+    // `totals` are normalised here, because they are sums the caller cannot
+    // re-derive. A row's sign is the adapter's to interpret, through
+    // `src/lib/counter/order-signs.ts` — one place that knows the convention,
+    // rather than an action that silently flips it and an adapter that cannot
+    // tell whether it already has.
+    expect(result.rows[0].commission).toBe(-5)
   })
 })
 
@@ -154,13 +160,19 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
       },
     ] as never)
     vi.mocked(prisma.otterOrder.aggregate)
-      .mockResolvedValueOnce(sums(50000, 1200, 8000) as never) // overall
-      .mockResolvedValueOnce(sums(30000, 500, 8000) as never) // 3P-only
+      // Discount and commission are stored NEGATIVE — see
+      // `src/lib/counter/order-signs.ts`. This fixture used positive figures
+      // until 2026-08-26, a shape the database has zero rows of, and it is why
+      // `Σsubtotal − Σdiscount` passed review while inflating every range's net
+      // sales by twice the discounts given.
+      .mockResolvedValueOnce(sums(50000, -1200, -8000) as never) // overall
+      .mockResolvedValueOnce(sums(30000, -500, -8000) as never) // 3P-only
 
     const result = await getOrdersList()
-    expect(result.totals.netSales).toBe(50000 - 1200)
+    expect(result.totals.netSales).toBe(48800)
+    // Reported positive: it is a fee, not a negative number.
     expect(result.totals.commission).toBe(8000)
-    expect(result.totals.thirdPartyNetSales).toBe(30000 - 500)
+    expect(result.totals.thirdPartyNetSales).toBe(29500)
   })
 
   it("excludes the in-house platform from the thirdPartyNetSales aggregate", async () => {

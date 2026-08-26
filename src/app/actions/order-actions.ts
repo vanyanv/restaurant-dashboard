@@ -262,10 +262,15 @@ export async function getOrdersList(
     totalCount,
     undrainedCount,
     totals: {
-      netSales: (overallSums._sum.subtotal ?? 0) - (overallSums._sum.discount ?? 0),
-      commission: overallSums._sum.commission ?? 0,
+      // `+ discount`, not `−`: the column is stored NEGATIVE (0 positive rows
+      // of 40,055 on 2026-08-26). Subtracting it inflated every range's net
+      // sales by twice the discounts given. See `src/lib/counter/order-signs.ts`.
+      netSales: (overallSums._sum.subtotal ?? 0) + (overallSums._sum.discount ?? 0),
+      // Reported as the POSITIVE amount the marketplaces took, so the strip's
+      // "Marketplace fees" is a fee and not a negative number.
+      commission: Math.max(0, -(overallSums._sum.commission ?? 0)),
       thirdPartyNetSales:
-        (thirdPartySums._sum.subtotal ?? 0) - (thirdPartySums._sum.discount ?? 0),
+        (thirdPartySums._sum.subtotal ?? 0) + (thirdPartySums._sum.discount ?? 0),
     },
   }
 }
