@@ -15,6 +15,9 @@
 // silence on both sides.
 
 import { describe, it, expect } from "vitest"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { converter, parse } from "culori"
 
 import {
   CHECKED_PROPERTIES,
@@ -27,6 +30,10 @@ import {
   matchedCount,
   relativeLuminance,
   requiredContrast,
+  isTokenCorrection,
+  applyAbsenceAllowances,
+  TOKEN_CORRECTIONS,
+  type Difference,
   type Landmark,
   type ThemedNode,
 } from "../../e2e/fidelity/landmarks"
@@ -197,6 +204,142 @@ describe("compareLandmarks", () => {
 
   it("counts landmarks by class for the report headline", () => {
     expect(landmarkTally(withStores)).toEqual({ sec: 1, stores: 1, stcard: 1 })
+  })
+})
+
+describe("applyAbsenceAllowances — landmarks the database cannot fill", () => {
+  const missing = (cls: string[], order: number): Difference => ({
+    kind: "missing",
+    order,
+    classes: cls,
+  })
+
+  it("forgives exactly the recorded count, and reports the one past it", () => {
+    // Five missing bullet meters is the recorded fact: only two of Overview's
+    // six figures are judged against anything this schema publishes. A sixth
+    // is a regression, and has to read as one.
+    const five = [0, 1, 2, 3, 4].map((i) => missing(["blt"], i))
+    expect(applyAbsenceAllowances(five, { blt: 5 }).unexplained).toEqual([])
+
+    const six = [...five, missing(["blt"], 5)]
+    const out = applyAbsenceAllowances(six, { blt: 5 })
+    expect(out.unexplained).toHaveLength(1)
+    expect(out.stale).toEqual([])
+  })
+
+  it("NEVER forgives an extra, however the budget is written", () => {
+    // Ruling F-R8: an extra silently leaves the rendering comparison, so
+    // forgiving one shrinks what is checked without saying so.
+    const diffs: Difference[] = [{ kind: "extra", order: 3, classes: ["strip"] }]
+    expect(applyAbsenceAllowances(diffs, { strip: 9 }).unexplained).toEqual(diffs)
+  })
+
+  it("forgives nothing it was not asked to", () => {
+    const diffs = [missing(["blt"], 0), missing(["queue"], 1)]
+    const out = applyAbsenceAllowances(diffs, { blt: 1 })
+    expect(out.unexplained.map((d) => d.classes)).toEqual([["queue"]])
+  })
+
+  it("reports an allowance that forgave fewer than it budgets for", () => {
+    // The day the schema starts publishing a target, the landmark lands and
+    // the line claiming it cannot has to go — otherwise it sits there
+    // absorbing a future regression. Same contract as the extractor's
+    // corrections, which throw when they match nothing.
+    const out = applyAbsenceAllowances([missing(["blt"], 0)], { blt: 5 })
+    expect(out.unexplained).toEqual([])
+    expect(out.stale).toEqual([{ landmark: "blt", budgeted: 5, used: 1 }])
+  })
+
+  it("keys on the WHOLE class list, so a compound landmark is not forgiven by a part", () => {
+    const out = applyAbsenceAllowances([missing(["sec", "blt"], 0)], { blt: 3 })
+    expect(out.unexplained).toHaveLength(1)
+    expect(out.stale).toEqual([{ landmark: "blt", budgeted: 3, used: 0 }])
+  })
+
+  it("leaves style differences alone — they are the rendering pass's", () => {
+    const style: Difference = {
+      kind: "style",
+      order: 1,
+      classes: ["band"],
+      property: "color",
+      prototype: "a",
+      ours: "b",
+    }
+    expect(applyAbsenceAllowances([style], {})).toEqual({ unexplained: [], stale: [] })
+  })
+})
+
+describe("TOKEN_CORRECTIONS — the colours this app moved on purpose", () => {
+  it("forgives the recorded pair, on a colour property, and nothing else", () => {
+    const [c] = TOKEN_CORRECTIONS
+    const proto = [lm(["band"], { order: 0, style: { color: c.prototype } })]
+    const ours = [lm(["band"], { order: 0, style: { color: c.ours } })]
+    expect(compareLandmarks(proto, ours)).toEqual([])
+
+    // The SAME strings on a property that is not a colour are still a
+    // difference — a correction is about a token's value, not a spelling.
+    expect(isTokenCorrection("font-size", c.prototype, c.ours)).toBe(false)
+    expect(isTokenCorrection("color", c.prototype, c.ours)).toBe(true)
+    // And it is a pair, not a tolerance: our value against some OTHER
+    // prototype colour is reported.
+    expect(isTokenCorrection("color", "oklch(0.47 0.012 45)", c.ours)).toBe(false)
+    expect(isTokenCorrection("color", c.prototype, "oklch(0.47 0.012 45)")).toBe(false)
+  })
+
+  it("still reports a landmark where anything ELSE differs", () => {
+    const [c] = TOKEN_CORRECTIONS
+    const proto = [lm(["band"], { order: 0, style: { color: c.prototype } })]
+    const ours = [
+      lm(["band"], { order: 0, style: { color: c.ours, "font-size": "11px" } }),
+    ]
+    expect(compareLandmarks(proto, ours).map((d) => d.property)).toEqual(["font-size"])
+  })
+
+  it("describes what counter.css and the prototype ACTUALLY declare", () => {
+    // A correction that has stopped matching either source is forgiving a
+    // colour nobody renders — the same failure `applyCorrections` throws on in
+    // the extractor. Both sides are read back out of the files here so the
+    // table cannot go stale in silence.
+    const counterCss = readFileSync(
+      join(process.cwd(), "src", "styles", "counter.css"),
+      "utf-8",
+    )
+    const proto = readFileSync(
+      join(process.cwd(), "docs", "counter", "counter-prototype.html"),
+      "utf-8",
+    )
+    const near = (a: string, b: string) => {
+      const x = parse(a)
+      const y = parse(b)
+      if (!x || !y) throw new Error(`unparseable colour: ${a} / ${b}`)
+      const cx = converter("oklch")(x)
+      const cy = converter("oklch")(y)
+      return (
+        Math.abs((cx.l ?? 0) - (cy.l ?? 0)) < 1e-6 &&
+        Math.abs((cx.c ?? 0) - (cy.c ?? 0)) < 1e-6 &&
+        Math.abs((cx.h ?? 0) - (cy.h ?? 0)) < 1e-6
+      )
+    }
+
+    for (const c of TOKEN_CORRECTIONS) {
+      // Ours: the LIGHT half of the light-dark() pair in counter.css. The
+      // rendering pass runs in light.
+      const declared = counterCss.match(
+        new RegExp(`${c.token}:\\s*light-dark\\(\\s*([^,]+?)\\s*,`),
+      )
+      expect(declared, `${c.token} is not declared in counter.css`).not.toBeNull()
+      expect(near(declared![1], c.ours), `${c.token}: counter.css declares ${declared![1]}, the table says ${c.ours}`).toBe(true)
+
+      // Theirs: the same token name, unprefixed, in the prototype's own
+      // `.frame` block.
+      const theirs = proto.match(new RegExp(`${c.token.replace("--ct-", "--")}:\\s*([^;]+);`))
+      expect(theirs, `${c.token} has no counterpart in the prototype`).not.toBeNull()
+      expect(near(theirs![1], c.prototype), `${c.token}: the prototype declares ${theirs![1]}, the table says ${c.prototype}`).toBe(true)
+
+      // A correction that agreed with the prototype would forgive nothing and
+      // should be deleted rather than left sitting there.
+      expect(near(c.prototype, c.ours), `${c.token} no longer diverges`).toBe(false)
+    }
   })
 })
 

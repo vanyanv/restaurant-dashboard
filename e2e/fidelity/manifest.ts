@@ -31,6 +31,35 @@ interface FidelityPageBase {
    */
   route: string
   /**
+   * The query string the suite asks for, appended to `route`.
+   *
+   * WHY A PAGE NEEDS ONE. The prototype renders every page in ONE window: its
+   * date control opens at `preset:'d7', cmp:'weekday'` (line 1757) and it has
+   * no database, so a seven-day series is what every chart on every page is
+   * drawn from. Our default is `yesterday` — one day, deliberately (an owner
+   * opening the dashboard in the morning wants the day that finished). One
+   * reading is not a chart, so `Chart` degrades it to `.strip strip--fit`,
+   * which is EXACTLY what the prototype's own `chart()` does at line 3140
+   * with the same input.
+   *
+   * Compared without this, that agreement reads as a difference: the gate
+   * reports a missing `.ch` and an extra `.strip` for a rule behaving
+   * identically on both sides — and an extra silently leaves the rendering
+   * comparison (ruling F-R8), shrinking what is checked. So the suite asks
+   * for the window the prototype is in, and the two answer the same question.
+   *
+   * This is ruling C-R5's fix one layer up: there the prototype's frame was
+   * widened to our viewport so `@container fr` resolved against the same
+   * width on both sides; here the range is matched so the SERIES has the same
+   * shape. Both are the harness removing a difference it introduced itself.
+   *
+   * It is NOT a way to dodge a real gap. It sets the reader's window and
+   * nothing else — every figure still comes from the database, and a page
+   * that renders differently at its own default is still rendering
+   * differently at its own default.
+   */
+  query?: string
+  /**
    * Where the mobile projects actually land after asking for `route`. The
    * middleware rewrites /dashboard/* to /m/*, and the fidelity suite asserts
    * the landed path so that a 404 or a guard redirect is reported as a page
@@ -60,6 +89,43 @@ interface FidelityPageBase {
    * on the page; this forgives exactly one, in writing, with its number.
    */
   contrastAllowances?: Array<{ selector: string; reason: string; measured: number }>
+  /**
+   * Landmarks the prototype renders that this page CANNOT, because nothing in
+   * the database publishes what they would say — with the count, per surface,
+   * and the reason.
+   *
+   * Ruling Scan-R1: a figure judged against nothing gets no meter. The
+   * prototype draws a bullet under all six of Overview's strip figures because
+   * it invented six thresholds; this schema publishes exactly two
+   * (`Store.targetCogsPct`, and prime cost's trade ceiling under C-R1), so
+   * four of those figures carry no `Reference` and therefore no `.blt`, no
+   * `.band` and no `.sp`. The page is right and the schema is the follow-up.
+   * Inventing a threshold to close the gate would put a number on the screen
+   * that nobody set, judging an owner's business against it.
+   *
+   * THIS IS NOT A TOLERANCE, and the three rules in
+   * `applyAbsenceAllowances` are why:
+   *
+   *   - it forgives an exact COUNT, so one more missing meter than recorded is
+   *     still a failure;
+   *   - it never forgives an EXTRA (ruling F-R8);
+   *   - and an allowance that forgives FEWER than it budgets for fails as
+   *     stale — the day a target is published the landmark lands, and the line
+   *     saying it cannot has to go, or it would silently absorb a real
+   *     regression later.
+   *
+   * Every entry names the function that would have produced the landmark and
+   * the thing it has no input for. If you cannot write that sentence, the
+   * landmark is missing because the page is unfinished, and this is the wrong
+   * place for it.
+   */
+  absentLandmarks?: Array<{
+    /** The landmark's full class list, sorted and dot-joined — `signature()`'s key. */
+    landmark: string
+    desktop: number
+    mobile: number
+    reason: string
+  }>
 }
 
 /**
@@ -84,7 +150,85 @@ export type FidelityPage =
     })
 
 export const PAGES: FidelityPage[] = [
-  { protoId: "overview", name: "Overview", protoRoute: "/dashboard", route: "/dashboard", mobileRoute: "/m", status: "editorial", report: true },
+  {
+    protoId: "overview",
+    name: "Overview",
+    protoRoute: "/dashboard",
+    route: "/dashboard",
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m",
+    status: "editorial",
+    report: true,
+    absentLandmarks: [
+      {
+        landmark: "blt",
+        desktop: 5,
+        mobile: 4,
+        reason:
+          "The bullet meter. `Figure` draws it from a `Reference`, and " +
+          "`referenceFor` in the Overview adapter returns undefined when no " +
+          "target is published. This schema publishes two: " +
+          "`Store.targetCogsPct` (food cost) and prime cost's trade ceiling " +
+          "(PRIME_CEILING_PCT, ruling C-R1). Orders, avg ticket, labour and " +
+          "marketplace fees are judged against nothing at all — the " +
+          "prototype's bands for them are its own invention (`ords * 0.92`, " +
+          "`$25.10-$26.40`), which is the figure judging itself. The desk " +
+          "also loses the SPLH lead figure's meter for the same reason; the " +
+          "phone does not draw that figure. Ruling Scan-R1.",
+      },
+      {
+        landmark: "band",
+        desktop: 2,
+        mobile: 3,
+        reason:
+          "The flag words under a figure, which say what it was judged " +
+          "against. `Figure` opens the band on `caption || reference`, so a " +
+          "figure with neither has none — the same four unjudged figures as " +
+          "`blt` above, minus the two the adapter gives a caption to on their " +
+          "own (`Plan 28.5%` on food cost, `excludes grubhub` on fees). The " +
+          "phone loses one more than the desk because `MStrip` follows " +
+          "`mstrip()` and opens its band only inside the reference branch.",
+      },
+      {
+        landmark: "hfloor",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The floor meter under sales per labour hour. Nothing in this " +
+          "schema publishes an SPLH floor: the prototype's `SPLH_FLOOR = " +
+          "68.00` is its own number, and `SplhPoint.targetSplh` is the " +
+          "median of the store's own weekday history — the figure judging " +
+          "itself. `FloorMeter` mounts only when a floor is published, so " +
+          "today it does not mount. The phone's head block carries one figure " +
+          "and it is net sales, so this landmark is not on that surface at all.",
+      },
+      {
+        landmark: "sp",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The sparkline. `Figure` draws it from `reference.series`, so a " +
+          "figure with no reference has no series to draw — downstream of the " +
+          "same missing target as `blt`. The phone draws no sparklines at " +
+          "all, by the prototype's own decision (`mstrip()`: the two charts " +
+          "are directly beneath and vertical space is the scarce thing), so " +
+          "neither side has one there and nothing is missing.",
+      },
+      {
+        landmark: "moneyline",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The invoices tile's fourth line, \"Does not reconcile\". " +
+          "`Invoice` does carry `reviewReasons` — the `ReviewReason[]` " +
+          "`src/lib/invoice-sanity.ts` writes when a header total does not " +
+          "match its lines — but `getInvoiceSummary` neither selects nor " +
+          "aggregates it, and no other existing function does. Three real " +
+          "lines rather than four with one guessed. The phone drops the " +
+          "invoices tile entirely, as the prototype's phone does.",
+      },
+    ],
+  },
   { protoId: "ask", name: "Ask", protoRoute: "/dashboard/chat", route: "/dashboard/chat", status: "editorial" },
   { protoId: "decisions", name: "Needs you", protoRoute: "/dashboard/decisions", route: "/dashboard/decisions", status: "editorial" },
   { protoId: "alerts", name: "Needs you", protoRoute: "/dashboard/alerts", route: "/dashboard/alerts", status: "editorial" },
@@ -138,6 +282,19 @@ export const PAGES: FidelityPage[] = [
   { protoId: "notfound", name: "Not found", protoRoute: "/dashboard/not-found", route: "/dashboard/not-found", status: "editorial" },
   { protoId: "forbidden", name: "No access", protoRoute: "403", route: "403", status: "editorial" },
 ]
+
+/** The absence budget for one surface, as `applyAbsenceAllowances` wants it. */
+export function absenceBudget(
+  entry: FidelityPage,
+  surface: "desk" | "phone",
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const a of entry.absentLandmarks ?? []) {
+    const n = surface === "desk" ? a.desktop : a.mobile
+    if (n > 0) out[a.landmark] = n
+  }
+  return out
+}
 
 export function pageById(protoId: string): FidelityPage {
   const p = PAGES.find((x) => x.protoId === protoId)
