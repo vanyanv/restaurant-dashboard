@@ -529,10 +529,26 @@ export function extract(html: string): ExtractResult {
  * not change layout and it may not introduce a value: `npm run tokens` and
  * this file's own tests both still apply.
  */
-const CORRECTIONS: Array<{ from: string; to: string; why: string }> = [
+const CORRECTIONS: Array<{
+  /**
+   * The exact rule texts to replace, and what each becomes.
+   *
+   * More than one edit per entry when a single design decision is written
+   * into the sheet at more than one selector. Splitting those into separate
+   * entries would let a later change fix one and leave the other — and "the
+   * desk and the phone disagree about what a falling number looks like" is
+   * the defect, not the mechanism for fixing it.
+   */
+  edits: Array<{ from: string; to: string }>
+  why: string
+}> = [
   {
-    from: ".dispatch .sep{color:var(--line-strong)}",
-    to: ".dispatch .sep{color:var(--ink-3)}",
+    edits: [
+      {
+        from: ".dispatch .sep{color:var(--line-strong)}",
+        to: ".dispatch .sep{color:var(--ink-3)}",
+      },
+    ],
     why:
       "The prototype paints the dispatch line's separator in a RULE colour. " +
       "In the dark theme --line-strong against --surface is 1.73:1, which the " +
@@ -543,21 +559,75 @@ const CORRECTIONS: Array<{ from: string; to: string; why: string }> = [
       ".sep` uses. Proved by the dark pass going green with this line and red " +
       "without it.",
   },
+  {
+    edits: [
+      {
+        from:
+          ".headline .d{font-family:var(--mono);font-size:var(--t-cap);" +
+          "font-weight:500;color:var(--good)}",
+        to:
+          ".headline .d{font-family:var(--mono);font-size:var(--t-cap);" +
+          "font-weight:500;color:var(--good)}\n" +
+          ".headline .d.is-down{color:var(--bad)}\n" +
+          ".headline .d.is-flat{color:var(--ink-3)}",
+      },
+      {
+        from:
+          ".mhead .d{font-family:var(--mono);font-size:var(--t-cap);" +
+          "font-weight:500;color:var(--good)}",
+        to:
+          ".mhead .d{font-family:var(--mono);font-size:var(--t-cap);" +
+          "font-weight:500;color:var(--good)}\n" +
+          ".mhead .d.is-down{color:var(--bad)}\n" +
+          ".mhead .d.is-flat{color:var(--ink-3)}",
+      },
+    ],
+    why:
+      "A FALL IS PAINTED AS GOOD NEWS, on both surfaces. The prototype gives " +
+      "its two lead-figure deltas exactly one rule each — `.headline .d` " +
+      "(line 155) and `.mhead .d` (line 465) both paint var(--good) and " +
+      "nothing else — while the two STRIP deltas beside them each carry " +
+      "`.is-down` and `.is-flat` overrides (`.strip .d` lines 233-235, " +
+      "`.mstrip .d` lines 628-630). So the strip can say a figure moved the " +
+      "wrong way and the head block, which carries the one figure an owner " +
+      "reads first, cannot. Measured on our own Overview on 2026-08-25: net " +
+      "sales read \"\\u25bc 37.2% vs the prior period\" in var(--good) green on " +
+      "the desk and again on the phone. A number going the wrong way that " +
+      "looks like good news is the most consequential kind of fidelity " +
+      "defect, and it is the prototype's own omission rather than ours. " +
+      "`.is-flat` comes with it because the same two elements print " +
+      "\"no comparison set\" and \"14 day readings with labour posted\" — " +
+      "statements of fact, painted the colour of a rise. " +
+      "\n\n" +
+      "THE CLASS IS SENTIMENT, NOT DIRECTION, and the prototype's own call " +
+      "sites are what settle that: line 4911 writes `mkt.d > 0 ? 'is-down'` " +
+      "and line 4926 writes `rep.d < 0 ? 'is-down'` on the SAME page, so a " +
+      "rise and a fall both earn it depending on which way is bad for that " +
+      "figure; line 4776 puts it on `['Open','3','2 need a decision']`, which " +
+      "has no direction at all. The caller decides, the arrow does not — so " +
+      "these two rules cannot make every fall red, and a figure whose fall " +
+      "is a win (marketplace fees) simply is not given the class. " +
+      "\n\n" +
+      "Two colours, both already in the sheet, both already used by the " +
+      "sibling rules this copies. No layout, no new value.",
+  },
 ]
 
 /** Applies `CORRECTIONS`, and fails loudly if one no longer matches anything. */
 function applyCorrections(css: string): string {
   let out = css
   for (const c of CORRECTIONS) {
-    if (!out.includes(c.from)) {
-      throw new Error(
-        `extract-prototype-css: correction for ${JSON.stringify(c.from)} matched ` +
-          `nothing. The prototype's rule changed under it — re-read the rule and ` +
-          `either update the correction or delete it, but do not leave a ` +
-          `correction that silently does nothing.`,
-      )
+    for (const edit of c.edits) {
+      if (!out.includes(edit.from)) {
+        throw new Error(
+          `extract-prototype-css: correction for ${JSON.stringify(edit.from)} matched ` +
+            `nothing. The prototype's rule changed under it — re-read the rule and ` +
+            `either update the correction or delete it, but do not leave a ` +
+            `correction that silently does nothing.`,
+        )
+      }
+      out = out.split(edit.from).join(edit.to)
     }
-    out = out.split(c.from).join(c.to)
   }
   return out
 }

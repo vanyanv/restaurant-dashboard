@@ -61,16 +61,38 @@ describe("MHead — the phone's head block", () => {
     expect(container.querySelector(".d")).toBeNull()
   })
 
-  it("never puts a tone class on .d, because the sheet has no rule for one", () => {
-    // `.strip .d` and `.mstrip .d` both carry `.is-down`/`.is-flat`; `.mhead .d`
-    // is one rule painting var(--good), exactly like `.headline .d`. This test
-    // holds the ASSERTION about the sheet as well as about the component, so
-    // the day a tone rule is added this fails and says so.
-    expect(SHEET).toMatch(/\.mhead \.d\{[^}]*color:var\(--good\)/)
-    expect(SHEET).not.toMatch(/\.mhead \.d\.is-/)
+  it("paints a fall as a fall, and only because the sheet now has a rule for one", () => {
+    // This test used to assert the OPPOSITE — that `.mhead .d` never carries a
+    // tone — because the prototype gives it one rule, `color:var(--good)`, and
+    // a class matching no rule is the `Meter` defect. The consequence was
+    // visible in the browser: net sales down 37.2% printed its ▼ in the colour
+    // of a rise. The sheet was corrected instead (an entry in
+    // `scripts/extract-prototype-css.ts`'s CORRECTIONS table, covering
+    // `.mhead .d` and `.headline .d` together), so the class is now live.
+    //
+    // The sheet assertion stays: a tone class is only ever emitted here
+    // because there is a rule to receive it.
+    expect(SHEET).toMatch(/\.mhead \.d\.is-down\{color:var\(--bad\)\}/)
+    expect(SHEET).toMatch(/\.mhead \.d\.is-flat\{color:var\(--ink-3\)\}/)
 
     const { container } = render(
-      <MHead label="Net sales" value="$25,879" delta="▼ 4.1% vs the prior period" />,
+      <MHead
+        label="Net sales"
+        value="$25,879"
+        delta="▼ 37.2% vs the prior period"
+        deltaTone="is-down"
+      />,
+    )
+    expect(container.querySelector(".d")!.className).toBe("d is-down")
+  })
+
+  it("never infers the tone from the arrow it was handed", () => {
+    // `.is-down` is SENTIMENT, not direction — the prototype puts it on a rise
+    // (`mkt.d > 0`) and on a fall (`rep.d < 0`) on the same page. A component
+    // that read the ▼ would paint every fall red, including the ones that are
+    // wins (marketplace fees). The caller decides; unclassed reads as a rise.
+    const { container } = render(
+      <MHead label="Marketplace fees" value="$684" delta="▼ 12.0% vs the prior period" />,
     )
     expect(container.querySelector(".d")!.className).toBe("d")
   })

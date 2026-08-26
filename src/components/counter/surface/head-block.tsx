@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import type { DeltaTone } from "./figure"
 
 /**
  * The lead block: the one or two figures an owner checks before anything else,
@@ -59,6 +60,23 @@ export interface HeadFigure {
   value: ReactNode
   /** `.d` — how it moved, and anything bought to move it. */
   detail?: ReactNode
+  /**
+   * `.d`'s class.
+   *
+   * `.headline .d` had no tone at all until the ported sheet was corrected:
+   * one rule painting `var(--good)`, so a net sales figure down 37.2% printed
+   * its ▼ in the colour of a rise, and "no comparison set" printed as
+   * good news beside it. The repair is a CORRECTIONS entry in
+   * `scripts/extract-prototype-css.ts` covering this selector and `.mhead .d`
+   * together — the desk and the phone must not disagree about what a fall
+   * looks like.
+   *
+   * SENTIMENT, NOT DIRECTION. The prototype writes `mkt.d > 0 ? 'is-down'` on
+   * one figure and `rep.d < 0 ? 'is-down'` on another on the same page, and
+   * puts it on a figure with no direction at all (line 4776). The caller
+   * decides; a figure whose fall is a win never gets it. Unclassed is a rise.
+   */
+  detailTone?: DeltaTone
   /** Emitted after `.d`, inside the same `.fig`. `FloorMeter` on Overview's co-lead. */
   meter?: ReactNode
 }
@@ -76,14 +94,16 @@ export interface HeadFigure {
  * wraps in its own `<Section bare>`, so each figure carries its own state and
  * `HeadBlock` still owns the element, the modifier and the count.
  */
-export function LeadFigure({ label, value, detail, meter }: HeadFigure) {
+export function LeadFigure({ label, value, detail, detailTone, meter }: HeadFigure) {
   return (
     <>
       <span className="k">{label}</span>
       <span data-figure-value className="v">
         {value}
       </span>
-      {detail ? <span className="d">{detail}</span> : null}
+      {detail ? (
+        <span className={detailTone ? `d ${detailTone}` : "d"}>{detail}</span>
+      ) : null}
       {meter}
     </>
   )
