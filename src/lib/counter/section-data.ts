@@ -90,6 +90,32 @@ export function dataOf<T>(sd: SectionData<T>): T | null {
 }
 
 /**
+ * True when the section LOADED and there was nothing there — and false for
+ * every other reason it might be showing no data.
+ *
+ * The second, narrower status question a consumer can legitimately ask, and it
+ * exists for exactly one caller: a DETAIL page. `/dashboard/orders/[id]` is
+ * about one record, and an id that does not exist (or belongs to another
+ * account) is a 404, not a page of grey panels. `getOrderSections` already
+ * encodes that — `classify`'s `isEmpty` turns a null `getOrderDetail` into
+ * `empty` — but the page cannot read it through `hasData`, which is equally
+ * false for `loading`, `failed` and `not_computed`.
+ *
+ * THAT DISTINCTION IS THE WHOLE POINT. A page that 404'd on `!hasData` would
+ * turn a database outage into "no such order", which is a lie told to the one
+ * reader who most needs the truth, and it would do it silently. `empty` means
+ * the load succeeded; `failed` means it did not, and a failed section still
+ * renders as a failed section on a page that exists.
+ *
+ * It lives here rather than in a page because `npm run tokens`' no-status-branch
+ * rule holds over `src/app/**` .tsx — pages compose, they do not inspect. The
+ * check belongs in this module, once, beside `hasData`.
+ */
+export function isMissing<T>(sd: SectionData<T>): boolean {
+  return sd.status === "empty"
+}
+
+/**
  * Re-classifies an already-classified `SectionData` through `f`, keeping every
  * non-data status (failed/empty/not_computed/loading) exactly as it was.
  *

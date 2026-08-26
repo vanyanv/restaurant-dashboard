@@ -1,37 +1,58 @@
-import { formatCurrency as fmtMoney } from "@/lib/format"
-import Link from "next/link"
-import { notFound, redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
+import { notFound, redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { getOrderDetail } from "@/app/actions/order-actions"
-import { PageHead } from "@/components/mobile/page-head"
-import { Panel } from "@/components/mobile/panel"
-import {
-  MastheadFigures,
-  type MastheadCell,
-} from "@/components/mobile/masthead-figures"
+import { getOrderSections } from "@/lib/counter/adapters/orders"
+import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { isMissing } from "@/lib/counter/section-data"
+import { CounterPhoneOrderClient } from "./counter-phone-order-client"
 
 export const dynamic = "force-dynamic"
 
-const fmtTime = (d: Date) =>
-  d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-
-const fmtDate = (d: Date) =>
-  d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })
-
-const PLATFORM_LABEL: Record<string, string> = {
-  doordash: "DOORDASH",
-  ubereats: "UBEREATS",
-  grubhub: "GRUBHUB",
-  chownow: "CHOWNOW",
-  "css-pos": "IN-HOUSE",
-  "bnm-web": "ONLINE",
-}
-
+/**
+ * Counter — one order, the phone detail (Phase C, page 3, surface 4).
+ *
+ * `src/middleware.ts` rewrites `/dashboard/orders/<id>` to `/m/orders/<id>` on
+ * a phone user agent, so this route IS the phone surface of an order, and it is
+ * what `npm run fidelity`'s `fidelity-mobile` project measures against
+ * `P.order.phone()`.
+ *
+ * It is a near-copy of `src/app/dashboard/orders/[id]/page.tsx` on purpose, and
+ * the part that must stay identical is the middle: ONE `getOrderSections` call,
+ * with the same id and the same account. Two surfaces asking two different
+ * loaders what one order kept is how one restaurant ends up with two answers
+ * for one order; here they cannot, because there is one adapter and it is this
+ * one.
+ *
+ * ## What this replaces, and the figure it was getting wrong
+ *
+ * The editorial page at this path built its `FEES + TAX` masthead cell as
+ * `fmtMoney(order.tax + order.commission)`. `OtterOrder.commission` is stored
+ * NEGATIVE (`src/lib/counter/order-signs.ts` counted it: 25,648 rows below
+ * zero, none above), so that expression SUBTRACTS the marketplace's cut from
+ * the tax — printing a figure smaller than the tax alone, and negative on any
+ * DoorDash order whose commission exceeds its tax. Nothing about the page
+ * looked broken; it was a plausible number in the wrong direction. Going
+ * through the adapter is what ends it: `buildOrderStrip` reads `feeAmount()`,
+ * which is `Math.max(0, −commission)`, and the phone prints what it is given.
+ *
+ * ## No searchParams, because there is no window
+ *
+ * `P.order` is `nodate: true`. An order happened at one instant — there is no
+ * range to widen, no comparison to make, and nothing for `?range=` to mean.
+ *
+ * ## No owner gate, same as the list
+ *
+ * `getOrderDetail` is scoped to the session's own account. A manager who can
+ * see the orders list can see an order on it. Contrast `/m/pnl`, where every
+ * section is the one owner-only rollup and a non-owner is redirected.
+ *
+ * ## The 404
+ *
+ * `getOrderDetail` returns `null` both for an id that does not exist and for
+ * one belonging to another account. `isMissing` reads the `empty` that becomes
+ * — NOT `!hasData`, which is equally true of `failed`: an outage must render a
+ * page of failed sections, not tell the reader their order does not exist.
+ */
 export default async function MobileOrderDetailPage({
   params,
 }: {
@@ -39,140 +60,18 @@ export default async function MobileOrderDetailPage({
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
+
   const { id } = await params
 
-  const order = await getOrderDetail(id)
-  if (!order) notFound()
+  // The switcher's list, shared with the Overview rather than re-queried, so
+  // the phone's store sheet cannot offer a store the desk's rail does not.
+  const stores = await getOverviewStores()
+  const sections = await getOrderSections({
+    orderId: id,
+    accountId: session.user.accountId,
+  })
 
-  const t = order.referenceTimeLocal
-  const cells: MastheadCell[] = [
-    { label: "TOTAL", value: fmtMoney(order.total), sub: `${fmtMoney(order.subtotal)} subtotal` },
-    {
-      label: "FEES + TAX",
-      value: fmtMoney(order.tax + order.commission),
-      sub: order.tip > 0 ? `${fmtMoney(order.tip)} tip` : undefined,
-    },
-  ]
+  if (isMissing(sections.head)) notFound()
 
-  return (
-    <>
-      <BackLink href="/m/orders" label="All orders" />
-
-      <PageHead
-        dept={`${PLATFORM_LABEL[order.platform] ?? order.platform.toUpperCase()} · ${fmtTime(t)}`}
-        title={order.externalDisplayId ?? "Order"}
-        sub={`${fmtDate(t)} · ${order.storeName}${order.fulfillmentMode ? ` · ${order.fulfillmentMode.toLowerCase()}` : ""}`}
-      />
-
-      <MastheadFigures cells={cells} />
-
-      <div className="dock-in dock-in-3" style={{ marginTop: 14 }}>
-        <Panel
-          dept={`${order.items.length} ITEM${order.items.length === 1 ? "" : "S"}`}
-          title="Itemized"
-          flush
-        >
-          {order.items.length === 0 ? (
-            <div className="m-empty m-empty--flush">
-              <strong>No item details on file.</strong> Run a refetch from the
-              desktop view if this looks wrong.
-            </div>
-          ) : (
-            order.items.map((it) => (
-              <div
-                key={it.id}
-                style={{
-                  borderTop: "1px solid var(--hairline)",
-                  padding: "14px 18px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 12,
-                    alignItems: "baseline",
-                  }}
-                >
-                  <span
-                    className="inv-row__vendor-name"
-                    style={{ fontSize: 15 }}
-                  >
-                    {it.quantity > 1 ? `${it.quantity}× ` : ""}
-                    {it.name}
-                  </span>
-                  <span className="inv-row__total">
-                    {fmtMoney(it.price * it.quantity)}
-                  </span>
-                </div>
-                {it.subItems.length > 0 ? (
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      padding: "8px 0 0 14px",
-                      margin: 0,
-                      display: "grid",
-                      gap: 4,
-                    }}
-                  >
-                    {it.subItems.map((si) => (
-                      <li
-                        key={si.id}
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr auto",
-                          gap: 12,
-                          fontFamily:
-                            "var(--font-dm-sans), ui-sans-serif, sans-serif",
-                          fontSize: 12,
-                          color: "var(--ink-muted)",
-                          fontVariantNumeric: "tabular-nums lining-nums",
-                        }}
-                      >
-                        <span>
-                          {si.quantity > 1 ? `${si.quantity}× ` : "+ "}
-                          {si.name}
-                        </span>
-                        {si.price !== 0 ? (
-                          <span>{fmtMoney(si.price * si.quantity)}</span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ))
-          )}
-        </Panel>
-      </div>
-
-      {order.customerName ? (
-        <div className="dock-in dock-in-4" style={{ marginTop: 14 }}>
-          <Panel dept="CUSTOMER" title={order.customerName}>
-            <p
-              style={{
-                fontSize: 12,
-                color: "var(--ink-muted)",
-                margin: 0,
-                fontFamily:
-                  "var(--font-jetbrains-mono), ui-monospace, monospace",
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-              }}
-            >
-              {order.acceptanceStatus ?? order.orderStatus ?? "—"}
-            </p>
-          </Panel>
-        </div>
-      ) : null}
-    </>
-  )
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} className="m-back-link">
-      <span className="m-cap m-cap--ink">← {label}</span>
-    </Link>
-  )
+  return <CounterPhoneOrderClient stores={stores} sections={sections} />
 }
