@@ -81,6 +81,32 @@ export async function openPrototype(
     `the page index does not have "${pageId}" pressed`,
   ).toHaveAttribute("aria-pressed", "true")
 
+  // The prototype renders inside its own documentation shell, which caps
+  // `.wrap` at 1340px and narrows `#deskHost` further — measured at **932px**
+  // while our `.ct-root` is the full 1440px viewport.
+  //
+  // That is not a design difference, it is the docs page's furniture. But
+  // `container-name: fr` sits on `.frame` and `container-type: inline-size`
+  // on our `.ct-root`, so every `@container fr` rule in the ported sheet
+  // resolves against a DIFFERENT width on each side. The strip reflows 6->3
+  // at 1180: at 932 the prototype is always in the 3-track band while we are
+  // in the 6-track one, and the gate reports a rendering difference for a
+  // rule that is behaving correctly on both sides. Seven of Overview's eleven
+  // differences were exactly this.
+  //
+  // So the frame is widened to the viewport before anything is measured. The
+  // design is `inline-size`-driven, which means it is defined AT ANY WIDTH —
+  // comparing at the width our app actually renders is the honest comparison,
+  // and shrinking OUR page to 932 to match a documentation wrapper would be
+  // testing the wrapper.
+  await page.addStyleTag({
+    content: `
+      .wrap { max-width: none !important; padding: 0 !important; }
+      #deskHost, #deskHost > * { max-width: none !important; width: 100% !important; }
+      #deskHost .frame { width: 100vw !important; max-width: none !important; }
+    `,
+  })
+
   // 3. the surface actually rendered something
   const root = page.locator(SURFACE_ROOT[surface])
   await expect(
