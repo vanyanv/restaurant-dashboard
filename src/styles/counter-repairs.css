@@ -42,3 +42,10 @@
 .mscroll > * {
   animation-fill-mode: backwards;
 }
+
+/* `P.order`'s "What you keep" panel draws two rules with inline styles
+   (prototype lines 6595-6598). Ported as classes: an inline `var(--line-strong)`
+   is a colour reference outside counter.css, which `npm run tokens` fails, and
+   a page drawing its own rules is exactly what the sheet exists to prevent. */
+.mathline.is-rule { border-top: 1px solid var(--line-strong); padding-top: 9px; border-bottom: none }
+.mathline.is-open { border-bottom: none }
