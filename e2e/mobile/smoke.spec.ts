@@ -11,7 +11,10 @@ test.describe("@smoke mobile", () => {
     await expect(page).toHaveURL(/\/m\/pnl/)
     await page.waitForLoadState("networkidle")
 
-    await expect(page.locator("body")).toContainText(/revenue|sales|p&l|net/i, {
+    // "Gross sales" is the Counter statement's first line; "Profit and loss"
+    // is its title. Either way this only asserts the page RENDERED — what it
+    // renders is `npm run fidelity`'s question, not this one's.
+    await expect(page.locator("body")).toContainText(/gross sales|profit and loss/i, {
       timeout: 15_000,
     })
     expect(consoleErrors, "no console errors on /m/pnl").toEqual([])
@@ -20,7 +23,13 @@ test.describe("@smoke mobile", () => {
   test("mobile date sheet sits above its backdrop (m-sheet collision regression)", async ({
     page,
   }) => {
-    await page.goto("/m/pnl")
+    // `/m/orders`, not `/m/pnl`. This regression belongs to the EDITORIAL
+    // date sheet (`.m-sheet`, opened by `CustomPillTrigger`), and `/m/pnl` is
+    // Counter now — its date control is `MDateSheet`, a different element with
+    // a different stacking context. Orders still runs `MToolbar`, so this
+    // still guards the sheet it was written for; the day that page is rebuilt
+    // too, this test goes with the last `MToolbar`.
+    await page.goto("/m/orders")
     await page.waitForLoadState("networkidle")
 
     // The trigger is the CUSTOM pill (`CustomPillTrigger`). The previous
@@ -30,7 +39,7 @@ test.describe("@smoke mobile", () => {
     // that cannot fail is worse than no test: it reports the regression as
     // covered. Assert the trigger exists so a rename fails loudly here instead.
     const dateTrigger = page.getByRole("button", { name: /custom/i }).first()
-    await expect(dateTrigger, "date sheet trigger is on /m/pnl").toBeVisible()
+    await expect(dateTrigger, "date sheet trigger is on /m/orders").toBeVisible()
 
     await dateTrigger.click()
 
