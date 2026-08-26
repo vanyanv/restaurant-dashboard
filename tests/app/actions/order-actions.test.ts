@@ -154,7 +154,7 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
         tip: 3,
         discount: 0,
         total: 25,
-        commission: 5,
+        commission: -5,
         detailsFetchedAt: new Date("2026-08-20T13:00:00Z"),
         _count: { items: 2 },
       },

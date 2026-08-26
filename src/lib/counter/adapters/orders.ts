@@ -418,6 +418,32 @@ export function buildOrdersStrip(
       ? (now.totals.commission / now.totals.thirdPartyNetSales) * 100
       : null
 
+  /*
+   * Marketplace sales with NO commission recorded against them is not a range
+   * that paid no fees — it is a range whose fees we do not have.
+   *
+   * `OtterOrder.commission` comes from Otter's `adjusted_commission`, and its
+   * coverage is erratic: counted on 2026-08-26, marketplace orders carrying a
+   * commission ran 5,908 of 6,094 in January, 0 of 6,145 in May, 4,393 of
+   * 7,559 in July and **0 of 6,307 in August**. So a reader opening this page
+   * today would be told DoorDash and Uber Eats took $0.
+   *
+   * That is the same lie `channel-mix.ts` refuses to tell about Grubhub, and
+   * it is worse here because the P&L answers the same question a DIFFERENT way
+   * — `pnl.ts` never reads this column at all, it applies
+   * `Store.uberCommissionRate` / `doordashCommissionRate` to sales. One page
+   * would read "$0" while the other read "−$1,632" for the same day. Note 60
+   * is precisely this, and the resolution note 60 takes is that a figure
+   * nobody can stand behind is not printed.
+   *
+   * So the cell goes blank and SAYS it is not recorded. It is not reconciled
+   * against the P&L's modelled figure, because a modelled figure and an
+   * observed one are different questions and quietly substituting one for the
+   * other is how the two pages came to disagree in the first place. The real
+   * repair is upstream, in the sync — recorded as a follow-up.
+   */
+  const feesRecorded = now.totals.commission > 0 || now.totals.thirdPartyNetSales === 0
+
   return [
     { label: "Orders", value: count(now.totalCount), delta: orders.text, deltaTone: orders.tone },
     { label: "Net sales", value: money(now.totals.netSales), delta: net.text, deltaTone: net.tone },
@@ -431,11 +457,16 @@ export function buildOrdersStrip(
     },
     {
       label: "Marketplace fees",
-      value: money(now.totals.commission),
+      // `money(null)` is an em dash — see `feesRecorded` above.
+      value: money(feesRecorded ? now.totals.commission : null),
       // The prototype puts this in `c[2]` (`.d`), not in `c[4]` (`.band`) —
       // see the report. Money leaving is `is-down` whichever way it moved.
-      delta: feeShare === null ? "no marketplace sales" : `${pct(feeShare, { scaled: true })} of 3P`,
-      deltaTone: feeShare === null ? "is-flat" : "is-down",
+      delta: !feesRecorded
+        ? "not recorded for this range"
+        : feeShare === null
+          ? "no marketplace sales"
+          : `${pct(feeShare, { scaled: true })} of 3P`,
+      deltaTone: feesRecorded && feeShare !== null ? "is-down" : "is-flat",
     },
     {
       // Ruling O-R1: the prototype's slot, this schema's figure, an honest name.
