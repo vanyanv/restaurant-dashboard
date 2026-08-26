@@ -24,7 +24,8 @@ export { Caret } from "./surface/caret"
 export { Drill } from "./surface/drill"
 export { GapBar, type GapCause, type GapResidual, type GapTone } from "./surface/gap-bar"
 export { ChannelRows, type ChannelRow } from "./surface/channel-rows"
-export { StoreCards, type StoreCard, type TradingStore, type PreOpenStore } from "./surface/store-cards"
+export { StoreCards, stageLabel, type StoreCard, type TradingStore, type PreOpenStore } from "./surface/store-cards"
+export { StoreRows } from "./surface/store-rows"
 export { Toast, type ToastTone } from "./surface/toast"
 export { Dispatch, type DispatchItem } from "./surface/dispatch"
 export { HeadBlock, LeadFigure, type HeadFigure } from "./surface/head-block"
@@ -35,6 +36,7 @@ export { AskGlyph } from "./surface/ask-glyph"
 
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"
+export { AskSheet } from "./ask/ask-sheet"
 
 export { AppShell, EntryItem } from "./shell/app-shell"
 export { Rail, type RailUser } from "./shell/rail"
@@ -45,6 +47,13 @@ export { Wordmark } from "./shell/wordmark"
 export { StoreSwitcher, type SwitchableStore } from "./shell/store-switcher"
 export { DateControl, type DateControlProps } from "./shell/date-control"
 export { Topbar } from "./shell/topbar"
+
+/* The phone's own three. `.mhead`, `.mstrip` and `.mlist` had no emitter
+   anywhere in this tree until Phase C task 4; the phone surface was 0 of 51
+   landmarks and could not move without them. */
+export { MHead } from "./shell/m-head"
+export { MStrip } from "./shell/m-strip"
+export { MList, type MListRow } from "./shell/m-list"
 
 export { useEntry, ENTRY_STAGGER_MS, ENTRY_DURATION_MS, ENTRY_TOTAL_MS } from "./motion/use-entry"
 export { useCountUp, COUNT_UP_MS } from "./motion/use-count-up"

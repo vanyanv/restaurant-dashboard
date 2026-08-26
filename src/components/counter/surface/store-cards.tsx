@@ -210,13 +210,28 @@ export function StoreCards({
   )
 }
 
+/**
+ * The three words a Counter surface calls a store's stage, in ONE place.
+ *
+ * The desk prints them inside a `.mtag` chip and the phone prints them as the
+ * `.prow em` under the store's name (`StoreRows`) — two renderings, one
+ * vocabulary. Two labels each written at its own call site is how the
+ * `trading | fit_out | pre_open` / `trading | warming_up | pre_open` split
+ * happened, which `CARD_STAGE_FOR` in the Overview adapter had to unpick.
+ */
+export function stageLabel(store: StoreCard): string {
+  if (store.kind === "pre_open") return "Pre-open"
+  // "Warming up" rather than the prototype's own "Fit-out 68%", because
+  // warming-up is a stage the model actually publishes and 68% is not a figure
+  // anything measures.
+  return store.stage === "warming_up" ? "Warming up" : "Trading"
+}
+
 function Tag({ store }: { store: StoreCard }) {
-  if (store.kind === "pre_open") return <span className="mtag">Pre-open</span>
-  // `.mtag warn` is the prototype's louder tag. It carries "Warming up" here
-  // rather than its own "Fit-out 68%", because warming-up is a stage the model
-  // actually publishes and 68% is not a figure anything measures.
-  if (store.stage === "warming_up") return <span className="mtag warn">Warming up</span>
-  return <span className="mtag good">Trading</span>
+  if (store.kind === "pre_open") return <span className="mtag">{stageLabel(store)}</span>
+  // `.mtag warn` is the prototype's louder tag.
+  if (store.stage === "warming_up") return <span className="mtag warn">{stageLabel(store)}</span>
+  return <span className="mtag good">{stageLabel(store)}</span>
 }
 
 function TradingBody({ store }: { store: TradingStore }) {
