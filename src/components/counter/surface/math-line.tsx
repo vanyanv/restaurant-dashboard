@@ -48,10 +48,18 @@ export interface MathRow {
  * The prototype draws its subtotal rule and its trailing rows with inline
  * `style="border-top:1px solid var(--line-strong);…"` / `style="border-bottom:none"`.
  * Ported as the `.mathline.is-rule` / `.mathline.is-open` classes in
- * `src/styles/counter-repairs.css` instead: an inline `var(--line-strong)`
- * reference is a colour literal outside `counter.css` (`npm run tokens`
- * fails on it), and a page drawing its own rules is exactly what the ported
- * sheet exists to prevent.
+ * `src/styles/counter-repairs.css` instead, because a page drawing its own
+ * rules is what the ported sheet exists to prevent.
+ *
+ * **`npm run tokens` does NOT enforce this, and the plan that asked for it was
+ * wrong to say it did.** That was measured, not assumed: reintroducing
+ * `style={{ borderTop: "1px solid var(--line-strong)" }}` here leaves the
+ * linter clean. Its `no-colour-literal` rule matches hex, `oklch()`, `rgb()`
+ * and `hsl()` literals — a `var()` reference is none of those, and it cannot
+ * be banned outright either, since assigning one to a custom property is the
+ * sanctioned pattern (`channel-rows.tsx` sets `--pc` exactly that way). The
+ * rule this comment states is therefore held by review and by this comment,
+ * not by the build. Treat it as binding anyway.
  */
 export function MathLines({ rows }: { rows: MathRow[] }): ReactNode {
   return (
