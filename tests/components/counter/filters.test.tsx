@@ -42,7 +42,10 @@ describe("Filters", () => {
     // thing the brief's version intended: the button is present in the
     // document with its label, carrying `hidden`, not conditionally absent.
     const { container } = setup({ onClear: undefined })
-    const clear = container.querySelector(".clear")
+    // `button.clear`, not `.clear`: matching by class alone would keep passing
+    // if this stopped being a button, and `.filters .clear[hidden]` styles a
+    // control the reader is meant to be able to press once it is shown.
+    const clear = container.querySelector("button.clear")
     expect(clear).not.toBeNull()
     expect(clear).toHaveTextContent("Clear filters")
     expect(clear).toHaveAttribute("hidden")
