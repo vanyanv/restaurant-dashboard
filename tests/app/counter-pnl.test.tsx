@@ -65,6 +65,12 @@ const sections: PnlSections = {
       { label: "Labor", value: "24.8%", caption: "$6,540" },
       { label: "Gross sales", value: "$25,879", delta: "▲ 4.1% vs the prior period" },
     ],
+    // The phone's own two, from the same statement — `/m/pnl` renders these
+    // and this page does not. Present here because `PnlHeadline` is one shape.
+    phoneCells: [
+      { label: "Bottom line", value: "$3,247", delta: "12.5% of sales" },
+      { label: "Prime cost", value: "56.2%", delta: "3.8 pts of room" },
+    ],
     reading: [
       { text: "You kept $3,247", strong: true },
       { text: " of $25,879 over 7 days — a margin of " },
@@ -87,6 +93,7 @@ const sections: PnlSections = {
   }),
   statement: ready({
     comparisonLabel: "the prior period",
+    fixedInRange: "$3,340",
     lines: [
       { key: "gross", name: "Gross sales", sub: "1,024 orders", strong: true, amount: "$25,879", share: "100.0%", comparison: "$24,860", change: "▲ 4.1%", loud: false, worth: "+$1,019" },
       { key: "commissions", name: "Marketplace commissions", sub: "what the marketplaces kept", amount: "−$4,632", share: "17.9%", comparison: "17.4%", change: "▲ 0.5 pts", loud: false, worth: "+$129", href: "/dashboard/analytics" },

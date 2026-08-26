@@ -714,3 +714,120 @@ describe("failure", () => {
     expect(s.headline.status).toBe("ready")
   })
 })
+
+/* ── The phone's own two figures ──────────────────────────────────────── */
+
+/**
+ * `P.pnl.phone()` (`docs/counter/counter-prototype.html:5354`) draws a
+ * two-cell `mstrip`, not the desk's five-cell `strip`, and its prime cell
+ * carries a DIFFERENT second line: the room left under the ceiling rather than
+ * the move against the comparison. That is arithmetic, so it is here and not
+ * in the page — a page composes, it does not compute.
+ */
+describe("the phone's strip", () => {
+  const phone = (s: PnlSections): StripCell[] => must(s.headline, "headline").phoneCells
+
+  it("is the prototype's two cells, in its order", async () => {
+    const s = await load()
+    expect(phone(s).map((c) => c.label)).toEqual(["Bottom line", "Prime cost"])
+  })
+
+  it("prints the same two figures the desk's own strip prints", async () => {
+    // One page, one number: the phone is not a second reading of the range.
+    const s = await load()
+    expect(phone(s)[0].value).toBe(cellOf(s, "Bottom line")?.value)
+    expect(phone(s)[1].value).toBe(cellOf(s, "Prime cost")?.value)
+  })
+
+  it("names the room left under the ceiling, not the move against the comparison", async () => {
+    const s = await load({ comparisonId: "prev" })
+    // 60.0 − 56.2 = 3.8, and `PrimeCost.roomPp` is what owns that subtraction.
+    expect(phone(s)[1].delta).toBe("3.8 pts of room")
+    expect(phone(s)[1].deltaTone).toBeUndefined()
+  })
+
+  it("says a breach is over the ceiling rather than printing negative room", async () => {
+    // The prototype writes `(PRIME_PLAN - prime).toFixed(1) + ' pts of room'`,
+    // which reads "−3.2 pts of room" on a breach — a quantity of room that is
+    // less than none. The direction is the same; the words are the ones a
+    // reader can act on.
+    const over = GROSS * 0.7
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      rollup({
+        combined: kpis({ laborValue: over - COGS, laborPct: (over - COGS) / GROSS }),
+        perStore: [
+          store("holly", "Hollywood", {
+            laborValue: over - COGS,
+            laborPct: (over - COGS) / GROSS,
+          }),
+        ],
+      }) as never,
+    )
+    const s = await load()
+    expect(phone(s)[1].delta).toBe("10.0 pts over the ceiling")
+    expect(phone(s)[1].deltaTone).toBe("is-down")
+  })
+
+  it("judges prime against the trade's ceiling and the bottom line against nothing", async () => {
+    const s = await load()
+    expect(phone(s)[0].reference).toBeUndefined()
+    const r = phone(s)[1].reference as Reference
+    expect(r.target).toBe(PRIME_CEILING_PCT)
+    expect(r.better).toBe("low")
+    expect(isJudged(r)).toBe(true)
+  })
+
+  it("carries no trajectory: the phone takes the mark and not the sparkline", async () => {
+    // `mstrip()`'s own comment — the two charts are directly beneath it and
+    // vertical space is the scarce thing on a phone. The desk's prime cell
+    // DOES carry the eight weeks, which is what makes this assertion mean
+    // something.
+    const s = await load()
+    expect((cellOf(s, "Prime cost")?.reference as Reference).series).toBeDefined()
+    for (const c of phone(s)) expect(c.reference?.series).toBeUndefined()
+  })
+
+  it("carries no caption: `mstrip` opens its band on the reference alone", async () => {
+    const s = await load()
+    for (const c of phone(s)) expect(c.caption).toBeUndefined()
+  })
+
+  it("drops the prime cell — and only that cell — when no labour is posted", async () => {
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      rollup({
+        combined: kpis({ laborValue: 0, laborPct: 0 }),
+        perStore: [store("holly", "Hollywood", { laborValue: 0, laborPct: 0 })],
+      }) as never,
+    )
+    const s = await load()
+    expect(phone(s).map((c) => c.label)).toEqual(["Bottom line"])
+  })
+})
+
+/* ── The two things the phone's statement needs and the desk's does not ─ */
+
+describe("the phone's statement", () => {
+  it("carries the fixed lines charged to this range, for the note under it", async () => {
+    // The prototype's `fixedInRange(null, a.days)`. Rent plus the other
+    // monthly lines, prorated by the rollup — never a whole month.
+    const s = await load()
+    expect(must(s.statement, "statement").fixedInRange).toBe("$7,000")
+  })
+
+  it("marks the food line as over when it beat the target on file", async () => {
+    // 31.4% against a 29.0% target. `over` is a JUDGEMENT against a published
+    // number, not `loud` — which is about the size of a MOVE and would paint
+    // a food line that is comfortably under its target but moved 1.2 points.
+    const s = await load()
+    expect(lineOf(s, "food")?.over).toBe(true)
+    expect(lineOf(s, "commissions")?.over).toBeUndefined()
+  })
+
+  it("says nothing about `over` when no target is on file", async () => {
+    // Absent, not `false`: "not over" and "there is nothing to be over" are
+    // different answers, and only one of them is true here.
+    vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
+    const s = await load()
+    expect(lineOf(s, "food")?.over).toBeUndefined()
+  })
+})
