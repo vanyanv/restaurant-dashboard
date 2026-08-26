@@ -37,6 +37,9 @@ export { WeekTable, type WeekRow, type WeekTableProps } from "./surface/week-tab
 export { Filters, type FilterToggle } from "./surface/filters"
 export { SearchGlyph } from "./surface/search-glyph"
 export { MathLines, type MathRow } from "./surface/math-line"
+export { Briefing, type BriefingLine } from "./surface/briefing"
+export { Dots } from "./surface/dots"
+export { Tag, StatusPill, type TagTone, type PillSeverity } from "./surface/tag"
 
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"
