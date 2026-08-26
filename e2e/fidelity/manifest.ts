@@ -236,7 +236,30 @@ export const PAGES: FidelityPage[] = [
   { protoId: "orders", name: "Orders", protoRoute: "/dashboard/orders", route: "/dashboard/orders", status: "editorial" },
   { protoId: "order", name: "An order", protoRoute: "/dashboard/orders/4821", route: "/dashboard/orders/4821", status: "editorial" },
   { protoId: "analytics", name: "Analytics", protoRoute: "/dashboard/analytics", route: "/dashboard/analytics", status: "editorial" },
-  { protoId: "pnl", name: "P&L", protoRoute: "/dashboard/pnl", route: "/dashboard/pnl", status: "editorial" },
+  {
+    protoId: "pnl",
+    name: "P&L",
+    protoRoute: "/dashboard/pnl",
+    route: "/dashboard/pnl",
+    // The window the prototype is in — same as Overview's, and for the same
+    // reason (see `query` above). Our default is one day; a statement drawn
+    // over one day degrades every series on it, and the gate would report that
+    // agreement as a difference.
+    query: "?range=d7&cmp=weekday",
+    // The middleware rewrites /dashboard/pnl to /m/pnl on a phone UA, so the
+    // mobile projects land there. Stated so a rewrite is not reported as a
+    // page that failed to load. The phone SURFACE is still editorial — that is
+    // Task 5 — and its report says so in landmark counts.
+    mobileRoute: "/m/pnl",
+    // Rebuilt on Counter in Phase C task 4 and MEASURED from that commit, but
+    // still `editorial` — captured, never gated. Task 6 turns it into a gate,
+    // with a baseline and the written `absentLandmarks` that say which of the
+    // prototype's landmarks this schema cannot produce. Reporting first and
+    // gating second is the order Overview went in: a baseline invented before
+    // it was measured is a number nobody can defend.
+    report: true,
+    status: "editorial",
+  },
   { protoId: "cogs", name: "COGS", protoRoute: "/dashboard/cogs", route: "/dashboard/cogs", status: "editorial" },
   { protoId: "menu", name: "Menu profit", protoRoute: "/dashboard/menu-profit", route: "/dashboard/menu-profit", status: "editorial" },
   { protoId: "labor", name: "Labor", protoRoute: "/dashboard/labor", route: "/dashboard/labor", status: "editorial" },
