@@ -866,6 +866,13 @@ export interface DecisionsSections {
   accuracy: SectionData<Accuracy>        // "How well we have been calling it"
   ledger: SectionData<LedgerRow[]>       // "What you decided" — EMPTY TODAY, see N-R5
   queue: SectionData<QueueItem[]>        // "What to do this week" — three, see N-R6
+  /**
+   * "3 of 5" — what the queue shows against what the loader ranked. A plain
+   * string beside the sections rather than a field inside one: `SectionData`
+   * carries the section's DATA, and this is the meta the page prints in
+   * `.sec__head`. See N-R6.
+   */
+  queueMeta: string
 }
 ```
 
@@ -923,10 +930,12 @@ describe("getDecisionsSections", () => {
     expect(dataOf(s.queue)).toHaveLength(3)
   })
 
-  it("reports the true open count in the section meta, so the cap is visible", async () => {
+  it("reports the true open count beside the cap, so the cap is visible", async () => {
     const s = await getDecisionsSections({})
     expect(s.queue.status).toBe("ready")
-    expect(dataOf(s.head)?.queueMeta).toBe("3 of 5")
+    // On the sections object, NOT inside `head` — the meta belongs to the
+    // queue, and `SectionData` carries data, not the head a page renders.
+    expect(s.queueMeta).toBe("3 of 5")
   })
 
   /*
@@ -952,11 +961,17 @@ describe("getDecisionsSections", () => {
     expect(cell.value).toBe(head.figure.value)
   })
 
-  it("labels every action impact per week, whatever horizon it came from", async () => {
+  /*
+   * `buildActionCards` already normalises every horizon to a week (1 day for
+   * reprice, 30 for menu engineering). The adapter must PRINT that, not
+   * re-normalise it — doing the division twice is what turned a 30-day figure
+   * into "+$10,839/wk" before the loader was fixed.
+   */
+  it("prints the loader's weekly figure unchanged, with a /wk unit", async () => {
     const s = await getDecisionsSections({})
-    for (const q of dataOf(s.queue)!) expect(q.body).toMatchObject({})
-    // assert the unit string is "/wk" on each — the loader normalises, the
-    // adapter must not relabel
+    const items = dataOf(s.queue)!
+    expect(items.map((q) => q.lead)).toEqual(["$6,480", "-$116", "$41"])
+    expect(items.map((q) => q.unit)).toEqual(["/wk", "/wk", "/wk"])
   })
 
   it("surfaces a loader failure as failed sections, not as an empty page", async () => {
@@ -1162,7 +1177,11 @@ git commit -m "feat(counter): the week ahead, on a phone"
 
 This task carries rulings N-R1, N-R2 and N-R3. Read the measured table at the top of this plan before starting; the tests below encode it.
 
-`getAlertInbox` today returns `counts: { open, critical, watch, info }`. The page needs three more: `acknowledged`, `dismissed`, and the per-source tallies for the toggles. Add them to `AlertInboxData` — additive only, no existing caller's behaviour changes.
+`getAlertInbox` today returns `counts: { open, critical, watch, info }`. The page needs three more: `acknowledged`, `dismissed`, and the per-source tallies for the toggles.
+
+**And one field on the row itself.** `InboxAlert` does not carry `acknowledgedAt`, and the time-to-close median cannot be computed without it. Add `acknowledgedAt: Date | null` to `InboxAlert` and to the `select` that fills it.
+
+All four additions are additive — no existing caller's behaviour changes, and `npx tsc --noEmit` is what proves it.
 
 - [ ] **Step 1: Write the failing tests**
 
