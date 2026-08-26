@@ -80,11 +80,11 @@ export type OrderListRow = {
 }
 
 export type OrderListTotals = {
-  /** Σ subtotal − Σ discount, over every matched order. */
+  /** Σ subtotal + Σ discount — the column is stored NEGATIVE. See `order-signs.ts`. */
   netSales: number
-  /** Σ commission, over every matched order. */
+  /** −Σ commission: the POSITIVE amount the marketplaces took. */
   commission: number
-  /** Σ subtotal − Σ discount, over matched orders whose platform is not in-house. */
+  /** Σ subtotal + Σ discount, over matched orders whose platform is not in-house. */
   thirdPartyNetSales: number
 }
 

@@ -812,3 +812,34 @@ describe("money that moves the right way", () => {
     expect(fees?.value).toBe("$250")
   })
 })
+
+describe("fees nobody recorded", () => {
+  /*
+   * `OtterOrder.commission` coverage is erratic — 0 of 6,307 marketplace
+   * orders in August 2026, against 5,908 of 6,094 in January. A range with
+   * real DoorDash volume and no commission on file has fees we do not have,
+   * not fees of zero.
+   */
+  const fees = (totals: { netSales: number; commission: number; thirdPartyNetSales: number }) =>
+    buildOrdersStrip(listResponse({ totals }), null, noComparison).find(
+      (c) => c.label === "Marketplace fees",
+    )
+
+  it("says the fees are not recorded rather than printing $0 on real 3P volume", () => {
+    const cell = fees({ netSales: 8000, commission: 0, thirdPartyNetSales: 5000 })
+    expect(cell?.value).toBe(DASH)
+    expect(cell?.delta).toBe("not recorded for this range")
+  })
+
+  it("still prints a real figure when the fees ARE on file", () => {
+    const cell = fees({ netSales: 8000, commission: 1250, thirdPartyNetSales: 5000 })
+    expect(cell?.value).toBe("$1,250")
+    expect(cell?.delta).toBe("25.0% of 3P")
+  })
+
+  it("calls a range with no marketplace sales at all $0, because that one is true", () => {
+    const cell = fees({ netSales: 8000, commission: 0, thirdPartyNetSales: 0 })
+    expect(cell?.value).toBe("$0")
+    expect(cell?.delta).toBe("no marketplace sales")
+  })
+})

@@ -57,7 +57,16 @@ export function feeAmount(order: { commission: number }): number {
   return Math.max(0, -order.commission)
 }
 
-/** The ticket less the marketplace's cut — what the order left behind before food. */
+/**
+ * The ticket less the marketplace's cut — what the order left behind before food.
+ *
+ * Built from `feeAmount`, not from the raw column. Adding `order.commission`
+ * directly gives the same answer for every row in the database, but it breaks
+ * this module's own invariant on the one shape `feeAmount` guards against: a
+ * POSITIVE commission would make the net exceed the ticket, and
+ * `buildOrderKeep` would then draw `ticket → net` with no operation between
+ * them and a bottom line larger than the top.
+ */
 export function netOf(order: { subtotal: number; discount: number; commission: number }): number {
-  return ticketOf(order) + order.commission
+  return ticketOf(order) - feeAmount(order)
 }
