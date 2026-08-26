@@ -216,6 +216,78 @@ export interface Landmark {
   style: Record<string, string>
 }
 
+/**
+ * Colour values this application renders differently from the prototype ON
+ * PURPOSE, each with the token that decided it and both measured values.
+ *
+ * This is the rendering pass's counterpart to
+ * `scripts/extract-prototype-css.ts`'s CORRECTIONS table, and it exists for
+ * the same reason: the prototype's palette was designed light-only and against
+ * no accessibility floor, so a handful of its values cannot be shipped as
+ * written. `--ct-ink-3` is the one. Correcting it in counter.css and then
+ * failing the fidelity gate for the correction would leave exactly two moves —
+ * revert the fix, or turn the gate off — and both are worse than saying which
+ * value moved and why.
+ *
+ * A correction here is NOT a tolerance. It forgives one exact (prototype,
+ * ours) PAIR on a colour property; anything else on the same element, and any
+ * other value of the same property, still reports. Painting `--ct-ink-2` where
+ * the prototype paints `--ct-ink-3` is a difference and stays one.
+ *
+ * It is deliberately keyed on the VALUE and not on a selector, because the
+ * substitution is systematic: every element in the design that paints
+ * `--ink-3` paints the corrected value here, on every page, now and later. One
+ * line covers all of them and cannot drift out of step with a page that gains
+ * or loses a `.band`.
+ *
+ * `tests/e2e/landmarks.test.ts` reads both sides back out of
+ * `src/styles/counter.css` and the prototype itself, so a table that stops
+ * describing what the two files actually declare fails rather than quietly
+ * forgiving the wrong colour.
+ */
+export const TOKEN_CORRECTIONS: ReadonlyArray<{
+  /** The token whose value moved. */
+  token: string
+  /** What the prototype computes, as Chromium serialises it. */
+  prototype: string
+  /** What we compute. */
+  ours: string
+  why: string
+}> = [
+  {
+    token: "--ct-ink-3",
+    prototype: "oklch(0.55 0.011 50)",
+    ours: "oklch(0.525 0.011 50)",
+    why:
+      "The prototype's muted ink is 4.356:1 on its own --paper and 4.29:1 on " +
+      "its --chrome — below the WCAG AA 4.5:1 floor for the caption, folio " +
+      "and SKU text it is used for. Sub-AA text is a compliance floor rather " +
+      "than an aesthetic call, so counter.css corrects it to 52.5% lightness " +
+      "(hue and chroma untouched), which clears every surface it actually " +
+      "renders on with margin. The correction is documented at the head of " +
+      "src/styles/counter.css and asserted live in " +
+      "tests/styles/counter-tokens.test.ts. It reaches the fidelity gate as a " +
+      "`.band` colour difference on every Counter page.",
+  },
+]
+
+/**
+ * The colour-valued members of CHECKED_PROPERTIES. A token correction applies
+ * to these and to nothing else — a `font-size` that happens to match a
+ * correction's strings cannot be forgiven by one.
+ */
+const COLOUR_PROPERTIES: ReadonlySet<string> = new Set([
+  "color",
+  "background-color",
+  "border-left-color",
+])
+
+/** True when a difference is one of the recorded token corrections, exactly. */
+export function isTokenCorrection(property: string, prototype: string, ours: string): boolean {
+  if (!COLOUR_PROPERTIES.has(property)) return false
+  return TOKEN_CORRECTIONS.some((c) => c.prototype === prototype && c.ours === ours)
+}
+
 export interface Difference {
   kind: "missing" | "extra" | "style"
   order: number
@@ -298,6 +370,10 @@ export function compareLandmarks(proto: Landmark[], ours: Landmark[]): Differenc
       const b = o.style[prop]
       if (a === undefined && b === undefined) continue
       if (a === b) continue
+      // A colour this application deliberately moved off the prototype's
+      // value, named and reasoned in TOKEN_CORRECTIONS above. One exact pair,
+      // on a colour property; everything else still reports.
+      if (isTokenCorrection(prop, a ?? "", b ?? "")) continue
       diffs.push({
         kind: "style",
         order: p.order,
@@ -309,6 +385,79 @@ export function compareLandmarks(proto: Landmark[], ours: Landmark[]): Differenc
     }
   }
   return diffs
+}
+
+/**
+ * Split the structural differences into the ones a page has ACCOUNTED FOR and
+ * the ones it has not, given a per-landmark budget of allowed absences.
+ *
+ * WHY A BUDGET AND NOT A FLAG. A page whose database publishes no target for
+ * four of its six figures renders four fewer bullet meters than the design
+ * draws. That is the page being right — ruling Scan-R1: never invent a target
+ * to close a gate — but it is also indistinguishable, to a comparison, from a
+ * meter someone forgot to build. The difference is a written reason and a
+ * COUNT: five missing `.blt` is the recorded fact; a sixth is a regression.
+ *
+ * Three rules, and each one is the point of a different failure this project
+ * has already had:
+ *
+ *  1. An EXTRA is never allowed. An extra silently leaves the rendering
+ *     comparison (ruling F-R8), so forgiving one shrinks what is checked
+ *     without saying so. They come back untouched.
+ *
+ *  2. A missing landmark with no allowance comes back untouched too. The
+ *     budget forgives the recorded absences and nothing else.
+ *
+ *  3. An allowance with budget LEFT OVER is itself reported, as `stale`. That
+ *     is the day the schema started publishing the target — the landmark now
+ *     lands, and the line claiming it cannot is a lie that would quietly
+ *     forgive a future regression. Same contract as
+ *     `scripts/extract-prototype-css.ts`'s corrections, which throw when they
+ *     match nothing.
+ *
+ * `allowed` is keyed by a landmark's full class list, joined and sorted the
+ * way `signature()` does it, so an allowance for `blt` cannot forgive a
+ * compound landmark that merely includes it.
+ */
+export interface AbsenceOutcome {
+  /** Differences that are still findings. */
+  unexplained: Difference[]
+  /** Allowances that forgave fewer landmarks than they budgeted for. */
+  stale: Array<{ landmark: string; budgeted: number; used: number }>
+}
+
+export function applyAbsenceAllowances(
+  differences: Difference[],
+  allowed: Readonly<Record<string, number>>,
+): AbsenceOutcome {
+  const left = new Map<string, number>(Object.entries(allowed))
+  const budgeted = new Map<string, number>(Object.entries(allowed))
+  const unexplained: Difference[] = []
+
+  for (const d of differences) {
+    if (d.kind === "style") continue
+    if (d.kind === "extra") {
+      unexplained.push(d)
+      continue
+    }
+    const key = [...d.classes].sort().join(".")
+    const remaining = left.get(key) ?? 0
+    if (remaining > 0) {
+      left.set(key, remaining - 1)
+      continue
+    }
+    unexplained.push(d)
+  }
+
+  const stale = [...left.entries()]
+    .filter(([, remaining]) => remaining > 0)
+    .map(([landmark, remaining]) => ({
+      landmark,
+      budgeted: budgeted.get(landmark) ?? 0,
+      used: (budgeted.get(landmark) ?? 0) - remaining,
+    }))
+
+  return { unexplained, stale }
 }
 
 /**
