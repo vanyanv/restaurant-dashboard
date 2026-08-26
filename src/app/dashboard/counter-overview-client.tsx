@@ -240,7 +240,7 @@ export function CounterOverviewClient({
       ...c,
       panel: (
         <ChannelRows
-          caption={`Where ${c.name}'s ${money(c.netSales)} came from · ${windowLabel}`}
+          caption={`Where ${c.name}'s ${money(c.grossSales)} came from · ${windowLabel}`}
           rows={c.channels}
           footer={
             c.channels.length === 0
@@ -332,7 +332,7 @@ export function CounterOverviewClient({
             {(d) => (
               <LeadFigure
                 label={netSalesLabel(range)}
-                value={money(d.netSales)}
+                value={money(d.grossSales)}
                 detail={d.comparison}
                 // The adapter decides this, not the arrow in the string: net
                 // sales is a figure whose direction and sentiment agree, and

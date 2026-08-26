@@ -283,7 +283,7 @@ describe("getOverviewSections", () => {
     expect(glendale.kind).toBe("pre_open")
     // Note 33: the em-dash table is what the design deleted. The union makes
     // the absence structural — there is no key to read, null or otherwise.
-    expect("netSales" in glendale).toBe(false)
+    expect("grossSales" in glendale).toBe(false)
     expect("orders" in glendale).toBe(false)
     expect("ticket" in glendale).toBe(false)
     expect("series" in glendale).toBe(false)
@@ -294,7 +294,7 @@ describe("getOverviewSections", () => {
 
     const holly = s.stores.data.find((c) => c.id === "holly")
     if (holly?.kind !== "trading") throw new Error("holly")
-    expect(holly.netSales).toBe(7468)
+    expect(holly.grossSales).toBe(7468)
     expect(holly.orders).toBe(300)
   })
 
@@ -383,7 +383,7 @@ describe("getOverviewSections", () => {
     const bars = s.salesChart.data.series[0].data
     expect(bars).toEqual([4000, 3468])
     // Note 39: a total is the sum of the series drawn beside it.
-    expect(bars.reduce<number>((t, v) => t + (v ?? 0), 0)).toBe(s.sales.data.netSales)
+    expect(bars.reduce<number>((t, v) => t + (v ?? 0), 0)).toBe(s.sales.data.grossSales)
   })
 
   it("draws no comparison line and claims no delta when the reader switched it off", async () => {

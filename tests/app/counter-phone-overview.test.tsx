@@ -25,7 +25,7 @@ const STORES = [
 ]
 
 const sections: OverviewSections = {
-  sales: ready({ netSales: 7468, comparison: "▼ 37.2% vs the prior period", comparisonTone: "is-down" }),
+  sales: ready({ grossSales: 7468, comparison: "▼ 37.2% vs the prior period", comparisonTone: "is-down" }),
   splh: notComputed("sales per labour hour"),
   strip: ready([
     { label: "Orders", value: "1,024" },
@@ -47,7 +47,7 @@ const sections: OverviewSections = {
       id: "hollywood",
       name: "Hollywood",
       stage: "trading",
-      netSales: 7468,
+      grossSales: 7468,
       series: [7468],
       comparison: "no comparison set",
       orders: 291,

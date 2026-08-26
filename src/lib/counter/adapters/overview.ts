@@ -163,7 +163,7 @@ export interface Verdict {
  * A store that is trading.
  *
  * The union below is the point of this type, not a convenience: a pre-open
- * store is a DIFFERENT SHAPE with no `netSales`, no `orders`, no `ticket` and
+ * store is a DIFFERENT SHAPE with no `grossSales`, no `orders`, no `ticket` and
  * no `series`, so no caller can hand one a null sales figure and no renderer
  * can print an em-dash where a figure belongs. Note 33 is precisely the table
  * that did, and a type is a stronger guarantee than a convention.
@@ -183,8 +183,19 @@ export interface TradingStoreCard {
    * its own call site is how note 60's two labour figures happened.
    */
   stage: "trading" | "warming_up"
-  /** Net sales over the range, from the same rollup as the page headline. */
-  netSales: number
+  /**
+   * The range's sales, from the same rollup as the page headline.
+   *
+   * Named `grossSales` because that is what `getAllStoresPnL` calls it and
+   * what it holds — net of tax and discounts, GROSS of marketplace
+   * commissions, which the cascade subtracts afterwards. It was called
+   * `netSales` here while holding exactly that, in a file where
+   * `SplhPoint.netSales` is a genuinely different figure. Two numbers, one
+   * name, one file: note 60's mechanism precisely. The screen labels still
+   * follow the prototype, which itself says "Net sales" on Overview and
+   * "Gross sales" on the P&L for this same value (ruling P-R6).
+   */
+  grossSales: number
   /** The shape behind the figure — the same rollup, bucket by bucket. */
   series: number[]
   /** Pre-formatted: "▲ 4.1% vs the prior period", or "no comparison set". */
@@ -306,7 +317,8 @@ export interface OverviewSectionsInput {
 export interface OverviewSections {
   /** Note 30: net sales says whether the day happened. */
   sales: SectionData<{
-    netSales: number
+    /** See `TradingStoreCard.grossSales` — same figure, same reason for the name. */
+    grossSales: number
     comparison: string
     /**
      * How `comparison` should read. Both surfaces put this string in a `.d`
@@ -985,7 +997,7 @@ export async function getOverviewSections(
   return {
     sales: mapReady(scopeSd, (p) => {
       const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
-      return { netSales: p.grossSales, comparison: reading.text, comparisonTone: reading.tone }
+      return { grossSales: p.grossSales, comparison: reading.text, comparisonTone: reading.tone }
     }),
 
     splh: mapReadyTo(splhPoints, (points) => {
@@ -1170,7 +1182,7 @@ function buildStoreCards(input: {
     }
 
     const row = statement?.perStore.find((s) => s.storeId === f.id) ?? null
-    const netSales = row?.grossSales ?? 0
+    const grossSales = row?.grossSales ?? 0
     const mix = mixByStore.get(f.id) ?? []
     // `CARD_STAGE_FOR` maps `pre_open` too; it cannot reach here, because
     // `isOperational` returned true above.
@@ -1187,12 +1199,12 @@ function buildStoreCards(input: {
       id: f.id,
       name: f.name,
       stage,
-      netSales,
+      grossSales,
       series: row ? rowValues(row.rows, TOTAL_SALES_CODE) ?? [] : [],
       // `.stcard .d` and `.prow` print this one in `var(--ink-2)` with no tone
       // rule of their own, so a store card takes the words and not the class.
       comparison: comparisonPhrase(
-        netSales,
+        grossSales,
         cmp,
         cmpStatement?.perStore.find((s) => s.storeId === f.id)?.grossSales ?? null,
       ).text,

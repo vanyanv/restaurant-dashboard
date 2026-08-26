@@ -36,7 +36,7 @@ const base = {
 }
 
 const sections: OverviewSections = {
-  sales: ready({ netSales: 7468, comparison: "▲ 4.1% vs the prior period" }),
+  sales: ready({ grossSales: 7468, comparison: "▲ 4.1% vs the prior period" }),
   splh: ready({ value: 71.4, floor: null, series: [68, 70, 71.4] }),
   strip: ready([
     { label: "Orders", value: "1,024" },
@@ -69,7 +69,7 @@ const sections: OverviewSections = {
       id: "hollywood",
       name: "Hollywood",
       stage: "trading",
-      netSales: 7468,
+      grossSales: 7468,
       series: [7468],
       comparison: "no comparison set",
       orders: 291,
