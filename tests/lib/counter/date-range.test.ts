@@ -276,6 +276,41 @@ describe("rangeSubtitle", () => {
       rangeSubtitle("Hollywood", { start: new Date(2025, 11, 29), end: new Date(2026, 0, 4) }, "prev"),
     ).toBe("Hollywood · Dec 29, 2025 – Jan 4, 2026 · vs the prior period")
   })
+
+  /**
+   * The P&L's fourth term. `P.pnl.sub()` (prototype line 5248) carries it and
+   * `R.head()` — the Overview's — does not, so it is opt-in: a statement's
+   * fixed lines are prorated across exactly that many days, and a reader
+   * counting them off "Aug 15 – 21" is doing arithmetic the head could do.
+   */
+  it("carries the day count between the window and the comparison, when asked", () => {
+    expect(
+      rangeSubtitle(
+        "Hollywood",
+        { start: new Date(2026, 7, 15), end: new Date(2026, 7, 21) },
+        "prev",
+        { days: true },
+      ),
+    ).toBe("Hollywood · Aug 15 – Aug 21 · 7 days · vs the prior period")
+  })
+
+  it("says '1 day', not '1 days', on a single-day range", () => {
+    expect(
+      rangeSubtitle("All stores", { start: new Date(2026, 7, 21), end: new Date(2026, 7, 21) }, "none", {
+        days: true,
+      }),
+    ).toBe("All stores · Aug 21 · 1 day · with no comparison")
+  })
+
+  it("adds nothing at all when it is not asked — the Overview's head is unchanged", () => {
+    const r = { start: new Date(2026, 7, 15), end: new Date(2026, 7, 21) }
+    expect(rangeSubtitle("Hollywood", r, "prev")).toBe(
+      "Hollywood · Aug 15 – Aug 21 · vs the prior period",
+    )
+    expect(rangeSubtitle("Hollywood", r, "prev", {})).toBe(
+      rangeSubtitle("Hollywood", r, "prev"),
+    )
+  })
 })
 
 describe("monthDay", () => {
