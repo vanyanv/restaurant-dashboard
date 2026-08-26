@@ -1,137 +1,86 @@
-import { formatCurrency as fmtMoney } from "@/lib/format"
-import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
-import { getOrdersList } from "@/app/actions/order-actions"
-import { getStores } from "@/app/actions/store-actions"
-import { PageHead } from "@/components/mobile/page-head"
-import { Panel } from "@/components/mobile/panel"
-import { MToolbar } from "@/components/mobile/m-toolbar"
-import {
-  parseMobileRange,
-  periodToDateRange,
-  MOBILE_PERIODS,
-} from "@/lib/mobile/period"
+import { readCounterParams } from "@/lib/counter/url-state"
+import { getOrdersSections } from "@/lib/counter/adapters/orders"
+import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { CounterPhoneOrdersClient } from "./counter-phone-orders-client"
 
 export const dynamic = "force-dynamic"
 
-const fmtTime = (d: Date | string) => {
-  const date = typeof d === "string" ? new Date(d) : d
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  })
-}
-
-const PLATFORM_LABEL: Record<string, string> = {
-  doordash: "DOORDASH",
-  ubereats: "UBEREATS",
-  grubhub: "GRUBHUB",
-  chownow: "CHOWNOW",
-  "css-pos": "IN-HOUSE",
-  "bnm-web": "ONLINE",
-}
-
+/**
+ * Counter Orders — the phone (Phase C, page 3, surface 2).
+ *
+ * `src/middleware.ts` rewrites `/dashboard/orders` to `/m/orders` on a phone
+ * user agent, so this route IS the phone surface of the orders list, and it is
+ * what `npm run fidelity`'s `fidelity-mobile` project measures against
+ * `P.orders.phone()`.
+ *
+ * It is a near-copy of `src/app/dashboard/orders/page.tsx` on purpose, and the
+ * part that must stay identical is the middle: ONE `getOrdersSections` call,
+ * with the range, comparison, store, channels and search read off the same
+ * `readCounterParams`. Two surfaces asking two different loaders how many
+ * orders came in is how one restaurant ends up with two answers for one range;
+ * here they cannot, because there is one adapter and it is this one.
+ *
+ * ## The filters are read here even though the phone draws no filter bar
+ *
+ * `P.orders.phone()` has no `.filters`, so the island never renders one — but
+ * `?ch=` and `?q=` are still passed to the adapter. They travel in a LINK: a
+ * desk reader who narrows the list to DoorDash and sends the URL to a phone
+ * must get the DoorDash list, not the whole day's. Dropping them here would
+ * silently widen a shared filter, and the figures above the list would then be
+ * counting different orders than the sender saw.
+ *
+ * ## No owner gate, same as the desk
+ *
+ * `getOrdersList` and `getHourlyPatternsForRange` are scoped to the session's
+ * own account. A manager who can see the dashboard can see the orders that
+ * came through their own store, and a gate here would hide a manager's own
+ * day's work from them. Contrast `/m/pnl`, where every section is the one
+ * owner-only rollup and a non-owner is redirected to `/m/more`.
+ */
 export default async function MobileOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
 
   const sp = await searchParams
-  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
-  const storeId = sp.store && sp.store !== "" ? sp.store : null
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (typeof value === "string") params.set(key, value)
+  }
 
-  const stores = await getStores()
-  const validStoreId = storeId && stores.some((s) => s.id === storeId)
-    ? storeId
-    : null
+  // Resolved once, here, and passed to both the params reader and the island —
+  // a moving `new Date()` re-evaluated in two places could disagree about
+  // which calendar day "today" is.
+  const today = new Date()
+  const counterParams = readCounterParams(params, today)
 
-  const window =
-    range.kind === "custom"
-      ? { startDate: range.start, endDate: range.end }
-      : (() => {
-          const r = periodToDateRange(range.period)
-          return { startDate: r.startDate, endDate: r.endDate }
-        })()
-  const startStr = window.startDate.toISOString().slice(0, 10)
-  const endStr = window.endDate.toISOString().slice(0, 10)
-
-  const list = await getOrdersList({
-    storeId: validStoreId ?? undefined,
-    platform: sp.platform,
-    startDate: startStr,
-    endDate: endStr,
-    limit: 50,
+  // The switcher's list, shared with the Overview rather than re-queried, so
+  // the phone's store sheet cannot offer a store the desk's rail does not.
+  const stores = await getOverviewStores()
+  const sections = await getOrdersSections({
+    range: counterParams.range,
+    comparisonId: counterParams.comparisonId,
+    storeId: counterParams.storeId,
+    channels: counterParams.channels,
+    search: counterParams.search,
   })
 
-  const periodLabel =
-    range.kind === "named"
-      ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.label ?? "Today")
-      : "Custom range"
-
   return (
-    <>
-      <MToolbar
-        pathname="/m/orders"
-        searchParams={sp}
-        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
-        storeId={validStoreId}
-        range={range}
+    <div data-perf-ready="/m/orders">
+      <CounterPhoneOrdersClient
+        // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
+        // the RSC boundary with its prototype stripped.
+        params={params.toString()}
+        stores={stores}
+        today={today}
+        sections={sections}
       />
-
-      <PageHead
-        dept="LEDGER"
-        title="Orders"
-        sub={`${list.totalCount.toLocaleString()} ${periodLabel.toLowerCase()}`}
-      />
-
-      <div className="dock-in dock-in-2">
-        <Panel
-          dept={`${list.rows.length} OF ${list.totalCount.toLocaleString()}`}
-          title="Live ledger"
-          flush
-        >
-          {list.rows.length === 0 ? (
-            <div className="m-empty m-empty--flush">
-              <strong>No orders match.</strong> Try a wider period or a
-              different store.
-            </div>
-          ) : (
-            list.rows.map((o) => (
-              <Link
-                key={o.id}
-                href={`/m/orders/${o.id}`}
-                className="order-row"
-                style={{
-                  gridTemplateColumns: "[meta] 1fr [total] auto",
-                  gap: 12,
-                  padding: "14px 18px",
-                }}
-              >
-                <span style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <span className="m-cap">
-                    {fmtTime(o.referenceTimeLocal)} ·{" "}
-                    {PLATFORM_LABEL[o.platform] ?? o.platform.toUpperCase()}
-                  </span>
-                  <span className="inv-row__vendor-name">
-                    {o.externalDisplayId ?? "—"}
-                  </span>
-                  <span style={{ fontSize: 11, color: "var(--ink-muted)" }}>
-                    {o.storeName} · {o.itemCount} items
-                  </span>
-                </span>
-                <span className="total-num inv-row__total">
-                  {fmtMoney(o.total)}
-                </span>
-              </Link>
-            ))
-          )}
-        </Panel>
-      </div>
-    </>
+    </div>
   )
 }
