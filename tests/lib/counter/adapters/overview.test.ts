@@ -445,6 +445,22 @@ describe("getOverviewSections", () => {
     expect(food?.change).toContain("pts")
   })
 
+  it("divides the weekday window's money by four before reading it against one period", async () => {
+    // `comparisonRange("weekday")` returns a window CONTAINING four
+    // occurrences, not an equivalent period. Undivided, every weekday
+    // comparison would report this range as down 75%.
+    vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
+      (input.startDate.getTime() < range.start.getTime()
+        ? pnl({ combined: { ...pnl().combined, grossSales: 29_872 } })
+        : pnl()) as never,
+    )
+    const s = await load({ comparisonId: "weekday" })
+    if (!hasData(s.comparison)) throw new Error("comparison")
+    const net = s.comparison.data[0]
+    expect(net.then).toBe("$7,468")
+    expect(net.change).toBe("flat")
+  })
+
   it("has nothing to compare when the reader turned the comparison off", async () => {
     const s = await load()
     expect(s.comparison.status).toBe("empty")
