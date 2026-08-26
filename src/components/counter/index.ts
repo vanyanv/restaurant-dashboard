@@ -40,6 +40,8 @@ export { MathLines, type MathRow } from "./surface/math-line"
 export { Briefing, type BriefingLine } from "./surface/briefing"
 export { Dots } from "./surface/dots"
 export { Tag, StatusPill, type TagTone, type PillSeverity } from "./surface/tag"
+export { WeekPicker, type WeekDay } from "./surface/week-picker"
+export { Record, type RecordMark } from "./surface/record"
 
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"
