@@ -1,210 +1,83 @@
-import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { PageHead } from "@/components/mobile/page-head"
-import {
-  MastheadFigures,
-  type MastheadCell,
-} from "@/components/mobile/masthead-figures"
-import { MToolbar } from "@/components/mobile/m-toolbar"
-import { HourlyChart } from "@/components/mobile/hourly-chart"
-import { DailyRevenueChart } from "@/components/mobile/daily-revenue-chart"
-import {
-  parseMobileRange,
-  periodToDateRange,
-  MOBILE_PERIODS,
-} from "@/lib/mobile/period"
-import { todayInLA } from "@/lib/dashboard-utils"
-import { formatPaceLine } from "@/lib/hourly-orders"
-import {
-  getMobileHomeSnapshot,
-  trailingRevenueStart,
-} from "@/lib/mobile/snapshots"
+import { readCounterParams } from "@/lib/counter/url-state"
+import { getOverviewSections, getOverviewStores } from "@/lib/counter/adapters/overview"
+import { CounterPhoneOverviewClient } from "./counter-phone-overview-client"
 
 export const dynamic = "force-dynamic"
 
-const fmtCount = (n: number) => n.toLocaleString("en-US")
-
-const fmtTodayTitle = () => {
-  const today = new Date()
-  return today.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  })
-}
-
-const PERIOD_TITLE: Record<string, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  "this-week": "This week",
-  "last-week": "Last week",
-}
-
+/**
+ * Counter Overview — the phone.
+ *
+ * `src/middleware.ts` redirects `/dashboard` to `/m` on a phone user agent, so
+ * this route IS the phone surface: it is what a reader on a phone gets when
+ * they open the dashboard, and it is what `npm run fidelity`'s `fidelity-mobile`
+ * project measures against `P.overview.phone()`.
+ *
+ * It is a near-copy of `src/app/dashboard/page.tsx` on purpose, and the part
+ * that must stay identical is the middle: ONE `getOverviewSections` call, with
+ * the range, comparison and store read off the same `readCounterParams`. Two
+ * surfaces asking two different loaders for "net sales" is how the same
+ * restaurant ends up with two answers for the same day; here they cannot,
+ * because there is one adapter and it is this one.
+ *
+ * ## What this replaced
+ *
+ * The editorial mobile home: `PageHead` + `MastheadFigures` + `HourlyChart` +
+ * `DailyRevenueChart`, driven by `getMobileHomeSnapshot` and a `?period=`
+ * vocabulary of its own. That page answered two figures where the design shows
+ * a dozen, and — the reason it could not simply be kept alongside — it read a
+ * different range parameter than the desk, so a phone and a desk open on the
+ * same account showed different windows and neither said so. Its loaders are
+ * left in place; other `/m` pages still use them.
+ *
+ * ## The owner gate, and why it redirects rather than degrades
+ *
+ * Ruling C-R4, unchanged on this surface: `getAllStoresPnL` refuses a
+ * non-owner and most of this page's sections share that one rollup, so a
+ * reader without owner access would get a page of "restricted to owners"
+ * boxes. It redirects to `/m/more` — the phone's settings — rather than
+ * `/dashboard/settings`, which on a phone would bounce through the middleware
+ * to the same place with an extra hop.
+ */
 export default async function MobileHomePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
+  if (!hasOwnerAccess(session.user.role)) redirect("/m/more")
 
   const sp = await searchParams
-  const range = parseMobileRange({ period: sp.period, start: sp.start, end: sp.end })
-  const storeId = sp.store && sp.store !== "" ? sp.store : null
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (typeof value === "string") params.set(key, value)
+  }
 
-  // Period totals come from `otterDailySummary` (same source the desktop uses)
-  // so the masthead never shows a stale zero just because the hourly precompute
-  // table is behind. The 14-day chart trails the period's end so a yesterday
-  // selection still gives meaningful context.
-  const window =
-    range.kind === "custom"
-      ? { startDate: range.start, endDate: range.end }
-      : (() => {
-          const r = periodToDateRange(range.period)
-          return { startDate: r.startDate, endDate: r.endDate }
-        })()
-  const periodStart = window.startDate.toISOString().slice(0, 10)
-  const periodEnd = window.endDate.toISOString().slice(0, 10)
-  const trendEnd = periodEnd
-  const trendStart = trailingRevenueStart(trendEnd)
+  // Resolved once, here, and passed to the island — a moving `new Date()`
+  // re-evaluated in two places could disagree about which calendar day
+  // "today" is.
+  const today = new Date()
+  const counterParams = readCounterParams(params, today)
 
-  const snapshot = await getMobileHomeSnapshot({
-    storeId,
-    periodStart,
-    periodEnd,
-    trendStart,
-    trendEnd,
-    hourlyPeriod: range.kind === "named" ? range.period : null,
+  const stores = await getOverviewStores()
+  const sections = await getOverviewSections({
+    range: counterParams.range,
+    comparisonId: counterParams.comparisonId,
+    storeId: counterParams.storeId,
+    accountId: session.user.accountId,
   })
-
-  const stores = snapshot?.stores ?? []
-  const validStoreId = snapshot?.validStoreId ?? null
-  const activeStoreName = snapshot?.activeStoreName ?? null
-  const totalSales = snapshot?.totalSales ?? 0
-  const totalOrders = snapshot?.totalOrders ?? 0
-  const netGrowth = snapshot?.netGrowth ?? null
-  const previousNet = snapshot?.previousNet ?? 0
-  const hourlyComparison = snapshot?.hourlyComparison ?? null
-  const pendingInvoiceCount = snapshot?.pendingInvoiceCount ?? null
-  const laborGlance = snapshot?.laborGlance ?? null
-  const canSeeLabor = hasOwnerAccess(session.user.role)
-
-  const periodLabel =
-    range.kind === "named"
-      ? (MOBILE_PERIODS.find((p) => p.value === range.period)?.short ?? "TODAY")
-      : "CUSTOM"
-
-  // A period that includes today is still running, so comparing its total
-  // against a *complete* prior period reads as a collapse all morning — that
-  // is what produced "−88% vs prior" at 1:16 PM on a day the desktop correctly
-  // called +4%. Prefer the cutoff-aware same-weekday pace line (shared with the
-  // desktop hero KPIs); only fall back to prior-period growth once the period
-  // has actually closed, and say nothing rather than guess in between.
-  const periodInProgress = periodEnd >= todayInLA()
-  const pace = formatPaceLine(hourlyComparison, hourlyComparison?.salesPacePct)
-  const priorGrowth =
-    netGrowth != null && previousNet > 0
-      ? `${netGrowth >= 0 ? "+" : ""}${netGrowth.toFixed(0)}% vs prior`
-      : null
-
-  const netSub = pace
-    ? pace.display
-    : periodInProgress
-      ? "in progress · no like-for-like yet"
-      : (priorGrowth ?? "no prior comparison")
-
-  const cells: MastheadCell[] = [
-    {
-      label: `NET ${periodLabel}`,
-      value: fmtMoney(totalSales),
-      sub: netSub,
-    },
-    {
-      label: "ORDERS",
-      value: fmtCount(totalOrders),
-      sub: activeStoreName ?? `${stores.length} stores`,
-    },
-  ]
-
-  // Invoice-count lookup is contained (getPendingInvoiceCountSafe never
-  // throws) — a failure yields null and the cell is omitted, never a fake
-  // zero, same contract as labor below.
-  if (pendingInvoiceCount != null) {
-    cells.push({
-      label: "PENDING INV",
-      value: fmtCount(pendingInvoiceCount),
-      sub: "awaiting review",
-      href: "/m/invoices?status=REVIEW",
-    })
-  }
-
-  // Labor is owner-only (mirrors the /m/labor route's own gate) and only
-  // shown once Harri has a forecast to compare against — no fake zero. The
-  // link carries the selected store explicitly: the figure is computed for
-  // validStoreId (falling back to the account's first store only when no
-  // store is selected), but /m/labor applies that same fallback on its own
-  // arrival, so an explicit non-default selection would otherwise silently
-  // flip to a different store's data after the tap.
-  if (canSeeLabor && laborGlance) {
-    cells.push({
-      label: "LABOR ±",
-      value: (
-        <span style={{ color: laborGlance.overbudget ? "var(--accent)" : "var(--ink)" }}>
-          {`${laborGlance.variancePct >= 0 ? "+" : ""}${(laborGlance.variancePct * 100).toFixed(1)}%`}
-        </span>
-      ),
-      sub: `${laborGlance.variance >= 0 ? "+" : "-"}${fmtMoney(Math.abs(laborGlance.variance))} vs forecast`,
-      href: `/m/labor${validStoreId ? `?store=${validStoreId}` : ""}`,
-    })
-  }
-
-  const trendIsTrailing = trendEnd === todayInLA()
-  const trendLabel = trendIsTrailing
-    ? "DAILY REVENUE · LAST 14D"
-    : `DAILY REVENUE · 14D TO ${range.kind === "named" ? periodLabel : periodEnd}`
 
   return (
     <div data-perf-ready="/m">
-      <MToolbar
-        pathname="/m"
-        searchParams={sp}
-        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
-        storeId={validStoreId}
-        range={range}
+      <CounterPhoneOverviewClient
+        params={params.toString()}
+        stores={stores}
+        today={today}
+        sections={sections}
       />
-
-      <PageHead
-        dept="DAILY EDITION"
-        title={
-          range.kind === "named" && range.period === "today"
-            ? fmtTodayTitle()
-            : range.kind === "named"
-            ? (PERIOD_TITLE[range.period] ?? "Today")
-            : "Custom range"
-        }
-        sub={
-          activeStoreName
-            ? `${activeStoreName} · late edition`
-            : `All stores · late edition`
-        }
-      />
-
-      <MastheadFigures cells={cells} />
-
-      {range.kind === "named" && (
-        <div style={{ marginTop: 14 }}>
-          <HourlyChart data={snapshot?.hourly ?? []} metric="orders" showBaseline />
-        </div>
-      )}
-
-      <div style={{ marginTop: 14 }}>
-        <DailyRevenueChart
-          data={snapshot?.dailyTrends ?? []}
-          label={trendLabel}
-        />
-      </div>
     </div>
   )
 }

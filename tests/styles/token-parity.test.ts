@@ -101,8 +101,11 @@ function contrast(a: string, b: string): number {
  *      route group, not a parent of it, so no editorial page nests inside it.
  *   2. The four editorial stylesheets are imported by
  *      `(editorial)/layout.tsx`, `login/layout.tsx`, `(mobile)/m/layout.tsx`,
- *      `not-found.tsx` and `shutdown/page.tsx` — none of which is on a Counter
- *      route, so on `/dashboard` those rules are not even in the document.
+ *      `not-found.tsx` and `shutdown/page.tsx`. On `/dashboard` those rules
+ *      are not even in the document. On `/m` they ARE — see the third
+ *      exception below — and it is still safe, because an importer of those
+ *      sheets is an ANCESTOR of the Counter root, not a descendant of it, and
+ *      custom properties inherit downward only.
  *   3. Nothing in the Counter tree, or in the file that mounts it, imports
  *      Radix, `@/components/ui/**`, or an editorial stylesheet, and none of
  *      them emits an `editorial-*` class. The six mirrored token copies exist
@@ -132,6 +135,22 @@ function contrast(a: string, b: string): number {
  * palette's own ported markup: no Radix, no `@/components/ui/**`, no
  * `editorial-*` class. The third test below asserts that subtree stays that
  * way.
+ *
+ * THE THIRD EXCEPTION (Phase C task 4, the phone). `/m` is Counter Overview's
+ * phone surface — `src/middleware.ts` redirects `/dashboard` there on a phone
+ * user agent — and it is the FIRST Counter root mounted underneath a layout
+ * that imports the editorial stylesheets (`(mobile)/m/layout.tsx` loads
+ * `editorial-tokens.css` and `editorial-mobile.css`, and still renders the
+ * editorial tab bar around the page).
+ *
+ * That is the nesting direction this file has always said is fine. The hazard
+ * is an editorial element rendered INSIDE `.ct-root`, reading an unprefixed
+ * token that the alias layer has re-answered with a Counter value. Everything
+ * editorial on `/m` — the shell, the tab bar, the welcome marquee — is an
+ * ancestor or a sibling of the Counter root, and custom properties do not
+ * inherit upward or sideways. What is inside it is ported Counter markup and
+ * nothing else, which the third test sweeps for by finding every file that
+ * emits `ct-root` rather than only the ones that mount `<AppShell>`.
  */
 const COUNTER_ROOT_CLASSES = ["ct-root", "frame", "pframe", "login"]
 
@@ -141,6 +160,10 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // The ⌘K palette, which portals to document.body and must carry the alias
   // layer out with it. See the note above.
   { file: "components/counter/ask/ask-surface.tsx", token: "ct-root" },
+  // The phone surface. `/m` is Counter Overview on a phone, and it composes no
+  // `AppShell` — the desk's rail and topbar are not the phone's chrome — so it
+  // mounts the alias layer itself. See the note above.
+  { file: "app/(mobile)/m/counter-phone-overview-client.tsx", token: "ct-root" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -190,16 +213,29 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
 
   it("still bans the three root classes nothing carries", () => {
     // The exception list must never quietly grow into a blanket exemption.
-    expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual(["ct-root", "ct-root"])
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(2)
+    expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual([
+      "ct-root",
+      "ct-root",
+      "ct-root",
+    ])
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(3)
   })
 
   it("keeps every editorial surface out of the Counter root", () => {
     // The three conditions from the comment above, as one sweep: the Counter
-    // component tree, plus whatever file mounts <AppShell> — everything that
-    // can render INSIDE .ct-root — must be free of editorial anything.
+    // component tree, plus every file that can OPEN a .ct-root — everything
+    // that can render INSIDE one — must be free of editorial anything.
+    //
+    // "Mounts <AppShell>" was the whole test until the phone arrived, and the
+    // phone composes no AppShell: it is a Counter root under an editorial
+    // layout, which is exactly the case worth sweeping. So the set is every
+    // file that EMITS `ct-root`, which is the thing that actually turns the
+    // alias layer on, plus the AppShell mounts that inherit it from the shell.
     const all = sourceFiles(join(process.cwd(), "src"))
-    const mounts = all.filter((f) => /<AppShell[\s>]/.test(readFileSync(f, "utf8")))
+    const mounts = all.filter((f) => {
+      const text = readFileSync(f, "utf8")
+      return /<AppShell[\s>]/.test(text) || /\bct-root\b/.test(text)
+    })
     expect(mounts.length, "expected at least one file to mount AppShell").toBeGreaterThan(0)
 
     const underRoot = new Set([
