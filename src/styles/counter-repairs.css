@@ -51,3 +51,30 @@
    in src/components/counter/surface/math-line.tsx. */
 .mathline.is-rule { border-top: 1px solid var(--line-strong); padding-top: 9px; border-bottom: none }
 .mathline.is-open { border-bottom: none }
+
+/* `WeekPicker` renders `.wkd` as a <button>, not the prototype's <div>, so
+   the day cell is keyboard-reachable (ruling N-R10). `.wkd` itself
+   (src/styles/counter-components.css:572-581, 906-907) never declares
+   font-family, font-size, line-height, color, font-variant-numeric or a
+   border — a <div> just inherits the first five from `.ct-root` and has no
+   border by default, so it never needed to. A <button> does not inherit
+   those from its ancestor and instead gets Chromium's UA button defaults (a
+   fixed control font/size/line-height, black text, a 2px outset border).
+   Verified directly: rendered a bare <div class="wkd"> next to a
+   <button class="wkd"> under the same .ct-root in Chromium and diffed
+   getComputedStyle for the 18 properties the fidelity gate checks
+   (e2e/fidelity/landmarks.ts) — font-family, font-size, line-height, color,
+   font-variant-numeric, border-top-width, border-left-width and
+   border-left-color all diverged; the other ten (display, font-weight,
+   letter-spacing, background-color, border-radius, padding-top, padding-left,
+   gap, grid-template-columns, text-transform) matched because `.wkd` (or its
+   descendant rules plus `.ct-root`) already sets them or the UA default
+   happens to agree. `inherit` restores the div's behaviour exactly, in both
+   themes, rather than hard-coding a token here. */
+button.wkd {
+  font: inherit;
+  color: inherit;
+  font-variant-numeric: inherit;
+  border: none;
+  appearance: none;
+}
