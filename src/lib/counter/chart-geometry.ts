@@ -295,8 +295,18 @@ export function chartMarks(spec: ChartSpec, sc: ChartScale): ChartMarks {
       for (let i = 0; i < n; i++) {
         const lo = spec.band.lo[i]
         const hi = spec.band.hi[i]
-        // A ribbon cannot hold a hole, so a gap simply ends the run of points
-        // rather than emitting a NaN coordinate that voids the whole path.
+        // A gap is SKIPPED, not broken across: `continue` omits the vertex, so
+        // the ribbon closes over the missing columns as one polygon rather
+        // than becoming two. That is not what a hole means, and it is left
+        // that way deliberately — a genuinely broken ribbon needs a list of
+        // sub-paths, and nothing reaches this branch with a holed band today
+        // (only the `bars` branch above takes one). What this line DOES buy is
+        // the thing that matters: no `NaN` coordinate, which would void the
+        // whole path rather than one span of it.
+        //
+        // If a line-type band ever gets holes, this needs splitting, and the
+        // test above it (which only asserts the absence of NaN) needs to start
+        // asserting the shape.
         if (lo == null || hi == null) continue
         up.push(`${X(i).toFixed(1)},${Y(hi).toFixed(1)}`)
         dn.push(`${X(i).toFixed(1)},${Y(lo).toFixed(1)}`)
