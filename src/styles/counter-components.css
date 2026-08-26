@@ -817,7 +817,7 @@ width:340px; height:718px; flex:none;
 }
 .dispatch{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 15px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:var(--t-body)}
 .dispatch b{font-weight:600}
-.dispatch .sep{color:var(--line-strong)}
+.dispatch .sep{color:var(--ink-3)}
 .dispatch .hot{color:var(--accent);font-weight:600}
 .dispatch .quiet{color:var(--ink-2)}
 .dispatch .spacer{flex:1}

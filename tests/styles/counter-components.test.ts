@@ -348,6 +348,24 @@ describe("counter-components.css", () => {
     expect(componentsAt).toBeGreaterThan(counterAt)
   })
 
+  it("carries the one recorded correction, and carries it for a reason the gate proved", () => {
+    // The ported sheet is byte-identical to the extractor's output (the test
+    // below), so a colour that is wrong in DARK cannot be hand-edited here —
+    // it has to be recorded in the extractor's CORRECTIONS table. Exactly one
+    // is recorded today: the prototype paints `.dispatch .sep` in a rule
+    // colour, which is 1.73:1 against the surface in dark and which the
+    // fidelity gate's contrast pass reports as a defect on the Overview.
+    expect(CSS).toContain(".dispatch .sep{color:var(--ink-3)}")
+    expect(CSS).not.toContain(".dispatch .sep{color:var(--line-strong)}")
+    // And the prototype still says what the correction says it says, so the
+    // correction is a divergence rather than a coincidence.
+    const proto = readFileSync(
+      join(ROOT, "docs", "counter", "counter-prototype.html"),
+      "utf-8",
+    )
+    expect(proto).toContain(".dispatch .sep{color:var(--line-strong)}")
+  })
+
   it("is exactly what the extractor produces from the prototype today", () => {
     // Regeneration is deterministic, and the committed file is not stale.
     expect(generate()).toBe(CSS)
