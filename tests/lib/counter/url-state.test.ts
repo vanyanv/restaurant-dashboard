@@ -140,3 +140,93 @@ describe("custom ranges in the URL", () => {
     expect(p.comparisonId).toBe("prev")
   })
 })
+
+/**
+ * The orders list's own two keys.
+ *
+ * A filtered list has to survive a reload and be linkable — "look at the
+ * DoorDash orders that mention 'burger'" is a link, not a description of which
+ * buttons to press. Both keys are read as UNTRUSTED like everything else here:
+ * a hand-edited channel id is dropped, never thrown on.
+ */
+describe("the orders filters in the URL", () => {
+  it("reads no channels at all when the key is absent — which means every channel", () => {
+    // NOT "no channel matches". A reader who has pressed nothing, or who has
+    // just pressed Clear, is asking for the whole list.
+    expect(readCounterParams(new URLSearchParams(), TODAY).channels).toEqual([])
+    expect(readCounterParams(new URLSearchParams(), TODAY).search).toBe("")
+  })
+
+  it("reads a comma-separated list of channels", () => {
+    expect(readCounterParams(new URLSearchParams("channels=doordash,house"), TODAY).channels)
+      .toEqual(["doordash", "house"])
+  })
+
+  it("drops an unknown channel id rather than throwing", () => {
+    // `channelById` throws on an unknown id, and this string is user input.
+    const p = readCounterParams(new URLSearchParams("channels=doordash,skipthedishes"), TODAY)
+    expect(p.channels).toEqual(["doordash"])
+  })
+
+  it("drops every id when none of them is known, and does not fall back to a channel nobody asked for", () => {
+    expect(readCounterParams(new URLSearchParams("channels=nonsense"), TODAY).channels).toEqual([])
+  })
+
+  it("ignores an empty channels key and a repeated id", () => {
+    expect(readCounterParams(new URLSearchParams("channels="), TODAY).channels).toEqual([])
+    expect(readCounterParams(new URLSearchParams("channels=house,house"), TODAY).channels)
+      .toEqual(["house"])
+  })
+
+  it("reads the search term", () => {
+    expect(readCounterParams(new URLSearchParams("q=4821"), TODAY).search).toBe("4821")
+  })
+
+  it("writes both keys", () => {
+    const next = writeCounterParams(new URLSearchParams(), {
+      channels: ["house", "grubhub"],
+      search: "burger",
+    })
+    expect(next.get("channels")).toBe("house,grubhub")
+    expect(next.get("q")).toBe("burger")
+  })
+
+  it("REMOVES both keys when cleared, rather than writing them empty", () => {
+    // This is what "Clear filters" does, and the asymmetry is load-bearing:
+    // an absent `channels` key is no platform filter at all, so orders on a
+    // slug outside the four channels (`chownow`) come back. Writing all four
+    // ids instead would filter those orders OUT — a Clear that narrows.
+    const next = writeCounterParams(
+      new URLSearchParams("range=d7&channels=doordash&q=4821"),
+      { channels: [], search: "" },
+    )
+    expect(next.has("channels")).toBe(false)
+    expect(next.has("q")).toBe(false)
+    // The range is not a filter, so Clear leaves it where it was.
+    expect(next.get("range")).toBe("d7")
+    expect(next.toString()).toBe("range=d7")
+  })
+
+  it("treats a whitespace-only search as no search", () => {
+    const next = writeCounterParams(new URLSearchParams("q=4821"), { search: "   " })
+    expect(next.has("q")).toBe(false)
+  })
+
+  it("leaves both keys alone when neither is passed", () => {
+    const next = writeCounterParams(new URLSearchParams("channels=house&q=fries"), {
+      storeId: "hollywood",
+    })
+    expect(next.get("channels")).toBe("house")
+    expect(next.get("q")).toBe("fries")
+  })
+
+  it("round-trips: what write produces, read understands", () => {
+    const written = writeCounterParams(new URLSearchParams(), {
+      channels: ["ubereats", "grubhub"],
+      search: "wings",
+    })
+    const read = readCounterParams(written, TODAY)
+    expect(read.channels).toEqual(["ubereats", "grubhub"])
+    expect(read.search).toBe("wings")
+  })
+})

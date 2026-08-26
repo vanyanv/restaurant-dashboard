@@ -2,6 +2,7 @@ import {
   COMPARISONS, PRESETS, comparisonRange, isoDay, parseIsoDay, resolvePreset,
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "./date-range"
+import { CHANNELS, type ChannelId } from "./channels"
 
 /**
  * The range and the store live in the URL.
@@ -29,6 +30,20 @@ export interface CounterParams {
   /** null means all stores — the absence of a store, not a magic "all" id. */
   storeId: string | null
   range: DateRange
+  /**
+   * The pressed channel toggles on the orders list. EMPTY IS EVERY CHANNEL.
+   *
+   * That asymmetry is the whole of the filter's meaning and it is not a
+   * shortcut: with no toggle pressed there is no platform filter at all, so an
+   * order on a slug that has no Counter channel (`chownow`, and whatever Otter
+   * adds next) is included. With all four pressed the filter becomes
+   * `platform IN (the four channels' slugs)` and those orders VANISH. So "all
+   * four pressed" and "none pressed" are different questions, and Clear must
+   * ask the second one — see `writeCounterParams`.
+   */
+  channels: ChannelId[]
+  /** The free-text filter on the orders list. `""` is no search. */
+  search: string
 }
 
 /**
@@ -66,6 +81,28 @@ function readCustomRange(params: URLSearchParams): DateRange | null {
   return { start, end }
 }
 
+const isChannel = (v: string): v is ChannelId => CHANNELS.some((c) => c.id === v)
+
+/**
+ * `channels=doordash,house` — the pressed toggles, in the order they were
+ * written, deduplicated, with anything unrecognised DROPPED.
+ *
+ * Dropping rather than throwing is the file's own rule applied to a new key:
+ * `channelById` throws on an unknown id, and this string is user input. A
+ * stale link from before a channel was renamed must open the orders list, not
+ * a 500.
+ */
+function readChannels(params: URLSearchParams): ChannelId[] {
+  const raw = params.get("channels")
+  if (raw === null || raw === "") return []
+  const out: ChannelId[] = []
+  for (const part of raw.split(",")) {
+    const id = part.trim()
+    if (isChannel(id) && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
 export function readCounterParams(params: URLSearchParams, today: Date): CounterParams {
   const custom = readCustomRange(params)
 
@@ -90,7 +127,14 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
 
   const store = params.get("store")
 
-  return { presetId, comparisonId, storeId: store === null || store === "" ? null : store, range }
+  return {
+    presetId,
+    comparisonId,
+    storeId: store === null || store === "" ? null : store,
+    range,
+    channels: readChannels(params),
+    search: params.get("q") ?? "",
+  }
 }
 
 /**
@@ -100,7 +144,7 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
  */
 export function writeCounterParams(
   current: URLSearchParams,
-  next: Partial<Pick<CounterParams, "comparisonId" | "storeId">> & {
+  next: Partial<Pick<CounterParams, "comparisonId" | "storeId" | "channels" | "search">> & {
     presetId?: PresetId
     /**
      * An arbitrary window — a pressed week (note 53) or a stepped period.
@@ -137,6 +181,29 @@ export function writeCounterParams(
   if (next.storeId !== undefined) {
     if (next.storeId === null) out.delete("store")
     else out.set("store", next.storeId)
+  }
+  /*
+   * Both orders keys are REMOVED at their default rather than written empty,
+   * and for `channels` that is not only about a tidy URL.
+   *
+   * `?channels=` and no `channels` key at all must mean the same thing, since
+   * `readChannels` reads both as "no toggle pressed" — but the reverse
+   * mistake is the dangerous one. "Clear filters" has to arrive here as
+   * `channels: []`, never as all four ids: an absent key is NO platform
+   * filter, so an order on a slug outside the four channels comes back, while
+   * all four ids is `platform IN (...)` and quietly drops those same orders.
+   * A Clear that narrows the list is the worst possible reading of the word.
+   */
+  if (next.channels !== undefined) {
+    if (next.channels.length === 0) out.delete("channels")
+    else out.set("channels", next.channels.join(","))
+  }
+  if (next.search !== undefined) {
+    // Trimmed, because a box holding one space is a box the reader has
+    // emptied — and `?q=%20` would filter every order out of the list.
+    const q = next.search.trim()
+    if (q === "") out.delete("q")
+    else out.set("q", q)
   }
 
   return out
