@@ -246,6 +246,35 @@ ruling as the unterminated `/*` at `counter-prototype.html:1167`.
 | **B** | Every primitive rebuilt as a faithful port: strip · figure · bullet · spark · section · table · queue · chart · cascade · head block · say · floor meter · dispatch · moving · ask bar · store cards · channel rows · gap bar · drill · rail · topbar · date control, plus the phone set (`mstrip`, `mlist`, `money`, `mtab`). |
 | **C** | Pages, in the prototype's own order, each desk and phone, each with a committed fidelity report. Overview first — it is the page that proved the problem. |
 
+Phase C, page by page. A row moves to **gated** in the commit that flips its
+`e2e/fidelity/manifest.ts` entry to `status: "counter"` with the baseline the
+suite measured — never before, and never with a number that was chosen rather
+than reported.
+
+| Page | Desk | Phone | Gated |
+|---|---:|---:|---|
+| Overview (`overview`) | 76 of 86 | 44 of 51 | yes — 5 absences recorded |
+| P&L (`pnl`) | 43 of 51 | 21 of 21 | yes — 8 desk absences recorded |
+| Orders (`orders`) | 10 of 10 | 5 of 5 | yes — nothing absent |
+| An order (`order`) | 20 of 20 | 12 of 12 | yes — nothing absent |
+
+Orders is the first page whose two surfaces both match the prototype landmark
+for landmark, with nothing missing, nothing extra and no rendering difference
+on either. Two things it settled that the plan had wrong:
+
+- **The strip meters were never owed.** The plan budgeted a `.blt`, a `.band`
+  and a `.sp` under every strip cell on both pages, on the correct observation
+  that nothing in `prisma/schema.prisma` publishes a per-order target. But
+  `P.orders.desk()` and `P.order.desk()` pass no reference to `strip()` either,
+  so no meter is drawn on EITHER side. Written down anyway, the allowance would
+  have failed on its first run as **stale** — which is the rule working.
+- **A gated page cannot render an empty section.** `Empty` emits `.empty`, an
+  extra landmark, and ruling F-R8 never forgives one. So the order the `order`
+  entry names is not arbitrary: it has to be one that exercises every section
+  the prototype draws, including the "Needs you" queue. 19,911 of the account's
+  last 20,000 orders have every line costed and would render that section
+  empty; the entry names one of the 87 that do not, and says so.
+
 Plan 8's Tasks 3–8 are withdrawn. `prime-cost.ts` (Task 2) and the URL's
 custom ranges (Task 1) survive — both are correct and Phase C needs them. The
 P&L is rebuilt in Phase C like every other page, from the prototype's own

@@ -328,6 +328,63 @@ describe("the P&L manifest entry accounts for what it cannot render", () => {
   })
 })
 
+describe("the two Orders manifest entries are gated on what they measured", () => {
+  it("is gated on both surfaces, with the counts the suite actually reported", () => {
+    // Desk 10 of the prototype's 10, phone 5 of 5 — the first PAGE in this
+    // project whose two surfaces both match the prototype landmark for
+    // landmark, with nothing missing and nothing extra.
+    const orders = pageById("orders")
+    expect(orders.status).toBe("counter")
+    if (orders.status !== "counter") throw new Error("unreachable")
+    expect(orders.baseline).toEqual({ desktop: 10, mobile: 5 })
+
+    const order = pageById("order")
+    expect(order.status).toBe("counter")
+    if (order.status !== "counter") throw new Error("unreachable")
+    expect(order.baseline).toEqual({ desktop: 20, mobile: 12 })
+  })
+
+  it("forgives NOTHING on either page, on either surface", () => {
+    // The plan budgeted `.blt`, `.band` and `.sp` under every strip cell on
+    // both pages, reasoning that no per-order target is published. The
+    // reasoning holds and the conclusion did not: `P.orders.desk()` and
+    // `P.order.desk()` pass no reference to `strip()` either, so the meter is
+    // absent from BOTH sides and there is nothing to forgive. An allowance
+    // written anyway would have failed on its first run as stale — which is
+    // exactly what that rule is for.
+    for (const id of ["orders", "order"]) {
+      expect(pageById(id).absentLandmarks ?? []).toEqual([])
+      expect(absenceBudget(pageById(id), "desk")).toEqual({})
+      expect(absenceBudget(pageById(id), "phone")).toEqual({})
+    }
+  })
+
+  it("names a real order rather than the prototype's invented #4821", () => {
+    // The prototype's route is `/dashboard/orders/4821`; ours must be an id
+    // this database holds, or the page 404s and the gate reports a design
+    // difference about a page that never loaded.
+    const order = pageById("order")
+    expect(order.protoRoute).toBe("/dashboard/orders/4821")
+    expect(order.route).not.toBe(order.protoRoute)
+    expect(order.route).toMatch(
+      /^\/dashboard\/orders\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    )
+    // The phone lands on the same order through the middleware's rewrite, so
+    // the two routes must name the SAME id — a mismatch would compare two
+    // different orders and call the difference a design finding.
+    expect(order.mobileRoute).toBe(order.route.replace("/dashboard/", "/m/"))
+  })
+
+  it("asks for no window, because neither page has one to ask for", () => {
+    // Overview and the P&L pass `?range=d7&cmp=weekday` so their day series
+    // are not degraded to a strip by our one-day default. Orders' only chart
+    // is hourly and the order detail is `nodate` on both sides, so both pages
+    // are compared at their own defaults.
+    expect(pageById("orders").query).toBeUndefined()
+    expect(pageById("order").query).toBeUndefined()
+  })
+})
+
 describe("every gated page carries a floor and a written reason for each absence", () => {
   // The same three things the Overview entry has always been checked for,
   // asserted over the whole manifest rather than page by page — so the next
@@ -335,8 +392,10 @@ describe("every gated page carries a floor and a written reason for each absence
   // hand-written copy of it that someone forgets to add.
   const gated = PAGES.filter((p) => p.status === "counter")
 
-  it("has at least the two pages this phase gated", () => {
-    expect(gated.map((p) => p.protoId)).toEqual(["overview", "pnl"])
+  it("has at least the four pages this phase gated", () => {
+    // Manifest order, which is the prototype's own page order — not the order
+    // they were gated in.
+    expect(gated.map((p) => p.protoId)).toEqual(["overview", "orders", "order", "pnl"])
   })
 
   for (const page of gated) {
