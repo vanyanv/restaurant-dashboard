@@ -645,6 +645,84 @@ git commit -m "feat(counter): one adapter for the list of orders and for one ord
 
 ---
 
+## Task 4b: The band the prototype draws, and a filter that can express "In-house"
+
+**Added after Task 4, from two gaps it found. Files:**
+- Modify: `src/lib/hourly-orders.ts`, `src/app/actions/hourly-orders-actions.ts`
+- Modify: `src/app/actions/order-actions.ts`
+- Modify: `src/lib/counter/adapters/orders.ts` (`buildOrdersByHour`, `buildToggles`)
+- Test: `tests/lib/hourly-orders.test.ts`, `tests/lib/counter/adapters/orders.test.ts`
+
+### 4b-i. A per-hour band, because the data is already in hand
+
+`sec('Orders by hour', 'band = the last four <dow>s', chart({… band:{lo:HLO, hi:HHI} …}))`
+— prototype line 4870. Task 4 could not draw it: `HourlyOrderPoint` publishes
+`avgOrderCount`, the MEAN across the four baseline weeks, and
+`OrderPatternsHourlyComparison.groupTotals` are whole-period totals with no hour
+attached. A `{lo,hi}` built from a mean is a zero-width band drawn as a range —
+correctly refused, and shipped as a dashed baseline line instead.
+
+But the spread is not missing, only discarded. `readHourlyPatterns` already
+queries **every `(date, hour)` row for all four comparison groups** in one
+`findMany` and hands them to `bucketHourlyRows`, which averages them. Publish
+the spread instead of only its mean:
+
+```ts
+export interface HourlyOrderPoint {
+  // …existing fields unchanged…
+  /** Per-baseline-group order counts for THIS hour, weeks with no data removed. */
+  groupOrderCounts: number[]
+}
+```
+
+`buildOrdersByHour` then draws `band: { lo: min(groupOrderCounts), hi: max(...) }`
+per hour, which is what the prototype draws, and **drops the dashed baseline
+series**. That series is an EXTRA landmark under ruling F-R8 and would block
+Task 8's gate; this is why 4b comes before the compositions rather than after.
+
+An hour whose `groupOrderCounts` is empty (no baseline week had data) gets no
+band at that hour, not a band of zero. Keep the existing `hasBaseline` guard for
+the whole-chart case.
+
+**Do not change `avgOrderCount`.** The Overview's pace lines read it and the
+Overview is already gated; a changed mean would show up there as a regression.
+
+### 4b-ii. A filter that can express "In-house"
+
+`getOrdersList` filters on ONE `platform` string, but `css-pos` and `bnm-web`
+both map to the `house` channel (`CHANNEL_FOR_PLATFORM` in `channel-mix.ts`), so
+a per-channel toggle cannot be expressed and Task 4 shipped toggles per raw
+slug. The prototype's four toggles are CHANNELS (line 4859) — In-house,
+DoorDash, Uber Eats, Grubhub — so the filter has to widen:
+
+```ts
+export type OrderListFilters = {
+  // …existing…
+  /** Raw platform slugs. Any match. Supersedes `platform`, which stays for callers that pass one. */
+  platforms?: string[] | null
+}
+```
+
+`where.platform = { in: platforms }` when the array is non-empty. An empty array
+means **no filter**, not "match nothing" — a reader who deselects every toggle
+is asking to see everything, which is also what the prototype's Clear does.
+Test that case explicitly; it is the one a naive `in: []` gets backwards by
+returning zero rows.
+
+Then `buildToggles` emits one toggle per `ChannelId` with `markVarFor(id)` as the
+tint, and the adapter maps selected channels to their slugs through
+`CHANNEL_FOR_PLATFORM`.
+
+- [ ] **Step 1: Write the failing tests** — per-hour lo/hi across four uneven groups; an hour with no baseline data; `platforms: []` returning everything; a channel toggle selecting both house slugs.
+- [ ] **Step 2: Run and watch them fail**
+- [ ] **Step 3: Implement**
+- [ ] **Step 4: Run and watch them pass**
+- [ ] **Step 5: Prove the empty-array test is real** — change the filter to `in: platforms` unconditionally, watch that one test go red while the others stay green, restore, report both.
+- [ ] **Step 6: Confirm the Overview did not move** — `npm run fidelity -- --grep Overview` must stay green, because `avgOrderCount` feeds its pace lines.
+- [ ] **Step 7: Commit**
+
+---
+
 ## Task 5: The desk list — `/dashboard/orders`
 
 **Files:**
