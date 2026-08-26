@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import Link from "next/link"
 import { toneStyle, type Tone } from "./tone"
 
 /**
@@ -23,8 +24,16 @@ export type QueueItem = {
      * nothing is worse than no button (the same rule `Failed` follows), so
      * the type makes the pair inseparable.
      */
-  { act: string; onAct: () => void }
-  | { act?: undefined; onAct?: undefined }
+  { act: string; onAct: () => void; href?: never }
+  | /**
+     * The same rule, for the arm the prototype actually uses most: `data-goto`
+     * is a DESTINATION, not a callback. Without this, an adapter with somewhere
+     * to send the reader had to invent a handler or drop the button — the
+     * order page dropped it, which cost that page its `.do` landmark and left
+     * a worklist item telling a reader to do something with no way to go do it.
+     */
+  { act: string; href: string; onAct?: never }
+  | { act?: undefined; onAct?: undefined; href?: never }
 )
 
 /**
@@ -62,7 +71,14 @@ export function Queue({ items }: { items: QueueItem[] }) {
           <div>
             <b>{i.title}</b>
             <p>{i.body}</p>
-            {i.act ? (
+            {i.act && i.href ? (
+              // A link, not a button: it navigates, so it has to be
+              // middle-clickable and copyable like every other destination on
+              // the page. `.do` styles either element.
+              <Link className="do" href={i.href}>
+                {i.act}
+              </Link>
+            ) : i.act ? (
               <button className="do" type="button" onClick={i.onAct}>
                 {i.act}
               </button>

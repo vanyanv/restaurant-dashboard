@@ -21,12 +21,20 @@ export type SectionData<T> =
   | { status: "not_computed"; owed: string }
 
 /**
- * Two reasons, because they need different next steps (note 23). A pre-open
- * store has no sales because it has no customers — nothing is wrong and there
- * is nothing to do. A filter that matched nothing is a dead end the reader can
- * back out of.
+ * Three reasons, because they need different next steps (note 23).
+ *
+ * A pre-open store has no sales because it has no customers — nothing is wrong
+ * and there is nothing to do. A filter that matched nothing is a dead end the
+ * reader can back out of.
+ *
+ * `all_clear` is the third, and it was added because "Needs you" on an order
+ * with nothing wrong rendered `no_match`'s copy: *"No rows fall inside the
+ * current filters and date range. Widen either to see figures."* — on a page
+ * that has no filters and no date range. Worse than clumsy: it tells a reader
+ * whose order is perfectly fine to go looking for something they cannot find.
+ * An empty worklist is GOOD NEWS and has to read as good news.
  */
-export type EmptyReason = "pre_open" | "no_match"
+export type EmptyReason = "pre_open" | "no_match" | "all_clear"
 
 export const ready = <T>(data: T): Extract<SectionData<T>, { status: "ready" }> => ({
   status: "ready",

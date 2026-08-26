@@ -1103,7 +1103,7 @@ export function buildNeedsYou(
     })
   }
 
-  if (seen.size === 0) return empty<QueueItem[]>("no_match")
+  if (seen.size === 0) return empty<QueueItem[]>("all_clear")
 
   const items: QueueItem[] = [...seen].map(([skuId, l]) => {
     const carried = carriedBySku.get(skuId) ?? null
@@ -1113,6 +1113,14 @@ export function buildNeedsYou(
       lead: count(carried),
       unit: "orders",
       title: `${l.modifier ? "A modifier" : "An item"} is not costed: ${l.name}`,
+      // The prototype's `act: 'Map the modifier'` — and where it goes, which
+      // the prototype leaves to a global `data-goto` delegate we do not have.
+      // The two destinations are genuinely different pages: an unmapped ITEM
+      // is given a recipe in the catalogue, an unmapped MODIFIER is mapped
+      // against an ingredient. Sending both to one of them would be a button
+      // that lands the reader somewhere they cannot do the thing it named.
+      act: l.modifier ? "Map the modifier" : "Map the item",
+      href: l.modifier ? "/dashboard/ingredients" : "/dashboard/menu/catalog",
       body:
         `${l.name} is on this order and ${l.reason}, so every order carrying it ` +
         `overstates what you keep. ` +
