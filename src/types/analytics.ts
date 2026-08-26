@@ -302,6 +302,22 @@ export interface HourlyOrderPoint {
   totalSales: number
   avgOrderCount: number
   avgTotalSales: number
+  /**
+   * What THIS hour did in each baseline week that has data for it — the
+   * spread `avgOrderCount` is the mean of, published rather than discarded.
+   *
+   * Per-day, on the same divisor as `orderCount` and `avgOrderCount`: a
+   * group's rows for the hour summed and divided by the group's day count, so
+   * a week-long range's band sits beside week-long bars instead of seven
+   * times above them.
+   *
+   * A week with NO data at this hour is dropped rather than counted as zero —
+   * the same decision `OrderPatternsHourlyComparison.groupTotals` makes, for
+   * the same reason: a missing week must not drag a band's floor to zero.
+   * An EMPTY array therefore means "nothing is known about this hour", and a
+   * consumer must draw no band there rather than a band of zero.
+   */
+  groupOrderCounts: number[]
 }
 
 export type HourlyComparisonPeriod =

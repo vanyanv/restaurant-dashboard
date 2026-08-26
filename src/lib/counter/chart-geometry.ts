@@ -52,8 +52,16 @@ export interface ChartSeries {
 }
 
 export interface ChartBand {
-  lo: number[]
-  hi: number[]
+  /**
+   * `null` is a gap, not a zero — the same convention `ChartSeries.data` uses.
+   *
+   * A column nothing is known about (an hour no baseline week traded in) gets
+   * NO band block at all. Zeroes there would draw a floor along the axis and
+   * claim the comparison says "normally none", which is a different statement
+   * from "we do not know".
+   */
+  lo: (number | null)[]
+  hi: (number | null)[]
 }
 
 export interface ChartRule {
@@ -124,7 +132,10 @@ export function chartScale(spec: ChartSpec): ChartScale {
   for (const s of spec.series) {
     for (const v of s.data) if (v != null) vals.push(v)
   }
-  if (spec.band) vals.push(...spec.band.lo, ...spec.band.hi)
+  if (spec.band) {
+    for (const v of spec.band.lo) if (v != null) vals.push(v)
+    for (const v of spec.band.hi) if (v != null) vals.push(v)
+  }
   if (spec.rule) vals.push(spec.rule.v)
 
   let min: number
@@ -264,9 +275,12 @@ export function chartMarks(spec: ChartSpec, sc: ChartScale): ChartMarks {
   if (spec.band) {
     if (bar) {
       for (let i = 0; i < n; i++) {
+        const lo = spec.band.lo[i]
+        const hi = spec.band.hi[i]
+        if (lo == null || hi == null) continue
         const bw = w / n
-        const yh = Y(spec.band.hi[i])
-        const yl = Y(spec.band.lo[i])
+        const yh = Y(hi)
+        const yl = Y(lo)
         bandRects.push({
           x: bw * i + bw * 0.14,
           y: yh,
@@ -279,10 +293,15 @@ export function chartMarks(spec: ChartSpec, sc: ChartScale): ChartMarks {
       const up: string[] = []
       const dn: string[] = []
       for (let i = 0; i < n; i++) {
-        up.push(`${X(i).toFixed(1)},${Y(spec.band.hi[i]).toFixed(1)}`)
-        dn.push(`${X(i).toFixed(1)},${Y(spec.band.lo[i]).toFixed(1)}`)
+        const lo = spec.band.lo[i]
+        const hi = spec.band.hi[i]
+        // A ribbon cannot hold a hole, so a gap simply ends the run of points
+        // rather than emitting a NaN coordinate that voids the whole path.
+        if (lo == null || hi == null) continue
+        up.push(`${X(i).toFixed(1)},${Y(hi).toFixed(1)}`)
+        dn.push(`${X(i).toFixed(1)},${Y(lo).toFixed(1)}`)
       }
-      bandPath = `M${up.join("L")}L${dn.reverse().join("L")}Z`
+      bandPath = up.length ? `M${up.join("L")}L${dn.reverse().join("L")}Z` : undefined
     }
   }
 
@@ -433,7 +452,13 @@ export function chartReading(
   const extras: string[] = []
   const bf = bandFmt ?? fmt
   if (spec.band) {
-    extras.push(`${spec.bandLabel ?? "4-week band"} ${bf(spec.band.lo[i])}–${bf(spec.band.hi[i])}`)
+    const lo = spec.band.lo[i]
+    const hi = spec.band.hi[i]
+    // Nothing is known about this column, so the card says nothing about it —
+    // "$null–$null" is what reading the gap as a number would print.
+    if (lo != null && hi != null) {
+      extras.push(`${spec.bandLabel ?? "4-week band"} ${bf(lo)}–${bf(hi)}`)
+    }
   }
   if (spec.rule) extras.push(`${spec.rule.label} ${fmt(spec.rule.v)}`)
   if (spec.notes?.[i]) extras.push(spec.notes[i] as string)

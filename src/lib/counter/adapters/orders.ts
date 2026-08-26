@@ -6,7 +6,7 @@ import type { Prisma } from "@/generated/prisma/client"
 import type { HourlyOrderPoint, OrderPatternsHourlyComparison } from "@/types/analytics"
 import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { CHANNEL_FOR_PLATFORM } from "@/lib/counter/channel-mix"
-import { channelById, markVarFor, type Channel, type ChannelId } from "@/lib/counter/channels"
+import { CHANNELS, channelById, markVarFor, type Channel, type ChannelId } from "@/lib/counter/channels"
 import { count, money, pct } from "@/lib/counter/format"
 import {
   comparisonContext,
@@ -161,12 +161,15 @@ export interface OrdersSectionsInput {
   /** `null` = every store on the account. */
   storeId: string | null
   /**
-   * A raw Otter platform slug, or `null` for every channel.
+   * The channel toggles that are pressed. EMPTY (or absent) is every channel,
+   * which is what a reader who has pressed Clear is asking for — never "no
+   * channel matches".
    *
-   * ONE slug, not a set, because `getOrdersList` filters on one — see
-   * `buildToggles` for why the toggles are per slug rather than per channel.
+   * Channels, not raw slugs: `css-pos` and `bnm-web` are both `house`, so
+   * "In-house" is not a slug. `platformsForChannels` does the expansion, and
+   * `getOrdersList` takes the set through its `platforms` filter.
    */
-  platform?: string | null
+  channels?: ChannelId[]
   search?: string
   /** `"none"` prints no change on the strip rather than a row of em-dashes it calls a comparison. */
   comparisonId?: ComparisonId
@@ -275,16 +278,18 @@ const WEEKDAYS = [
 ]
 
 /**
- * Raw Otter slug → the words on its filter toggle.
+ * Raw Otter slug → the words on its row chip.
  *
  * NOT `Channel.name`, and the difference matters for exactly one channel:
- * `CHANNEL_FOR_PLATFORM` maps BOTH `css-pos` and `bnm-web` onto `house`, and
- * `getOrdersList` filters on ONE slug. Two toggles both labelled "In-house"
- * would be indistinguishable, and a single "In-house" toggle could not select
- * both slugs through a filter that takes one. So the toggles are per slug and
- * the house pair is named for what actually distinguishes them — the register
- * and the restaurant's own web ordering — while both still carry the house
- * tint, because they are one channel on every chart.
+ * `CHANNEL_FOR_PLATFORM` maps BOTH `css-pos` and `bnm-web` onto `house`. A row
+ * says which one took the money — the register, or the restaurant's own web
+ * ordering — because that is the thing a reader looking at ONE order wants to
+ * know, while both still carry the house tint, since they are one channel on
+ * every chart.
+ *
+ * The FILTER toggles are the other decision and they are per channel, not per
+ * slug (`buildToggles`): "In-house" means both slugs, which is why
+ * `getOrdersList` had to grow a `platforms` set to say it.
  */
 const PLATFORM_LABEL: Record<string, string> = {
   "css-pos": "In-house",
@@ -437,34 +442,50 @@ export function buildOrdersStrip(
 }
 
 /**
- * One toggle per platform the account has actually traded on.
+ * One toggle per CHANNEL — the prototype's four at line 4859.
  *
- * Driven by `OrderListResponse.platforms` — the distinct slugs on file —
- * rather than by `CHANNELS`, so a store that has never taken a Grubhub order
- * is not offered a filter that can only ever return nothing. A slug with no
- * Counter channel (`chownow`, and whatever Otter adds next) gets a toggle with
- * NO tint: `channel-mix.ts` deliberately assigns it no CVD-safe band, and
- * `Filters` renders an untinted toggle in fallback ink rather than in a colour
- * that means something else on the charts.
+ * Not one per raw slug on file. `css-pos` and `bnm-web` are both the `house`
+ * channel, so "In-house" — the first toggle the prototype draws — cannot be
+ * said with a slug at all; a reader pressing it means both. The toggles are
+ * therefore the four `CHANNELS`, always all four, and `platformsForChannels`
+ * expands what is pressed back into the slugs the query needs.
+ *
+ * The cost of the change, stated: an account that has never taken a Grubhub
+ * order is still offered the Grubhub toggle, and orders on a slug with no
+ * Counter channel (`chownow`, and whatever Otter adds next) can no longer be
+ * filtered TO — they are simply included whenever no toggle narrows the list.
+ * `channel-mix.ts` refuses those slugs a CVD-safe band on purpose, and a fifth
+ * toggle here would be a fifth landmark the prototype does not have.
  */
-function buildToggles(platforms: string[], selected: string | null): FilterToggle[] {
-  return platforms.map((p) => {
-    const channel = channelOf(p)
-    return {
-      id: p,
-      label: PLATFORM_LABEL[p] ?? p,
-      ...(channel ? { tint: tintName(channel.id) } : {}),
-      pressed: selected === p,
-    }
-  })
+function buildToggles(selected: ChannelId[]): FilterToggle[] {
+  return CHANNELS.map((c) => ({
+    id: c.id,
+    label: c.name,
+    tint: tintName(c.id),
+    pressed: selected.includes(c.id),
+  }))
+}
+
+/**
+ * The raw Otter slugs behind a set of channels, in `CHANNEL_FOR_PLATFORM`'s
+ * own order — `["house"]` is BOTH `css-pos` and `bnm-web`.
+ *
+ * An empty selection expands to an empty array, which `getOrdersList` reads as
+ * "no platform filter" rather than "match nothing". That asymmetry is the
+ * whole point: deselecting every toggle shows everything.
+ */
+export function platformsForChannels(ids: ChannelId[]): string[] {
+  return Object.entries(CHANNEL_FOR_PLATFORM)
+    .filter(([, id]) => ids.includes(id))
+    .map(([platform]) => platform)
 }
 
 export function buildOrdersList(
   res: OrderListResponse,
-  opts: { search: string; platform: string | null },
+  opts: { search: string; channels: ChannelId[] },
 ): OrdersList {
   return {
-    toggles: buildToggles(res.platforms, opts.platform),
+    toggles: buildToggles(opts.channels),
     search: opts.search,
     count: `${count(res.rows.length)} of ${count(res.totalCount)}`,
     nextCursor: res.nextCursor,
@@ -492,27 +513,25 @@ export function buildOrdersList(
 }
 
 /**
- * The hours, and what the same hours normally do.
+ * The hours, and the spread of what the same hours normally do.
  *
- * **The prototype's per-hour band is not buildable from what this action
- * publishes today** — but the data behind it exists, and Task 4b closes the
- * gap. Do not read this paragraph as a permanent constraint.
+ * `sec('Orders by hour', 'band = the last four ' + CD.dowName() + 's', chart({…
+ * band: { lo: HLO, hi: HHI } …}))` — prototype line 4870. The band is the four
+ * baseline weeks' own counts for that hour, floor to ceiling.
  *
- * `getHourlyPatternsForRange` returns `HourlyOrderPoint.avgOrderCount` — the
- * MEAN of the four comparison groups at that hour — and publishes the groups'
- * spread only as `groupTotals`, which are whole-period totals with no hour on
- * them. A `{lo, hi}` built from an average is `{avg, avg}`: a band of zero
- * width drawn as if it were a range, the same defect as the prototype's own
- * `ords * 0.92` orders band that `adapters/overview.ts` refuses. So until the
- * per-hour spread is published, the baseline ships as what it actually is —
- * one dashed line, `as: "line"` over the bars.
+ * It is built from `HourlyOrderPoint.groupOrderCounts`, NOT from
+ * `avgOrderCount`: a `{lo, hi}` made from a mean is `{avg, avg}`, a band of
+ * zero width drawn as if it were a range — the same defect as the prototype's
+ * `ords * 0.92` orders band that `adapters/overview.ts` refuses. Task 4 had
+ * only the mean and shipped a dashed baseline LINE instead; Task 4b published
+ * the spread `readHourlyPatterns` was already fetching, so the line is gone.
+ * A dashed series beside the band would be an EXTRA landmark, and ruling F-R8
+ * never forgives an extra.
  *
- * That line is a STOPGAP, not the destination: the prototype draws a band, and
- * a series the prototype does not have is an extra landmark, which the fidelity
- * gate never forgives (ruling F-R8). `readHourlyPatterns` already fetches every
- * `(date, hour)` row for all four groups in one query and averages the spread
- * away; 4b publishes `groupOrderCounts` and this function draws the real band
- * and drops the line.
+ * An hour no baseline week has data for gets `null` on both edges — a hole in
+ * the band, not a floor of zero. Zero would say "this hour normally takes
+ * none", which is a claim; the hole says nothing, which is the truth. When NO
+ * hour has a baseline behind it there is no band at all and the meta says so.
  *
  * The meta names the baseline from THIS range's own weekday. Hardcoding
  * "Thursdays" would be right one day in seven.
@@ -522,35 +541,32 @@ export function buildOrdersByHour(
   cmp: OrderPatternsHourlyComparison | null,
   range: DateRange,
 ): OrdersByHour {
-  const baseline = hourly.map((h) => h.avgOrderCount)
-  const hasBaseline = cmp !== null && baseline.some((v) => v > 0)
+  const spreads = hourly.map((h) => h.groupOrderCounts ?? [])
+  const hasBand = cmp !== null && spreads.some((g) => g.length > 0)
 
   return {
-    meta: hasBaseline ? baselineMeta(range) : "no baseline for this range",
+    meta: hasBand ? baselineMeta(range) : "no baseline for this range",
     chart: {
       type: "bars",
       h: 132,
       zero: true,
       labels: hourly.map((h) => h.label),
       alt: "Orders by hour",
-      legend: hasBaseline,
-      vs: hasBaseline ? 1 : null,
-      vsLabel: "against the baseline",
+      // One series and a band it is read against: nothing to name in a legend,
+      // and `vs` indexes a SERIES, which the band is not.
+      legend: false,
+      vs: null,
       series: [
         { name: "Orders", color: "var(--ink)", data: hourly.map((h) => h.orderCount) },
-        ...(hasBaseline
-          ? [
-              {
-                name: "Baseline",
-                color: "var(--ink-3)",
-                data: baseline,
-                as: "line" as const,
-                dash: true,
-                w: 1.5,
-              },
-            ]
-          : []),
       ],
+      ...(hasBand
+        ? {
+            band: {
+              lo: spreads.map((g) => (g.length ? Math.min(...g) : null)),
+              hi: spreads.map((g) => (g.length ? Math.max(...g) : null)),
+            },
+          }
+        : {}),
     },
   }
 }
@@ -558,8 +574,8 @@ export function buildOrdersByHour(
 /** `band = the last four Thursdays`, built from the range rather than remembered. */
 function baselineMeta(range: DateRange): string {
   const days = dayCount(range)
-  if (days === 1) return `baseline = the last four ${WEEKDAYS[range.start.getDay()]}s`
-  return `baseline = the same ${plural(days, "day")}, four weeks back`
+  if (days === 1) return `band = the last four ${WEEKDAYS[range.start.getDay()]}s`
+  return `band = the same ${plural(days, "day")}, four weeks back`
 }
 
 /* ── One order: its lines ─────────────────────────────────────────────── */
@@ -1076,14 +1092,16 @@ export function buildNeedsYou(
 
 export async function getOrdersSections(input: OrdersSectionsInput): Promise<OrdersSections> {
   const { range, storeId } = input
-  const platform = input.platform ?? null
+  const channels = input.channels ?? []
   const search = input.search ?? ""
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
   const filters = {
     storeId,
-    platform,
+    // Every slug behind the pressed toggles. Empty is every channel — see
+    // `OrderListFilters.platforms`, which reads `[]` as no filter at all.
+    platforms: platformsForChannels(channels),
     search,
     startDate: isoDay(range.start),
     endDate: isoDay(range.end),
@@ -1149,7 +1167,7 @@ export async function getOrdersSections(input: OrdersSectionsInput): Promise<Ord
 
   return {
     strip: mapReady(listSd, (res) => buildOrdersStrip(res, cmpList, cmp)),
-    list: mapReady(listSd, (res) => buildOrdersList(res, { search, platform })),
+    list: mapReady(listSd, (res) => buildOrdersList(res, { search, channels })),
     byHour: mapReady(hourlySd, (h) =>
       buildOrdersByHour(h?.hourly ?? [], h?.hourlyComparison ?? null, range),
     ),

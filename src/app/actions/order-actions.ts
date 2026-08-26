@@ -37,6 +37,18 @@ const getPlatformsForAccount = unstable_cache(
 export type OrderListFilters = {
   storeId?: string | null
   platform?: string | null
+  /**
+   * Raw Otter platform slugs; an order matching ANY of them is returned.
+   * Supersedes `platform`, which stays for callers that pass a single slug.
+   *
+   * A channel is not a platform: `css-pos` and `bnm-web` are both the `house`
+   * channel, so "In-house" cannot be expressed with one slug at all.
+   *
+   * An EMPTY array means no platform filter — every channel. A reader who has
+   * deselected every toggle (or pressed Clear) is asking to see everything,
+   * and `{ in: [] }` would answer that with zero rows.
+   */
+  platforms?: string[] | null
   startDate?: string | null
   endDate?: string | null
   search?: string | null
@@ -144,7 +156,13 @@ export async function getOrdersList(
     }
     where.storeId = filters.storeId
   }
-  if (filters.platform) where.platform = filters.platform
+  // Order matters: a non-empty set supersedes the single slug, and an empty
+  // set leaves `where.platform` unset rather than narrowing to nothing.
+  if (filters.platforms && filters.platforms.length > 0) {
+    where.platform = { in: filters.platforms }
+  } else if (filters.platform) {
+    where.platform = filters.platform
+  }
   if (filters.detailsOnly) where.detailsFetchedAt = { not: null }
   if (filters.startDate || filters.endDate) {
     const range: { gte?: Date; lte?: Date } = {}
@@ -205,8 +223,12 @@ export async function getOrdersList(
       // thirdPartyNetSales is what "X% of 3P" is a percentage OF, so it can't
       // be derived from overallSums — it needs the in-house platforms
       // excluded in its own aggregate.
+      //
+      // ANDed rather than spread: `{ ...where, platform: … }` OVERWRITES the
+      // reader's own platform filter, so filtering to DoorDash would divide
+      // DoorDash fees by every marketplace's sales. Both conditions hold.
       prisma.otterOrder.aggregate({
-        where: { ...where, platform: { notIn: [...HOUSE_PLATFORMS] } },
+        where: { AND: [where, { platform: { notIn: [...HOUSE_PLATFORMS] } }] },
         _sum: { subtotal: true, discount: true },
       }),
     ])
