@@ -1083,10 +1083,16 @@ it("never renders an .empty landmark", () => {
   expect(container.querySelectorAll(".empty")).toHaveLength(0)
 })
 
+// N-R12. `Table` takes only `columns` and `rows` — it has no caption and no
+// aria-label, so it has NO accessible name and `getByRole("table", { name })`
+// cannot find it. Scope through the section, which is the house convention:
+// `tests/app/counter-orders.test.tsx:196` and `:405` do exactly this.
 it("shows the ledger's table header with no rows", () => {
-  const tbl = screen.getByRole("table", { name: /what you decided/i })
-  expect(within(tbl).getAllByRole("columnheader")).toHaveLength(4)
-  expect(within(tbl).queryAllByRole("row")).toHaveLength(1) // the header row only
+  const sections = container.querySelectorAll(".sec")
+  const ledger = [...sections].find((s) => s.textContent?.includes("What you decided"))!
+  const tbl = ledger.querySelector("table.tbl")!
+  expect(tbl.querySelectorAll("thead th")).toHaveLength(4)
+  expect(tbl.querySelectorAll("tbody tr")).toHaveLength(0)
 })
 
 it("moves the selected day into the URL, not into state", async () => { /* … */ })
