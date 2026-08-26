@@ -44,8 +44,10 @@
 }
 
 /* `P.order`'s "What you keep" panel draws two rules with inline styles
-   (prototype lines 6595-6598). Ported as classes: an inline `var(--line-strong)`
-   is a colour reference outside counter.css, which `npm run tokens` fails, and
-   a page drawing its own rules is exactly what the sheet exists to prevent. */
+   (prototype lines 6595-6598). Ported as classes because a page drawing its own
+   rules is what this sheet exists to prevent. `npm run tokens` does NOT catch
+   the inline form — its colour rule matches hex/oklch/rgb/hsl literals, not
+   `var()` references, and that was verified rather than assumed. See the note
+   in src/components/counter/surface/math-line.tsx. */
 .mathline.is-rule { border-top: 1px solid var(--line-strong); padding-top: 9px; border-bottom: none }
 .mathline.is-open { border-bottom: none }

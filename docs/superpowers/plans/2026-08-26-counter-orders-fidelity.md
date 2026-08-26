@@ -258,9 +258,13 @@ which is the caller's own child, not a row.
 
 The prototype's inline styles (`border-top:1px solid var(--line-strong)` and
 `border-bottom:none`) become the `rule` and `noBorder` flags. **They may not be
-ported as inline `style` attributes** — `npm run tokens` fails on a colour
-reference outside `counter.css`, and an inline border here would also be the
-only place in Counter where a rule is drawn by a page rather than a sheet. Add
+ported as inline `style` attributes** — an inline border here would be the only
+place in Counter where a rule is drawn by a page rather than a sheet.
+(An earlier draft of this plan claimed `npm run tokens` would fail on the inline
+form. It does not; that was measured. Its colour rule matches hex/`oklch`/`rgb`/
+`hsl` literals, not `var()` references, which it cannot ban outright because
+assigning one to a custom property is the sanctioned pattern. This rule is held
+by review, not by the build.) Add
 two modifier classes to `src/styles/counter-repairs.css`:
 
 ```css
@@ -318,7 +322,7 @@ it("opens the trailing rows", () => {
 - [ ] **Step 4: Run the test and watch it pass**
 - [ ] **Step 5: Prove the inline-style test is real**
 
-Replace `is-rule` with the prototype's inline `style` and re-run: the rule test goes red AND `npm run tokens` reports a colour reference. Restore, report both.
+Replace `is-rule` with the prototype's inline `style` and re-run: the rule test goes red. `npm run tokens` will stay clean — see the note above; do not treat that as a failure of the step.
 
 - [ ] **Step 6: Commit**
 
