@@ -83,3 +83,54 @@ export function hasData<T>(
 ): sd is Extract<SectionData<T>, { status: "ready" | "stale" }> {
   return sd.status === "ready" || sd.status === "stale"
 }
+
+/** The data a section carries, or null. `hasData` is the sanctioned accessor. */
+export function dataOf<T>(sd: SectionData<T>): T | null {
+  return hasData(sd) ? sd.data : null
+}
+
+/**
+ * Re-classifies an already-classified `SectionData` through `f`, keeping every
+ * non-data status (failed/empty/not_computed/loading) exactly as it was.
+ *
+ * This is how one query answers eight sections: `f` only ever runs on a value
+ * that already loaded, so no adapter needs a status branch of its own and no
+ * second load is issued to fill a second section. Lived in
+ * `adapters/overview.ts` until the P&L adapter needed the identical pair;
+ * moved here rather than copied, because a second copy is a second set of
+ * cases to forget one of.
+ */
+export function mapReady<T, U>(sd: SectionData<T>, f: (value: T) => U): SectionData<U> {
+  switch (sd.status) {
+    case "ready":
+      return ready(f(sd.data))
+    case "stale":
+      return stale(f(sd.data), sd.lastGoodAt)
+    case "failed":
+      return failed(sd.error, sd.retryAction)
+    case "empty":
+      return empty(sd.reason)
+    case "not_computed":
+      return notComputed(sd.owed)
+    case "loading":
+      return loading()
+  }
+}
+
+/**
+ * `mapReady`, but the mapper may decide the value is not a section after all —
+ * a selected store the rollup has no row for, an account that has never
+ * traded. Returning a `SectionData` from `f` lets one loader answer "loaded,
+ * and there is nothing here" without a second query.
+ */
+export function mapReadyTo<T, U>(
+  sd: SectionData<T>,
+  f: (value: T) => SectionData<U>,
+): SectionData<U> {
+  if (sd.status === "ready") return f(sd.data)
+  if (sd.status === "stale") {
+    const next = f(sd.data)
+    return next.status === "ready" ? stale(next.data, sd.lastGoodAt) : next
+  }
+  return mapReady(sd, () => undefined as never)
+}

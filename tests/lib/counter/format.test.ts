@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { money, moneyCompact, pct, delta, deltaSign, count, TABULAR } from "@/lib/counter/format"
+import { money, moneyCompact, pct, delta, deltaSign, count, points, TABULAR } from "@/lib/counter/format"
 
 describe("format", () => {
   it("money is whole dollars by default — cents are noise at a glance", () => {
@@ -66,6 +66,27 @@ describe("format", () => {
   it("count is plain and grouped", () => {
     expect(count(376)).toBe("376")
     expect(count(1652)).toBe("1,652")
+  })
+
+
+  it("points is a movement in points, not a percentage change of a percentage", () => {
+    // 29.0% to 30.6% is 1.6 POINTS. Printing its percentage change — 5.5% —
+    // is a figure no operator acts on.
+    expect(points(30.6 - 29.0)).toBe("▲ 1.6 pts")
+    expect(points(-2.4)).toBe("▼ 2.4 pts")
+  })
+
+  it("points calls flat exactly what delta calls flat", () => {
+    // One threshold, read by both, so a movement one page prints as an arrow
+    // cannot be flat on the other.
+    for (const v of [0.04, -0.04, 0.05, -0.05, 0.06]) {
+      expect(points(v) === "flat", `points(${v})`).toBe(delta(v, { scaled: true }) === "flat")
+    }
+  })
+
+  it("points has no reading for an absent change", () => {
+    expect(points(null)).toBe("—")
+    expect(points(NaN)).toBe("—")
   })
 
   it("TABULAR is the class every figure carries", () => {

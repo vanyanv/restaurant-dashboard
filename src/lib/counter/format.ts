@@ -100,6 +100,25 @@ export function deltaSign(
   return n > 0 ? 1 : -1
 }
 
+/**
+ * A change in PERCENTAGE POINTS — "▲ 1.6 pts", or "flat".
+ *
+ * The prototype's `pts()` (line 3962), and the same `FLAT_WITHIN_PTS` window
+ * `delta` uses, so a movement one page calls flat cannot be an arrow on the
+ * other. Distinct from `delta` because the two say different things about the
+ * same arithmetic: a food line that went from 29.0% to 30.6% moved 1.6 POINTS,
+ * and calling that "▲ 5.5%" (its percentage change) is a figure no operator
+ * acts on.
+ *
+ * The input is already in points — 1.6, not 0.016. There is no `scaled`
+ * option, because a fraction has no reading here at all.
+ */
+export function points(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return DASH
+  if (Math.abs(v) < FLAT_WITHIN_PTS) return "flat"
+  return `${v > 0 ? "▲" : "▼"} ${Math.abs(v).toFixed(1)} pts`
+}
+
 export function count(v: number | null): string {
   return v === null || !Number.isFinite(v) ? DASH : v.toLocaleString("en-US")
 }

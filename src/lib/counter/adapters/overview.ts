@@ -15,11 +15,10 @@ import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/
 import { granularityFor, loadStatement, type Statement } from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
-import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
+import { count, delta, money, pct, points } from "@/lib/counter/format"
 import {
   bucketFor,
   comparisonRange,
-  COMPARISONS,
   dayCount,
   toQueryBounds,
   type Bucket,
@@ -28,8 +27,13 @@ import {
 } from "@/lib/counter/date-range"
 import { classify } from "@/lib/counter/adapters/types"
 import {
-  empty, failed, hasData, loading, notComputed, ready, stale, type SectionData,
+  dataOf, empty, mapReady, mapReadyTo, notComputed, ready, type SectionData,
 } from "@/lib/counter/section-data"
+import {
+  comparisonContext,
+  comparisonPhrase,
+  type ComparisonContext,
+} from "@/lib/counter/comparison"
 import type {
   ChannelRow,
   DeltaTone,
@@ -393,123 +397,6 @@ function rowPercents(rows: PnLRow[], code: string): number[] | null {
   return row ? row.percents.map((v) => Math.abs(v) * 100) : null
 }
 
-/** The data a section carries, or null. `hasData` is the sanctioned accessor — see section-data. */
-function dataOf<T>(sd: SectionData<T>): T | null {
-  return hasData(sd) ? sd.data : null
-}
-
-/**
- * Re-classifies an already-classified `SectionData` through `f`, keeping
- * every non-data status (failed/empty/not_computed/loading) exactly as it
- * was. This is how eight sections derive from ONE P&L query — `f` only ever
- * runs on a value that already loaded.
- */
-function mapReady<T, U>(sd: SectionData<T>, f: (value: T) => U): SectionData<U> {
-  switch (sd.status) {
-    case "ready":
-      return ready(f(sd.data))
-    case "stale":
-      return stale(f(sd.data), sd.lastGoodAt)
-    case "failed":
-      return failed(sd.error, sd.retryAction)
-    case "empty":
-      return empty(sd.reason)
-    case "not_computed":
-      return notComputed(sd.owed)
-    case "loading":
-      return loading()
-  }
-}
-
-/**
- * `mapReady`, but the mapper may decide the value is not a section after all —
- * a selected store the rollup has no row for, a range the model has no call
- * for. Returning a `SectionData` from `f` lets one loader answer "loaded, and
- * there is nothing here" without a second query.
- */
-function mapReadyTo<T, U>(sd: SectionData<T>, f: (value: T) => SectionData<U>): SectionData<U> {
-  if (sd.status === "ready") return f(sd.data)
-  if (sd.status === "stale") {
-    const next = f(sd.data)
-    return next.status === "ready" ? stale(next.data, sd.lastGoodAt) : next
-  }
-  return mapReady(sd, () => undefined as never)
-}
-
-/* ── Comparison ───────────────────────────────────────────────────────── */
-
-interface ComparisonContext {
-  /** The comparison's own rollup, when one was asked for and it loaded. */
-  scope: Statement | null
-  /** "the prior period" — reads inside a sentence. */
-  label: string
-  /** "vs prior" — reads inside a chart tooltip. */
-  short: string
-  /**
-   * How many equivalent periods the comparison window holds. `weekday` returns
-   * a window CONTAINING four occurrences (see `comparisonRange`), so its total
-   * has to be divided before it can be read against one period.
-   */
-  divisor: number
-  on: boolean
-}
-
-function comparisonContext(mode: ComparisonId, scope: Statement | null): ComparisonContext {
-  const c = COMPARISONS.find((x) => x.id === mode) ?? COMPARISONS[COMPARISONS.length - 1]
-  return {
-    scope,
-    label: c.label.replace(/^vs /, ""),
-    short: c.short.replace(/^vs /, ""),
-    divisor: mode === "weekday" ? 4 : 1,
-    on: mode !== "none" && scope !== null,
-  }
-}
-
-/**
- * "▲ 4.1% vs the prior period", or the honest absence of one — and, for the
- * head figure, how it should READ.
- *
- * `.headline .d` and `.mhead .d` had no tone at all until the ported sheet was
- * corrected (see `scripts/extract-prototype-css.ts`'s CORRECTIONS table): both
- * painted `var(--good)`, so net sales down 37.2% printed its ▼ in the colour
- * of a rise, on both surfaces, and "no comparison set" printed as good news.
- *
- * THE TONE IS A JUDGEMENT ABOUT THE FIGURE, NOT A READING OF THE ARROW, which
- * is the whole reason it is decided here rather than in the component. Net
- * sales is a figure whose direction and sentiment agree: down is bad. A figure
- * where they disagree — marketplace fees, where a fall is a win — takes the
- * opposite branch at ITS own call site, which is exactly what the prototype
- * does (`mkt.d > 0 ? 'is-down'` at line 4911 against `rep.d < 0 ? 'is-down'`
- * at line 4926, same page, same class, opposite directions). A component that
- * inferred the tone from the ▼ could not express that and would paint every
- * fall red.
- *
- * The absence of a comparison is `is-flat`, not unclassed: it is a statement
- * about the page, and the colour of a rise is the wrong thing to say about it.
- */
-interface ComparisonReading {
-  text: string
-  /** The head figure's `.d` class. Undefined reads as a rise. */
-  tone?: DeltaTone
-}
-
-function comparisonPhrase(
-  now: number,
-  cmp: ComparisonContext,
-  base: number | null,
-): ComparisonReading {
-  if (!cmp.on || base === null) return { text: "no comparison set", tone: "is-flat" }
-  const previous = base / cmp.divisor
-  if (previous === 0) return { text: `no ${cmp.label} to compare`, tone: "is-flat" }
-  const change = (now - previous) / previous
-  const sign = deltaSign(change)
-  return {
-    text: `${delta(change)} vs ${cmp.label}`,
-    // Up is the default and needs no class — see `DeltaTone`.
-    tone: sign === 1 ? undefined : sign === -1 ? "is-down" : "is-flat",
-  }
-}
-
 /* ── Sections ─────────────────────────────────────────────────────────── */
 
 /**
@@ -835,10 +722,10 @@ function pointsRow(key: string, figure: string, now: number, then: number): Comp
     figure,
     now: pct(now, { scaled: true }),
     then: pct(then, { scaled: true }),
-    change:
-      Math.abs(diff) < 0.05
-        ? "flat"
-        : `${diff > 0 ? "\u25b2" : "\u25bc"} ${Math.abs(diff).toFixed(1)} pts`,
+    // `points()` owns both the wording and the flat window — the P&L's change
+    // column prints the same movement, and two thresholds is one page calling
+    // flat what the other calls a move.
+    change: points(diff),
     bad: diff > 0.05,
   }
 }
