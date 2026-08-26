@@ -153,7 +153,7 @@ function order(over: Partial<OrderDetail> = {}): OrderDetail {
 /** The lines of `order()`, costed: the slider and the fries priced, the modifier not. */
 function costsFor(o: OrderDetail, opts: { commissionRate?: number } = {}): LineCost[] {
   const lines = flattenOrderLines(o)
-  const rate = opts.commissionRate ?? commissionRateOf(o, lines)
+  const rate = opts.commissionRate ?? commissionRateOf(o)
   return resolveLineCosts({
     lines,
     recipeBySku: new Map([
@@ -616,5 +616,73 @@ describe("buildNeedsYou", () => {
     expect(items).toHaveLength(1)
     // No count on file is an em dash, never a zero.
     expect(items[0].lead).toBe(DASH)
+  })
+})
+
+/*
+ * The bug this file could not see.
+ *
+ * Every fixture above has `subtotal − discount` COINCIDENTALLY equal to
+ * `Σ line.price`, so for a long time the list computed the ticket one way and
+ * the detail the other and all 32 tests passed. It took a reviewer reading both
+ * call sites. A partially-drained order is where they part company, and it is
+ * the ordinary case: Otter delivers the order first and its lines later.
+ */
+describe("one order, one ticket", () => {
+  const PARTIAL = {
+    subtotal: 36.65,
+    discount: 0,
+    commission: 9.16,
+    // Only ONE of the three lines has been drained from Otter so far.
+    items: [
+      { id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 12.0, subItems: [] },
+    ],
+  }
+
+  function ticketOnDetail() {
+    const o = order(PARTIAL)
+    const lines = flattenOrderLines(o)
+    const costs = resolveLineCosts({
+      lines,
+      recipeBySku: new Map(),
+      costByRecipe: new Map(),
+      commissionRate: commissionRateOf(o),
+    })
+    return buildOrderStrip(o, costs).find((c) => c.label === "Ticket")?.value
+  }
+
+  function ticketOnList() {
+    const res = listResponse({
+      rows: [listRow({ subtotal: PARTIAL.subtotal, discount: PARTIAL.discount, commission: PARTIAL.commission })],
+    })
+    return buildOrdersList(res, { platform: null, search: "" }).rows[0].ticket
+  }
+
+  it("prints the same ticket on the list and on the order's own page", () => {
+    expect(ticketOnDetail()).toBe(ticketOnList())
+  })
+
+  it("reads the ticket off the order's columns, not off the lines drained so far", () => {
+    // Σ line.price is $12.00 here. The customer was charged $36.65.
+    expect(ticketOnDetail()).toBe("$36.65")
+  })
+})
+
+describe("a margin nothing can be believed about", () => {
+  it("renders an em dash rather than a flattering figure when keep is negative", () => {
+    // A rate above 1 is reachable on a partially-drained order whose recorded
+    // commission exceeds the lines on file. `(keep − cost) / keep` then divides
+    // by a negative and returns a finite 400.0% — the kind of wrong number a
+    // reader acts on because nothing about it looks wrong.
+    const o = order({ subtotal: 10, discount: 0, commission: 14 })
+    const lines = flattenOrderLines(o)
+    const costs: LineCost[] = lines.map((l, i) => ({
+      key: l.key, name: l.name, modifier: l.modifier, quantity: l.quantity,
+      price: l.price, keep: -1, cost: i === 0 ? 3 : null,
+      uncostedReason: i === 0 ? null : ("unmapped" as const),
+    }))
+    for (const row of buildOrderItems(o, costs).rows) {
+      expect(row.margin).toBe(DASH)
+    }
   })
 })

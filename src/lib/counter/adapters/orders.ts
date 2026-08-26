@@ -361,8 +361,18 @@ function feeFigure(commission: number, opts: { cents?: boolean } = {}): string {
 }
 
 /** A margin, or an em dash where the division has no reading — rule 2. */
+/**
+ * `keep <= 0`, not `keep === 0`.
+ *
+ * Zero is the comped line, and it is the case the rule was written for. But a
+ * NEGATIVE keep is reachable too: a partially-drained order whose recorded
+ * commission exceeds the ticket implies a rate above 1, and `(keep − cost) /
+ * keep` then divides by a negative and returns a finite, flattering figure —
+ * `marginFigure(-1, 3)` gave **400.0%**. A number that plausible is worse on a
+ * page than `Infinity%`, because nothing about it looks wrong.
+ */
 function marginFigure(keep: number, cost: number | null): string {
-  if (cost === null || keep === 0) return DASH
+  if (cost === null || keep <= 0) return DASH
   return pct(((keep - cost) / keep) * 100, { scaled: true })
 }
 
@@ -460,7 +470,7 @@ export function buildOrdersList(
     nextCursor: res.nextCursor,
     rows: res.rows.map((r) => {
       const channel = channelOf(r.platform)
-      const ticket = r.subtotal - r.discount
+      const ticket = ticketOf(r)
       return {
         key: r.id,
         href: `/dashboard/orders/${r.id}`,
@@ -484,17 +494,25 @@ export function buildOrdersList(
 /**
  * The hours, and what the same hours normally do.
  *
- * **The prototype's per-hour BAND is not buildable from this schema**, and
- * drawing one anyway would be inventing a spread. `getHourlyPatternsForRange`
- * returns `HourlyOrderPoint.avgOrderCount` — the MEAN of the four comparison
- * groups at that hour — and publishes the groups' spread only as
- * `groupTotals`, which are whole-period totals with no hour on them. A
- * `{lo, hi}` built from an average is `{avg, avg}`: a band of zero width drawn
- * as if it were a range, which is the same defect as the prototype's own
- * `ords * 0.92` orders band that `adapters/overview.ts` refuses. So the
- * baseline ships as what it actually is — one dashed line, `as: "line"` over
- * the bars, which `ChartSeries` documents as "the bars are what happened, the
- * line is what they are judged against".
+ * **The prototype's per-hour band is not buildable from what this action
+ * publishes today** — but the data behind it exists, and Task 4b closes the
+ * gap. Do not read this paragraph as a permanent constraint.
+ *
+ * `getHourlyPatternsForRange` returns `HourlyOrderPoint.avgOrderCount` — the
+ * MEAN of the four comparison groups at that hour — and publishes the groups'
+ * spread only as `groupTotals`, which are whole-period totals with no hour on
+ * them. A `{lo, hi}` built from an average is `{avg, avg}`: a band of zero
+ * width drawn as if it were a range, the same defect as the prototype's own
+ * `ords * 0.92` orders band that `adapters/overview.ts` refuses. So until the
+ * per-hour spread is published, the baseline ships as what it actually is —
+ * one dashed line, `as: "line"` over the bars.
+ *
+ * That line is a STOPGAP, not the destination: the prototype draws a band, and
+ * a series the prototype does not have is an extra landmark, which the fidelity
+ * gate never forgives (ruling F-R8). `readHourlyPatterns` already fetches every
+ * `(date, hour)` row for all four groups in one query and averages the spread
+ * away; 4b publishes `groupOrderCounts` and this function draws the real band
+ * and drops the line.
  *
  * The meta names the baseline from THIS range's own weekday. Hardcoding
  * "Thursdays" would be right one day in seven.
@@ -634,18 +652,28 @@ export function buildRecipeBySku(
 }
 
 /**
- * The order's OWN commission as a share of the ticket its LINES add up to.
+ * The order's OWN commission as a share of what the customer was charged.
  *
  * Not `Channel.commission`: that is the trade's published rate, and this order
- * has a recorded figure. Using the recorded one keeps `Σ line.keep` exactly
- * equal to `ticket − commission`, so the items table's "After commission"
- * total and the strip's "You keep" cannot differ by a rounding step.
+ * has a recorded figure. A DoorDash order billed at a promotional rate should
+ * print the rate it was billed at.
  *
- * The denominator is the LINES, not `subtotal`, for the same reason rule 1
- * exists: it has to be the number a reader can add up on the page.
+ * The denominator is `ticketOf`, NOT the sum of the drained lines. It was the
+ * line sum, with a docstring arguing that it "has to be the number a reader can
+ * add up on the page" — which is true of the Items table's total row (rule 1)
+ * and false of a RATE. On a partially-drained order the line sum is a fraction
+ * of the ticket, so dividing by it inflated the rate without limit: an order
+ * charged $36.65 with $9.16 of commission and one $12.00 line on file read
+ * **76%** instead of 25%, and every per-line margin under it was wrong to
+ * match.
+ *
+ * What the old denominator bought was `Σ line.keep === ticket − commission`.
+ * That equality is not something to preserve — on a partly-drained order those
+ * two figures SHOULD differ, and the difference is exactly the lines not yet on
+ * file. The Items section's own meta says how many that is.
  */
-export function commissionRateOf(order: OrderDetail, lines: OrderLine[]): number {
-  const ticket = lines.reduce((t, l) => t + l.price, 0)
+export function commissionRateOf(order: Pick<OrderDetail, "subtotal" | "discount" | "commission">): number {
+  const ticket = ticketOf(order)
   return ticket > 0 ? order.commission / ticket : 0
 }
 
@@ -662,11 +690,34 @@ interface OrderMoney {
   uncosted: number
 }
 
+/**
+ * What the customer was charged for an order, from the order's own columns.
+ *
+ * ONE definition, because two pages print it. The list row and the detail's
+ * strip and math panel all read this; before it existed the list computed
+ * `subtotal − discount` while the detail summed `Σ line.price`, so a
+ * PARTIALLY-drained order printed one ticket on the list and a smaller one on
+ * its own page. The single fixture had them coincidentally equal, so no test
+ * could see it — it took a reviewer reading both call sites.
+ *
+ * `subtotal − discount` is the right side of that disagreement: it is complete
+ * whatever has been drained, while `Σ line.price` is only complete once every
+ * line is on file.
+ *
+ * This does NOT touch rule 1. The Items table's total row still sums the rows
+ * drawn above it — that is the table's total, a different figure from the
+ * order's ticket, and where the two differ the gap IS the undrained lines,
+ * which the Items section's own meta names.
+ */
+export function ticketOf(order: Pick<OrderDetail, "subtotal" | "discount">): number {
+  return order.subtotal - order.discount
+}
+
 function orderMoney(order: OrderDetail, costs: LineCost[]): OrderMoney {
   // With no lines on file, the order's own columns are all there is — and the
   // Items section says so rather than drawing a $0.00 ticket.
   if (costs.length === 0) {
-    const ticket = order.subtotal - order.discount
+    const ticket = ticketOf(order)
     return {
       ticket,
       commission: order.commission,
@@ -677,8 +728,10 @@ function orderMoney(order: OrderDetail, costs: LineCost[]): OrderMoney {
     }
   }
 
-  const ticket = costs.reduce((t, l) => t + l.price, 0)
-  const keep = costs.reduce((t, l) => t + l.keep, 0)
+  // NOT `Σ l.price`. See `ticketOf`: summing the drained lines under-reports a
+  // partially-drained order, and the list beside it does not.
+  const ticket = ticketOf(order)
+  const keep = ticket - order.commission
   const costed = costs.filter((l) => l.cost !== null)
   return {
     ticket,
@@ -890,8 +943,11 @@ export function buildOrderKeep(order: OrderDetail, costs: LineCost[]): OrderKeep
   }
   if (order.tip > 0) {
     sentences.push(
+      // NOT "for the same reason": tax was never the restaurant's money, while a
+      // tip is — it simply is not part of what the food earned, which is what
+      // this panel measures. Two different reasons for one omission.
       `${money(order.tip, { cents: true })} of tip was collected on this order. It is not in ` +
-        "any figure above either, for the same reason.",
+        "any figure above, because a tip is not what the food earned.",
     )
   }
   if (m.cost === null) {
@@ -1063,7 +1119,21 @@ export async function getOrdersSections(input: OrdersSectionsInput): Promise<Ord
           { kind: "custom", startDate: isoDay(range.start), endDate: isoDay(range.end) },
           storeId ?? undefined,
         ),
-      { retryAction: "retryHourly" },
+      {
+        retryAction: "retryHourly",
+        /*
+         * `getHourlyPatternsForRange` catches its own errors and returns
+         * `{ hourly: emptyHourly(), hourlyComparison: null }` — 24 zeroed
+         * hours — and returns `null` outright with no session. Without this,
+         * both arrive as a READY chart: a failed query would draw 24 bars of
+         * zero and a reader would take it for a dead trading day.
+         *
+         * `classify` cannot see that, because nothing threw. So emptiness is
+         * decided here, on the value: no hours at all, or no order in any of
+         * them.
+         */
+        isEmpty: (v) => v === null || v.hourly.every((h) => h.orderCount === 0),
+      },
     ),
   ])
 
@@ -1145,7 +1215,7 @@ export async function getOrderSections(input: OrderSectionsInput): Promise<Order
       lines,
       recipeBySku: buildRecipeBySku(lines, itemMappings, subMappings),
       costByRecipe,
-      commissionRate: commissionRateOf(order, lines),
+      commissionRate: commissionRateOf(order),
     })
 
     const carriedBySku = await countCarried(
@@ -1215,24 +1285,28 @@ async function countCarried(
    * that does not exist on `OtterOrderSubItem` — and `npx tsc --noEmit` was
    * clean on it.
    *
-   * The reason is excess-property checking, which applies only to a FRESH
-   * object literal at the point of assignment. A `where:` written inline in
-   * the `groupBy` call is fresh, so a bad key there IS caught. A `where:` that
-   * names an UNANNOTATED `const` is not fresh at the call site and its keys go
-   * unchecked — that was the shape this code had. Annotating the const makes
-   * its own declaration the fresh literal, which is checked.
+   * Measured against this repo's generated client (`@/generated/prisma/client`
+   * — NOT `@prisma/client`, which is a different, stale client here and will
+   * mislead anyone probing this), for a `where` holding one VALID key beside
+   * one bogus key, which is what every real `where` looks like:
    *
-   * All four behaviours were measured against this repo's generated client, not
-   * inferred:
+   *   where: { skuId: {...}, badKey: x }        inline literal    -> CLEAN  ✗
+   *   const w: Prisma.XWhereInput = { ...same }  annotated const   -> TS2353 ✓
+   *   const w = { ...same }; where: w            unannotated const -> CLEAN  ✗
    *
-   *   where: { badKey: … }                    inline literal   -> TS2353 ✓
-   *   const w: Prisma.XWhereInput = { badKey } annotated const  -> TS2353 ✓
-   *   const w = { badKey }; where: w           unannotated      -> CLEAN ✗
+   * Only the annotation catches it. `groupBy`'s arg is a `Subset<T, …>`, and
+   * once the literal has at least one key the generic can bind to, the bogus
+   * one rides along unchecked.
    *
-   * So the rule is the opposite of the intuitive one: hoisting a `where` out of
-   * a call to tidy it up SILENTLY REMOVES a type check unless you annotate it.
-   * `grep -rn "where: [a-z][A-Za-z0-9_]*,$" src` finds the hoisted ones; ten of
-   * them elsewhere in this repo are still unannotated.
+   * The trap for anyone re-deriving this: a `where` containing ONLY a bogus key
+   * IS caught inline, so a minimal probe "proves" inline is safe. It is not —
+   * that probe is unrepresentative of every `where` in this codebase. Probe the
+   * realistic shape. (Both of this comment's earlier revisions were written
+   * from the minimal probe and stated the rule backwards.)
+   *
+   * So: annotate every `where` you hoist, and do not read an inline `where` as
+   * type-checked. `grep -rn "where: [a-z][A-Za-z0-9_]*,$" src` finds 17 hoisted
+   * ones; ten name an unannotated const and are unchecked today.
    */
   const scope: Prisma.OtterOrderWhereInput = {
     store: { accountId: ctx.accountId },
