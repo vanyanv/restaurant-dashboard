@@ -130,6 +130,21 @@ export interface OrdersRow {
   ticket: string
   /** An em dash when the channel took nothing — never `$0.00`. */
   fees: string
+  /**
+   * Whether the fee on this row is KNOWN, which is not the same as being zero.
+   *
+   * An in-house order has no marketplace fee and `fees` is an em dash: true.
+   * A DoorDash order whose `commission` never synced also shows an em dash,
+   * and that one is false — `adjusted_commission`'s coverage is erratic (0 of
+   * 6,307 marketplace orders in Aug 2026 against 5,908 of 6,094 in Jan).
+   *
+   * The two look identical in a right-aligned money column, so a surface that
+   * writes WORDS beside the figure has to be able to tell them apart. The
+   * phone said "no fees" under six Uber Eats and DoorDash rows, which is a
+   * claim, not a blank — and unlike the desk, the phone's two-cell strip
+   * carries no "not recorded for this range" to qualify it.
+   */
+  feesRecorded: boolean
   /** `ticket + commission` (the column is negative). What this order left behind before food. */
   net: string
 }
@@ -543,6 +558,9 @@ export function buildOrdersList(
         items: count(r.itemCount),
         ticket: money(ticket, { cents: true }),
         fees: feeFigure(r.commission, { cents: true }),
+        // In-house takes no commission, so a zero there is the truth. On a
+        // marketplace it means the figure never arrived.
+        feesRecorded: channel === null || channel.id === "house" || r.commission !== 0,
         net: money(netOf(r), { cents: true }),
       }
     }),
