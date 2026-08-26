@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@/generated/prisma/client"
 import { persistOrderItems } from "@/lib/otter-orders-sync"
+import { HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
 
 /** Distinct platforms across an account's orders, cached for an hour.
  * The previous shape was a `distinct: ["platform"]` findMany inside every
@@ -62,6 +63,23 @@ export type OrderListRow = {
   discount: number
   total: number
   detailsFetched: boolean
+  /** What the marketplace took on this order. 0 for in-house. */
+  commission: number
+}
+
+export type OrderListTotals = {
+  /** Σ subtotal − Σ discount, over every matched order. */
+  netSales: number
+  /** Σ commission, over every matched order. */
+  commission: number
+  /** Σ subtotal − Σ discount, over matched orders whose platform is not in-house. */
+  thirdPartyNetSales: number
+}
+
+const ZERO_TOTALS: OrderListTotals = {
+  netSales: 0,
+  commission: 0,
+  thirdPartyNetSales: 0,
 }
 
 export type OrderListResponse = {
@@ -69,6 +87,10 @@ export type OrderListResponse = {
   nextCursor: string | null
   platforms: string[]
   totalCount: number
+  /** Orders in the same scope still waiting on OrderDetails (detailsFetchedAt: null). */
+  undrainedCount: number
+  /** The whole matched range, not just the returned page — see OrderListTotals. */
+  totals: OrderListTotals
 }
 
 export async function getOrdersList(
@@ -76,7 +98,14 @@ export async function getOrdersList(
 ): Promise<OrderListResponse> {
   const session = await getServerSession(authOptions)
   if (!session?.user) {
-    return { rows: [], nextCursor: null, platforms: [], totalCount: 0 }
+    return {
+      rows: [],
+      nextCursor: null,
+      platforms: [],
+      totalCount: 0,
+      undrainedCount: 0,
+      totals: ZERO_TOTALS,
+    }
   }
 
   const stores = await prisma.store.findMany({
@@ -85,7 +114,14 @@ export async function getOrdersList(
   })
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) {
-    return { rows: [], nextCursor: null, platforms: [], totalCount: 0 }
+    return {
+      rows: [],
+      nextCursor: null,
+      platforms: [],
+      totalCount: 0,
+      undrainedCount: 0,
+      totals: ZERO_TOTALS,
+    }
   }
   const nameById = new Map(stores.map((s) => [s.id, s.name]))
 
@@ -97,7 +133,14 @@ export async function getOrdersList(
 
   if (filters.storeId) {
     if (!storeIds.includes(filters.storeId)) {
-      return { rows: [], nextCursor: null, platforms: [], totalCount: 0 }
+      return {
+        rows: [],
+        nextCursor: null,
+        platforms: [],
+        totalCount: 0,
+        undrainedCount: 0,
+        totals: ZERO_TOTALS,
+      }
     }
     where.storeId = filters.storeId
   }
@@ -118,36 +161,55 @@ export async function getOrdersList(
     ]
   }
 
-  const [rows, totalCount, platforms] = await Promise.all([
-    prisma.otterOrder.findMany({
-      where,
-      orderBy: { referenceTimeLocal: "desc" },
-      take: limit + 1,
-      ...(filters.cursor
-        ? { skip: 1, cursor: { id: filters.cursor } }
-        : {}),
-      select: {
-        id: true,
-        otterOrderId: true,
-        externalDisplayId: true,
-        storeId: true,
-        platform: true,
-        referenceTimeLocal: true,
-        fulfillmentMode: true,
-        orderStatus: true,
-        customerName: true,
-        subtotal: true,
-        tax: true,
-        tip: true,
-        discount: true,
-        total: true,
-        detailsFetchedAt: true,
-        _count: { select: { items: true } },
-      },
-    }),
-    prisma.otterOrder.count({ where }),
-    getPlatformsForAccount(session.user.accountId),
-  ])
+  const [rows, totalCount, undrainedCount, platforms, overallSums, thirdPartySums] =
+    await Promise.all([
+      prisma.otterOrder.findMany({
+        where,
+        orderBy: { referenceTimeLocal: "desc" },
+        take: limit + 1,
+        ...(filters.cursor
+          ? { skip: 1, cursor: { id: filters.cursor } }
+          : {}),
+        select: {
+          id: true,
+          otterOrderId: true,
+          externalDisplayId: true,
+          storeId: true,
+          platform: true,
+          referenceTimeLocal: true,
+          fulfillmentMode: true,
+          orderStatus: true,
+          customerName: true,
+          subtotal: true,
+          tax: true,
+          tip: true,
+          discount: true,
+          total: true,
+          commission: true,
+          detailsFetchedAt: true,
+          _count: { select: { items: true } },
+        },
+      }),
+      prisma.otterOrder.count({ where }),
+      // Served by the partial index OtterOrder_pending_details_idx — see
+      // prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql.
+      prisma.otterOrder.count({ where: { ...where, detailsFetchedAt: null } }),
+      getPlatformsForAccount(session.user.accountId),
+      // The Orders strip is about the whole matched range, not the single
+      // page `rows` covers (findMany is capped at `limit`), so netSales and
+      // commission need their own aggregate under the same `where`.
+      prisma.otterOrder.aggregate({
+        where,
+        _sum: { subtotal: true, discount: true, commission: true },
+      }),
+      // thirdPartyNetSales is what "X% of 3P" is a percentage OF, so it can't
+      // be derived from overallSums — it needs the in-house platforms
+      // excluded in its own aggregate.
+      prisma.otterOrder.aggregate({
+        where: { ...where, platform: { notIn: [...HOUSE_PLATFORMS] } },
+        _sum: { subtotal: true, discount: true },
+      }),
+    ])
 
   const hasMore = rows.length > limit
   const trimmed = hasMore ? rows.slice(0, limit) : rows
@@ -171,10 +233,18 @@ export async function getOrdersList(
       discount: r.discount,
       total: r.total,
       detailsFetched: r.detailsFetchedAt != null,
+      commission: r.commission,
     })),
     nextCursor: hasMore ? trimmed[trimmed.length - 1].id : null,
     platforms,
     totalCount,
+    undrainedCount,
+    totals: {
+      netSales: (overallSums._sum.subtotal ?? 0) - (overallSums._sum.discount ?? 0),
+      commission: overallSums._sum.commission ?? 0,
+      thirdPartyNetSales:
+        (thirdPartySums._sum.subtotal ?? 0) - (thirdPartySums._sum.discount ?? 0),
+    },
   }
 }
 

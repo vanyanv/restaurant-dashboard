@@ -82,13 +82,26 @@ export interface ChannelMixInput {
  * would put an unassigned colour on a stacked chart; folding it into `house`
  * would report marketplace volume as commission-free.
  */
-const CHANNEL_FOR_PLATFORM: Record<string, ChannelId> = {
+export const CHANNEL_FOR_PLATFORM: Record<string, ChannelId> = {
   "css-pos": "house",
   "bnm-web": "house",
   doordash: "doordash",
   ubereats: "ubereats",
   grubhub: "grubhub",
 }
+
+/**
+ * Raw Otter platform slugs whose channel is `house` — i.e. the money arrived
+ * without a marketplace in between. Derived from `CHANNEL_FOR_PLATFORM` so
+ * there is one place that decides "in-house", not a second `"css-pos"`
+ * string literal wherever something needs to exclude the house channel
+ * (e.g. a third-party-only aggregate).
+ */
+export const HOUSE_PLATFORMS: readonly string[] = Object.entries(
+  CHANNEL_FOR_PLATFORM
+)
+  .filter(([, channel]) => channel === "house")
+  .map(([platform]) => platform)
 
 /** The house channel's platforms are first-party: their figures are the `fp*` columns. */
 const FIRST_PARTY: ReadonlySet<ChannelId> = new Set<ChannelId>(["house"])
