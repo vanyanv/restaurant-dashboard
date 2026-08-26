@@ -928,17 +928,21 @@ function startOfDayUtc(d: Date): number {
 function buildInvoiceLines(k: InvoiceKpis): MoneyLine[] {
   const postedCount = k.invoiceCount - k.pendingReviewCount
   const postedTotal = k.totalSpend - k.pendingReviewTotal
+  /*
+   * The prototype's order, and the prototype's tones: received, then what
+   * reached COGS, then what is still held up. `total` is on NONE of them —
+   * `.moneyline.total` is the heavy closing line, and the prototype's is
+   * "Does not reconcile", the one figure of the four this schema cannot
+   * answer. Promoting "Posted to COGS" into that slot would put a bold
+   * closing rule under a line that is not the statement's bottom line.
+   */
   return [
     { label: "Received", value: `${count(k.invoiceCount)} · ${money(k.totalSpend)}` },
+    { label: "Posted to COGS", value: `${count(postedCount)} · ${money(postedTotal)}` },
     {
       label: "In review",
       value: `${count(k.pendingReviewCount)} · ${money(k.pendingReviewTotal)}`,
       tone: k.pendingReviewCount > 0 ? "warn" : undefined,
-    },
-    {
-      label: "Posted to COGS",
-      value: `${count(postedCount)} · ${money(postedTotal)}`,
-      total: true,
     },
   ]
 }
@@ -1252,8 +1256,20 @@ function buildStoreCards(input: {
 }): OverviewStoreCard[] {
   const { files, pnl, cmpPnl, cmp, mixByStore, splhByStore, storeId } = input
   const inScope = storeId ? files.filter((f) => f.id === storeId) : files
+  /*
+   * Trading stores first, in the prototype's own order (Hollywood, then the
+   * two in build-out). `getStores` sorts by name, which on this account puts
+   * both pre-open stores above the only one with customers — so the first
+   * card a reader's eye lands on is the one with no figures on it, and the
+   * sparkline that marks the trading card sits third instead of first.
+   * Sorting here rather than at the call site keeps it one decision.
+   */
+  const ordered = [...inScope].sort((a, b) => {
+    const rank = (f: StoreFile) => (isOperational(f) ? 0 : 1)
+    return rank(a) - rank(b) || a.name.localeCompare(b.name)
+  })
 
-  return inScope.map((f): OverviewStoreCard => {
+  return ordered.map((f): OverviewStoreCard => {
     if (!isOperational(f)) {
       return {
         kind: "pre_open",

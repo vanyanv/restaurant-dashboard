@@ -228,7 +228,7 @@ export function CounterOverviewClient({
                 : `Its store file is still missing ${c.missingFromFile.join(", ").toLowerCase()}.`
             }
             actions={
-              <Link className="btn btn--quiet" href={`/dashboard/stores/${c.id}`}>
+              <Link className="btn" href={`/dashboard/stores/${c.id}`}>
                 Open the store file
               </Link>
             }
@@ -249,10 +249,10 @@ export function CounterOverviewClient({
           }
           actions={
             <>
-              <Link className="btn btn--quiet" href={`/dashboard/pnl/${c.id}`}>
+              <Link className="btn" href={`/dashboard/pnl/${c.id}`}>
                 Open this store&rsquo;s P&amp;L
               </Link>
-              <Link className="btn btn--quiet" href={`/dashboard/stores/${c.id}`}>
+              <Link className="btn" href={`/dashboard/stores/${c.id}`}>
                 Open the store file
               </Link>
             </>
@@ -480,6 +480,14 @@ export function CounterOverviewClient({
         {(cards) => (
           <StoreCards
             stores={cards.map(toCard)}
+            /* The prototype opens the SELECTED store's card (`here === id`,
+               line 3907). With no store selected it opens the first trading
+               one, because "open a store for where its money came from" is
+               what this section is for and a page of shut drawers answers
+               nothing. */
+            defaultOpenId={
+              counterParams.storeId ?? cards.find((c) => c.kind === "trading")?.id
+            }
             notes={[
               `Every figure is ${windowLabel}.`,
               "Net sales across the cards sum to the headline, because both come from one rollup.",
