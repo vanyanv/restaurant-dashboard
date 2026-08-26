@@ -298,15 +298,28 @@ export function rangeTitle(r: DateRange): string {
  * Three facts, in the order a reader needs them: WHICH store, WHICH window,
  * WHAT it is measured against. `.pagehead .sub` uppercases it, so the caller
  * writes it in sentence case.
+ *
+ * `days` inserts the prototype's FOURTH term, between the window and the
+ * comparison — `P.pnl.sub()` (line 5248) carries it and `R.head()` does not,
+ * so it is opt-in rather than added to every page. A statement needs it: every
+ * fixed line on a P&L is prorated across exactly that many days, and a reader
+ * counting them off "Aug 15 – 21, 2026" is doing arithmetic the head could
+ * have done. It is an OPTION on this one function rather than a second
+ * sentence in a page, so no two pages can word the same head differently.
  */
 export function rangeSubtitle(
   storeName: string,
   r: DateRange,
   comparisonId: ComparisonId,
+  opts: { days?: boolean } = {},
 ): string {
   const cmp = COMPARISONS.find((c) => c.id === comparisonId)
   const window = rangeLabel(r, "custom")
-  return cmp ? `${storeName} · ${window} · ${cmp.label}` : `${storeName} · ${window}`
+  const n = dayCount(r)
+  const parts = [storeName, window]
+  if (opts.days) parts.push(`${n} day${n === 1 ? "" : "s"}`)
+  if (cmp) parts.push(cmp.label)
+  return parts.join(" · ")
 }
 
 /**
