@@ -62,14 +62,42 @@ export function pct(v: number | null, opts: { scaled?: boolean } = {}): string {
 }
 
 /**
+ * Below this, in percentage points, a change is not a movement — it is
+ * rounding. One constant, read by both `delta` and `deltaSign`, so the arrow a
+ * reader sees and the tone it is painted in can never disagree about whether
+ * the figure moved at all.
+ */
+const FLAT_WITHIN_PTS = 0.05
+
+/**
  * A delta is a direction plus a magnitude. "flat" rather than "▲ 0.0%",
  * because an arrow that points at nothing is a false signal.
  */
 export function delta(v: number | null, opts: { scaled?: boolean } = {}): string {
   if (v === null || !Number.isFinite(v)) return DASH
   const n = opts.scaled ? v : v * 100
-  if (Math.abs(n) < 0.05) return "flat"
+  if (Math.abs(n) < FLAT_WITHIN_PTS) return "flat"
   return `${n > 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}%`
+}
+
+/**
+ * Which way the same change points: `1` up, `-1` down, `0` for the window
+ * `delta` prints as "flat", `null` for a change there is no reading of.
+ *
+ * This exists so a caller can pick a TONE for a delta without re-deriving the
+ * threshold or, worse, reading the arrow back out of the string `delta`
+ * returned. It is the direction only — whether that direction is good news is
+ * a judgement about the figure, and it belongs to whoever knows what the
+ * figure is.
+ */
+export function deltaSign(
+  v: number | null,
+  opts: { scaled?: boolean } = {},
+): -1 | 0 | 1 | null {
+  if (v === null || !Number.isFinite(v)) return null
+  const n = opts.scaled ? v : v * 100
+  if (Math.abs(n) < FLAT_WITHIN_PTS) return 0
+  return n > 0 ? 1 : -1
 }
 
 export function count(v: number | null): string {

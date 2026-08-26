@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { money, moneyCompact, pct, delta, count, TABULAR } from "@/lib/counter/format"
+import { money, moneyCompact, pct, delta, deltaSign, count, TABULAR } from "@/lib/counter/format"
 
 describe("format", () => {
   it("money is whole dollars by default — cents are noise at a glance", () => {
@@ -42,6 +42,25 @@ describe("format", () => {
     expect(delta(0.114)).toBe("▲ 11.4%")
     expect(delta(-0.028)).toBe("▼ 2.8%")
     expect(delta(0)).toBe("flat")
+  })
+
+  it("deltaSign points the same way delta prints, at the same threshold", () => {
+    // Two readers of one number: the arrow a reader SEES and the tone it is
+    // painted in. If these could disagree, a figure could print ▼ in the
+    // colour of a rise — which is exactly the defect `.headline .d` and
+    // `.mhead .d` carried until the sheet was corrected.
+    expect(deltaSign(0.114)).toBe(1)
+    expect(deltaSign(-0.028)).toBe(-1)
+    expect(deltaSign(0)).toBe(0)
+    expect(deltaSign(null)).toBeNull()
+    expect(deltaSign(NaN)).toBeNull()
+    expect(deltaSign(31.4, { scaled: true })).toBe(1)
+
+    // The "flat" window is ONE constant. Sampled either side of it, the sign
+    // and the text agree on whether the figure moved at all.
+    for (const v of [0.0004, -0.0004, 0.0006, -0.0006, 0.05, -0.05]) {
+      expect(deltaSign(v) === 0, `deltaSign(${v})`).toBe(delta(v) === "flat")
+    }
   })
 
   it("count is plain and grouped", () => {

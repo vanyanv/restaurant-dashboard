@@ -334,6 +334,11 @@ export function CounterOverviewClient({
                 label={netSalesLabel(range)}
                 value={money(d.netSales)}
                 detail={d.comparison}
+                // The adapter decides this, not the arrow in the string: net
+                // sales is a figure whose direction and sentiment agree, and
+                // until the sheet was corrected a 37.2% FALL printed here in
+                // the colour of a rise.
+                detailTone={d.comparisonTone}
               />
             )}
           </Section>,
@@ -343,6 +348,10 @@ export function CounterOverviewClient({
                 label="Sales per labor hour"
                 value={money(d.value, { cents: true })}
                 detail={`${count(d.series.length)} ${buckets} readings with labour posted`}
+                // A statement of fact about the window, not a movement. Left
+                // unclassed it paints `var(--good)`, which says "good news"
+                // about a reading count.
+                detailTone="is-flat"
                 // Only when a floor is published. Nothing in this schema
                 // publishes one, so nothing is drawn against one — a meter
                 // against a number nobody set is the prototype's own 68.00.

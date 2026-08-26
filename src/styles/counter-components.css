@@ -157,6 +157,8 @@ display:grid;grid-template-columns:212px 1fr;
 .headline .k{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
 .headline .v{font-size:var(--t-hero);font-weight:600;letter-spacing:-.03em;line-height:1}
 .headline .d{font-family:var(--mono);font-size:var(--t-cap);font-weight:500;color:var(--good)}
+.headline .d.is-down{color:var(--bad)}
+.headline .d.is-flat{color:var(--ink-3)}
 .headline .say{display:grid;gap:9px;justify-items:start;border-left:1px solid var(--line);padding-left:20px}
 .headline .say p{margin:0;font-size:var(--t-mid);line-height:1.45;max-width:52ch}
 .headline .say b{font-weight:600}
@@ -467,6 +469,8 @@ width:340px; height:718px; flex:none;
 .mhead .k{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
 .mhead .v{font-size:var(--t-hero);font-weight:600;letter-spacing:-.03em;line-height:1}
 .mhead .d{font-family:var(--mono);font-size:var(--t-cap);font-weight:500;color:var(--good)}
+.mhead .d.is-down{color:var(--bad)}
+.mhead .d.is-flat{color:var(--ink-3)}
 .mhead p{margin:0;font-size:var(--t-body);line-height:1.45}
 .mhead p b{font-weight:600}
 .mstrip{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}

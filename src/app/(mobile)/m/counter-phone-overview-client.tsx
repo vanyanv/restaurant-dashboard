@@ -199,10 +199,15 @@ export function CounterPhoneOverviewClient({
           <MHead
             label={days === 1 ? "Net sales" : `Net sales · ${count(days)} days`}
             value={money(d.netSales)}
-            // Only when a comparison is on. `.mhead .d` is painted --good with
-            // no tone override in the sheet, so it may only ever carry a
-            // reading the page has already called good news.
+            // Only when a comparison is on: with it off the string is "no
+            // comparison set", which is what `.msub` above already says.
+            //
+            // The tone is the adapter's, and it is the reason `.mhead .d`
+            // needed correcting at all — the sheet paints it `var(--good)`
+            // unclassed, so before this a fall printed its ▼ in the colour of
+            // a rise on this surface exactly as it did on the desk.
             delta={comparing ? d.comparison : undefined}
+            deltaTone={comparing ? d.comparisonTone : undefined}
             note={
               <Section bare title="The verdict" data={sections.verdict}>
                 {(v) => (

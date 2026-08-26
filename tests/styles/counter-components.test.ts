@@ -389,13 +389,14 @@ describe("counter-components.css", () => {
     expect(componentsAt).toBeGreaterThan(counterAt)
   })
 
-  it("carries the one recorded correction, and carries it for a reason the gate proved", () => {
+  it("carries the recorded corrections, and carries them for reasons the gate proved", () => {
     // The ported sheet is byte-identical to the extractor's output (the test
-    // below), so a colour that is wrong in DARK cannot be hand-edited here —
-    // it has to be recorded in the extractor's CORRECTIONS table. Exactly one
-    // is recorded today: the prototype paints `.dispatch .sep` in a rule
-    // colour, which is 1.73:1 against the surface in dark and which the
-    // fidelity gate's contrast pass reports as a defect on the Overview.
+    // below), so a colour that is wrong here cannot be hand-edited — it has to
+    // be recorded in the extractor's CORRECTIONS table. Two are recorded.
+    //
+    // 1. The prototype paints `.dispatch .sep` in a rule colour, which is
+    //    1.73:1 against the surface in dark and which the fidelity gate's
+    //    contrast pass reports as a defect on the Overview.
     expect(CSS).toContain(".dispatch .sep{color:var(--ink-3)}")
     expect(CSS).not.toContain(".dispatch .sep{color:var(--line-strong)}")
     // And the prototype still says what the correction says it says, so the
@@ -405,6 +406,35 @@ describe("counter-components.css", () => {
       "utf-8",
     )
     expect(proto).toContain(".dispatch .sep{color:var(--line-strong)}")
+  })
+
+  it("gives BOTH lead-figure deltas a down tone, so a fall cannot read as good news", () => {
+    // `.strip .d` and `.mstrip .d` carry `.is-down`/`.is-flat` in the prototype
+    // itself; `.headline .d` and `.mhead .d` — the two elements that carry the
+    // ONE figure an owner reads first — carry neither, so a 37.2% fall paints
+    // var(--good) green on the desk and again on the phone. Both selectors, in
+    // one CORRECTIONS entry, because a fix that reached one surface and not the
+    // other would BE the defect.
+    for (const sel of [".headline .d", ".mhead .d"]) {
+      expect(CSS, `${sel} has no down tone`).toContain(`${sel}.is-down{color:var(--bad)}`)
+      expect(CSS, `${sel} has no flat tone`).toContain(`${sel}.is-flat{color:var(--ink-3)}`)
+    }
+
+    // The prototype still has the gap this corrects — otherwise the entry is
+    // forgiving something that no longer exists.
+    const proto = readFileSync(
+      join(ROOT, "docs", "counter", "counter-prototype.html"),
+      "utf-8",
+    )
+    for (const sel of [".headline .d", ".mhead .d"]) {
+      expect(proto, `${sel} unexpectedly gained a tone in the prototype`).not.toContain(
+        `${sel}.is-down`,
+      )
+    }
+    // And the two tones are the SAME two the sibling strip rules already use:
+    // a correction may only reach for a token the sheet already decided on.
+    expect(proto).toContain(".strip .d.is-down{color:var(--bad)}")
+    expect(proto).toContain(".mstrip .d.is-flat{color:var(--ink-3)}")
   })
 
   it("is exactly what the extractor produces from the prototype today", () => {

@@ -17,7 +17,7 @@ import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/
 import { primeCost } from "@/lib/counter/prime-cost"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
-import { count, delta, money, pct } from "@/lib/counter/format"
+import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
 import {
   bucketFor,
   comparisonRange,
@@ -34,6 +34,7 @@ import {
 } from "@/lib/counter/section-data"
 import type {
   ChannelRow,
+  DeltaTone,
   FigureProps,
   MoneyLine,
   MovingCell,
@@ -299,7 +300,16 @@ export interface OverviewSectionsInput {
 
 export interface OverviewSections {
   /** Note 30: net sales says whether the day happened. */
-  sales: SectionData<{ netSales: number; comparison: string }>
+  sales: SectionData<{
+    netSales: number
+    comparison: string
+    /**
+     * How `comparison` should read. Both surfaces put this string in a `.d`
+     * that paints `var(--good)` unless it is classed, so an unclassed fall is
+     * a fall painted as good news — see `comparisonPhrase`.
+     */
+    comparisonTone?: DeltaTone
+  }>
   /**
    * Note 30's second number — sales per labour hour, which says whether the
    * day was worth having.
@@ -513,12 +523,49 @@ function comparisonContext(mode: ComparisonId, scope: PnLScope | null): Comparis
   }
 }
 
-/** "▲ 4.1% vs the prior period", or the honest absence of one. */
-function comparisonPhrase(now: number, cmp: ComparisonContext, base: number | null): string {
-  if (!cmp.on || base === null) return "no comparison set"
+/**
+ * "▲ 4.1% vs the prior period", or the honest absence of one — and, for the
+ * head figure, how it should READ.
+ *
+ * `.headline .d` and `.mhead .d` had no tone at all until the ported sheet was
+ * corrected (see `scripts/extract-prototype-css.ts`'s CORRECTIONS table): both
+ * painted `var(--good)`, so net sales down 37.2% printed its ▼ in the colour
+ * of a rise, on both surfaces, and "no comparison set" printed as good news.
+ *
+ * THE TONE IS A JUDGEMENT ABOUT THE FIGURE, NOT A READING OF THE ARROW, which
+ * is the whole reason it is decided here rather than in the component. Net
+ * sales is a figure whose direction and sentiment agree: down is bad. A figure
+ * where they disagree — marketplace fees, where a fall is a win — takes the
+ * opposite branch at ITS own call site, which is exactly what the prototype
+ * does (`mkt.d > 0 ? 'is-down'` at line 4911 against `rep.d < 0 ? 'is-down'`
+ * at line 4926, same page, same class, opposite directions). A component that
+ * inferred the tone from the ▼ could not express that and would paint every
+ * fall red.
+ *
+ * The absence of a comparison is `is-flat`, not unclassed: it is a statement
+ * about the page, and the colour of a rise is the wrong thing to say about it.
+ */
+interface ComparisonReading {
+  text: string
+  /** The head figure's `.d` class. Undefined reads as a rise. */
+  tone?: DeltaTone
+}
+
+function comparisonPhrase(
+  now: number,
+  cmp: ComparisonContext,
+  base: number | null,
+): ComparisonReading {
+  if (!cmp.on || base === null) return { text: "no comparison set", tone: "is-flat" }
   const previous = base / cmp.divisor
-  if (previous === 0) return `no ${cmp.label} to compare`
-  return `${delta((now - previous) / previous)} vs ${cmp.label}`
+  if (previous === 0) return { text: `no ${cmp.label} to compare`, tone: "is-flat" }
+  const change = (now - previous) / previous
+  const sign = deltaSign(change)
+  return {
+    text: `${delta(change)} vs ${cmp.label}`,
+    // Up is the default and needs no class — see `DeltaTone`.
+    tone: sign === 1 ? undefined : sign === -1 ? "is-down" : "is-flat",
+  }
 }
 
 /* ── Sections ─────────────────────────────────────────────────────────── */
@@ -1104,10 +1151,10 @@ export async function getOverviewSections(
   const strip = mapReady(scopeSd, (p) => buildStrip(p, channels, targets))
 
   return {
-    sales: mapReady(scopeSd, (p) => ({
-      netSales: p.grossSales,
-      comparison: comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null),
-    })),
+    sales: mapReady(scopeSd, (p) => {
+      const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
+      return { netSales: p.grossSales, comparison: reading.text, comparisonTone: reading.tone }
+    }),
 
     splh: mapReadyTo(splhPoints, (points) => {
       const net = points.reduce((t, p) => t + p.netSales, 0)
@@ -1309,11 +1356,13 @@ function buildStoreCards(input: {
       stage,
       netSales,
       series: row ? rowValues(row.rows, TOTAL_SALES_CODE) ?? [] : [],
+      // `.stcard .d` and `.prow` print this one in `var(--ink-2)` with no tone
+      // rule of their own, so a store card takes the words and not the class.
       comparison: comparisonPhrase(
         netSales,
         cmp,
         cmpPnl?.perStore.find((s) => s.storeId === f.id)?.grossSales ?? null,
-      ),
+      ).text,
       orders,
       // Same rule as the strip and as `loadChannelMix` itself: no orders means
       // no average ticket. Zero would claim every order on this store was free.

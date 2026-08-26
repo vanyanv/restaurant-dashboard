@@ -392,8 +392,41 @@ describe("getOverviewSections", () => {
     if (!hasData(s.salesChart) || !hasData(s.sales)) throw new Error("chart")
     expect(s.salesChart.data.series).toHaveLength(1)
     expect(s.sales.data.comparison).toBe("no comparison set")
+    // ...and it says so in the MUTED tone, not the tone of a rise. `.headline
+    // .d` / `.mhead .d` paint var(--good) unclassed, so "no comparison set"
+    // unclassed is an absence rendered as good news.
+    expect(s.sales.data.comparisonTone).toBe("is-flat")
     // The comparison rollup is never even queried.
     expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(1)
+  })
+
+  it("tones the head figure's delta, so a fall does not read as good news", async () => {
+    // The defect this closes was visible in the browser on both surfaces: net
+    // sales down 37.2% printed "▼ 37.2% vs the prior period" in var(--good).
+    // The sheet gained the rule (an extractor CORRECTIONS entry); the tone
+    // itself is a JUDGEMENT ABOUT THE FIGURE and is decided here, which is why
+    // it is asserted here.
+    const cmpAt = (previous: number) => {
+      vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
+        (input.startDate.getTime() < range.start.getTime()
+          ? pnl({ combined: { ...pnl().combined, grossSales: previous } })
+          : pnl()) as never,
+      )
+      return load({ comparisonId: "prev" })
+    }
+
+    // pnl()'s own gross sales is the "now" side; a bigger previous is a fall.
+    const down = await cmpAt(20000)
+    if (!hasData(down.sales)) throw new Error("down")
+    expect(down.sales.data.comparison).toMatch(/^▼/)
+    expect(down.sales.data.comparisonTone).toBe("is-down")
+
+    const up = await cmpAt(1000)
+    if (!hasData(up.sales)) throw new Error("up")
+    expect(up.sales.data.comparison).toMatch(/^▲/)
+    // A rise is the DEFAULT and carries no class — the prototype's own choice,
+    // and the reason `DeltaTone` has no "is-up".
+    expect(up.sales.data.comparisonTone).toBeUndefined()
   })
 
   it("reads the comparison off its own rollup when one is asked for", async () => {
