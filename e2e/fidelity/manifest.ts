@@ -233,8 +233,93 @@ export const PAGES: FidelityPage[] = [
   { protoId: "ask", name: "Ask", protoRoute: "/dashboard/chat", route: "/dashboard/chat", status: "editorial" },
   { protoId: "decisions", name: "Needs you", protoRoute: "/dashboard/decisions", route: "/dashboard/decisions", status: "editorial" },
   { protoId: "alerts", name: "Needs you", protoRoute: "/dashboard/alerts", route: "/dashboard/alerts", status: "editorial" },
-  { protoId: "orders", name: "Orders", protoRoute: "/dashboard/orders", route: "/dashboard/orders", status: "editorial" },
-  { protoId: "order", name: "An order", protoRoute: "/dashboard/orders/4821", route: "/dashboard/orders/4821", status: "editorial" },
+  {
+    protoId: "orders",
+    name: "Orders",
+    protoRoute: "/dashboard/orders",
+    route: "/dashboard/orders",
+    // The middleware rewrites /dashboard/orders to /m/orders on a phone UA.
+    // Stated so the rewrite is reported as a rewrite and not as a page that
+    // failed to load.
+    mobileRoute: "/m/orders",
+    // NO `query`, deliberately — and this is the first Counter page that needs
+    // none. Overview and the P&L ask for `?range=d7&cmp=weekday` because their
+    // charts are day series and our one-day default degrades them to a strip,
+    // which the gate would read as a difference. This page's only chart is
+    // `Orders by hour`: 24 hourly buckets whatever the range, and its band is
+    // the last four same-weekdays, which the range does not choose either. So
+    // the page draws a `.ch` at its OWN default and the honest comparison is
+    // the one made there.
+    status: "counter",
+    report: true,
+    // Measured, not chosen. Desk 10 of the prototype's 10; phone 5 of 5. Both
+    // surfaces match the prototype landmark for landmark, with 0 missing, 0
+    // extra and 0 rendering differences.
+    baseline: { desktop: 10, mobile: 5 },
+    // No `absentLandmarks`, and that is a finding rather than an omission.
+    // The plan expected `.blt` / `.band` / `.sp` to be owed under every strip
+    // cell, on the reasoning that nothing in `prisma/schema.prisma` publishes
+    // a per-order target. The reasoning is right and the conclusion was wrong:
+    // the PROTOTYPE draws no meter here either. `P.orders.desk()` (line 4854)
+    // passes three- and four-element cells to `strip()` — label, value, delta,
+    // tone — and `strip()` opens a bullet, a band and a sparkline only from a
+    // reference it was not given. Neither side has one, so nothing is missing
+    // and an allowance would have failed as STALE the first time it ran.
+  },
+  {
+    protoId: "order",
+    name: "An order",
+    protoRoute: "/dashboard/orders/4821",
+    // #4821 is the prototype's own invented order. Ours has to be a REAL one,
+    // and which one is a decision the gate can see, so it is written down.
+    //
+    // `3D4B7815` — DoorDash, Hollywood, 12 Jul 2026, nine lines, $35.19
+    // charged with $8.80 of commission recorded against it (25.0%, the rate
+    // every DoorDash sample lands on) and exactly ONE line with no recipe
+    // behind it.
+    //
+    // The last of those is why it, and not another order. The prototype's
+    // #4821 carries one uncosted modifier and therefore a "Needs you" section
+    // with a one-item queue. `buildNeedsYou` returns `empty("all_clear")` for
+    // an order with nothing to fix, and `Empty` renders `.empty` in place of
+    // the queue — an EXTRA landmark, which ruling F-R8 never forgives and no
+    // `absentLandmarks` entry can express. So an order with a clean bill of
+    // lines cannot be the subject here: it would compare our page in its empty
+    // state against the prototype's in its full one, and the difference would
+    // be about the row we picked rather than about the design.
+    //
+    // Measured over the whole account: 19,911 orders of 20,000 have every line
+    // costed, 87 have exactly one that is not, 2 have two. So this shape is
+    // rare, and it is the shape the design was drawn for. If someone maps that
+    // sku the queue empties and this gate goes red with an extra `.empty` —
+    // which is the correct alarm, and the fix is another id from the same 87.
+    route: "/dashboard/orders/4551abf7-d5b1-484f-9eef-3e25cdf1a1fe",
+    mobileRoute: "/m/orders/4551abf7-d5b1-484f-9eef-3e25cdf1a1fe",
+    // `nodate: true` in the prototype (line 6569) and no window on our side
+    // either: an order happened at one instant, so there is no range to ask
+    // for.
+    status: "counter",
+    report: true,
+    // Measured, not chosen. Desk 20 of the prototype's 20; phone 12 of 12.
+    // Both surfaces match landmark for landmark, 0 missing, 0 extra, 0
+    // rendering differences.
+    baseline: { desktop: 20, mobile: 12 },
+    // No `absentLandmarks`, on the same finding as the list above plus two of
+    // its own:
+    //
+    //   - the prototype's own `strip()` call at line 6574 passes no reference,
+    //     so there is no `.blt`, no `.band` and no `.sp` on EITHER side;
+    //   - the item rows link to `catalogitem`, which is not rebuilt, so
+    //     `OrderItemRow` carries no href — but a row's link is an `<a>` inside
+    //     `.tbl` and carries no landmark class, so the gate sees no difference
+    //     and there is nothing to record. It stays a real gap in the page and
+    //     a false one to write here.
+    //
+    // The Timeline and Platform panels print fewer ROWS than the prototype
+    // (nothing in this schema records accepted/ready/collected times, or a
+    // payout id and date). `.kv` is the landmark and both of them render, so
+    // that is not an absence either — it is two shorter lists.
+  },
   { protoId: "analytics", name: "Analytics", protoRoute: "/dashboard/analytics", route: "/dashboard/analytics", status: "editorial" },
   {
     protoId: "pnl",
