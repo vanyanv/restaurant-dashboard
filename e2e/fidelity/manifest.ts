@@ -251,14 +251,95 @@ export const PAGES: FidelityPage[] = [
     // page that failed to load. The phone SURFACE is still editorial — that is
     // Task 5 — and its report says so in landmark counts.
     mobileRoute: "/m/pnl",
-    // Rebuilt on Counter in Phase C task 4 and MEASURED from that commit, but
-    // still `editorial` — captured, never gated. Task 6 turns it into a gate,
-    // with a baseline and the written `absentLandmarks` that say which of the
-    // prototype's landmarks this schema cannot produce. Reporting first and
+    // Rebuilt on Counter across Phase C tasks 4 and 5, measured from those
+    // commits while still `editorial`, and GATED here. Reporting first and
     // gating second is the order Overview went in: a baseline invented before
-    // it was measured is a number nobody can defend.
+    // it was measured is a number nobody can defend. `report` stays on so the
+    // committed `docs/counter/fidelity/pnl.md` keeps being regenerated from
+    // what the gate actually measured.
     report: true,
-    status: "editorial",
+    status: "counter",
+    // Measured, not chosen. Desk: 43 of the prototype's 51, 0 extra, 0
+    // rendering differences. Phone: 21 of 21, complete — the first surface in
+    // this project that matches the prototype landmark for landmark.
+    baseline: { desktop: 43, mobile: 21 },
+    absentLandmarks: [
+      {
+        landmark: "blt",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The LABOUR bullet, and only that one — prime cost and food both " +
+          "draw theirs. `Figure` opens a bullet from a judged `Reference`, " +
+          "and `referenceFor` in `adapters/pnl.ts` has nothing to judge " +
+          "labour against: `loadStripTargets` returns `labor: null` because " +
+          "no column in `prisma/schema.prisma` publishes a labour band " +
+          "(`Store.targetCogsPct` is the schema's ONE published reference, " +
+          "and `Store.fixedMonthlyLabor` is a budget in dollars, not a " +
+          "percent of sales). The prototype's 23.9–26.2%-plus-salaried is its " +
+          "own invention (line 5276), which is the figure judging itself. " +
+          "The labour cell is NOT unwired: it carries a `Reference` with the " +
+          "eight-week trajectory, so its `.sp` and `.band` both land — the " +
+          "bullet is the one part with no input. Ruling Scan-R1. The phone " +
+          "draws two cells (bottom line, prime cost) and labour is not one of " +
+          "them, so nothing is missing there.",
+      },
+      {
+        landmark: "gap",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The food-cause bar. `GapBar` names the causes of a food overshoot " +
+          "in POINTS, and `getPnlSections` returns `foodCause` as " +
+          "`not_computed`: nothing in this schema attributes points of the " +
+          "food line to one ingredient. That needs each ingredient's SHARE of " +
+          "food spend over the range beside its own price move, and the price " +
+          "monitor publishes the moves without the shares — there is no " +
+          "`src/lib/**` function that computes the pair, checked rather than " +
+          "assumed. A bar whose only segment is \"everything else\" would add " +
+          "a picture of an explanation and no explanation. The plan-versus-" +
+          "actual half of the same fact IS on the page, in the strip's food " +
+          "cell. The phone composes no food-cause section at all " +
+          "(`P.pnl.phone()` has three sections and this is not one), so " +
+          "neither side has it there.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "The action rows of the two sections that are `not_computed` — the " +
+          "food-cause section's (\"Ask why\" / \"Open cost of goods\") and the " +
+          "trust panel's (\"Post the N invoices\"). Both are children of a " +
+          "section BODY, and `Section` renders `Owed` in place of the body " +
+          "when the data is `not_computed`; a page may not branch on a " +
+          "section's status (`npm run tokens` fails the build on it), so " +
+          "there is no arm in which the buttons render beside an absent " +
+          "answer. `Owed` carries no actions by design, for the same reason " +
+          "`Empty` drops the prototype's `.btn`: this codebase does not ship " +
+          "a control that does nothing, and \"Post the 6 invoices\" cannot be " +
+          "written without the count, which is the very query that is " +
+          "missing. The by-store section's `.btnrow` is present and matched. " +
+          "The phone has none of these sections.",
+      },
+      {
+        landmark: "btn",
+        desktop: 4,
+        mobile: 0,
+        reason:
+          "Three of these are the buttons inside the two `.btnrow`s above and " +
+          "fall with them — same cause, counted separately because the gate " +
+          "counts landmarks, not reasons. The FOURTH is a deliberate " +
+          "subtraction rather than an absence: the prototype's by-store row " +
+          "offers \"Open a store P&L\" pointing at its `pnlstore` page, which " +
+          "on this rebuild is the page the reader is already on, scoped by " +
+          "`?store=` — `/dashboard/pnl/[storeId]` is a 308 shim to exactly " +
+          "that URL, and the rail's store switcher is the gesture. A button " +
+          "whose destination is the current page is a control that does " +
+          "nothing. \"Fill in a store file\" survives and is matched. The " +
+          "phone composes no button rows.",
+      },
+    ],
   },
   { protoId: "cogs", name: "COGS", protoRoute: "/dashboard/cogs", route: "/dashboard/cogs", status: "editorial" },
   { protoId: "menu", name: "Menu profit", protoRoute: "/dashboard/menu-profit", route: "/dashboard/menu-profit", status: "editorial" },

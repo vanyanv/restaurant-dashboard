@@ -37,7 +37,7 @@ import {
   type Landmark,
   type ThemedNode,
 } from "../../e2e/fidelity/landmarks"
-import { pageById } from "../../e2e/fidelity/manifest"
+import { PAGES, pageById, absenceBudget } from "../../e2e/fidelity/manifest"
 
 /** A landmark carrying the prototype's own Overview values, so a fixture reads like a real render. */
 function lm(classes: string[], over: Partial<Landmark> = {}): Landmark {
@@ -293,6 +293,67 @@ describe("the Overview manifest entry accounts for what it cannot render", () =>
     // `.strip`, for a rule behaving identically on both sides.
     expect(pageById("overview").query).toBe("?range=d7&cmp=weekday")
   })
+})
+
+describe("the P&L manifest entry accounts for what it cannot render", () => {
+  it("is gated, with the baseline both surfaces actually measured", () => {
+    // Ruling F-R4 makes `baseline` a type requirement of `status: "counter"`,
+    // so `tsc` already refuses a page declared done without a floor. What it
+    // cannot check is whether the numbers were MEASURED. These two are: desk
+    // 43 of the prototype's 51, phone 21 of 21 — the first surface in this
+    // project that matches the prototype landmark for landmark.
+    const pnl = pageById("pnl")
+    expect(pnl.status).toBe("counter")
+    if (pnl.status !== "counter") throw new Error("unreachable")
+    expect(pnl.baseline).toEqual({ desktop: 43, mobile: 21 })
+  })
+
+  it("forgives exactly the desk's eight absences, and nothing on the phone", () => {
+    // The phone budget being EMPTY is the assertion worth having. An absence
+    // allowance that forgives a landmark which in fact lands fails as stale,
+    // so a `mobile: 1` written "to be safe" would turn a complete surface red
+    // — and a `mobile` count written on a surface that never had the landmark
+    // would be a false absence, which never goes stale and quietly stops the
+    // gate asking. `P.pnl.phone()` composes none of these, so every entry is
+    // `mobile: 0` and `absenceBudget` drops them all.
+    const pnl = pageById("pnl")
+    expect(absenceBudget(pnl, "desk")).toEqual({ blt: 1, gap: 1, btnrow: 2, btn: 4 })
+    expect(absenceBudget(pnl, "phone")).toEqual({})
+
+    // 43 rendered + 8 forgiven = the prototype's 51. If that ever stops
+    // adding up, either the page grew a landmark or an allowance is stale.
+    const forgiven = Object.values(absenceBudget(pnl, "desk")).reduce((a, b) => a + b, 0)
+    if (pnl.status !== "counter") throw new Error("unreachable")
+    expect(pnl.baseline.desktop + forgiven).toBe(51)
+  })
+})
+
+describe("every gated page carries a floor and a written reason for each absence", () => {
+  // The same three things the Overview entry has always been checked for,
+  // asserted over the whole manifest rather than page by page — so the next
+  // page to flip to "counter" inherits the check instead of needing a
+  // hand-written copy of it that someone forgets to add.
+  const gated = PAGES.filter((p) => p.status === "counter")
+
+  it("has at least the two pages this phase gated", () => {
+    expect(gated.map((p) => p.protoId)).toEqual(["overview", "pnl"])
+  })
+
+  for (const page of gated) {
+    it(`${page.protoId}: a positive floor on both surfaces, and no blank reasons`, () => {
+      if (page.status !== "counter") throw new Error("unreachable")
+      expect(page.baseline.desktop).toBeGreaterThan(0)
+      expect(page.baseline.mobile).toBeGreaterThan(0)
+
+      // Every allowance names something, on at least one surface, and says why
+      // in more than a word. A blank reason is how "not built yet" gets
+      // laundered into "the database has nothing to say".
+      for (const a of page.absentLandmarks ?? []) {
+        expect(a.desktop + a.mobile, `${a.landmark} forgives nothing`).toBeGreaterThan(0)
+        expect(a.reason.length, `${a.landmark} has no reason`).toBeGreaterThan(80)
+      }
+    })
+  }
 })
 
 describe("TOKEN_CORRECTIONS — the colours this app moved on purpose", () => {
