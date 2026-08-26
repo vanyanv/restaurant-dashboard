@@ -267,6 +267,7 @@ const ALIAS_LAYER = `.ct-root, .frame, .pframe, .login {
   --surface: var(--ct-surface);          --paper: var(--ct-paper);
   --chrome: var(--ct-chrome);            --sunk: var(--ct-sunk);
   --line: var(--ct-line);                --line-strong: var(--ct-line-strong);
+  --scrim: var(--ct-scrim);
 
   /* ink */
   --ink: var(--ct-ink);                  --ink-2: var(--ct-ink-2);
@@ -525,9 +526,13 @@ export function extract(html: string): ExtractResult {
  * The fidelity gate's dark pass is what finds those, and a correction recorded
  * here is the honest way to fix one — a hand-edit to the .css is not.
  *
- * A correction may ONLY change a colour to a token that already exists. It may
- * not change layout and it may not introduce a value: `npm run tokens` and
- * this file's own tests both still apply.
+ * A correction may ONLY change a colour to a `var()` the alias layer supplies,
+ * whose value is decided in `src/styles/counter.css` — the one place in this
+ * application a colour is decided. It may not change layout and it may not
+ * write a value here: `npm run tokens` and this file's own tests both still
+ * apply, and a correction that needs a token the design has never named must
+ * add that token to counter.css as a light-dark() pair, in the open, with its
+ * reasoning — not smuggle a literal in through this table.
  */
 const CORRECTIONS: Array<{
   /**
@@ -610,6 +615,36 @@ const CORRECTIONS: Array<{
       "\n\n" +
       "Two colours, both already in the sheet, both already used by the " +
       "sibling rules this copies. No layout, no new value.",
+  },
+  {
+    edits: [
+      {
+        from:
+          ".pshade{position:absolute;inset:0;background:oklch(24% 0.014 40 / .3);" +
+          "display:none;z-index:15}",
+        to:
+          ".pshade{position:absolute;inset:0;background:var(--scrim);" +
+          "display:none;z-index:15}",
+      },
+    ],
+    why:
+      "THE PHONE SHEET'S SCRIM DID THE OPPOSITE OF A SCRIM IN DARK. The " +
+      "prototype writes the value inline because it has no dark theme to keep " +
+      "it honest: oklch(24% 0.014 40 / .3) is --ink's LIGHT value at 30%, and " +
+      "a 24%-lightness wash over the dark theme's 19%-lightness ground " +
+      "LIGHTENS it to about 20.5% — pushing the page forward while the sheet " +
+      "covering it sits at 22%. Depth inverted, and no separation at all " +
+      "between a modal surface and the page behind it. The fidelity gate's " +
+      "dark pass found it on its first run against /m: LITERAL .ct-root " +
+      ".mtop .pshade background-color. " +
+      "\n\n" +
+      "It cannot be derived from an existing token. --ct-ink themes to " +
+      "near-WHITE in dark, so a color-mix() of it would paint a white veil, " +
+      "and every other token is opaque while a scrim needs alpha by " +
+      "definition. So --ct-scrim is authored in counter.css as a light-dark() " +
+      "pair whose LIGHT half is this literal, verbatim — the same situation " +
+      "as every dark half in that file, which the prototype never drew. The " +
+      "rule here changes nothing but where the colour comes from.",
   },
 ]
 

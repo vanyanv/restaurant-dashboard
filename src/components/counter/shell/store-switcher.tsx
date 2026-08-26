@@ -55,8 +55,17 @@ export interface SwitchableStore {
   stage: "trading" | "warming_up" | "pre_open"
 }
 
-/** `.mtag` has three tones in the ported sheet; a store uses two of them. */
-const STAGE_TAG: Record<SwitchableStore["stage"], { className: string; label: string }> = {
+/**
+ * `.mtag` has three tones in the ported sheet; a store uses two of them.
+ *
+ * EXPORTED because the phone has the same control in different chrome —
+ * `MTop`'s store sheet — and a store that is "Warming up" in the rail must not
+ * be something else in a sheet. One map, two surfaces. (`stageLabel` in
+ * `store-cards.tsx` is the same vocabulary for the store CARDS, which take a
+ * `StoreCard` rather than a `SwitchableStore`; the two shapes are different
+ * and the words are deliberately identical.)
+ */
+export const STAGE_TAG: Record<SwitchableStore["stage"], { className: string; label: string }> = {
   trading: { className: "mtag good", label: "Trading" },
   warming_up: { className: "mtag", label: "Warming up" },
   pre_open: { className: "mtag warn", label: "Pre-open" },

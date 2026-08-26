@@ -437,6 +437,25 @@ describe("counter-components.css", () => {
     expect(proto).toContain(".mstrip .d.is-flat{color:var(--ink-3)}")
   })
 
+  it("takes the phone sheet's scrim off a token, because the literal inverts in dark", () => {
+    // `oklch(24% 0.014 40 / .3)` is --ink's LIGHT value at 30%. Over the dark
+    // theme's 19%-lightness ground it composites to ~20.5% — LIGHTER, so the
+    // page it is meant to push away comes forward instead, in front of a
+    // 22%-lightness sheet. The fidelity gate's dark pass reported it as a
+    // literal the first time it ran against /m.
+    expect(CSS).toContain(".pshade{position:absolute;inset:0;background:var(--scrim);")
+    expect(CSS).not.toContain("background:oklch(24% 0.014 40 / .3)")
+    // The token it reaches for is real, aliased, and decided in counter.css.
+    expect(CSS).toContain("--scrim: var(--ct-scrim);")
+    expect(COUNTER_CSS).toMatch(/--ct-scrim:\s*light-dark\(/)
+
+    const proto = readFileSync(
+      join(ROOT, "docs", "counter", "counter-prototype.html"),
+      "utf-8",
+    )
+    expect(proto).toContain(".pshade{position:absolute;inset:0;background:oklch(24% 0.014 40 / .3)")
+  })
+
   it("is exactly what the extractor produces from the prototype today", () => {
     // Regeneration is deterministic, and the committed file is not stale.
     expect(generate()).toBe(CSS)

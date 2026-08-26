@@ -115,6 +115,31 @@
   --ct-line:         light-dark(oklch(89.5% 0.009 58), oklch(28% 0.009 58));
   --ct-line-strong:  light-dark(oklch(82.5% 0.013 55), oklch(38% 0.013 55));
 
+  /* The scrim behind a phone bottom sheet — the ONE token here the prototype
+   * never named, because it wrote the value inline in `.pshade` and had no
+   * dark theme to keep it honest. The light half is that literal, verbatim:
+   * oklch(24% 0.014 40 / .3), which is --ct-ink's light value at 30%.
+   *
+   * Ported as written it did the OPPOSITE of a scrim in dark. A 24%-lightness
+   * wash over a 19%-lightness ground LIGHTENS it (to ~20.5%), pushing the page
+   * forward while the sheet behind it sat at 22% — depth inverted, and no
+   * separation between a modal surface and the page it is covering. The
+   * fidelity gate's dark pass reported it as a literal on its first run
+   * against `/m`, which is exactly what that pass is for.
+   *
+   * There is no way to derive it from an existing token. --ct-ink themes to
+   * near-WHITE in dark, so `color-mix(--ink 30%, transparent)` would paint a
+   * white veil; and every other token is opaque, while a scrim needs alpha by
+   * definition. So it is authored here, in the only place a colour is
+   * decided, as a light-dark() pair like every other token — the same
+   * situation as the dark halves the prototype never drew.
+   *
+   * Dark: 8% lightness at 55% alpha, warm-tinted like every other neutral in
+   * this file. Over --ct-paper's 19% that composites to ~13%, a clear step
+   * BELOW both the ground and the 22% sheet, so the depth order reads the way
+   * it does in light. */
+  --ct-scrim:        light-dark(oklch(24% 0.014 40 / 0.3), oklch(8% 0.010 60 / 0.55));
+
   /* ink */
   --ct-ink:          light-dark(oklch(24% 0.014 40), oklch(93% 0.010 60));
   --ct-ink-2:        light-dark(oklch(47% 0.012 45), oklch(74% 0.011 55));

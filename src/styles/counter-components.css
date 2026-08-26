@@ -23,6 +23,7 @@
   --surface: var(--ct-surface);          --paper: var(--ct-paper);
   --chrome: var(--ct-chrome);            --sunk: var(--ct-sunk);
   --line: var(--ct-line);                --line-strong: var(--ct-line-strong);
+  --scrim: var(--ct-scrim);
 
   /* ink */
   --ink: var(--ct-ink);                  --ink-2: var(--ct-ink-2);
@@ -991,7 +992,7 @@ width:340px; height:718px; flex:none;
 .mpresets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .mpresets button{padding:9px 10px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--paper);font-size:var(--t-body);font-weight:500;text-align:left;cursor:pointer}
 .mpresets button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
-.pshade{position:absolute;inset:0;background:oklch(24% 0.014 40 / .3);display:none;z-index:15}
+.pshade{position:absolute;inset:0;background:var(--scrim);display:none;z-index:15}
 .pshade.on{display:block}
 .pframe{position:relative}
 .headline--duo{grid-template-columns:minmax(178px,auto) minmax(186px,auto) minmax(0,1fr)}
