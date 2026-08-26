@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getOverviewSections, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOverviewClient } from "./counter-overview-client"
@@ -23,6 +23,17 @@ export default async function DashboardPage({
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
+  /*
+   * Owner-only, the same gate `/dashboard/pnl` already carries.
+   *
+   * `getAllStoresPnL` refuses a non-owner, and five of this page's sections
+   * now share that one rollup — so a reader without owner access would land on
+   * an Overview whose head figure, strip, moving band, chart and store cards
+   * all read "P&L is restricted to owners". A page that looks broken is worse
+   * than one that was never theirs. `hasOwnerAccess` is OWNER or DEVELOPER,
+   * which is every role this application has.
+   */
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard/settings")
 
   const sp = await searchParams
   const params = new URLSearchParams()

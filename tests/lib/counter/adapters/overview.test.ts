@@ -11,6 +11,7 @@ vi.mock("@/app/actions/forecasts/revenue-forecast-actions", () => ({
 // Both of these import `@/lib/prisma` at module load; mocking them keeps the
 // adapter importable without a DATABASE_URL, which is the same reason the
 // adapter takes an accountId instead of fetching its own session.
+vi.mock("@/app/actions/ratings/ratings-actions", () => ({ getRatingsSummary: vi.fn() }))
 vi.mock("@/lib/counter/channel-mix", () => ({ loadChannelMix: vi.fn() }))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
 
@@ -20,6 +21,7 @@ import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import { getSplhSeries } from "@/app/actions/splh-actions"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
+import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import { loadChannelMix } from "@/lib/counter/channel-mix"
 import { loadStripTargets } from "@/lib/counter/targets"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
@@ -128,6 +130,12 @@ const CHANNELS = [
   { channel: "grubhub", net: 1468, orders: 60, commission: null, ticket: 24.47 },
 ]
 
+const RATINGS = {
+  windowDays: 30, stale: false, latestReviewAt: new Date(2026, 7, 24),
+  count: 142, average: 4.62, lowCount: 1, distribution: [1, 0, 4, 30, 107],
+  deltaVsPrior: null, byPlatform: [], recent: [],
+}
+
 const INVOICES = {
   totalSpend: 63203, invoiceCount: 34, avgInvoiceTotal: 1858.9,
   pendingReviewCount: 6, pendingReviewTotal: 2140, vendorCount: 12,
@@ -175,6 +183,7 @@ function happyPath() {
   vi.mocked(getSplhSeries).mockResolvedValue(splhSeries() as never)
   vi.mocked(getAlertInbox).mockResolvedValue(inbox([alert()]) as never)
   vi.mocked(getRevenueForecast).mockResolvedValue(forecast([]) as never)
+  vi.mocked(getRatingsSummary).mockResolvedValue(RATINGS as never)
   vi.mocked(loadChannelMix).mockResolvedValue(CHANNELS as never)
   vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
 }
@@ -198,7 +207,8 @@ describe("getOverviewSections", () => {
     const s = await load()
     for (const key of [
       "sales", "splh", "strip", "verdict", "moving", "needsYou",
-      "salesChart", "splhChart", "stores", "ledger", "channels", "invoices", "modelCall",
+      "salesChart", "splhChart", "stores", "comparison", "channels", "invoices",
+      "modelCall", "ratings",
     ]) {
       expect(s[key as keyof OverviewSections]).toBeDefined()
     }
@@ -288,10 +298,23 @@ describe("getOverviewSections", () => {
     expect(holly.orders).toBe(300)
   })
 
-  it("keeps the pre-open store out of the interim ledger table entirely", async () => {
+  it("gives a trading card its own channel rows, so its drawer is not a second query", async () => {
     const s = await load()
-    if (!hasData(s.ledger)) throw new Error("ledger")
-    expect(s.ledger.data.map((r) => r.storeId)).toEqual(["holly"])
+    if (!hasData(s.stores)) throw new Error("stores")
+    const holly = s.stores.data.find((c) => c.id === "holly")
+    if (holly?.kind !== "trading") throw new Error("holly")
+    // The same readings the strip's orders and ticket came from — one call per
+    // store, not one call per drawer.
+    expect(holly.channels.map((c) => c.id)).toEqual(["house", "doordash", "grubhub"])
+    expect(holly.channels[0]).toEqual({ id: "house", net: 4000, orders: 160 })
+  })
+
+  it("maps the lifecycle stage in ONE place, and a warming-up store still trades", async () => {
+    const s = await load()
+    if (!hasData(s.stores)) throw new Error("stores")
+    const holly = s.stores.data.find((c) => c.id === "holly")
+    if (holly?.kind !== "trading") throw new Error("holly")
+    expect(holly.stage).toBe("trading")
   })
 
   it("renders a channel with zero orders as a null ticket, never $0.00", async () => {
@@ -381,6 +404,70 @@ describe("getOverviewSections", () => {
     if (!hasData(s.sales) || !hasData(s.salesChart)) throw new Error("cmp")
     expect(s.sales.data.comparison).toBe("▲ 6.7% vs the prior period")
     expect(s.salesChart.data.series[1].dash).toBe(true)
+  })
+
+  it("builds the comparison table from the rollup it already loaded, not a second query", async () => {
+    vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
+      (input.startDate.getTime() < range.start.getTime()
+        ? pnl({ combined: { ...pnl().combined, grossSales: 7000 } })
+        : pnl()) as never,
+    )
+    const s = await load({ comparisonId: "prev" })
+    if (!hasData(s.comparison)) throw new Error("comparison")
+    expect(s.comparison.data.map((r) => r.figure)).toEqual([
+      "Net sales",
+      "Food cost",
+      "Labor",
+      "Prime cost",
+    ])
+    const net = s.comparison.data[0]
+    expect([net.now, net.then, net.change]).toEqual(["$7,468", "$7,000", "\u25b2 6.7%"])
+    // Nothing was asked about the comparison window except the P&L: the
+    // prototype's orders / ticket / SPLH rows would each be a second round
+    // trip for a drawer that starts closed.
+    expect(vi.mocked(loadChannelMix)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ range: expect.objectContaining({ end: expect.anything() }), comparison: true }),
+    )
+    expect(vi.mocked(getSplhSeries)).toHaveBeenCalledTimes(1)
+  })
+
+  it("marks a cost that went UP as the bad direction, and leaves one that fell alone", async () => {
+    vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
+      (input.startDate.getTime() < range.start.getTime()
+        ? // Same sales, less COGS: this range's food cost is HIGHER.
+          pnl({ combined: { ...pnl().combined, cogsValue: 1800, cogsPct: 1800 / 7468 } })
+        : pnl()) as never,
+    )
+    const s = await load({ comparisonId: "prev" })
+    if (!hasData(s.comparison)) throw new Error("comparison")
+    const food = s.comparison.data.find((r) => r.figure === "Food cost")
+    expect(food?.bad).toBe(true)
+    expect(food?.change).toContain("pts")
+  })
+
+  it("has nothing to compare when the reader turned the comparison off", async () => {
+    const s = await load()
+    expect(s.comparison.status).toBe("empty")
+  })
+
+  it("reads guest ratings on their OWN window, not the page's range", async () => {
+    const s = await load()
+    if (!hasData(s.ratings)) throw new Error("ratings")
+    // Pre-formatted here: a page never formats a number, and a star average
+    // has no formatter in @/lib/counter/format.
+    expect(s.ratings.data.average).toBe("4.6")
+    expect(s.ratings.data.windowDays).toBe(30)
+    // A review arrives days after the meal, so a one-day range would show an
+    // empty tile about a restaurant with 142 reviews.
+    expect(vi.mocked(getRatingsSummary)).toHaveBeenCalledWith({ storeId: null })
+  })
+
+  it("says the ratings tile is empty rather than printing a 0.0 nobody earned", async () => {
+    vi.mocked(getRatingsSummary).mockResolvedValue({
+      ...RATINGS, count: 0, average: null,
+    } as never)
+    const s = await load()
+    expect(s.ratings.status).toBe("empty")
   })
 
   it("derives the verdict from a breach, and owes one when nothing is judged", async () => {

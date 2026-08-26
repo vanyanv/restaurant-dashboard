@@ -48,6 +48,29 @@ import { AskGlyph } from "./ask-glyph"
  *
  * `pad={false}` is `raw()` — "this body brings its own padding", which is what
  * `tbl()` returns, so a Section whose only child is a Table passes it.
+ *
+ * ## `bare` — a state wrapper that is not a `.sec`
+ *
+ * Four of the prototype's Overview blocks are NOT sections and must not emit
+ * `.sec`: the head block (line 4243), the strip (4256), the moving band (4295)
+ * and the comparison drill (4340). All four sit at page level, above and
+ * between the six real sections — and all four still have states. `headBlock()`
+ * is itself a state wrapper: it reads `eff()` and substitutes a skeleton for
+ * `loading` and a build-out body for `empty`.
+ *
+ * So the choice is between a SECOND component that renders the six states, or
+ * one flag here. Task 6 named the first option and refused it — `Section` is
+ * the sole state renderer (R3) — and two implementations of "what does failed
+ * look like" is exactly the drift that rule exists to prevent. `bare` is the
+ * second option: the same six branches, the same five state components, with
+ * the `.sec` chrome dropped. Nothing about a state changes; only the box
+ * around it does.
+ *
+ * `bare` implies no `.sec__head` (there is no head to put a title in) and no
+ * `.sec__body` (there is no section body to pad), so `meta`, `askAbout` and
+ * `pad` say nothing in that mode. `title` is still REQUIRED, and still
+ * load-bearing: it is what `Failed` names, so a head block that could not load
+ * says which block it was.
  */
 export function Section<T>({
   title,
@@ -56,6 +79,7 @@ export function Section<T>({
   askAbout,
   onRetry,
   pad = true,
+  bare = false,
   children,
 }: {
   title: string
@@ -71,6 +95,11 @@ export function Section<T>({
    * inset a second time.
    */
   pad?: boolean
+  /**
+   * Drop the `.sec` wrapper, the `.sec__head` and the `.sec__body`, keeping
+   * only the state body. For the prototype's page-level blocks — see above.
+   */
+  bare?: boolean
   children: (data: T) => ReactNode
 }) {
   const withData = hasData(data)
@@ -90,18 +119,19 @@ export function Section<T>({
   const asked = askAbout === true ? title : askAbout
   const question = asked ? asked.replace(/<[^>]+>/g, "") : null
 
+  // `wrap` is where `.sec__body` is decided, once. In `bare` mode it never
+  // wraps — there is no section body — but every state below is otherwise the
+  // same markup it has always been.
+  const wrap = (node: ReactNode, inBody: boolean): ReactNode =>
+    inBody && !bare ? <div className="sec__body">{node}</div> : node
+
   let body: ReactNode
   if (data.status === "loading") {
-    body = (
-      <div className="sec__body">
-        <Skeleton />
-      </div>
-    )
+    body = wrap(<Skeleton />, true)
   } else if (data.status === "failed") {
-    body = (
-      <div className="sec__body">
-        <Failed title={title} error={data.error} retryAction={data.retryAction} onRetry={onRetry} />
-      </div>
+    body = wrap(
+      <Failed title={title} error={data.error} retryAction={data.retryAction} onRetry={onRetry} />,
+      true,
     )
   } else if (data.status === "empty") {
     // No `.sec__body` — see the note above. `.empty` pads itself.
@@ -110,11 +140,7 @@ export function Section<T>({
     // OUR sixth state; the prototype has no equivalent. It goes where every
     // other body goes rather than replacing the section, so a reader still
     // gets the title of the thing that is owed.
-    body = (
-      <div className="sec__body">
-        <Owed owed={data.owed} />
-      </div>
-    )
+    body = wrap(<Owed owed={data.owed} />, true)
   } else {
     const inner = (
       <>
@@ -122,8 +148,12 @@ export function Section<T>({
         {children(data.data)}
       </>
     )
-    body = pad ? <div className="sec__body">{inner}</div> : inner
+    body = wrap(inner, pad)
   }
+
+  // A page-level block: the states, without the box. The head block, the
+  // strip, the moving band and the comparison drill are all this.
+  if (bare) return <>{body}</>
 
   return (
     // `<section aria-labelledby>` rather than the prototype's bare `<div>`.

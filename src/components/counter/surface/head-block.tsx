@@ -56,18 +56,50 @@ export interface HeadFigure {
   /** `.k` — what the figure is. Upper-cased by the ported rule. */
   label: string
   /** `.v` — pre-formatted. Formatting belongs to `@/lib/counter/format`. */
-  value: string
+  value: ReactNode
   /** `.d` — how it moved, and anything bought to move it. */
   detail?: ReactNode
   /** Emitted after `.d`, inside the same `.fig`. `FloorMeter` on Overview's co-lead. */
   meter?: ReactNode
 }
 
+/**
+ * The three spans (and optional meter) inside one `.fig`, WITHOUT the `.fig`
+ * itself — `HeadBlock` owns that element and its `fig--co` modifier.
+ *
+ * Split out of `HeadBlock` in Phase C. `figures` used to be `HeadFigure[]`,
+ * which forced every lead figure on a page to have loaded before ANY of them
+ * could be written: the two on Overview come from two different rollups
+ * (`getAllStoresPnL` and `getSplhSeries`) that fail independently, so a single
+ * array of plain data cannot express "net sales is here and sales per labour
+ * hour is not". `figures` is now a list of NODES, each of which the caller
+ * wraps in its own `<Section bare>`, so each figure carries its own state and
+ * `HeadBlock` still owns the element, the modifier and the count.
+ */
+export function LeadFigure({ label, value, detail, meter }: HeadFigure) {
+  return (
+    <>
+      <span className="k">{label}</span>
+      <span data-figure-value className="v">
+        {value}
+      </span>
+      {detail ? <span className="d">{detail}</span> : null}
+      {meter}
+    </>
+  )
+}
+
 export function HeadBlock({
   figures,
   children,
 }: {
-  figures: HeadFigure[]
+  /**
+   * One node per lead figure — normally a `LeadFigure`, or a `Section bare`
+   * that renders one once its own data arrives. `HeadBlock` wraps each in the
+   * `.fig` element, so the number of figures still decides `--duo` and
+   * `fig--co`; a caller cannot pass two and forget the class.
+   */
+  figures: ReactNode[]
   /** The verdict — a `Say`. The prototype's headline always carries one. */
   children: ReactNode
 }) {
@@ -76,13 +108,8 @@ export function HeadBlock({
   return (
     <div className={duo ? "headline headline--duo" : "headline"}>
       {figures.map((f, i) => (
-        <div key={f.label} className={duo && i === 1 ? "fig fig--co" : "fig"}>
-          <span className="k">{f.label}</span>
-          <span data-figure-value className="v">
-            {f.value}
-          </span>
-          {f.detail ? <span className="d">{f.detail}</span> : null}
-          {f.meter}
+        <div key={i} className={duo && i === 1 ? "fig fig--co" : "fig"}>
+          {f}
         </div>
       ))}
       {children}

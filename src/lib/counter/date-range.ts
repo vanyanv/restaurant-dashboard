@@ -244,6 +244,16 @@ function dayLabel(d: Date, withYear: boolean): string {
 }
 
 /**
+ * One calendar day, written the way every other date on a Counter page is
+ * written — `Aug 3, 2026`. Exported so a card that prints a store's opening
+ * date does not grow a second date vocabulary beside this one (note 60's
+ * defect class: two functions, one question, two answers).
+ */
+export function shortDate(d: Date): string {
+  return dayLabel(d, true)
+}
+
+/**
  * What the date control prints, and what the Ask context sentence says.
  *
  * A custom range has no name of its own, so it is named by its ends. Before

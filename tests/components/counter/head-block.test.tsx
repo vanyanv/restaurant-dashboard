@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest"
 import { render } from "@testing-library/react"
-import { HeadBlock } from "@/components/counter/surface/head-block"
+import { HeadBlock, LeadFigure } from "@/components/counter/surface/head-block"
 import { Say } from "@/components/counter/surface/say"
 import { FloorMeter } from "@/components/counter/surface/floor-meter"
 
@@ -16,8 +16,8 @@ describe("HeadBlock", () => {
     const { container } = render(
       <HeadBlock
         figures={[
-          { label: "Net sales today", value: "$7,468", detail: "▲ 5.1% vs last Tuesday" },
-          { label: "Sales per labor hour", value: "$71.40", detail: "104 hours bought" },
+          <LeadFigure key="f1" label="Net sales today" value="$7,468" detail="▲ 5.1% vs last Tuesday" />,
+          <LeadFigure key="f2" label="Sales per labor hour" value="$71.40" detail="104 hours bought" />,
         ]}
       >
         {SAY}
@@ -30,7 +30,7 @@ describe("HeadBlock", () => {
 
   it("one figure: a bare .headline, because the two-track rule is the one that fits it", () => {
     const { container } = render(
-      <HeadBlock figures={[{ label: "Hourly labor", value: "24.8%" }]}>{SAY}</HeadBlock>,
+      <HeadBlock figures={[<LeadFigure key="f3" label="Hourly labor" value="24.8%" />]}>{SAY}</HeadBlock>,
     )
     const head = container.querySelector(".headline") as HTMLElement
     // `.headline` is minmax(210px,auto) 1fr; `--duo` is three tracks. One
@@ -41,13 +41,13 @@ describe("HeadBlock", () => {
 
   it("the modifier follows the figure count — a caller cannot forget it or get it wrong", () => {
     const one = render(
-      <HeadBlock figures={[{ label: "a", value: "1" }]}>{SAY}</HeadBlock>,
+      <HeadBlock figures={[<LeadFigure key="f4" label="a" value="1" />]}>{SAY}</HeadBlock>,
     ).container.querySelector(".headline")!.className
     const two = render(
       <HeadBlock
         figures={[
-          { label: "a", value: "1" },
-          { label: "b", value: "2" },
+          <LeadFigure key="f5" label="a" value="1" />,
+          <LeadFigure key="f6" label="b" value="2" />,
         ]}
       >
         {SAY}
@@ -59,7 +59,7 @@ describe("HeadBlock", () => {
 
   it("a figure is k, then v, then d — the prototype's order", () => {
     const { container } = render(
-      <HeadBlock figures={[{ label: "Net sales today", value: "$7,468", detail: "▲ 5.1%" }]}>
+      <HeadBlock figures={[<LeadFigure key="f7" label="Net sales today" value="$7,468" detail="▲ 5.1%" />]}>
         {SAY}
       </HeadBlock>,
     )
@@ -72,7 +72,7 @@ describe("HeadBlock", () => {
 
   it("omits .d entirely when a figure has not moved against anything", () => {
     const { container } = render(
-      <HeadBlock figures={[{ label: "Net sales", value: "$7,468" }]}>{SAY}</HeadBlock>,
+      <HeadBlock figures={[<LeadFigure key="f8" label="Net sales" value="$7,468" />]}>{SAY}</HeadBlock>,
     )
     expect(container.querySelector(".d")).toBeNull()
   })
@@ -81,13 +81,8 @@ describe("HeadBlock", () => {
     const { container } = render(
       <HeadBlock
         figures={[
-          { label: "Net sales today", value: "$7,468" },
-          {
-            label: "Sales per labor hour",
-            value: "$71.40",
-            detail: "104 hours bought",
-            meter: <FloorMeter value={71.4} floor={68} />,
-          },
+          <LeadFigure key="f9" label="Net sales today" value="$7,468" />,
+          <LeadFigure key="f10" label="Sales per labor hour" value="$71.40" detail="104 hours bought" meter={<FloorMeter value={71.4} floor={68} />} />,
         ]}
       >
         {SAY}
@@ -109,8 +104,8 @@ describe("HeadBlock", () => {
     const { container } = render(
       <HeadBlock
         figures={[
-          { label: "a", value: "1" },
-          { label: "b", value: "2" },
+          <LeadFigure key="f11" label="a" value="1" />,
+          <LeadFigure key="f12" label="b" value="2" />,
         ]}
       >
         {SAY}
@@ -126,7 +121,7 @@ describe("HeadBlock", () => {
     // here, a page would have two components deciding what loading looks
     // like.
     const { container } = render(
-      <HeadBlock figures={[{ label: "a", value: "1" }]}>{SAY}</HeadBlock>,
+      <HeadBlock figures={[<LeadFigure key="f13" label="a" value="1" />]}>{SAY}</HeadBlock>,
     )
     expect(container.querySelector(".skb")).toBeNull()
     expect(container.querySelector(".empty")).toBeNull()
