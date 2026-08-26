@@ -753,6 +753,27 @@ Client-island tests (RTL, `fireEvent` only): pressing a toggle writes the URL;
 the clear button is hidden with no filters and shown with one; the count reads
 "shown of matched".
 
+### Two things Task 4's review handed to this task
+
+**The `byHour` section has page-level furniture the adapter does not carry.**
+The prototype's `sec('Orders by hour', …)` (lines 4874-4877) closes with a
+`<p class="mono">` — *"This is the list. The shape of it — which channel, which
+hour, which way it is moving — is one page over."* — and a `.btnrow` holding a
+`.btn` reading **"Open analytics"**, pointing at `/dashboard/analytics`. Neither
+is a figure, so neither belongs in `OrdersByHour`; both are the composition's to
+render, as children of that `Section`. **Render them, or Task 8 reports two
+missing landmarks.**
+
+**`list` never goes empty, and that needs writing down.** `buildOrdersList`
+returns a `ready` list with zero rows when a filter matches nothing, rather than
+`empty("no_match")` — deliberately, because the filter bar lives INSIDE that
+section and an empty state would take the reader's filters away along with the
+rows, leaving them no way to widen the search that just failed. That is the
+right call and the mirror of rule 4, so state it in the island's own comment.
+The table still needs something in the zero-row case: the prototype has no such
+state, so render the `.filters` bar with an empty `Table` beneath it.
+
+
 - [ ] **Step 1: Write the failing island tests**
 - [ ] **Step 2: Run and watch them fail**
 - [ ] **Step 3: Implement the page, the island, and the two url-state keys**
