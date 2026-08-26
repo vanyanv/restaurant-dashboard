@@ -184,9 +184,19 @@ export function CounterPnlClient({
   const { range, presetId, comparisonId } = counterParams
   const selectedStore = stores.find((s) => s.id === counterParams.storeId) ?? null
   const storeName = selectedStore?.name ?? "All stores"
-  // What the date control at the top of the page CALLS this range — "Last 7
-  // days" for a preset, its own ends for a window someone pressed.
-  const windowLabel = rangeLabel(range, presetId)
+  // The window named by its ENDS, on a preset as much as on a pressed range.
+  //
+  // `CD.rangeLabel()` in the prototype is `fmtRange()` (line 1862): two dates,
+  // no preset branch, and `P.pnl.desk()` calls it for the cascade's meta (line
+  // 5313) and the week table's unmarked note (line 5172). This page briefly
+  // passed `presetId` instead, on the argument that the head should echo what
+  // the date control CALLS the range — defensible on one surface and wrong
+  // across two, because `/m/pnl` renders the same window from the same
+  // adapter and names it by its ends. One range printed two ways on one page
+  // is note 60's shape with no arithmetic in it. "Last 7 days" also never
+  // says WHICH seven days, which is the only thing a statement's reader has
+  // to know.
+  const windowLabel = rangeLabel(range, "custom")
   const days = dayCount(range)
   const comparing = comparisonId !== "none"
   const cmpName = comparisonName(comparisonId)

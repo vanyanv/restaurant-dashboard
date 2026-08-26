@@ -143,6 +143,39 @@ describe("Counter P&L", () => {
     )
   })
 
+  it("names the window by its ENDS on a preset too, never by the preset's name", () => {
+    // `CD.rangeLabel()` is `fmtRange()` (prototype line 1862) — two dates, no
+    // preset branch — and `P.pnl.desk()` calls it for the cascade's meta
+    // (5313) and the week table's unmarked note (5172). With the PRESET's name
+    // here the desk printed "Last 7 days" where the phone, from the same
+    // range, printed "Aug 19 – Aug 25": one window, two names, across two
+    // surfaces of one page.
+    const { container } = render(
+      <CounterPnlClient {...base} params="range=d7" sections={sections} />,
+    )
+    expect(container.querySelector(".pagehead .sub")?.textContent).toBe(
+      "All stores · Aug 19 – Aug 25 · 7 days · vs the prior period",
+    )
+    const cascadeMeta = main(container).querySelector(".sec .sec__head .k")?.textContent
+    expect(cascadeMeta).toBe("Aug 19 – Aug 25 · the bar is what is left after each line")
+    // The same label again, in the note the week table prints when the range
+    // above it is not one of its eight rows.
+    expect(main(container).textContent).toContain(
+      "The range above is Aug 19 – Aug 25, which is not one of these weeks",
+    )
+    // "Last 7 days" is still on the page exactly once, inside the date
+    // control, which is the prototype's own `presetName()` at line 1919 — the
+    // control names the preset, the page names the window.
+    expect(
+      Array.from(main(container).querySelectorAll(".sec__head .k")).map((e) => e.textContent),
+    ).toEqual([
+      "Aug 19 – Aug 25 · the bar is what is left after each line",
+      "press a week to read it in full · every figure is this same statement over that window",
+      "against the prior period · same 7 days, so the change column is readable",
+      "2 stores, 2 stages",
+    ])
+  })
+
   it("composes the page in the prototype's order, with the strip and the reading OUTSIDE any section", () => {
     // The whole task as one assertion: strip → reading → cascade → eight weeks
     // → statement → the split → by store.

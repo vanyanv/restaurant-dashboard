@@ -278,9 +278,22 @@ function statementRows(s: PnlStatement): MoneyLine[] {
     out.push({
       label,
       value: line.amount,
-      // The prototype paints two rows: commissions always, and food when it
+      // The prototype paints two rows: commissions ALWAYS, and food when it
       // beat the target on file. `over` is the adapter's judgement — this
       // page never compares a percentage to a target.
+      //
+      // The unconditional commission tone is a RULING, not an oversight, and
+      // it was raised and upheld rather than shipped unnoticed. It sits in
+      // tension with this codebase's own rule that colour marks the exception
+      // (`Cascade`'s comment says so, and paints exactly one cut): a
+      // commission is red on every account, so it marks nothing. Two reasons
+      // it stays. The prototype is the authority this phase is measured
+      // against — `['Commissions', …, 'bad']` at line 5371 is unconditional
+      // where the food line beside it is `a.pct.cogs > FOOD_PLAN ? 'bad' : ''`
+      // — and the colour here is not a judgement against a threshold at all:
+      // it is money that left the building to a third party on every single
+      // line, which is what the tone is saying. Do not "fix" this to a
+      // conditional without overturning the ruling first.
       tone: key === "commissions" || line.over ? "bad" : undefined,
       total: key === "bottom",
     })
