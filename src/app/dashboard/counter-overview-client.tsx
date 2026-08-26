@@ -1,47 +1,102 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   AppShell,
+  AskBar,
+  Chart,
+  ChannelRows,
   Dispatch,
   DateControl,
-  Section,
-  Figure,
-  Table,
+  Drill,
+  FloorMeter,
+  HeadBlock,
+  LeadFigure,
   MoneyLines,
+  Moving,
+  Queue,
+  Say,
+  Section,
+  StoreCards,
+  Strip,
+  Table,
   type DispatchItem,
+  type QueueItem,
   type RailUser,
+  type StoreCard,
   type SwitchableStore,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { rangeLabel, rangeSubtitle, rangeTitle, stepRange } from "@/lib/counter/date-range"
-import { money, pct, delta } from "@/lib/counter/format"
-import type { OverviewSections } from "@/lib/counter/adapters/overview"
+import {
+  bucketFor,
+  COMPARISONS,
+  dayCount,
+  rangeLabel,
+  rangeSubtitle,
+  rangeTitle,
+  stepRange,
+  type ComparisonId,
+  type DateRange,
+} from "@/lib/counter/date-range"
+import { count, money } from "@/lib/counter/format"
+import type {
+  OverviewSections,
+  OverviewStoreCard,
+  QueueEntry,
+} from "@/lib/counter/adapters/overview"
 
 /**
  * What `page.tsx` hands this island — already shaped exactly the way each
- * primitive below renders it. `src/lib/counter/adapters/overview.ts` is
- * where that shaping happens; this file never inspects `.status` (the six
- * renderings all live inside `Section`) and never formats a number a second
- * way.
+ * primitive below renders it. `src/lib/counter/adapters/overview.ts` is where
+ * that shaping happens; this file never inspects `.status` (the six renderings
+ * all live inside `Section`) and never formats a number a second way.
  *
- * The type is the adapter's own, imported rather than restated: the adapter
- * shapes twelve sections for this page, and a second hand-written copy of
- * those shapes here would be twelve chances for the two to drift. It is a
- * TYPE-ONLY import, so nothing of the adapter's server code reaches the
- * client bundle.
+ * The type is the adapter's own, imported rather than restated: a second
+ * hand-written copy of fourteen section shapes here would be fourteen chances
+ * for the two to drift.
  *
- * `sales` and `splh` are two sections, not one. Note 30: net sales says
- * whether the day happened, sales per labour hour says whether it was worth
- * having. One `SectionData` can only carry one status, and the two figures
- * come from different rollups that can fail independently, so the two numbers
- * this page leads with cannot share a section.
+ * ## The order below is `P.overview.desk()`'s order, and it is load-bearing
  *
- * Only part of what the adapter now supplies is composed below. The head
- * block, the strip, the verdict, the moving band, the two charts, the store
- * cards and the channel panels are Task 3's — this island renders the
- * sections it already had, against their new shapes.
+ * `docs/counter/counter-prototype.html:4219`. Two constraints break the layout
+ * silently if they are missed, and both were measured rather than guessed:
+ *
+ * 1. **The head block, the strip, the moving band, the ask bar and the
+ *    comparison drill sit at PAGE level**, above and between the six sections
+ *    — not inside one. Before this composition our head figure lived inside
+ *    the first `.sec`, and the fidelity gate reported `.headline`, `.fig`,
+ *    `.strip` and `.tbl` as four EXTRA landmarks at the wrong index, purely
+ *    because everything above them was missing.
+ * 2. **Every store card precedes every drawer** inside `.stores`, because
+ *    `.stores > .ldrawer` is `grid-column: 1 / -1`. `StoreCards` enforces that
+ *    itself; it is recorded here because it is the reason it does.
+ *
+ * ## What is on this page and is not a `.sec`
+ *
+ * Five blocks, and all five still have states. `Section bare` is how they get
+ * them: the same six branches and the same five state components, without the
+ * `.sec` chrome. A second component rendering "failed" its own way is the one
+ * thing note 22 forbids.
+ *
+ * ## What the prototype has here and this page does not
+ *
+ * - **A build-out meter on a pre-open store card.** No column, no milestone
+ *   table, nothing — see `PreOpenStore`. The card carries the opening date and
+ *   what its store file is still missing instead.
+ * - **A floor under sales per labour hour.** `SPLH_FLOOR = 68.00` is the
+ *   prototype's own invention and `SplhPoint.targetSplh` is the figure judging
+ *   itself. `FloorMeter` mounts only when a floor is published, so today it
+ *   does not mount at all.
+ * - **A band under four of the six strip figures.** Only food cost has a
+ *   published target (`Store.targetCogsPct`) and only prime cost has a
+ *   published ceiling (a trade benchmark, not a per-store setting). The rest
+ *   are judged against nothing, because nothing publishes anything to judge
+ *   them against.
+ * - **The model's call.** The prototype mounts it only on a single-day range,
+ *   and `getRevenueForecast`'s horizon starts TODAY while this page's default
+ *   range ends yesterday — so it would be a permanently empty box on the view
+ *   a reader lands on. `/dashboard/forecasts` serves it as a page.
  */
 export type OverviewClientSections = OverviewSections
 
@@ -49,14 +104,14 @@ export type OverviewClientSections = OverviewSections
  * The dispatch line's facts, and nowhere else to get them.
  *
  * The prototype's three are "3 need you · 1,284 orders trading · synced 12 min
- * ago". We have none of those yet: the needs-you count is an owed section, the
- * order count lives inside a `SectionData` this page may not open (a page never
- * branches on `.status` — `npm run tokens` fails the build on it), and this
- * application has no last-sync reading at all. What it DOES have, at page level
- * and with no status to inspect, is the store lifecycle — which is exactly the
- * third thing the design's own note asks this line for: "whether the figures
- * can be trusted". A pre-open store is why a page below is empty, and saying so
- * here is the difference between an empty dashboard and a broken one.
+ * ago". We have none of those three at page level: the needs-you count and the
+ * order count both live inside a `SectionData` this page may not open (a page
+ * never branches on `.status`), and this application has no last-sync reading
+ * at all. What it DOES have, at page level and with no status to inspect, is
+ * the store lifecycle — which is exactly the third thing the design's own note
+ * asks this line for: "whether the figures can be trusted". A pre-open store is
+ * why a page below is empty, and saying so here is the difference between an
+ * empty dashboard and a broken one.
  *
  * Everything printed is derived. Nothing is invented, and the line goes short
  * rather than padded.
@@ -83,6 +138,19 @@ function dispatchItems(
     items.push({ tone: "quiet", text: `${rest} not trading yet, and nothing below counts them` })
   }
   return items
+}
+
+/** "the prior period" — the comparison named the way a sentence names it. */
+function comparisonLabel(id: ComparisonId): string {
+  return (COMPARISONS.find((c) => c.id === id)?.label ?? "with no comparison").replace(/^vs /, "")
+}
+
+const BUCKET_WORD = { day: "daily", week: "weekly", month: "monthly" } as const
+
+/** "Net sales" on one day, "Net sales · 7 days" on more. The prototype's own two forms. */
+function netSalesLabel(range: DateRange): string {
+  const n = dayCount(range)
+  return n === 1 ? "Net sales" : `Net sales · ${n} days`
 }
 
 export function CounterOverviewClient({
@@ -129,7 +197,89 @@ export function CounterOverviewClient({
     [params, pathname, router],
   )
 
+  const { range, presetId, comparisonId } = counterParams
   const selectedStore = stores.find((s) => s.id === counterParams.storeId) ?? null
+  const storeName = selectedStore?.name ?? "all stores"
+  const windowLabel = rangeLabel(range, "custom")
+  const buckets = BUCKET_WORD[bucketFor(range)]
+  const comparing = comparisonId !== "none"
+  const cmpName = comparisonLabel(comparisonId)
+
+  /**
+   * A card, and the channel panel that opens under it.
+   *
+   * The panel is built HERE rather than in the adapter because it is markup,
+   * and a `ReactNode` cannot cross the RSC boundary. Every figure inside it
+   * came from the adapter already.
+   */
+  const toCard = (c: OverviewStoreCard): StoreCard => {
+    if (c.kind === "pre_open") {
+      return {
+        ...c,
+        // `rows={[]}` is `prePanel()`: the same `.chan` box, saying what the
+        // store is waiting for instead of where its money came from.
+        panel: (
+          <ChannelRows
+            caption={`${c.name} is not trading yet`}
+            rows={[]}
+            footer={
+              c.missingFromFile.length === 0
+                ? "Its store file is complete. Nothing here will be counted until it opens."
+                : `Its store file is still missing ${c.missingFromFile.join(", ").toLowerCase()}.`
+            }
+            actions={
+              <Link className="btn btn--quiet" href={`/dashboard/stores/${c.id}`}>
+                Open the store file
+              </Link>
+            }
+          />
+        ),
+      }
+    }
+    return {
+      ...c,
+      panel: (
+        <ChannelRows
+          caption={`Where ${c.name}'s ${money(c.netSales)} came from · ${windowLabel}`}
+          rows={c.channels}
+          footer={
+            c.channels.length === 0
+              ? "No channel readings for this range."
+              : `${count(c.orders)} orders across ${c.channels.length} channels.`
+          }
+          actions={
+            <>
+              <Link className="btn btn--quiet" href={`/dashboard/pnl/${c.id}`}>
+                Open this store&rsquo;s P&amp;L
+              </Link>
+              <Link className="btn btn--quiet" href={`/dashboard/stores/${c.id}`}>
+                Open the store file
+              </Link>
+            </>
+          }
+        />
+      ),
+    }
+  }
+
+  /**
+   * `QueueEntry` -> `QueueItem`. The adapter names a destination; a handler is
+   * not serialisable, so turning the name into behaviour is this island's job
+   * — the same split as `SectionData.failed`'s `retryAction`.
+   */
+  const toQueueItem = (e: QueueEntry): QueueItem =>
+    e.href && e.actLabel
+      ? {
+          key: e.key,
+          tone: e.tone,
+          lead: e.lead,
+          unit: e.unit,
+          title: e.title,
+          body: e.body,
+          act: e.actLabel,
+          onAct: () => router.push(e.href as string),
+        }
+      : { key: e.key, tone: e.tone, lead: e.lead, unit: e.unit, title: e.title, body: e.body }
 
   return (
     <AppShell
@@ -138,22 +288,18 @@ export function CounterOverviewClient({
       // The title is a sentence about the WINDOW — "7 days to Aug 21" — not the
       // word "Overview", which the breadcrumb already says. Both strings come
       // from `date-range.ts` so no second page can word them differently.
-      title={rangeTitle(counterParams.range)}
-      sub={rangeSubtitle(
-        selectedStore?.name ?? "All stores",
-        counterParams.range,
-        counterParams.comparisonId,
-      )}
+      title={rangeTitle(range)}
+      sub={rangeSubtitle(selectedStore?.name ?? "All stores", range, comparisonId)}
       crumbLeaf="Overview"
       actions={
         <DateControl
-          presetId={counterParams.presetId}
-          comparisonId={counterParams.comparisonId}
-          range={counterParams.range}
+          presetId={presetId}
+          comparisonId={comparisonId}
+          range={range}
           onPreset={(id) => push({ presetId: id })}
           onComparison={(id) => push({ comparisonId: id })}
-          onStep={(direction) => push({ range: stepRange(counterParams.range, direction) })}
-          onRange={(range) => push({ range })}
+          onStep={(direction) => push({ range: stepRange(range, direction) })}
+          onRange={(next) => push({ range: next })}
         />
       }
       stores={stores}
@@ -165,7 +311,7 @@ export function CounterOverviewClient({
       // The ⌘K palette's "Change the range" group, from the same state the
       // date control above is drawn from — so the two can never disagree
       // about which preset is current.
-      presetId={counterParams.presetId}
+      presetId={presetId}
       onSelectPreset={(id) => push({ presetId: id })}
     >
       {/* `.dispatch` is the first thing inside the screen, above everything.
@@ -175,69 +321,197 @@ export function CounterOverviewClient({
           link. */}
       <Dispatch items={dispatchItems(stores, selectedStore)} />
 
-      {/* No `EntryItem` wrappers. `.screen > *` in the ported sheet already
-          staggers these six in reading order, with its own reduced-motion
-          branch — see the note on `EntryItem` itself. */}
-      <Section title="Net sales" data={sections.sales} askAbout>
-        {(d) => (
-          <div className="headline">
-            <Figure label="Net sales" value={money(d.netSales)} size="lead" />
-          </div>
-        )}
-      </Section>
-
-      <Section title="Sales per labour hour" data={sections.splh}>
-        {() => null}
-      </Section>
-
-      <Section
-        title="Stores"
-        meta={rangeLabel(counterParams.range, counterParams.presetId)}
-        data={sections.ledger}
-        askAbout="the per-store ledger"
-        // `raw()` in the prototype: a table fills its section edge to
-        // edge. `.tbl` rules its own rows the full width of the box, so a
-        // `.sec__body` gutter around it would stop every hairline 15px
-        // short of the section's border. Every `sec(… tbl(…) …)` call in
-        // the prototype does the same.
-        pad={false}
+      {/* Note 30, as two figures and a verdict: net sales says whether the day
+          happened, sales per labour hour says whether it was worth having.
+          Three sections, one block — they come from three rollups that fail
+          independently, so each figure carries its own state and the block
+          holds whichever of them arrived. */}
+      <HeadBlock
+        figures={[
+          <Section bare key="net" title="Net sales" data={sections.sales}>
+            {(d) => (
+              <LeadFigure
+                label={netSalesLabel(range)}
+                value={money(d.netSales)}
+                detail={d.comparison}
+              />
+            )}
+          </Section>,
+          <Section bare key="splh" title="Sales per labour hour" data={sections.splh}>
+            {(d) => (
+              <LeadFigure
+                label="Sales per labor hour"
+                value={money(d.value, { cents: true })}
+                detail={`${count(d.series.length)} ${buckets} readings with labour posted`}
+                // Only when a floor is published. Nothing in this schema
+                // publishes one, so nothing is drawn against one — a meter
+                // against a number nobody set is the prototype's own 68.00.
+                meter={d.floor === null ? null : <FloorMeter value={d.value} floor={d.floor} />}
+              />
+            )}
+          </Section>,
+        ]}
       >
-        {(rows) => (
-          <Table
-            columns={[
-              { key: "store", label: "Store" },
-              { key: "net", label: "Net sales", numeric: true },
-              { key: "cogsPct", label: "COGS %", numeric: true },
-              { key: "target", label: "vs target", numeric: true },
+        <Section bare title="The verdict" data={sections.verdict}>
+          {(v) => (
+            <Say tone={v.tone} headline={v.headline} action={v.action}>
+              {v.body}
+            </Say>
+          )}
+        </Section>
+      </HeadBlock>
+
+      {/* The ruled strip. `Strip` sizes itself from `cells.length`, so a strip
+          missing a figure the database cannot produce is a shorter strip
+          rather than a bordered box reading "—". */}
+      <Section bare title="The figures" data={sections.strip}>
+        {(cells) => <Strip cells={cells} />}
+      </Section>
+
+      {/* Every cell names something the figures above it do NOT include. */}
+      <Section bare title="Still moving" data={sections.moving}>
+        {(cells) => <Moving cells={cells} />}
+      </Section>
+
+      {/* Not a section in the prototype either, and it carries no state: a
+          store that is not trading is still a store you can ask about. */}
+      <AskBar
+        placeholder={`Ask anything about ${storeName}, ${windowLabel} or any range…`}
+        suggestions={[
+          "Why is food cost where it is?",
+          comparing ? `What changed vs ${cmpName}?` : "What changed over this range?",
+          "Which channel is costing the most to sell through?",
+        ]}
+      />
+
+      {/* The two lead figures, as trends. Both are sections, so both carry all
+          six states rather than only the one somebody remembered. */}
+      <div className="split">
+        <Section
+          title={`Net sales · ${windowLabel}`}
+          meta={
+            comparing
+              ? `dashed line: ${cmpName} · ${buckets} buckets`
+              : `hover for the reading · ${buckets} buckets`
+          }
+          data={sections.salesChart}
+          askAbout="net sales over this range"
+        >
+          {(spec) => (
+            <>
+              <Chart {...spec} fmt={(v) => money(v)} />
+              <div className="btnrow">
+                <Link className="btn btn--quiet" href="/dashboard/analytics">
+                  Where it came from
+                </Link>
+              </div>
+            </>
+          )}
+        </Section>
+
+        <Section
+          title="Sales per labor hour"
+          meta={`${buckets} readings`}
+          data={sections.splhChart}
+          askAbout="sales per labour hour"
+        >
+          {(spec) => (
+            <>
+              <Chart {...spec} fmt={(v) => money(v, { cents: true })} />
+              {/* The prototype draws a floor rule here and writes a sentence
+                  about it. No store file publishes a floor, so there is no
+                  rule — and this says so, rather than leaving a reader to
+                  wonder whether the line simply failed to draw. */}
+              <p className="mono">
+                Every hour of labour posted in this range returned this much in sales. No floor is
+                published for {storeName}, so nothing is drawn against one.
+              </p>
+            </>
+          )}
+        </Section>
+      </div>
+
+      {/* The comparison, all of it, one click under the chart that draws it,
+          at the width of the page — a four-column table in a 340px column
+          wraps every row it has. Mounted only when a comparison is on, which
+          is `P.overview.desk()`'s own `cmpOn &&` (line 4340) and is page
+          state, not a section's status. */}
+      {comparing ? (
+        <Section bare title="Every figure against the comparison" data={sections.comparison}>
+          {(rows) => (
+            <Drill wide label={`Every figure against ${cmpName}`}>
+              <Table
+                columns={[
+                  { key: "figure", label: "Figure" },
+                  { key: "now", label: "This range", numeric: true },
+                  { key: "then", label: "Comparison", numeric: true },
+                  { key: "change", label: "Change", numeric: true },
+                ]}
+                rows={rows.map((r) => ({
+                  key: r.key,
+                  cells: {
+                    figure: r.figure,
+                    now: r.now,
+                    then: r.then,
+                    // `hot` is the prototype's own class for a cell that moved
+                    // the wrong way; the ported sheet paints it.
+                    change: { v: r.change, cls: r.bad ? "hot" : undefined },
+                  },
+                }))}
+              />
+            </Drill>
+          )}
+        </Section>
+      ) : null}
+
+      <Section title="What needs you" data={sections.needsYou} askAbout="what needs me">
+        {(items) => <Queue items={items.map(toQueueItem)} />}
+      </Section>
+
+      {/* Where the money came from belongs to the store that made it. And a
+          store that has not opened belongs in something other than a row —
+          note 33, the element this whole effort was diagnosed on. */}
+      <Section
+        title="Per-store ledger"
+        meta={`${windowLabel} · open a store for where its money came from`}
+        data={sections.stores}
+        askAbout="the per-store ledger"
+      >
+        {(cards) => (
+          <StoreCards
+            stores={cards.map(toCard)}
+            notes={[
+              `Every figure is ${windowLabel}.`,
+              "Net sales across the cards sum to the headline, because both come from one rollup.",
             ]}
-            rows={rows.map((r) => ({
-              key: r.storeId,
-              cells: {
-                store: r.store,
-                net: money(r.net),
-                cogsPct: pct(r.cogsPct, { scaled: true }),
-                target: delta(r.deltaVsTargetPp, { scaled: true }),
-              },
-            }))}
           />
         )}
       </Section>
 
-      {/* Four figures became money lines: what arrived, what is held up, and
-          what actually reached COGS. `MoneyLines` is the prototype's own
-          element for a short reconciliation, and the adapter writes the lines
-          because a page never formats a number a second way. */}
-      <Section title="Invoices" data={sections.invoices} askAbout>
-        {(rows) => <MoneyLines rows={rows} />}
-      </Section>
+      <div className="tri tri--2">
+        {/* Four figures became money lines: what arrived, what is held up, and
+            what actually reached COGS. `MoneyLines` is the prototype's own
+            element for a short reconciliation, and the adapter writes the
+            lines because a page never formats a number a second way. */}
+        <Section title="Invoices" data={sections.invoices} askAbout>
+          {(rows) => <MoneyLines rows={rows} />}
+        </Section>
 
-      <Section title="Needs you" data={sections.needsYou}>
-        {() => null}
-      </Section>
-
-      <Section title="The model's call" data={sections.modelCall}>
-        {() => null}
-      </Section>
+        <Section title="Guest ratings" data={sections.ratings} askAbout>
+          {(r) => (
+            <>
+              <div className="stars">
+                <span className="n">{r.average}</span>
+                <span className="s">★★★★★</span>
+              </div>
+              <p className="mono">
+                {count(r.count)} reviews in {count(r.windowDays)} days
+                {r.lowCount > 0 ? ` · ${count(r.lowCount)} at one or two stars` : ""}
+              </p>
+            </>
+          )}
+        </Section>
+      </div>
     </AppShell>
   )
 }

@@ -17,6 +17,7 @@ const HOLLYWOOD: TradingStore = {
   kind: "trading",
   id: "hollywood",
   name: "Hollywood",
+  stage: "trading",
   netSales: 25_879,
   series: [820, 910, 1_040, 990, 1_120, 1_260, 1_180],
   comparison: "▲ 4.1% vs the prior period",
@@ -30,10 +31,8 @@ const GLENDALE: PreOpenStore = {
   kind: "pre_open",
   id: "glendale",
   name: "Glendale",
-  stage: "fit_out",
-  buildOutPct: 68,
-  blocker: "Hood and fire suppression signed off",
-  missingFromFile: "Rent",
+  opensOn: new Date(2026, 5, 15),
+  missingFromFile: ["Rent"],
   panel: <p>Glendale is not trading yet</p>,
 }
 
@@ -41,9 +40,8 @@ const VAN_NUYS: PreOpenStore = {
   ...GLENDALE,
   id: "vannuys",
   name: "Van Nuys",
-  stage: "pre_open",
-  buildOutPct: 31,
-  blocker: "Permit set resubmitted 14 Aug",
+  opensOn: null,
+  missingFromFile: ["Rent", "Opening date"],
   panel: <p>Van Nuys is not trading yet</p>,
 }
 
@@ -79,20 +77,44 @@ describe("StoreCards", () => {
     }
   })
 
-  it("a pre-open card shows the figure it DOES have: build-out, drawn as a meter", () => {
+  it("a pre-open card shows the fact it DOES have: when it opens", () => {
+    // NOT a build-out percentage. The prototype's 68% and 31% are invented for
+    // the mockup — there is no build-out column, no milestone table and
+    // nothing resembling one in the schema — and drawing a meter against a
+    // number nobody measured is note 33's em-dash reached by another route.
     const { container } = render(<StoreCards stores={ALL} />)
     const glendale = cards(container)[1]
-    expect(glendale.querySelector(".k")!.textContent).toBe("Build-out")
-    expect(glendale.querySelector(".v")!.textContent).toBe("68%")
-    expect((glendale.querySelector(".bld i") as HTMLElement).style.width).toBe("68%")
-    expect(glendale.querySelector(".d")!.textContent).toBe("Hood and fire suppression signed off")
+    expect(glendale.querySelector(".k")!.textContent).toBe("Opens")
+    expect(glendale.querySelector(".v")!.textContent).toBe("Jun 15, 2026")
+    expect(container.querySelector(".bld")).toBeNull()
   })
 
-  it("a pre-open card says what its store file is still missing", () => {
+  it("a store with no opening date says so, rather than guessing one", () => {
+    const { container } = render(<StoreCards stores={ALL} />)
+    expect(cards(container)[2].querySelector(".v")!.textContent).toBe("No date set")
+  })
+
+  it("a pre-open card says what its store file is still missing, and why it matters later", () => {
     const { container } = render(<StoreCards stores={ALL} />)
     const note = cards(container)[1].querySelector(".stnote")!
-    expect(note.textContent).toBe("Rent is still missing from its store file.")
     expect(note.querySelector("b")!.textContent).toBe("Rent is still missing")
+    expect(note.textContent).toContain("its P&L cannot be right the day it opens")
+  })
+
+  it("two missing fields read as a list, and the verb agrees with it", () => {
+    const { container } = render(<StoreCards stores={ALL} />)
+    expect(cards(container)[2].querySelector(".stnote b")!.textContent).toBe(
+      "Rent and Opening date are still missing",
+    )
+  })
+
+  it("a complete store file says so rather than leaving the note blank", () => {
+    const { container } = render(
+      <StoreCards stores={[{ ...GLENDALE, missingFromFile: [] }]} />,
+    )
+    expect(container.querySelector(".stnote")!.textContent).toContain(
+      "Its store file is complete",
+    )
   })
 
   it("a trading card carries net sales, its shape, its comparison and three sub-figures", () => {
@@ -121,7 +143,7 @@ describe("StoreCards", () => {
     })
     expect(tags).toEqual([
       ["mtag good", "Trading"],
-      ["mtag warn", "Fit-out 68%"],
+      ["mtag", "Pre-open"],
       ["mtag", "Pre-open"],
     ])
   })
@@ -201,12 +223,26 @@ describe("StoreCards", () => {
     expect(container.querySelector(".stcard .v")!.textContent).toBe("$25,879")
   })
 
-  it("a build-out figure outside 0–100 cannot paint outside its track", () => {
+  it("a warming-up store is a TRADING card, wearing the louder tag", () => {
+    // `isOperational` is `stage !== "pre_open"`, so a warming-up store has
+    // customers and therefore figures. The tag is the only difference, and it
+    // carries the model's own word rather than the prototype's "Fit-out".
     const { container } = render(
-      <StoreCards stores={[{ ...GLENDALE, buildOutPct: 140 }, { ...VAN_NUYS, buildOutPct: -5 }]} />,
+      <StoreCards stores={[{ ...HOLLYWOOD, stage: "warming_up" }]} />,
     )
-    const bars = Array.from(container.querySelectorAll(".bld i")) as HTMLElement[]
-    expect(bars[0].style.width).toBe("100%")
-    expect(bars[1].style.width).toBe("0%")
+    const tag = container.querySelector(".mtag")!
+    expect([tag.className, tag.textContent]).toEqual(["mtag warn", "Warming up"])
+    expect(container.querySelector(".stcard .v")!.textContent).toBe("$25,879")
+  })
+
+  it("a trading store with no orders prints an em-dash for the ticket, never $0.00", () => {
+    // The one place an em-dash is right on a card: a missing measurement on a
+    // row that has every other figure. Note 33 is about a card that is NOTHING
+    // but em-dashes.
+    const { container } = render(
+      <StoreCards stores={[{ ...HOLLYWOOD, orders: 0, ticket: null }]} />,
+    )
+    const figs = Array.from(container.querySelectorAll(".stfig dd")).map((d) => d.textContent)
+    expect(figs).toEqual(["0", "—", "$71.90"])
   })
 })

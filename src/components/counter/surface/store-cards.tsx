@@ -4,6 +4,7 @@ import { useState, type KeyboardEvent, type ReactNode } from "react"
 import { Caret } from "./caret"
 import { Spark } from "./spark"
 import { money, count } from "@/lib/counter/format"
+import { shortDate } from "@/lib/counter/date-range"
 
 /**
  * The stores, as small multiples. **This is note 33, and it is the element the
@@ -17,9 +18,12 @@ import { money, count } from "@/lib/counter/format"
  * target — and Glendale and Van Nuys have none of those four, because they have
  * no customers. A table demands that every row answer the same columns, so the
  * two that cannot answer print `$0`, `0.0%` and an em-dash: not an answer, the
- * absence of one, drawn with the authority of a figure. A card can hold a
- * build-out meter and the thing blocking it, which is the only news those two
- * stores have.
+ * absence of one, drawn with the authority of a figure. A card can hold what
+ * that store DOES have, which is the only news those two stores carry.
+ *
+ * "Build-out at 68% and 31%" is the one part of that sentence this codebase
+ * cannot honour: no column, no milestone table, nothing. See `PreOpenStore`
+ * below for what replaced it and why.
  *
  * Ported from `stores()` at line 3903 of `docs/counter/counter-prototype.html`:
  *
@@ -48,11 +52,10 @@ import { money, count } from "@/lib/counter/format"
  * "a card never prints an em-dash for a figure that does not apply to it" is
  * therefore not a review note; it is a type error.
  *
- * What the pre-open arm carries instead is what Task 6 found in `headBlock()`'s
- * empty branch and `prePanel()`: the build-out percent it does have, what that
- * percent is waiting on, and what its store file is still missing — "rent is
- * still missing", which is why its P&L could not be right on day one even after
- * it opens.
+ * What the pre-open arm carries instead is the half of `prePanel()` the schema
+ * can actually answer: when the store opens, and what its store file is still
+ * missing — "rent is still missing", which is why its P&L could not be right on
+ * day one even after it opens.
  *
  * ## Card order, drawer order
  *
@@ -82,6 +85,14 @@ export interface TradingStore {
   kind: "trading"
   id: string
   name: string
+  /**
+   * `trading` is `Store.lifecycleStage === "ready"`; `warming_up` is a store
+   * that has opened and whose figures are still settling. Both are
+   * OPERATIONAL (`isOperational` is `stage !== "pre_open"`), so both get a
+   * trading card — the tag is the difference, and it carries the model's own
+   * vocabulary rather than a second one invented here.
+   */
+  stage: "trading" | "warming_up"
   /** Net sales over the range. A trading store HAS this figure. */
   netSales: number
   /** The shape behind the figure. `Spark` renders nothing under two points. */
@@ -89,29 +100,46 @@ export interface TradingStore {
   /** Pre-formatted: "▲ 4.1% vs the prior period", or "no comparison set". */
   comparison: string
   orders: number
-  ticket: number
-  salesPerHour: number
+  /**
+   * `null` when the store took no orders in the range — never `0`, which
+   * claims every order was free. An em-dash HERE is one missing measurement on
+   * a card that carries every other figure, which is a different thing from
+   * note 33's table, where the em-dash WAS the row.
+   */
+  ticket: number | null
+  /** `null` when no labour hours were posted for the range. Same rule as `ticket`. */
+  salesPerHour: number | null
   /** What opens underneath — the channel breakdown for this store. */
   panel: ReactNode
 }
 
+/**
+ * A store that has not opened.
+ *
+ * ## What this arm used to ask for, and why it no longer does
+ *
+ * It required `buildOutPct: number` and `blocker: string` — the prototype's
+ * "Build-out 68% · hood and fire suppression signed off". Phase C went looking
+ * for both and found **no build-out column, no milestone table and nothing
+ * resembling one** anywhere in `prisma/schema.prisma`. The prototype's 68% and
+ * 31% are invented for the mockup, exactly like its `$25.10–$26.40` ticket
+ * band and its `SPLH_FLOOR = 68.00`.
+ *
+ * Synthesising a percentage to fill the meter would be note 33's em-dash table
+ * reached by another route: a figure drawn with the authority of a measurement
+ * nobody took. So this arm carries what the store file actually has — when it
+ * is expected to open, and which of its fields are still blank — and the card
+ * draws THOSE. "Rent is still missing" is the prototype's own second sentence,
+ * and unlike its percentage it is both true and actionable.
+ */
 export interface PreOpenStore {
   kind: "pre_open"
   id: string
   name: string
-  /**
-   * Both are the model's `pre_open` lifecycle stage; these are the prototype's
-   * own two tag words for how far along the build is. `fit_out` is the louder
-   * of the two (`.mtag warn`) because a store with a signed-off milestone is
-   * the one with a date attached to it.
-   */
-  stage: "fit_out" | "pre_open"
-  /** 0–100. The figure this store DOES have. */
-  buildOutPct: number
-  /** What the percent is waiting on: "Hood and fire suppression signed off". */
-  blocker: string
-  /** What its store file is still missing: "Rent". */
-  missingFromFile: string
+  /** `Store.openedAt`. `null` when nobody has set a date — not a guess at one. */
+  opensOn: Date | null
+  /** Which fields of its store file are still blank: `["Rent", "Opening date"]`. */
+  missingFromFile: string[]
   panel: ReactNode
 }
 
@@ -183,10 +211,12 @@ export function StoreCards({
 }
 
 function Tag({ store }: { store: StoreCard }) {
-  if (store.kind === "trading") return <span className="mtag good">Trading</span>
-  if (store.stage === "fit_out")
-    return <span className="mtag warn">Fit-out {pctLabel(store.buildOutPct)}</span>
-  return <span className="mtag">Pre-open</span>
+  if (store.kind === "pre_open") return <span className="mtag">Pre-open</span>
+  // `.mtag warn` is the prototype's louder tag. It carries "Warming up" here
+  // rather than its own "Fit-out 68%", because warming-up is a stage the model
+  // actually publishes and 68% is not a figure anything measures.
+  if (store.stage === "warming_up") return <span className="mtag warn">Warming up</span>
+  return <span className="mtag good">Trading</span>
 }
 
 function TradingBody({ store }: { store: TradingStore }) {
@@ -214,25 +244,38 @@ function TradingBody({ store }: { store: TradingStore }) {
   )
 }
 
+/**
+ * The prototype's build-out meter is not here, and its absence is the point —
+ * see `PreOpenStore`. What a pre-open store's file DOES answer is when it opens
+ * and what is still blank in it, so those are the two things the card says.
+ */
 function PreOpenBody({ store }: { store: PreOpenStore }) {
-  const w = Math.min(100, Math.max(0, store.buildOutPct))
+  const missing = store.missingFromFile
   return (
     <>
-      <span className="k">Build-out</span>
-      <span className="v">{pctLabel(store.buildOutPct)}</span>
-      <span className="bld">
-        <i style={{ width: `${w}%` }} />
-      </span>
-      <span className="d">{store.blocker}</span>
+      <span className="k">Opens</span>
+      <span className="v">{store.opensOn ? shortDate(store.opensOn) : "No date set"}</span>
+      <span className="d">No sales, no labour and no invoices yet</span>
       <p className="stnote">
-        <b>{store.missingFromFile} is still missing</b> from its store file.
+        {missing.length === 0 ? (
+          <>Its store file is complete, so its P&amp;L is ready the day it opens.</>
+        ) : (
+          <>
+            <b>
+              {listOf(missing)} {missing.length === 1 ? "is" : "are"} still missing
+            </b>{" "}
+            from its store file, so its P&amp;L cannot be right the day it opens.
+          </>
+        )}
       </p>
     </>
   )
 }
 
-function pctLabel(v: number): string {
-  return `${Math.round(v)}%`
+/** `["Rent", "Opening date"]` -> `"Rent and Opening date"`. */
+function listOf(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ""
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
 }
 
 /** Stable and unique per store, so `aria-controls` names a real element. */

@@ -5,6 +5,7 @@ import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import { getSplhSeries } from "@/app/actions/splh-actions"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
+import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import type { InvoiceKpis } from "@/types/invoice"
 import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
@@ -31,7 +32,14 @@ import { classify } from "@/lib/counter/adapters/types"
 import {
   empty, failed, hasData, loading, notComputed, ready, stale, type SectionData,
 } from "@/lib/counter/section-data"
-import type { FigureProps, MoneyLine, MovingCell, SwitchableStore, Tone } from "@/components/counter"
+import type {
+  ChannelRow,
+  FigureProps,
+  MoneyLine,
+  MovingCell,
+  SwitchableStore,
+  Tone,
+} from "@/components/counter"
 
 /**
  * Overview's data, classified.
@@ -158,6 +166,17 @@ export interface TradingStoreCard {
   kind: "trading"
   id: string
   name: string
+  /**
+   * `Store.lifecycleStage`, in the card's vocabulary. `isOperational` is
+   * `stage !== "pre_open"`, so a `warming_up` store IS trading and gets this
+   * arm — its figures are simply still settling, which the tag says.
+   *
+   * ONE mapping, in ONE place: `CARD_STAGE_FOR` below is the only translation
+   * from `LifecycleStage` into what a Counter surface prints, and the store
+   * switcher reads through the same map. Two vocabularies each translated at
+   * its own call site is how note 60's two labour figures happened.
+   */
+  stage: "trading" | "warming_up"
   /** Net sales over the range, from the same rollup as the page headline. */
   netSales: number
   /** The shape behind the figure — the same rollup, bucket by bucket. */
@@ -169,6 +188,13 @@ export interface TradingStoreCard {
   ticket: number | null
   /** `null` when no labour hours were posted for the range. */
   salesPerHour: number | null
+  /**
+   * Where this store's money came from — one row per channel, for the panel
+   * that opens under the card. `loadChannelMix` scoped to this store alone,
+   * which is the same call the strip's orders and ticket come from, so a card
+   * and the headline cannot disagree about how many orders there were.
+   */
+  channels: ChannelRow[]
 }
 
 /** A store that has not opened. It has no sales figures, so it is given none. */
@@ -189,20 +215,53 @@ export interface PreOpenStoreCard {
 export type OverviewStoreCard = TradingStoreCard | PreOpenStoreCard
 
 /**
- * One row of the per-store ledger, as the interim `Table` renders it.
+ * One row of the comparison drill — the prototype's "Every figure against the
+ * same 4 weekdays" table (line 4340), which opens under the net-sales chart.
  *
- * This is the four-column table note 33 indicts, and `stores` above is what
- * replaces it — the page swap is Task 3's. It is kept until then rather than
- * deleted early, and it is derived from the SAME rollup as `stores` and as the
- * headline, so the two renderings of the per-store money cannot disagree while
- * both exist.
+ * **It carries only the figures the comparison rollup actually answers.** The
+ * prototype writes six rows; three of them (orders, avg ticket, sales per
+ * labour hour) come from loaders this page only ever asks about the SELECTED
+ * range — `loadChannelMix` and `getSplhSeries` are never given the comparison
+ * window, and giving them one would be two more round trips per page load for
+ * a drawer that starts closed. So the table holds net sales, food cost, labour
+ * and prime cost, from the one rollup that was already loaded for the dashed
+ * line. A row is ABSENT rather than dashed: a table with an em-dash in its
+ * "Comparison" column is note 33 in four columns.
  */
-export interface LedgerRow {
-  storeId: string
-  store: string
-  net: number
-  cogsPct: number | null
-  deltaVsTargetPp: number | null
+export interface ComparisonRow {
+  key: string
+  figure: string
+  /** Pre-formatted, both of them, by the same function. */
+  now: string
+  then: string
+  /** "▲ 4.1%", "▼ 1.3 pts", "flat", or an em-dash when the base is zero. */
+  change: string
+  /** `true` when the change went the wrong way — the prototype's `cls:'hot'`. */
+  bad: boolean
+}
+
+/**
+ * The guest-ratings tile — the prototype's second box beside Invoices
+ * (line 4351).
+ *
+ * It is NOT scoped to the page's range, and that is deliberate: a review
+ * arrives days after the meal, so a one-day range would show an empty tile
+ * about a restaurant with hundreds of reviews. `getRatingsSummary` reads its
+ * own trailing window and says how long it is, which is what the prototype's
+ * own "Last 30 days" caption says while the page above it shows a week.
+ */
+export interface RatingsTile {
+  /**
+   * The mean, pre-formatted to one decimal — `"4.6"`. A star average has no
+   * formatter in `@/lib/counter/format`, and a page never formats a number, so
+   * it is written here. The section is `empty` when nothing was rated, so
+   * there is no null for a caller to render.
+   */
+  average: string
+  count: number
+  windowDays: number
+  /** Reviews at 1–2 stars — the ones an owner has to answer. */
+  lowCount: number
 }
 
 /** The model's forecast for one day. */
@@ -267,16 +326,35 @@ export interface OverviewSections {
   splhChart: SectionData<ChartData>
   /** Trading and pre-open are different shapes. See `OverviewStoreCard`. */
   stores: SectionData<OverviewStoreCard[]>
-  /** The interim four-column table `stores` replaces. Same rollup, so they cannot disagree. */
-  ledger: SectionData<LedgerRow[]>
+  /**
+   * The drill under the net-sales chart. `empty` when the reader turned the
+   * comparison off — there is nothing to compare, which is a state and not a
+   * failure. The page also declines to MOUNT the drill in that case, exactly
+   * as `P.overview.desk()`'s own `cmpOn &&` does.
+   */
+  comparison: SectionData<ComparisonRow[]>
   channels: SectionData<ChannelReading[]>
   /** Money lines, not figures: received, in review, posted. */
   invoices: SectionData<MoneyLine[]>
   /** From `src/app/actions/forecasts/`. Also never owed. */
   modelCall: SectionData<ModelCall>
+  /** The prototype's second tile beside Invoices, from `getRatingsSummary`. */
+  ratings: SectionData<RatingsTile>
 }
 
-const STAGE_FOR: Record<LifecycleStage, SwitchableStore["stage"]> = {
+/**
+ * The ONE place `Store.lifecycleStage` becomes something a Counter surface
+ * prints.
+ *
+ * Two vocabularies existed after Phase B — `StoreSwitcher` took
+ * `trading | warming_up | pre_open` and `StoreCards` took
+ * `trading | fit_out | pre_open` — and the Overview holds both on one page.
+ * `fit_out` turned out to be distinguishable from `pre_open` ONLY by a
+ * build-out percentage nothing in this schema measures, so the second
+ * vocabulary was removed rather than mapped (see `PreOpenStore`). What is left
+ * is this map, which both the switcher and the store cards read.
+ */
+const CARD_STAGE_FOR: Record<LifecycleStage, SwitchableStore["stage"]> = {
   pre_open: "pre_open",
   warming_up: "warming_up",
   ready: "trading",
@@ -285,7 +363,7 @@ const STAGE_FOR: Record<LifecycleStage, SwitchableStore["stage"]> = {
 /** The account's stores, for the `StoreSwitcher`. Fails closed to `[]`, same as `getStores` itself. */
 export async function getOverviewStores(): Promise<SwitchableStore[]> {
   const stores = await getStores()
-  return stores.map((s) => ({ id: s.id, name: s.name, stage: STAGE_FOR[s.lifecycleStage] }))
+  return stores.map((s) => ({ id: s.id, name: s.name, stage: CARD_STAGE_FOR[s.lifecycleStage] }))
 }
 
 /* ── Plumbing ─────────────────────────────────────────────────────────── */
@@ -704,6 +782,81 @@ function buildMoving(
   return cells
 }
 
+/**
+ * The comparison drill's table.
+ *
+ * Every row comes from the two `getAllStoresPnL` rollups this page already
+ * loaded — the selected range's and the comparison's — so the "This range"
+ * column is the SAME number as the headline above it, by construction.
+ *
+ * `divisor` matters here: the `weekday` comparison returns a window CONTAINING
+ * four occurrences, so its money has to be divided before it can be read
+ * against one period. Its percentages do not — a ratio over four days is
+ * already a ratio.
+ */
+function buildComparison(
+  now: PnLScope,
+  then: PnLScope,
+  cmp: ComparisonContext,
+): ComparisonRow[] {
+  const rows: ComparisonRow[] = []
+
+  const thenSales = then.grossSales / cmp.divisor
+  rows.push({
+    key: "net",
+    figure: "Net sales",
+    now: money(now.grossSales),
+    then: money(thenSales),
+    change: thenSales === 0 ? DASH : delta((now.grossSales - thenSales) / thenSales),
+    bad: thenSales > 0 && now.grossSales < thenSales,
+  })
+
+  if (now.grossSales > 0 && then.grossSales > 0) {
+    rows.push(pointsRow("food", "Food cost", now.cogsPct * 100, then.cogsPct * 100))
+  }
+
+  // Same guard as the strip's: zero labour over a range with sales is a store
+  // whose labour is not posted, not a store that spent nothing.
+  if (now.laborValue > 0 && then.laborValue > 0) {
+    rows.push(pointsRow("labor", "Labor", now.laborPct * 100, then.laborPct * 100))
+
+    const a = primeCost({
+      grossSales: now.grossSales,
+      cogsValue: now.cogsValue,
+      laborValue: now.laborValue,
+    })
+    const b = primeCost({
+      grossSales: then.grossSales,
+      cogsValue: then.cogsValue,
+      laborValue: then.laborValue,
+    })
+    if (a.primePct != null && b.primePct != null) {
+      rows.push(pointsRow("prime", "Prime cost", a.primePct, b.primePct))
+    }
+  }
+
+  return rows
+}
+
+/** A cost percentage against its own past. Up is the bad direction for all three. */
+function pointsRow(key: string, figure: string, now: number, then: number): ComparisonRow {
+  const diff = now - then
+  return {
+    key,
+    figure,
+    now: pct(now, { scaled: true }),
+    then: pct(then, { scaled: true }),
+    change:
+      Math.abs(diff) < 0.05
+        ? "flat"
+        : `${diff > 0 ? "\u25b2" : "\u25bc"} ${Math.abs(diff).toFixed(1)} pts`,
+    bad: diff > 0.05,
+  }
+}
+
+/** The same em-dash `@/lib/counter/format` writes, so this page has one. */
+const DASH = "\u2014"
+
 const TONE_FOR_SEVERITY: Record<string, Tone> = {
   CRITICAL: "bad",
   WATCH: "warn",
@@ -746,6 +899,14 @@ function buildQueue(
       unit: days === 0 ? undefined : days === 1 ? "day open" : "days open",
       title: a.title,
       body: a.explanation ?? a.body ?? `${a.storeName} · ${a.severity.toLowerCase()}`,
+      // The prototype gives each item its own destination (an invoice, six
+      // recipes, the menu). `getAlertInbox` publishes no destination per
+      // alert, and guessing one from the title would be a button that opens
+      // the wrong page. What every alert DOES have is the inbox it came from,
+      // and `/dashboard/alerts` is a route this app serves — one honest
+      // destination rather than three invented ones.
+      href: "/dashboard/alerts",
+      actLabel: "Open in the queue",
     }
   })
 }
@@ -819,6 +980,7 @@ export async function getOverviewSections(
     invoicesSd,
     queueSd,
     forecastSd,
+    ratingsSd,
     perStoreMixSd,
   ] = await Promise.all([
     classify(() => loadPnL(bounds, granularity), { retryAction: "retrySales" }),
@@ -873,6 +1035,18 @@ export async function getOverviewSections(
         return result.data
       },
       { retryAction: "retryModelCall" },
+    ),
+
+    classify(
+      async () => {
+        const summary = await getRatingsSummary({ storeId })
+        // Never throws by contract — it returns null for "not signed in" and
+        // for a query that failed, and this page must not print an empty tile
+        // over a dead ratings sync.
+        if (summary === null) throw new Error("Guest ratings could not be read")
+        return summary
+      },
+      { retryAction: "retryRatings", isEmpty: (r) => r.count === 0 },
     ),
 
     classify(
@@ -963,9 +1137,12 @@ export async function getOverviewSections(
       }),
     ),
 
-    ledger: mapReady(storeFilesSd, (files) =>
-      buildLedger(files, dataOf(pnlSd), targets, storeId),
-    ),
+    comparison: mapReadyTo(scopeSd, (p) => {
+      // Switched off, or the comparison rollup did not load: nothing to
+      // compare, which is a state rather than a failure.
+      if (!cmp.on || cmp.scope === null) return empty<ComparisonRow[]>("no_match")
+      return ready(buildComparison(p, cmp.scope, cmp))
+    }),
 
     channels: channelsSd,
 
@@ -985,6 +1162,18 @@ export async function getOverviewSections(
         p90: day.p90,
         recentMape: d.recentMape,
         source: day.forecastSource,
+      })
+    }),
+
+    ratings: mapReadyTo(ratingsSd, (r) => {
+      // `isEmpty` already caught a window with no reviews; a null average that
+      // survives it means the rows carried no rating at all.
+      if (r.average === null) return empty<RatingsTile>("no_match")
+      return ready({
+        average: r.average.toFixed(1),
+        count: r.count,
+        windowDays: r.windowDays,
+        lowCount: r.lowCount,
       })
     }),
   }
@@ -1078,6 +1267,10 @@ function buildStoreCards(input: {
     const row = pnl?.perStore.find((s) => s.storeId === f.id) ?? null
     const netSales = row?.grossSales ?? 0
     const mix = mixByStore.get(f.id) ?? []
+    // `CARD_STAGE_FOR` maps `pre_open` too; it cannot reach here, because
+    // `isOperational` returned true above.
+    const stage =
+      CARD_STAGE_FOR[f.lifecycleStage] === "warming_up" ? "warming_up" : "trading"
     const orders = mix.reduce((t, c) => t + c.orders, 0)
     const channelNet = mix.reduce((t, c) => t + c.net, 0)
     const points = splhByStore.get(f.id) ?? []
@@ -1088,6 +1281,7 @@ function buildStoreCards(input: {
       kind: "trading",
       id: f.id,
       name: f.name,
+      stage,
       netSales,
       series: row ? rowValues(row.rows, TOTAL_SALES_CODE) ?? [] : [],
       comparison: comparisonPhrase(
@@ -1100,35 +1294,12 @@ function buildStoreCards(input: {
       // no average ticket. Zero would claim every order on this store was free.
       ticket: orders > 0 ? channelNet / orders : null,
       salesPerHour: hours > 0 ? splhNet / hours : null,
+      // Passed through, not summed: `ChannelRows` wants the net and the order
+      // count per channel and works the commission out from the contract rate
+      // itself.
+      channels: mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders })),
     }
   })
-}
-
-/**
- * The interim table. Trading stores only — a store with no customers has none
- * of these four columns, and a row of zeroes and an em-dash is what note 33
- * indicts. `stores` above is the replacement.
- */
-function buildLedger(
-  files: StoreFile[],
-  pnl: PnLOk | null,
-  targets: StripTargets | null,
-  storeId: string | null,
-): LedgerRow[] {
-  const plan = targets?.foodCost?.kind === "target" ? targets.foodCost.value : null
-  return files
-    .filter((f) => isOperational(f) && (storeId === null || f.id === storeId))
-    .map((f) => {
-      const row = pnl?.perStore.find((s) => s.storeId === f.id) ?? null
-      const cogsPct = row && row.grossSales > 0 ? row.cogsPct * 100 : null
-      return {
-        storeId: f.id,
-        store: f.name,
-        net: row?.grossSales ?? 0,
-        cogsPct,
-        deltaVsTargetPp: cogsPct != null && plan != null ? cogsPct - plan : null,
-      }
-    })
 }
 
 /** Which fields of a store's file are still blank. Facts, not a build-out percentage. */
