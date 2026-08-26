@@ -1,6 +1,4 @@
 import { getStores } from "@/app/actions/store/crud-actions"
-import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
-import type { AllStoresPnLResult } from "@/app/actions/store/pnl-types"
 import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import { getSplhSeries } from "@/app/actions/splh-actions"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
@@ -11,10 +9,10 @@ import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
 import { foldSplhSeries } from "@/lib/dashboard/splh-fold"
 import type { SplhPoint } from "@/lib/splh"
-import { COGS_CODE, LABOR_CODE, TOTAL_SALES_CODE, type PnLRow, type Period } from "@/lib/pnl"
+import { COGS_CODE, LABOR_CODE, TOTAL_SALES_CODE, type PnLRow } from "@/lib/pnl"
 import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
-import { primeCost } from "@/lib/counter/prime-cost"
+import { granularityFor, loadStatement, type Statement } from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
@@ -68,15 +66,18 @@ import type {
  *
  * - **Every dollar printed as sales** — the headline, the chart's bars, each
  *   store card, and the denominator of every percent beside them — comes from
- *   ONE `getAllStoresPnL` call. The headline is `combined.grossSales`; the
- *   chart is that same rollup's `TOTAL_SALES` row, bucket by bucket; a store
- *   card is that store's entry in `perStore`. So the bars sum to the headline
- *   and the cards sum to the headline, by construction rather than by luck
- *   (note 39: a total is the sum of the series drawn beside it).
- * - **Food cost, labour and prime** are the same rollup's `cogsValue`,
- *   `laborValue` and their percents — not `@/lib/cogs`, which reaches the same
- *   sales figure by its own path and would drift the moment either query's
- *   bounds changed.
+ *   ONE `getAllStoresPnL` call, which this file no longer makes itself:
+ *   `src/lib/counter/statement.ts` owns it, because the P&L prints the same
+ *   dollars and a second page loading them itself is how a BOUNDS difference
+ *   gets in upstream of any formula. The headline is `Statement.grossSales`;
+ *   the chart is that same statement's `TOTAL_SALES` row, bucket by bucket; a
+ *   store card is that store's entry in `perStore`. So the bars sum to the
+ *   headline and the cards sum to the headline, by construction rather than by
+ *   luck (note 39: a total is the sum of the series drawn beside it).
+ * - **Food cost, labour and prime** are the same statement's `cogsValue`,
+ *   `laborValue` and `prime` — not `@/lib/cogs`, which reaches the same sales
+ *   figure by its own path and would drift the moment either query's bounds
+ *   changed.
  * - **Orders, avg ticket and the channel split** come from `loadChannelMix`,
  *   which reads net and orders off the SAME `OtterDailySummary` rows. Task 1's
  *   ruling: the ticket in that table has to be the net in that table over the
@@ -378,66 +379,7 @@ export async function getOverviewStores(): Promise<SwitchableStore[]> {
 
 /* ── Plumbing ─────────────────────────────────────────────────────────── */
 
-type Granularity = "daily" | "weekly" | "monthly"
-
-const GRANULARITY_FOR: Record<Bucket, Granularity> = {
-  day: "daily",
-  week: "weekly",
-  month: "monthly",
-}
-
 const BUCKET_WORD: Record<Bucket, string> = { day: "daily", week: "weekly", month: "monthly" }
-
-type PnLOk = Extract<AllStoresPnLResult, { combined: unknown }>
-
-/**
- * The rollup, scoped to what the reader selected.
- *
- * `getAllStoresPnL` has no store filter of its own — it returns every active
- * store in `perStore` alongside the account total, so a single-store view is a
- * lookup rather than a second query with its own bounds to get wrong.
- */
-interface PnLScope {
-  grossSales: number
-  cogsValue: number
-  laborValue: number
-  /** A FRACTION, not a percent — `getAllStoresPnL` divides and does not scale. */
-  cogsPct: number
-  laborPct: number
-  rows: PnLRow[]
-  periods: Period[]
-}
-
-async function loadPnL(
-  bounds: { startDate: Date; endDate: Date },
-  granularity: Granularity,
-): Promise<PnLOk> {
-  const result = await getAllStoresPnL({ ...bounds, granularity })
-  // `{ error }` is a real failure the reader must see ("P&L is restricted to
-  // owners"), not an empty section. classify turns a throw into `failed` with
-  // the message intact.
-  if ("error" in result) throw new Error(result.error)
-  return result
-}
-
-function scopePnL(p: PnLOk, storeId: string | null): PnLScope | null {
-  if (storeId === null) {
-    return { ...p.combined, rows: p.consolidatedRows, periods: p.periods }
-  }
-  const s = p.perStore.find((x) => x.storeId === storeId)
-  // A storeId that is not an active store on this account resolves to nothing
-  // rather than silently falling back to the whole account.
-  if (!s) return null
-  return {
-    grossSales: s.grossSales,
-    cogsValue: s.cogsValue,
-    laborValue: s.laborValue,
-    cogsPct: s.cogsPct,
-    laborPct: s.laborPct,
-    rows: s.rows,
-    periods: p.periods,
-  }
-}
 
 /** One P&L row's per-bucket values, as positive magnitudes. Expense rows are stored negative. */
 function rowValues(rows: PnLRow[], code: string): number[] | null {
@@ -498,7 +440,7 @@ function mapReadyTo<T, U>(sd: SectionData<T>, f: (value: T) => SectionData<U>): 
 
 interface ComparisonContext {
   /** The comparison's own rollup, when one was asked for and it loaded. */
-  scope: PnLScope | null
+  scope: Statement | null
   /** "the prior period" — reads inside a sentence. */
   label: string
   /** "vs prior" — reads inside a chart tooltip. */
@@ -512,7 +454,7 @@ interface ComparisonContext {
   on: boolean
 }
 
-function comparisonContext(mode: ComparisonId, scope: PnLScope | null): ComparisonContext {
+function comparisonContext(mode: ComparisonId, scope: Statement | null): ComparisonContext {
   const c = COMPARISONS.find((x) => x.id === mode) ?? COMPARISONS[COMPARISONS.length - 1]
   return {
     scope,
@@ -579,7 +521,7 @@ function comparisonPhrase(
  * strip, while a sixth cell reading "—" is note 33 in miniature.
  */
 function buildStrip(
-  p: PnLScope,
+  p: Statement,
   channels: ChannelReading[] | null,
   targets: StripTargets | null,
 ): StripCell[] {
@@ -661,13 +603,12 @@ function buildStrip(
 
   // The one figure judged against a threshold that is NOT in `targets.ts`.
   // See the module note — do not move `PRIME_CEILING_PCT` here or restate it.
-  const prime = laborKnown
-    ? primeCost({
-        grossSales: p.grossSales,
-        cogsValue: p.cogsValue,
-        laborValue: p.laborValue,
-      })
-    : null
+  //
+  // `p.prime` is `primeCost()` already applied by `statement.ts`, on this same
+  // statement's own denominator. `laborKnown` is a decision about the CELL —
+  // whether this figure is fit to print — not about the statement, which is
+  // why the gate stays here and the arithmetic does not.
+  const prime = laborKnown ? p.prime : null
   if (prime?.primePct != null) {
     const cogsSeries = rowPercents(p.rows, COGS_CODE)
     const laborSeries = rowPercents(p.rows, LABOR_CODE)
@@ -804,7 +745,7 @@ function buildMoving(
   range: DateRange,
   bucket: Bucket,
   cmp: ComparisonContext,
-  p: PnLScope,
+  p: Statement,
   invoices: InvoiceKpis | null,
   hours: number | null,
 ): MovingCell[] {
@@ -851,8 +792,8 @@ function buildMoving(
  * already a ratio.
  */
 function buildComparison(
-  now: PnLScope,
-  then: PnLScope,
+  now: Statement,
+  then: Statement,
   cmp: ComparisonContext,
 ): ComparisonRow[] {
   const rows: ComparisonRow[] = []
@@ -876,18 +817,10 @@ function buildComparison(
   if (now.laborValue > 0 && then.laborValue > 0) {
     rows.push(pointsRow("labor", "Labor", now.laborPct * 100, then.laborPct * 100))
 
-    const a = primeCost({
-      grossSales: now.grossSales,
-      cogsValue: now.cogsValue,
-      laborValue: now.laborValue,
-    })
-    const b = primeCost({
-      grossSales: then.grossSales,
-      cogsValue: then.cogsValue,
-      laborValue: then.laborValue,
-    })
-    if (a.primePct != null && b.primePct != null) {
-      rows.push(pointsRow("prime", "Prime cost", a.primePct, b.primePct))
+    // Both sides' prime cost came from `statement.ts`, on their own
+    // denominators — the same figures the strip above prints.
+    if (now.prime.primePct != null && then.prime.primePct != null) {
+      rows.push(pointsRow("prime", "Prime cost", now.prime.primePct, then.prime.primePct))
     }
   }
 
@@ -1012,7 +945,11 @@ export async function getOverviewSections(
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const bounds = toQueryBounds(range)
   const bucket = bucketFor(range)
-  const granularity = GRANULARITY_FOR[bucket]
+  // Worked out ONCE, from the SELECTED range, and passed to both loads below.
+  // A `weekday` comparison window contains four occurrences and would derive
+  // "weekly" from itself; a weekly series drawn as the dashed reference under
+  // daily bars is a chart comparing two different things.
+  const granularity = granularityFor(range)
   const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
   /*
@@ -1032,8 +969,8 @@ export async function getOverviewSections(
   // alert inbox, and `classify` never throws, so one failure cannot take the
   // page down.
   const [
-    pnlSd,
-    cmpSd,
+    stmtSd,
+    cmpStmtSd,
     channelsSd,
     targetsSd,
     splhSd,
@@ -1043,10 +980,15 @@ export async function getOverviewSections(
     ratingsSd,
     perStoreMixSd,
   ] = await Promise.all([
-    classify(() => loadPnL(bounds, granularity), { retryAction: "retrySales" }),
+    classify(() => loadStatement({ range, storeId, accountId, granularity }), {
+      retryAction: "retrySales",
+    }),
 
-    classify<PnLOk | null>(
-      () => (cmpRange ? loadPnL(toQueryBounds(cmpRange), granularity) : Promise.resolve(null)),
+    classify<Statement | null>(
+      () =>
+        cmpRange
+          ? loadStatement({ range: cmpRange, storeId, accountId, granularity })
+          : Promise.resolve(null),
       { retryAction: "retryComparison" },
     ),
 
@@ -1122,16 +1064,19 @@ export async function getOverviewSections(
     ),
   ])
 
-  const scopeSd = mapReadyTo(pnlSd, (p) => {
-    const s = scopePnL(p, storeId)
-    return s === null ? empty<PnLScope>("no_match") : ready(s)
-  })
+  // A selected store the rollup has no row for is "loaded, and there is
+  // nothing here" — never a silent fall back to the whole account, which is a
+  // page answering a question nobody asked. `loadStatement` reports it rather
+  // than the adapter re-deriving it from `perStore`.
+  const scopeSd = mapReadyTo(stmtSd, (s) =>
+    s.storeNotFound ? empty<Statement>("no_match") : ready(s),
+  )
 
-  const cmpScope = (() => {
-    const p = dataOf(cmpSd)
-    return p ? scopePnL(p, storeId) : null
-  })()
-  const cmp = comparisonContext(comparisonId, cmpScope)
+  const cmpStatement = dataOf(cmpStmtSd)
+  const cmp = comparisonContext(
+    comparisonId,
+    cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
+  )
 
   const channels = dataOf(channelsSd)
   const targets = dataOf(targetsSd)
@@ -1188,8 +1133,8 @@ export async function getOverviewSections(
     stores: mapReady(storeFilesSd, (files) =>
       buildStoreCards({
         files,
-        pnl: dataOf(pnlSd),
-        cmpPnl: dataOf(cmpSd),
+        statement: dataOf(stmtSd),
+        cmpStatement,
         cmp,
         mixByStore: dataOf(perStoreMixSd) ?? new Map(),
         splhByStore,
@@ -1240,7 +1185,7 @@ export async function getOverviewSections(
 }
 
 /** The net-sales chart: the same rollup as the headline, bucket by bucket. */
-function buildSalesChart(p: PnLScope, cmp: ComparisonContext, range: DateRange): ChartData {
+function buildSalesChart(p: Statement, cmp: ComparisonContext, range: DateRange): ChartData {
   const values = rowValues(p.rows, TOTAL_SALES_CODE) ?? []
   const cmpValues = cmp.scope ? rowValues(cmp.scope.rows, TOTAL_SALES_CODE) : null
   // A dashed reference only means anything drawn against the same number of
@@ -1301,8 +1246,9 @@ type StoreFile = Awaited<ReturnType<typeof getStores>>[number]
  */
 function buildStoreCards(input: {
   files: StoreFile[]
-  pnl: PnLOk | null
-  cmpPnl: PnLOk | null
+  /** The page's ONE statement. A card is that store's entry in `perStore`. */
+  statement: Statement | null
+  cmpStatement: Statement | null
   cmp: ComparisonContext
   /** One reading list per store — `loadChannelMix` scoped to that store alone. */
   mixByStore: Map<string, ChannelReading[]>
@@ -1310,7 +1256,7 @@ function buildStoreCards(input: {
   splhByStore: Map<string, SplhPoint[]>
   storeId: string | null
 }): OverviewStoreCard[] {
-  const { files, pnl, cmpPnl, cmp, mixByStore, splhByStore, storeId } = input
+  const { files, statement, cmpStatement, cmp, mixByStore, splhByStore, storeId } = input
   const inScope = storeId ? files.filter((f) => f.id === storeId) : files
   /*
    * Trading stores first, in the prototype's own order (Hollywood, then the
@@ -1336,7 +1282,7 @@ function buildStoreCards(input: {
       }
     }
 
-    const row = pnl?.perStore.find((s) => s.storeId === f.id) ?? null
+    const row = statement?.perStore.find((s) => s.storeId === f.id) ?? null
     const netSales = row?.grossSales ?? 0
     const mix = mixByStore.get(f.id) ?? []
     // `CARD_STAGE_FOR` maps `pre_open` too; it cannot reach here, because
@@ -1361,7 +1307,7 @@ function buildStoreCards(input: {
       comparison: comparisonPhrase(
         netSales,
         cmp,
-        cmpPnl?.perStore.find((s) => s.storeId === f.id)?.grossSales ?? null,
+        cmpStatement?.perStore.find((s) => s.storeId === f.id)?.grossSales ?? null,
       ).text,
       orders,
       // Same rule as the strip and as `loadChannelMix` itself: no orders means
