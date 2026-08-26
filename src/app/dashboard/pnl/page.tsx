@@ -1,0 +1,81 @@
+import { getServerSession } from "next-auth"
+import { redirect } from "next/navigation"
+import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { readCounterParams } from "@/lib/counter/url-state"
+import { getPnlSections } from "@/lib/counter/adapters/pnl"
+import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { CounterPnlClient } from "./counter-pnl-client"
+
+/** `OWNER` -> `Owner`. The rail prints a role, not an enum member. */
+function titleCase(role: string): string {
+  return role.charAt(0) + role.slice(1).toLowerCase()
+}
+
+/**
+ * Counter P&L — the second Counter page (Phase C, page 2).
+ *
+ * The route GRADUATED out of `(editorial)` to get here: a page rebuilt on
+ * Counter moves out of that route group, which is both the migration mechanism
+ * and the way anyone sees what is left (`ls src/app/dashboard/(editorial)`).
+ *
+ * A page resolves the session, reads the URL params ONCE, calls exactly one
+ * adapter and hands plain serialisable props to a client island. It never
+ * imports Prisma or an action directly and never inspects `SectionData.status`
+ * — `npm run tokens` fails the build on either.
+ */
+export default async function PnlPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const session = await getServerSession(authOptions)
+  if (!session) redirect("/login")
+  /*
+   * Owner-only, the same gate the editorial P&L carried and the same gate the
+   * Overview carries.
+   *
+   * `getAllStoresPnL` refuses a non-owner, and every section on this page is
+   * that one rollup — so a reader without owner access would land on a page
+   * whose strip, cascade, eight weeks, statement and store table ALL read
+   * "P&L is restricted to owners". A page that looks broken is worse than one
+   * that was never theirs. `hasOwnerAccess` is OWNER or DEVELOPER.
+   */
+  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard/settings")
+
+  const sp = await searchParams
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (typeof value === "string") params.set(key, value)
+  }
+
+  // Resolved once, here, and passed to both the params reader and the client
+  // island — a moving `new Date()` re-evaluated in two places could disagree
+  // about which calendar day "today" is, and the eight weeks are anchored on
+  // today rather than on the range (note 53).
+  const today = new Date()
+  const counterParams = readCounterParams(params, today)
+
+  // The switcher's list. Shared with the Overview rather than re-queried, so
+  // the rail cannot offer one page a store the other does not have.
+  const stores = await getOverviewStores()
+  const sections = await getPnlSections({
+    range: counterParams.range,
+    comparisonId: counterParams.comparisonId,
+    storeId: counterParams.storeId,
+    accountId: session.user.accountId,
+    today,
+  })
+
+  return (
+    <CounterPnlClient
+      pathname="/dashboard/pnl"
+      // PLAIN TEXT, not the URLSearchParams above: a class instance crosses the
+      // RSC boundary with its prototype stripped. See the island's own note.
+      params={params.toString()}
+      stores={stores}
+      user={{ name: session.user.name, role: titleCase(session.user.role) }}
+      today={today}
+      sections={sections}
+    />
+  )
+}
