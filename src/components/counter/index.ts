@@ -33,6 +33,7 @@ export { Say } from "./surface/say"
 export { FloorMeter } from "./surface/floor-meter"
 export { Moving, type MovingCell } from "./surface/moving"
 export { AskGlyph } from "./surface/ask-glyph"
+export { WeekTable, type WeekRow, type WeekTableProps } from "./surface/week-table"
 
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"
