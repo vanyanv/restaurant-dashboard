@@ -331,6 +331,47 @@ describe("counter-components.css", () => {
     expect(queries).toBeGreaterThan(10)
   })
 
+  /*
+   * `.ct-phone` carries `.pframe`'s TYPE SCALE, and nothing else.
+   *
+   * `CT_ROOT_BASE`'s defect, one surface over. The prototype declares two
+   * scales — `.frame` at 13px and `.pframe` at 14px, a step up at every step
+   * because a phone is held closer and its column is 316px — and `.ct-root`
+   * restated only the desk's. The phone surface (`/m`) therefore rendered the
+   * entire design at the desk's scale: 76 of its 79 rendering differences
+   * against the prototype were `font-size 14px / 13px` and its line-height
+   * partner, on every landmark the two sides shared.
+   */
+  it("gives .ct-phone .pframe's type scale, step for step", () => {
+    const phone = RULES.find((r) => r.prelude === ".ct-phone")
+    expect(phone, "counter-components.css declares no .ct-phone rule").toBeDefined()
+    const pframe = RULES.find((r) => r.prelude === ".pframe")!
+    for (const step of ["--t-micro", "--t-cap", "--t-body", "--t-mid", "--t-lg", "--t-xl", "--t-hero"]) {
+      const want = new RegExp(`${step}:\\s*([\\d.]+px)`).exec(pframe.body)?.[1]
+      const got = new RegExp(`${step}:\\s*([\\d.]+px)`).exec(phone!.body)?.[1]
+      expect(got, `${step} on .ct-phone`).toBe(want)
+    }
+    // The phone is a step UP from the desk, or this class says nothing.
+    expect(RULES.find((r) => r.prelude === ".frame")!.body).toContain("--t-body:13px")
+    expect(phone!.body).toContain("--t-body: 14px")
+  })
+
+  it("declares .ct-phone AFTER .ct-root, so one element can wear both", () => {
+    // Equal specificity: the later rule wins. `.ct-phone` overrides the alias
+    // layer's `--t-*` on the same element rather than replacing `.ct-root`,
+    // which still supplies the ink, the ground and `container-name: fr`.
+    expect(CSS.indexOf(".ct-phone {")).toBeGreaterThan(CSS.indexOf(".ct-root {"))
+  })
+
+  it("gives .ct-phone nothing but the scale — not .pframe's bezel", () => {
+    // 340x718 fixed, a 26px radius and a drop shadow: the documentation
+    // page's phone, not an app shell. Same rule as `.ct-root` and `.frame`.
+    const phone = RULES.find((r) => r.prelude === ".ct-phone")!
+    for (const banned of ["width", "height", "display", "border", "box-shadow", "background", "color:"]) {
+      expect(phone.body).not.toContain(banned)
+    }
+  })
+
   it("does NOT give .ct-root .frame's demo-card layout", () => {
     // `.frame` is a page-of-documentation wrapper: a fixed 212px grid column,
     // a border, a shadow and a 840px floor. An application shell composes its

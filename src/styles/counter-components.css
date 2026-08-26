@@ -78,6 +78,10 @@
   container-name: fr;
   container-type: inline-size;
 }
+.ct-phone {
+  --t-micro: 10px; --t-cap: 11.5px; --t-body: 14px; --t-mid: 15.5px;
+  --t-lg: 19px; --t-xl: 23px; --t-hero: 32px;
+}
 
 .note h3{font-size:14.5px;font-weight:600;margin:9px 0 6px;letter-spacing:-.01em}
 .note p{margin:0;font-size:14px;color:var(--page-ink-2)}
