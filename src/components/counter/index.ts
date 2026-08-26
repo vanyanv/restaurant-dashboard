@@ -44,7 +44,7 @@ export { PageHead } from "./shell/page-head"
 export { SyncChip, type SyncState } from "./shell/sync-chip"
 export { Calendar } from "./shell/calendar"
 export { Wordmark } from "./shell/wordmark"
-export { StoreSwitcher, type SwitchableStore } from "./shell/store-switcher"
+export { StoreSwitcher, STAGE_TAG, type SwitchableStore } from "./shell/store-switcher"
 export { DateControl, type DateControlProps } from "./shell/date-control"
 export { Topbar } from "./shell/topbar"
 
@@ -54,6 +54,14 @@ export { Topbar } from "./shell/topbar"
 export { MHead } from "./shell/m-head"
 export { MStrip } from "./shell/m-strip"
 export { MList, type MListRow } from "./shell/m-list"
+
+/* The phone's top chrome. `.mtop` sits OUTSIDE `.mscroll` and so outside the
+   fidelity surface, which is exactly why it was the last thing on this page to
+   be built — and why a phone-only reader could not change the store, the range
+   or the comparison until it was. */
+export { MTop, type MTopProps } from "./shell/m-top"
+export { MDateSheet, type MDateSheetProps } from "./shell/m-date-sheet"
+export { PhoneSheet } from "./shell/phone-sheet"
 
 export { useEntry, ENTRY_STAGGER_MS, ENTRY_DURATION_MS, ENTRY_TOTAL_MS } from "./motion/use-entry"
 export { useCountUp, COUNT_UP_MS } from "./motion/use-count-up"

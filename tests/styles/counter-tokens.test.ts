@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
+  converter,
   parse,
   wcagContrast,
   differenceCiede2000,
@@ -575,6 +576,35 @@ describe.each(THEMES)("counter tokens — %s", (theme) => {
     const descending = stack.every((v, i) => i === 0 || v <= stack[i - 1])
     const ascending = stack.every((v, i) => i === 0 || v >= stack[i - 1])
     expect(descending || ascending).toBe(true)
+  })
+
+  it("--ct-scrim darkens the ground it covers, in BOTH themes", () => {
+    // The prototype wrote this colour inline in `.pshade` and never had a dark
+    // theme to keep it honest. Ported verbatim it did the OPPOSITE of a scrim
+    // in dark: `oklch(24% ...)` at 30% over a 19%-lightness ground composites
+    // LIGHTER, pushing the page forward while the sheet covering it sat at
+    // 22%. The fidelity gate's dark pass caught it; this is the assertion that
+    // stops it coming back, and it is the property a scrim has to have — not a
+    // particular number.
+    const t = tokens()
+    const scrim = colorOf(t, "--ct-scrim")
+    expect(scrim.alpha, "a scrim with no alpha is a curtain").toBeLessThan(1)
+    expect(scrim.alpha).toBeGreaterThan(0)
+
+    const composite = (over: string) => {
+      const bg = converter("oklch")(colorOf(t, over))
+      const fg = converter("oklch")(scrim)
+      const a = scrim.alpha ?? 1
+      return (fg.l ?? 0) * a + (bg.l ?? 0) * (1 - a)
+    }
+    for (const ground of ["--ct-paper", "--ct-surface", "--ct-chrome"]) {
+      const bg = converter("oklch")(colorOf(t, ground))
+      expect(composite(ground), `--ct-scrim over ${ground}`).toBeLessThan(bg.l ?? 0)
+    }
+    // And it must sit BELOW the sheet it separates from the page, or the modal
+    // surface stops reading as the nearer of the two.
+    const sheet = converter("oklch")(colorOf(t, "--ct-surface"))
+    expect(composite("--ct-paper")).toBeLessThan(sheet.l ?? 0)
   })
 
   it("declares no pure white and no pure black", () => {
