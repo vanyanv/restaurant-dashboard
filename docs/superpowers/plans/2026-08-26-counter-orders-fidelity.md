@@ -826,6 +826,43 @@ npm run shot -- /m/orders /tmp/orders-phone-dark.png 390 dark
 
 ---
 
+## The sign audit, and the one bug Task 7 must carry
+
+`OtterOrder.discount` and `OtterOrder.commission` are stored as **signed
+deductions** — negative numbers to be ADDED. Counted on 2026-08-26: `discount`
+0 positive rows against 40,055 negative; `commission` 0 positive against 25,648
+negative. `src/lib/counter/order-signs.ts` owns the convention.
+
+Every other reader of those two columns was audited, not assumed
+(`grep -rnE "[-+] *(o|r|order|row)?\.?(discount|commission)\b|subtotal *[-+]" src`).
+Results:
+
+- **`src/app/dashboard/(editorial)/orders/[id]/order-detail-content.tsx` — CORRECT.**
+  Its LEDGER lists each column with its own sign and prints `order.total` as the
+  net. It computes nothing, so a negative "Commission −$9.37" line is the honest
+  reading. Leave it alone.
+- **`src/app/(mobile)/m/orders/[id]/page.tsx` — WRONG, and Task 7 fixes it.**
+  Its `FEES + TAX` masthead cell is `fmtMoney(order.tax + order.commission)`,
+  which SUBTRACTS the marketplace's cut from the tax and prints a figure
+  smaller than the tax alone — usually negative on a DoorDash order. It must
+  read `order.tax + feeAmount(order)`.
+
+  **This was deliberately not fixed in place, and the linter is why.**
+  `scripts/counter-lint.ts` exempts a legacy file only while its content still
+  matches `LEGACY_BASELINE_COMMIT`; editing it forfeits the exemption. A
+  one-line fix therefore made `npm run tokens` fail on that file's pre-existing
+  `import { getOrderDetail } from "@/app/actions/order-actions"` — a direct
+  action import a Counter page may not have. That is the gate working as
+  designed: touching a legacy file means bringing it up to standard, and
+  bringing THIS one up to standard is exactly Task 7.
+
+  So Task 7 does not patch the arithmetic — it replaces the page with a Counter
+  composition reading `getOrderSections`, which already goes through
+  `order-signs.ts`. **Verify the rebuilt phone page prints a POSITIVE fees +
+  tax figure on a DoorDash order**, and treat a negative one as a failed task.
+
+---
+
 ## Task 7: The detail, both surfaces — `/dashboard/orders/[id]` and `/m/orders/[id]`
 
 **Files:**
