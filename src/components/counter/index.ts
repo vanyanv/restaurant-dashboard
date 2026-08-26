@@ -34,6 +34,8 @@ export { FloorMeter } from "./surface/floor-meter"
 export { Moving, type MovingCell } from "./surface/moving"
 export { AskGlyph } from "./surface/ask-glyph"
 export { WeekTable, type WeekRow, type WeekTableProps } from "./surface/week-table"
+export { Filters, type FilterToggle } from "./surface/filters"
+export { SearchGlyph } from "./surface/search-glyph"
 
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"
