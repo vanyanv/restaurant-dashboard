@@ -654,9 +654,18 @@ function buildStrip(
         value: money(fees),
         // Naming what the figure excludes is the honest alternative to
         // folding a channel with no published rate in at zero.
+        //
+        // SHORT ON PURPOSE. `.strip .band` is a 9px mono line with
+        // `white-space:nowrap` (counter-components.css:375), and a strip cell
+        // at six tracks is ~168px of content — about 31 characters. The
+        // longer form this used to carry, "excludes grubhub — no published
+        // rate", is 36 and overflowed the cell's right border. The reason a
+        // channel is excluded is on that channel's own row in the store
+        // panel ("no commission · keeps $X"); what this figure needs to say
+        // is WHAT it left out.
         caption:
           withoutRate.length > 0
-            ? `excludes ${withoutRate.map((c) => c.channel).join(", ")} — no published rate`
+            ? `excludes ${withoutRate.map((c) => c.channel).join(", ")}`
             : undefined,
         reference: referenceFor(
           fees,

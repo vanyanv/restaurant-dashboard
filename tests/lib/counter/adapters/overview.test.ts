@@ -370,8 +370,11 @@ describe("getOverviewSections", () => {
     const fees = cell(s, "Marketplace fees")
     // $500 from DoorDash and nothing from Grubhub, which publishes no rate.
     expect(fees?.value).toBe("$500")
-    expect(fees?.caption).toContain("grubhub")
-    expect(fees?.caption).toContain("no published rate")
+    expect(fees?.caption).toBe("excludes grubhub")
+    // `.strip .band` is a 9px mono line with `white-space:nowrap` and a
+    // six-track strip cell holds about 31 characters. A caption that
+    // overflows its own cell is not a caption.
+    expect((fees?.caption ?? "").length).toBeLessThanOrEqual(31)
   })
 
   it("draws the sales chart from the SAME rollup as the headline, bucket by bucket", async () => {

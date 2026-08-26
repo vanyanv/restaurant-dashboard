@@ -445,9 +445,11 @@ export function extract(html: string): ExtractResult {
     }
   }
 
-  const rules = kept
-    .map((r) => (r.isAt ? `${r.sel}{\n${r.body}\n}` : `${r.sel}{${r.body}}`))
-    .join("\n")
+  const rules = applyCorrections(
+    kept
+      .map((r) => (r.isAt ? `${r.sel}{\n${r.body}\n}` : `${r.sel}{${r.body}}`))
+      .join("\n"),
+  )
 
   const animated = new Set<string>()
   for (const m of rules.matchAll(/\banimation(?:-name)?\s*:\s*([^;}]*)/g)) {
@@ -479,6 +481,56 @@ export function extract(html: string): ExtractResult {
     strippedTokens,
     rulesChars: rules.length,
   }
+}
+
+/**
+ * The ONE place the ported stylesheet is allowed to disagree with the
+ * prototype, and every disagreement has to earn its line here.
+ *
+ * The porting rule is that this file is the prototype's stylesheet, lifted
+ * whole — `tests/styles/counter-components.test.ts` asserts the committed CSS
+ * is byte-identical to what this script produces, precisely so nobody can
+ * hand-edit a rule and call it a port. That rule has one real exception: the
+ * prototype declares its application tokens LIGHT ONLY, so a colour choice
+ * that reads fine there can be invisible in the dark theme this project added.
+ * The fidelity gate's dark pass is what finds those, and a correction recorded
+ * here is the honest way to fix one — a hand-edit to the .css is not.
+ *
+ * A correction may ONLY change a colour to a token that already exists. It may
+ * not change layout and it may not introduce a value: `npm run tokens` and
+ * this file's own tests both still apply.
+ */
+const CORRECTIONS: Array<{ from: string; to: string; why: string }> = [
+  {
+    from: ".dispatch .sep{color:var(--line-strong)}",
+    to: ".dispatch .sep{color:var(--ink-3)}",
+    why:
+      "The prototype paints the dispatch line's separator in a RULE colour. " +
+      "In the dark theme --line-strong against --surface is 1.73:1, which the " +
+      "fidelity gate's contrast pass reports as a defect on the Overview " +
+      "(CONTRAST .dispatch -> .sep), and a separator nobody can see is not a " +
+      "separator. --ct-ink-3 is the muted-ink token counter.css already " +
+      "contrast-corrected for exactly this reason, and it is what `.crumbs " +
+      ".sep` uses. Proved by the dark pass going green with this line and red " +
+      "without it.",
+  },
+]
+
+/** Applies `CORRECTIONS`, and fails loudly if one no longer matches anything. */
+function applyCorrections(css: string): string {
+  let out = css
+  for (const c of CORRECTIONS) {
+    if (!out.includes(c.from)) {
+      throw new Error(
+        `extract-prototype-css: correction for ${JSON.stringify(c.from)} matched ` +
+          `nothing. The prototype's rule changed under it — re-read the rule and ` +
+          `either update the correction or delete it, but do not leave a ` +
+          `correction that silently does nothing.`,
+      )
+    }
+    out = out.split(c.from).join(c.to)
+  }
+  return out
 }
 
 /** Read the prototype and produce the stylesheet text. Pure: writes nothing. */
