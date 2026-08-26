@@ -126,6 +126,23 @@ export interface ReadingSegment {
 export interface PnlHeadline {
   cells: StripCell[]
   reading: ReadingSegment[]
+  /**
+   * The PHONE's strip — two cells, not five, and the second one reads
+   * differently (`P.pnl.phone()`, line 5354).
+   *
+   * Not a slice of `cells`, and it must not become one. The prototype's phone
+   * prime cell carries the room left under the ceiling where the desk's
+   * carries the move against the comparison, draws no sparkline at all
+   * (`mstrip()`: the two charts are directly beneath it and vertical space is
+   * the scarce thing on a phone), and takes no caption. A page slicing the
+   * desk's array would also be picking cells by POSITION out of a list whose
+   * length depends on the data — the prime cell is absent when no labour is
+   * posted, and the slice would silently hand the phone the food figure under
+   * the prime figure's rules.
+   *
+   * Both cells are the SAME figures the desk prints, from the same statement.
+   */
+  phoneCells: StripCell[]
 }
 
 /** Exactly `Cascade`'s props. The end carries no figure — `Cascade` derives it. */
@@ -167,6 +184,18 @@ export interface StatementLine {
   change: string
   /** The move is past what the trade acts on. The prototype's `hot`. */
   loud: boolean
+  /**
+   * This line beat a target that is actually on file — the phone's `money()`
+   * paints it, and it is the only line that can be painted.
+   *
+   * NOT `loud`, which is about the size of a MOVE: a food line comfortably
+   * under its target that shifted 1.2 points is `loud` and is not `over`, and
+   * a line 3 points over its target that has not moved is `over` and is not
+   * `loud`. Absent — rather than `false` — on every line this schema publishes
+   * no target for, so "not over" and "nothing to be over" stay different
+   * answers.
+   */
+  over?: boolean
   /** What that many points is worth at this range's volume. */
   worth: string
   /** A route this app serves, or absent. Never a guessed destination. */
@@ -177,6 +206,16 @@ export interface PnlStatement {
   lines: StatementLine[]
   /** What the comparison column is headed with. `null` when there is no comparison. */
   comparisonLabel: string | null
+  /**
+   * Rent and the other monthly lines as charged to THIS range, pre-formatted
+   * — the prototype's `fixedInRange(null, a.days)`, which its phone prints in
+   * a note under the statement.
+   *
+   * `occupancy + otherOperating`, both already prorated by the rollup. It is
+   * on the statement rather than worked out by the page because it is a
+   * figure, and a page that adds two of them together is a page computing.
+   */
+  fixedInRange: string
 }
 
 /**
@@ -498,6 +537,73 @@ function buildStrip(
   return cells
 }
 
+/**
+ * The phone's two cells (`P.pnl.phone()`, line 5354).
+ *
+ * ```js
+ * mstrip([['Bottom line', USD(a.bottom), a.pct.bottom.toFixed(1) + '% of sales', ''],
+ *         ['Prime cost', a.pct.prime.toFixed(1) + '%',
+ *          (PRIME_PLAN - a.pct.prime).toFixed(1) + ' pts of room',
+ *          a.pct.prime > PRIME_PLAN ? 'is-down' : '',
+ *          { v: a.pct.prime, target: PRIME_PLAN, better: 'low' }]])
+ * ```
+ *
+ * Three departures from `buildStrip`, all of them the prototype's:
+ *
+ * 1. **The second line is the room under the ceiling, not the comparison.**
+ *    The desk's prime cell prints "▲ 1.4 pts vs weekday"; this one prints how
+ *    much of the ceiling is left. Both subtractions belong to `prime-cost.ts`
+ *    — `roomPp` and `overCeiling` are read, never re-derived here.
+ * 2. **No series.** `mstrip()` draws no sparkline at all, so passing one would
+ *    be dead data crossing the RSC boundary.
+ * 3. **No caption.** `mstrip()` opens its `.band` inside the reference branch
+ *    and prints the flag words alone; a caption here would add a second line
+ *    the prototype's phone does not have.
+ *
+ * The one departure that is NOT the prototype's is the wording of a breach.
+ * `(PRIME_PLAN - prime)` on a page where prime is over reads "−3.2 pts of
+ * room" — a quantity of room smaller than none. Same figure, same direction,
+ * words a reader can act on.
+ */
+function buildPhoneStrip(p: Statement): StripCell[] {
+  const cells: StripCell[] = []
+
+  const margin = marginPoints(p)
+  cells.push({
+    label: "Bottom line",
+    value: money(p.bottomLine),
+    delta: margin === null ? undefined : `${pct(margin, { scaled: true })} of sales`,
+  })
+
+  // Same gate as the desk's: zero labour against sales is an absence, not a
+  // reading, and a prime cost built on one is a figure that is simply wrong.
+  // `roomPp` is null exactly when `primePct` is — `primeCost()` returns both
+  // from the same branch — but the pair is asserted rather than assumed, so
+  // this cell can never print a ceiling it did not measure against.
+  const prime = laborKnown(p) ? p.prime : null
+  if (prime?.primePct != null && prime.roomPp != null) {
+    const room = prime.roomPp
+    cells.push({
+      label: "Prime cost",
+      value: pct(prime.primePct, { scaled: true }),
+      delta: prime.overCeiling
+        ? `${Math.abs(room).toFixed(1)} pts over the ceiling`
+        : `${room.toFixed(1)} pts of room`,
+      deltaTone: prime.overCeiling ? "is-down" : undefined,
+      reference: {
+        v: prime.primePct,
+        target: prime.ceilingPct,
+        better: "low",
+        label:
+          `Prime cost ${pct(prime.primePct, { scaled: true })} against a ` +
+          `${pct(prime.ceilingPct, { scaled: true })} ceiling`,
+      },
+    })
+  }
+
+  return cells
+}
+
 /* ── The reading ──────────────────────────────────────────────────────── */
 
 /**
@@ -687,7 +793,15 @@ function buildStatement(
     value: number,
     share: number | null,
     thenShare: number | null | undefined,
-    opts: { sub?: string; strong?: boolean; negative?: boolean; act?: number; href?: string } = {},
+    opts: {
+      sub?: string
+      strong?: boolean
+      negative?: boolean
+      act?: number
+      href?: string
+      /** Only set where a target is actually published — see `StatementLine.over`. */
+      over?: boolean
+    } = {},
   ): StatementLine => {
     const move = moveVs(share, thenShare, cmp)
     return {
@@ -702,6 +816,7 @@ function buildStatement(
       comparison: thenShare == null || !cmp.on ? DASH : pct(thenShare, { scaled: true }),
       change: move === null ? DASH : points(move),
       loud: move !== null && opts.act !== undefined && Math.abs(move) >= opts.act,
+      over: opts.over,
       // What that many points is worth at THIS range's volume — the reason the
       // change column is readable at all. A point of a small week is not a
       // point of a big one.
@@ -750,6 +865,12 @@ function buildStatement(
       negative: true,
       act: ACT_PTS.food,
       sub: foodPlan?.kind === "target" ? `target ${pct(foodPlan.value, { scaled: true })}` : undefined,
+      // The same judgement the cascade paints one cut red for, and the only
+      // one on this table: a target on file, and a figure past it.
+      over:
+        foodPlan?.kind === "target" && p.prime.cogsPct != null
+          ? p.prime.cogsPct > foodPlan.value
+          : undefined,
       href: "/dashboard/cogs",
     }),
     line("labor", "Labor", p.laborValue, laborKnown(p) ? p.prime.laborPct : null, c && laborKnown(c) ? c.prime.laborPct : null, {
@@ -778,7 +899,13 @@ function buildStatement(
     }),
   ]
 
-  return { lines, comparisonLabel: cmp.on ? cmp.label : null }
+  return {
+    lines,
+    comparisonLabel: cmp.on ? cmp.label : null,
+    // Rent plus the other monthly lines, both already prorated to this range
+    // by the rollup — the figure the phone's note under the statement names.
+    fixedInRange: money(p.occupancy + p.otherOperating),
+  }
 }
 
 /**
@@ -968,6 +1095,10 @@ export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSectio
       // are simply bare for a render. Decoration degrades; the figure does not.
       cells: buildStrip(p, cmp, targets, dataOf(weeksSd)),
       reading: buildReading(p, targets),
+      // The same statement, read the way `P.pnl.phone()` reads it. One load,
+      // two surfaces — a phone and a desk open on this account cannot print
+      // two bottom lines.
+      phoneCells: buildPhoneStrip(p),
     })),
 
     cascade: mapReady(scopeSd, (p) => buildCascade(p, targets, channels)),
