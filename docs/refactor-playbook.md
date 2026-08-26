@@ -180,6 +180,91 @@ Before merging any split that touches a file imported from `src/app/(mobile)/m/*
 
 ---
 
+## Worked example — Batch B: `counter/adapters/overview.ts` (an *internals* extraction)
+
+**Before:** 1 file, 1,395 lines, 12 exports, consumed by two desktop modules
+and two mobile ones. **After:** the same 12 exports at the same path, 1,341
+lines, plus a new 257-line `src/lib/counter/statement.ts` that nothing outside
+the library imports yet.
+
+This is a shape the 9 steps did not have a name for, and it changes what three
+of them mean. Recognise it by one question: **does any EXPORT relocate?**
+
+| Step | What changed for an internals extraction |
+|---|---|
+| 1–2 | Inventory and consumer map still run first, unchanged. They are what *tells you* which shape you are in. |
+| 3 | No dead-code pass — nothing was unreferenced; every moved symbol had a live caller inside the file. |
+| 4–5 | Unchanged, and load-bearing. See the ordering note below. |
+| 6 | The "domain split" is a *dependency* extraction, not a partition: the original file keeps every export and becomes a CONSUMER of the new module. |
+| 7 | **No shim, and none is owed.** The re-export shim exists to keep import paths working when an export moves. When only private helpers move, no consumer edit was ever possible, so there is nothing to bridge. Do not add a shim to satisfy the checklist — an aggregator that re-exports nothing anyone imports is dead code with a doc comment. |
+| 8 | Unchanged, plus whatever behavioural gate the surface has (below). |
+| 9 | Not applicable. There is no shim to codemod away. |
+
+**Prove step 7 rather than asserting it.** One command, and it belongs in the
+PR description:
+
+```
+diff <(git show <base>:<file> | grep "^export ") <(grep "^export " <file>)
+```
+
+An empty diff *is* the "zero consumer edits" guarantee that step 7's shim buys
+in the other shape. A non-empty diff means an export moved after all, and you
+are back in Batch A's shape and owe a shim.
+
+### The gate that replaces manual smoking
+
+Step 8 ends with "manually smoke the routes the consumer map flagged." For a
+surface with a **fidelity gate** (`npm run fidelity`, `e2e/fidelity/`), run the
+gate for that page instead, *before and after*, and diff the numbers — it
+compares the rendered DOM landmark by landmark against the prototype, on both a
+desktop and a phone viewport, which is strictly more than a human confirming a
+page looks right. Batch B: desk 76 matched / 0 extra / 0 rendering differences
+and phone 44 / 0 / 0, identical across the refactor.
+
+Two rules that come with it:
+
+- **Capture the "before" run before the first line moves.** A gate you first
+  run after the change tells you the page passes, not that it did not move.
+  The numbers live in the gitignored `.fidelity/*.json`, which is where the
+  matched/extra/style counts come from — the console only prints pass/fail.
+- **If a number moves, the extraction changed behaviour.** Find out why. Never
+  adjust the baseline (`PAGES[].baseline` in `e2e/fidelity/manifest.ts`) to
+  make a refactor green — that is the permanently-green gate this suite was
+  built to replace.
+
+### Two extraction-specific traps, both caught in Batch B
+
+- **A value two call sites happened to share becomes a parameter, or it
+  silently stops being shared.** `overview.ts` loaded the selected range and
+  its comparison window at ONE granularity, computed once from the selected
+  range. Moving the load into `loadStatement` would have had each range derive
+  its own — and a `weekday` comparison window contains four occurrences, so it
+  derives "weekly" and gets drawn as a dashed reference under daily bars. The
+  fix is an OPTIONAL override parameter (`granularity?`) with the derivation as
+  the default, so the general case stays honest and the caller that needs them
+  pinned together says so.
+- **Decide what the new module owns and what stays a presentation call.**
+  `buildStrip` withheld the prime-cost cell entirely when labour was zero over
+  a range with sales. That test moved *nowhere*: `statement.ts` computes prime
+  unconditionally, and the "is this fit to print" gate stayed at the surface
+  that renders the cell. Pulling a display gate down into a data module makes
+  it invisible to the next page that needs the same figure under a different
+  rule.
+
+### Test ordering, restated for a NEW module
+
+Step 5's rule — "a test cannot import from a module that doesn't exist yet" —
+reads as an argument for pointing the test at the old path. For an internals
+extraction there is no old path to point at: the helpers were private. So the
+sequence is the ordinary red→green of step 4, and the meaningful red proof is
+not "the module does not exist" (which every new file gives you for free) but
+**one deliberate break per behaviour the extraction is supposed to preserve**,
+watched fail, then restored. Batch B did four: `marginPct` null→0, the
+`otherOperating` clamp removed, a single store falling back to the account
+total, and a second rollup call for the single-store scope.
+
+---
+
 ## Out-of-PR follow-ups
 
 Some artifacts produced by following this playbook are local-only and do not belong in the PR:
