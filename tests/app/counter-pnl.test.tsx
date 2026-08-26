@@ -305,17 +305,33 @@ describe("Counter P&L", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     const table = container.querySelectorAll("table.tbl")[1] as HTMLElement
     const glendale = table.querySelectorAll("tbody tr")[1] as HTMLElement
-    expect(glendale.className).toContain("is-hole")
-    expect(within(glendale).getByText("not on file")).toBeTruthy()
-    expect(glendale.querySelector("td.hole")).toBeTruthy()
+    const cell = within(glendale).getByText("not on file")
+    expect(cell.className).toContain("text-ct-warn")
     // And the callout says what the missing field costs the reader.
     expect(screen.getByText(/would make the group look more profitable than it is/)).toBeTruthy()
+  })
+
+  /**
+   * The sheet's `is-hole` pair — `tr.is-hole td{background:var(--bad-wash)}`
+   * and `tr.is-hole .hole{font-style:italic;color:var(--bad)}` — was tried
+   * here and is the wrong element. It is what a document line that is WRONG
+   * looks like: two whole rows washed red on a P&L. A pre-open store with no
+   * rent yet is not wrong, it is early, and the Stage column beside it says
+   * so. The prototype paints ONE cell `var(--warn)` and leaves the row alone.
+   */
+  it("does not paint a pre-open store's row as a document that is wrong", () => {
+    const { container } = render(<CounterPnlClient {...base} sections={sections} />)
+    const table = container.querySelectorAll("table.tbl")[1] as HTMLElement
+    expect(table.querySelectorAll("tr.is-hole")).toHaveLength(0)
+    expect(table.querySelectorAll("td.hole")).toHaveLength(0)
+    // The stage is what says why the cell is empty.
+    expect(within(table).getByText("Pre-open").className).toContain("mtag")
   })
 
   it("derives the by-store sentence from the ROWS, not from one account", () => {
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     expect(container.textContent).toContain(
-      "Every line above is Hollywood, because it is the only store with sales",
+      "Every line above is Hollywood, because it is the only store with sales in this range",
     )
     const { container: two } = render(
       <CounterPnlClient
@@ -330,7 +346,7 @@ describe("Counter P&L", () => {
       />,
     )
     expect(two.textContent).toContain(
-      "Every line above is Hollywood and Glendale, because they are the only stores with sales",
+      "Every line above is Hollywood and Glendale, because they are the only stores with sales in this range",
     )
     // With every rent on file, nothing is held out — and the callout says so
     // rather than disappearing and leaving the reader to infer it.

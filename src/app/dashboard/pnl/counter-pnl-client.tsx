@@ -78,7 +78,7 @@ import type {
  *    the same figure the statement above heads "Gross sales". Printing the
  *    prototype's word over our figure would be note 60 in a column header:
  *    one page, two names, one number.
- * 2. **"not on file" is a class, not an inline colour.** The prototype writes
+ * 2. **"not on file" is a token utility, not an inline colour.** The prototype writes
  *    `style="color:var(--warn)"`; a Counter page's only colour source is the
  *    `ct-` token layer, and `text-ct-warn` resolves to the same token.
  */
@@ -341,7 +341,7 @@ export function CounterPnlClient({
         pad={false}
         askAbout="how the stores compare"
       >
-        {(lines) => <ByStore lines={lines} windowLabel={windowLabel} />}
+        {(lines) => <ByStore lines={lines} />}
       </Section>
     </AppShell>
   )
@@ -361,28 +361,33 @@ const BY_STORE_COLUMNS: Column[] = [
  * Every store on the account, and the sentence that says why only some of them
  * are in the statement above.
  *
+ * The sentence says "in this range" rather than naming the window: the page
+ * head and this section's own meta both name it already, and a preset's name
+ * dropped mid-sentence ("with sales over Last 7 days") reads as a typo.
+ *
  * The prose is derived from the rows, never written for one account: "Every
  * line above is Hollywood, because it is the only store with sales" is a
  * sentence about whichever stores traded, and an account where all three trade
  * gets a different one.
  */
-function ByStore({ lines, windowLabel }: { lines: PnlStoreLine[]; windowLabel: string }) {
+function ByStore({ lines }: { lines: PnlStoreLine[] }) {
   const trading = lines.filter((l) => l.netSales !== null)
   const silent = lines.filter((l) => l.netSales === null)
   const noRent = lines.filter((l) => !l.rentOnFile)
 
   const rows: Row[] = lines.map((l) => ({
     key: l.id,
-    // `.tbl tbody tr.is-hole .hole` is the ported sheet's own pair for a figure
-    // missing from a document rather than measured at zero.
-    className: l.rentOnFile ? undefined : "is-hole",
     cells: {
       store: <b>{l.name}</b>,
       gross: money(l.netSales),
       prime: pct(l.primePct, { scaled: true }),
-      fixed: l.rentOnFile
-        ? money(l.fixedOnFile)
-        : { v: <span className="text-ct-warn">not on file</span>, cls: "hole" },
+      // The prototype's own treatment: ONE warn-coloured cell, and the row
+      // left alone. The sheet's `is-hole` pair was tried here and is wrong —
+      // it washes the whole row in `--bad-wash` and italicises the cell in
+      // `--bad`, which is what a document line that is WRONG looks like. A
+      // pre-open store with no rent yet is not wrong, it is early, and the
+      // Stage column beside it already says so.
+      fixed: l.rentOnFile ? money(l.fixedOnFile) : <span className="text-ct-warn">not on file</span>,
       stage: <span className={STAGE_TAG[l.stage].className}>{STAGE_TAG[l.stage].label}</span>,
     },
   }))
@@ -393,7 +398,7 @@ function ByStore({ lines, windowLabel }: { lines: PnlStoreLine[]; windowLabel: s
         <p style={{ margin: "0 0 12px", fontSize: "var(--t-mid)", lineHeight: 1.55 }}>
           {trading.length === 0 ? (
             <>
-              No store took anything over {windowLabel}, so the statement above has nothing to
+              No store took anything in this range, so the statement above has nothing to
               subtract from. The table is what is known about {plural(lines.length, "it", "them")}{" "}
               meanwhile.
             </>
@@ -401,11 +406,11 @@ function ByStore({ lines, windowLabel }: { lines: PnlStoreLine[]; windowLabel: s
             <>
               Every line above is {names(trading)}, because{" "}
               {plural(trading.length, "it is the only store", "they are the only stores")} with
-              sales over {windowLabel}.
+              sales in this range.
               {silent.length > 0 ? (
                 <>
                   {" "}
-                  {names(silent)} {plural(silent.length, "has", "have")} none in it, so{" "}
+                  {names(silent)} {plural(silent.length, "has", "have")} none, so{" "}
                   {plural(silent.length, "it carries", "they carry")} no line above. The table is
                   what is known about {plural(silent.length, "it", "them")} meanwhile.
                 </>
