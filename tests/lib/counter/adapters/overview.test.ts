@@ -521,16 +521,22 @@ describe("getOverviewSections", () => {
   it("writes invoices as money lines, and does not guess the line the schema cannot answer", async () => {
     const s = await load()
     if (!hasData(s.invoices)) throw new Error("invoices")
+    // The prototype's own order (line 4351): received, what reached COGS,
+    // what is still held up.
     expect(s.invoices.data.map((l) => l.label)).toEqual([
       "Received",
-      "In review",
       "Posted to COGS",
+      "In review",
     ])
     expect(s.invoices.data[0].value).toBe("34 · $63,203")
-    expect(s.invoices.data[1].tone).toBe("warn")
-    expect(s.invoices.data[2].total).toBe(true)
-    // The prototype's fourth line ("Does not reconcile") is absent, not faked:
-    // `getInvoiceSummary` never surfaces `Invoice.reviewReasons`.
+    expect(s.invoices.data[2].tone).toBe("warn")
+    // `.moneyline.total` is the heavy closing line, and the prototype's is
+    // "Does not reconcile" — the one figure of the four this schema cannot
+    // answer, because `getInvoiceSummary` never surfaces
+    // `Invoice.reviewReasons`. So no line wears it: a bold rule under a line
+    // that is not the bottom line is a shape that claims something.
+    expect(s.invoices.data.some((l) => l.total)).toBe(false)
+    expect(s.invoices.data.some((l) => /reconcile/i.test(l.label))).toBe(false)
     expect(s.invoices.data.some((l) => /reconcile/i.test(l.label))).toBe(false)
   })
 
