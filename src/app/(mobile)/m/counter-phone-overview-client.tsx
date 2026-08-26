@@ -170,12 +170,20 @@ export function CounterPhoneOverviewClient({
   })
 
   return (
+    // Three classes, three jobs, none of them new CSS.
+    //
     // `.ct-root` is what makes every ported rule below live — it is the alias
     // layer's own selector and the element `container-name: fr` sits on.
+    // `.ct-phone` is `.pframe`'s type scale, which is a step larger than the
+    // desk's at every step because a phone is held closer and the column is
+    // 316px wide; worn WITH `.ct-root`, never instead of it. Without it this
+    // page renders the whole design at the desk's 13px, which the fidelity
+    // gate reported as `font-size 14px / 13px` on every landmark it shares
+    // with the prototype.
     // `.mscroll` is the phone page's grid: 12px of padding, 11px between
     // blocks, and the staggered entry `counter-repairs.css` already repairs
     // for `.mscroll > *`.
-    <div className="ct-root mscroll">
+    <div className="ct-root ct-phone mscroll">
       <div>
         <h2 className="mtitle">{rangeTitle(range)}</h2>
         <p className="msub">

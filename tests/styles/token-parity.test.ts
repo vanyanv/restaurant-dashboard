@@ -152,7 +152,7 @@ function contrast(a: string, b: string): number {
  * nothing else, which the third test sweeps for by finding every file that
  * emits `ct-root` rather than only the ones that mount `<AppShell>`.
  */
-const COUNTER_ROOT_CLASSES = ["ct-root", "frame", "pframe", "login"]
+const COUNTER_ROOT_CLASSES = ["ct-root", "ct-phone", "frame", "pframe", "login"]
 
 /** `file suffix -> the one class it may emit`. Nothing else, nowhere else. */
 const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
@@ -164,6 +164,11 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // `AppShell` — the desk's rail and topbar are not the phone's chrome — so it
   // mounts the alias layer itself. See the note above.
   { file: "app/(mobile)/m/counter-phone-overview-client.tsx", token: "ct-root" },
+  // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
+  // the same element. Listed separately because a file that emitted
+  // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
+  // desk's ink and ground, which is a defect worth failing on.
+  { file: "app/(mobile)/m/counter-phone-overview-client.tsx", token: "ct-phone" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -213,12 +218,21 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
 
   it("still bans the three root classes nothing carries", () => {
     // The exception list must never quietly grow into a blanket exemption.
+    // `frame`, `pframe` and `login` stay banned outright; the two Counter
+    // roots are named file by file.
     expect(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token)).toEqual([
       "ct-root",
       "ct-root",
       "ct-root",
+      "ct-phone",
     ])
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(3)
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(4)
+    // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
+    // would be redeclaring the type scale over the wrong ink and ground.
+    const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
+    for (const p of phone) {
+      expect(COUNTER_ROOT_EXCEPTIONS).toContainEqual({ file: p.file, token: "ct-root" })
+    }
   })
 
   it("keeps every editorial surface out of the Counter root", () => {
