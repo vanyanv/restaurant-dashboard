@@ -5,6 +5,19 @@ import {
   type DecisionRecord,
   type DecisionsView,
 } from "@/app/actions/decisions/get-decisions-view"
+import { prisma } from "@/lib/prisma"
+import { getCachedSession, resolveStoreContext } from "@/app/actions/forecasts/_shared"
+import { newestGenerationPerDay } from "@/lib/counter/forecast-generation"
+import {
+  defaultForecastPreference,
+  isReconciledStale,
+} from "@/lib/forecasts/reconciliation-prefs"
+import {
+  parseDayKey,
+  weekDayKeys,
+  weekDayLabel,
+  weekStartUTC,
+} from "@/lib/counter/week-window"
 import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
 import {
   awaitSections,
@@ -21,6 +34,7 @@ import {
   type SectionData,
 } from "@/lib/counter/section-data"
 import type { DeltaTone } from "@/components/counter/surface/figure"
+import type { MListRow } from "@/components/counter"
 import type { BriefingLine, MathRow, QueueItem, RecordMark, Tone, WeekDay } from "@/components/counter"
 
 /**
@@ -55,6 +69,25 @@ import type { BriefingLine, MathRow, QueueItem, RecordMark, Tone, WeekDay } from
  * generation — and if a later change makes it read the table directly, it goes
  * through `newestGenerationPerDay` or it is a bug regardless of what the
  * loader did.
+ *
+ * ## The headline's week and the picker's week are not the same seven days
+ *
+ * They were until ruling N-R14, and the difference is deliberate rather than a
+ * drift to reconcile. `vitals.weekForecast.total` — the headline figure, the
+ * strip's first cell and the phone's first cell — is the ROLLING week
+ * `getDecisionsView` loads: today and the six days after it. The picker is the
+ * CALENDAR week, Monday to Sunday, because a picker of forward days has no
+ * actual to show against any of them and "forecast against actual" was
+ * therefore seven grey cells.
+ *
+ * They answer different questions — what the next seven days will take, and
+ * how this week's calls have landed — and the prototype has the same split:
+ * its headline says $38,930 where its own `WK` sums to $34,930. **Do not
+ * "fix" one into the other by summing the picker here.** That sum would be a
+ * second opinion about the week's pot, which is the defect the paragraph above
+ * this one exists to prevent; if the two should be one window, that is a
+ * change to what `computeVitals` is given, not a sum taken in a translation
+ * layer.
  *
  * ## One promise per section (ruling N-R13)
  *
@@ -160,6 +193,42 @@ export interface LedgerRow {
 export type DecisionQueueItem = QueueItem & {
   dots: number
   note: string
+  /**
+   * The claim, on its own — the first half of `body`.
+   *
+   * `body` stays the COMPLETE sentence, so a surface that ignores every field
+   * below still prints something a reader can act on. These three are what a
+   * surface that wants the prototype's shape composes instead: `why`, then the
+   * meter, then `confidence`, then the deadline in bold. Splitting `body` back
+   * apart in a page would be string surgery on prose the adapter wrote.
+   */
+  why: string
+  /** "high confidence" / "medium confidence" / "low confidence". */
+  confidence: string
+  /**
+   * Narrowed from `QueueItem`'s `ReactNode`. An adapter is a server module and
+   * writes prose, never markup — and `buildPhoneQueue` has to take this
+   * string's first sentence for the phone row, which a `ReactNode` could not
+   * be asked for.
+   */
+  body: string
+}
+
+/**
+ * "What to do this week" — the three items, and the cap made visible.
+ *
+ * `meta` is INSIDE the section rather than a string beside it, exactly as
+ * `OrderItems.meta` is. It was a sibling field on this object until the desk
+ * page was written and could not use it: under the streaming shape every key
+ * on `DecisionsSections` becomes a `Promise`, and `Section`'s `meta` prop
+ * takes a string or a function of the section's own data — never a promise.
+ * A `.sec__head` qualifier derived from a section's data belongs to that
+ * section, which is what `Section`'s `meta` callback exists for.
+ */
+export interface DecisionQueue {
+  items: DecisionQueueItem[]
+  /** "3 of 5" — what is shown against what the loader ranked. See N-R6. */
+  meta: string
 }
 
 export interface DecisionsSections {
@@ -171,16 +240,18 @@ export interface DecisionsSections {
   accuracy: SectionData<Accuracy>
   /** EMPTY TODAY — ready with zero rows, never `empty()`. See N-R5 below. */
   ledger: SectionData<LedgerRow[]>
-  queue: SectionData<DecisionQueueItem[]>
+  queue: SectionData<DecisionQueue>
   /**
-   * "3 of 5" — what the queue shows against what the loader ranked.
+   * The same three items, as the phone's `.mlist` rows (ruling N-R16).
    *
-   * A plain string beside the sections rather than a field inside one:
-   * `SectionData` carries the section's DATA, and this is the meta the page
-   * prints in `.sec__head`. See N-R6 and `OrderItems.meta`, which is the same
-   * decision made the same way.
+   * A FIELD beside `queue`, built here from the same actions — not a mapping
+   * in the phone client. `MListRow.value` is the desk's own `lead` string and
+   * `note` is the desk's own deadline words, so the two surfaces cannot print
+   * one item's figure two ways. A page that maps `queue` into `MListRow`s
+   * itself is one edit away from formatting the impact differently from the
+   * desk, and nothing would catch it.
    */
-  queueMeta: string
+  phoneQueue: SectionData<MListRow[]>
 }
 
 export interface DecisionsSectionsInput {
@@ -202,8 +273,8 @@ export interface DecisionsSectionsInput {
  * THREE, and `.qitem` is a fidelity landmark.
  *
  * Five against three is two extra landmarks, which no absence allowance
- * forgives. The two the reader does not see are not hidden — `queueMeta` says
- * "3 of 5", so the cap is on the page rather than in this file.
+ * forgives. The two the reader does not see are not hidden — `DecisionQueue.meta`
+ * says "3 of 5", so the cap is on the page rather than in this file.
  */
 const QUEUE_SHOWN = 3
 
@@ -229,20 +300,19 @@ const ACTION_ROUTE: Record<string, string> = {
   profit_risk: "/dashboard/pnl",
 }
 
-const WEEKDAY_TITLE: Record<string, string> = {
-  SUN: "Sun",
-  MON: "Mon",
-  TUE: "Tue",
-  WED: "Wed",
-  THU: "Thu",
-  FRI: "Fri",
-  SAT: "Sat",
-}
-
-/** "MON" + "AUG 24" -> "Mon 24", which is what a `.wkd` cell prints. */
-function dayLabel(d: DecisionDay): string {
-  const dom = d.monthDayShort.split(" ")[1] ?? ""
-  return `${WEEKDAY_TITLE[d.weekdayShort] ?? d.weekdayShort} ${Number(dom) || dom}`
+/**
+ * "Mon 24", which is what a `.wkd` cell prints and what the day-detail section
+ * titles itself with.
+ *
+ * `weekDayLabel` from `@/lib/counter/week-window` rather than a local format
+ * of `DecisionDay.weekdayShort`/`monthDayShort`, because the SETTLED half of
+ * the picker has no `DecisionDay` at all — those cells come from this file's
+ * own query — and because the desk client has to print the same label in a
+ * section heading before that section's data has landed. One function, three
+ * callers. See that module's note.
+ */
+function dayLabel(date: string): string {
+  return weekDayLabel(date)
 }
 
 /** Why a load failed, in words a reader can act on. */
@@ -468,36 +538,280 @@ export function buildDecisionsBriefing(view: DecisionsView): BriefingLine[] {
   })
 }
 
+/* ── The half of the week that has already happened (ruling N-R14) ────── */
+
 /**
- * The seven cells of the picker.
+ * One day of the week that has closed: what was called, and what came in.
  *
- * `actual` is null on every one of them, and that is a measurement rather than
- * a gap: `getRevenueForecast` is asked for the FORWARD window, so the earliest
- * day in `view.days` is today and today has not closed. `WeekPicker` renders a
- * null actual as "forecast" and marks it neither hit nor miss — which is the
- * state this page is genuinely in. Passing zero instead would paint all seven
- * days as misses.
+ * `p10`/`p90` travel with it because the detail panel prints the band for a
+ * settled day exactly as it does for a forward one — the whole question the
+ * panel answers is whether the actual landed inside it.
  */
-export function buildDecisionsWeek(view: DecisionsView): WeekDay[] {
-  return view.days
-    .map((d) => ({
-      key: d.date,
-      label: dayLabel(d),
-      forecast: d.predictedRevenue,
-      actual: null,
-    }))
-    // Sorted here as well as upstream, for the reason `newestGenerationPerDay`
-    // sorts: the cells are a WEEK and read left to right, so their order is
-    // this function's promise rather than an assertion about a query the
-    // caller could change.
-    .sort((a, b) => a.key.localeCompare(b.key))
+export interface SettledDay {
+  date: string
+  forecast: number
+  /** Null until reconciliation backfills it. NOT zero — see `loadSettledDays`. */
+  actual: number | null
+  p10: number | null
+  p90: number | null
 }
 
-/** Which day the detail panel is about. The URL asks; the week decides. */
-export function selectDay(view: DecisionsView, asked: string | undefined): DecisionDay | null {
-  const found = asked === undefined ? undefined : view.days.find((d) => d.date === asked)
-  if (found) return found
-  return view.days.find((d) => d.date === view.asOf) ?? view.days[0] ?? null
+/**
+ * The week's settled days, read here rather than through `getDecisionsView`.
+ *
+ * ## Why this query exists at all (ruling N-R14)
+ *
+ * `getDecisionsView` asks `getRevenueForecast` for the FORWARD window —
+ * `forecastDate >= today` — and never selects `actualRevenue`. So every
+ * `WeekDay.actual` was null, and "forecast against actual · click a day" had
+ * nothing to compare: the section drew seven grey cells and called it a week.
+ * `actualRevenue` is populated on 1,321 of `ForecastDailyRevenue`'s 1,442
+ * rows; the figures are on file and were simply never asked for.
+ *
+ * ## Why it is not a widened loader
+ *
+ * `src/app/actions/decisions/get-decisions-view.ts` is 917 lines and over the
+ * 400-line line `docs/refactor-playbook.md` draws, so widening its forecast
+ * query is a restructure with a playbook attached rather than a parameter
+ * change. This adapter is the layer that decides what the picker holds, and
+ * one `findMany` over one table is the smallest honest way to get it.
+ *
+ * ## `newestGenerationPerDay`, on the settled window too
+ *
+ * The settled window has exactly the same append-only shape as the forward
+ * one — the nightly rewrites the whole horizon each run and deletes nothing,
+ * so a closed Monday carries one row per generation that ever covered it.
+ * Summing them would inflate the week the same way it inflates the forecast
+ * ($646,442 against $50,754 on 2026-08-26). Newest generation wins, keyed on
+ * (store, day), exactly as `getRevenueForecast` does going forward.
+ *
+ * ## An aggregate day is settled only when EVERY store's is
+ *
+ * Reconciliation runs per store. Summing the stores that have reconciled and
+ * calling that "the actual" understates the day by whatever the others took,
+ * and an understated actual against a whole-account forecast reads as a miss
+ * the restaurant never had. So a day where any row is still unreconciled
+ * carries `actual: null` — the picker leaves it unmarked, which is the truth:
+ * we do not know yet.
+ */
+export async function loadSettledDays(
+  view: DecisionsView,
+  storeId: string | undefined,
+): Promise<SettledDay[]> {
+  const asOf = parseDayKey(view.asOf)
+  if (asOf === null) return []
+  const start = weekStartUTC(asOf)
+  // Today is Monday: the week has nothing behind it yet.
+  if (start.getTime() >= asOf.getTime()) return []
+
+  const session = await getCachedSession()
+  const accountId = session?.user?.accountId
+  if (!accountId) return []
+  // The SAME store resolution `getDecisionsView` ran, and `cache()`d, so this
+  // is the same set of stores rather than a second opinion about which stores
+  // the reader is looking at — and it costs no query.
+  const resolved = await resolveStoreContext(storeId, accountId)
+  if (!resolved.ok) return []
+  const storeIds = resolved.ctx.storeIds
+  if (storeIds.length === 0) return []
+
+  const rows = await prisma.forecastDailyRevenue.findMany({
+    where: {
+      storeId: { in: storeIds },
+      // Whole-day rows only. `hourBucket` 1-23 is reserved for an hourly
+      // forecast; counting one alongside its own day would double the day.
+      hourBucket: 0,
+      forecastDate: { gte: start, lt: asOf },
+    },
+    select: {
+      storeId: true,
+      forecastDate: true,
+      generatedAt: true,
+      predictedRevenue: true,
+      actualRevenue: true,
+      p10: true,
+      p90: true,
+      reconciledRevenue: true,
+      reconciledP10: true,
+      reconciledP90: true,
+      reconciledAt: true,
+    },
+  })
+
+  /*
+   * The SAME reconciled-or-raw choice `getRevenueForecast` makes, and it has
+   * to be the same one.
+   *
+   * These cells sit in one row beside the forward days, which come through
+   * that loader: if Monday printed the raw prediction while Thursday printed
+   * the reconciled one, the picker would be stating "forecast" two different
+   * ways in seven adjacent cells and nothing on the page would say so.
+   * `defaultForecastPreference` and `isReconciledStale` are the shared module
+   * both read (`src/lib/forecasts/reconciliation-prefs.ts`), so the `raw`
+   * rollback switch flips both halves of the week together.
+   */
+  const prefer = defaultForecastPreference()
+
+  const byDay = new Map<string, SettledDay & { pending: boolean }>()
+  for (const row of newestGenerationPerDay(rows)) {
+    const key = row.forecastDate.toISOString().slice(0, 10)
+    const held = byDay.get(key) ?? {
+      date: key,
+      forecast: 0,
+      actual: 0,
+      p10: null,
+      p90: null,
+      pending: false,
+    }
+    const useReconciled =
+      prefer === "reconciled" &&
+      row.reconciledRevenue != null &&
+      !isReconciledStale(row.reconciledAt)
+    const predicted = useReconciled ? row.reconciledRevenue! : row.predictedRevenue
+    const p10 = useReconciled ? row.reconciledP10 : row.p10
+    const p90 = useReconciled ? row.reconciledP90 : row.p90
+
+    held.forecast += predicted
+    if (row.actualRevenue === null) held.pending = true
+    else held.actual = (held.actual ?? 0) + row.actualRevenue
+    held.p10 = p10 === null ? held.p10 : (held.p10 ?? 0) + p10
+    held.p90 = p90 === null ? held.p90 : (held.p90 ?? 0) + p90
+    byDay.set(key, held)
+  }
+
+  return [...byDay.values()]
+    .map(({ pending, ...d }) => ({ ...d, actual: pending ? null : d.actual }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/**
+ * The seven cells of the picker — the week, not the forward window.
+ *
+ * Monday to Sunday, which is the prototype's own `WK` (Mon 24 → Sun 30) and
+ * the week a restaurant schedules against. The days behind today come from
+ * `loadSettledDays` and carry an actual; today and the days ahead come from
+ * `view.days` and carry `actual: null`.
+ *
+ * NULL IS NOT ZERO, and this is the one place that matters most. `WeekPicker`
+ * renders a null actual as "forecast" and marks the cell neither hit nor miss.
+ * Passing zero would paint every day of the coming week — four days out of
+ * seven — as a miss against a forecast nothing has yet been measured against.
+ * The same applies to a day that has closed but not reconciled: unmarked, not
+ * failed.
+ *
+ * A day the week expects but neither source has is LEFT OUT rather than drawn
+ * at zero. That is a store with no forecast row written for that day, and an
+ * empty cell claims a call nobody made.
+ */
+export function buildDecisionsWeek(view: DecisionsView, settled: SettledDay[]): WeekDay[] {
+  const asOf = parseDayKey(view.asOf)
+  const keys = asOf === null ? view.days.map((d) => d.date) : weekDayKeys(asOf)
+  const settledByDay = new Map(settled.map((s) => [s.date, s]))
+  const forwardByDay = new Map(view.days.map((d) => [d.date, d]))
+
+  const cells: WeekDay[] = []
+  for (const key of keys) {
+    const s = settledByDay.get(key)
+    if (s) {
+      cells.push({ key, label: dayLabel(key), forecast: s.forecast, actual: s.actual })
+      continue
+    }
+    const f = forwardByDay.get(key)
+    if (f) cells.push({ key, label: dayLabel(key), forecast: f.predictedRevenue, actual: null })
+  }
+  // Sorted here as well as upstream, for the reason `newestGenerationPerDay`
+  // sorts: the cells are a WEEK and read left to right, so their order is
+  // this function's promise rather than an assertion about a query the
+  // caller could change.
+  return cells.sort((a, b) => a.key.localeCompare(b.key))
+}
+
+/**
+ * Which day the detail panel is about. The URL asks; the week decides.
+ *
+ * Both halves of the picker are selectable, so this answers with either a
+ * forward `DecisionDay` or a `SettledDay`. A picker whose left-hand cells
+ * snapped the panel back to today when pressed would be a control that lies
+ * about being one.
+ */
+export function selectDay(
+  view: DecisionsView,
+  settled: SettledDay[],
+  asked: string | undefined,
+): { kind: "forward"; day: DecisionDay } | { kind: "settled"; day: SettledDay } | null {
+  if (asked !== undefined) {
+    const forward = view.days.find((d) => d.date === asked)
+    if (forward) return { kind: "forward", day: forward }
+    const closed = settled.find((d) => d.date === asked)
+    if (closed) return { kind: "settled", day: closed }
+  }
+  const today = view.days.find((d) => d.date === view.asOf) ?? view.days[0] ?? null
+  if (today) return { kind: "forward", day: today }
+  const last = settled[settled.length - 1]
+  return last ? { kind: "settled", day: last } : null
+}
+
+/**
+ * A day that has closed, as arithmetic.
+ *
+ * The same six rows the forward panel prints, with the two the schedule
+ * supplies left as em-dashes: `HarriShift` publishes forward cover and this
+ * adapter does not read a settled day's posted hours, so "12 h" here would be
+ * a number nobody looked up. What replaces them is the row a closed day
+ * actually has and a forward one cannot — a real Actual — and the sentence
+ * under the rule reads the two against each other.
+ */
+export function buildSettledDayDetail(day: SettledDay): DayDetail {
+  const rows: MathRow[] = [
+    { key: "forecast", label: "Forecast", value: money(day.forecast) },
+    { key: "actual", label: "Actual", value: money(day.actual) },
+    {
+      key: "interval",
+      label: "80% interval",
+      op: true,
+      value:
+        day.p10 === null || day.p90 === null
+          ? money(null)
+          : `${money(day.p10)} – ${money(day.p90)}`,
+    },
+    { key: "hours", label: "Hours planned", op: true, value: count(null) },
+    { key: "splh", label: "Implied sales per labour hour", op: true, value: money(null) },
+    { key: "moves", label: "How it landed", strong: true, rule: true, value: "" },
+  ]
+
+  return { date: day.date, label: dayLabel(day.date), meta: "closed", rows, moves: landedFor(day) }
+}
+
+/**
+ * The sentence under a closed day's rule.
+ *
+ * The one piece of arithmetic on this page that is not the loader's, because
+ * the loader never had both numbers: actual less forecast, and whether that
+ * landed inside the band. `WeekPicker`'s own hit/miss line is 97% of forecast
+ * (`week-picker.tsx`), and this sentence deliberately does NOT restate it as a
+ * verdict — the cell above already carries the mark, and two different
+ * thresholds describing one day is how a page comes to disagree with itself.
+ */
+function landedFor(day: SettledDay): string {
+  if (day.actual === null) {
+    return "The day has closed, but reconciliation has not posted what it took yet"
+  }
+  const gap = day.actual - day.forecast
+  const inside =
+    day.p10 !== null && day.p90 !== null && day.actual >= day.p10 && day.actual <= day.p90
+  const direction =
+    Math.round(gap) === 0
+      ? "landed on the call"
+      : gap > 0
+        ? `beat the call by ${money(gap)}`
+        : `came in ${money(-gap)} under the call`
+  const band =
+    day.p10 === null || day.p90 === null
+      ? ""
+      : inside
+        ? ", inside the 80% interval"
+        : ", outside the 80% interval"
+  return `It ${direction}${band}`
 }
 
 export function buildDayDetail(view: DecisionsView, day: DecisionDay): DayDetail {
@@ -510,9 +824,9 @@ export function buildDayDetail(view: DecisionsView, day: DecisionDay): DayDetail
     {
       key: "actual",
       label: settled ? "Actual" : "Actual so far",
-      // An em-dash, not a zero: a day still ahead has taken nothing YET, and
-      // `getDecisionsView` reads only the forward window, so there is no
-      // actual on file for any day in this picker. See `buildDecisionsWeek`.
+      // An em-dash, not a zero: a day still ahead has taken nothing YET.
+      // This is the FORWARD panel — a closed day is `buildSettledDayDetail`,
+      // which prints a real Actual out of this adapter's own query (N-R14).
       value: money(null),
     },
     {
@@ -539,7 +853,13 @@ export function buildDayDetail(view: DecisionsView, day: DecisionDay): DayDetail
     { key: "moves", label: "What moves it", strong: true, rule: true, value: "" },
   ]
 
-  return { date: day.date, label: dayLabel(day), meta: settled ? "closed" : "still ahead", rows, moves: movesFor(day) }
+  return {
+    date: day.date,
+    label: dayLabel(day.date),
+    meta: settled ? "closed" : "still ahead",
+    rows,
+    moves: movesFor(day),
+  }
 }
 
 /**
@@ -733,19 +1053,55 @@ function outcomeTone(r: DecisionRecord): Tone {
 export function buildDecisionQueue(actions: DecisionAction[]): DecisionQueueItem[] {
   return actions.slice(0, QUEUE_SHOWN).map((a) => {
     const note = deadlineWords(a)
+    const confidence = confidenceWords(a)
     return {
       key: a.id,
       tone: toneFor(a),
       lead: money(a.impactUsdPerWeek),
       unit: "/wk",
       title: a.title,
-      body: `${a.why} ${confidenceWords(a)} · ${note}`.trim(),
+      body: `${a.why} ${confidence} · ${note}`.trim(),
       act: `Open ${categoryLabel(a)}`,
       href: hrefFor(a),
       dots: a.dots,
       note,
+      why: a.why,
+      confidence,
     }
   })
+}
+
+/**
+ * The same three items, as `.mli` rows (ruling N-R16).
+ *
+ * Built from `buildDecisionQueue`'s OUTPUT rather than from the actions again:
+ * `value` is the desk's `lead` and `note` is the desk's deadline words, so the
+ * phone cannot print one item's impact in a different unit or round it
+ * differently from the desk. `P.decisions.phone()`'s own rows are the same
+ * five slots — title, why, figure, deadline, tone.
+ *
+ * `noteTone` is `down` only for something that decays, matching the
+ * prototype's own single `'down'` on the Saturday row: the tone marks the
+ * item you lose by waiting, not every item with a date.
+ */
+export function buildPhoneQueue(items: DecisionQueueItem[]): MListRow[] {
+  return items.map((i) => ({
+    key: i.key,
+    title: i.title,
+    // The claim without the confidence meter's prose — the phone row has two
+    // lines and the deadline already has the right-hand slot below.
+    detail: firstSentence(i.why),
+    value: `${i.lead}${i.unit ?? ""}`,
+    note: i.note,
+    noteTone: i.note === "decays daily" ? ("down" as const) : undefined,
+    href: i.href,
+  }))
+}
+
+/** The claim, without the evidence that follows it. `.mli span` is one line. */
+function firstSentence(body: string): string {
+  const stop = body.indexOf(". ")
+  return stop === -1 ? body : body.slice(0, stop)
 }
 
 function confidenceWords(a: DecisionAction): string {
@@ -766,7 +1122,8 @@ function deadlineWords(a: DecisionAction): string {
 /* ── The entry points ─────────────────────────────────────────────────── */
 
 /**
- * The Needs-you page's nine sections, as nine promises over ONE load.
+ * The Needs-you page's ten sections, as ten promises over ONE load — plus a
+ * second, dependent load for the half of the week that has already closed.
  *
  * Ruling N-R13, and the reason it is a ruling: `getDecisionsView` looks like a
  * single call and is nine queries across nine tables, feeding sections that
@@ -808,23 +1165,64 @@ export function getDecisionsSectionPromises(
       "retryDecisions",
     )
 
+  /*
+   * The week's settled half (N-R14), as a SECOND load hung off the first.
+   *
+   * It cannot start before `viewP` resolves, because which week it is comes
+   * from `view.asOf` — the server's day, and the one the forward days are
+   * anchored on. Deriving the week from a `new Date()` here instead would
+   * make two halves of one picker capable of disagreeing about which Monday
+   * they belong to, across a midnight boundary or a slow request.
+   *
+   * It never rejects: `loadSettledDays` fails closed to `[]`, which draws the
+   * picker with the forward days alone — exactly what it drew before this
+   * ruling. A settled query that broke must not take the week down with it.
+   */
+  const settledP: Promise<SettledDay[]> = viewP
+    .then((sd) => {
+      const view = dataOf(sd)
+      return view === null ? [] : loadSettledDays(view, input.storeId)
+    })
+    .catch(() => [])
+
+  /** The two sections that read the settled half as well as the view. */
+  const withWeek = <T,>(
+    f: (view: DecisionsView, settled: SettledDay[]) => SectionData<T>,
+  ): Promise<SectionData<T>> =>
+    guardSection(
+      Promise.all([viewP, settledP]).then(([sd, settled]) => {
+        if (sd.status !== "ready" && sd.status !== "stale") {
+          return mapReady(sd, () => undefined as never)
+        }
+        return f(sd.data, settled)
+      }),
+      "retryDecisions",
+    )
+
   return {
     head: simple(buildDecisionsHead),
     strip: simple(buildDecisionsStrip),
     briefing: simple(buildDecisionsBriefing),
-    week: simple(buildDecisionsWeek),
+
+    // Monday to Sunday, forecast against actual — not the forward window.
+    week: withWeek((view, settled) => ready(buildDecisionsWeek(view, settled))),
 
     // The one section that can be asked about a day the week does not have.
     // A week with no days at all is owed work rather than a failure — the
     // forecast has not been written for this store yet, which is a real state
     // for a store that has not opened.
-    day: on<DayDetail>((view) => {
-      const day = selectDay(view, input.day)
-      return day === null
-        ? notComputed<DayDetail>(
-            "a day to detail — no forecast rows have been written for this store's week",
-          )
-        : ready(buildDayDetail(view, day))
+    day: withWeek<DayDetail>((view, settled) => {
+      const picked = selectDay(view, settled, input.day)
+      if (picked === null) {
+        return notComputed<DayDetail>(
+          "a day to detail — no forecast rows have been written for this store's week",
+        )
+      }
+      return ready(
+        picked.kind === "forward"
+          ? buildDayDetail(view, picked.day)
+          : buildSettledDayDetail(picked.day),
+      )
     }),
 
     accuracy: on<Accuracy>(buildAccuracy),
@@ -835,29 +1233,20 @@ export function getDecisionsSectionPromises(
     // the reason it never should be.
     ledger: simple((view) => buildLedger(view.decisions)),
 
-    // N-R6: three of the loader's five.
-    queue: simple((view) => buildDecisionQueue(view.actions)),
+    // N-R6: three of the loader's five, and the cap said out loud beside them.
+    queue: simple((view) => ({
+      items: buildDecisionQueue(view.actions),
+      meta: `${Math.min(QUEUE_SHOWN, view.actions.length)} of ${view.actions.length}`,
+    })),
 
-    /*
-     * The cap, made visible. Not a `SectionData` — it is the meta line in
-     * `.sec__head`, and it is a string on the sections object for the same
-     * reason `OrderItems.meta` is a field: `SectionData` carries a section's
-     * DATA.
-     *
-     * An em-dash when the view did not load, by the same rule every other
-     * absent figure follows — "0 of 0" would be a measurement of a queue
-     * nobody managed to read.
-     */
-    queueMeta: viewP.then((sd) => {
-      const view = dataOf(sd)
-      if (view === null) return count(null)
-      return `${Math.min(QUEUE_SHOWN, view.actions.length)} of ${view.actions.length}`
-    }),
+    // N-R16: the same three, as the phone's rows. Built from the desk's own
+    // items, so one figure has one presentation.
+    phoneQueue: simple((view) => buildPhoneQueue(buildDecisionQueue(view.actions))),
   }
 }
 
 /**
- * The same nine, awaited.
+ * The same ten, awaited.
  *
  * `awaitSections` over the streaming variant rather than a second body — two
  * implementations of "what is in the queue" is how a desk and a phone come to

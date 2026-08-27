@@ -44,6 +44,18 @@ export interface CounterParams {
   channels: ChannelId[]
   /** The free-text filter on the orders list. `""` is no search. */
   search: string
+  /**
+   * The day the week picker has selected, as an ISO day key — or null for
+   * "whichever day it is today", which is what the adapter falls back to.
+   *
+   * In the URL for the same reason the range is: pressing a day on
+   * `/dashboard/decisions` has to survive a reload and travel in a link, and
+   * the DESK and the PHONE read the same key off the same query string, so a
+   * shared link opens on the same day on both surfaces.
+   *
+   * UNTRUSTED. See `readDay`.
+   */
+  day: string | null
 }
 
 /**
@@ -103,6 +115,25 @@ function readChannels(params: URLSearchParams): ChannelId[] {
   return out
 }
 
+/**
+ * `day=2026-08-29` — the week picker's selection.
+ *
+ * Anything that is not a real calendar day is DROPPED, the same way
+ * `readChannels` drops a channel it does not recognise: this string is user
+ * input, a stale link from last month is a normal thing to click, and the
+ * adapter already falls back to today for a day the week does not hold. It is
+ * NOT validated against "this week" here — that is the adapter's decision, and
+ * this module has no idea which week a caller means.
+ *
+ * `parseIsoDay` rather than a bare regex, so `2026-02-31` is rejected rather
+ * than rolled into March.
+ */
+function readDay(params: URLSearchParams): string | null {
+  const raw = params.get("day")
+  if (raw === null || raw === "") return null
+  return parseIsoDay(raw) === null ? null : raw
+}
+
 export function readCounterParams(params: URLSearchParams, today: Date): CounterParams {
   const custom = readCustomRange(params)
 
@@ -134,6 +165,7 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
     range,
     channels: readChannels(params),
     search: params.get("q") ?? "",
+    day: readDay(params),
   }
 }
 
@@ -144,7 +176,7 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
  */
 export function writeCounterParams(
   current: URLSearchParams,
-  next: Partial<Pick<CounterParams, "comparisonId" | "storeId" | "channels" | "search">> & {
+  next: Partial<Pick<CounterParams, "comparisonId" | "storeId" | "channels" | "search" | "day">> & {
     presetId?: PresetId
     /**
      * An arbitrary window — a pressed week (note 53) or a stepped period.
@@ -204,6 +236,18 @@ export function writeCounterParams(
     const q = next.search.trim()
     if (q === "") out.delete("q")
     else out.set("q", q)
+  }
+  /*
+   * The picked day is WRITTEN, never dropped at a default — there is no
+   * default day to drop it at. "Today" is not a value this module can compute
+   * (it has no clock and takes no `today` here), and a picker that cleared
+   * the key when the reader pressed today would hand back a link that means
+   * "whatever day you open this on" rather than the day that was pressed.
+   * `null` clears it, which is how a caller says "back to today".
+   */
+  if (next.day !== undefined) {
+    if (next.day === null) out.delete("day")
+    else out.set("day", next.day)
   }
 
   return out
