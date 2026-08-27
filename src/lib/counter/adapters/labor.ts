@@ -983,7 +983,10 @@ function buildWeekTable(
       "The verdict reads each day against the shifts this store published for it — its own " +
       "plan, priced at the range's blended rate. Nothing here is measured against a " +
       "sales-per-labour-hour floor: this schema publishes none, and a floor invented for the " +
-      "page would be the page judging itself.",
+      "page would be the page judging itself. Sales and Labor % are the statement's Total " +
+      "Sales; SPLH divides net sales instead, which is what the figure has always meant " +
+      "elsewhere in the product — so SPLH times hours will not equal the Sales column, and " +
+      "is not meant to.",
   }
 }
 
