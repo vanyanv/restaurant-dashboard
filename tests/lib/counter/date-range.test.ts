@@ -163,18 +163,31 @@ describe("comparisonRange", () => {
 })
 
 describe("toQueryBounds", () => {
-  it("converts Counter's {start, end} midnights into the inclusive-end {startDate, endDate} existing queries expect", () => {
+  // Task 3c (A-R19): bounds are UTC-anchored, not local-time-anchored.
+  // `r.start`/`r.end` are local midnights (this module's contract); the
+  // bounds a query gets are the SAME CALENDAR DAY rebuilt as a UTC instant,
+  // because every one of `toQueryBounds`'s six callers filters a `@db.Date`
+  // column (UTC midnight) or `referenceTimeLocal` (local time encoded AS a
+  // UTC epoch). Under TZ=UTC a local midnight and a UTC midnight are the same
+  // instant, so this file's assertions used to hold there BY ACCIDENT — they
+  // encoded `b.startDate` as `r.start` verbatim and `b.endDate` as local
+  // 23:59:59, which is only correct off UTC if the reader ignores the offset
+  // entirely. That was the bug (see tests/lib/counter/date-range-bounds.test.ts
+  // for the fuller reproduction and the invariant this restores): a bound
+  // still carrying a local-time offset, floored in UTC by `buildPeriods`,
+  // produced one extra day of periods and one extra day of query rows.
+  it("converts Counter's {start, end} midnights into the inclusive-end {startDate, endDate} existing queries expect, as UTC instants", () => {
     const r = { start: new Date(2026, 7, 18), end: new Date(2026, 7, 24) }
     const b = toQueryBounds(r)
-    expect(b.startDate).toEqual(r.start)
-    expect(b.endDate).toEqual(new Date(2026, 7, 24, 23, 59, 59))
+    expect(b.startDate).toEqual(new Date(Date.UTC(2026, 7, 18, 0, 0, 0)))
+    expect(b.endDate).toEqual(new Date(Date.UTC(2026, 7, 24, 23, 59, 59)))
   })
 
   it("a single-day range still covers the whole day, not zero seconds of it", () => {
     const day = { start: TODAY, end: TODAY }
     const b = toQueryBounds(day)
-    expect(b.startDate).toEqual(new Date(2026, 7, 24, 0, 0, 0))
-    expect(b.endDate).toEqual(new Date(2026, 7, 24, 23, 59, 59))
+    expect(b.startDate).toEqual(new Date(Date.UTC(2026, 7, 24, 0, 0, 0)))
+    expect(b.endDate).toEqual(new Date(Date.UTC(2026, 7, 24, 23, 59, 59)))
   })
 })
 
