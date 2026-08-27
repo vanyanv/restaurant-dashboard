@@ -212,9 +212,29 @@ The last row is a **partial week** — 182 hours against a ~430-hour norm.
 | **21h** | **6** | **36.1** |
 | 22h | 6 | 35.6 |
 | 23h | 6 | 39.4 |
+| **0h** | **6** | **35.0** |
+| **1h** | **6** | — |
 
 **Staffing steps up an hour after demand peaks.** That is the page's finding
 and it is measured, not borrowed.
+
+**The last two rows were missing from this table's first draft**, because the
+SQL I measured it with could not expand a shift across midnight — the exact
+defect L-R7 exists to prevent, committed in my own probe. The real roster for
+that day, read shift by shift:
+
+```
+ 9h -> 17h  Cashier          17h -> 2h  Line Cook
+ 9h -> 17h  Line Cook        17h -> 2h  Line Cook
+ 9h -> 17h  Line Cook        17h -> 2h  Cashier
+10h -> 15h  Line Cook        21h -> 2h  Cashier
+                             21h -> 2h  Line Cook
+                             21h -> 2h  Cashier
+```
+
+Ten shifts, six of which end at **2h the following morning**. Three people
+work past midnight every night this schedule covers, and a curve that stops at
+23h shows none of them.
 
 ### The forecast-generation trap, again
 
