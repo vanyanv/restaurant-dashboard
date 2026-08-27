@@ -166,9 +166,9 @@ export function CounterOverviewClient({
    * its prototype stripped (a real bug, caught only by loading this page in
    * an actual browser — a unit test that constructs the component directly,
    * with no serialisation boundary in between, cannot see it). Read for the
-   * controls' state AND passed straight into `AppShell` so the Ask surface's
-   * context sentence can never name a different range or store than what's
-   * on screen.
+   * controls' state — the date control's presets, comparison and range —
+   * and nothing is passed into `AppShell` any more: the rail, topbar and
+   * store switcher live in the layout now and read the URL directly.
    */
   params: string
   stores: SwitchableStore[]
