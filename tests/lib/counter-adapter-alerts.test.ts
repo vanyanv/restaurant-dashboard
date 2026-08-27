@@ -107,7 +107,26 @@ describe("getAlertsSections", () => {
     const c = await cell("Median time to close")
     expect(c.value).toBe("1.8 h")
     expect(c.delta).toBeNull() // there is no last month — nine days of history
-    expect(c.note).toBe("over dismissals")
+    // The note NAMES its population, size included. See the next test for why
+    // the size is load-bearing rather than decoration.
+    expect(c.note).toBe("over 10 dismissals")
+  })
+
+  /*
+   * Live, `getAlertInbox`'s relevance horizon holds ONE dismissal — nine of
+   * the account's ten occurred on 2026-07-25 and 07-27, before it — so this is
+   * what the page actually prints today. A median over n=1 is a single
+   * measurement wearing the word median, and the count is the only thing that
+   * tells a reader which of the two they are looking at.
+   */
+  it("names a population of one as one, never as a plural median", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue({
+      ok: true,
+      data: { ...INBOX, alerts: [row({ id: "1" }), DISMISSED[0]] } as never,
+    })
+    const c = await cell("Median time to close")
+    expect(c.value).toBe("0.6 h")
+    expect(c.note).toBe("over 1 dismissal")
   })
 
   it("counts open from the groupBy, not from the loaded page of rows", async () => {
