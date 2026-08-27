@@ -1,19 +1,22 @@
-import {
-  addDays,
-  differenceInCalendarDays,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isAfter,
-  isBefore,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns"
+import { isAfter, isBefore } from "date-fns"
 // UTC-floor on purpose: OtterDailySummary.date is a Postgres @db.Date stored
 // at UTC midnight (e.g. May 1 LA business day → 2026-05-01T00:00:00Z).
 // Period boundaries must land on the same instant or bucketSummariesByPeriod
 // drops every row when the server runs in non-UTC TZ (e.g. local dev in PDT).
-import { startOfDayUTC as startOfDay } from "@/lib/date-utils"
+// Every date op below (not just the initial floor) must stay in UTC, or a
+// period boundary drifts off midnight and either drops rows (DST) or mislabels
+// the day (any negative offset) — isAfter/isBefore are the exception, since
+// they compare instants and are already timezone-safe.
+import {
+  addDaysUTC as addDays,
+  differenceInCalendarDaysUTC as differenceInCalendarDays,
+  endOfMonthUTC as endOfMonth,
+  endOfWeekUTC as endOfWeek,
+  formatUTC as format,
+  startOfDayUTC as startOfDay,
+  startOfMonthUTC as startOfMonth,
+  startOfWeekUTC as startOfWeek,
+} from "@/lib/date-utils"
 
 export type Granularity = "daily" | "weekly" | "monthly"
 
@@ -112,9 +115,9 @@ export function buildPeriods(
   }
 
   if (granularity === "weekly") {
-    let weekStart = startOfWeek(rangeStart, { weekStartsOn: 0 }) // Sunday
+    let weekStart = startOfWeek(rangeStart, 0) // Sunday
     while (!isAfter(weekStart, rangeEnd)) {
-      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 })
+      const weekEnd = endOfWeek(weekStart, 0)
       const bucketStart = isBefore(weekStart, rangeStart) ? rangeStart : weekStart
       const bucketEnd = isAfter(weekEnd, rangeEnd) ? rangeEnd : weekEnd
       const days = differenceInCalendarDays(bucketEnd, bucketStart) + 1
