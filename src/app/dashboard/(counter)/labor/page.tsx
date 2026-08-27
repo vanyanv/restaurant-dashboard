@@ -17,8 +17,10 @@ import { CounterLaborClient } from "./counter-labor-client"
  * (`ls src/app/dashboard/(editorial)`). The editorial `/dashboard/labor`
  * `page.tsx` was deleted in the same commit — both resolved to
  * `/dashboard/labor`, and Next fails the build on two pages resolving to one
- * path. Its `components/` and its `labor.css` deliberately stay: the editorial
- * `[storeId]/page.tsx` still imports from BOTH and is Task 7's to remove.
+ * path. Its `components/` and its `labor.css` outlived that commit by exactly
+ * one task, because the editorial `[storeId]/page.tsx` still imported from
+ * both; Task 7 rebuilt that route here too and took all three with it, so
+ * `src/app/dashboard/(editorial)/labor` no longer exists in any form.
  *
  * A page resolves the session, reads the URL params ONCE, calls exactly one
  * adapter and hands plain serialisable props to a client island. It never
