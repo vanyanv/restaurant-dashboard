@@ -855,6 +855,138 @@ git commit -m "feat(counter): one rollup answers both analytics pages"
 
 ---
 
+## Task 3b: Periods are built in UTC (A-R18)
+
+**Files:**
+- Modify: `src/lib/date-utils.ts` — UTC-safe date helpers
+- Modify: `src/lib/pnl.ts` — `buildPeriods` uses them
+- Create: `tests/lib/pnl-periods.test.ts`
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: no signature change. `buildPeriods(startDate, endDate, granularity)`
+  keeps its shape; only its answers stop depending on the process timezone.
+
+Money arithmetic, so it keeps assertions.
+
+### The defect
+
+`buildPeriods` floors its bounds with `startOfDayUTC` and then does **every**
+subsequent operation with local-time date-fns: `addDays`, `format`,
+`startOfWeek`, `endOfWeek`, `startOfMonth`, `endOfMonth`,
+`differenceInCalendarDays`. Two things follow, both reproduced:
+
+```
+--- TZ=UTC ---                        --- TZ=America/Los_Angeles ---
+Thu Mar 5  2026-03-05T00:00:00.000Z   Wed Mar 4  2026-03-05T00:00:00.000Z
+Sun Mar 8  2026-03-08T00:00:00.000Z   Sat Mar 7  2026-03-08T00:00:00.000Z
+Mon Mar 9  2026-03-09T00:00:00.000Z   Sun Mar 8  2026-03-08T23:00:00.000Z
+rows placed 8 of 8                    rows placed 4 of 8
+```
+
+1. **Rows vanish after a DST transition.** Periods land at `23:00Z`; a daily
+   period has `startDate === endDate` and `bucketSummariesByPeriod` matches on
+   exact equality, so no row matches and it is silently skipped. Measured YTD:
+   **$1,589,817.29 under UTC against $443,895.15 under PDT.**
+2. **Every daily label is one day early** in a negative-offset zone — no DST
+   transition required. Live in the August fidelity window, on the mix chart's
+   x-axis and the day book's dates.
+
+`src/lib/pnl.ts` already carries a comment stating the invariant it breaks:
+*"Period boundaries must land on the same instant or `bucketSummariesByPeriod`
+drops every row when the server runs in non-UTC TZ (e.g. local dev in PDT)."*
+Someone changed `startOfDay` to `startOfDayUTC` and stopped. Finish it.
+
+### The fix
+
+Every instant `buildPeriods` handles is a UTC midnight, and UTC has no DST, so
+the arithmetic is exact on epoch milliseconds. Add to `src/lib/date-utils.ts`,
+beside the existing `startOfDayUTC` / `startOfDayLocal` / `ymdUTC`:
+
+```ts
+export function addDaysUTC(d: Date, n: number): Date
+export function startOfWeekUTC(d: Date, weekStartsOn: number): Date
+export function endOfWeekUTC(d: Date, weekStartsOn: number): Date
+export function startOfMonthUTC(d: Date): Date
+export function endOfMonthUTC(d: Date): Date
+export function differenceInCalendarDaysUTC(later: Date, earlier: Date): number
+export function formatUTC(d: Date, pattern: "EEE MMM d" | "MMM d" | "MMM yyyy"): string
+```
+
+`formatUTC` needs only the three patterns `buildPeriods` uses. Build it on
+`Intl.DateTimeFormat("en-US", { timeZone: "UTC", … })` rather than on string
+surgery — the weekday and month names must match what date-fns produced, since
+they are what a reader sees on the axis today under UTC.
+
+**Do not add a dependency.** `@date-fns/tz` is not installed and this does not
+need it.
+
+Then replace every local-time call inside `buildPeriods` with its UTC
+counterpart. `isAfter` and `isBefore` compare instants and are already safe —
+leave them.
+
+**Scope discipline: `buildPeriods` and its helpers only.** Do not convert other
+date handling in `src/lib/pnl.ts` or anywhere else in this task. Other callers
+of local date-fns may be correct for their own purpose.
+
+- [ ] **Step 1: Write the helpers and switch `buildPeriods` over.**
+
+- [ ] **Step 2: Write the assertions**, in `tests/lib/pnl-periods.test.ts`. The
+suite must prove the answers no longer depend on the process timezone. Set
+`process.env.TZ` per-case if the runner allows it; otherwise assert the UTC
+instants and labels directly, which is what actually changed.
+
+1. A daily range 2026-03-05 … 2026-03-12 yields eight periods whose
+   `startDate`s are exactly `2026-03-05T00:00:00.000Z` through
+   `2026-03-12T00:00:00.000Z` — no `23:00:00.000Z` anywhere.
+2. Those eight periods' labels are `Thu Mar 5` … `Thu Mar 12`.
+3. `bucketSummariesByPeriod` places **8 of 8** rows dated at UTC midnight
+   across that range. **Assert the placed count, not just the bucket shape** —
+   the old code returned the right number of empty buckets.
+4. The same three assertions for a range NOT crossing a DST transition
+   (2026-08-20 … 2026-08-26): labels `Thu Aug 20` … `Wed Aug 26`, 7 of 7
+   placed. This is the fidelity window and the label defect is live in it.
+5. Weekly and monthly granularity over a DST-crossing range keep every row:
+   assert the placed count equals the row count.
+6. A one-day range yields exactly one period.
+
+- [ ] **Step 3: Run them, then run every suite that touches the P&L.**
+
+```bash
+npx vitest run tests/lib/pnl-periods.test.ts
+npx vitest run tests/lib/ tests/app/
+```
+
+**A pre-existing test that asserted a label under the local timezone will now
+fail, and that failure is the bug being fixed — not a regression.** If one
+does, report it with its old and new expected values rather than editing the
+assertion to whatever the code now prints.
+
+- [ ] **Step 4: Prove the timezone independence end to end.**
+
+```bash
+TZ=UTC npx vitest run tests/lib/pnl-periods.test.ts
+TZ=America/Los_Angeles npx vitest run tests/lib/pnl-periods.test.ts
+TZ=Asia/Kolkata npx vitest run tests/lib/pnl-periods.test.ts
+```
+
+All three must pass. Kolkata is `UTC+5:30` — a positive, non-integer offset,
+which catches a fix that only handles negative whole-hour zones. **Report all
+three outputs.**
+
+- [ ] **Step 5: Full gate and commit.**
+
+```bash
+npm test && npx tsc --noEmit && npm run tokens && npm run build
+```
+
+```bash
+git add -A
+git commit -m "fix(pnl): periods walked in local time dropped every day after a DST switch"
+```
+
+---
+
 ## Task 4: The group page, on the desk
 
 **Files:**
