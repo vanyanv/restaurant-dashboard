@@ -157,6 +157,23 @@ export interface Statement extends StatementLines {
   periods: Period[]
 }
 
+/**
+ * One P&L row's per-bucket values, or `null` when the code has no row.
+ *
+ * Values keep the sign the rollup stored them with — a sales line is
+ * non-negative already, but an expense or commission line (`6100`, `6200`,
+ * `COM_UBER`, `COM_DD`) is stored NEGATIVE, and a caller reading one of those
+ * for its own purpose (a magnitude, a positive commission dollar figure) is
+ * the one who knows what transformation is correct for that purpose. Flipping
+ * the sign here once, generically, would be a second guess at what every
+ * caller wants; `channel-series.ts` flips a commission row's sign itself, and
+ * asserts it, for exactly this reason.
+ */
+export function rowValues(rows: PnLRow[], code: string): number[] | null {
+  const row = rows.find((r) => r.code === code)
+  return row ? row.values : null
+}
+
 type RollupOk = Extract<AllStoresPnLResult, { combined: unknown }>
 type RollupLines = RollupOk["combined"]
 

@@ -59,6 +59,14 @@ export const GL_ROWS = [
   { code: "4110", label: "DISCOUNTS (GUEST)" },
 ] as const
 
+// The four channel sales lines `channel-series.ts` reads to build the mix —
+// named here so a second file never spells the GL code as a string literal.
+export const SALES_CREDIT_CARDS_CODE = "4010"
+export const SALES_CASH_CODE = "4011"
+export const SALES_UBER_CODE = "4012"
+export const SALES_DOORDASH_CODE = "4013"
+export const SALES_GRUBHUB_CODE = "4014"
+
 export const TOTAL_SALES_CODE = "TOTAL_SALES"
 export const UBER_COMMISSION_CODE = "COM_UBER"
 export const DOORDASH_COMMISSION_CODE = "COM_DD"
