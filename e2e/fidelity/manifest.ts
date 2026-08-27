@@ -687,7 +687,50 @@ export const PAGES: FidelityPage[] = [
   },
   { protoId: "cogs", name: "COGS", protoRoute: "/dashboard/cogs", route: "/dashboard/cogs", status: "editorial" },
   { protoId: "menu", name: "Menu profit", protoRoute: "/dashboard/menu-profit", route: "/dashboard/menu-profit", status: "editorial" },
-  { protoId: "labor", name: "Labor", protoRoute: "/dashboard/labor", route: "/dashboard/labor", status: "editorial" },
+  {
+    protoId: "labor",
+    name: "Labor",
+    protoRoute: "/dashboard/labor",
+    route: "/dashboard/labor",
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m/labor",
+    report: true,
+    // MEASURED. Desk: 31 of the prototype's 31 — landmark for landmark, 0
+    // extra. Phone: 9 of 9. The only two differences on either surface are the
+    // strip's cell count, declared below.
+    status: "counter",
+    baseline: { desktop: 31, mobile: 9 },
+    styleAllowances: [
+      {
+        landmark: "strip",
+        property: "data-n",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The prototype's strip is six cells; ours is five. Its second is " +
+          "'With salaried', and this account cannot answer it: " +
+          "`Store.fixedMonthlyLabor` is 0 for the only trading store, and " +
+          "`HarriPositionDaily`'s SALARIED rows carry $0 across 0 seconds. " +
+          "The cell would print the identical percentage to the 'Hourly " +
+          "labor' cell beside it, and a figure repeated is not a second " +
+          "figure (ruling L-R3). `data-n` IS the layout — `.strip` is a " +
+          "six-track grid by default and `counter-components.css` overrides " +
+          "the track count per `data-n` — so the second difference below is " +
+          "this one's consequence, not an independent finding. The day a " +
+          "store file carries a salaried figure, the cell lands and both of " +
+          "these lines must fail rather than quietly absorb it.",
+      },
+      {
+        landmark: "strip",
+        property: "grid-template-columns",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The track count that follows from the `data-n` above. One cause, " +
+          "two measurements.",
+      },
+    ],
+  },
   { protoId: "pnlstore", name: "P&L", protoRoute: "/dashboard/pnl/hollywood", route: "/dashboard/pnl/hollywood", status: "editorial" },
   { protoId: "menuhub", name: "Menu profit", protoRoute: "/dashboard/menu", route: "/dashboard/menu", status: "editorial" },
   { protoId: "catalog", name: "Menu profit", protoRoute: "/dashboard/menu/catalog", route: "/dashboard/menu/catalog", status: "editorial" },
@@ -732,7 +775,20 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 32, mobile: 9 },
   },
-  { protoId: "laborstore", name: "Labor", protoRoute: "/dashboard/labor/hollywood", route: "/dashboard/labor/hollywood", status: "editorial" },
+  {
+    protoId: "laborstore",
+    name: "Labor",
+    protoRoute: "/dashboard/labor/hollywood",
+    // Hollywood's id is a cuid, not the prototype's slug.
+    route: "/dashboard/labor/cmexd4zia0001jr04ljkdt9na",
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m/labor/cmexd4zia0001jr04ljkdt9na",
+    report: true,
+    // Landmark for landmark on BOTH surfaces, with zero rendering differences
+    // and zero `.empty`. Nothing to declare.
+    status: "counter",
+    baseline: { desktop: 22, mobile: 9 },
+  },
   { protoId: "cogsstore", name: "COGS", protoRoute: "/dashboard/cogs/hollywood", route: "/dashboard/cogs/hollywood", status: "editorial" },
   { protoId: "moninfra", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/infrastructure", route: "/dashboard/admin/monitoring/infrastructure", status: "editorial" },
   { protoId: "moncosts", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/costs", route: "/dashboard/admin/monitoring/costs", status: "editorial" },
