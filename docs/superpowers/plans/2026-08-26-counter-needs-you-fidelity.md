@@ -262,6 +262,63 @@ would make that later decomposition a page rewrite as well as a loader one.
 *Cost if wrong:* the decisions adapter carries a promise-per-section API that
 buys nothing until the loader is split. That is a shape, not a cost.
 
+
+**N-R14 — the week picker must carry ACTUALS, and the data is already there.**
+
+Task 4 reported that every `WeekDay.actual` comes out null, so "The call this
+week — forecast against actual · click a day" renders seven forecast bars with
+no hit, no miss and nothing to compare. That is half a section, and the half
+that is missing is the one the section is named after.
+
+**The cause is not missing data.** Measured on the live database 2026-08-26:
+`actualRevenue` is populated on **1,321 of 1,442 rows**, including every settled
+day of the current week —
+
+```
+Mon 24   pred $7,202   actual $7,522     hit
+Tue 25   pred $6,784   actual $6,358     miss  (93.7%, under the 97% line)
+Wed 26   pred $6,269   actual NULL       today, still open
+```
+
+The cause is that `get-decisions-view.ts` queries
+`forecastDate: { gte: today, lte: addDays(today, 7) }` — **forward only** — and
+never selects `actualRevenue`.
+
+*Ruling:* the adapter runs its OWN query for the settled part of the current
+week, reading `forecastDate` and `actualRevenue` back to the week's start, and
+merges it with the forward days `getDecisionsView` already returns. Do NOT widen
+the loader's query — `get-decisions-view.ts` is 917 lines and out of bounds
+(`docs/refactor-playbook.md`).
+
+This is not a duplicated query and it does not violate N-R13. It is an
+independent query feeding one section, which is exactly the shape N-R13 asks for:
+it resolves on its own promise and the week picker streams separately from the
+scorecard.
+
+`newestGenerationPerDay` applies to it — the settled window has the same many-
+generations-per-day shape as the forward one.
+
+Keep `actual: null` for today and any future day. `WeekPicker` already leaves a
+null day unmarked, and Task 2 built it that way deliberately: reading a null
+actual as zero would paint every day of the coming week as a miss.
+
+*Cost if wrong: one extra query per decisions page load, for the figure the
+section exists to show.*
+
+**N-R15 — Task 5 needs no `AWAITED_SECTIONS_ALLOWED` entry.**
+Task 6 of the streaming plan rewrote Task 5 to keep a single `await` and claim a
+lint exemption. N-R13 replaced that with a promise-per-section entry point, so
+the page holds promises and the rule is satisfied without an exemption. **Do not
+add the decisions pages to `AWAITED_SECTIONS_ALLOWED`.** Alerts keeps its entry;
+one query is one query.
+
+**N-R16 — the phone queue needs an adapter shape, not a client mapping.**
+Task 4 reports the phone `mlist` has no shape in `DecisionsSections`, so the
+mapping from `DecisionQueueItem` would land in the page client. That puts a
+figure's presentation in two places and is the rule the linter cannot check.
+Add a `phoneQueue` field to the sections object, built beside `queue` from the
+same data.
+
 ---
 
 ## Task 1: The four flat primitives
