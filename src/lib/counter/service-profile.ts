@@ -96,8 +96,12 @@ function dateKey(d: Date): string {
  * service day. A fixture with no overnight gap at all (e.g. `10..14`) has its
  * largest gap on the wrap itself, so the axis starts back at its own first
  * hour and never rotates.
+ *
+ * Exported so `src/lib/counter/staffing-curve.ts` (L-R7) can order its own
+ * hour axis the same way — one restaurant, one day shape, not a second
+ * rotation invented on the labour page that could disagree with this one.
  */
-function serviceDayOrder(hours: number[]): number[] {
+export function serviceDayOrder(hours: number[]): number[] {
   if (hours.length <= 1) return hours.slice()
 
   let bestGapAt = 0

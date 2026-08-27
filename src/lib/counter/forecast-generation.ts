@@ -43,3 +43,46 @@ export function newestGenerationPerDay<
     (a, b) => a.forecastDate.getTime() - b.forecastDate.getTime(),
   )
 }
+
+/**
+ * The hourly sibling of `newestGenerationPerDay`, for `ForecastHourlyOrders`
+ * (`src/lib/counter/staffing-curve.ts`, L-R6).
+ *
+ * Same append-only shape, one grain finer: unique on `(storeId,
+ * forecastDate, hourBucket, generatedAt)` rather than `(storeId,
+ * forecastDate)`. Measured over the labour window (2026-08-20 … 2026-08-26):
+ *
+ *     raw                    2,208 rows   35,020 orders
+ *     newest generation only   168 rows    2,658 orders   <- 13.17x
+ *
+ * and the deduped total is the credible one — 2,658 forecast against 2,643
+ * actual orders the same week. This is a second copy of
+ * `newestGenerationPerDay`'s tie-break and sort shape, not a rewrite of it:
+ * the two tables key on a different tuple, so one generic function over
+ * `Map<string, T>` would need its caller to build that key anyway, which is
+ * exactly what each of these two thin functions already does.
+ */
+export function newestGenerationPerHour<
+  T extends {
+    storeId: string
+    forecastDate: Date
+    hourBucket: number
+    generatedAt: Date
+  },
+>(rows: T[]): T[] {
+  const best = new Map<string, T>()
+  for (const r of rows) {
+    const key = `${r.storeId}|${r.forecastDate.toISOString().slice(0, 10)}|${r.hourBucket}`
+    const held = best.get(key)
+    // Same `>=` tie-break as `newestGenerationPerDay`: on a tie the later row
+    // in the input wins, keeping the function total rather than leaving an
+    // arbitrary earlier row behind.
+    if (held === undefined || r.generatedAt.getTime() >= held.generatedAt.getTime()) {
+      best.set(key, r)
+    }
+  }
+  return [...best.values()].sort((a, b) => {
+    const byDate = a.forecastDate.getTime() - b.forecastDate.getTime()
+    return byDate !== 0 ? byDate : a.hourBucket - b.hourBucket
+  })
+}
