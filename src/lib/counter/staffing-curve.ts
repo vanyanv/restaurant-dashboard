@@ -138,9 +138,13 @@ function staffingSentence(hours: StaffedHour[], tightest: number | null): string
 /**
  * Pure. `shifts` staffs each hour it covers by one; `demand` is the
  * already-deduped forecast (the loader runs `newestGenerationPerHour`
- * before calling this). The hour axis is every hour EITHER side carries
- * something for, in service-day order (L-R7) — an hour with no shift and no
- * forecast is not a row.
+ * before calling this). The hour axis is every hour something actually
+ * HAPPENS in — a shift covers it, or the forecast is greater than zero — in
+ * service-day order (L-R7). An hour with no shift and no forecast is not a
+ * row, and neither is an hour whose only claim is a forecast bucket of 0:
+ * `ForecastHourlyOrders` publishes all 24 hours whether the restaurant is
+ * open or not, and taking that at face value leaves the rotation no gap to
+ * turn on (see the comment in the body).
  *
  * `tightest` is the hour that maximises `demand - scheduled` over hours with
  * a forecast — "most outruns", not "most understaffed by ratio" — ties
@@ -158,8 +162,24 @@ export function staffingCurve(
     }
   }
 
+  // A TRADING hour: someone is on the clock, or the forecast expects an order.
+  // A forecast bucket of ZERO is not a trading hour, and this is the whole of
+  // the rotation bug it caused: `ForecastHourlyOrders` publishes every hour of
+  // the day, most of them 0, so a set built from `demand.keys()` is all 24
+  // hours — a ring with no gap in it. `serviceDayOrder` rotates on the LARGEST
+  // gap, so with no gap to find it degenerates to clock order and the axis
+  // reads `12a … 12p … 11p`, burying the evening rush against the right edge.
+  // Measured 2026-08-27: shifts cover 9…23 and 0, the forecast is > 0 at 0 and
+  // 10…23; the union is `0, 9…23`, whose largest gap is 1…8, so the axis starts
+  // at 9 and ends past midnight — the same day shape the Analytics hourly chart
+  // reads off `OtterHourlySummary`, which never publishes an empty hour at all.
   const present = Array.from(
-    new Set<number>([...scheduledByHour.keys(), ...demand.keys()]),
+    new Set<number>([
+      ...scheduledByHour.keys(),
+      ...Array.from(demand.entries())
+        .filter(([, orders]) => orders > 0)
+        .map(([hour]) => hour),
+    ]),
   ).sort((a, b) => a - b)
   const order = serviceDayOrder(present)
 

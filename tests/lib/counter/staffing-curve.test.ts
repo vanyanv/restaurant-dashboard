@@ -143,6 +143,77 @@ describe("staffingCurve — edges", () => {
   })
 })
 
+/*
+ * The rotation defect, measured on 2026-08-27.
+ *
+ * `ForecastHourlyOrders` publishes EVERY hour of the day, most of them zero.
+ * Feeding all 24 keys to `serviceDayOrder` hands it a ring with no gap in it,
+ * so the "largest gap" it rotates on is a tie at 1 hour, it starts back at the
+ * set's own first element, and the axis degenerates to clock order — `12a …
+ * 12p … 11p` — with the evening rush crushed against the right edge. The
+ * Analytics hourly chart on the same restaurant starts at 10a, because
+ * `OtterHourlySummary` never publishes an empty hour to begin with.
+ *
+ * The shifts are the ones the brief measured for that day (9→17 x3, 17→1 x3,
+ * 18→1, 20→1) and the demand map carries all 24 keys with 9 of them zero
+ * (hours 1–9), matching what the forecast actually publishes.
+ */
+describe("staffingCurve — a 24-key demand map must not produce a clock-ordered axis", () => {
+  const SHIFTS_2026_08_27 = [
+    { startHour: 9, endHour: 17 },
+    { startHour: 9, endHour: 17 },
+    { startHour: 9, endHour: 17 },
+    { startHour: 17, endHour: 1 },
+    { startHour: 17, endHour: 1 },
+    { startHour: 17, endHour: 1 },
+    { startHour: 18, endHour: 1 },
+    { startHour: 20, endHour: 1 },
+  ]
+
+  // All 24 buckets published. Hours 1..9 are 0 — the forecast's own empty
+  // buckets, which are not trading hours.
+  const DEMAND_24 = new Map<number, number>([
+    [0, 12.4],
+    [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0],
+    [10, 5.8], [11, 9.0], [12, 12.0], [13, 14.0], [14, 16.1],
+    [15, 16.9], [16, 17.9], [17, 18.9], [18, 26.8], [19, 33.2],
+    [20, 38.4], [21, 36.1], [22, 35.6], [23, 39.4],
+  ])
+
+  const curve = staffingCurve(SHIFTS_2026_08_27, DEMAND_24)
+
+  it("the axis opens at 9h and closes past midnight, not at 0h and 23h", () => {
+    const hours = curve.hours.map((r) => r.hour)
+    expect(hours[0]).toBe(9)
+    expect(hours[hours.length - 1]).toBe(0)
+    // The defect's exact signature: a clock-ordered axis.
+    expect(hours).not.toEqual(Array.from({ length: 24 }, (_, i) => i))
+  })
+
+  it("the forecast's empty buckets are not rows on the axis", () => {
+    const hours = curve.hours.map((r) => r.hour)
+    for (const dead of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      expect(hours).not.toContain(dead)
+    }
+    // 9h IS a row — a shift covers it — and its published forecast of zero is
+    // carried through as 0 rather than dropped to null.
+    expect(curve.hours.find((r) => r.hour === 9)?.demand).toBe(0)
+    expect(curve.hours.find((r) => r.hour === 9)?.scheduled).toBe(3)
+  })
+
+  it("every trading hour is still on the axis, in one unbroken run", () => {
+    expect(curve.hours.map((r) => r.hour)).toEqual([
+      9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0,
+    ])
+  })
+
+  it("tightest is still the hour demand most outruns the schedule", () => {
+    // 23h: 39.4 forecast orders against the 5 people the evening shifts leave
+    // on the floor — a wider gap than 20h's 38.4 against 5.
+    expect(curve.tightest).toBe(23)
+  })
+})
+
 describe("newestGenerationPerHour (L-R6) — the hourly forecast dedupe", () => {
   const gen = (hour: number, generatedAt: string, predictedOrders: number) => ({
     storeId: "s1",
