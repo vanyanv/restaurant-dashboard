@@ -172,10 +172,10 @@ The existing `freezeForecast` in `decision-log-actions.ts` dedupes correctly, an
 | `src/components/counter/surface/record.tsx` | `Record` — `.record`, the hit/miss run used by the accuracy panel. |
 | `src/lib/counter/adapters/decisions.ts` | `getDecisionsSections()` |
 | `src/lib/counter/adapters/alerts.ts` | `getAlertsSections()` |
-| `src/app/dashboard/decisions/page.tsx` + `counter-decisions-client.tsx` | Desk — the week ahead |
-| `src/app/(mobile)/m/decisions/page.tsx` + `counter-phone-decisions-client.tsx` | Phone — the week ahead |
-| `src/app/dashboard/alerts/page.tsx` + `counter-alerts-client.tsx` | Desk — open right now |
-| `src/app/(mobile)/m/alerts/page.tsx` + `counter-phone-alerts-client.tsx` | Phone — open right now |
+| `src/app/dashboard/(counter)/decisions/page.tsx` + `counter-decisions-client.tsx` + `loading.tsx` | Desk — the week ahead |
+| `src/app/(mobile)/m/(counter)/decisions/page.tsx` + `counter-phone-decisions-client.tsx` + `loading.tsx` | Phone — the week ahead |
+| `src/app/dashboard/(counter)/alerts/page.tsx` + `counter-alerts-client.tsx` + `loading.tsx` | Desk — open right now |
+| `src/app/(mobile)/m/(counter)/alerts/page.tsx` + `counter-phone-alerts-client.tsx` + `loading.tsx` | Phone — open right now |
 | `docs/counter/fidelity/decisions.md`, `docs/counter/fidelity/alerts.md` | Gate reports |
 
 **Modify**
@@ -183,7 +183,8 @@ The existing `freezeForecast` in `decision-log-actions.ts` dedupes correctly, an
 | Path | Change |
 |---|---|
 | `src/components/counter/index.ts` | Export the five new primitives. |
-| `src/middleware.ts` | Add `/dashboard/decisions` → `/m/decisions` and `/dashboard/alerts` → `/m/alerts` to the phone rewrite map. |
+| `src/middleware.ts` | Add `/dashboard/decisions` → `/m/decisions` and `/dashboard/alerts` → `/m/alerts` to the phone rewrite map. Unaffected by the route-group rewrite below — `MOBILE_ROUTES` maps URL paths, and `(counter)` never appears in a URL. |
+| `scripts/counter-lint.ts` | `AWAITED_SECTIONS_ALLOWED` gains the four new page paths (Tasks 5, 6, 8, 9) — each of those four is a single-load page in the order-detail shape, not the streaming-pages shape. See Task 5's rewrite note. |
 | `e2e/fidelity/manifest.ts` | Flip `decisions` and `alerts` to `status: "counter"` with measured baselines. |
 | `src/app/actions/alerts/inbox-actions.ts` | Add the lifecycle counts the page needs (Task 7) — no behaviour change to existing callers. |
 
@@ -1102,12 +1103,22 @@ git commit -m "feat(counter): the week ahead, as sections"
 ## Task 5: The week ahead, on the desk
 
 **Files:**
-- Create: `src/app/dashboard/decisions/page.tsx`, `src/app/dashboard/decisions/counter-decisions-client.tsx`
+- Create: `src/app/dashboard/(counter)/decisions/page.tsx`, `src/app/dashboard/(counter)/decisions/counter-decisions-client.tsx`, `src/app/dashboard/(counter)/decisions/loading.tsx`
+- Modify: `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED` — see Step 3)
 - Delete: `src/app/dashboard/(editorial)/decisions/**` (10 components, 13 lib modules, `decisions.css`)
 - Test: `tests/app/counter-decisions.test.tsx`
 
 **Interfaces:**
 - Consumes: `getDecisionsSections` (Task 4), every primitive from Tasks 1-2.
+
+### Rewritten 2026-08-26 against the shell Tasks 1-4 of the streaming-architecture plan landed
+
+This task was written before that plan existed and describes the pattern it replaced: a page under `src/app/dashboard/` that awaits everything and hands one object to one client component rendering `AppShell`. Four things change here; **the six sections below, the day-picker rule and every ruling (N-R1 through N-R8) are unchanged** — only composition and fetching are:
+
+- **Route group.** The page lives at `src/app/dashboard/(counter)/decisions/page.tsx`, not `src/app/dashboard/decisions/page.tsx` — a page rebuilt on Counter graduates into `(counter)`, exactly as `orders` and `pnl` did. `npm run tokens`' `no-route-without-loading` then requires the sibling `loading.tsx` this file list now includes.
+- **No shell in the page or the client.** Neither file imports `AppShell`. The client returns a `<>` holding `PageHead` (title, sub, the day picker's own actions if any) followed by the six sections — the rail, the topbar, the store switcher and the ⌘K surface are `(counter)/layout.tsx`'s, already mounted before this page renders. `npm run tokens`' `no-shell-in-page` fails the build on an `AppShell` import here.
+- **The single await is correct here, and must be named to the linter.** `getDecisionsSections` (Task 4) is ONE resolved `Promise<DecisionsSections>` built from ONE `getDecisionsView` load — every section is derived from that same value, exactly as `getOrderSections` is for `src/app/dashboard/(counter)/orders/[id]/page.tsx`. There is nothing to isolate with a promise per section, so the page keeps `await getDecisionsSections(...)` rather than adopting the `getXSectionPromises` shape the streaming pages use — but `npm run tokens`' `no-awaited-sections-in-page` does not know that reasoning, only the two order-detail paths it is told about. This page's path must be added, by name, to `AWAITED_SECTIONS_ALLOWED` in `scripts/counter-lint.ts` in the same commit, or the gate reds on a page that is correctly written.
+- **The store list, if this page's own content needs it, is fetched alongside the adapter call, not before it.** `getOverviewStores()` is no longer fetched "for the switcher" — the switcher reads it from the layout already. If the client needs the full store list for its own content (check what it actually renders before assuming it does), fetch it with `Promise.all([getOverviewStores(), getDecisionsSections({...})])`: the two calls are independent, and a sequential pair here would be exactly the waterfall Task 5 of the streaming-architecture plan closed on the order-detail pages.
 
 Page composition, in the prototype's order (`P.decisions.desk`, line 4682):
 
@@ -1122,7 +1133,7 @@ The day picker writes to the URL, not to component state — same rule as every 
 
 - [ ] **Step 1: Write the failing tests**
 
-Model on `tests/app/counter-orders.test.tsx`. Assert:
+Model on `tests/app/counter-orders.test.tsx` **as it stands today**: that file's own `CounterOrdersClient` test wrapper renders `AppShell` around the island, because `AppShell` is the layout's now and a bare island has no `main#ct-main` to assert against. Copy that wrapper shape, not an older one. Assert:
 
 ```tsx
 it("renders the six prototype sections in order", async () => { /* … */ })
@@ -1152,9 +1163,9 @@ it("prints the same week total in the headline and the strip", () => { /* … */
 
 - [ ] **Step 2: Run and watch fail.** `npx vitest run tests/app/counter-decisions.test.tsx`
 
-- [ ] **Step 3: Implement the page and client.**
+- [ ] **Step 3: Implement the page and client, and name the exemption.**
 
-The page is a server component: session, `getOverviewStores()` for the switcher, one `getDecisionsSections` call, render the client. No `.status` reads anywhere in either file.
+The page is a server component: session, then either `await getDecisionsSections({...})` alone or `Promise.all([getOverviewStores(), getDecisionsSections({...})])` if the client needs the store list (see above), and render the client with a `loading.tsx` beside it. Add `src/app/dashboard/(counter)/decisions/page.tsx` to `AWAITED_SECTIONS_ALLOWED` in `scripts/counter-lint.ts` in this step — the array is a hardcoded allowlist, so `npm run tokens` cannot pass without it. The client is a `<>` of `PageHead` plus the six sections, no `AppShell`. No `.status` reads anywhere in either file.
 
 - [ ] **Step 4: Run and watch pass.**
 
@@ -1174,7 +1185,7 @@ grep -rn "(editorial)/decisions" src/ e2e/ tests/ || echo "no references"
 
 ```bash
 npm test && npm run tokens && npx tsc --noEmit && npm run build
-git add -A src/app/dashboard tests/app
+git add -A src/app/dashboard scripts/counter-lint.ts tests/app
 git commit -m "feat(counter): the week ahead, on the desk"
 ```
 
@@ -1183,12 +1194,18 @@ git commit -m "feat(counter): the week ahead, on the desk"
 ## Task 6: The week ahead, on a phone
 
 **Files:**
-- Create: `src/app/(mobile)/m/decisions/page.tsx`, `src/app/(mobile)/m/decisions/counter-phone-decisions-client.tsx`
-- Modify: `src/middleware.ts`
+- Create: `src/app/(mobile)/m/(counter)/decisions/page.tsx`, `src/app/(mobile)/m/(counter)/decisions/counter-phone-decisions-client.tsx`, `src/app/(mobile)/m/(counter)/decisions/loading.tsx`
+- Modify: `src/middleware.ts`, `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED`)
 - Test: `tests/app/counter-phone-decisions.test.tsx`
 
 **Interfaces:**
 - Consumes: `getDecisionsSections` (Task 4) — **the same call, with the same arguments, as the desk**. Two surfaces asking two loaders what the week holds is how one restaurant gets two answers.
+
+### Rewritten 2026-08-26, against the same shell contract as Task 5
+
+Same four changes as Task 5's own rewrite note, applied to the phone surface: the page lives under `src/app/(mobile)/m/(counter)/decisions/` with a sibling `loading.tsx`; neither the page nor the client imports `AppShell` (the phone shell — rail-equivalent nav, topbar, ask — is `(mobile)/m/(counter)/layout.tsx`'s); the page keeps its single `await getDecisionsSections(...)` and this page's path is added to `AWAITED_SECTIONS_ALLOWED` alongside Task 5's desk entry; `getOverviewStores()` is fetched with `Promise.all` alongside the adapter call only if the phone client's own content needs the store list. `PageHead` carries `.mtitle`/`.msub`; the URL-driven `day` param is identical to the desk's, per the "same call, same arguments" rule above — a phone reading a different day than the desk for the same link is the same failure mode as two surfaces reading two ranges.
+
+The middleware change below is unaffected by any of this: `MOBILE_ROUTES` maps URL paths, and a route group never appears in a URL.
 
 Prototype (`P.decisions.phone`, line 4762): `.mtitle` + `.msub`, an `mstrip` of two cells, a `Section` "The call this week" holding a bar chart, a `Section` "What to do" holding an `mlist` of three, and one `.mbtn.mbtn--primary`.
 
@@ -1208,13 +1225,13 @@ it("never renders an .empty landmark", () => { /* … */ })
 ```
 
 - [ ] **Step 2: Run and watch fail.**
-- [ ] **Step 3: Implement.**
+- [ ] **Step 3: Implement**, under `(counter)`, with no `AppShell` in either file, and add this page's path to `AWAITED_SECTIONS_ALLOWED` in `scripts/counter-lint.ts`.
 - [ ] **Step 4: Run and watch pass.**
 - [ ] **Step 5: Gate and commit**
 
 ```bash
 npm test && npm run tokens && npx tsc --noEmit && npm run build
-git add -A "src/app/(mobile)" src/middleware.ts tests/app
+git add -A "src/app/(mobile)" src/middleware.ts scripts/counter-lint.ts tests/app
 git commit -m "feat(counter): the week ahead, on a phone"
 ```
 
@@ -1360,9 +1377,14 @@ git commit -m "fix(counter): the inbox called ten dismissals an acknowledgement"
 ## Task 8: Open right now, on the desk
 
 **Files:**
-- Create: `src/app/dashboard/alerts/page.tsx`, `src/app/dashboard/alerts/counter-alerts-client.tsx`
+- Create: `src/app/dashboard/(counter)/alerts/page.tsx`, `src/app/dashboard/(counter)/alerts/counter-alerts-client.tsx`, `src/app/dashboard/(counter)/alerts/loading.tsx`
+- Modify: `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED` — see Task 5's note)
 - Delete: `src/app/dashboard/(editorial)/alerts/**`
 - Test: `tests/app/counter-alerts.test.tsx`
+
+### Rewritten 2026-08-26, against the same shell contract as Task 5
+
+The same four changes apply here as on Task 5's decisions page, and for the same reason: `getAlertsSections` (Task 7) is ONE resolved `Promise<AlertsSections>` built from ONE `getAlertInbox` load, so this page is structurally the order-detail shape, not the streaming-pages shape. Concretely: the page lives at `src/app/dashboard/(counter)/alerts/page.tsx` with a sibling `loading.tsx`; neither file imports `AppShell` — `PageHead` is the client's, the rail/topbar/switcher/ask are `(counter)/layout.tsx`'s; the page keeps its single `await getAlertsSections(...)` and this path is added to `AWAITED_SECTIONS_ALLOWED` in the same commit; `getOverviewStores()`, if the page's own content needs it, is fetched with `Promise.all` alongside the adapter call rather than a sequential `await` before it. N-R8's owner gate is unaffected — it is a redirect the page issues before any of this, exactly as `/dashboard/pnl` and `/dashboard/decisions`'s absence of one are unaffected by their own rewrites.
 
 Composition (`P.alerts.desk`, line 4775): `Strip` of four → a `.sec` holding TWO `.filters` rows (severity toggles + search + count; then a source row labelled `Source`) and a `Table` → `Section` "Alerts opened" holding a bar chart.
 
@@ -1378,13 +1400,13 @@ it("renders five source toggles and disables the four with no rows", () => { /* 
 it("never renders an .empty landmark, in any segment", () => { /* … */ })
 ```
 
-- [ ] **Step 2-4:** fail → implement → pass.
+- [ ] **Step 2-4:** fail → implement (page under `(counter)`, no `AppShell`, path added to `AWAITED_SECTIONS_ALLOWED`) → pass.
 - [ ] **Step 5: Delete `src/app/dashboard/(editorial)/alerts`, then grep for references** exactly as Task 5 does.
 - [ ] **Step 6: Gate and commit**
 
 ```bash
 npm test && npm run tokens && npx tsc --noEmit && npm run build
-git add -A src/app/dashboard tests/app
+git add -A src/app/dashboard scripts/counter-lint.ts tests/app
 git commit -m "feat(counter): open right now, on the desk"
 ```
 
@@ -1393,9 +1415,13 @@ git commit -m "feat(counter): open right now, on the desk"
 ## Task 9: Open right now, on a phone
 
 **Files:**
-- Create: `src/app/(mobile)/m/alerts/page.tsx`, `src/app/(mobile)/m/alerts/counter-phone-alerts-client.tsx`
-- Modify: `src/middleware.ts`
+- Create: `src/app/(mobile)/m/(counter)/alerts/page.tsx`, `src/app/(mobile)/m/(counter)/alerts/counter-phone-alerts-client.tsx`, `src/app/(mobile)/m/(counter)/alerts/loading.tsx`
+- Modify: `src/middleware.ts`, `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED`)
 - Test: `tests/app/counter-phone-alerts.test.tsx`
+
+### Rewritten 2026-08-26, against the same shell contract as Task 5
+
+Same four changes as Tasks 5, 6 and 8's own rewrite notes, on the phone surface of the alert inbox: page and client live under `src/app/(mobile)/m/(counter)/alerts/` with a sibling `loading.tsx`; neither imports `AppShell`; the single `await getAlertsSections(...)` stays and this path joins `AWAITED_SECTIONS_ALLOWED`; `getOverviewStores()`, if needed, is `Promise.all`'d alongside it. The middleware change below is unaffected — `MOBILE_ROUTES` maps URL paths, and `(counter)` is a route group, invisible to the URL.
 
 Prototype (`P.alerts.phone`, line 4820): `.mtitle` "Alerts", `.msub` "3 open · 12 acknowledged", a `Section` "Open" with an `mlist` of three, a `Section` "Acknowledged" with an `mlist` of two.
 
@@ -1411,12 +1437,12 @@ it("renders the acknowledged mlist over zero rows, not an .empty", () => { /* �
 it("prints the live counts in the subtitle", () => { /* '77 open · 0 acknowledged' */ })
 ```
 
-- [ ] **Step 2-4:** fail → implement → pass.
+- [ ] **Step 2-4:** fail → implement (page under `(counter)`, no `AppShell`, path added to `AWAITED_SECTIONS_ALLOWED`) → pass.
 - [ ] **Step 5: Gate and commit**
 
 ```bash
 npm test && npm run tokens && npx tsc --noEmit && npm run build
-git add -A "src/app/(mobile)" src/middleware.ts tests/app
+git add -A "src/app/(mobile)" src/middleware.ts scripts/counter-lint.ts tests/app
 git commit -m "feat(counter): open right now, on a phone"
 ```
 
