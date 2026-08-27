@@ -1,5 +1,11 @@
-import { useId, type ReactNode } from "react"
-import { hasData, type SectionData } from "@/lib/counter/section-data"
+import { Suspense, use, useId, type ReactNode } from "react"
+import {
+  hasData,
+  isPendingSource,
+  loading,
+  type SectionData,
+  type SectionSource,
+} from "@/lib/counter/section-data"
 import { Skeleton } from "@/components/counter/state/skeleton"
 import { Failed } from "@/components/counter/state/failed"
 import { Empty } from "@/components/counter/state/empty"
@@ -72,20 +78,79 @@ import { AskGlyph } from "./ask-glyph"
  * load-bearing: it is what `Failed` names, so a head block that could not load
  * says which block it was.
  */
-export function Section<T>({
-  title,
-  meta,
-  data,
-  askAbout,
-  onRetry,
-  pad = true,
-  bare = false,
-  children,
-}: {
+/**
+ * ## Streaming, and why the boundary is HERE and not in the page
+ *
+ * Task 3 of the streaming-architecture plan. `data` now takes the PROMISE of a
+ * `SectionData` as well as a resolved one; when it is a promise this component
+ * mounts its own `<Suspense>`, renders the section's own loading skeleton as
+ * the fallback, and unwraps the value with React 19's `use()` inside it. One
+ * slow query therefore holds up one section and nothing else — which is the
+ * whole of what the owner asked for: *"different data is isolated for
+ * components so they don't block each other."*
+ *
+ * The boundary lives in this component rather than in each page for the same
+ * reason every state does. The spec is binding on all fifty-four Counter
+ * pages, each of which is written by copying the last one; a `<Suspense>` a
+ * page author has to remember is a `<Suspense>` some page will not have, and
+ * that page's regression is invisible until someone measures it. Here it is
+ * structural: passing a promise IS the boundary, and there is no way to pass
+ * one without getting it.
+ *
+ * It also settles what the fallback looks like without a second answer. The
+ * fallback is this same component rendering `loading()` — the same `.sec`, the
+ * same head, the same title, the same `Skeleton` the eight `loading.tsx` files
+ * already compose, in the same box the resolved section will occupy. Nothing
+ * moves when the value lands, and there is still exactly one renderer of
+ * "not here yet".
+ *
+ * A PAGE STILL CANNOT BRANCH ON A STATUS, and could not use one if it wanted:
+ * a promise has no `.status` to read, and the resolved value never reaches the
+ * page at all. `npm run tokens`' `no-status-branch` rule survives this change
+ * untouched.
+ */
+export function Section<T>({ data, ...chrome }: SectionProps<T>) {
+  if (isPendingSource(data)) {
+    return (
+      // The fallback is the section's own loading state, so the head, the
+      // title and the box are already on screen and only the body swaps.
+      <Suspense fallback={<SectionBody<T> {...chrome} data={loading<T>()} />}>
+        <PendingSection<T> {...chrome} source={data} />
+      </Suspense>
+    )
+  }
+  return <SectionBody<T> {...chrome} data={data} />
+}
+
+/**
+ * The suspending half. It exists as its own component because a Suspense
+ * boundary only catches what is rendered INSIDE it — a `use()` called in the
+ * component that renders the `<Suspense>` suspends the parent instead, which
+ * would hand the whole page back to `loading.tsx` and undo the isolation.
+ */
+function PendingSection<T>({
+  source,
+  ...chrome
+}: Omit<SectionProps<T>, "data"> & { source: Promise<SectionData<T>> }) {
+  return <SectionBody<T> {...chrome} data={use(source)} />
+}
+
+type SectionProps<T> = {
   title: string
-  /** A short qualifier — the range, the store, the row count. Shown only with data. */
-  meta?: string
-  data: SectionData<T>
+  /**
+   * A short qualifier — the range, the store, the row count. Shown only with
+   * data.
+   *
+   * A FUNCTION when the qualifier is derived from the section's own data
+   * ("2 lines · 1 modifier", "6 shown"). Three pages used to lift that value
+   * out with `dataOf(sections.x)` and pass the string down; with `x` a promise
+   * there is nothing to lift, and the honest place to read it is here, where
+   * the value has already arrived and the section already knows whether there
+   * is one. It returns `undefined` for "no meta at all", exactly as the string
+   * form's absence does.
+   */
+  meta?: string | ((data: T) => string | undefined)
+  data: SectionSource<T>
   /** `true` asks about the section by its title; a string asks about that instead. */
   askAbout?: boolean | string
   onRetry?: (action: string) => void
@@ -101,8 +166,29 @@ export function Section<T>({
    */
   bare?: boolean
   children: (data: T) => ReactNode
-}) {
+}
+
+/**
+ * The six states, on the prototype's own DOM. Everything above this line is
+ * about WHEN it runs; this is the part that has always been here.
+ */
+function SectionBody<T>({
+  title,
+  meta,
+  data,
+  askAbout,
+  onRetry,
+  pad = true,
+  bare = false,
+  children,
+}: Omit<SectionProps<T>, "data"> & { data: SectionData<T> }) {
   const withData = hasData(data)
+  // The qualifier, resolved once the value is in hand — see `meta` above.
+  const metaText = hasData(data)
+    ? typeof meta === "function"
+      ? meta(data.data)
+      : meta
+    : undefined
   const headingId = useId()
 
   // The button carries the QUESTION, not the title: `true` means "ask about
@@ -163,7 +249,7 @@ export function Section<T>({
     <section className="sec" aria-labelledby={headingId}>
       <div className="sec__head">
         <h3 id={headingId}>{title}</h3>
-        {withData && meta ? <span className="k">{meta}</span> : null}
+        {metaText ? <span className="k">{metaText}</span> : null}
         {/* Note 55: this button was rendered on fifty pages and wired to
             nothing. It appears only when there is an answer to ask about —
             asking about a section that failed to load is asking about

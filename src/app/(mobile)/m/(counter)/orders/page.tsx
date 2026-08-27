@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getOrdersSections } from "@/lib/counter/adapters/orders"
+import { getOrdersSectionPromises } from "@/lib/counter/adapters/orders"
 import { CounterPhoneOrdersClient } from "./counter-phone-orders-client"
 
 export const dynamic = "force-dynamic"
@@ -59,7 +59,9 @@ export default async function MobileOrdersPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  const sections = await getOrdersSections({
+  // NOT AWAITED — one promise per section, each unwrapped inside its own
+  // Suspense boundary by `Section`. See the desk page's note.
+  const sections = getOrdersSectionPromises({
     range: counterParams.range,
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,

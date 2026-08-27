@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getOrdersSections } from "@/lib/counter/adapters/orders"
+import { getOrdersSectionPromises } from "@/lib/counter/adapters/orders"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOrdersClient } from "./counter-orders-client"
 
@@ -52,11 +52,10 @@ export default async function OrdersPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  // The rail's switcher is the LAYOUT's now; this list is for the page's own
-  // content — the store the sub-line names. `getOverviewStores` is `cache()`d,
-  // so the layout's call and this one are one query per request.
-  const stores = await getOverviewStores()
-  const sections = await getOrdersSections({
+  // NOT AWAITED — one promise per section, each unwrapped inside its own
+  // Suspense boundary by `Section`, so `Orders by hour` no longer waits on the
+  // list query. Started before the store list so the two are concurrent.
+  const sections = getOrdersSectionPromises({
     range: counterParams.range,
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,
@@ -67,6 +66,11 @@ export default async function OrdersPage({
     channels: counterParams.channels,
     search: counterParams.search,
   })
+
+  // The rail's switcher is the LAYOUT's now; this list is for the page's own
+  // content — the store the sub-line names. `getOverviewStores` is `cache()`d,
+  // so the layout's call and this one are one query per request.
+  const stores = await getOverviewStores()
 
   return (
     <CounterOrdersClient

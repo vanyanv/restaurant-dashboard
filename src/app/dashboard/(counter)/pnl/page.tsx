@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getPnlSections } from "@/lib/counter/adapters/pnl"
+import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPnlClient } from "./counter-pnl-client"
 
@@ -50,16 +50,21 @@ export default async function PnlPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  // The switcher's list. Shared with the Overview rather than re-queried, so
-  // the rail cannot offer one page a store the other does not have.
-  const stores = await getOverviewStores()
-  const sections = await getPnlSections({
+  // NOT AWAITED — one promise per section, each unwrapped inside its own
+  // Suspense boundary by `Section`, so the strip and the statement no longer
+  // sit behind the eight trailing weeks. Started before the store list so the
+  // two are concurrent.
+  const sections = getPnlSectionPromises({
     range: counterParams.range,
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
     today,
   })
+
+  // The switcher's list. Shared with the Overview rather than re-queried, so
+  // the rail cannot offer one page a store the other does not have.
+  const stores = await getOverviewStores()
 
   return (
     <CounterPnlClient

@@ -22,7 +22,12 @@ import {
   type DateRange,
 } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
-import { classify } from "@/lib/counter/adapters/types"
+import {
+  awaitSections,
+  classify,
+  guardSection,
+  type StreamedSections,
+} from "@/lib/counter/adapters/types"
 import {
   dataOf,
   empty,
@@ -1271,7 +1276,23 @@ export function buildNeedsYou(
 
 /* ── The entry points ─────────────────────────────────────────────────── */
 
-export async function getOrdersSections(input: OrdersSectionsInput): Promise<OrdersSections> {
+/**
+ * The desk and phone orders lists, as three promises.
+ *
+ * Task 3. What changed from the awaited version below is only WHEN the awaits
+ * happen: the three loads still start together, but the record handed back
+ * carries one promise per section instead of one finished object, so
+ * `Orders by hour` paints the moment `getHourlyPatternsForRange` answers and
+ * does not wait on the list query, and vice versa. Not a hypothetical: the
+ * hourly rollup and the order list are different queries over different
+ * tables and routinely differ by hundreds of milliseconds.
+ *
+ * `strip` and `list` share the ONE list load on purpose — the strip counts the
+ * orders the table lists, and two loads would be two answers.
+ */
+export function getOrdersSectionPromises(
+  input: OrdersSectionsInput,
+): StreamedSections<OrdersSections> {
   const { range, storeId } = input
   const channels = input.channels ?? []
   const search = input.search ?? ""
@@ -1290,29 +1311,28 @@ export async function getOrdersSections(input: OrdersSectionsInput): Promise<Ord
     cursor: input.cursor ?? null,
   }
 
-  const [listSd, cmpSd, hourlySd] = await Promise.all([
-    classify(() => getOrdersList(filters), { retryAction: "retryOrders" }),
+  const listP = classify(() => getOrdersList(filters), { retryAction: "retryOrders" })
 
-    // The comparison is its own load and its own failure: a strip that lost
-    // its figures because the PRIOR period would not load would be a worse
-    // page than one whose deltas simply read "no comparison set".
-    classify<OrderListResponse | null>(
-      () =>
-        cmpRange
-          ? getOrdersList({
-              ...filters,
-              startDate: isoDay(cmpRange.start),
-              endDate: isoDay(cmpRange.end),
-              cursor: null,
-              // One row is enough: every figure the comparison feeds comes off
-              // `totals` and `totalCount`, which cover the whole matched range.
-              limit: 1,
-            })
-          : Promise.resolve(null),
-      { retryAction: "retryComparison" },
-    ),
+  // The comparison is its own load and its own failure: a strip that lost
+  // its figures because the PRIOR period would not load would be a worse
+  // page than one whose deltas simply read "no comparison set".
+  const cmpP = classify<OrderListResponse | null>(
+    () =>
+      cmpRange
+        ? getOrdersList({
+            ...filters,
+            startDate: isoDay(cmpRange.start),
+            endDate: isoDay(cmpRange.end),
+            cursor: null,
+            // One row is enough: every figure the comparison feeds comes off
+            // `totals` and `totalCount`, which cover the whole matched range.
+            limit: 1,
+          })
+        : Promise.resolve(null),
+    { retryAction: "retryComparison" },
+  )
 
-    classify(
+  const hourlyP = classify(
       () =>
         getHourlyPatternsForRange(
           { kind: "custom", startDate: isoDay(range.start), endDate: isoDay(range.end) },
@@ -1331,28 +1351,56 @@ export async function getOrdersSections(input: OrdersSectionsInput): Promise<Ord
          * decided here, on the value: no hours at all, or no order in any of
          * them.
          */
-        isEmpty: (v) => v === null || v.hourly.every((h) => h.orderCount === 0),
-      },
-    ),
-  ])
-
-  const cmpList = dataOf(cmpSd)
-  // `comparisonContext` types its scope as a `Statement`, which is not what
-  // this page compares. Its label, short form and DIVISOR are the decisions
-  // worth reusing — they are the ones two pages must not answer differently —
-  // so the context is built with a null scope and only `on` is restated here.
-  const cmp: ComparisonContext = {
-    ...comparisonContext(comparisonId, null),
-    on: comparisonId !== "none" && cmpList !== null,
-  }
+      isEmpty: (v) => v === null || v.hourly.every((h) => h.orderCount === 0),
+    },
+  )
 
   return {
-    strip: mapReady(listSd, (res) => buildOrdersStrip(res, cmpList, cmp)),
-    list: mapReady(listSd, (res) => buildOrdersList(res, { search, channels })),
-    byHour: mapReady(hourlySd, (h) =>
-      buildOrdersByHour(h?.hourly ?? [], h?.hourlyComparison ?? null, range),
+    // The strip is the one section that waits on TWO loads, and it always did:
+    // its deltas are this range read against the prior one.
+    strip: guardSection(
+      Promise.all([listP, cmpP]).then(([listSd, cmpSd]) => {
+        const cmpList = dataOf(cmpSd)
+        // `comparisonContext` types its scope as a `Statement`, which is not
+        // what this page compares. Its label, short form and DIVISOR are the
+        // decisions worth reusing — they are the ones two pages must not
+        // answer differently — so the context is built with a null scope and
+        // only `on` is restated here.
+        const cmp: ComparisonContext = {
+          ...comparisonContext(comparisonId, null),
+          on: comparisonId !== "none" && cmpList !== null,
+        }
+        return mapReady(listSd, (res) => buildOrdersStrip(res, cmpList, cmp))
+      }),
+      "retryOrders",
+    ),
+
+    list: guardSection(
+      listP.then((listSd) => mapReady(listSd, (res) => buildOrdersList(res, { search, channels }))),
+      "retryOrders",
+    ),
+
+    byHour: guardSection(
+      hourlyP.then((hourlySd) =>
+        mapReady(hourlySd, (h) =>
+          buildOrdersByHour(h?.hourly ?? [], h?.hourlyComparison ?? null, range),
+        ),
+      ),
+      "retryHourly",
     ),
   }
+}
+
+/**
+ * The same three sections, awaited.
+ *
+ * Kept because the island tests and any caller that genuinely needs the
+ * finished record still want it, and because there must be exactly one place
+ * that decides what each section holds — this is `awaitSections` over the
+ * function above, not a second copy of it.
+ */
+export async function getOrdersSections(input: OrdersSectionsInput): Promise<OrdersSections> {
+  return awaitSections(getOrdersSectionPromises(input))
 }
 
 /** Everything the order page's seven sections are built from, loaded once. */

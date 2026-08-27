@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getOverviewSections, getOverviewStores } from "@/lib/counter/adapters/overview"
+import { getOverviewSectionPromises, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOverviewClient } from "./counter-overview-client"
 
 /**
@@ -42,11 +42,19 @@ export default async function DashboardPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  // The rail's switcher is the LAYOUT's now; this list is for the page's own
-  // content — the dispatch line's store lifecycle. `getOverviewStores` is
-  // `cache()`d, so the layout's call and this one are one query per request.
-  const stores = await getOverviewStores()
-  const sections = await getOverviewSections({
+  /*
+   * NOT AWAITED, and that is the whole of Task 3 on this page.
+   *
+   * `getOverviewSectionPromises` starts every load and returns one promise per
+   * section. Each promise is handed to that section's own Suspense boundary
+   * inside `Section`, so the strip paints when the rollup answers and does not
+   * wait for the guest ratings, the alert inbox or the model's call. The page
+   * itself never sees a resolved value and so still has nothing to branch on.
+   *
+   * Started BEFORE the store list is awaited, so the two are concurrent — the
+   * sequential `await` pair here was defect 5 in the spec.
+   */
+  const sections = getOverviewSectionPromises({
     range: counterParams.range,
     // The comparison is part of the range (spec §5.3), so the adapter needs it
     // to load the second rollup the dashed line and every delta are read
@@ -55,6 +63,11 @@ export default async function DashboardPage({
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
   })
+
+  // The rail's switcher is the LAYOUT's now; this list is for the page's own
+  // content — the dispatch line's store lifecycle. `getOverviewStores` is
+  // `cache()`d, so the layout's call and this one are one query per request.
+  const stores = await getOverviewStores()
 
   return (
     <CounterOverviewClient

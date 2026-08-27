@@ -16,6 +16,7 @@ import { dayCount, monthDay, rangeLabel, type DateRange } from "@/lib/counter/da
 import { money, pct } from "@/lib/counter/format"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections, PnlStatement } from "@/lib/counter/adapters/pnl"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
  * Counter P&L — the phone.
@@ -82,7 +83,7 @@ export function CounterPhonePnlClient({
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
   today: Date
-  sections: PnlSections
+  sections: SectionSources<PnlSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])

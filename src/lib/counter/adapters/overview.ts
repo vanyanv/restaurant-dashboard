@@ -26,7 +26,12 @@ import {
   type ComparisonId,
   type DateRange,
 } from "@/lib/counter/date-range"
-import { classify } from "@/lib/counter/adapters/types"
+import {
+  awaitSections,
+  classify,
+  guardSection,
+  type StreamedSections,
+} from "@/lib/counter/adapters/types"
 import {
   dataOf, empty, mapReady, mapReadyTo, notComputed, ready, type SectionData,
 } from "@/lib/counter/section-data"
@@ -849,9 +854,30 @@ function buildInvoiceLines(k: InvoiceKpis): MoneyLine[] {
 
 /* ── The entry point ──────────────────────────────────────────────────── */
 
-export async function getOverviewSections(
+/**
+ * The Overview's fifteen sections, as fifteen promises.
+ *
+ * Task 3 of the streaming-architecture plan, and the page this matters most
+ * on: the head figure, the strip, the chart and the store cards all come off
+ * one slow P&L rollup, while the alert inbox, the invoice summary, the guest
+ * ratings and the model's call are four unrelated queries that used to sit
+ * behind it for no reason other than a single `await`.
+ *
+ * Nothing about WHAT a section holds changed here. What changed is where the
+ * awaits are: the loads still all start at once, but each section is now its
+ * own promise over only the loads it actually reads, so `Guest ratings` paints
+ * when `getRatingsSummary` answers rather than when the statement does.
+ *
+ * Sections that share a load still share it — `sales`, `strip`, `verdict`,
+ * `moving`, `salesChart` and `comparison` are all one `loadStatement`, because
+ * a figure shown twice must come from one query or the two will disagree.
+ *
+ * `getOverviewSections` below is `awaitSections` over this, so there is one
+ * implementation and not two.
+ */
+export function getOverviewSectionPromises(
   input: OverviewSectionsInput,
-): Promise<OverviewSections> {
+): StreamedSections<OverviewSections> {
   const { range, storeId, accountId } = input
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const bounds = toQueryBounds(range)
@@ -863,106 +889,93 @@ export async function getOverviewSections(
   const granularity = granularityFor(range)
   const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
 
+  /* ── The loads. Every one of them starts here; none is awaited here. ── */
+
+  const storeFilesP = classify(() => getStores(), { retryAction: "retryStores" })
+
+  const stmtP = classify(() => loadStatement({ range, storeId, granularity }), {
+    retryAction: "retrySales",
+  })
+
+  const cmpStmtP = classify<Statement | null>(
+    () =>
+      cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null),
+    { retryAction: "retryComparison" },
+  )
+
+  const channelsP = classify(() => loadChannelMix({ range, storeId, accountId }), {
+    retryAction: "retryChannels",
+    isEmpty: (rows) => rows.length === 0,
+  })
+
+  const targetsP = classify(() => loadStripTargets(storeId, accountId), {
+    retryAction: "retryTargets",
+  })
+
+  const splhP = classify(() => getSplhSeries(bucket === "day" ? "day" : "week", bounds), {
+    retryAction: "retrySplh",
+    isEmpty: (series) => series.length === 0,
+  })
+
+  const invoicesP = classify<InvoiceKpis>(
+    () =>
+      getInvoiceSummary({
+        storeId: storeId ?? undefined,
+        startDate: isoDate(bounds.startDate),
+        endDate: isoDate(bounds.endDate),
+      }),
+    { retryAction: "retryInvoices" },
+  )
+
+  // NOT owed. `getAlertInbox` has been in the tree since F21 — the previous
+  // adapter reported it as unbuilt work against code that already existed.
+  const queueP = classify(
+    async () => {
+      const result = await getAlertInbox({ storeId })
+      if (!result.ok) throw new Error("You do not have access to the alert inbox")
+      return result.data
+    },
+    { retryAction: "retryNeedsYou", isEmpty: (d) => d.alerts.length === 0 },
+  )
+
+  // Also not owed — `src/app/actions/forecasts/` has shipped for months.
+  const forecastP = classify(
+    async () => {
+      const result = await getRevenueForecast({ storeId: storeId ?? undefined })
+      if (result === null) throw new Error("Not signed in")
+      if (!result.ok) throw new Error("That store is not on this account")
+      return result.data
+    },
+    { retryAction: "retryModelCall" },
+  )
+
+  const ratingsP = classify(
+    async () => {
+      const summary = await getRatingsSummary({ storeId })
+      // Never throws by contract — it returns null for "not signed in" and
+      // for a query that failed, and this page must not print an empty tile
+      // over a dead ratings sync.
+      if (summary === null) throw new Error("Guest ratings could not be read")
+      return summary
+    },
+    { retryAction: "retryRatings", isEmpty: (r) => r.count === 0 },
+  )
+
   /*
-   * The store list resolves first, alone, because two loaders take it as an
-   * INPUT: a store card needs that store's own orders, and `loadChannelMix`
-   * aggregates rather than grouping, so per-store readings are per-store
-   * calls. It is a single indexed query on one table — the cheapest thing on
-   * the page — and everything else still runs concurrently behind it.
+   * The one loader that takes another loader's answer as an INPUT: a store
+   * card needs that store's own orders, and `loadChannelMix` aggregates rather
+   * than grouping, so per-store readings are per-store calls. The store list
+   * is a single indexed query on one table — the cheapest thing on the page —
+   * and this is now the only thing waiting behind it. Before Task 3 every
+   * other load on this page did too.
    */
-  const storeFilesSd = await classify(() => getStores(), { retryAction: "retryStores" })
-  const operationalIds = (dataOf(storeFilesSd) ?? [])
-    .filter(isOperational)
-    .map((s) => s.id)
-    .filter((id) => storeId === null || id === storeId)
+  const perStoreMixP = storeFilesP.then((storeFilesSd) => {
+    const operationalIds = (dataOf(storeFilesSd) ?? [])
+      .filter(isOperational)
+      .map((s) => s.id)
+      .filter((id) => storeId === null || id === storeId)
 
-  // Every section loads concurrently: a slow P&L rollup must not hold up the
-  // alert inbox, and `classify` never throws, so one failure cannot take the
-  // page down.
-  const [
-    stmtSd,
-    cmpStmtSd,
-    channelsSd,
-    targetsSd,
-    splhSd,
-    invoicesSd,
-    queueSd,
-    forecastSd,
-    ratingsSd,
-    perStoreMixSd,
-  ] = await Promise.all([
-    classify(() => loadStatement({ range, storeId, granularity }), {
-      retryAction: "retrySales",
-    }),
-
-    classify<Statement | null>(
-      () =>
-        cmpRange
-          ? loadStatement({ range: cmpRange, storeId, granularity })
-          : Promise.resolve(null),
-      { retryAction: "retryComparison" },
-    ),
-
-    classify(() => loadChannelMix({ range, storeId, accountId }), {
-      retryAction: "retryChannels",
-      isEmpty: (rows) => rows.length === 0,
-    }),
-
-    classify(() => loadStripTargets(storeId, accountId), { retryAction: "retryTargets" }),
-
-    classify(() => getSplhSeries(bucket === "day" ? "day" : "week", bounds), {
-      retryAction: "retrySplh",
-      isEmpty: (series) => series.length === 0,
-    }),
-
-    classify<InvoiceKpis>(
-      () =>
-        getInvoiceSummary({
-          storeId: storeId ?? undefined,
-          startDate: isoDate(bounds.startDate),
-          endDate: isoDate(bounds.endDate),
-        }),
-      { retryAction: "retryInvoices" },
-    ),
-
-    // NOT owed. `getAlertInbox` has been in the tree since F21 — the previous
-    // adapter reported it as unbuilt work against code that already existed.
-    classify(
-      async () => {
-        const result = await getAlertInbox({ storeId })
-        if (!result.ok) throw new Error("You do not have access to the alert inbox")
-        return result.data
-      },
-      {
-        retryAction: "retryNeedsYou",
-        isEmpty: (d) => d.alerts.length === 0,
-      },
-    ),
-
-    // Also not owed — `src/app/actions/forecasts/` has shipped for months.
-    classify(
-      async () => {
-        const result = await getRevenueForecast({ storeId: storeId ?? undefined })
-        if (result === null) throw new Error("Not signed in")
-        if (!result.ok) throw new Error("That store is not on this account")
-        return result.data
-      },
-      { retryAction: "retryModelCall" },
-    ),
-
-    classify(
-      async () => {
-        const summary = await getRatingsSummary({ storeId })
-        // Never throws by contract — it returns null for "not signed in" and
-        // for a query that failed, and this page must not print an empty tile
-        // over a dead ratings sync.
-        if (summary === null) throw new Error("Guest ratings could not be read")
-        return summary
-      },
-      { retryAction: "retryRatings", isEmpty: (r) => r.count === 0 },
-    ),
-
-    classify(
+    return classify(
       async () => {
         const lists = await Promise.all(
           operationalIds.map(async (id) =>
@@ -972,127 +985,201 @@ export async function getOverviewSections(
         return new Map<string, ChannelReading[]>(lists)
       },
       { retryAction: "retryStoreChannels" },
-    ),
-  ])
+    )
+  })
+
+  /* ── The derivations, each over only the loads it reads. ── */
 
   // A selected store the rollup has no row for is "loaded, and there is
   // nothing here" — never a silent fall back to the whole account, which is a
   // page answering a question nobody asked. `loadStatement` reports it rather
   // than the adapter re-deriving it from `perStore`.
-  const scopeSd = mapReadyTo(stmtSd, (s) =>
-    s.storeNotFound ? empty<Statement>("no_match") : ready(s),
+  const scopeP = stmtP.then((stmtSd) =>
+    mapReadyTo(stmtSd, (s) => (s.storeNotFound ? empty<Statement>("no_match") : ready(s))),
   )
 
-  const cmpStatement = dataOf(cmpStmtSd)
-  const cmp = comparisonContext(
-    comparisonId,
-    cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
-  )
-
-  const channels = dataOf(channelsSd)
-  const targets = dataOf(targetsSd)
-  const invoiceKpis = dataOf(invoicesSd)
+  const cmpP = cmpStmtP.then((cmpStmtSd) => {
+    const cmpStatement = dataOf(cmpStmtSd)
+    return comparisonContext(
+      comparisonId,
+      cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
+    )
+  })
 
   // SPLH is a RATIO, so the account-wide series is total net over total hours
   // per day, not the mean of the per-store ratios. `foldSplhSeries` is the one
   // function that does that; the raw per-store series stays for the cards.
-  const splhPoints = mapReady(splhSd, (series) => foldSplhSeries(series))
-  const foldedPoints = dataOf(splhPoints) ?? []
-  const hoursTotal =
-    foldedPoints.length > 0 ? foldedPoints.reduce((t, p) => t + p.laborHours, 0) : null
-  const splhByStore = new Map<string, SplhPoint[]>(
-    (dataOf(splhSd) ?? []).map((s) => [s.storeId, s.points]),
+  const splhPointsP = splhP.then((splhSd) => mapReady(splhSd, (series) => foldSplhSeries(series)))
+
+  const stripP = Promise.all([scopeP, channelsP, targetsP]).then(
+    ([scopeSd, channelsSd, targetsSd]) =>
+      mapReady(scopeSd, (p) => buildStrip(p, dataOf(channelsSd), dataOf(targetsSd))),
   )
 
-  const strip = mapReady(scopeSd, (p) => buildStrip(p, channels, targets))
-
   return {
-    sales: mapReady(scopeSd, (p) => {
-      const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
-      return { grossSales: p.grossSales, comparison: reading.text, comparisonTone: reading.tone }
-    }),
-
-    splh: mapReadyTo(splhPoints, (points) => {
-      const net = points.reduce((t, p) => t + p.netSales, 0)
-      const hours = points.reduce((t, p) => t + p.laborHours, 0)
-      if (hours <= 0) return empty("no_match")
-      return ready({
-        value: net / hours,
-        // No column publishes a floor. See the doc comment on `splh` above.
-        floor: null,
-        // A `Spark` cannot draw a gap, so a day with no reading is dropped
-        // from the sparkline rather than flattened to zero. The chart below
-        // keeps the gap, because a chart can draw one.
-        series: points.map((p) => p.splh).filter((v): v is number => v != null),
-      })
-    }),
-
-    strip,
-
-    verdict: mapReadyTo(strip, (cells) => buildVerdict(cells)),
-
-    moving: mapReady(scopeSd, (p) =>
-      buildMoving(range, bucket, cmp, p, invoiceKpis, hoursTotal),
+    sales: guardSection(
+      Promise.all([scopeP, cmpP]).then(([scopeSd, cmp]) =>
+        mapReady(scopeSd, (p) => {
+          const reading = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
+          return {
+            grossSales: p.grossSales,
+            comparison: reading.text,
+            comparisonTone: reading.tone,
+          }
+        }),
+      ),
+      "retrySales",
     ),
 
-    needsYou: mapReady(queueSd, (d) => buildQueue(d.alerts, new Date())),
-
-    salesChart: mapReady(scopeSd, (p) => buildSalesChart(p, cmp, range)),
-
-    splhChart: mapReady(splhPoints, (points) => buildSplhChart(points)),
-
-    stores: mapReady(storeFilesSd, (files) =>
-      buildStoreCards({
-        files,
-        statement: dataOf(stmtSd),
-        cmpStatement,
-        cmp,
-        mixByStore: dataOf(perStoreMixSd) ?? new Map(),
-        splhByStore,
-        storeId,
-      }),
+    splh: guardSection(
+      splhPointsP.then((splhPoints) =>
+        mapReadyTo(splhPoints, (points) => {
+          const net = points.reduce((t, p) => t + p.netSales, 0)
+          const hours = points.reduce((t, p) => t + p.laborHours, 0)
+          if (hours <= 0) return empty("no_match")
+          return ready({
+            value: net / hours,
+            // No column publishes a floor. See the doc comment on `splh` above.
+            floor: null,
+            // A `Spark` cannot draw a gap, so a day with no reading is dropped
+            // from the sparkline rather than flattened to zero. The chart below
+            // keeps the gap, because a chart can draw one.
+            series: points.map((p) => p.splh).filter((v): v is number => v != null),
+          })
+        }),
+      ),
+      "retrySplh",
     ),
 
-    comparison: mapReadyTo(scopeSd, (p) => {
-      // Switched off, or the comparison rollup did not load: nothing to
-      // compare, which is a state rather than a failure.
-      if (!cmp.on || cmp.scope === null) return empty<ComparisonRow[]>("no_match")
-      return ready(buildComparison(p, cmp.scope, cmp))
-    }),
+    strip: guardSection(stripP, "retrySales"),
 
-    channels: channelsSd,
+    verdict: guardSection(
+      stripP.then((strip) => mapReadyTo(strip, (cells) => buildVerdict(cells))),
+      "retrySales",
+    ),
 
-    invoices: mapReady(invoicesSd, buildInvoiceLines),
+    moving: guardSection(
+      Promise.all([scopeP, cmpP, invoicesP, splhPointsP]).then(
+        ([scopeSd, cmp, invoicesSd, splhPoints]) => {
+          const foldedPoints = dataOf(splhPoints) ?? []
+          const hoursTotal =
+            foldedPoints.length > 0 ? foldedPoints.reduce((t, p) => t + p.laborHours, 0) : null
+          return mapReady(scopeSd, (p) =>
+            buildMoving(range, bucket, cmp, p, dataOf(invoicesSd), hoursTotal),
+          )
+        },
+      ),
+      "retrySales",
+    ),
 
-    modelCall: mapReadyTo(forecastSd, (d) => {
-      const wanted = isoDate(range.end)
-      const day = d.days.find((x) => isoDate(x.date) === wanted)
-      // The model writes calls forward, not backward: a range that ended
-      // before today has no call to show, and narrowing to a day it does have
-      // one for is the way back out.
-      if (!day) return empty("no_match")
-      return ready({
-        date: day.date,
-        predicted: day.predictedRevenue,
-        p10: day.p10,
-        p90: day.p90,
-        recentMape: d.recentMape,
-        source: day.forecastSource,
-      })
-    }),
+    needsYou: guardSection(
+      queueP.then((queueSd) => mapReady(queueSd, (d) => buildQueue(d.alerts, new Date()))),
+      "retryNeedsYou",
+    ),
 
-    ratings: mapReadyTo(ratingsSd, (r) => {
-      // `isEmpty` already caught a window with no reviews; a null average that
-      // survives it means the rows carried no rating at all.
-      if (r.average === null) return empty<RatingsTile>("no_match")
-      return ready({
-        average: r.average.toFixed(1),
-        count: r.count,
-        windowDays: r.windowDays,
-        lowCount: r.lowCount,
-      })
-    }),
+    salesChart: guardSection(
+      Promise.all([scopeP, cmpP]).then(([scopeSd, cmp]) =>
+        mapReady(scopeSd, (p) => buildSalesChart(p, cmp, range)),
+      ),
+      "retrySales",
+    ),
+
+    splhChart: guardSection(
+      splhPointsP.then((splhPoints) => mapReady(splhPoints, (points) => buildSplhChart(points))),
+      "retrySplh",
+    ),
+
+    stores: guardSection(
+      Promise.all([storeFilesP, stmtP, cmpStmtP, cmpP, perStoreMixP, splhP]).then(
+        ([storeFilesSd, stmtSd, cmpStmtSd, cmp, perStoreMixSd, splhSd]) =>
+          mapReady(storeFilesSd, (files) =>
+            buildStoreCards({
+              files,
+              statement: dataOf(stmtSd),
+              cmpStatement: dataOf(cmpStmtSd),
+              cmp,
+              mixByStore: dataOf(perStoreMixSd) ?? new Map(),
+              splhByStore: new Map<string, SplhPoint[]>(
+                (dataOf(splhSd) ?? []).map((s) => [s.storeId, s.points]),
+              ),
+              storeId,
+            }),
+          ),
+      ),
+      "retryStores",
+    ),
+
+    comparison: guardSection(
+      Promise.all([scopeP, cmpP]).then(([scopeSd, cmp]) =>
+        mapReadyTo(scopeSd, (p) => {
+          // Switched off, or the comparison rollup did not load: nothing to
+          // compare, which is a state rather than a failure.
+          if (!cmp.on || cmp.scope === null) return empty<ComparisonRow[]>("no_match")
+          return ready(buildComparison(p, cmp.scope, cmp))
+        }),
+      ),
+      "retryComparison",
+    ),
+
+    channels: guardSection(channelsP, "retryChannels"),
+
+    invoices: guardSection(
+      invoicesP.then((invoicesSd) => mapReady(invoicesSd, buildInvoiceLines)),
+      "retryInvoices",
+    ),
+
+    modelCall: guardSection(
+      forecastP.then((forecastSd) =>
+        mapReadyTo(forecastSd, (d) => {
+          const wanted = isoDate(range.end)
+          const day = d.days.find((x) => isoDate(x.date) === wanted)
+          // The model writes calls forward, not backward: a range that ended
+          // before today has no call to show, and narrowing to a day it does
+          // have one for is the way back out.
+          if (!day) return empty("no_match")
+          return ready({
+            date: day.date,
+            predicted: day.predictedRevenue,
+            p10: day.p10,
+            p90: day.p90,
+            recentMape: d.recentMape,
+            source: day.forecastSource,
+          })
+        }),
+      ),
+      "retryModelCall",
+    ),
+
+    ratings: guardSection(
+      ratingsP.then((ratingsSd) =>
+        mapReadyTo(ratingsSd, (r) => {
+          // `isEmpty` already caught a window with no reviews; a null average
+          // that survives it means the rows carried no rating at all.
+          if (r.average === null) return empty<RatingsTile>("no_match")
+          return ready({
+            average: r.average.toFixed(1),
+            count: r.count,
+            windowDays: r.windowDays,
+            lowCount: r.lowCount,
+          })
+        }),
+      ),
+      "retryRatings",
+    ),
   }
+}
+
+/**
+ * The same fifteen sections, awaited.
+ *
+ * `awaitSections` over the streaming variant rather than a second body: two
+ * implementations of "what is in the strip" is how one restaurant ends up with
+ * two answers for one day.
+ */
+export async function getOverviewSections(
+  input: OverviewSectionsInput,
+): Promise<OverviewSections> {
+  return awaitSections(getOverviewSectionPromises(input))
 }
 
 /** The net-sales chart: the same rollup as the headline, bucket by bucket. */

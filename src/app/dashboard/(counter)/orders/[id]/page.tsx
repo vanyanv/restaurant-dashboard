@@ -34,6 +34,23 @@ import { CounterOrderClient } from "./counter-order-client"
  * the orders list can see an order on it. Contrast `/dashboard/pnl`, where
  * every section is the one owner-only rollup.
  *
+ *
+ * ## Why this page does NOT stream its sections, and it is not an oversight
+ *
+ * Task 3 gave every other Counter page a promise per section, each unwrapped
+ * inside its own Suspense boundary. This one keeps the single `await`, because
+ * there is nothing here to isolate: `getOrderSections` is ONE `getOrderDetail`
+ * load plus one costing batch, and all seven sections are `mapReadyTo` over
+ * that same value. Seven promises resolving in the same tick would be a
+ * picture of streaming rather than streaming, and it would cost something
+ * real — the head and the platform rows are read at PAGE level, for the
+ * masthead's title and for the store the rail names, and this page must
+ * already have the head resolved to decide the 404 below.
+ *
+ * `Section` takes either half of `SectionSource`, so nothing about this page
+ * is a different API from the streaming ones. When an order grows a section
+ * with a loader of its own, that section becomes a promise and this note
+ * shrinks.
  * ## The 404
  *
  * `getOrderDetail` returns `null` both for an id that does not exist and for

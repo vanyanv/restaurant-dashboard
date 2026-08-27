@@ -23,7 +23,12 @@ import {
   type DateRange,
   type WeekWindow,
 } from "@/lib/counter/date-range"
-import { classify } from "@/lib/counter/adapters/types"
+import {
+  awaitSections,
+  classify,
+  guardSection,
+  type StreamedSections,
+} from "@/lib/counter/adapters/types"
 import {
   dataOf,
   empty,
@@ -1016,7 +1021,25 @@ function emptyReasonFor(
 
 /* ── The entry point ──────────────────────────────────────────────────── */
 
-export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSections> {
+/**
+ * The P&L's seven sections, as seven promises.
+ *
+ * Task 3 of the streaming-architecture plan. The six loads still start
+ * together; what changed is that each section now waits on only the ones it
+ * reads. The eight trailing weeks are eight statements — by far the slowest
+ * thing on this page — and before this the strip, the cascade, the statement
+ * and the store table all sat behind them for no reason. Now only `weeks`
+ * does, and the strip's sparklines (its one use of that load) simply arrive
+ * with the strip when they are ready.
+ *
+ * `trust` and `foodCause` are owed work with no loader at all, so they resolve
+ * in the first tick and paint immediately — which is the first time this page
+ * has been able to say what it owes before it knows what it earned.
+ *
+ * `getPnlSections` below is `awaitSections` over this, so there is one
+ * implementation and not two.
+ */
+export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections<PnlSections> {
   const { range, storeId, accountId } = input
   const comparisonId: ComparisonId = input.comparisonId ?? "none"
   const today = input.today ?? new Date()
@@ -1027,98 +1050,137 @@ export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSectio
   const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
   const windows = trailingWeeks(today, WEEKS_SHOWN)
 
-  const [stmtSd, cmpSd, weeksSd, targetsSd, filesSd, channelsSd] = await Promise.all([
-    classify(() => loadStatement({ range, storeId, granularity }), {
-      retryAction: "retryStatement",
-    }),
+  /* ── The loads. Every one of them starts here; none is awaited here. ── */
 
-    classify<Statement | null>(
-      () => (cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null)),
-      { retryAction: "retryComparison" },
-    ),
+  const stmtP = classify(() => loadStatement({ range, storeId, granularity }), {
+    retryAction: "retryStatement",
+  })
 
-    /*
-     * One statement per week, and deliberately NOT one wide query bucketed
-     * weekly. Two reasons, and the second is the one that matters: the
-     * rollup's weekly buckets start on SUNDAY while `trailingWeeks` runs
-     * Monday to Sunday, so a bucketed read would label a row with one week and
-     * fill it with another; and each of these loads uses the same bounds and
-     * the same granularity the page will use when that row is PRESSED, which
-     * is the same 10-minute cache entry. The row's promise — "these are the
-     * figures you will see" — is then true by construction rather than by
-     * arithmetic that happens to agree.
-     */
-    classify(
-      () =>
-        Promise.all(
-          windows.map((w) => loadStatement({ range: { start: w.start, end: w.end }, storeId })),
-        ),
-      { retryAction: "retryWeeks" },
-    ),
+  const cmpP = classify<Statement | null>(
+    () =>
+      cmpRange ? loadStatement({ range: cmpRange, storeId, granularity }) : Promise.resolve(null),
+    { retryAction: "retryComparison" },
+  )
 
-    classify(() => loadStripTargets(storeId, accountId), { retryAction: "retryTargets" }),
+  /*
+   * One statement per week, and deliberately NOT one wide query bucketed
+   * weekly. Two reasons, and the second is the one that matters: the
+   * rollup's weekly buckets start on SUNDAY while `trailingWeeks` runs
+   * Monday to Sunday, so a bucketed read would label a row with one week and
+   * fill it with another; and each of these loads uses the same bounds and
+   * the same granularity the page will use when that row is PRESSED, which
+   * is the same 10-minute cache entry. The row's promise — "these are the
+   * figures you will see" — is then true by construction rather than by
+   * arithmetic that happens to agree.
+   */
+  const weeksP = classify(
+    () =>
+      Promise.all(
+        windows.map((w) => loadStatement({ range: { start: w.start, end: w.end }, storeId })),
+      ),
+    { retryAction: "retryWeeks" },
+  )
 
-    classify(() => getStores(), { retryAction: "retryStores" }),
+  const targetsP = classify(() => loadStripTargets(storeId, accountId), {
+    retryAction: "retryTargets",
+  })
 
-    // Orders, and only orders: the rollup publishes no order count, and the
-    // cascade's first line and the statement's first row both name one. Read
-    // off the same `OtterDailySummary` rows the Overview's orders come from,
-    // so the two pages cannot report different order counts for one range.
-    classify(() => loadChannelMix({ range, storeId, accountId }), {
-      retryAction: "retryOrders",
-    }),
-  ])
+  const filesP = classify(() => getStores(), { retryAction: "retryStores" })
 
-  const files = dataOf(filesSd) ?? []
-  const targets = dataOf(targetsSd)
-  const channels = dataOf(channelsSd)
+  // Orders, and only orders: the rollup publishes no order count, and the
+  // cascade's first line and the statement's first row both name one. Read
+  // off the same `OtterDailySummary` rows the Overview's orders come from,
+  // so the two pages cannot report different order counts for one range.
+  const channelsP = classify(() => loadChannelMix({ range, storeId, accountId }), {
+    retryAction: "retryOrders",
+  })
+
+  /* ── The derivations, each over only the loads it reads. ── */
 
   // ONE decision about what this page is looking at, applied to every section
   // that reads the statement. A section is never left to work out for itself
   // whether zeroes are a reading.
-  const scopeSd = mapReadyTo(stmtSd, (s) => {
-    const reason = emptyReasonFor(s, files, storeId)
-    return reason === null ? ready(s) : empty<Statement>(reason)
+  const scopeP = Promise.all([stmtP, filesP]).then(([stmtSd, filesSd]) => {
+    const files = dataOf(filesSd) ?? []
+    return mapReadyTo(stmtSd, (s) => {
+      const reason = emptyReasonFor(s, files, storeId)
+      return reason === null ? ready(s) : empty<Statement>(reason)
+    })
   })
 
-  const cmpStatement = dataOf(cmpSd)
-  const cmp = comparisonContext(
-    comparisonId,
-    cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
-  )
+  const cmpCtxP = cmpP.then((cmpSd) => {
+    const cmpStatement = dataOf(cmpSd)
+    return comparisonContext(
+      comparisonId,
+      cmpStatement && !cmpStatement.storeNotFound ? cmpStatement : null,
+    )
+  })
 
   return {
-    headline: mapReady(scopeSd, (p) => ({
-      // `dataOf(weeksSd)`, not the section: the weeks are their own load and
-      // fail on their own, and a strip that went blank because its sparklines
-      // could not be drawn would be a worse page than one whose three figures
-      // are simply bare for a render. Decoration degrades; the figure does not.
-      cells: buildStrip(p, cmp, targets, dataOf(weeksSd)),
-      reading: buildReading(p, targets),
-      // The same statement, read the way `P.pnl.phone()` reads it. One load,
-      // two surfaces — a phone and a desk open on this account cannot print
-      // two bottom lines.
-      phoneCells: buildPhoneStrip(p),
-    })),
+    headline: guardSection(
+      Promise.all([scopeP, cmpCtxP, targetsP, weeksP]).then(
+        ([scopeSd, cmp, targetsSd, weeksSd]) => {
+          const targets = dataOf(targetsSd)
+          return mapReady(scopeSd, (p) => ({
+            // `dataOf(weeksSd)`, not the section: the weeks are their own load
+            // and fail on their own, and a strip that went blank because its
+            // sparklines could not be drawn would be a worse page than one
+            // whose three figures are simply bare for a render. Decoration
+            // degrades; the figure does not.
+            cells: buildStrip(p, cmp, targets, dataOf(weeksSd)),
+            reading: buildReading(p, targets),
+            // The same statement, read the way `P.pnl.phone()` reads it. One
+            // load, two surfaces — a phone and a desk open on this account
+            // cannot print two bottom lines.
+            phoneCells: buildPhoneStrip(p),
+          }))
+        },
+      ),
+      "retryStatement",
+    ),
 
-    cascade: mapReady(scopeSd, (p) => buildCascade(p, targets, channels)),
+    cascade: guardSection(
+      Promise.all([scopeP, targetsP, channelsP]).then(([scopeSd, targetsSd, channelsSd]) =>
+        mapReady(scopeSd, (p) => buildCascade(p, dataOf(targetsSd), dataOf(channelsSd))),
+      ),
+      "retryStatement",
+    ),
 
     // The weeks are their own load, so they keep their own failure — but they
     // are still this page's statement over eight windows, so an account with
     // nothing to state has nothing to state weekly either.
-    weeks: mapReadyTo(scopeSd, () =>
-      mapReady(weeksSd, (weeks) => ({
-        rows: buildWeeks(windows, weeks),
-        foodTargetPct: targets?.foodCost?.kind === "target" ? targets.foodCost.value : null,
-      })),
+    weeks: guardSection(
+      Promise.all([scopeP, weeksP, targetsP]).then(([scopeSd, weeksSd, targetsSd]) => {
+        const targets = dataOf(targetsSd)
+        return mapReadyTo(scopeSd, () =>
+          mapReady(weeksSd, (weeks) => ({
+            rows: buildWeeks(windows, weeks),
+            foodTargetPct: targets?.foodCost?.kind === "target" ? targets.foodCost.value : null,
+          })),
+        )
+      }),
+      "retryWeeks",
     ),
 
-    statement: mapReady(scopeSd, (p) => buildStatement(p, cmp, targets, channels)),
+    statement: guardSection(
+      Promise.all([scopeP, cmpCtxP, targetsP, channelsP]).then(
+        ([scopeSd, cmp, targetsSd, channelsSd]) =>
+          mapReady(scopeSd, (p) =>
+            buildStatement(p, cmp, dataOf(targetsSd), dataOf(channelsSd)),
+          ),
+      ),
+      "retryStatement",
+    ),
 
     // NOT scoped: this section is the one that says which stores exist, so it
     // answers even when the selected store is not one of them. `allStores` is
     // the unfiltered half of the SAME rollup call — see `statement.ts`.
-    byStore: mapReady(filesSd, (f) => buildByStore(f, dataOf(stmtSd)?.allStores ?? [])),
+    byStore: guardSection(
+      Promise.all([filesP, stmtP]).then(([filesSd, stmtSd]) =>
+        mapReady(filesSd, (f) => buildByStore(f, dataOf(stmtSd)?.allStores ?? [])),
+      ),
+      "retryStores",
+    ),
 
     // Note 44. The panel splits every line into measured / prorated / a rate /
     // not yet posted, and that needs a per-line provenance model this schema
@@ -1126,9 +1188,11 @@ export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSectio
     // days Harri covered, and `getInvoiceSummary` reports invoices IN REVIEW,
     // which is not the same set as invoices whose food falls inside this range.
     // Half an answer drawn as a whole panel is exactly what note 44 is about.
-    trust: notComputed(
-      "a per-line provenance model (which days of labour are clocked and which are prorated) " +
-        "and an unposted-food-inside-this-range query — neither exists",
+    trust: Promise.resolve(
+      notComputed<never>(
+        "a per-line provenance model (which days of labour are clocked and which are prorated) " +
+          "and an unposted-food-inside-this-range query — neither exists",
+      ),
     ),
 
     // The gap bar names the causes of a food overshoot in POINTS. Nothing in
@@ -1138,9 +1202,22 @@ export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSectio
     // shares. The plan-versus-actual half is already on the page, in the strip's
     // food cell; a bar whose only segment is "everything else" would add a
     // picture of an explanation to it and no explanation.
-    foodCause: notComputed(
-      "a cause-attribution model — points of the food gap per ingredient, which needs each " +
-        "ingredient's share of spend over the range beside its price move",
+    foodCause: Promise.resolve(
+      notComputed<never>(
+        "a cause-attribution model — points of the food gap per ingredient, which needs each " +
+          "ingredient's share of spend over the range beside its price move",
+      ),
     ),
   }
+}
+
+/**
+ * The same seven sections, awaited.
+ *
+ * `awaitSections` over the streaming variant rather than a second body: two
+ * implementations of "what is in the statement" is how one restaurant ends up
+ * with two bottom lines for one range.
+ */
+export async function getPnlSections(input: PnlSectionsInput): Promise<PnlSections> {
+  return awaitSections(getPnlSectionPromises(input))
 }
