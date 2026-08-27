@@ -236,6 +236,22 @@ check, not an AST, and fails the build on:
    pattern to match against an absence. It never reaches the ~19 remaining
    editorial pages at all (they live outside both `(counter)` groups), so it
    needs no LEGACY exemption of its own.
+8. **`no-awaited-sections-in-page`** — a `page.tsx` under one of the two
+   `(counter)` route groups calling `await get<Anything>Sections(...)`
+   instead of the not-awaited `get<Anything>SectionPromises(...)` shape Task 3
+   of the streaming-architecture plan moved six of the eight Counter pages
+   onto. Like rule 7, this walks `page.tsx` files under the two route groups
+   directly rather than running as a per-file regex over everything else the
+   other rules reach, and for the same reason needs no LEGACY exemption: the
+   editorial pages live outside both `(counter)` groups. Two routes are
+   exempted **by name**, not by pattern —
+   `src/app/dashboard/(counter)/orders/[id]/page.tsx` and
+   `src/app/(mobile)/m/(counter)/orders/[id]/page.tsx` — because ruling S-R5
+   keeps both on a single `await getOrderSections(...)`: all seven of their
+   sections come from one `getOrderDetail` load, so splitting it into seven
+   promises resolving in the same tick would be a picture of streaming rather
+   than streaming, and the page must resolve `head` before rendering at all,
+   to decide its 404.
 
 It checks `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
 `src/components/counter/**`, and `src/lib/counter/**`. Legacy files under the
@@ -243,9 +259,9 @@ first two roots are exempt *only* while their on-disk content is byte-
 identical to what that path held at the gate's baseline commit — the moment a
 legacy file is rewritten (onto Counter or for any other reason, including an
 uncommitted edit), it loses the exemption and is linted for real. The
-exemption can only shrink. Rule 7 is scoped narrower than the other six (the
-two `(counter)` route groups, not the full first two roots) for exactly the
-reason its own entry above gives.
+exemption can only shrink. Rules 7 and 8 are scoped narrower than the other
+six (the two `(counter)` route groups, not the full first two roots) for
+exactly the reason their own entries above give.
 
 It's a regex, so it has known, documented holes — five of them, recorded in
 `scripts/counter-lint.ts`'s module comment rather than only in a report: a
