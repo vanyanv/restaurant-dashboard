@@ -87,11 +87,26 @@ requirements implicitly include this section.
 
 ## The measured data
 
-Every figure below was measured against the live database on 2026-08-27, in
-the window the fidelity manifest puts these pages in — `?range=d7&cmp=weekday`,
-which resolved to **2026-08-20 … 2026-08-26** (the latest seven days
-`OtterDailySummary` holds). Quote these numbers; do not re-derive them from the
-prototype's fixtures, which are invented.
+Every figure below was measured against the live database on 2026-08-27, over
+**2026-08-20 … 2026-08-26** — the latest seven days `OtterDailySummary` holds.
+Quote these numbers; do not re-derive them from the prototype's fixtures, which
+are invented.
+
+**That is NOT the window `?range=d7` resolves to, and my first draft of this
+sentence wrongly said it was.** `d7` is a trailing window ending TODAY
+(2026-08-27), so it runs 2026-08-21 … 2026-08-27 and its last day holds no data
+yet. The two windows overlap in six days out of seven.
+
+**So verify with the explicit window, not the preset.** `from`/`to` beat
+`range` in `readCounterParams` precisely because they are the more specific
+statement, so every screenshot check in this plan uses:
+
+```
+?from=2026-08-20&to=2026-08-26&cmp=weekday
+```
+
+`?range=d7` remains what the fidelity manifest sends, and Task 9 measures
+landmarks — not figures — so the difference does not touch the baseline.
 
 ### Stores
 
@@ -1071,7 +1086,7 @@ npm run tokens && npx tsc --noEmit && npm run build
 screenshot the page:
 
 ```bash
-npm run shot -- "/dashboard/analytics?range=d7&cmp=weekday" /tmp/analytics-desk.png
+npm run shot -- "/dashboard/analytics?from=2026-08-20&to=2026-08-26&cmp=weekday" /tmp/analytics-desk.png
 ```
 
 Confirm from the image, and say so in your report: the strip reads three cells;
@@ -1086,6 +1101,121 @@ table is a finding — report it, do not adjust the table to match.**
 ```bash
 git add -A
 git commit -m "feat(counter): where the sales came from, on the desk"
+```
+
+---
+
+## Task 3c: The range's bounds are UTC-anchored (A-R19)
+
+**Files:**
+- Modify: `src/lib/counter/date-range.ts` — `toQueryBounds` only
+- Create: `tests/lib/counter/date-range-bounds.test.ts`
+
+**Interfaces:** no signature change. `toQueryBounds(r)` keeps returning
+`{ startDate, endDate }`; only the instants stop depending on the process
+timezone.
+
+Money arithmetic — it decides which rows a range contains — so it keeps
+assertions.
+
+### The defect
+
+Task 3b fixed how `buildPeriods` WALKS. It did not fix what it is HANDED.
+Counter's `DateRange` is local midnights by explicit contract, and
+`toQueryBounds` adds `23:59:59` in local time; `buildPeriods` then floors with
+`startOfDayUTC`. Two frames, one handoff. Reproduced on `?range=d7` with
+`today = 2026-08-27T12:00:00Z`:
+
+```
+TZ UTC                 d7 = Aug 21 00:00Z -> Aug 27 00:00Z   dayCount 7
+  bounds Aug 21 00:00:00Z -> Aug 27 23:59:59Z
+  daily periods: 7   Fri Aug 21 … Thu Aug 27          <- correct
+
+TZ America/Los_Angeles d7 = Aug 21 07:00Z -> Aug 27 07:00Z   dayCount 7
+  bounds Aug 21 07:00:00Z -> Aug 28 06:59:59Z
+  daily periods: 8   Fri Aug 21 … Fri Aug 28          <- a day that has not happened
+
+TZ Asia/Kolkata        d7 = Aug 20 18:30Z -> Aug 26 18:30Z   dayCount 7
+  bounds Aug 20 18:30:00Z -> Aug 27 18:29:59Z
+  daily periods: 8   Thu Aug 20 … Thu Aug 27          <- range shifted a day earlier
+```
+
+`dayCount` says 7 and the page draws 8. The extra bucket also widens the
+QUERY: `date <= Aug 28 06:59:59Z` matches the `@db.Date` row stored at
+`Aug 28 00:00:00Z`. **The shipped P&L page prints $50,192 for a window that
+holds $48,425.** Production is UTC and unaffected; local dev is not.
+
+### The fix
+
+`toQueryBounds` is already documented as *"the one place that conversion
+happens"*. Make it convert frames as well as times: take the CALENDAR day out
+of the local-midnight instant and rebuild it in UTC, which is the frame
+`@db.Date` stores.
+
+```ts
+export function toQueryBounds(r: DateRange): { startDate: Date; endDate: Date } {
+  const startDate = new Date(
+    Date.UTC(r.start.getFullYear(), r.start.getMonth(), r.start.getDate()),
+  )
+  const endDate = new Date(
+    Date.UTC(r.end.getFullYear(), r.end.getMonth(), r.end.getDate(), 23, 59, 59),
+  )
+  return { startDate, endDate }
+}
+```
+
+Under UTC this is a no-op — the same Y/M/D goes in and the same instant comes
+out — so production behaviour does not change. **Say so in the docblock**, and
+explain WHY the conversion is here rather than in `resolvePreset`: the module's
+contract is "all dates are local midnights", every caller and label depends on
+that, and this function is the boundary where a local calendar day becomes a
+database query.
+
+**Scope: `toQueryBounds` only.** Do not change `resolvePreset`, the presets,
+`dayCount`, or `src/app/actions/_shared/date-range.ts`. Six loaders call
+`toQueryBounds` — `channel-mix`, `service-profile`, `statement`, and three in
+the two adapters — and all six query `@db.Date` columns or the
+local-time-encoded-as-UTC `referenceTimeLocal`. UTC bounds are right for every
+one.
+
+- [ ] **Step 1: Make the change and write the docblock.**
+
+- [ ] **Step 2: Write the assertions.** Each must pass under all three zones:
+
+1. `toQueryBounds` on a `d7` range resolved at `2026-08-27T12:00:00Z` yields
+   `startDate` exactly `2026-08-21T00:00:00.000Z` and `endDate` exactly
+   `2026-08-27T23:59:59.000Z`.
+2. `buildPeriods` over those bounds at daily granularity yields **7** periods,
+   labelled `Fri Aug 21` … `Thu Aug 27`. Assert the COUNT and the LABELS —
+   the count alone passed in Kolkata for the wrong seven days.
+3. `dayCount(range)` equals the period count, for `d7`, `d30` and `today`.
+   **This is the invariant the bug broke**, so assert it as one.
+4. A single-day range (`today`) yields one period, not two.
+5. `startDate` is midnight UTC and `endDate` is `23:59:59` UTC — assert the
+   UTC hours directly, so a future local-time regression cannot pass.
+
+- [ ] **Step 3: Run under three zones and report all three.**
+
+```bash
+TZ=UTC npx vitest run tests/lib/counter/date-range-bounds.test.ts
+TZ=America/Los_Angeles npx vitest run tests/lib/counter/date-range-bounds.test.ts
+TZ=Asia/Kolkata npx vitest run tests/lib/counter/date-range-bounds.test.ts
+```
+
+- [ ] **Step 4: Re-measure the shipped P&L.** With the server running in the
+local zone, load `/dashboard/pnl?from=2026-08-20&to=2026-08-26` and report the
+Total Sales it now prints. **It must be $48,425.32.** If it is not, that is a
+finding — report the number, do not adjust anything.
+
+- [ ] **Step 5: Full gate and commit.**
+
+```bash
+npm test && npx tsc --noEmit && npm run tokens && npm run build
+```
+
+```bash
+git add -A
+git commit -m "fix(counter): a seven-day range asked the database for eight"
 ```
 
 ---
@@ -1133,7 +1263,7 @@ npm run tokens && npx tsc --noEmit && npm run build
 - [ ] **Step 3: Look at it.**
 
 ```bash
-npm run shot -- "/m/analytics?range=d7&cmp=weekday" /tmp/analytics-phone.png
+npm run shot -- "/m/analytics?from=2026-08-20&to=2026-08-26&cmp=weekday" /tmp/analytics-phone.png
 ```
 
 Confirm and report: four `mstrip` cells, no horizontal overflow, the legend
@@ -1196,7 +1326,7 @@ references as in Task 4 Step 3.
 - [ ] **Step 4: Look at it.**
 
 ```bash
-npm run shot -- "/dashboard/analytics/cmexd4zia0001jr04ljkdt9na?range=d7&cmp=weekday" /tmp/analytics-store-desk.png
+npm run shot -- "/dashboard/analytics/cmexd4zia0001jr04ljkdt9na?from=2026-08-20&to=2026-08-26&cmp=weekday" /tmp/analytics-store-desk.png
 ```
 
 Report what the day book's first row reads and whether its prime equals food
@@ -1231,7 +1361,7 @@ The `mlist` rows are `[label, "<n> orders", money(net)]`.
 - [ ] **Step 1: Write the page, the island and `loading.tsx`.**
 - [ ] **Step 2: Add the store middleware rewrite.**
 - [ ] **Step 3: Gate.** `npm run tokens && npx tsc --noEmit && npm run build`
-- [ ] **Step 4: Look at it.** `npm run shot -- "/m/analytics/cmexd4zia0001jr04ljkdt9na?range=d7" /tmp/analytics-store-phone.png`
+- [ ] **Step 4: Look at it.** `npm run shot -- "/m/analytics/cmexd4zia0001jr04ljkdt9na?from=2026-08-20&to=2026-08-26" /tmp/analytics-store-phone.png`
 
 Per A-R12: confirm the day book list has rows. A heading over a blank panel is
 the defect the previous plan shipped and had to fix.
