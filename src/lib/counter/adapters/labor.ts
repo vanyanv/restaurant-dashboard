@@ -214,8 +214,18 @@ export interface WeekStripDay {
   /** "$121.10 / h", or an em-dash on a day with no hours or no platform sales. */
   splh: string
   bar: number
-  /** The last day of the range — the prototype's `is-today`. */
-  last: boolean
+  /**
+   * `.wkd.is-today` — TRUE only on the cell that is the real calendar day the
+   * page was rendered for, and only when that day is inside the strip.
+   *
+   * It used to be `i === shown.length - 1`, the last day of the RANGE, which
+   * painted `Wed 26` as today on a page rendered on the 27th. `is-today` is not
+   * a "here is where the range ends" marker — the strip's own `meta` already
+   * names the window — and a reader who trusts it is reading the wrong day's
+   * hours as the ones still running. A range entirely in the past marks
+   * nothing.
+   */
+  isToday: boolean
 }
 
 export interface LaborWeekStrip {
@@ -362,6 +372,19 @@ export interface LaborSectionsInput {
    * `loadStatement` does not take one: it was forwarded nowhere.
    */
   accountId: string
+  /**
+   * The calendar day the page is being rendered on, resolved ONCE in
+   * `page.tsx` and passed down. Only the week strip's `is-today` reads it.
+   *
+   * This file still has no clock of its own — `loadEverything` derives the
+   * curve's day from the range's end, not from `new Date()`, so the same URL
+   * still renders the same figures. `is-today` is the one thing on the page
+   * that is genuinely a statement about the reader's day rather than about the
+   * window, and it takes the day as an input rather than reading one, because a
+   * moving `new Date()` evaluated in two places can disagree about which
+   * calendar day it is.
+   */
+  today: Date
 }
 
 /* ── Constants ────────────────────────────────────────────────────────── */
@@ -850,21 +873,28 @@ function buildHeadline(input: {
  * a verdict, because nothing here is judged (L-R1); a day with no reading gets
  * no bar rather than a bar of zero length painted as a failure.
  */
-function buildWeekStrip(days: LaborDay[], range: DateRange): LaborWeekStrip {
+function buildWeekStrip(days: LaborDay[], range: DateRange, today: Date): LaborWeekStrip {
   const shown = days.slice(-WEEK_DAYS)
   const best = shown.reduce<number>(
     (m, d) => (d.splh !== null && d.splh > m ? d.splh : m),
     0,
   )
 
-  const cells: WeekStripDay[] = shown.map((d, i) => ({
+  // The one calendar day the page was rendered for, as the same `YYYY-MM-DD`
+  // key `LaborDay` carries. `isoDay` reads LOCAL getters, which is what makes
+  // this comparable to a `HarriPositionDaily` day key at all; `today` itself is
+  // resolved ONCE in `page.tsx` and handed down, so nothing here can evaluate a
+  // second `new Date()` that disagrees about which day it is.
+  const todayKey = isoDay(today)
+
+  const cells: WeekStripDay[] = shown.map((d) => ({
     key: d.key,
     label: d.label,
     short: shortDayLabel(d),
     hours: hoursText(d.actualHours),
     splh: rateText(d.splh),
     bar: d.splh === null || best <= 0 ? 0 : Math.max(0, Math.min(100, (d.splh / best) * 100)),
-    last: i === shown.length - 1,
+    isToday: d.key === todayKey,
   }))
 
   const withSplh = shown.filter((d) => d.splh !== null)
@@ -1616,7 +1646,7 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
 export function getLaborSectionPromises(
   input: LaborSectionsInput,
 ): StreamedSections<LaborSections> {
-  const { range } = input
+  const { range, today } = input
   const granularity = granularityFor(range)
   const { nextDay, scopeP, laborP, leaksP, curveLoadP, gapP, trendLoadP } =
     loadEverything(input)
@@ -1637,7 +1667,7 @@ export function getLaborSectionPromises(
 
     week: guardSection(
       laborP.then((laborSd) =>
-        laborSection(laborSd, NO_HARRI_OWED, (d) => buildWeekStrip(d.days, range)),
+        laborSection(laborSd, NO_HARRI_OWED, (d) => buildWeekStrip(d.days, range, today)),
       ),
       "retryLabor",
     ),

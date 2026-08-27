@@ -54,15 +54,24 @@ export type WeekStripDay = {
   splh: string
   /** `.bar i`'s width, 0..100. A day with no reading gets 0 and no colour. */
   bar: number
-  /** The last day of the range — the prototype's `is-today` wash. */
-  last: boolean
+  /**
+   * The prototype's `is-today` wash — the day the page is being read on, and
+   * nothing else.
+   *
+   * The adapter decides this against a `today` resolved once in `page.tsx`; a
+   * range that ended in the past marks no cell at all. It is deliberately NOT
+   * "the last day of the range": the range's end is already named in the
+   * section's `meta`, and a wash that says "today" over a day that is not today
+   * makes a reader look at the wrong day's hours as the ones still running.
+   */
+  isToday: boolean
 }
 
 export function WeekStrip({ days }: { days: WeekStripDay[] }) {
   return (
     <div className="wk">
       {days.map((d) => (
-        <div className={d.last ? "wkd is-today" : "wkd"} key={d.key} title={d.label}>
+        <div className={d.isToday ? "wkd is-today" : "wkd"} key={d.key} title={d.label}>
           <span className="dn">{d.short}</span>
           <span className="fv">{d.hours}</span>
           <span className="av">{d.splh}</span>
