@@ -11,6 +11,7 @@ import {
   Section,
   Strip,
   Table,
+  useCounterTransition,
   usePageChrome,
   type Column,
   type Row,
@@ -215,6 +216,15 @@ export function CounterOrdersClient({
   usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
 
   /*
+   * The ONE transition shared with `AppShell`'s own store switcher — see
+   * `counter-transition.tsx`. `pending` is threaded to every `<Section>`
+   * below, and `startTransition` wraps this page's own `push` — the date
+   * control, the channel toggles and the settled search — so a store change
+   * from the rail and a filter change from this page mark the same `stale`.
+   */
+  const { pending, startTransition } = useCounterTransition()
+
+  /*
    * The pending search write, cleared by the effect's own cleanup.
    *
    * `push` deliberately does NOT cancel it, and neither does it read the
@@ -238,9 +248,11 @@ export function CounterOrdersClient({
     (next: Parameters<typeof writeCounterParams>[1]) => {
       const nextParams = writeCounterParams(params, next)
       const qs = nextParams.toString()
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      startTransition(() => {
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      })
     },
-    [params, pathname, router],
+    [params, pathname, router, startTransition],
   )
 
   const { range, presetId, comparisonId, channels, search } = counterParams
@@ -352,19 +364,20 @@ export function CounterOrdersClient({
           written in `P.orders.desk()`. Ruling O-R2: no cell here is judged
           against anything, because nothing in this schema publishes a
           per-order target, a fee ceiling or a ticket floor. */}
-      <Section bare title="The figures" data={sections.strip}>
+      <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <Strip cells={cells} />}
       </Section>
 
       {/* The prototype's own headless `.sec` — see the file note. */}
       <div className="sec">
-        <Section bare title="Orders" data={sections.list}>
+        <Section bare title="Orders" data={sections.list} pending={pending}>
           {(l) => <OrdersTable list={l} draft={draft} onSearch={setDraft} onToggle={onToggle} onClear={filtering ? onClear : undefined} />}
         </Section>
       </div>
 
       <Section
         title="Orders by hour"
+        pending={pending}
         /*
          * The baseline the band is drawn from, named by the ADAPTER: which
          * weekday it is made of is a fact about the range, not a page

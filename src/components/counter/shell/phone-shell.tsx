@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { MTop } from "./m-top"
 import { MDateSheet } from "./m-date-sheet"
 import { PageChromeContext, type PageChrome } from "./page-chrome"
+import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
 import type { SwitchableStore } from "./store-switcher"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { hasWindow, phoneTrail, storeScopeHref } from "@/lib/counter/route-shape"
@@ -61,6 +62,10 @@ export function PhoneShell({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
+  // The ONE transition for this surface — see `counter-transition.tsx`. Every
+  // control on the phone (the date sheet AND the store picker) writes through
+  // this shell's own `push`, so there is only ever one `pending` to share.
+  const [pending, startTransition] = useTransition()
 
   const resolvedToday = useMemo(() => today ?? new Date(), [today])
   const params = useMemo(
@@ -83,12 +88,23 @@ export function PhoneShell({
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1], href = pathname) => {
       const qs = writeCounterParams(params, next).toString()
-      router.push(qs ? `${href}?${qs}` : href, { scroll: false })
+      // Wrapped in `startTransition` so a range or store change does not blank
+      // `.mscroll` back to `loading.tsx` while it resolves — see Task 4 of the
+      // streaming-architecture plan. The OLD content stays on screen with
+      // `pending` true, which every page's `<Section>` turns into a stale
+      // banner over the last good figures.
+      startTransition(() => {
+        router.push(qs ? `${href}?${qs}` : href, { scroll: false })
+      })
     },
-    [params, pathname, router],
+    [params, pathname, router, startTransition],
   )
 
   const [page, setPage] = useState<PageChrome>({})
+  const transition = useMemo<CounterTransition>(
+    () => ({ pending, startTransition }),
+    [pending, startTransition],
+  )
 
   const onSelectStore = useCallback(
     (id: string | null) => push({ storeId: id }, storeScopeHref(pathname)),
@@ -134,7 +150,9 @@ export function PhoneShell({
           blocks, and the staggered entry `counter-repairs.css` already repairs
           for `.mscroll > *`. */}
       <div className="mscroll">
-        <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
+        <CounterTransitionContext.Provider value={transition}>
+          <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
+        </CounterTransitionContext.Provider>
       </div>
     </div>
   )

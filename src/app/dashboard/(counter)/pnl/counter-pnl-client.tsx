@@ -12,6 +12,7 @@ import {
   Strip,
   Table,
   WeekTable,
+  useCounterTransition,
   usePageChrome,
   type Column,
   type Row,
@@ -191,13 +192,24 @@ export function CounterPnlClient({
   // The one chrome fact this page has that its URL does not.
   usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
 
+  /*
+   * The ONE transition shared with `AppShell`'s own store switcher — see
+   * `counter-transition.tsx`. `pending` is threaded to every `<Section>`
+   * below, and `startTransition` wraps this page's own `push`, so a store
+   * change from the rail and a range change from the date control mark the
+   * same `stale`.
+   */
+  const { pending, startTransition } = useCounterTransition()
+
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
       const nextParams = writeCounterParams(params, next)
       const qs = nextParams.toString()
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      startTransition(() => {
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      })
     },
-    [params, pathname, router],
+    [params, pathname, router, startTransition],
   )
 
   const { range, presetId, comparisonId } = counterParams
@@ -254,7 +266,7 @@ export function CounterPnlClient({
       {/* The strip and the sentence under it — one section, because the
           sentence is a reading OF those five figures. Both sit at page level,
           above the first `.sec`, as `P.pnl.desk()` writes them. */}
-      <Section bare title="The figures" data={sections.headline}>
+      <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => (
           <>
             <Strip cells={h.cells} />
@@ -268,6 +280,7 @@ export function CounterPnlClient({
           as a parameter, so the picture reconciles by construction. */}
       <Section
         title="Where it went"
+        pending={pending}
         meta={`${windowLabel} · the bar is what is left after each line`}
         data={sections.cascade}
         askAbout="where the money went"
@@ -281,6 +294,7 @@ export function CounterPnlClient({
           to the same window the row was loaded over. */}
       <Section
         title="The last eight weeks"
+        pending={pending}
         meta="press a week to read it in full · every figure is this same statement over that window"
         data={sections.weeks}
         askAbout="the last eight weeks"
@@ -298,6 +312,7 @@ export function CounterPnlClient({
 
       <Section
         title="The statement"
+        pending={pending}
         meta={
           comparing
             ? `against ${cmpName} · same ${days} ${plural(days, "day", "days")}, so the change column is readable`
@@ -338,6 +353,7 @@ export function CounterPnlClient({
       <div className="split">
         <Section
           title="What is behind the food line"
+          pending={pending}
           meta="points of the food gap, per cause"
           data={sections.foodCause}
         >
@@ -345,6 +361,7 @@ export function CounterPnlClient({
         </Section>
         <Section
           title="How much of this is measured"
+          pending={pending}
           meta="and how much is an estimate"
           data={sections.trust}
         >
@@ -356,6 +373,7 @@ export function CounterPnlClient({
           which are not — so it is deliberately NOT scoped to the selection. */}
       <Section
         title="By store"
+        pending={pending}
         // The prototype's "3 stores, 3 stages". Counted off the switcher's own
         // list, which is page state — the section's rows are the same set, but
         // a `meta` is drawn beside the title whatever the body turned out to be.
