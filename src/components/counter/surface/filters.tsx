@@ -8,6 +8,57 @@ export interface FilterToggle {
   /** A `ct-` custom property NAME, e.g. "--ch-dd". Never a colour literal. */
   tint?: string
   pressed: boolean
+  /**
+   * How many rows are behind this toggle, printed after its label.
+   *
+   * Ruling N-R1, from the alert inbox: four of that page's five source
+   * toggles have never matched a single row, and a toggle that silently
+   * filters to nothing is worse than one that says `Price moves 0`. Optional,
+   * because the orders page's four channels have no such problem and the
+   * prototype draws them as bare words.
+   */
+  count?: number
+  /**
+   * Nothing to filter: the toggle still RENDERS — the landmark count must not
+   * change with the data — and cannot be pressed.
+   */
+  disabled?: boolean
+}
+
+/**
+ * `.togs` — the row of toggles, on its own.
+ *
+ * Extracted so the alert inbox's SECOND filter row (`P.alerts.desk`, line
+ * 4788: a `.mono` caption and five source toggles, with no search box, no
+ * clear and no count) emits the same `.tog` DOM as this one. A second copy of
+ * `aria-pressed` + `--pc` + `<i/>` is how one of the two rows comes to be
+ * styled by a rule the other one has moved off.
+ */
+export function Toggles({
+  toggles,
+  onToggle,
+}: {
+  toggles: FilterToggle[]
+  onToggle: (id: string) => void
+}): ReactNode {
+  return (
+    <div className="togs">
+      {toggles.map((t) => (
+        <button
+          key={t.id}
+          className="tog"
+          type="button"
+          style={t.tint ? ({ "--pc": `var(${t.tint})` } as CSSProperties) : undefined}
+          aria-pressed={t.pressed}
+          disabled={t.disabled}
+          onClick={() => onToggle(t.id)}
+        >
+          <i />
+          {t.count === undefined ? t.label : `${t.label} ${t.count}`}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /**
@@ -69,21 +120,7 @@ export function Filters(props: {
           onChange={(e) => onSearch(e.target.value)}
         />
       </label>
-      <div className="togs">
-        {toggles.map((t) => (
-          <button
-            key={t.id}
-            className="tog"
-            type="button"
-            style={t.tint ? ({ "--pc": `var(${t.tint})` } as CSSProperties) : undefined}
-            aria-pressed={t.pressed}
-            onClick={() => onToggle(t.id)}
-          >
-            <i />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Toggles toggles={toggles} onToggle={onToggle} />
       <button className="clear" type="button" hidden={!onClear} onClick={onClear}>
         Clear filters
       </button>
