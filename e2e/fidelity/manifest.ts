@@ -429,7 +429,21 @@ export const PAGES: FidelityPage[] = [
     // payout id and date). `.kv` is the landmark and both of them render, so
     // that is not an absence either — it is two shorter lists.
   },
-  { protoId: "analytics", name: "Analytics", protoRoute: "/dashboard/analytics", route: "/dashboard/analytics", status: "editorial" },
+  {
+    protoId: "analytics",
+    name: "Analytics",
+    protoRoute: "/dashboard/analytics",
+    route: "/dashboard/analytics",
+    // Same window as Overview and the P&L, and for the same reason: a mix
+    // drawn over one day has no first and last third to compare, and the gate
+    // would report that agreement as a difference.
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m/analytics",
+    // Reporting first, gating second — the order Overview and the P&L went in.
+    // A baseline invented before it is measured is a number nobody can defend.
+    report: true,
+    status: "editorial",
+  },
   {
     protoId: "pnl",
     name: "P&L",
@@ -567,7 +581,18 @@ export const PAGES: FidelityPage[] = [
   { protoId: "monitoring", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring", route: "/dashboard/admin/monitoring", status: "editorial" },
   { protoId: "monml", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ml", route: "/dashboard/admin/monitoring/ml", status: "editorial" },
   { protoId: "monpeople", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/people", route: "/dashboard/admin/monitoring/people", status: "editorial" },
-  { protoId: "analyticsstore", name: "Analytics", protoRoute: "/dashboard/analytics/hollywood", route: "/dashboard/analytics/hollywood", status: "editorial" },
+  {
+    protoId: "analyticsstore",
+    name: "Analytics",
+    protoRoute: "/dashboard/analytics/hollywood",
+    // Hollywood's id is a cuid, not the prototype's slug. It is the only store
+    // on this account that has ever traded.
+    route: "/dashboard/analytics/cmexd4zia0001jr04ljkdt9na",
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m/analytics/cmexd4zia0001jr04ljkdt9na",
+    report: true,
+    status: "editorial",
+  },
   { protoId: "laborstore", name: "Labor", protoRoute: "/dashboard/labor/hollywood", route: "/dashboard/labor/hollywood", status: "editorial" },
   { protoId: "cogsstore", name: "COGS", protoRoute: "/dashboard/cogs/hollywood", route: "/dashboard/cogs/hollywood", status: "editorial" },
   { protoId: "moninfra", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/infrastructure", route: "/dashboard/admin/monitoring/infrastructure", status: "editorial" },

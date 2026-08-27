@@ -204,7 +204,7 @@ export function CounterAnalyticsClient({
         {(m) => (
           <>
             <Chart {...m.chart} fmt={share} />
-            <Drill wide label="How the mix moved, and what it cost">
+            <Drill label="How the mix moved, and what it cost">
               {m.drill.enough ? (
                 <>
                   <Table columns={MIX_COLUMNS} rows={mixRows(m.drill)} />

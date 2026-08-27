@@ -616,6 +616,12 @@ function buildStrip(
   granularity: Granularity,
 ): StripCell[] {
   const sales = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
+  // The prototype's `R.mktPct()` (line 3491): the marketplace share bucket by
+  // bucket is the house band's own share, inverted. One series, read off the
+  // shares the chart below already draws, rather than a second computation of
+  // the same quantity.
+  const houseBand = series.bands.find((b) => b.channel === "house")
+  const marketplaceSeries = houseBand ? houseBand.shares.map((v) => 100 - v) : undefined
 
   const cells: StripCell[] = [
     {
@@ -647,6 +653,7 @@ function buildStrip(
             target: market.was,
             better: "low",
             quiet: true,
+            series: marketplaceSeries,
             label:
               `Marketplace share ${pct(series.marketplaceShare, { scaled: true })}, ` +
               `from ${pct(market.was, { scaled: true })} at the start of the range`,
@@ -664,6 +671,31 @@ function buildStrip(
         series.blendedPct === null
           ? "of channel sales"
           : `of channel sales · ${pct(series.blendedPct, { scaled: true })} off marketplace sales`,
+      // The same quiet meter the cell above carries, for the same reason: the
+      // range's own opening rate is the only line this schema publishes to
+      // judge commission against, so the meter draws where it started and
+      // where it is now and says nothing about whether that is good. The
+      // trajectory is `ChannelSeries.commissionShares`, which is the prototype's
+      // `R.feeNetPct()`. When the range is too short to hold thirds there is no
+      // line to draw, so the reference keeps only the series and is unjudged —
+      // a sparkline with no bullet, exactly as the prototype's `{ s: … }`.
+      reference: commission.enough
+        ? {
+            v: series.commissionPct,
+            target: commission.was,
+            better: "low",
+            quiet: true,
+            series: series.commissionShares,
+            label:
+              `Commission ${pct(series.commissionPct, { scaled: true })} of channel sales, ` +
+              `from ${pct(commission.was, { scaled: true })} at the start of the range`,
+          }
+        : {
+            v: series.commissionPct,
+            better: "low",
+            quiet: true,
+            series: series.commissionShares,
+          },
     },
   ]
 
@@ -676,7 +708,10 @@ function buildStrip(
  * Two departures from the desk, both the prototype's: the commission cell
  * prints DOLLARS with the percentage demoted to its caption, and the fourth
  * cell is Best day — which is why A-R3 removes nothing here. The phone strip
- * draws no sparkline and opens no meter, so no cell carries a reference.
+ * draws no sparkline (`MStrip` renders no `.sp` at all), but it DOES open the
+ * marketplace meter: the prototype's phone Marketplaces cell carries the same
+ * quiet reference its desk cell does, and the caption under it only exists
+ * because the reference does.
  */
 function buildPhoneStrip(
   p: Statement,
@@ -705,6 +740,25 @@ function buildPhoneStrip(
       // slot for exactly that reason and so does this.
       delta: market.enough ? points(market.points) : "of channel sales",
       deltaTone: market.enough && market.points > 0 ? "is-down" : undefined,
+      // The desk's quiet meter, on the phone too (`P.analytics.phone()`, line
+      // 4991). `MCell` opens its band inside `reference ? … : ''`, so the
+      // caption below is invisible until this reference exists — which is why
+      // the phone had neither the meter nor the sentence under it. No `series`:
+      // `MStrip` draws no sparkline at all, by design.
+      caption: market.enough
+        ? `started at ${pct(market.was, { scaled: true })}`
+        : undefined,
+      reference: market.enough
+        ? {
+            v: series.marketplaceShare,
+            target: market.was,
+            better: "low",
+            quiet: true,
+            label:
+              `Marketplace share ${pct(series.marketplaceShare, { scaled: true })}, ` +
+              `from ${pct(market.was, { scaled: true })} at the start of the range`,
+          }
+        : undefined,
     },
     {
       label: "Commission",
@@ -911,10 +965,24 @@ function buildService(profile: ServiceProfile): ServiceSection {
 
 /* ── The store strip ──────────────────────────────────────────────────── */
 
+/**
+ * EVERY qualifier here goes in the DELTA slot, not the caption.
+ *
+ * `P.analyticsstore.desk()` (prototype line 7593) writes all four of this
+ * strip's cells as `[label, value, qualifier, tone]` — the qualifier is `c[2]`,
+ * and `c[4]`, the caption, is empty on all four. None of these cells is judged
+ * against anything, so none of them carries a reference; `Figure` opens a
+ * `.band` on `caption || reference`, so a caption here draws a band the
+ * prototype does not have. (The phone strip has the mirror-image defect: `MCell`
+ * opens its band only inside `reference ? … : ''`, so the same caption draws
+ * NOTHING there — the qualifier was invisible on the phone and an extra
+ * landmark on the desk, one slot fixing both.)
+ */
 function buildStoreStrip(
   p: Statement,
   orders: number | null,
   cmp: ComparisonContext,
+  range: DateRange,
 ): Pick<StoreHeadline, "cells" | "phoneCells"> {
   const sales = comparisonPhrase(p.grossSales, cmp, cmp.scope?.grossSales ?? null)
   const netCell: StripCell = {
@@ -926,18 +994,32 @@ function buildStoreStrip(
   const foodCell: StripCell = {
     label: "Food cost",
     value: pct(p.prime.cogsPct, { scaled: true }),
-    caption: money(p.cogsValue),
+    delta: money(p.cogsValue),
+    // `is-flat` on all three qualifiers below, and it is not decoration.
+    // `.strip .d` with no tone class is `var(--good)` (counter-components.css
+    // line 180), so a delta slot holding a QUALIFIER rather than a movement —
+    // a range label, an order count, a dollar total — comes out painted green
+    // for having moved nowhere. `is-flat` is `var(--ink-3)`, which is the tone
+    // these words carried as captions and the tone the prototype gives its own
+    // non-movement qualifier on this strip's first cell.
+    deltaTone: "is-flat",
   }
 
   const cells: StripCell[] = [netCell]
   // No order count is an absence, not a zero — and an average ticket derived
   // from one would be a division by nothing dressed up as a figure.
   if (orders !== null && orders > 0) {
-    cells.push({ label: "Orders", value: count(orders) })
+    cells.push({
+      label: "Orders",
+      value: count(orders),
+      delta: rangeLabel(range, "custom"),
+      deltaTone: "is-flat",
+    })
     cells.push({
       label: "Avg ticket",
       value: money(p.grossSales / orders, { cents: true }),
-      caption: `${count(orders)} orders`,
+      delta: `${count(orders)} orders`,
+      deltaTone: "is-flat",
     })
   }
   cells.push(foodCell)
@@ -1385,7 +1467,7 @@ export function getStoreAnalyticsSectionPromises(
               ? null
               : Array.from(byDay.values()).reduce((t, n) => t + n, 0)
           return {
-            ...buildStoreStrip(p, orders, cmp),
+            ...buildStoreStrip(p, orders, cmp, range),
             note:
               "Everything above is the group page filtered to this store. The day " +
               "book, the statement and the category table below it are this page's " +
