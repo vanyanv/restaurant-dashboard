@@ -422,8 +422,20 @@ export function compareLandmarks(proto: Landmark[], ours: Landmark[]): Differenc
 export interface AbsenceOutcome {
   /** Differences that are still findings. */
   unexplained: Difference[]
-  /** Allowances that forgave fewer landmarks than they budgeted for. */
-  stale: Array<{ landmark: string; budgeted: number; used: number }>
+  /** Allowances that forgave fewer differences than they budgeted for. */
+  stale: Array<{
+    landmark: string
+    /**
+     * The property the allowance was keyed on. Set by `applyStyleAllowances`
+     * and absent from an `applyAbsenceAllowances` result, which keys on the
+     * landmark alone. Without it, a page allowing two properties on the SAME
+     * landmark would produce two stale lines that read identically, and the
+     * reader would not know which of the two to delete.
+     */
+    property?: string
+    budgeted: number
+    used: number
+  }>
 }
 
 export function applyAbsenceAllowances(
@@ -455,6 +467,108 @@ export function applyAbsenceAllowances(
       landmark,
       budgeted: budgeted.get(landmark) ?? 0,
       used: (budgeted.get(landmark) ?? 0) - remaining,
+    }))
+
+  return { unexplained, stale }
+}
+
+/**
+ * The same declared absence, seen from the RENDERING side.
+ *
+ * `applyAbsenceAllowances` opens with `if (d.kind === "style") continue`, and
+ * that is a scope rather than an oversight. But a declared absence does not
+ * always stay on the structure side of that line. A strip cell this schema
+ * cannot compute takes its own `.sp` and `.band` with it — those are absences,
+ * and the budget above forgives them by count — and it ALSO changes what the
+ * strip itself renders: `.strip` prints its cell count in `data-n`, and
+ * `counter-components.css` sets the grid's track count off that attribute.
+ * Three cells where the prototype draws four is one ruling, and it necessarily
+ * reports as two differences on a landmark that is present on BOTH sides,
+ * which no absence allowance can reach.
+ *
+ * Without this, the harness offers a page in that position exactly two moves:
+ * invent the figure it cannot compute, or leave the page ungated. Both are
+ * worse than a written line with a count on it.
+ *
+ * THIS IS NOT A TOLERANCE, and it is the same three disciplines that make the
+ * absence budget trustworthy:
+ *
+ *  1. It forgives an exact COUNT, per (landmark, property) PAIR. A second
+ *     `data-n` difference on `.strip` is a finding, not a second helping. Two
+ *     entries naming the same pair add up, so the number that has to be true
+ *     is always the manifest's total for that pair and never its largest line.
+ *
+ *  2. It never forgives anything outside its own kind. A `missing` or an
+ *     `extra` handed to this function comes back in `unexplained` exactly as
+ *     it arrived — the same way `applyAbsenceAllowances` passes an `extra`
+ *     through. The two allowances answer to two different passes and neither
+ *     may quietly cover for the other: a page cannot turn a structural
+ *     regression into a forgiven style line by routing it through here.
+ *
+ *  3. An allowance that forgives FEWER differences than it budgets for is
+ *     reported as `stale`. The day the missing cell can be computed the strip
+ *     renders four again, this line matches nothing, and it has to go — or it
+ *     sits there absorbing the next real `data-n` regression in silence.
+ *
+ * The landmark key is derived exactly as `applyAbsenceAllowances` derives it —
+ * the difference's own classes, sorted and dot-joined, which is `signature()`
+ * — so the two allowances cannot drift apart about what a landmark is called.
+ * The property is matched verbatim against the name the difference carries: a
+ * member of `CHECKED_PROPERTIES`, a member of `COMPARED_ATTRIBUTES`, or the
+ * pseudo-property "text". Nothing here normalises either side, so an allowance
+ * naming a property no difference reports goes stale on its first run rather
+ * than sitting inert.
+ */
+export interface StyleAllowanceKey {
+  /** The landmark's class signature, as `applyAbsenceAllowances` keys it. */
+  landmark: string
+  /** The computed property or attribute, exactly as the difference names it. */
+  property: string
+}
+
+export function applyStyleAllowances(
+  differences: Difference[],
+  allowed: ReadonlyArray<StyleAllowanceKey & { count: number }>,
+): AbsenceOutcome {
+  // A space joins the two halves, and it is safe to key on: a landmark
+  // signature is CSS class names joined by ".", and a property name is a
+  // member of CHECKED_PROPERTIES, of COMPARED_ATTRIBUTES, or "text". Neither
+  // alphabet contains a space, so no two distinct pairs can collide into one
+  // key.
+  const keyOf = (landmark: string, property: string) => `${landmark} ${property}`
+
+  const left = new Map<string, number>()
+  const budgeted = new Map<string, number>()
+  const named = new Map<string, StyleAllowanceKey>()
+  for (const a of allowed) {
+    const k = keyOf(a.landmark, a.property)
+    left.set(k, (left.get(k) ?? 0) + a.count)
+    budgeted.set(k, (budgeted.get(k) ?? 0) + a.count)
+    named.set(k, { landmark: a.landmark, property: a.property })
+  }
+
+  const unexplained: Difference[] = []
+  for (const d of differences) {
+    if (d.kind !== "style") {
+      unexplained.push(d)
+      continue
+    }
+    const k = keyOf([...d.classes].sort().join("."), d.property ?? "")
+    const remaining = left.get(k) ?? 0
+    if (remaining > 0) {
+      left.set(k, remaining - 1)
+      continue
+    }
+    unexplained.push(d)
+  }
+
+  const stale = [...left.entries()]
+    .filter(([, remaining]) => remaining > 0)
+    .map(([k, remaining]) => ({
+      landmark: named.get(k)?.landmark ?? k,
+      property: named.get(k)?.property ?? "",
+      budgeted: budgeted.get(k) ?? 0,
+      used: (budgeted.get(k) ?? 0) - remaining,
     }))
 
   return { unexplained, stale }

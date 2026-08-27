@@ -27,7 +27,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { test, expect, type Page, type TestInfo } from "@playwright/test"
-import { PAGES, absenceBudget, type FidelityPage } from "./manifest"
+import { PAGES, absenceBudget, styleBudget, type FidelityPage } from "./manifest"
 import { openPrototype, SURFACE_ROOT, type Surface } from "./prototype"
 import { extractLandmarksInPage, extractThemedInPage } from "./extract"
 import {
@@ -35,6 +35,7 @@ import {
   COMPARED_ATTRIBUTES,
   LANDMARK_CLASSES,
   applyAbsenceAllowances,
+  applyStyleAllowances,
   compareLandmarks,
   defectWhere,
   matchedCount,
@@ -409,12 +410,38 @@ for (const entry of PAGES) {
         `right or wrong about, and reporting "no differences" would be a lie.`,
     ).toBeGreaterThan(0)
 
+    // Properties a landmark cannot match BECAUSE of an absence the manifest
+    // has already declared — a strip that honestly renders three cells where
+    // the design draws four reports `data-n` and its track count, and neither
+    // is a defect. Forgiven by an exact count on an exact (landmark, property)
+    // pair, from the manifest's own written list, and only those: a `missing`
+    // or an `extra` is never forgiven here, a property with no entry is never
+    // forgiven, and an entry that forgives fewer than it budgets for fails as
+    // stale. See `applyStyleAllowances`.
+    const { unexplained, stale } = applyStyleAllowances(
+      styleDiffs,
+      styleBudget(entry, surface),
+    )
+
     expect(
-      styleDiffs.map(describeDiff),
-      `${entry.protoId} (${surface}, light): ${styleDiffs.length} rendering ` +
+      unexplained.map(describeDiff),
+      `${entry.protoId} (${surface}, light): ${unexplained.length} rendering ` +
         `differences on landmarks that exist on both sides. Structure is a ` +
         `separate pass — if that one is also red, fix it first; most of these ` +
         `are usually downstream of one missing wrapper.`,
+    ).toEqual([])
+
+    expect(
+      stale.map(
+        (s) =>
+          `STALE    .${s.landmark} ${s.property}: the manifest forgives ` +
+          `${s.budgeted} on this property, only ${s.used} reported`,
+      ),
+      `${entry.protoId} (${surface}, light): a style allowance forgave fewer ` +
+        `differences than it budgets for. The landmark now renders this ` +
+        `property the way the prototype does, so whatever the page could not ` +
+        `compute it can compute — delete the line rather than leave it ` +
+        `absorbing a future regression on the same property.`,
     ).toEqual([])
   })
 

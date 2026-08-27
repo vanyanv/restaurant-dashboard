@@ -126,6 +126,53 @@ interface FidelityPageBase {
     mobile: number
     reason: string
   }>
+  /**
+   * Properties a landmark that DOES render cannot match, because a declared
+   * absence changed what it renders — with the property, the count per
+   * surface, and the reason.
+   *
+   * `absentLandmarks` above says "this element is not here, and here is why it
+   * can never be". This says the same thing from the other side, about an
+   * element that IS on both sides. The two are one mechanism split by which
+   * pass sees it: a strip cell that cannot be computed removes its own `.sp`
+   * and `.band` (the structure pass, forgiven above) and changes the STRIP —
+   * `.strip` prints its cell count in `data-n`, and `counter-components.css`
+   * sets the grid's track count from that attribute. There is no arrangement
+   * of the page in which one of those happens and the other does not.
+   *
+   * Before this field existed, a page in that position had two moves:
+   * fabricate the figure it cannot compute, or stay `editorial` and be gated
+   * by nothing. Analytics was the page that forced the question, and both
+   * answers were worse than writing the count down.
+   *
+   * THIS IS NOT A TOLERANCE EITHER, and it is the same three rules, enforced
+   * in `applyStyleAllowances`:
+   *
+   *   - it forgives an exact COUNT on an exact (landmark, property) PAIR, so a
+   *     second `data-n` difference on the same strip is still a failure, and a
+   *     `padding-left` difference on it is not forgiven by a `data-n` line;
+   *   - it never forgives a `missing` or an `extra` — those belong to the
+   *     structure pass and come back untouched, so a structural regression
+   *     cannot be laundered into a forgiven style line;
+   *   - and an allowance that forgives FEWER than it budgets for fails as
+   *     stale. The day this schema can identify a returning guest, the fourth
+   *     cell renders, the strip reports `data-n="4"` and four tracks, and
+   *     these two lines match nothing. They must FAIL then, not sit here
+   *     absorbing the next real `data-n` regression in silence.
+   *
+   * Every entry names the absence it is downstream of. A rendering difference
+   * that is not the consequence of a declared absence is a rendering defect,
+   * and this is the wrong place for it — fix the page.
+   */
+  styleAllowances?: Array<{
+    /** The landmark's full class list, sorted and dot-joined — `signature()`'s key. */
+    landmark: string
+    /** The property or attribute, exactly as the difference names it. */
+    property: string
+    desktop: number
+    mobile: number
+    reason: string
+  }>
 }
 
 /**
@@ -442,7 +489,86 @@ export const PAGES: FidelityPage[] = [
     // Reporting first, gating second — the order Overview and the P&L went in.
     // A baseline invented before it is measured is a number nobody can defend.
     report: true,
-    status: "editorial",
+    // MEASURED, not chosen. Desk: 23 of the prototype's 25, 0 extra, 2
+    // rendering differences. Phone: 11 of 11 — complete.
+    status: "counter",
+    baseline: { desktop: 23, mobile: 11 },
+    absentLandmarks: [
+      {
+        landmark: "sp",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The sparkline on the prototype's fourth strip cell, 'Repeat " +
+          "guests'. That cell is not rendered at all (ruling A-R3) and this " +
+          "is one of the two landmarks that go with it. Measured: " +
+          "`OtterOrder.customerName` is NULL for all 29,173 css-pos orders " +
+          "— the entire in-house channel — and the marketplace names that " +
+          "do exist are a first name plus an initial (`Chris C`, `Chris D`, " +
+          "`Brady B`), which collide by construction. A repeat rate on that " +
+          "describes marketplace orders only, computed on an identity that " +
+          "merges strangers. Nothing else in this schema carries a customer " +
+          "identity, so there is no second source to reach for. The two " +
+          "rendering differences on this page are the same absence seen " +
+          "from the other side: `.strip` reports `data-n=\"3\"` against the " +
+          "prototype's `4`, and the track count that follows from it.",
+      },
+      {
+        landmark: "band",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The caption band of the same 'Repeat guests' cell — `Figure` " +
+          "opens a `.band` on `caption || reference`, and a cell that is " +
+          "not rendered has neither. See the `sp` allowance above; one " +
+          "missing cell, two missing landmarks.",
+      },
+    ],
+    styleAllowances: [
+      {
+        landmark: "strip",
+        property: "data-n",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The strip carries three cells where the prototype draws four, and " +
+          "`Strip` writes its own cell count into `data-n`. The fourth cell " +
+          "is 'Repeat guests', which ruling A-R3 does not render: " +
+          "`OtterOrder.customerName` is NULL for all 29,173 css-pos orders " +
+          "and the marketplace names that exist are a first name plus an " +
+          "initial (`Chris C`, `Chris D`, `Brady B`), colliding by " +
+          "construction, with no customer id anywhere in this schema to fall " +
+          "back to. `data-n=\"3\"` is not a defect in the strip — it is the " +
+          "strip reporting the ruling accurately. The two `absentLandmarks` " +
+          "entries above (`sp`, `band`) are the same missing cell seen by the " +
+          "structure pass. `mobile: 0` for two independent reasons, either " +
+          "of which would be enough: the phone composes `.mstrip`, which " +
+          "emits no `data-n` at all on either side (`MStrip`'s second " +
+          "departure from `Strip` — `.mstrip` is a fixed `1fr 1fr`), and the " +
+          "fourth cell of the prototype's own phone strip is 'Best day', not " +
+          "'Repeat guests', so A-R3 removes nothing on that surface.",
+      },
+      {
+        landmark: "strip",
+        property: "grid-template-columns",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "Three tracks against the prototype's four, and this is the " +
+          "`data-n` line's CONSEQUENCE rather than an independent finding. " +
+          "`.strip` is a six-track grid by default and " +
+          "`src/styles/counter-components.css` overrides the track count per " +
+          "`data-n` — so on this landmark `data-n` IS the layout, and a strip " +
+          "that honestly reports three cells cannot then be asked to lay out " +
+          "four. It is written as its own line, with its own count, because " +
+          "the gate forgives properties and not reasons: making one line " +
+          "cover both would forgive a track count that disagreed with the " +
+          "cell count, which is the real defect this property is checked for. " +
+          "The phone's `.mstrip` is a fixed two-track rule with no `data-n` " +
+          "to override it, so this does not arise there — `mobile: 0`. Both " +
+          "lines go the day the fourth cell can be computed.",
+      },
+    ],
   },
   {
     protoId: "pnl",
@@ -591,7 +717,10 @@ export const PAGES: FidelityPage[] = [
     query: "?range=d7&cmp=weekday",
     mobileRoute: "/m/analytics/cmexd4zia0001jr04ljkdt9na",
     report: true,
-    status: "editorial",
+    // Landmark for landmark on BOTH surfaces, with zero rendering
+    // differences and zero `.empty`. No absence to declare.
+    status: "counter",
+    baseline: { desktop: 32, mobile: 9 },
   },
   { protoId: "laborstore", name: "Labor", protoRoute: "/dashboard/labor/hollywood", route: "/dashboard/labor/hollywood", status: "editorial" },
   { protoId: "cogsstore", name: "COGS", protoRoute: "/dashboard/cogs/hollywood", route: "/dashboard/cogs/hollywood", status: "editorial" },
@@ -616,6 +745,28 @@ export function absenceBudget(
   for (const a of entry.absentLandmarks ?? []) {
     const n = surface === "desk" ? a.desktop : a.mobile
     if (n > 0) out[a.landmark] = n
+  }
+  return out
+}
+
+/**
+ * The rendering allowances for one surface, as `applyStyleAllowances` wants
+ * them.
+ *
+ * A zero on this surface is DROPPED rather than passed through as
+ * `count: 0`: an allowance that budgets nothing can forgive nothing, so it
+ * would be reported as stale on every run and the failure would be about the
+ * manifest's shape instead of about the page. `absenceBudget` drops its zeroes
+ * for the same reason.
+ */
+export function styleBudget(
+  entry: FidelityPage,
+  surface: "desk" | "phone",
+): Array<{ landmark: string; property: string; count: number }> {
+  const out: Array<{ landmark: string; property: string; count: number }> = []
+  for (const a of entry.styleAllowances ?? []) {
+    const n = surface === "desk" ? a.desktop : a.mobile
+    if (n > 0) out.push({ landmark: a.landmark, property: a.property, count: n })
   }
   return out
 }
