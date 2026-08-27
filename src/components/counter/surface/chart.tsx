@@ -129,7 +129,30 @@ export function Chart(props: ChartProps) {
       } catch {
         len = 1200
       }
-      p.style.setProperty("--len", (len || 1200).toFixed(0))
+      /*
+       * `--len` HAS TO BE IN SCREEN UNITS, NOT VIEWBOX UNITS.
+       *
+       * These paths carry `vector-effect: non-scaling-stroke`, which moves the
+       * whole stroke — dash pattern included — into the host coordinate space,
+       * while `getTotalLength()` stays in the viewBox's own 700-unit space. The
+       * `<svg>` is `preserveAspectRatio="none"` on a `0 0 700 h` box drawn at
+       * `height: h`, so the vertical scale is exactly 1 and the horizontal one
+       * is `width / 700` — 1.66 in a full-width `.sec`.
+       *
+       * Unscaled, `cndraw` ends at `stroke-dashoffset: 0` with a dash shorter
+       * than the line it is dashing, and the last ~38% of the stroke lands in
+       * the gap and is never painted. Measured on `/dashboard/labor`, whose two
+       * full-width line charts were the first in the product: both solid lines
+       * stopped dead at 62% of the plot with the fill continuing underneath.
+       * Every chart shipped before it is either bars, a `.chref` dash (which
+       * `cndraw` does not touch) or narrower than 700px, where an over-long
+       * dash is harmless — which is why this has never shown.
+       *
+       * Rounding UP is deliberate and is the safe direction: a dash longer than
+       * the path simply runs off the end and the line finishes fully drawn.
+       */
+      const scale = Math.max(1, (p.ownerSVGElement?.clientWidth ?? 0) / CH_W)
+      p.style.setProperty("--len", Math.ceil((len || 1200) * scale).toFixed(0))
     }
     setDrawable(true)
   }, [animate, lineKey])
