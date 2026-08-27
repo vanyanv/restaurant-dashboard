@@ -87,7 +87,7 @@ import type { DeltaTone, FigureProps, MListRow, TagTone, Tone } from "@/componen
  *
  * A third appearance of a sales figure USED to be a second, wrong, split: the
  * twelve-week trend's `laborPct` was computed over `OtterHourlySummary` —
- * platform sales, `splh`'s figure — because that table is the only per-day
+ * net sales, `splh`'s figure — because that table is the only per-day
  * sales figure that reaches back twelve weeks without a second rollup over 84
  * days. It read ~12–16% under a 17.9% headline, on the same page, and the
  * mitigation shipped for it was a sentence (`TrendSection.note`) rather than a
@@ -97,7 +97,7 @@ import type { DeltaTone, FigureProps, MListRow, TagTone, Tone } from "@/componen
  * construct `salesByDayOf` uses below) and folds it into `trailingWeeks`' own
  * Monday-start weeks, then hands `loadLaborTrend` the finished per-week map —
  * on the identical contract `salesByDay` already is for `loadLaborWeek`.
- * `splh` is unaffected: it still reads platform sales on both the week and
+ * `splh` is unaffected: it still reads net sales on both the week and
  * the trend, because that split was never the defect.
  *
  * ## L-R1 — there is no floor and there is no band
@@ -211,7 +211,7 @@ export interface WeekStripDay {
   /** "Wed 26" — what the cell prints. */
   short: string
   hours: string
-  /** "$121.10 / h", or an em-dash on a day with no hours or no platform sales. */
+  /** "$121.10 / h", or an em-dash on a day with no hours or no net sales. */
   splh: string
   bar: number
   /**
@@ -675,7 +675,7 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
   if (week.splh !== null) {
     say(`${week.laborPct === null ? " — " : ", and "}`)
     strong(money(week.splh, { cents: true }))
-    say(" of platform sales for every hour worked")
+    say(" of net sales for every hour worked")
   }
   say(".")
 
@@ -758,7 +758,7 @@ function buildStrip(
       value: money(week.splh, { cents: true }),
       // Names the OTHER denominator, out loud, right beside the cell that
       // carries the first one. See the module comment.
-      delta: "platform sales over hours worked",
+      delta: "net sales over hours worked",
       deltaTone: "is-flat",
     },
     {
@@ -839,7 +839,7 @@ function buildHeadline(input: {
     phoneCells.push({
       label: "SPLH",
       value: money(week.splh, { cents: true }),
-      delta: "platform sales an hour",
+      delta: "net sales an hour",
       deltaTone: "is-flat",
     })
   }
@@ -909,7 +909,7 @@ function buildWeekStrip(days: LaborDay[], range: DateRange, today: Date): LaborW
 
   const sentence =
     top === null || bottom === null
-      ? "No day in this range has both hours worked and platform sales, so no day has a rate to read."
+      ? "No day in this range has both hours worked and net sales, so no day has a rate to read."
       : top.key === bottom.key
         ? `Only ${top.label} carries both hours and sales in this range, at ${rateText(top.splh)}.`
         : `${top.label} bought the most for its hours at ${rateText(top.splh)}; ` +
