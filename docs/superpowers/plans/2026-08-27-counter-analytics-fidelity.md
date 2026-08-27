@@ -173,8 +173,11 @@ the prototype's own caveat sentence applies and must be printed.
 
 - 2,636 orders over 7 days = **377 a day**
 - busiest hour **23h**
-- 5p–10p (the prototype's block) is **38%**
-- the best contiguous five hours are **19h–23h at 45.6%**
+- trading hours run **10h through 2h** — seventeen hours, crossing midnight
+- 5p–10p (the prototype's block) is **38.1%**
+- the best contiguous five hours are **20h–0h at 48.0%** (1,266 orders)
+- **25.8% of orders fall outside the prototype's 11a–10p axis**, including the
+  single busiest hour
 - table coverage begins **2026-02-25**; 110 rows cover the 7 days
 - the daily summaries report **2,598** orders for the same window — 1.5% fewer.
   Two syncs, two answers. See A-R5.
@@ -282,8 +285,8 @@ against a figure the strip printed.
 order count on the site. That is stated in the caption rather than hidden.
 
 **A-R6 — The staffing sentence is computed, not copied.** The prototype names
-5p–10p. Measured here that block is 38% of orders and the busiest hour is
-**23h**; the best contiguous five hours are **19h–23h at 45.6%**. The sentence
+5p–10p. Measured here that block is 38.1% of orders and the busiest hour is
+**23h**; the best contiguous five hours are **20h–0h at 48.0%**. The sentence
 names the measured peak block. Copying the prototype's hours would print a
 recommendation this restaurant's own data contradicts.
 
@@ -340,6 +343,26 @@ Reading `Store.uberCommissionRate` again would be a second source for a number
 the statement holds, and the two would disagree the moment a rate changed
 mid-range. **The stored values are NEGATIVE** — flip the sign exactly once, and
 assert it (Task 1, assertion 12).
+
+**A-R15 — The hour axis is this restaurant's service day, not the prototype's
+`11a`–`10p`.** The prototype's `HOURS` list holds twelve labels, `11a` through
+`10p` (line 3662). Measured here, **25.8% of orders fall outside that window** —
+including hour 23, which is the single busiest hour of the day. A chart that
+cuts off its own peak is not a shorter chart, it is a wrong one.
+
+So the axis runs from the first trading hour to the last, in **service-day
+order**: `10a, 11a, … 11p, 12a, 1a`. The day crosses midnight, and the hours
+after midnight belong to the evening that produced them, not to the morning
+that follows.
+
+That ordering is also what the peak-block search runs over — a block may
+therefore span `11p → 12a`, and the measured winner does. It may not wrap past
+the service day's own end.
+
+*Cost if wrong:* seventeen ticks where the prototype draws twelve. The fidelity
+gate compares landmark classes and computed styles, not tick counts, so this
+does not move the baseline — it is a design decision, made on the data, and
+recorded here so it is not mistaken for drift later.
 
 **A-R12 — Where a section has a shell but no rows, change what the section
 shows — do not render an empty shell.** This is N-R4/N-R5's correction,
@@ -678,12 +701,18 @@ export async function loadServiceProfile(input: {
 }): Promise<ServiceProfile | null>
 ```
 
-**The peak block** (A-R6): scan every contiguous five-hour window over hours
-0–23 **without wrapping past 23 to 0**, and return the one with the largest
-share. The measured answer for the d7 window is 19h–23h at 45.6%.
+**The hour axis** (A-R15) is the service day: the hours are ordered from the
+first hour that traded to the last, so a restaurant open past midnight gets
+`10a, 11a, … 11p, 12a, 1a` and NOT a clock-ordered `0..23` that puts the late
+rush at the far left. Emit `hours` in that order; the chart draws them as given.
 
-`label` writes an hour the way the prototype's `HOURS` list does — `7p`,
-`11p`, `midnight`, `noon` — so "19h–23h" reads as **"7p to midnight"**.
+**The peak block** (A-R6): scan every contiguous five-hour window **in
+service-day order**, and return the one with the largest share. A block may
+span `11p → 12a` — the measured winner does — but may not wrap past the service
+day's own end. The measured answer for the d7 window is **20h–0h at 48.0%**.
+
+`label` writes an hour the way the prototype's `HOURS` list does — `8p`, `11p`,
+`midnight`, `noon` — so the measured block reads **"8p to 1a"**.
 
 **`loadServiceProfile` scoping.** It takes an `accountId` for the same reason
 `loadChannelMix` does: without it, `storeId: null` would mean "every store in
@@ -701,17 +730,19 @@ being drawn as a service profile (A-R7).
 
 1. `serviceProfile` over the measured d7 rows: `coveredDays` 7, `perDay` 377 to
    the nearest order, `busiest` 23.
-2. `peak` is `{ startHour: 19, endHour: 23 }` with `share` 45.6 to one decimal
-   and `label` `"7p to midnight"`.
-3. The peak search does not wrap: a fixture whose only orders sit at hours 22,
-   23, 0 and 1 returns a block starting at 19 or 20, never one starting at 21
-   and running through 1.
-4. `serviceProfile` returns `null` for fewer than three covered days — assert
+2. `peak` is `{ startHour: 20, endHour: 0 }` with `share` 48.0 to one decimal
+   and `label` `"8p to 1a"`.
+3. `hours` comes back in service-day order — first element hour 10, last element
+   hour 2 — and NOT clock-ordered starting at 0.
+4. The peak block may span midnight (assertion 2 proves it does) but does not
+   wrap past the service day's end: a fixture trading only 10h–14h returns a
+   block inside that span, never one running 13h → 11h.
+5. `serviceProfile` returns `null` for fewer than three covered days — assert
    at 2 and at 3.
-5. `dayOfWeekProfile` over the 90-day figures: Sunday's average `9018`,
+6. `dayOfWeekProfile` over the 90-day figures: Sunday's average `9018`,
    Tuesday's `6397`, `best` pointing at Sunday, and `mean` equal to the mean of
    the seven averages weighted by their day counts.
-6. A weekday the range never held has `average: null`, not `0`.
+7. A weekday the range never held has `average: null`, not `0`.
 
 - [ ] **Step 3: Run them.**
 
@@ -719,8 +750,9 @@ being drawn as a service profile (A-R7).
 npx vitest run tests/lib/counter/service-profile.test.ts
 ```
 
-- [ ] **Step 4: Mutation-check the wrap guard.** Let the peak window wrap past
-23 and confirm assertion 3 fails. Restore. Report the failure output.
+- [ ] **Step 4: Mutation-check the ordering.** Order the hours by clock
+(`0..23`) instead of by service day and confirm assertions 2 and 3 both fail.
+Restore. Report the exact failure output.
 
 - [ ] **Step 5: Commit.**
 
