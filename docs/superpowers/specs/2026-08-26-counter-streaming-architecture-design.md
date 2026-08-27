@@ -1,8 +1,29 @@
 # Counter — streaming architecture, and why the rebuild regressed
 
-**Status:** design, awaiting execution
+**Status:** APPROVED 2026-08-26 — binding for every Counter page, built and unbuilt
 **Date:** 2026-08-26
 **Applies to:** every Counter route, built and unbuilt (3 of 54 exist today)
+
+---
+
+## The decision this records
+
+Approved by the owner on 2026-08-26, in these terms: *every page should be like
+this so the whole app is extremely snappy and responsive, different data is
+isolated for components so they don't block each other, and everything is
+smooth.*
+
+Three things follow, and they are requirements rather than aspirations:
+
+1. **Universal, not selective.** This is the pattern for all 54 Counter pages.
+   A page that does not stream is a defect, not a variation — which is why the
+   enforcement in Task 2b of the plan is part of the work and not a follow-up.
+2. **Per-component data isolation is the primary goal**, not a bonus on top of
+   faster navigation. A section waiting on another section's query is the
+   specific thing being removed. Section-level Suspense (Task 3) is therefore
+   the load-bearing task in the plan; Tasks 1, 2 and 5 make it useful.
+3. **Snappy is measurable or it is a claim.** Task 7 measures before and after,
+   and reverts what does not help.
 
 ---
 
