@@ -332,6 +332,15 @@ slower than the same range at its natural grain, say so in the report and fall
 back to two calls with the weekday panel explicitly labelled as the daily one.
 *Cost if wrong:* a wide range pulls 365 periods where it needed 12.
 
+**A-R14 — Commission comes off the statement's rows, not off `Store`.**
+`computeStorePnL` writes `COM_UBER` and `COM_DD` per period and
+`consolidateRows` merges them by code across stores, so the rate this account
+actually charges is already inside the rollup that printed the headline.
+Reading `Store.uberCommissionRate` again would be a second source for a number
+the statement holds, and the two would disagree the moment a rate changed
+mid-range. **The stored values are NEGATIVE** — flip the sign exactly once, and
+assert it (Task 1, assertion 12).
+
 **A-R12 — Where a section has a shell but no rows, change what the section
 shows — do not render an empty shell.** This is N-R4/N-R5's correction,
 promoted to a standing rule: the previous plan ruled "render the shell over
