@@ -48,6 +48,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   ["/dashboard/analytics", "/m/analytics"],
   ["/dashboard/invoices", "/m/invoices"],
+  ["/dashboard/labor", "/m/labor"],
   ["/dashboard/orders", "/m/orders"],
   ["/dashboard/pnl", "/m/pnl"],
 ]
