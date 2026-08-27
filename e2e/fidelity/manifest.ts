@@ -231,8 +231,117 @@ export const PAGES: FidelityPage[] = [
     ],
   },
   { protoId: "ask", name: "Ask", protoRoute: "/dashboard/chat", route: "/dashboard/chat", status: "editorial" },
-  { protoId: "decisions", name: "Needs you", protoRoute: "/dashboard/decisions", route: "/dashboard/decisions", status: "editorial" },
-  { protoId: "alerts", name: "Needs you", protoRoute: "/dashboard/alerts", route: "/dashboard/alerts", status: "editorial" },
+  {
+    protoId: "decisions",
+    name: "Needs you",
+    protoRoute: "/dashboard/decisions",
+    route: "/dashboard/decisions",
+    // The middleware rewrites /dashboard/decisions to /m/decisions on a phone
+    // UA. Stated so the rewrite reads as a rewrite and not as a page that
+    // failed to load.
+    mobileRoute: "/m/decisions",
+    // NO `query`, and unlike Orders this page could not use one. Overview and
+    // the P&L ask for `?range=d7&cmp=weekday` because their charts are day
+    // series and our one-day default degrades them to a strip. This page has
+    // no range at all: the week ahead is the week, not a window a reader
+    // picks, so `PageHead` carries no `DateControl` (see the client's own
+    // comment) and there is nothing for a range parameter to change. The
+    // picker's seven cells are Monday to Sunday whatever is in the URL.
+    status: "counter",
+    report: true,
+    // Measured, not chosen — the run of 2026-08-27, both surfaces.
+    // Desk: 26 of the prototype's 30, 0 extra, 0 rendering differences, and
+    // the four missing are the two `absentLandmarks` entries below.
+    // Phone: 9 of 9, complete — landmark for landmark, 0 missing, 0 extra,
+    // 0 rendering differences.
+    baseline: { desktop: 26, mobile: 9 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 3,
+        mobile: 0,
+        reason:
+          "Three buttons, and NEITHER is a gap in what the database can say " +
+          "— both are deliberate subtractions, which is why they are written " +
+          "here rather than left to look like unfinished work.\n" +
+          "The first is the date control's \"Apply\". `DateControl` emits it " +
+          "inside `.pagehead` whether or not its popover is open, so every " +
+          "prototype page carrying a date bar carries a `.btn` at order 0 — " +
+          "Orders renders one and matches. This page mounts NO `DateControl`: " +
+          "the week ahead is the week, and a control offering to change it " +
+          "would offer a window this page does not have. A control that " +
+          "cannot change anything is the thing this codebase does not ship.\n" +
+          "The other two are \"Add three shifts\" and \"Leave it\", the " +
+          "prototype's `.btnrow` under the Saturday detail panel (line 4727). " +
+          "Committing a shift needs a client action against `HarriShift` and " +
+          "there is none; `buildDayDetail` is a server module and has no " +
+          "handler to give, which is the same reason `buildDecisionQueue` " +
+          "gives every queue item a LINK where the prototype writes " +
+          "\"Commit\". Two buttons that did nothing would be worse than two " +
+          "buttons that are not there.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The row that holds the two day-detail buttons above. It falls with " +
+          "them and is counted separately because the gate counts landmarks, " +
+          "not reasons. An empty `.btnrow` would be a wrapper drawn around " +
+          "nothing — the same defect as the empty `.mlist` N-R18 removed from " +
+          "the phone's alert list. The phone composes no button rows at all " +
+          "(`P.decisions.phone` ends on a bare `.mbtn`, which carries no " +
+          "landmark class on either side).",
+      },
+    ],
+  },
+  {
+    protoId: "alerts",
+    name: "Needs you",
+    protoRoute: "/dashboard/alerts",
+    route: "/dashboard/alerts",
+    // The middleware rewrites /dashboard/alerts to /m/alerts on a phone UA.
+    mobileRoute: "/m/alerts",
+    // NO `query`, for a reason of its own. The inbox is a HORIZON — every
+    // section reads the rows `getAlertInbox` loaded, which is
+    // `occurredOn >= anomalyHorizon()` and not a range the URL sets. The one
+    // chart is "Alerts opened", one bar per day of that horizon, and it draws
+    // a `.ch` at the page's own default with no rendering differences. The
+    // segment, the severities and the sources ARE in the URL; none of them is
+    // a window, and the gate reads the page at its own default, which is
+    // where the honest comparison is.
+    status: "counter",
+    report: true,
+    // Measured, not chosen — the run of 2026-08-27.
+    // Desk: 7 of the prototype's 8, 0 extra, 0 rendering differences; the one
+    // missing is the `absentLandmarks` entry below.
+    // Phone: 8 of 8, complete, 0 missing, 0 extra, 0 rendering differences —
+    // after N-R18. Before it the phone matched 8 of 8 STRUCTURALLY and failed
+    // the rendering pass with three differences, because the "Acknowledged"
+    // list was scoped to `status = ACKNOWLEDGED` (0 rows in this database) and
+    // an `.mlist` with no children has no grid track and no text. That is the
+    // `.empty` constraint arriving from the other side: the shell-over-zero-
+    // rows trick keeps the extra landmark out and leaves a blank panel, which
+    // the structure pass cannot see and the rendering pass can.
+    baseline: { desktop: 7, mobile: 8 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\", and the same deliberate subtraction " +
+          "as the first of the decisions page's three. `DateControl` emits it " +
+          "inside `.pagehead`, and this page mounts no `DateControl`: the " +
+          "inbox is the horizon `anomalyHorizon()` sets, so `PageHead` NAMES " +
+          "the window (\"last 30 days\") rather than offering to change it. " +
+          "The controls this page does have — the segment, the severity and " +
+          "source toggles, the search box — are `.seg` and `.tog`, which the " +
+          "prototype draws too and which are matched. The phone has no page " +
+          "head furniture at all on either side.",
+      },
+    ],
+  },
   {
     protoId: "orders",
     name: "Orders",

@@ -181,10 +181,50 @@ describe("getAlertsSections", () => {
     expect(dataOf(s.phoneHead)!.sub).toBe("77 open · 0 acknowledged")
   })
 
-  it("renders the acknowledged phone list over zero rows", async () => {
+  /*
+   * N-R18. This assertion used to read `rows).toEqual([])` — the section was
+   * scoped to `status = ACKNOWLEDGED`, which is 0 rows in this database and
+   * rendered a heading over a blank panel. The list now holds what is CLOSED,
+   * which is the same predicate the median time-to-close cell is measured
+   * over, so the two cannot disagree about which rows count as dealt with.
+   */
+  it("fills the closed phone list from the rows the median is measured over", async () => {
     const s = await getAlertsSections({ today: TODAY })
-    expect(s.phoneAcknowledged.status).toBe("ready")
-    expect(dataOf(s.phoneAcknowledged)!.rows).toEqual([])
-    expect(dataOf(s.phoneAcknowledged)!.meta).toBe("none yet")
+    expect(s.phoneClosed.status).toBe("ready")
+    const list = dataOf(s.phoneClosed)!
+    // Ten dismissals in the fixture, six rows to a phone list.
+    expect(list.rows).toHaveLength(6)
+    expect(list.meta).toBe("6 of 10")
+    expect(list.rows.every((r) => r.severityLabel !== undefined)).toBe(true)
+  })
+
+  /* The meta names its population the way the median cell's note does. */
+  it("names the closed population rather than counting it twice", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue({
+      ok: true,
+      data: { ...INBOX, alerts: [row({ id: "1" }), DISMISSED[0]] } as never,
+    })
+    const list = dataOf((await getAlertsSections({ today: TODAY })).phoneClosed)!
+    expect(list.rows).toHaveLength(1)
+    expect(list.meta).toBe("1 dismissal")
+  })
+
+  /*
+   * A window with nothing closed in it is an ordinary week. It must not draw a
+   * blank panel (which is what an `mlist` over zero rows renders, and what the
+   * fidelity gate measures as three rendering differences), and it must not
+   * draw an `Empty` either — `.empty` is a landmark `P.alerts.phone` does not
+   * have. One stated row, carrying no severity, is what it draws instead.
+   */
+  it("says nothing has closed rather than drawing an empty list", async () => {
+    vi.mocked(getAlertInbox).mockResolvedValue({
+      ok: true,
+      data: { ...INBOX, alerts: [row({ id: "1" })] } as never,
+    })
+    const list = dataOf((await getAlertsSections({ today: TODAY })).phoneClosed)!
+    expect(list.meta).toBe("none yet")
+    expect(list.rows).toHaveLength(1)
+    expect(list.rows[0].title).toBe("Nothing closed in the last 30 days")
+    expect(list.rows[0].severityLabel).toBeUndefined()
   })
 })
