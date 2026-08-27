@@ -100,16 +100,29 @@ forecast reaches further.
 
 ### The window, day by day
 
-| date | actual | scheduled | cost | SPLH |
-|---|---:|---:|---:|---:|
-| 2026-08-20 | 56.8 h | 59.0 h | $1,181 | $156.56 |
-| 2026-08-21 | 66.5 h | 69.5 h | $1,356 | $150.03 |
-| 2026-08-22 | 60.7 h | 70.0 h | $1,245 | $176.41 |
-| 2026-08-23 | 66.1 h | 67.5 h | $1,349 | $183.62 |
-| 2026-08-24 | 59.6 h | 58.5 h | $1,195 | $167.81 |
-| 2026-08-25 | 59.4 h | 48.5 h | $1,222 | $141.12 |
-| 2026-08-26 | 63.0 h | 64.0 h | $1,277 | $134.98 |
-| **total** | **432.1 h** | **437.0 h** | **$8,825** | **$158.76** |
+| date | actual | scheduled | cost | net sales | SPLH |
+|---|---:|---:|---:|---:|---:|
+| 2026-08-20 | 56.8 h | 59.0 h | $1,181 | $6,883 | $121.10 |
+| 2026-08-21 | 66.5 h | 69.5 h | $1,356 | $7,685 | $115.59 |
+| 2026-08-22 | 60.7 h | 70.0 h | $1,245 | $8,307 | $136.78 |
+| 2026-08-23 | 66.1 h | 67.5 h | $1,349 | $9,345 | $141.45 |
+| 2026-08-24 | 59.6 h | 58.5 h | $1,195 | $7,522 | $126.27 |
+| 2026-08-25 | 59.4 h | 48.5 h | $1,222 | $6,358 | $106.97 |
+| 2026-08-26 | 63.0 h | 64.0 h | $1,277 | $6,451 | $102.34 |
+| **total** | **432.1 h** | **437.0 h** | **$8,825** | **$52,550** | **$121.60** |
+
+**The SPLH column above was WRONG in the first draft of this plan and is
+corrected here — see L-R17.** It read $158.76 for the range because I computed
+it from `OtterDailySummary` GROSS. `getSplhSeries`, which is what the Overview
+already prints, divides `OtterHourlySummary.netSales` by the same Harri hours.
+Three sales sources, three different answers for one week:
+
+| source | sales | SPLH |
+|---|---:|---:|
+| `OtterHourlySummary.netSales` — **what the app uses** | $52,550 | **$121.60** |
+| `OtterDailySummary` net | $52,570 | $121.65 |
+| `OtterDailySummary` gross | $68,609 | $158.76 |
+| Statement Total Sales | $49,389 | $114.30 |
 
 **$8,825 is exactly the Labor line the Analytics store statement prints**, and
 `HarriDailyLabor` sums to the same figure to the cent ($8,825.47 both ways).
@@ -117,6 +130,12 @@ The two Harri tables agree; either ties to the P&L.
 
 Labour as a share of **Total Sales** ($49,389) is **17.9%**. Of platform sales
 it is 12.9%. See L-R2 for which one the page prints.
+
+**Labour percent and SPLH do NOT share a denominator, and that is correct.**
+The percent is the P&L's line and takes the P&L's Total Sales (L-R2); SPLH is
+`getSplhSeries`' figure and takes its net sales (L-R17). Two ratios, two
+questions, two owners — each matching the one place in the app that already
+answers it.
 
 Overtime for the window: **$51.08** — a dollar amount. There is no
 overtime-hours column anywhere in the schema.
@@ -221,11 +240,26 @@ judging itself. So: **no floor line, no hit/miss on the week strip, no "under
 the floor" verdict tag, and no "comfortably over the floor" sentence.**
 
 Measured, the prototype's floor would be meaningless anyway: our SPLH is
-**$158.76** for the window and $127–$172 across twelve weeks, against its
-fixture's $66–$76.
+**$121.60** for the window, against its fixture's $66–$76.
 
 *Cost if wrong:* the week strip shows each day's SPLH without saying whether it
 was good. That is the honest state until a store file carries a floor.
+
+**L-R17 — SPLH comes from `getSplhSeries`' source, and my own measurement of
+it was wrong.** I wrote $158.76 into the first draft of this plan, computed
+from `OtterDailySummary` GROSS. The app already answers this question:
+`src/app/actions/splh-actions.ts` divides `OtterHourlySummary.netSales` by
+`HarriPositionDaily.actualSeconds`, and its own comment says netSales
+reconciles with `OtterDailySummary` to ~0.1% — which it does, **against the NET
+column**, not the gross one. The correct figure is **$121.60**.
+
+The Overview prints SPLH from that function today. A Labor page printing
+$158.76 beside an Overview printing $121.60 would be the two-numbers-one-name
+defect this project has spent three plans removing.
+
+*Cost of my error:* Task 1 shipped a test asserting $158.76 whose fixture
+back-derived its sales as `splh × hours` — so the assertion could not fail. It
+is corrected in Task 1b.
 
 **L-R2 — Labour percent is taken on Total Sales, the P&L's own denominator.**
 Measured: $8,825 is **12.9%** of platform sales and **17.9%** of Total Sales.
