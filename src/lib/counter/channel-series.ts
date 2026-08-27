@@ -65,6 +65,18 @@ export interface ChannelSeries {
   commission: number
   /** Commission as a share of `total`, 0..100. */
   commissionPct: number
+  /**
+   * Commission as a share of the four-channel total, BUCKET BY BUCKET, 0..100
+   * — the prototype's `R.feeNetPct()` (line 3501), which is what its strip
+   * draws the commission sparkline from.
+   *
+   * Same length as `labels`, `0` (never `NaN`) where a bucket sold nothing.
+   * Derived from the same NEGATIVE `COM_UBER` / `COM_DD` rows the range totals
+   * come from, with the sign flipped exactly once — never from
+   * `Store.uberCommissionRate` (A-R14). It therefore sums to `commission` and
+   * its dollars-over-dollars reading over the whole range is `commissionPct`.
+   */
+  commissionShares: number[]
   /** Commission as a share of `total - house`, 0..100. `null` with no marketplace sales. */
   blendedPct: number | null
 }
@@ -223,7 +235,30 @@ export function channelSeries(statement: Statement): ChannelSeries {
   const marketplaceTotal = total - house
   const blendedPct = marketplaceTotal === 0 ? null : ratio(commission, marketplaceTotal)
 
-  return { labels, bands, total, house, marketplaceShare, commission, commissionPct, blendedPct }
+  // The per-bucket commission, off the SAME two GL rows the range totals read,
+  // negated once (`computeStorePnL` writes them negative). Grubhub publishes no
+  // commission row at all, so it contributes nothing to the numerator while its
+  // sales still count in the denominator — the same convention `commissionFrom`
+  // and `commissionDrift` already use, for the same reason.
+  const commissionPerBucket = bandValues(
+    rows,
+    n,
+    DOORDASH_COMMISSION_CODE,
+    UBER_COMMISSION_CODE,
+  ).map((v) => -v)
+  const commissionShares = commissionPerBucket.map((v, i) => ratio(v, bucketTotals[i]))
+
+  return {
+    labels,
+    bands,
+    total,
+    house,
+    marketplaceShare,
+    commission,
+    commissionPct,
+    commissionShares,
+    blendedPct,
+  }
 }
 
 /* ── Drift ────────────────────────────────────────────────────────────── */
