@@ -44,6 +44,47 @@ import {
  * question (platform sales per day) the statement never answered in the
  * first place.
  *
+ * ## Why this queries the table instead of calling `getSplhSeries`
+ *
+ * `src/app/actions/splh-actions.ts`'s `getSplhSeries` is this app's actual
+ * OWNER of the sales-per-labour-hour figure — the Overview page prints it,
+ * and this module's SPLH must never drift from it. It was evaluated and
+ * rejected as a call target here, for reasons that are structural, not
+ * stylistic:
+ *
+ * - It calls `getServerSession` and gates on `hasOwnerAccess` ITSELF. This
+ *   module's own scoping section (below) explains why it deliberately does
+ *   NOT import `@/lib/auth` — that pulls in `@/lib/prisma` at module load and
+ *   takes every importer down without `DATABASE_URL`, tests included. Calling
+ *   `getSplhSeries` would reintroduce that exact import, plus a second,
+ *   redundant session fetch, plus a hidden behavioural change: a non-OWNER
+ *   viewer of the labour page would silently get an empty SPLH (`[]`) even
+ *   though `loadLaborWeek` itself has no such role gate.
+ * - It takes no `storeId`. It always returns one series per active store on
+ *   the account; a caller wanting a SINGLE store's SPLH (this module's
+ *   `storeId: string | null` contract) would have to re-filter and re-sum its
+ *   per-store output client-side — which is re-deriving the join this module
+ *   already does directly, not avoiding it.
+ * - Its `range` is `{ startDate, endDate }` (inclusive `endDate`, the
+ *   `_shared/date-range.ts` shape), not this module's `DateRange`, AND it
+ *   widens the query by `TARGET_HISTORY_DAYS` (56 days) on top of whatever
+ *   range is passed, to score each day against its weekday's trailing
+ *   median — work this module has no use for and would pay for on every
+ *   call.
+ * - Its `SplhPoint` output is a variance-scored chart point (`targetSplh`,
+ *   `earnedHours`, `varianceDollars`, `status`), built by joining
+ *   `HarriPositionDaily` as the base table (a day with sales but zero labour
+ *   rows would not appear at all) — a different null contract than this
+ *   module's "platform sales `null` only when the table truly has no row for
+ *   that day", regardless of whether hours were worked.
+ *
+ * None of that rules out a future shared low-level query for "net sales per
+ * (store, day) over a range" that both this module and `getSplhSeries` call
+ * — but that is a refactor of `splh-actions.ts`, out of scope here. Until
+ * then, this file queries `OtterHourlySummary.netSales` directly, and
+ * `splh-actions.ts` remains the figure's owner for every purpose
+ * `getSplhSeries` already serves (the Overview page, the variance charts).
+ *
  * ## Scoping
  *
  * Both loaders resolve stores through `accountId` FIRST, exactly as
