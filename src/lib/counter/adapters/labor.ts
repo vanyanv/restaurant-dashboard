@@ -381,11 +381,47 @@ const WEEK_DAYS = 7
 /** The trend is twelve weeks on both pages. Note 53: weekly is the cadence the trade runs on. */
 const TREND_WEEKS = 12
 
-/** Within this many hours, worked and published are the same number rather than a movement. */
-const SCHEDULE_FLAT_HOURS = 0.25
-
-/** Beyond this share of the published hours, the range is off its own schedule. */
+/**
+ * ONE tolerance for "did the schedule hold", decided here and used by every
+ * sentence on this page that asks the question.
+ *
+ * It used to be two. The head block allowed 2% of the published hours, the
+ * schedule section allowed a flat 0.25 h, and on the measured window
+ * (2026-08-20…26) that put two contradictory sentences 300px apart on the same
+ * screen off the same two numbers: 437.0 h published against 432.1 h worked is
+ * 1.12% — inside one tolerance, eleven times outside the other. A reader could
+ * find the disagreement without leaving the page.
+ *
+ * The share is the rule that survives, because the flat-hours one is not a
+ * tolerance at all at week scale: 0.25 h is a rounding error on a 437-hour week,
+ * so "the schedule held" could never be said about a real week and the sentence
+ * would be dead copy. 2% is the grain a labour schedule is actually written to —
+ * a single person clocking in fifteen minutes early on four shifts of a
+ * seven-day week is inside it, and that is a rounding of the roster rather than
+ * a schedule that failed.
+ *
+ * `SCHEDULE_FLAT_FLOOR` exists only so the rule stays sane at the OTHER end of
+ * the scale, where the share is applied to a single day (`buildWeekTable`) or a
+ * near-empty range: 2% of a 4-hour day is 4.8 minutes, which is below the grain
+ * `HarriPositionDaily` even records. Whichever of the two is larger is the
+ * allowance.
+ */
 const SCHEDULE_FLAT_SHARE = 0.02
+
+/** The floor under the share, in hours — see `SCHEDULE_FLAT_SHARE`. */
+const SCHEDULE_FLAT_FLOOR = 0.25
+
+/**
+ * Did the hours worked hold to the hours published?
+ *
+ * The ONE predicate behind the head verdict, the schedule section's sentence
+ * and the store page's per-day verdict column — so those three can disagree
+ * about what a week COST but never about whether it held.
+ */
+function scheduleHeld(gap: number, scheduled: number): boolean {
+  const allowance = Math.max(SCHEDULE_FLAT_FLOOR, Math.abs(scheduled) * SCHEDULE_FLAT_SHARE)
+  return Math.abs(gap) <= allowance
+}
 
 /** The grain a caption names. `Granularity` reads badly in a sentence. */
 const GRAIN_WORD: Record<Granularity, string> = {
@@ -635,10 +671,7 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
     )
   } else {
     const gap = week.actualHours - scheduled
-    const flat =
-      Math.abs(gap) <= SCHEDULE_FLAT_HOURS ||
-      (scheduled > 0 && Math.abs(gap) / scheduled <= SCHEDULE_FLAT_SHARE)
-    if (flat) {
+    if (scheduleHeld(gap, scheduled)) {
       say(` That is ${hoursText(scheduled)} published and ${hoursText(week.actualHours)} worked — the schedule held.`)
     } else {
       tone = gap > 0 ? "warn" : "good"
@@ -889,7 +922,7 @@ function buildWeekTable(
 
       if (d.scheduledHours !== null) {
         const gap = d.actualHours - d.scheduledHours
-        if (Math.abs(gap) <= SCHEDULE_FLAT_HOURS) {
+        if (scheduleHeld(gap, d.scheduledHours)) {
           verdict = "on the published schedule"
         } else if (rate === null) {
           verdict = `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"} the schedule`
@@ -1028,12 +1061,13 @@ function buildSchedule(
       "against them, so there is nothing to read the hours against."
   } else {
     const gap = week.actualHours - scheduled
-    sentence =
-      Math.abs(gap) <= SCHEDULE_FLAT_HOURS
-        ? `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — the schedule held.`
-        : `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — ` +
-          `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}` +
-          (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labour.`)
+    // The SAME predicate the head block's verdict asks (`scheduleHeld`), so the
+    // two sentences cannot reach opposite readings of the same two numbers.
+    sentence = scheduleHeld(gap, scheduled)
+      ? `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — the schedule held.`
+      : `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — ` +
+        `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}` +
+        (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labour.`)
   }
 
   return {
