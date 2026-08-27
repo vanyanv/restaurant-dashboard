@@ -32,11 +32,23 @@ import {
  *   an hour of labour produce", which is not a question about the P&L's
  *   revenue line, and switching its denominator to Total Sales would make
  *   this page's SPLH disagree with the SPLH already shown everywhere else
- *   in the product. The measured twelve-week table's own column is headed
- *   "% of platform sales" for the same reason: the TREND read here uses
- *   platform sales for both `splh` and `laborPct`, and only the CURRENT
- *   week's `laborPct` — the figure that sits beside the P&L on the page —
- *   is pinned to Total Sales.
+ *   in the product.
+ *
+ * **`laborPct` is ALWAYS on Total Sales — the current week's and the
+ * twelve-week trend's.** An earlier version of this module read the trend's
+ * `laborPct` on platform sales, for a real reason (platform sales is the only
+ * per-day figure that reached back twelve weeks without a second rollup), and
+ * mitigated the resulting five-to-eight-point gap with a footnote. That
+ * shipped a correct description of a wrong number: one page printing 17.9% a
+ * few hundred pixels above a chart printing 12.9% for the SAME week. The fix
+ * (task 4b) is not a footnote — it is `loadLaborTrend` taking a per-week Total
+ * Sales figure, on the same contract as `loadLaborWeek`'s `salesByDay`: the
+ * adapter loads a daily statement over the trend's OWN twelve-week range,
+ * reads `TOTAL_SALES_CODE` off it exactly as `salesByDayOf` does for the
+ * headline, and folds the days into `trailingWeeks`' own Monday-start weeks.
+ * `splh` keeps reading platform sales on both the week and the trend — that
+ * split was never the defect; the trend's `laborPct` reading a DIFFERENT sales
+ * figure than the headline's `laborPct` was.
  *
  * `loadLaborWeek` therefore queries `OtterHourlySummary` itself for SPLH's
  * sales even though Total Sales is handed in — that is not the "second
@@ -157,8 +169,14 @@ export interface LaborTrendWeek {
   label: string
   cost: number
   hours: number
-  /** Over PLATFORM sales — see the module comment. `null` with no sales data. */
+  /**
+   * Over TOTAL SALES — the identical denominator `LaborWeek.laborPct` uses,
+   * fed in by the adapter as this week's slice of the SAME statement
+   * construct the headline reads (L-R2, task 4b). `null` with no Total Sales
+   * for the week.
+   */
   laborPct: number | null
+  /** Over PLATFORM sales — see the module comment. `null` with no sales data. */
   splh: number | null
   /** Fewer days than a full week fell inside the data (L-R11). */
   isPartial: boolean
@@ -166,6 +184,21 @@ export interface LaborTrendWeek {
 
 function sum(values: number[]): number {
   return values.reduce((a, b) => a + b, 0)
+}
+
+/**
+ * Labour cost as a percent of a sales figure, 0..100 — the ONE expression
+ * `laborDay`, `laborWeek` and `laborTrendWeek` all call for `laborPct`, so the
+ * headline and the trend can never diverge by computing this ratio two ways
+ * (task 4b's whole point: they did, by 5 points, before this existed).
+ *
+ * `null` when the sales figure is unknown or not positive — a percent of zero
+ * or negative sales is not a labour percentage, it is a division nobody asked
+ * for, and `<= 0` (not `=== 0`) keeps a range of pure refunds from reading as
+ * a triumph, the same guard `statement.ts`'s `marginPct` uses.
+ */
+function pctOfSales(cost: number, sales: number | null): number | null {
+  return sales === null || sales <= 0 ? null : (cost / sales) * 100
 }
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -216,10 +249,7 @@ export function laborDay(input: {
     input.platformSales === null || actualHours === 0
       ? null
       : input.platformSales / actualHours
-  const laborPct =
-    input.totalSales === null || input.totalSales === 0
-      ? null
-      : (input.cost / input.totalSales) * 100
+  const laborPct = pctOfSales(input.cost, input.totalSales)
 
   return {
     key: input.key,
@@ -273,7 +303,7 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
   const totalSales = sum(
     pctKnown.map((d) => d.cost / ((d.laborPct as number) / 100)),
   )
-  const laborPct = totalSales > 0 ? (cost / totalSales) * 100 : null
+  const laborPct = pctOfSales(cost, totalSales)
 
   return { days, actualHours, scheduledHours, cost, blendedRate, splh, laborPct, overtimeCost }
 }
@@ -310,9 +340,8 @@ export function laborRole(
 interface TrendDayInput {
   cost: number
   hours: number
-  /** Off `OtterHourlySummary` — see the module comment on why the trend
-   *  keeps the platform-sales convention rather than L-R2's Total-Sales
-   *  rule, which is scoped to the current week's card. */
+  /** Off `OtterHourlySummary` — `splh`'s sales figure ONLY. NOT `laborPct`'s
+   *  denominator any more (task 4b) — see the module comment. */
   platformSales: number | null
 }
 
@@ -326,11 +355,18 @@ interface TrendDayInput {
  * carried straight through from the caller (`trailingWeeks`'s own
  * `.partial`), never re-derived here — L-R11 is `trailingWeeks`'s test to
  * pass, not a second one written against its answer.
+ *
+ * `totalSales` is this week's OWN slice of Total Sales, fed in by the caller
+ * (task 4b) — never derived from `days`, because Total Sales is not on
+ * `TrendDayInput` and has no business being reconstructed from platform
+ * sales. `laborPct` and `LaborWeek.laborPct` now call the identical
+ * `pctOfSales`, so they cannot compute this ratio two ways again.
  */
 export function laborTrendWeek(
   weekStart: Date,
   isPartial: boolean,
   days: TrendDayInput[],
+  totalSales: number | null,
 ): LaborTrendWeek {
   const cost = sum(days.map((d) => d.cost))
   const hours = sum(days.map((d) => d.hours))
@@ -342,7 +378,7 @@ export function laborTrendWeek(
     label: monthDay(weekStart),
     cost,
     hours,
-    laborPct: sales !== null && sales > 0 ? (cost / sales) * 100 : null,
+    laborPct: pctOfSales(cost, totalSales),
     splh: sales !== null && hours > 0 ? sales / hours : null,
     isPartial,
   }
@@ -483,6 +519,16 @@ export async function loadLaborWeek(input: {
  * `trailingWeeks` already publishes the running week CLIPPED to `endingOn`
  * with `partial: true` and its real `days` — exactly L-R11's "fewer days
  * than a full week fell inside the data", so nothing here re-derives it.
+ *
+ * `weeklyTotalSales` is `laborPct`'s ONLY sales input (task 4b), on the same
+ * contract `loadLaborWeek`'s `salesByDay` already is: this loader does not
+ * query anything sales-related for it — that is the adapter's job, off the
+ * SAME `loadStatement` construct the headline reads, so the trend cannot
+ * become a second answer to the question the headline already answered.
+ * Keyed by `isoDay(week.start)`, the same string this function's own
+ * `LaborTrendWeek.key` is; a window with no entry gets `laborPct: null`
+ * rather than a silent zero. `OtterHourlySummary` is still queried here,
+ * unchanged — that sales figure is `splh`'s, not `laborPct`'s.
  */
 export async function loadLaborTrend(input: {
   storeId: string | null
@@ -490,8 +536,10 @@ export async function loadLaborTrend(input: {
   /** How many weeks back from the range's end. Twelve on both pages. */
   weeks: number
   endingOn: Date
+  /** This week's Total Sales, keyed `isoDay(week.start)`. See above. */
+  weeklyTotalSales: Map<string, number>
 }): Promise<LaborTrendWeek[]> {
-  const { storeId, accountId, weeks, endingOn } = input
+  const { storeId, accountId, weeks, endingOn, weeklyTotalSales } = input
 
   const stores = await prisma.store.findMany({
     where: {
@@ -547,6 +595,8 @@ export async function loadLaborTrend(input: {
         platformSales: salesByDate.has(key) ? (salesByDate.get(key) as number) : null,
       })
     }
-    return laborTrendWeek(w.start, w.partial, days)
+    const weekKey = isoDay(w.start)
+    const totalSales = weeklyTotalSales.has(weekKey) ? (weeklyTotalSales.get(weekKey) as number) : null
+    return laborTrendWeek(w.start, w.partial, days, totalSales)
   })
 }

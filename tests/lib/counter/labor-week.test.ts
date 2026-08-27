@@ -205,46 +205,108 @@ describe("laborRole — the salaried line is empty, not absent", () => {
   })
 })
 
+// task 4b re-derivation: `laborPct` moved from platform sales to Total Sales,
+// so the platform-sales percentages the ORIGINAL twelve-week table published
+// (13.0% / 12.4%, both ruled out explicitly below) are no longer the right
+// expectations. Total Sales for each week is measured independently — pulled
+// live off `loadStatement`/`rowValues(TOTAL_SALES_CODE)` against the real
+// database for these exact calendar weeks at Hollywood, the SAME construct
+// `weeklySalesOf` in `adapters/labor.ts` folds into the trend — never
+// inverted from an expected `laborPct`, which is exactly task 1's circular
+// defect this file's own header warns about. `platformSales` (splh's input)
+// is untouched and still independent of `totalSales`.
+const NEWEST_TOTAL_SALES = 19973.6 // 2026-08-24..27 (partial), measured
+const PRIOR_TOTAL_SALES = 49270.5 // 2026-08-17..23 (full week), measured
+
 describe("laborTrendWeek — the running week is partial, the one before it isn't", () => {
   it("marks the newest (182h) week partial and the full 417h week before it not", () => {
     // 2026-08-24 (Mon) .. 2026-08-27 (Thu): the running week, clipped.
     // cost $3,695 / hours 182 / splh $155.60 (measured), split evenly across
     // 4 days for the fixture — no per-day figure is published or asserted.
-    // `sales` is reconstructed from splh, so ONLY laborPct is asserted below
-    // — never splh itself (see the note on the "prior" week further down).
+    // `platformSales` is reconstructed from splh (splh's own input, unrelated
+    // to `laborPct` since task 4b), so splh itself is never asserted below —
+    // see the note on the "prior" week further down for why.
     const newestDays = Array.from({ length: 4 }, () => ({
       cost: 3695 / 4,
       hours: 182 / 4,
       platformSales: (155.6 * 182) / 4,
     }))
-    const newest = laborTrendWeek(new Date(2026, 7, 24), true, newestDays)
+    const newest = laborTrendWeek(new Date(2026, 7, 24), true, newestDays, NEWEST_TOTAL_SALES)
     expect(newest.isPartial).toBe(true)
     expect(newest.hours).toBeCloseTo(182, 0)
     expect(newest.cost).toBeCloseTo(3695, 0)
-    expect(newest.laborPct as number).toBeCloseTo(13.0, 1)
+    // Total Sales (task 4b) — $3,695 / $19,973.60 measured, not the
+    // platform-sales 13.0% the original (pre-fix) table read for this week.
+    expect(newest.laborPct as number).toBeCloseTo(18.5, 1)
+    expect(newest.laborPct as number).not.toBeCloseTo(13.0, 1)
 
-    // 2026-08-17 (Mon) .. 2026-08-23 (Sun): a full week. The twelve-week
-    // table (measured-data.md) publishes only cost, hours, "% of platform
-    // sales" and splh for this week — no independent net-sales figure. Both
-    // % and splh were computed from the SAME underlying sales number, so a
-    // fixture can use ONE of them to reconstruct that sales figure but must
-    // not assert the other: asserting splh here after building `sales` as
-    // `splh * hours` is exactly task 1's circular defect (feed the answer
-    // in, get the answer out), so this fixture builds `sales` from splh (the
-    // more precise, cents-quoted figure) and asserts only laborPct — the
-    // metric that was NOT used to construct the input. This mirrors the
-    // "newest" week fixture above, which does the same and likewise never
-    // asserts splh.
+    // 2026-08-17 (Mon) .. 2026-08-23 (Sun): a full week. The pre-4b
+    // twelve-week table published only cost, hours, "% of platform sales" and
+    // splh for this week — no independent net-sales figure for splh's input,
+    // which is why `platformSales` below is still reconstructed from splh
+    // (the more precise, cents-quoted figure) rather than independently
+    // measured: asserting splh after building `platformSales` as
+    // `splh * hours` would be task 1's circular defect (feed the answer in,
+    // get the answer out), so splh itself is never asserted. `totalSales`
+    // carries no such problem — it is `laborPct`'s ONLY input now, measured
+    // independently (see above), so `laborPct` IS asserted, directly against
+    // the live figure.
     const priorDays = Array.from({ length: 7 }, () => ({
       cost: 8500 / 7,
       hours: 417 / 7,
       platformSales: 68688.24 / 7,
     }))
-    const prior = laborTrendWeek(new Date(2026, 7, 17), false, priorDays)
+    const prior = laborTrendWeek(new Date(2026, 7, 17), false, priorDays, PRIOR_TOTAL_SALES)
     expect(prior.isPartial).toBe(false)
     expect(prior.hours).toBeCloseTo(417, 0)
     expect(prior.cost).toBeCloseTo(8500, 0)
-    // % of platform sales, per the measured twelve-week table (NOT Total Sales).
-    expect(prior.laborPct as number).toBeCloseTo(12.4, 1)
+    // Total Sales (task 4b) — $8,500 / $49,270.50 measured, not the
+    // platform-sales 12.4% the original (pre-fix) table read for this week.
+    expect(prior.laborPct as number).toBeCloseTo(17.3, 1)
+    expect(prior.laborPct as number).not.toBeCloseTo(12.4, 1)
+  })
+
+  it("agrees with the headline's OWN laborPct construction for the same week — the invariant task 4b exists to establish", () => {
+    // This is L-R2's whole point, made concrete: the trend's laborPct and the
+    // headline's laborPct must be the SAME division of the SAME two numbers
+    // for the same week, not two different sales figures that happen to be
+    // close. Built two ways from the identical cost/hours/Total-Sales inputs
+    // (2026-08-17..23, measured) — once through `laborTrendWeek` (the trend's
+    // own construction) and once through `laborDay`/`laborWeek` (the
+    // headline's own construction, `LaborWeek.laborPct`) — and asserted equal.
+    // Before task 4b this failed by five points (17.9% vs 12.9%, per the
+    // brief); it can only pass now because both paths call the same
+    // `pctOfSales(cost, totalSales)` underneath.
+    const cost = 8500.275
+    const hours = 417
+    const totalSales = PRIOR_TOTAL_SALES
+
+    const trendDays = Array.from({ length: 7 }, () => ({
+      cost: cost / 7,
+      hours: hours / 7,
+      platformSales: 68688.24 / 7,
+    }))
+    const trendWeek = laborTrendWeek(new Date(2026, 7, 17), false, trendDays, totalSales)
+
+    const priorKeys = [
+      "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20",
+      "2026-08-21", "2026-08-22", "2026-08-23",
+    ]
+    const headlineDays: LaborDay[] = priorKeys.map((key) =>
+      laborDay({
+        key,
+        label: key,
+        actualSeconds: (hours / 7) * 3600,
+        scheduledMinutes: null,
+        cost: cost / 7,
+        platformSales: null,
+        totalSales: totalSales / 7,
+      }),
+    )
+    const headlineWeek = laborWeek(headlineDays, 0)
+
+    expect(trendWeek.laborPct).not.toBeNull()
+    expect(headlineWeek.laborPct).not.toBeNull()
+    expect(trendWeek.laborPct as number).toBeCloseTo(headlineWeek.laborPct as number, 6)
   })
 })
