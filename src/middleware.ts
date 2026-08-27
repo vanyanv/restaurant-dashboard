@@ -45,6 +45,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
 // left on desktop. (COGS and Stores were deleted from mobile entirely — see
 // DESKTOP_TO_MOBILE above.)
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
+  ["/dashboard/analytics", "/m/analytics"],
   ["/dashboard/invoices", "/m/invoices"],
   ["/dashboard/orders", "/m/orders"],
   ["/dashboard/pnl", "/m/pnl"],
