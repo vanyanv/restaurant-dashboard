@@ -24,6 +24,7 @@ import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-act
 import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import { loadChannelMix } from "@/lib/counter/channel-mix"
 import { loadStripTargets } from "@/lib/counter/targets"
+import { toQueryBounds } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { hasData } from "@/lib/counter/section-data"
 import {
@@ -36,6 +37,12 @@ import {
 
 const range = { start: new Date(2026, 7, 18), end: new Date(2026, 7, 19) }
 const accountId = "acct_1"
+// Task 3c (A-R19): `toQueryBounds` now rebuilds the local calendar day as a
+// UTC instant, so `range.start`'s raw local-midnight `Date` is no longer the
+// same instant as the primary window's queried `startDate`. Tests below that
+// need to tell the "primary" load apart from the "comparison" load by their
+// bound must compare against THIS, not against `range.start` directly.
+const primaryStart = toQueryBounds(range).startDate
 
 /** Two daily buckets: $4,000 then $3,468. COGS $2,200, labour $1,900. */
 function pnlRows() {
@@ -218,12 +225,10 @@ describe("getOverviewSections", () => {
     await load()
     const [granularity, passedRange] = vi.mocked(getSplhSeries).mock.calls[0]
     expect(granularity).toBe("day")
-    // `toQueryBounds` — the end bound is 23:59:59 on the last day, because a
-    // query filtering on local midnight drops the whole of it.
-    expect(passedRange).toEqual({
-      startDate: range.start,
-      endDate: new Date(2026, 7, 19, 23, 59, 59),
-    })
+    // `toQueryBounds` — UTC-anchored (task 3c): the end bound is 23:59:59
+    // UTC on the last day, because a query filtering on local midnight drops
+    // the whole of it.
+    expect(passedRange).toEqual(toQueryBounds(range))
   })
 
   it("scopes sales per labour hour to the range and publishes no invented floor", async () => {
@@ -408,7 +413,7 @@ describe("getOverviewSections", () => {
     // it is asserted here.
     const cmpAt = (previous: number) => {
       vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-        (input.startDate.getTime() < range.start.getTime()
+        (input.startDate.getTime() < primaryStart.getTime()
           ? pnl({ combined: { ...pnl().combined, grossSales: previous } })
           : pnl()) as never,
       )
@@ -431,7 +436,7 @@ describe("getOverviewSections", () => {
 
   it("reads the comparison off its own rollup when one is asked for", async () => {
     vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-      (input.startDate.getTime() < range.start.getTime()
+      (input.startDate.getTime() < primaryStart.getTime()
         ? pnl({ combined: { ...pnl().combined, grossSales: 7000 } })
         : pnl()) as never,
     )
@@ -444,7 +449,7 @@ describe("getOverviewSections", () => {
 
   it("builds the comparison table from the rollup it already loaded, not a second query", async () => {
     vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-      (input.startDate.getTime() < range.start.getTime()
+      (input.startDate.getTime() < primaryStart.getTime()
         ? pnl({ combined: { ...pnl().combined, grossSales: 7000 } })
         : pnl()) as never,
     )
@@ -469,7 +474,7 @@ describe("getOverviewSections", () => {
 
   it("marks a cost that went UP as the bad direction, and leaves one that fell alone", async () => {
     vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-      (input.startDate.getTime() < range.start.getTime()
+      (input.startDate.getTime() < primaryStart.getTime()
         ? // Same sales, less COGS: this range's food cost is HIGHER.
           pnl({ combined: { ...pnl().combined, cogsValue: 1800, cogsPct: 1800 / 7468 } })
         : pnl()) as never,
@@ -486,7 +491,7 @@ describe("getOverviewSections", () => {
     // occurrences, not an equivalent period. Undivided, every weekday
     // comparison would report this range as down 75%.
     vi.mocked(getAllStoresPnL).mockImplementation(async (input) =>
-      (input.startDate.getTime() < range.start.getTime()
+      (input.startDate.getTime() < primaryStart.getTime()
         ? pnl({ combined: { ...pnl().combined, grossSales: 29_872 } })
         : pnl()) as never,
     )

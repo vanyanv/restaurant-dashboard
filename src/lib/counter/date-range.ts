@@ -94,16 +94,42 @@ export function dayCount(r: DateRange): number {
  * when `endDate` is that day's midnight).
  *
  * `toQueryBounds` is the one place that conversion happens, so an adapter
- * never has to reconstruct "add 23:59:59 to the end date" itself.
+ * never has to reconstruct "add 23:59:59 to the end date" itself. It converts
+ * FRAMES as well as times: `r.start`/`r.end` are local-midnight instants —
+ * correct for a reader's calendar, wrong for a database column — so the
+ * calendar day is read off with local getters and then rebuilt as a UTC
+ * instant, which is the frame every caller actually queries against. All six
+ * callers (`channel-mix`, `service-profile`, `statement`, and three sites
+ * across the two adapters) filter either a Postgres `@db.Date` column (stored
+ * at UTC midnight) or `OtterOrder.referenceTimeLocal` (local time encoded AS a
+ * UTC epoch) — UTC-anchored bounds are the right frame for every one of them.
+ *
+ * This belongs here, at the query boundary, and not in `resolvePreset`:
+ * the module's contract is "all dates are local midnights", and `rangeLabel`,
+ * `rangeTitle`, `dayCount`, every preset and every reader-facing string is
+ * built on that contract holding all the way through the module. Converting
+ * earlier would break it for everything that isn't a query. `toQueryBounds`
+ * is the one function whose whole job is to hand a local calendar day to a
+ * database, so it is the one place the frame is allowed to change.
+ *
+ * Under `TZ=UTC` this is a no-op: local midnight and UTC midnight are the
+ * same instant, so the same Y/M/D goes in and the same instant comes back
+ * out. Production runs on Vercel under UTC, so this fixes local dev (and any
+ * non-UTC deployment) without changing production's output. The bug this
+ * fixes only shows up off UTC: `buildPeriods` (fixed separately, in
+ * `buildPeriods`'s own commit) floors its cursor with `startOfDayUTC`, so a
+ * bound that was still carrying a local-time offset landed on the wrong side
+ * of a UTC day boundary and produced one extra period — a 7-day range walked
+ * as 8 days and queried 8 days of rows.
  */
 export function toQueryBounds(r: DateRange): { startDate: Date; endDate: Date } {
-  const endDate = new Date(
-    r.end.getFullYear(),
-    r.end.getMonth(),
-    r.end.getDate(),
-    23, 59, 59,
+  const startDate = new Date(
+    Date.UTC(r.start.getFullYear(), r.start.getMonth(), r.start.getDate()),
   )
-  return { startDate: r.start, endDate }
+  const endDate = new Date(
+    Date.UTC(r.end.getFullYear(), r.end.getMonth(), r.end.getDate(), 23, 59, 59),
+  )
+  return { startDate, endDate }
 }
 
 export type Bucket = "day" | "week" | "month"

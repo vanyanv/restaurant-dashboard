@@ -57,19 +57,23 @@ export interface SplhSeries {
 type JoinedRow = { date: Date; net: number | null; hours: number | null; cost: number | null }
 
 /**
- * The calendar day a `Date` names, read off its LOCAL fields.
+ * The calendar day a `Date` names, read off its UTC fields.
  *
  * The rows come back from a `@db.Date` column as UTC midnights, so their own
- * day string is `toISOString().slice(0, 10)`. A `range` bound does NOT: it is
- * a local midnight (see `SplhRange`), and `toISOString()` on one shifts the
- * calendar date by a day wherever the server clock is not UTC. Both sides of
- * the comparison have to name the same calendar day, so the bound is read the
- * way it was written.
+ * day string is `toISOString().slice(0, 10)`. A `range` bound is the only
+ * caller of this function's other argument, and its only source is Counter's
+ * `toQueryBounds` (task 3c, A-R19) — which rebuilds the local calendar day it
+ * receives as a UTC instant precisely so it lands on the same frame `@db.Date`
+ * does. Reading it with LOCAL getters, as this used to, would read the WRONG
+ * calendar day off that UTC instant in any zone west of UTC (and a day-early
+ * one east of it) — the exact defect class `toQueryBounds` was fixed to stop
+ * producing, reintroduced one function downstream. Both sides of the
+ * comparison have to name the same calendar day, so both are read in UTC.
  */
 function calendarDay(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${d.getFullYear()}-${m}-${day}`
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0")
+  const day = String(d.getUTCDate()).padStart(2, "0")
+  return `${d.getUTCFullYear()}-${m}-${day}`
 }
 
 /**
