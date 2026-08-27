@@ -681,6 +681,7 @@ function buildStrip(
 function buildPhoneStrip(
   p: Statement,
   series: ChannelSeries,
+  market: Drift,
   week: DayOfWeekProfile,
   cmp: ComparisonContext,
 ): StripCell[] {
@@ -697,12 +698,22 @@ function buildPhoneStrip(
     {
       label: "Marketplaces",
       value: pct(series.marketplaceShare, { scaled: true }),
-      caption: "of channel sales",
+      // The DRIFT when the range is wide enough to hold one, the qualifier
+      // when it is not. Never a caption: `MCell` opens its band inside
+      // `reference ? … : ''`, transcribed from `mstrip()`, so a caption with
+      // no reference draws NOTHING. The prototype puts this text in the delta
+      // slot for exactly that reason and so does this.
+      delta: market.enough ? points(market.points) : "of channel sales",
+      deltaTone: market.enough && market.points > 0 ? "is-down" : undefined,
     },
     {
       label: "Commission",
       value: money(series.commission),
-      caption: `${pct(series.commissionPct, { scaled: true })} of channel sales`,
+      delta: `${pct(series.commissionPct, { scaled: true })} of channel sales`,
+      // NO tone. The prototype hardcodes `is-down` here, which paints a
+      // permanent red flag on a figure that is not a movement at all — it is
+      // what commission always costs. A warning that is always on is not a
+      // warning.
     },
   ]
 
@@ -712,7 +723,7 @@ function buildPhoneStrip(
     cells.push({
       label: "Best day",
       value: WEEKDAY_SHORT[best.day],
-      caption: `${money(best.average)} average`,
+      delta: `${money(best.average)} average`,
     })
   }
 
@@ -788,9 +799,13 @@ function buildMix(
     // bands and the total they are a share of.
     subtitle: `${rangeLabel(range, "custom")} · share of the four channels, not dollars`,
     drill: { enough: move.enough, rows: move.enough ? rows : [], note },
+    // "of X of channel sales" said "of" twice about two different things and
+    // read as a typo. The share and the base are one clause now, and the
+    // commission is the sentence's point rather than a trailing fragment.
     sentence:
-      `Marketplaces took ${pct(series.marketplaceShare, { scaled: true })} of ` +
-      `${money(series.total)} of channel sales and kept ${money(series.commission)} — ` +
+      `Marketplaces carried ${pct(series.marketplaceShare, { scaled: true })} of ` +
+      `${money(series.total)} in channel sales, and kept ` +
+      `${money(series.commission)} of it — ` +
       `${pct(series.commissionPct, { scaled: true })}.`,
   }
 }
@@ -1219,7 +1234,7 @@ export function getAnalyticsSectionPromises(
           // The phone's Best day cell and the weekday panel below it are the
           // same `dayOfWeekProfile` over the same days — one function, two
           // callers, so a phone and a desk cannot name two different best days.
-          phoneCells: buildPhoneStrip(s.daily, s.series, weekdaysOf(s.daily, range), cmp),
+          phoneCells: buildPhoneStrip(s.daily, s.series, s.market, weekdaysOf(s.daily, range), cmp),
         })),
       ),
       "retryStatement",
