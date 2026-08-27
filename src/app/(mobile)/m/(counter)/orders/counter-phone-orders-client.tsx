@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, use } from "react"
-import { MList, MStrip, Section, type MListRow } from "@/components/counter"
+import { MList, MStrip, Section, useCounterTransition, type MListRow } from "@/components/counter"
 import { dataOf, isPendingSource, type SectionSource } from "@/lib/counter/section-data"
 import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapters/orders"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -75,6 +75,15 @@ export function CounterPhoneOrdersClient({
 }: {
   sections: SectionSources<OrdersSections>
 }) {
+  /*
+   * This page has no filter bar (see the file note) and no `push` of its own
+   * — the range and the store are `PhoneShell`'s. `pending` is that same
+   * transition, threaded to every `<Section>` below so a range or store
+   * change reads as `stale` rather than a blank `loading.tsx`. See
+   * `counter-transition.tsx`.
+   */
+  const { pending } = useCounterTransition()
+
   return (
     /*
      * A FRAGMENT. `.ct-root.ct-phone`, `.mtop` and `.mscroll` are
@@ -96,7 +105,7 @@ export function CounterPhoneOrdersClient({
       {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
           is judged — ruling O-R2 — so no cell carries a reference and the
           phone draws no bullet and no band. */}
-      <Section bare title="The figures" data={sections.strip}>
+      <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <MStrip cells={phoneCells(cells)} />}
       </Section>
 
@@ -109,6 +118,7 @@ export function CounterPhoneOrdersClient({
           value is in hand, which is the only place that count exists. */}
       <Section
         title="Latest"
+        pending={pending}
         meta={(l) => `${Math.min(l.rows.length, PHONE_ROWS)} shown`}
         data={sections.list}
       >

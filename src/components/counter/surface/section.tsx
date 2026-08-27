@@ -3,6 +3,7 @@ import {
   hasData,
   isPendingSource,
   loading,
+  stale,
   type SectionData,
   type SectionSource,
 } from "@/lib/counter/section-data"
@@ -165,6 +166,30 @@ type SectionProps<T> = {
    * only the state body. For the prototype's page-level blocks — see above.
    */
   bare?: boolean
+  /**
+   * Task 4 of the streaming-architecture plan: true while a `useTransition`
+   * navigation is in flight for a filter, range, store or search change —
+   * see `useCounterTransition` and the `push` in each page client and in
+   * `AppShell`/`PhoneShell`.
+   *
+   * Reclassifies THIS section's already-resolved data for exactly the
+   * duration of that transition, in `SectionBody`:
+   *
+   *   - `ready` (or an already-`stale` section) becomes `stale` — there is
+   *     something on screen, so the reader sees the LAST GOOD figures with
+   *     `StaleBanner` saying a refetch is running. This is `stale`'s designed
+   *     job, and nothing constructs it any other way: no adapter calls
+   *     `stale()` today (see `section-data.ts`), so this is the only place it
+   *     becomes reachable.
+   *   - everything else (`loading`/`failed`/`empty`/`not_computed` — nothing
+   *     worth keeping on screen) becomes `loading`. This is `SectionData.loading`'s
+   *     OTHER reachable path, beside the Suspense fallback Task 3 covers for a
+   *     first paint: this one is a refetch with nothing to show.
+   *
+   * Defaults to `false`, so every existing caller and every existing test —
+   * none of which passes this — is unaffected.
+   */
+  pending?: boolean
   children: (data: T) => ReactNode
 }
 
@@ -175,13 +200,34 @@ type SectionProps<T> = {
 function SectionBody<T>({
   title,
   meta,
-  data,
+  data: rawData,
   askAbout,
   onRetry,
   pad = true,
   bare = false,
+  pending = false,
   children,
 }: Omit<SectionProps<T>, "data"> & { data: SectionData<T> }) {
+  /*
+   * `Section` is deliberately NOT a client component (see the file's own
+   * note above `EntryItem` in `app-shell.tsx` and this component's use from
+   * every `loading.tsx`, a Server Component) — so no `useEffect`/`useRef`
+   * here, ever. `new Date()` at the moment of reclassification is not a
+   * running clock: this component only re-renders when `pending` or
+   * `rawData` actually changes (props are otherwise stable across a
+   * transition), so it renders once when the transition STARTS — which is
+   * exactly "the last confirmed good moment" for the data being frozen — and
+   * once more when it ends with fresh data. See `pending`'s doc comment on
+   * `SectionProps` for the two branches below.
+   */
+  const data: SectionData<T> = !pending
+    ? rawData
+    : rawData.status === "ready"
+      ? stale(rawData.data, new Date())
+      : rawData.status === "stale" || rawData.status === "loading"
+        ? rawData
+        : loading<T>()
+
   const withData = hasData(data)
   // The qualifier, resolved once the value is in hand — see `meta` above.
   const metaText = hasData(data)

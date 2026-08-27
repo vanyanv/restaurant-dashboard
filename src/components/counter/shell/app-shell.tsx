@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Rail, type RailUser } from "./rail"
 import { PAGE_TITLE_ID } from "./page-head"
 import { Topbar } from "./topbar"
 import { PageChromeContext, type PageChrome } from "./page-chrome"
+import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
 import type { SyncState } from "./sync-chip"
 import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
@@ -105,6 +106,11 @@ export function AppShell({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
+  // The ONE transition for this surface — see `counter-transition.tsx`. Both
+  // this shell's own `push` (the store switcher) and every page's `push`
+  // (the date control, the orders filter bar) run through it, so a store
+  // change and a range change mark the same `pending` for every `<Section>`.
+  const [pending, startTransition] = useTransition()
 
   // Same "resolve once, at mount" contract as DateControl's own default — a
   // caller not passing `today` should not get a moving target on every render.
@@ -131,12 +137,24 @@ export function AppShell({
       // push, not replace: note 19's "a range that only changes the label is a
       // lie" cuts the other way too — a range change is a real navigation an
       // owner expects the back button to undo.
-      router.push(qs ? `${href}?${qs}` : href, { scroll: false })
+      //
+      // Wrapped in `startTransition` so a store change does not blank
+      // `#ct-main` back to `loading.tsx` while it resolves — see Task 4 of the
+      // streaming-architecture plan. The OLD content stays on screen with
+      // `pending` true, which every page's `<Section>` turns into a stale
+      // banner over the last good figures.
+      startTransition(() => {
+        router.push(qs ? `${href}?${qs}` : href, { scroll: false })
+      })
     },
-    [params, pathname, router],
+    [params, pathname, router, startTransition],
   )
 
   const [page, setPage] = useState<PageChrome>({})
+  const transition = useMemo<CounterTransition>(
+    () => ({ pending, startTransition }),
+    [pending, startTransition],
+  )
 
   /*
    * On a page scoped by `?store=` this rewrites the current URL. On a RECORD
@@ -231,7 +249,9 @@ export function AppShell({
              * `PageHead` writes this id by default.
              */}
             <main id="ct-main" className="screen" aria-labelledby={PAGE_TITLE_ID}>
-              <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
+              <CounterTransitionContext.Provider value={transition}>
+                <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
+              </CounterTransitionContext.Provider>
             </main>
           </div>
         </div>

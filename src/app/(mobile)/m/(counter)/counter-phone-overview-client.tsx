@@ -12,6 +12,7 @@ import {
   Moving,
   Section,
   StoreRows,
+  useCounterTransition,
   type MListRow,
   type StoreCard,
 } from "@/components/counter"
@@ -103,6 +104,16 @@ export function CounterPhoneOverviewClient({
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
+
+  /*
+   * This page owns no `push` of its own — the date sheet and the store picker
+   * are `PhoneShell`'s (`MTop`/`MDateSheet`). `pending` is the same
+   * transition either one of them starts; threaded to every `<Section>`
+   * below, it is what turns a range or store change into a stale banner over
+   * the last good figures instead of a blank `loading.tsx`. See
+   * `counter-transition.tsx`.
+   */
+  const { pending } = useCounterTransition()
 
   const { range, comparisonId } = counterParams
   const selectedStore = stores.find((s) => s.id === counterParams.storeId) ?? null
@@ -200,7 +211,7 @@ return (
       {/* The whole head block, as one figure and one sentence. Two sections
           that fail independently: the figure is the sales rollup, the sentence
           is the verdict derived across every figure on the page. */}
-      <Section bare title="Net sales" data={sections.sales}>
+      <Section bare title="Net sales" data={sections.sales} pending={pending}>
         {(d) => (
           <MHead
             label={days === 1 ? "Net sales" : `Net sales · ${count(days)} days`}
@@ -215,7 +226,7 @@ return (
             delta={comparing ? d.comparison : undefined}
             deltaTone={comparing ? d.comparisonTone : undefined}
             note={
-              <Section bare title="The verdict" data={sections.verdict}>
+              <Section bare title="The verdict" data={sections.verdict} pending={pending}>
                 {(v) => (
                   <p>
                     <b>{v.headline}</b> {v.body}
@@ -238,24 +249,25 @@ return (
         ]}
       />
 
-      <Section bare title="The figures" data={sections.strip}>
+      <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <MStrip cells={cells} />}
       </Section>
 
       {/* ONE cell. See the module note. */}
-      <Section bare title="Still moving" data={sections.moving}>
+      <Section bare title="Still moving" data={sections.moving} pending={pending}>
         {(cells) => <Moving cells={cells.slice(0, 1)} />}
       </Section>
 
       {/* `h` and `ticks` are the prototype's own phone values (108 and 104,
           both tickless): the axis row is what a 316px chart cannot afford, and
           the reading is on the tooltip either way. */}
-      <Section title="Net sales" meta={windowLabel} data={sections.salesChart} askAbout="net sales over this range">
+      <Section title="Net sales" meta={windowLabel} data={sections.salesChart} pending={pending} askAbout="net sales over this range">
         {(spec) => <Chart {...spec} h={108} ticks={false} fmt={(v) => money(v)} />}
       </Section>
 
       <Section
         title="Sales per labor hour"
+        pending={pending}
         meta={windowLabel}
         data={sections.splhChart}
         askAbout="sales per labour hour"
@@ -265,7 +277,7 @@ return (
         )}
       </Section>
 
-      <Section title="Per store" meta="tap for where the money came from" data={sections.stores}>
+      <Section title="Per store" meta="tap for where the money came from" data={sections.stores} pending={pending}>
         {(cards) => (
           <StoreRows
             stores={cards.map(toRow)}
@@ -277,7 +289,7 @@ return (
         )}
       </Section>
 
-      <Section title="What needs you" data={sections.needsYou} askAbout="what needs me">
+      <Section title="What needs you" data={sections.needsYou} pending={pending} askAbout="what needs me">
         {(items) => <MList rows={items.map(toListRow)} />}
       </Section>
     </>

@@ -7,6 +7,7 @@ import {
   MStrip,
   MoneyLines,
   Section,
+  useCounterTransition,
   type MListRow,
   type MoneyLine,
   type WeekRow,
@@ -88,6 +89,16 @@ export function CounterPhonePnlClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
+  /*
+   * This page owns no `push` of its own — the date sheet and the store picker
+   * are `PhoneShell`'s. `pending` is that same transition, threaded to every
+   * `<Section>` below so a range or store change reads as `stale` rather
+   * than a blank `loading.tsx`. See `counter-transition.tsx`. (The week-row
+   * links below stay plain `<a>` navigations, unrelated to this transition —
+   * see the file's own note on why they are links rather than a `push`.)
+   */
+  const { pending } = useCounterTransition()
+
   /**
    * Where a week row goes. `writeCounterParams({ range })` writes `?from=…&to=…`
    * — the SAME parameters the date sheet above writes, so pressing a week and
@@ -142,21 +153,21 @@ export function CounterPhonePnlClient({
 
       {/* Two cells. The reading paragraph beside them on the desk is not on
           this surface, so the strip is the whole headline here. */}
-      <Section bare title="The figures" data={sections.headline}>
+      <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
 
-      <Section title="Where it went" meta={windowLabel} data={sections.cascade}>
+      <Section title="Where it went" meta={windowLabel} data={sections.cascade} pending={pending}>
         {(c) => <Cascade start={c.start} cuts={c.cuts} end={c.end} />}
       </Section>
 
       {/* SIX weeks, not the desk's eight, and the most recent six — the
           prototype's own `weekRows(6)`, oldest first. */}
-      <Section title="Week by week" meta="tap a week" data={sections.weeks}>
+      <Section title="Week by week" meta="tap a week" data={sections.weeks} pending={pending}>
         {(w) => <MList rows={w.rows.slice(-6).map((row) => toWeekRow(row, weekHref))} />}
       </Section>
 
-      <Section title="The statement" meta={windowLabel} data={sections.statement}>
+      <Section title="The statement" meta={windowLabel} data={sections.statement} pending={pending}>
         {(s) => (
           <>
             <MoneyLines rows={statementRows(s)} />

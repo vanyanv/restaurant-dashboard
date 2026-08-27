@@ -22,6 +22,7 @@ import {
   StoreCards,
   Strip,
   Table,
+  useCounterTransition,
   type DispatchItem,
   type QueueItem,
   type StoreCard,
@@ -191,6 +192,14 @@ export function CounterOverviewClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
+  /*
+   * The ONE transition shared with `AppShell`'s own store switcher — see
+   * `counter-transition.tsx`. `pending` is threaded to every `<Section>`
+   * below, which is what turns a range/comparison change into a stale banner
+   * over the last good figures instead of a blank `loading.tsx`.
+   */
+  const { pending, startTransition } = useCounterTransition()
+
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
       const nextParams = writeCounterParams(params, next)
@@ -198,9 +207,11 @@ export function CounterOverviewClient({
       // push, not replace: note 19's "a range that only changes the label is
       // a lie" cuts the other way too — a range change is a real navigation
       // an owner expects the back button to undo.
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      startTransition(() => {
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      })
     },
-    [params, pathname, router],
+    [params, pathname, router, startTransition],
   )
 
   const { range, presetId, comparisonId } = counterParams
@@ -335,7 +346,7 @@ export function CounterOverviewClient({
           holds whichever of them arrived. */}
       <HeadBlock
         figures={[
-          <Section bare key="net" title="Net sales" data={sections.sales}>
+          <Section bare key="net" title="Net sales" data={sections.sales} pending={pending}>
             {(d) => (
               <LeadFigure
                 label={netSalesLabel(range)}
@@ -349,7 +360,7 @@ export function CounterOverviewClient({
               />
             )}
           </Section>,
-          <Section bare key="splh" title="Sales per labour hour" data={sections.splh}>
+          <Section bare key="splh" title="Sales per labour hour" data={sections.splh} pending={pending}>
             {(d) => (
               <LeadFigure
                 label="Sales per labor hour"
@@ -368,7 +379,7 @@ export function CounterOverviewClient({
           </Section>,
         ]}
       >
-        <Section bare title="The verdict" data={sections.verdict}>
+        <Section bare title="The verdict" data={sections.verdict} pending={pending}>
           {(v) => (
             <Say tone={v.tone} headline={v.headline} action={v.action}>
               {v.body}
@@ -380,12 +391,12 @@ export function CounterOverviewClient({
       {/* The ruled strip. `Strip` sizes itself from `cells.length`, so a strip
           missing a figure the database cannot produce is a shorter strip
           rather than a bordered box reading "—". */}
-      <Section bare title="The figures" data={sections.strip}>
+      <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <Strip cells={cells} />}
       </Section>
 
       {/* Every cell names something the figures above it do NOT include. */}
-      <Section bare title="Still moving" data={sections.moving}>
+      <Section bare title="Still moving" data={sections.moving} pending={pending}>
         {(cells) => <Moving cells={cells} />}
       </Section>
 
@@ -405,6 +416,7 @@ export function CounterOverviewClient({
       <div className="split">
         <Section
           title={`Net sales · ${windowLabel}`}
+          pending={pending}
           meta={
             comparing
               ? `dashed line: ${cmpName} · ${buckets} buckets`
@@ -429,6 +441,7 @@ export function CounterOverviewClient({
           title="Sales per labor hour"
           meta={`${buckets} readings`}
           data={sections.splhChart}
+          pending={pending}
           askAbout="sales per labour hour"
         >
           {(spec) => (
@@ -453,7 +466,7 @@ export function CounterOverviewClient({
           is `P.overview.desk()`'s own `cmpOn &&` (line 4340) and is page
           state, not a section's status. */}
       {comparing ? (
-        <Section bare title="Every figure against the comparison" data={sections.comparison}>
+        <Section bare title="Every figure against the comparison" data={sections.comparison} pending={pending}>
           {(rows) => (
             <Drill wide label={`Every figure against ${cmpName}`}>
               <Table
@@ -480,7 +493,7 @@ export function CounterOverviewClient({
         </Section>
       ) : null}
 
-      <Section title="What needs you" data={sections.needsYou} askAbout="what needs me">
+      <Section title="What needs you" data={sections.needsYou} pending={pending} askAbout="what needs me">
         {(items) => <Queue items={items.map(toQueueItem)} />}
       </Section>
 
@@ -489,6 +502,7 @@ export function CounterOverviewClient({
           note 33, the element this whole effort was diagnosed on. */}
       <Section
         title="Per-store ledger"
+        pending={pending}
         meta={`${windowLabel} · open a store for where its money came from`}
         data={sections.stores}
         askAbout="the per-store ledger"
@@ -517,11 +531,11 @@ export function CounterOverviewClient({
             what actually reached COGS. `MoneyLines` is the prototype's own
             element for a short reconciliation, and the adapter writes the
             lines because a page never formats a number a second way. */}
-        <Section title="Invoices" data={sections.invoices} askAbout>
+        <Section title="Invoices" data={sections.invoices} pending={pending} askAbout>
           {(rows) => <MoneyLines rows={rows} />}
         </Section>
 
-        <Section title="Guest ratings" data={sections.ratings} askAbout>
+        <Section title="Guest ratings" data={sections.ratings} pending={pending} askAbout>
           {(r) => (
             <>
               <div className="stars">
