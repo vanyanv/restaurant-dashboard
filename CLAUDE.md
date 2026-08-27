@@ -26,9 +26,11 @@ It enforces, on `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
 `src/components/counter/**` and `src/lib/counter/**`: no colour literal
 outside `counter.css`, no generic Tailwind palette colour, no page branching
 on a `SectionData` status, no page importing Prisma or a server action
-directly, no page importing `framer-motion` directly. It has documented holes
-(regex, not an AST) — see `DESIGN.md` and the module comment in
-`scripts/counter-lint.ts`.
+directly, no page importing `framer-motion` directly, no page or page client
+importing or rendering `AppShell`/`PhoneShell` (they belong to a layout), and
+no directory under a `(counter)` route group holding a `page.tsx` without a
+`loading.tsx` beside it. It has documented holes (regex, not an AST) — see
+`DESIGN.md` and the module comment in `scripts/counter-lint.ts`.
 
 Two things the linter cannot check, because they need judgment:
 

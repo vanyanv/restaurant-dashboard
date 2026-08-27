@@ -220,6 +220,22 @@ check, not an AST, and fails the build on:
    `src/lib/counter/adapters/`; adapters call the existing server code.
 5. **`no-direct-motion-import`** — a page importing `framer-motion` (or
    `motion/react`) directly, static or dynamic. See Motion, above.
+6. **`no-shell-in-page`** — a page or page client under
+   `src/app/dashboard/**` or `src/app/(mobile)/m/**` importing or rendering
+   `AppShell` or `PhoneShell`. After the streaming-architecture rebuild
+   (Task 1) both belong to exactly one place each —
+   `src/app/dashboard/(counter)/layout.tsx` and
+   `src/app/(mobile)/m/(counter)/layout.tsx` — and a page that mounts its
+   own is the regression the whole plan exists to repair (4 mount sites, 0
+   layouts, measured before the fix). `layout.tsx` files are the rule's own
+   exemption, not a legacy one.
+7. **`no-route-without-loading`** — a directory under one of the two
+   `(counter)` route groups that holds a `page.tsx` but no `loading.tsx`
+   beside it. This is the one rule that is a directory check rather than a
+   regex — the defect is an absence, and there is no line of text for a
+   pattern to match against an absence. It never reaches the ~19 remaining
+   editorial pages at all (they live outside both `(counter)` groups), so it
+   needs no LEGACY exemption of its own.
 
 It checks `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
 `src/components/counter/**`, and `src/lib/counter/**`. Legacy files under the
@@ -227,7 +243,9 @@ first two roots are exempt *only* while their on-disk content is byte-
 identical to what that path held at the gate's baseline commit — the moment a
 legacy file is rewritten (onto Counter or for any other reason, including an
 uncommitted edit), it loses the exemption and is linted for real. The
-exemption can only shrink.
+exemption can only shrink. Rule 7 is scoped narrower than the other six (the
+two `(counter)` route groups, not the full first two roots) for exactly the
+reason its own entry above gives.
 
 It's a regex, so it has known, documented holes — five of them, recorded in
 `scripts/counter-lint.ts`'s module comment rather than only in a report: a
@@ -246,7 +264,7 @@ stripped, because the scanner treats everything between backticks as opaque
 string content. None of these are silent — a hole that's written down is a
 limitation; one that isn't is a trap.
 
-A sixth rule can't be linted, because it needs judgment: **a figure shown on
+One more rule can't be linted, because it needs judgment: **a figure shown on
 two pages must come from one function in `src/lib/counter/`.** The spec's
 note 60 is the cautionary tale this rule exists to prevent: in the pre-Counter
 dashboard, Overview read prime cost at 56.2% and the P&L read 57.9% for the

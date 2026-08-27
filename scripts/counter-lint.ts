@@ -1,10 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * The five CLAUDE.md tripwires, as a build failure instead of prose.
+ * The CLAUDE.md tripwires, as a build failure instead of prose.
  *
  * They were prose for months and were violated repeatedly — which is what a
  * tripwire being hit means. Text-level checks are used deliberately: they
  * cost nothing, need no build, and run on a file the moment it is written.
+ *
+ * Five rules were text-over-source regex checks (below). Task 2b of the
+ * streaming-architecture plan added two more, `no-shell-in-page` and
+ * `no-route-without-loading` — see "Task 2b (regression enforcement)" below
+ * for why they exist and why the second one is NOT a regex.
  *
  * These are regex checks over source text, not an AST. That is a deliberate
  * trade of soundness for cost and speed, and it has known holes — see the
@@ -79,6 +84,40 @@
  *     the cause and the remedy — instead of silently returning "not exempt"
  *     for that case. See `BaselineUnreachableError`'s own doc comment.
  *
+ * --- Task 2b (regression enforcement) ---
+ *
+ * The streaming-architecture plan's Task 1 moved the Counter chrome
+ * (`AppShell`, `PhoneShell`) out of every page and into two layouts —
+ * `src/app/dashboard/(counter)/layout.tsx` and
+ * `src/app/(mobile)/m/(counter)/layout.tsx` — and Task 2 gave every Counter
+ * route a `loading.tsx`. Both were, until this task, prose rather than a
+ * build failure: nothing stopped the NEXT of the 51 unbuilt Counter pages
+ * from copying the old pattern (a page mounting its own shell) or skipping
+ * the new one (a route with no loading boundary), because a page is written
+ * by copying the page before it and the test cycle is off (see the
+ * project's "BUILD VELOCITY" note). Two rules close that gap:
+ *
+ *   - `no-shell-in-page` is a sixth entry in `RULES`, matched and exempted
+ *     exactly like the first five: comment-stripped before matching (so a
+ *     doc comment that mentions `AppShell` in prose does not trip it — two
+ *     page clients did exactly that until their comments were corrected in
+ *     this same task) and LEGACY-exempt on the same byte-identical-content
+ *     basis. It needs no route-scoping of its own beyond `SHELL_ALLOWED`:
+ *     the two layout files are the shell's only legitimate mount site, and
+ *     `components/counter` / `lib/counter` / `styles` are not "a page or
+ *     page client" at all.
+ *   - `no-route-without-loading` is deliberately NOT a `RULES` entry. The
+ *     defect it catches is an absence — a directory with a `page.tsx` and no
+ *     `loading.tsx` beside it — and there is no line of text for a regex to
+ *     match against an absence. `findRouteLoadingViolations` walks the
+ *     filesystem directly instead, scoped to `COUNTER_ROUTE_GROUPS` (the two
+ *     `(counter)` route groups, not the wider `src/app/dashboard/**` /
+ *     `src/app/(mobile)/m/**` the other rules police). That scope is also
+ *     why it needs no LEGACY exemption of its own: the ~19 remaining
+ *     editorial pages live outside both `(counter)` groups, so this check
+ *     structurally cannot reach them, unlike a regex rule that would see
+ *     every editorial page and need LEGACY to look away from it.
+ *
  * --- Known holes, left as regex-over-text limitations (not fixed) ---
  *
  *   - Dynamic Tailwind classes: `` `bg-${color}-500` `` or
@@ -114,8 +153,8 @@
  *     fixture test means and so is its own decision, not a side effect of
  *     adding the second file.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs"
-import { join, relative, sep } from "node:path"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
+import { dirname, join, relative, sep } from "node:path"
 import { execFileSync } from "node:child_process"
 
 export interface Violation {
@@ -180,6 +219,18 @@ const DIRECT_MOTION_SPECIFIERS = String.raw`framer-motion|motion\/react`
 const DIRECT_MOTION_IMPORT = new RegExp(
   String.raw`from\s+["'](?:${DIRECT_MOTION_SPECIFIERS})["']|\b(?:import|require)\s*\(\s*["'](?:${DIRECT_MOTION_SPECIFIERS})["']`,
 )
+/**
+ * A page or page client importing OR rendering the layout-level shell
+ * directly — the exact defect the streaming-architecture spec measured (4
+ * mount sites, 0 layouts) before Task 1 moved `AppShell` and `PhoneShell`
+ * into `(counter)/layout.tsx` and `(mobile)/m/(counter)/layout.tsx`. Matched
+ * as a bare identifier rather than an import-only or JSX-tag-only pattern
+ * because the rule is "may not import OR render" — either one is the
+ * regression. Comments are stripped before this runs (see `stripComments`
+ * and the module comment's "Task 2b" note), so a doc comment that mentions
+ * `AppShell` in prose does not trip it.
+ */
+const SHELL_IN_PAGE = /\bAppShell\b|\bPhoneShell\b/
 
 /** surface/ and state/ implement the status-branch rule; lib/counter constructs data, it doesn't render it — see the comment on STATUS_BRANCH above. */
 const STATUS_BRANCH_ALLOWED =
@@ -208,6 +259,18 @@ const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]adapters[/\\]/
  * it: 1 failed, "expected 0 to be greater than 0".
  */
 const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$/
+/**
+ * `SHELL_IN_PAGE`'s exemption: the two layout files that ARE the shell's one
+ * legitimate mount site each, plus everything reachable from `ROOTS` that is
+ * not "a page or page client" at all — `components/counter`, `lib/counter`
+ * and `styles` carry no pages, so a rule about pages has nothing to say
+ * about them. No LEGACY consideration is needed here beyond the mechanism
+ * every `RULES` entry already gets (see `isLegacyUnchanged`): the editorial
+ * pages don't render `AppShell`/`PhoneShell` at all, so this rule would
+ * already report them clean even without it.
+ */
+const SHELL_ALLOWED =
+  /[/\\]layout\.tsx$|[/\\]components[/\\]counter[/\\]|[/\\]lib[/\\]counter[/\\]|[/\\]styles[/\\]/
 
 const RULES: Array<{
   name: string
@@ -220,6 +283,7 @@ const RULES: Array<{
   { name: "no-status-branch", pattern: STATUS_BRANCH, allowed: STATUS_BRANCH_ALLOWED, extensions: [".tsx"] },
   { name: "no-direct-data-import", pattern: DIRECT_DATA_IMPORT, allowed: DATA_ALLOWED, extensions: [".tsx"] },
   { name: "no-direct-motion-import", pattern: DIRECT_MOTION_IMPORT, allowed: MOTION_ALLOWED, extensions: [".tsx", ".ts"] },
+  { name: "no-shell-in-page", pattern: SHELL_IN_PAGE, allowed: SHELL_ALLOWED, extensions: [".tsx"] },
 ]
 
 /**
@@ -522,6 +586,58 @@ function isLegacyUnchanged(absPath: string, currentContent: string, baselineComm
   return base === normalizeRouteGroupImports(currentContent)
 }
 
+/**
+ * The two Counter route groups `no-route-without-loading` polices — see the
+ * module comment's "Task 2b" section for why this is narrower than `ROOTS`
+ * and needs no LEGACY exemption of its own.
+ */
+export const COUNTER_ROUTE_GROUPS = [
+  join(process.cwd(), "src", "app", "dashboard", "(counter)"),
+  join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)"),
+]
+
+/** True if `dir` is `root` itself or nested inside it. */
+function isUnder(dir: string, root: string): boolean {
+  return dir === root || dir.startsWith(root + sep)
+}
+
+/**
+ * `no-route-without-loading`, as a directory check rather than a regex —
+ * the defect it catches is an ABSENCE (no `loading.tsx` beside a
+ * `page.tsx`), and there is no line of text for a pattern to match against
+ * an absence. Walks `routeGroupRoots` directly instead of scanning file
+ * contents; every directory that contains a `page.tsx` must also contain a
+ * `loading.tsx`.
+ */
+export function findRouteLoadingViolations(
+  routeGroupRoots: string[] = COUNTER_ROUTE_GROUPS,
+): Violation[] {
+  const violations: Violation[] = []
+  for (const root of routeGroupRoots) {
+    let files: string[]
+    try {
+      files = walk(root)
+    } catch {
+      continue // a route group that does not exist yet is not a violation
+    }
+    const pageDirs = new Set(
+      files.filter((f) => f.endsWith(`${sep}page.tsx`)).map((f) => dirname(f)),
+    )
+    for (const dir of pageDirs) {
+      if (!existsSync(join(dir, "loading.tsx"))) {
+        const rel = relative(process.cwd(), dir)
+        violations.push({
+          file: rel,
+          line: 1,
+          rule: "no-route-without-loading",
+          text: `${rel} has a page.tsx but no loading.tsx beside it`,
+        })
+      }
+    }
+  }
+  return violations
+}
+
 export function lintCounter(
   roots: string[],
   opts: { ignoreLegacy?: boolean; baselineCommit?: string } = {},
@@ -561,6 +677,19 @@ export function lintCounter(
       })
     }
   }
+  // `no-route-without-loading` is a directory check, not a per-file regex
+  // (see `findRouteLoadingViolations`), so it is not in `RULES` and runs
+  // once here instead of once per file. Scoped to whichever
+  // `COUNTER_ROUTE_GROUPS` entries actually fall within the `roots` this
+  // call was given, so `lintCounter([FIXTURES])` in tests sees only
+  // fixture-shaped violations — a fixture directory is never under
+  // `COUNTER_ROUTE_GROUPS` — while `lintCounter(ROOTS)` (what `npm run
+  // tokens` runs) always reaches the real tree, since `ROOTS` includes both
+  // `src/app/dashboard` and `src/app/(mobile)/m`.
+  const routeGroupsInScope = COUNTER_ROUTE_GROUPS.filter((group) =>
+    roots.some((r) => isUnder(group, r)),
+  )
+  violations.push(...findRouteLoadingViolations(routeGroupsInScope))
   return violations
 }
 

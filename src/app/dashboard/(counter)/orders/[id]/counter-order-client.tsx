@@ -46,11 +46,11 @@ import type {
  * `P.order` is declared `nodate: true` (line 6569) and `deskFor()` writes
  * `(src.nodate ? '' : CD.bar())`. ONE ORDER DOES NOT HAVE A RANGE, so there is
  * nothing for a window to widen and nothing for a comparison to compare
- * against. `AppShell` already has the mechanism: `actions` is optional and
- * `PageHead` emits `.phactions` only when there is something to put in it, so
- * omitting the prop removes the control rather than hiding a live one. No new
+ * against. `PageHead` already has the mechanism: its `children` are optional
+ * and `.phactions` is emitted only when there is something to put in it, so
+ * omitting the date control removes it rather than hiding a live one. No new
  * prop was needed and none was added — a `nodate` boolean would have been a
- * second way to say what not passing `actions` already says.
+ * second way to say what not passing `children` already says.
  *
  * `presetId` / `onSelectPreset` are omitted for the same reason: they are what
  * make `AskSurface` draw its "Change the range" group, and a palette row that
