@@ -674,15 +674,33 @@ export function findRouteLoadingViolations(
 const AWAITED_SECTIONS_PATTERN = /\bawait\s+get\w*Sections\s*\(/
 
 /**
- * The two order-detail routes, exempted BY NAME rather than by pattern — see
- * the module comment's "Task 4" section for ruling S-R5 and why naming the
- * exact paths (rather than, say, any `page.tsx` under an `[id]` segment)
- * matters. Exported so a test can assert the exemption is exactly these two
- * paths and nothing wider.
+ * The routes whose sections come out of ONE query, exempted BY NAME rather
+ * than by pattern — see the module comment's "Task 4" section for ruling S-R5
+ * and why naming the exact paths (rather than, say, any `page.tsx` under an
+ * `[id]` segment) matters. Exported so a test can assert the exemption is
+ * exactly these paths and nothing wider.
+ *
+ * THE TEST FOR MEMBERSHIP IS HOW MANY INDEPENDENT QUERIES SIT BEHIND THE
+ * SECTIONS, not how many sections there are and not how many loaders were
+ * written. A page that awaits nine queries behind one call is the streaming
+ * defect this rule exists to catch; a page that awaits one query and hands out
+ * seven projections of its single result would gain nothing but a picture of
+ * streaming by splitting it.
+ *
+ *   - The two order-detail routes: all seven sections are `mapReadyTo` over
+ *     one `getOrderDetail` load plus its costing batch, and the head must be
+ *     resolved at page level anyway to decide the 404.
+ *   - The two alert-inbox routes: `getAlertsSections` is one `getAlertInbox`
+ *     load — a `findMany`, a `groupBy` and two small scope reads, all issued
+ *     concurrently — and every section is a projection of its single result.
+ *     Contrast `/dashboard/decisions`, whose `getDecisionsView` is nine
+ *     independent queries and which therefore streams and is NOT listed here.
  */
 export const AWAITED_SECTIONS_ALLOWED = [
   join(process.cwd(), "src", "app", "dashboard", "(counter)", "orders", "[id]", "page.tsx"),
   join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "orders", "[id]", "page.tsx"),
+  join(process.cwd(), "src", "app", "dashboard", "(counter)", "alerts", "page.tsx"),
+  join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "alerts", "page.tsx"),
 ]
 
 /**
