@@ -1,6 +1,7 @@
 // laborDay / laborWeek / laborRole / laborTrendWeek — the labour week's pure
 // arithmetic, against "The measured data" in
-// .superpowers/sdd/2026-08-27-counter-labor-fidelity/task-1-brief.md,
+// .superpowers/sdd/2026-08-27-counter-labor-fidelity/task-1-brief.md and the
+// CORRECTED sales-per-labour-hour table in that plan's task-1b-brief.md,
 // window 2026-08-20 … 2026-08-26, Hollywood.
 //
 // Dollar figures there are a snapshot (the Otter sync backfills closed
@@ -8,10 +9,16 @@
 // published at cent precision, so this fixture RECONSTRUCTS them:
 //   - cost: the seven whole-dollar day figures, with the leftover 47c parked
 //     on the last day so the range total is exactly $8,825.47.
-//   - platformSales (SPLH's sales): `splh * actualHours` for each day, off
-//     the published per-day SPLH and hours — the exact inverse of the
-//     division `laborDay` performs, so the range SPLH reproduces to the cent
-//     by construction.
+//   - platformSales (SPLH's sales): the seven measured NET SALES figures off
+//     `OtterHourlySummary`, from task-1b-brief.md's corrected table — an
+//     INDEPENDENT input, never derived from the expected SPLH. Task 1's
+//     original fixture built this as `splh * actualHours`, which fed the
+//     expected answer into the input and could not fail regardless of which
+//     sales source (gross vs. net) the code actually read — the defect
+//     task-1b exists to close. Because these net-sales figures are quoted to
+//     the whole dollar and the hours to 0.1h, the SPLH computed from them
+//     lands a few cents from task-1b's own rounded per-day SPLH column;
+//     assertions below use a tolerance wide enough to absorb that.
 //   - totalSales (laborPct's sales): NOT published per day — only the range
 //     total ($49,389) and the resulting 17.9% are. Seven placeholder day
 //     figures are used that sum to exactly $49,389; their individual split
@@ -33,7 +40,17 @@ import { laborDay, laborRole, laborTrendWeek, laborWeek, type LaborDay } from "@
 const ACTUAL_HOURS = [56.8, 66.5, 60.7, 66.1, 59.6, 59.4, 63.0]
 const SCHEDULED_HOURS = [59.0, 69.5, 70.0, 67.5, 58.5, 48.5, 64.0]
 const COST = [1181, 1356, 1245, 1349, 1195, 1222, 1277.47]
-const SPLH = [156.56, 150.03, 176.41, 183.62, 167.81, 141.12, 134.98]
+// NET SALES off `OtterHourlySummary`, task-1b-brief.md's corrected per-day
+// table — measured independently of SPLH (this IS the app's real sales
+// figure for the day, not an inversion of the ratio under test). Sums to
+// $52,551 against the brief's rounder $52,550 range total — a whole-dollar
+// rounding artifact of the seven inputs, not a fixture error.
+const NET_SALES = [6883, 7685, 8307, 9345, 7522, 6358, 6451]
+// The corrected per-day SPLH the brief measured (net sales / actual hours),
+// kept here ONLY as the assertions' target values below — never fed back in
+// as an input. A day's `NET_SALES[i] / ACTUAL_HOURS[i]` lands a few cents
+// from these because both dollars and hours are quoted rounded.
+const SPLH_MEASURED = [121.10, 115.59, 136.78, 141.45, 126.27, 106.97, 102.34]
 // Total Sales per day: NOT published individually — only the range total
 // ($49,389) and its 17.9% are measured. These seven figures are invented to
 // sum to exactly that total; no single day's laborPct is asserted against
@@ -52,7 +69,7 @@ function buildWeek(): LaborDay[] {
       actualSeconds: ACTUAL_HOURS[i] * 3600,
       scheduledMinutes: SCHEDULED_HOURS[i] * 60,
       cost: COST[i],
-      platformSales: SPLH[i] * ACTUAL_HOURS[i],
+      platformSales: NET_SALES[i],
       totalSales: TOTAL_SALES[i],
     }),
   )
@@ -71,22 +88,27 @@ describe("laborWeek — the measured window", () => {
     expect(week.blendedRate).toBeCloseTo(20.42, 2)
   })
 
-  it("takes splh over platform sales at $158.76 for the range", () => {
+  it("takes splh over NET platform sales at $121.60 for the range — not gross's $158.76", () => {
     const week = laborWeek(buildWeek(), 51.08)
-    // 1 decimal, not 2: each day's platformSales fixture is `splh * hours`
-    // built from the table's own ROUNDED figures (splh to the cent, hours to
-    // 0.1h), so the reconstructed range total carries a few tenths of a cent
-    // of rounding across 7 days — a fixture-precision artifact, not a claim
-    // that `laborWeek`'s own arithmetic loses precision.
-    expect(week.splh).toBeCloseTo(158.76, 1)
+    // $121.60 is `OtterHourlySummary.netSales` over the window — the figure
+    // `getSplhSeries`/the Overview page already print. $158.76 (task 1's
+    // original, wrong, target) was computed from `OtterDailySummary` GROSS
+    // and is ruled out explicitly below so a regression back to a gross
+    // source fails loudly instead of by coincidence.
+    expect(week.splh).toBeCloseTo(121.6, 1)
+    expect(week.splh as number).not.toBeCloseTo(158.76, 0)
   })
 
-  it("takes each day's own splh — $183.62 on 08-23, $134.98 on 08-26", () => {
+  it("takes each day's own splh — ~$141 on 08-23, ~$102 on 08-26", () => {
     const week = laborWeek(buildWeek(), 51.08)
     const aug23 = week.days.find((d) => d.key === "2026-08-23")
     const aug26 = week.days.find((d) => d.key === "2026-08-26")
-    expect(aug23?.splh).toBeCloseTo(183.62, 2)
-    expect(aug26?.splh).toBeCloseTo(134.98, 2)
+    // Precision 0 (not 2): the input here is real net sales quoted to the
+    // whole dollar over hours quoted to 0.1h, so it lands a few cents from
+    // task-1b-brief.md's own rounded SPLH column ($141.45 / $102.34) — see
+    // the fixture-precision note at the top of this file.
+    expect(aug23?.splh).toBeCloseTo(SPLH_MEASURED[3], 0)
+    expect(aug26?.splh).toBeCloseTo(SPLH_MEASURED[6], 0)
   })
 
   it("takes laborPct over TOTAL SALES (17.9%) — never the platform-sales denominator (12.9%)", () => {
@@ -188,6 +210,8 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     // 2026-08-24 (Mon) .. 2026-08-27 (Thu): the running week, clipped.
     // cost $3,695 / hours 182 / splh $155.60 (measured), split evenly across
     // 4 days for the fixture — no per-day figure is published or asserted.
+    // `sales` is reconstructed from splh, so ONLY laborPct is asserted below
+    // — never splh itself (see the note on the "prior" week further down).
     const newestDays = Array.from({ length: 4 }, () => ({
       cost: 3695 / 4,
       hours: 182 / 4,
@@ -199,7 +223,18 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     expect(newest.cost).toBeCloseTo(3695, 0)
     expect(newest.laborPct as number).toBeCloseTo(13.0, 1)
 
-    // 2026-08-17 (Mon) .. 2026-08-23 (Sun): a full week.
+    // 2026-08-17 (Mon) .. 2026-08-23 (Sun): a full week. The twelve-week
+    // table (measured-data.md) publishes only cost, hours, "% of platform
+    // sales" and splh for this week — no independent net-sales figure. Both
+    // % and splh were computed from the SAME underlying sales number, so a
+    // fixture can use ONE of them to reconstruct that sales figure but must
+    // not assert the other: asserting splh here after building `sales` as
+    // `splh * hours` is exactly task 1's circular defect (feed the answer
+    // in, get the answer out), so this fixture builds `sales` from splh (the
+    // more precise, cents-quoted figure) and asserts only laborPct — the
+    // metric that was NOT used to construct the input. This mirrors the
+    // "newest" week fixture above, which does the same and likewise never
+    // asserts splh.
     const priorDays = Array.from({ length: 7 }, () => ({
       cost: 8500 / 7,
       hours: 417 / 7,
@@ -211,6 +246,5 @@ describe("laborTrendWeek — the running week is partial, the one before it isn'
     expect(prior.cost).toBeCloseTo(8500, 0)
     // % of platform sales, per the measured twelve-week table (NOT Total Sales).
     expect(prior.laborPct as number).toBeCloseTo(12.4, 1)
-    expect(prior.splh as number).toBeCloseTo(164.72, 1)
   })
 })
