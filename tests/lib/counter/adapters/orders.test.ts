@@ -39,6 +39,7 @@ import type { HourlyOrderPoint, OrderPatternsHourlyComparison } from "@/types/an
 import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { comparisonContext, type ComparisonContext } from "@/lib/counter/comparison"
 import { hasData } from "@/lib/counter/section-data"
+import { ticketOf } from "@/lib/counter/order-signs"
 import { getOrdersList } from "@/app/actions/order-actions"
 import { getHourlyPatternsForRange } from "@/app/actions/hourly-orders-actions"
 import {
@@ -173,6 +174,7 @@ function costsFor(o: OrderDetail, opts: { commissionRate?: number } = {}): LineC
       ["r-fries", { totalCost: 1.4, partial: false }],
     ]),
     commissionRate: rate,
+    ticket: ticketOf(o),
   })
 }
 
@@ -498,6 +500,7 @@ describe("buildOrderItems", () => {
       recipeBySku: new Map([["SKU-SLIDER", "r-slider"]]),
       costByRecipe: new Map([["r-slider", { totalCost: 3.1, partial: false }]]),
       commissionRate: 0,
+      ticket: ticketOf(o),
     })
     const items = buildOrderItems(o, costs)
 
@@ -568,6 +571,7 @@ describe("buildOrderKeep", () => {
       recipeBySku: new Map(),
       costByRecipe: new Map(),
       commissionRate: 0.25,
+      ticket: ticketOf(o),
     })
     const keep = buildOrderKeep(o, costs)
     expect(keep.rows.map((r) => r.key)).toEqual(["ticket", "commission", "net"])
@@ -641,6 +645,7 @@ describe("buildNeedsYou", () => {
         ["r-fries", { totalCost: 1.4, partial: false }],
       ]),
       commissionRate: 0.25,
+      ticket: ticketOf(o),
     })
 
     const sd = buildNeedsYou(lines, costs, new Map())
@@ -706,6 +711,7 @@ describe("buildNeedsYou", () => {
       recipeBySku: new Map([["SKU-SLIDER", "r-slider"]]),
       costByRecipe: new Map([["r-slider", { totalCost: 3.1, partial: false }]]),
       commissionRate: 0.25,
+      ticket: ticketOf(o),
     })
     const sd = buildNeedsYou(lines, costs, new Map())
     const items = hasData(sd) ? sd.data : []
@@ -756,6 +762,7 @@ describe("one order, one ticket", () => {
       recipeBySku: new Map(),
       costByRecipe: new Map(),
       commissionRate: commissionRateOf(o),
+      ticket: ticketOf(o),
     })
     return buildOrderStrip(o, costs).find((c) => c.label === "Ticket")?.value
   }
@@ -794,6 +801,50 @@ describe("one order, one ticket", () => {
   })
 })
 
+/*
+ * The margin column, under a Contribution figure that was always right.
+ *
+ * `keep = line.price × (1 − commissionRate)` applied a correct rate to a price
+ * the customer never paid: 315 of 500 orders carry an order-level discount,
+ * and on those the line total runs a median 24.95% above the ticket. So the
+ * table's Margin column was inflated on the majority of orders, directly
+ * beneath a Contribution computed correctly from `netOf`.
+ */
+describe("a margin the order actually earned", () => {
+  it("prices each line at what the customer paid before taking the rate off it", () => {
+    // Half off: a $20.00 line was paid $10.00, and at 12.5% commission keeps
+    // $8.75. On the menu price it would have reported $17.50.
+    const o = order({
+      subtotal: 20,
+      discount: -10,
+      commission: -1.25,
+      items: [{ id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 20, subItems: [] }],
+    })
+    const row = buildOrderItems(o, costsFor(o)).rows[0]
+    expect(row.keep).toBe("$8.75")
+    // (8.75 − 3.10) / 8.75 = 64.6%. On the undiscounted $17.50 keep it would
+    // have read 82.3% — a figure that flatters by nearly twenty points.
+    expect(row.margin).toBe("64.6%")
+  })
+
+  it("agrees with the order-level contribution the strip prints above it", () => {
+    const o = order({
+      subtotal: 41.5,
+      discount: -20.75,
+      commission: -5.19,
+      items: [
+        { id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 25.5, subItems: [] },
+        { id: "i2", skuId: "SKU-FRIES", name: "Cheese Fries", quantity: 1, price: 16.0, subItems: [] },
+      ],
+    })
+    const t = buildOrderItems(o, costsFor(o))
+    const cells = buildOrderStrip(o, costsFor(o))
+    const contribution = cash(cells.find((c) => c.label === "Contribution")?.value ?? "0")
+    // The table's own bottom line: after commission, less the costed food.
+    expect(cash(t.total.keep) - cash(t.total.cost)).toBeCloseTo(contribution, 2)
+  })
+})
+
 describe("a margin nothing can be believed about", () => {
   it("renders an em dash rather than a flattering figure when keep is negative", () => {
     // A rate above 1 is reachable on a partially-drained order whose recorded
@@ -804,7 +855,7 @@ describe("a margin nothing can be believed about", () => {
     const lines = flattenOrderLines(o)
     const costs: LineCost[] = lines.map((l, i) => ({
       key: l.key, name: l.name, modifier: l.modifier, quantity: l.quantity,
-      price: l.price, keep: -1, cost: i === 0 ? 3 : null,
+      price: l.price, charged: l.price, keep: -1, cost: i === 0 ? 3 : null,
       uncostedReason: i === 0 ? null : ("unmapped" as const),
     }))
     for (const row of buildOrderItems(o, costs).rows) {
@@ -945,7 +996,7 @@ describe("where an unmapped line sends you", () => {
     })
     const lines = flattenOrderLines(o)
     const costs = resolveLineCosts({
-      lines, recipeBySku: new Map(), costByRecipe: new Map(), commissionRate: 0.25,
+      lines, recipeBySku: new Map(), costByRecipe: new Map(), commissionRate: 0.25, ticket: ticketOf(o),
     })
 
     const sd = buildNeedsYou(lines, costs, new Map())
