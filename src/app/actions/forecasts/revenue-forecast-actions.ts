@@ -13,6 +13,7 @@ import {
   type Attribution,
 } from "@/lib/dashboard/model-call"
 import { getCachedSession, resolveStoreContext } from "./_shared"
+import { newestGenerationPerDay } from "@/lib/counter/forecast-generation"
 
 export interface RevenueForecastDay {
   date: Date
@@ -121,14 +122,15 @@ export async function getRevenueForecast(input: {
   ])
 
   // Latest generation per (storeId, date), then sum across stores per date.
-  const latestPerStoreDate = new Map<string, (typeof rows)[number]>()
-  for (const r of rows) {
-    const key = `${r.storeId}|${r.forecastDate.toISOString().slice(0, 10)}`
-    const existing = latestPerStoreDate.get(key)
-    if (!existing || r.generatedAt > existing.generatedAt) {
-      latestPerStoreDate.set(key, r)
-    }
-  }
+  //
+  // The dedupe itself is `newestGenerationPerDay`, and it is a shared function
+  // rather than the loop that used to sit here because THIS is the query it
+  // was measured on: over `hourBucket: 0` for the next fourteen days on
+  // 2026-08-26 the table held 121 rows across 14 dates and 16 generations, and
+  // summing them without this step gives $646,442 where the week is $50,754.
+  // Every reader of `ForecastDailyRevenue` needs the same step, and a second
+  // copy of it is a second place for it to be forgotten.
+  const latestPerStoreDate = newestGenerationPerDay(rows)
 
   const aggByDate = new Map<
     string,
@@ -143,7 +145,7 @@ export async function getRevenueForecast(input: {
       attributions: Attribution[]
     }
   >()
-  for (const r of latestPerStoreDate.values()) {
+  for (const r of latestPerStoreDate) {
     const key = r.forecastDate.toISOString().slice(0, 10)
     const cur = aggByDate.get(key)
     // W6-8: branch per-row to reconciled values when the flag opts in AND the
