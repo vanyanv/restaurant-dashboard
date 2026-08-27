@@ -11,6 +11,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
+  "/dashboard/labor": "/m/labor",
   "/dashboard/menu": "/m/menu",
   "/dashboard/operations": "/m/operations",
   "/dashboard/orders": "/m/orders",
