@@ -87,19 +87,44 @@ requirements implicitly include this section.
 
 ## The measured data
 
-Every figure below was measured against the live database on 2026-08-27, over
-**2026-08-20 … 2026-08-26** — the latest seven days `OtterDailySummary` holds.
-Quote these numbers; do not re-derive them from the prototype's fixtures, which
-are invented.
+### READ THIS BEFORE COMPARING ANY DOLLAR FIGURE
 
-**That is NOT the window `?range=d7` resolves to, and my first draft of this
-sentence wrongly said it was.** `d7` is a trailing window ending TODAY
-(2026-08-27), so it runs 2026-08-21 … 2026-08-27 and its last day holds no data
-yet. The two windows overlap in six days out of seven.
+**These figures drift, and they drifted during this plan.** The Otter sync
+backfills into windows that are already closed. Between the morning probe that
+seeded this table and the Task 3c verification eight hours later, the SAME
+window 2026-08-20 … 2026-08-26 moved:
 
-**So verify with the explicit window, not the preset.** `from`/`to` beat
-`range` in `readCounterParams` precisely because they are the more specific
-statement, so every screenshot check in this plan uses:
+| | morning | evening |
+|---|---|---|
+| P&L Total Sales | 48,425.32 | **49,388.65** |
+| four-channel total | 67,085.38 | **68,418.03** |
+| Uber gross | 31,659.20 | **32,477.61** |
+| 2026-08-26 platform sales | 8,898 | **8,475** … and every other day moved too |
+
+**So a dollar figure in this table is a snapshot, not an expectation.** Before
+comparing a screenshot to one, re-measure. The ratios are what hold: commission
+was 17.3% of channel sales and 22.3% off marketplace in BOTH probes, to the
+decimal, on totals nearly a thousand dollars apart.
+
+**Verification doctrine for every remaining task:**
+
+- **Stable — assert these.** Percentages and shares; the ordering of bands and
+  days; which hour is busiest; landmark counts; structure.
+- **Volatile — re-measure, never assert from this table.** Every dollar figure,
+  and any points-drift derived from two dollar ratios (the thirds moved from
+  +2.6 pts to +3.1 pts on the same window between probes).
+
+This is the same lesson as the previous plan's ruling S-R4, where byte-identical
+fidelity reports turned out to drift against live data as the day turned.
+
+### Snapshot: 2026-08-27 evening, window 2026-08-20 … 2026-08-26
+
+**That is NOT the window `?range=d7` resolves to**, and my first draft of this
+sentence wrongly said it was. `d7` is a trailing window ending TODAY, so it runs
+2026-08-21 … 2026-08-27 and its last day holds no data yet.
+
+**Verify with the explicit window, not the preset.** `from`/`to` beat `range` in
+`readCounterParams` because they are the more specific statement:
 
 ```
 ?from=2026-08-20&to=2026-08-26&cmp=weekday
@@ -112,74 +137,59 @@ landmarks — not figures — so the difference does not touch the baseline.
 
 | id | name | lifecycle | Otter rows |
 |---|---|---|---|
-| `cmexd4zia0001jr04ljkdt9na` | Chris N Eddys - Hollywood | `ready` | 3,430 daily · 2,905 hourly · 80,932 orders |
+| `cmexd4zia0001jr04ljkdt9na` | Chris N Eddys - Hollywood | `ready` | all of it |
 | `store-chrisneddys-vannuys` | Chris N Eddys - Van Nuys | `pre_open` | none |
 | `store-chrisneddys-glendale` | Chris N Eddys - Glendale | `pre_open` | **1 hourly row**, nothing else |
 
 Hollywood's id is a cuid; the other two are hand-written slugs. Do not assume a
 store id's shape.
 
-### The d7 window, by platform (all stores = Hollywood)
+### The window, by GL sales line (gross — the basis the P&L uses)
 
-Gross is the basis the P&L's sales lines use. Net is what `OtterDailySummary`
-calls net.
+| GL line | platform | gross |
+|---|---|---|
+| house (4010 + 4011) | css-pos + bnm-web, CARD and CASH | 15,254.49 |
+| 4012 Uber | ubereats | 32,477.61 |
+| 4013 Doordash | doordash | 20,088.60 |
+| 4014 Grubhub | grubhub | 542.02 |
+| 4015C Caviar | caviar | 55.31 |
+| **four-channel total** | | **68,418.03** |
 
-| GL line | platform | gross | net |
-|---|---|---|---|
-| 4010 SALES-FOOD Credit Cards | css-pos + bnm-web, CARD | — | — |
-| 4011 SALES-FOOD Cash | css-pos, CASH | — | — |
-| **house (4010 + 4011)** | | **15,055.23** | 15,176.54 |
-| 4012 Uber | ubereats | **31,659.20** | 22,008.99 |
-| 4013 Doordash | doordash | **19,828.93** | 13,814.54 |
-| 4014 Grubhub | grubhub | **542.02** | 542.02 |
-| 4015C Caviar | caviar | **55.31** | 55.31 |
-| **four-channel total** | | **67,085.38** | 51,542.09 |
-| all platforms | | 67,140.69 | 51,597.40 |
+Other lines inside Total Sales: service charges +113.54, tax −3,151.95,
+discounts −15,990.97. **P&L Total Sales = 49,388.65** — the figure Overview and
+the P&L both print as "Net sales" (`Statement.grossSales`).
 
-Other lines inside Total Sales: service charges **+83.67**, tax
-**−3,109.24**, discounts **−15,689.80**.
+### Channel share, per day (share of the four channels)
 
-**P&L Total Sales for the window = 48,425.32.** That is the figure Overview and
-the P&L both print as "Net sales" (`Statement.grossSales`, from
-`getAllStoresPnL`).
+| date | house | Uber | DoorDash | Grubhub | other |
+|---|---|---|---|---|---|
+| 2026-08-20 | 26.0% | 48.6% | 24.9% | 0.5% | 0.00% |
+| 2026-08-21 | 21.4% | 45.9% | 31.3% | 1.2% | 0.20% |
+| 2026-08-22 | 26.7% | 43.5% | 29.3% | 0.4% | 0.00% |
+| 2026-08-23 | 23.6% | 45.2% | 30.4% | 0.9% | 0.00% |
+| 2026-08-24 | 16.5% | 53.6% | 29.5% | 0.1% | 0.21% |
+| 2026-08-25 | 20.2% | 45.7% | 33.1% | 0.9% | 0.18% |
+| 2026-08-26 | 20.9% | 50.9% | 26.5% | 1.7% | 0.00% |
 
-### Channel share, per day of the window (share of the four channels, on gross)
+**Marketplace share 77.7%** of the four channels. **Commission 17.3% of channel
+sales and 22.3% off marketplace** — both held to the decimal across two probes
+a thousand dollars apart, which is why they are the figures to check.
 
-| date | house | Uber | DoorDash | Grubhub | other | total |
-|---|---|---|---|---|---|---|
-| 2026-08-20 | 26.0% | 48.6% | 24.9% | 0.5% | 0.00% | $8,898 |
-| 2026-08-21 | 21.4% | 45.9% | 31.3% | 1.2% | 0.20% | $9,906 |
-| 2026-08-22 | 26.7% | 43.5% | 29.3% | 0.4% | 0.00% | $10,663 |
-| 2026-08-23 | 23.6% | 45.2% | 30.4% | 0.9% | 0.00% | $12,093 |
-| 2026-08-24 | 16.5% | 53.6% | 29.5% | 0.1% | 0.21% | $9,996 |
-| 2026-08-25 | 20.2% | 45.7% | 33.1% | 0.9% | 0.18% | $8,387 |
-| 2026-08-26 | 21.9% | 48.5% | 27.6% | 2.1% | 0.00% | $7,198 |
+Uber is the largest channel every single day. In-house never exceeds 27%.
+Caviar never reaches a quarter of one percent — that is A-R2's whole basis.
 
-**Range: marketplace share 77.6% of the four channels** (70.6% if computed on
-net instead — see A-R1).
-
-**Commission** at this account's published rates (Uber 0.21, DoorDash 0.25;
-Grubhub has no rate in the schema): **$11,605.66**, which is **17.3% of the
-four-channel total** and **22.3% off marketplace sales**.
-
-**Thirds** (7 buckets, `floor(7/3) = 2`, so two buckets each side):
-
-- marketplace share **76.4% → 79.0%**, **+2.6 pts**
-- blended rate off the top **16.98% → 17.50%**, **+0.52 pts**
-- on $67,085 of channel sales that is **$348** of extra commission on the mix
-  alone
-
-### Day of week (trailing 90 days, all platforms, net)
+### Day of week (trailing 90 days, net)
 
 | | Sun | Mon | Tue | Wed | Thu | Fri | Sat |
 |---|---|---|---|---|---|---|---|
 | days | 13 | 13 | 13 | 13 | 12 | 13 | 13 |
 | average | **$9,018** | $7,063 | $6,397 | $6,680 | $6,706 | $7,325 | $8,444 |
 
-Sunday is the best day. Over a 7-day range every weekday is a single reading —
-the prototype's own caveat sentence applies and must be printed.
+**Sunday is the best day and Tuesday the worst** — that ORDERING is the stable
+fact. Over a 7-day range every weekday is a single reading, and the
+prototype's own caveat sentence applies.
 
-### Service profile (`OtterHourlySummary`, the d7 window)
+### Service profile (`OtterHourlySummary`)
 
 ```
  0h:255   1h:98   2h:1   10h:43  11h:86  12h:121 13h:132 14h:115 15h:126
@@ -187,32 +197,28 @@ the prototype's own caveat sentence applies and must be printed.
 ```
 
 - 2,636 orders over 7 days = **377 a day**
-- busiest hour **23h**
+- **busiest hour 23h**
 - trading hours run **10h through 2h** — seventeen hours, crossing midnight
 - 5p–10p (the prototype's block) is **38.1%**
-- the best contiguous five hours are **20h–0h at 48.0%** (1,266 orders)
+- the best contiguous five hours are **20h–0h at 48.0%**
 - **25.8% of orders fall outside the prototype's 11a–10p axis**, including the
-  single busiest hour
-- table coverage begins **2026-02-25**; 110 rows cover the 7 days
-- the daily summaries report **2,598** orders for the same window — 1.5% fewer.
-  Two syncs, two answers. See A-R5.
+  busiest hour
+- coverage begins **2026-02-25**
+- the daily summaries report 2,598 orders for the same window — 1.5% fewer.
+  Two syncs, two answers (A-R5).
 
-### Menu (the d7 window)
+### Menu
 
-Categories, by net: On The Side $27,104 · NFL Promo $14,294 · Combos $10,748 ·
-Slider and Fries Combos $6,828 · Drinks $1,861 · Secret Menu $1,654 · A La
-Carte $1,441 · Uncategorized $2.
+Categories by net: On The Side · NFL Promo · Combos · Slider and Fries Combos ·
+Drinks · Secret Menu · A La Carte · Uncategorized.
 
-Top items, by net: Signature Double Patty & Cheese Slider $21,820 (×1,747) ·
-Signature Slider Fries & Drink Combo $14,294 (×771) · 2 Slider Combo $6,860
-(×416) · 2 Sliders and Fries $4,337 (×228) · 1 Slider Combo $3,849 (×335).
+Top items by net: Signature Double Patty & Cheese Slider · Signature Slider
+Fries & Drink Combo · 2 Slider Combo · 2 Sliders and Fries · 1 Slider Combo.
 
-Both tables span 2025-02-21 … 2026-08-26 — 2,272 category rows, 22,454 item
-rows. `OtterMenuItem` names its column **`itemName`**, not `name`.
+**That ordering is the stable fact; the dollars are not.** Both tables span
+2025-02-21 … 2026-08-26. `OtterMenuItem` names its column **`itemName`**.
 
 ### Customer identity
-
-`OtterOrder.customerName` by platform:
 
 | platform | orders | with a name |
 |---|---|---|
@@ -222,12 +228,9 @@ rows. `OtterMenuItem` names its column **`itemName`**, not `name`.
 | d2c-eater-website | 1,159 | 1,154 |
 | grubhub | 776 | 776 |
 
-51,745 of 80,932 orders carry a name; 21,039 distinct values. The most common
-are `Brady B` (126), `Michael P` (96), `Liam Fitzgerald` (82), `Chris C` (61),
-`Chris D` (44) — truncated first-name-plus-initial, which collide by
-construction. There is no customer id anywhere in the schema.
-
----
+The most common values are `Brady B`, `Michael P`, `Liam Fitzgerald`, `Chris C`,
+`Chris D` — truncated first-name-plus-initial, which collide by construction.
+There is no customer id anywhere in the schema. This is A-R3's whole basis.
 
 ## Rulings
 
