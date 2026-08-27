@@ -86,12 +86,27 @@ export type OrderListTotals = {
   commission: number
   /** Σ subtotal + Σ discount, over matched orders whose platform is not in-house. */
   thirdPartyNetSales: number
+  /**
+   * How many matched orders are on a marketplace at all, and how many of those
+   * carry a commission figure.
+   *
+   * `commission` alone cannot say whether it is the whole bill or a fraction of
+   * it, and `adjusted_commission`'s coverage is not a constant: counted on
+   * 2026-08-26 it ran 5,908 of 6,094 marketplace orders in January, 2,548 of
+   * 5,835 in April, 0 of 6,145 in May and 4,393 of 7,559 in July. A range on
+   * the wrong side of one of those cliffs states a total that is roughly half
+   * the truth, so the strip needs the ratio, not just the sum.
+   */
+  thirdPartyCount: number
+  thirdPartyWithFees: number
 }
 
 const ZERO_TOTALS: OrderListTotals = {
   netSales: 0,
   commission: 0,
   thirdPartyNetSales: 0,
+  thirdPartyCount: 0,
+  thirdPartyWithFees: 0,
 }
 
 export type OrderListResponse = {
@@ -179,7 +194,25 @@ export async function getOrdersList(
     ]
   }
 
-  const [rows, totalCount, undrainedCount, platforms, overallSums, thirdPartySums] =
+  /*
+   * The marketplace half of the range, ANDed rather than spread for the same
+   * reason the aggregate below is: `{ ...where, platform }` would OVERWRITE the
+   * reader's own platform filter.
+   */
+  const thirdPartyWhere: Prisma.OtterOrderWhereInput = {
+    AND: [where, { platform: { notIn: [...HOUSE_PLATFORMS] } }],
+  }
+
+  const [
+    rows,
+    totalCount,
+    undrainedCount,
+    platforms,
+    overallSums,
+    thirdPartySums,
+    thirdPartyCount,
+    thirdPartyWithFees,
+  ] =
     await Promise.all([
       prisma.otterOrder.findMany({
         where,
@@ -228,8 +261,17 @@ export async function getOrdersList(
       // reader's own platform filter, so filtering to DoorDash would divide
       // DoorDash fees by every marketplace's sales. Both conditions hold.
       prisma.otterOrder.aggregate({
-        where: { AND: [where, { platform: { notIn: [...HOUSE_PLATFORMS] } }] },
+        where: thirdPartyWhere,
         _sum: { subtotal: true, discount: true },
+      }),
+      // The two halves of the coverage ratio the strip grades its fee cell by.
+      prisma.otterOrder.count({ where: thirdPartyWhere }),
+      // `not: 0`, not `lt: 0`: the question is whether a figure LANDED, and a
+      // positive commission would mean the column's convention had changed —
+      // which is a thing to notice, not a row to count as missing. `feeAmount`
+      // makes its own decision about what such a row is worth.
+      prisma.otterOrder.count({
+        where: { AND: [thirdPartyWhere, { commission: { not: 0 } }] },
       }),
     ])
 
@@ -271,6 +313,8 @@ export async function getOrdersList(
       commission: Math.max(0, -(overallSums._sum.commission ?? 0)),
       thirdPartyNetSales:
         (thirdPartySums._sum.subtotal ?? 0) + (thirdPartySums._sum.discount ?? 0),
+      thirdPartyCount,
+      thirdPartyWithFees,
     },
   }
 }
