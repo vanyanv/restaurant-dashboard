@@ -116,6 +116,25 @@ const orderCount = (v: number) => `${v} order${v === 1 ? "" : "s"}`
 /** The prototype's `bandFmt: function (v) { return v; }` — "4-week band 18–27". */
 const bareCount = (v: number) => String(v)
 
+/**
+ * A fee nobody recorded, in the column where a fee would be.
+ *
+ * The same shape as the order page's `not costed` (prototype line 6587): a
+ * WORD in a money column, coloured so it cannot be read as a figure. `--warn`
+ * rather than `--bad` because nothing is wrong with the ORDER — the row is
+ * fine and its fee has not arrived. `adjusted_commission`'s coverage ran 0 of
+ * 6,360 marketplace orders in August 2026 against 5,908 of 6,094 in January,
+ * so this is a sync gap, and the strip above says the same thing about the
+ * range.
+ *
+ * The inline style names a token rather than a value, the same way `NotCosted`
+ * and `Kv`'s tones do; `npm run tokens` matches hex, `oklch(`, `rgb(` and
+ * `hsl(` literals and a `var()` is none of those.
+ */
+function NotRecorded() {
+  return <span style={{ color: "var(--warn)" }}>not recorded</span>
+}
+
 function orderRows(rows: OrdersRow[]): Row[] {
   return rows.map((r) => ({
     key: r.key,
@@ -134,7 +153,13 @@ function orderRows(rows: OrdersRow[]): Row[] {
       ),
       items: r.items,
       ticket: r.ticket,
-      fees: r.fees,
+      // Three states in one column, not two. `OrdersRow.fees` is an em dash
+      // both when a channel took nothing and when its commission never
+      // synced, and in a right-aligned money column those are indistinguishable
+      // — so the second one says so in words. The phone has read
+      // `feesRecorded` since the repair that discovered this; the desk, which
+      // shows fifty rows to the phone's six, never did.
+      fees: r.feesRecorded ? r.fees : <NotRecorded />,
       // The prototype paints every Net cell `hot`. It is not a verdict on the
       // row — `.tbl tbody tr[data-goto]:hover td.hot` is the only rule that
       // fires — it is the column the reader is following, lit on the row their

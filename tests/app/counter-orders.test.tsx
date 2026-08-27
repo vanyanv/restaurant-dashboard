@@ -223,6 +223,38 @@ describe("the orders desk composition", () => {
     // Note 47: the row opens the order.
     expect(rows[0].getAttribute("data-goto")).toBe("/dashboard/orders/o1")
   })
+
+  /*
+   * The three-state fee repair, on the surface that shows fifty rows.
+   *
+   * `OrdersRow.fees` is an em dash both when a channel took nothing and when
+   * its commission never synced. The phone has told those apart in words since
+   * the repair that found it; the desk read the figure and not the flag, so a
+   * DoorDash order with no fee on file printed the same blank an in-house
+   * order gets for genuinely paying none — and its Net column then equalled
+   * its Ticket with nothing saying why.
+   */
+  it("says a marketplace fee is not recorded rather than printing the in-house blank", () => {
+    const unrecorded = [
+      ROWS[0],
+      { ...ROWS[0], key: "o3", href: "/dashboard/orders/o3", id: "#4819", fees: "—", feesRecorded: false, net: "$36.65" },
+      ROWS[1],
+    ]
+    const { container } = render(
+      <CounterOrdersClient {...base} sections={sections({ list: ready(list({ rows: unrecorded })) })} />,
+    )
+    const cells = Array.from(container.querySelectorAll("table.tbl tbody tr")).map(
+      (r) => (r.querySelectorAll("td")[5] as HTMLElement),
+    )
+    expect(cells.map((c) => c.textContent)).toEqual(["$9.16", "not recorded", "—"])
+    // A word in a money column, coloured so it cannot be read as a figure —
+    // the same shape as the order page's `not costed`.
+    const marked = cells[1].querySelector("span")
+    expect(marked).not.toBeNull()
+    expect(marked?.getAttribute("style")).toContain("var(--warn)")
+    // And the in-house row keeps its bare em dash: zero IS the truth there.
+    expect(cells[2].querySelector("span")).toBeNull()
+  })
 })
 
 describe("the filters, which live in the URL", () => {
