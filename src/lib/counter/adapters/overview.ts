@@ -13,7 +13,7 @@ import type { SplhPoint } from "@/lib/splh"
 import { COGS_CODE, LABOR_CODE, TOTAL_SALES_CODE, type PnLRow } from "@/lib/pnl"
 import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
-import { granularityFor, loadStatement, type Statement } from "@/lib/counter/statement"
+import { granularityFor, loadStatement, rowValues, type Statement } from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { count, delta, money, pct, points } from "@/lib/counter/format"
@@ -413,12 +413,6 @@ export const getOverviewStores = cache(async function getOverviewStores(): Promi
 /* ── Plumbing ─────────────────────────────────────────────────────────── */
 
 const BUCKET_WORD: Record<Bucket, string> = { day: "daily", week: "weekly", month: "monthly" }
-
-/** One P&L row's per-bucket values, as positive magnitudes. Expense rows are stored negative. */
-function rowValues(rows: PnLRow[], code: string): number[] | null {
-  const row = rows.find((r) => r.code === code)
-  return row ? row.values.map((v) => Math.abs(v)) : null
-}
 
 /** One P&L row's per-bucket share of sales, as a percent. Expense percents are stored negative. */
 function rowPercents(rows: PnLRow[], code: string): number[] | null {
