@@ -25,7 +25,9 @@ import {
   isoDay,
   rangeLabel,
   toQueryBounds,
+  trailingWeeks,
   type DateRange,
+  type WeekWindow,
 } from "@/lib/counter/date-range"
 import type { ChartSeries, ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -83,13 +85,20 @@ import type { DeltaTone, FigureProps, MListRow, TagTone, Tone } from "@/componen
  * each and this file's only job is to feed it the right inputs and to NAME the
  * denominator in every caption that carries one.
  *
- * There is a third appearance of the same split, and it is the one a reader
- * can actually trip over: **the twelve-week trend is over PLATFORM sales**
- * (`LaborTrendWeek.laborPct`), because `OtterHourlySummary` is the only per-day
+ * A third appearance of a sales figure USED to be a second, wrong, split: the
+ * twelve-week trend's `laborPct` was computed over `OtterHourlySummary` —
+ * platform sales, `splh`'s figure — because that table is the only per-day
  * sales figure that reaches back twelve weeks without a second rollup over 84
- * days. It reads ~12–16% where the headline above it reads 17.9%. `TrendSection.note`
- * says so on the page, in words, rather than leaving a reader to discover that
- * a chart never reaches its own headline.
+ * days. It read ~12–16% under a 17.9% headline, on the same page, and the
+ * mitigation shipped for it was a sentence (`TrendSection.note`) rather than a
+ * fix. Task 4b closed it: the trend's `laborPct` is now on the identical Total
+ * Sales the headline reads — `loadEverything`'s `trendLoadP` loads a DAILY
+ * statement over the trend's own twelve-week span (the same `rowValues`
+ * construct `salesByDayOf` uses below) and folds it into `trailingWeeks`' own
+ * Monday-start weeks, then hands `loadLaborTrend` the finished per-week map —
+ * on the identical contract `salesByDay` already is for `loadLaborWeek`.
+ * `splh` is unaffected: it still reads platform sales on both the week and
+ * the trend, because that split was never the defect.
  *
  * ## L-R1 — there is no floor and there is no band
  *
@@ -310,7 +319,11 @@ export interface TrendSection {
   phoneChart: ChartData
   sentence: string
   meta: string
-  /** The denominator warning. See the module comment. */
+  /**
+   * Used to carry the denominator mismatch disclaimer; that defect is fixed
+   * (task 4b) and the note now confirms parity with the headline instead.
+   * See `buildTrend`.
+   */
   note: string
 }
 
@@ -528,6 +541,30 @@ function salesByDayOf(daily: Statement, range: DateRange): Map<string, number> {
       range.start.getDate() + i,
     )
     out.set(isoDay(d), net[i] ?? 0)
+  }
+  return out
+}
+
+/**
+ * `salesByDayOf`'s per-day map, summed into the TREND's own Monday-start
+ * weeks — task 4b, `loadLaborTrend`'s `weeklyTotalSales`.
+ *
+ * Windows come from `trailingWeeks` (note 53), never re-derived by hand: a
+ * hand-rolled "start + 7 days" walk is exactly the class of bug `toQueryBounds`
+ * and `buildPeriods` were fixed for this week (a DST transition silently
+ * shifting a boundary by a day). Keyed by `isoDay(window.start)`, the same
+ * string `LaborTrendWeek.key` already is, so `loadLaborTrend` can look a
+ * week's Total Sales up by the same key it labels its own bar with.
+ */
+function weeklySalesOf(salesByDay: Map<string, number>, windows: WeekWindow[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const w of windows) {
+    let total = 0
+    for (let i = 0; i < w.days; i++) {
+      const d = new Date(w.start.getFullYear(), w.start.getMonth(), w.start.getDate() + i)
+      total += salesByDay.get(isoDay(d)) ?? 0
+    }
+    out.set(isoDay(w.start), total)
   }
   return out
 }
@@ -1257,10 +1294,10 @@ function buildDecision(gap: Array<{ date: string; forecastOrders: number }>): De
  * schema publishes a labour target. A rule drawn here would be a line this
  * page invented and then graded twelve weeks against.
  *
- * `note` carries the denominator, and it is not a footnote: this chart is over
- * PLATFORM sales while the headline above it is over Total Sales, and a reader
- * watching a 12.4% chart under a 17.9% headline deserves to be told why rather
- * than left to assume one of them is broken.
+ * `laborPct` here is over TOTAL SALES — the identical denominator the
+ * headline above it uses (task 4b). `note` no longer carries a denominator
+ * disclaimer: there is nothing left to disclaim, because the two figures are
+ * now the same division of the same two numbers for the same week.
  */
 function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
   const chart: ChartData = {
@@ -1269,7 +1306,7 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
     labels: weeks.map((w) => w.label),
     series: [
       {
-        name: "Labor % of platform sales",
+        name: "Labor % of Total Sales",
         color: "var(--ink)",
         data: weeks.map((w) => w.laborPct),
       },
@@ -1278,7 +1315,7 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
       (w) =>
         `${money(w.cost)} · ${hoursText(w.hours, 0)}${w.isPartial ? " · part week" : ""}`,
     ),
-    alt: "Labour as a share of platform sales, twelve weeks",
+    alt: "Labour as a share of Total Sales, twelve weeks",
   }
 
   const full = weeks.filter((w) => !w.isPartial && w.laborPct !== null)
@@ -1291,10 +1328,10 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
   } else if (newest.key === oldest.key) {
     sentence =
       `One full week in this window has a reading: ${newest.label}, at ` +
-      `${pct(newest.laborPct, { scaled: true })} of platform sales. Twelve of them is what makes a trend.`
+      `${pct(newest.laborPct, { scaled: true })} of Total Sales. Twelve of them is what makes a trend.`
   } else {
     sentence =
-      `Labour ran ${pct(newest.laborPct, { scaled: true })} of platform sales in the week of ` +
+      `Labour ran ${pct(newest.laborPct, { scaled: true })} of Total Sales in the week of ` +
       `${newest.label}, against ${pct(oldest.laborPct, { scaled: true })} in the week of ` +
       `${oldest.label} — ${points((newest.laborPct as number) - (oldest.laborPct as number))} ` +
       "across the window."
@@ -1314,12 +1351,12 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
     chart,
     phoneChart: { ...chart, h: 116, ticks: false },
     sentence,
-    meta: `${count(weeks.length)} weeks · Monday to Sunday · share of platform sales`,
-    note:
-      "This trend is labour over PLATFORM sales — OtterHourlySummary, the only per-day sales " +
-      "figure that reaches back twelve weeks. The headline above is labour over Total Sales, the " +
-      "P&L's own denominator, and reads several points higher on the same money. Two " +
-      "denominators, two questions; neither is the other's answer.",
+    meta: `${count(weeks.length)} weeks · Monday to Sunday · share of Total Sales`,
+    // The denominator disclaimer this note used to carry described a defect
+    // that no longer exists (task 4b) and nothing else was in it worth
+    // keeping, so it now states the fact that replaced the disclaimer: this
+    // chart and the headline above it read the same denominator.
+    note: "Same denominator as the headline above — Total Sales, off the same statement.",
   }
 }
 
@@ -1369,8 +1406,39 @@ function loadEverything(input: LaborSectionsInput) {
     retryAction: "retryScheduleGap",
   })
 
+  /*
+   * The trend's own per-week Total Sales (L-R2 / task 4b). Loaded off the
+   * SAME `loadStatement` + `rowValues(TOTAL_SALES_CODE)` construct
+   * `salesByDayOf` above already reads for the headline — DAILY granularity,
+   * not `loadStatement`'s "weekly" one: `buildPeriods`'s weekly buckets start
+   * on SUNDAY (`src/lib/pnl.ts`), while the trend's own weeks
+   * (`trailingWeeks`, note 53) start on MONDAY. Asking for "weekly" here would
+   * fold this page's Monday weeks against the rollup's Sunday ones and
+   * mislabel every bar — the exact hazard this module's own comment on
+   * `loadLaborTrend` already flags. Daily sidesteps it: it is the identical
+   * per-day figure the headline reads, summed into the trend's own windows
+   * (`weeklySalesOf`) instead of the rollup's.
+   *
+   * This is a DIFFERENT range asking a different question than `dailyP`
+   * above, not a second rollup of the SAME range (A-R13's one-rollup rule is
+   * about the latter) — `getAllStoresPnL` is cached 600s per (account, range,
+   * granularity), so this is one more cheap call, exactly as the Analytics
+   * adapter already makes one for its comparison window.
+   */
   const trendLoadP = classify(
-    () => loadLaborTrend({ storeId, accountId, weeks: TREND_WEEKS, endingOn: range.end }),
+    async () => {
+      const trendWindows = trailingWeeks(range.end, TREND_WEEKS)
+      let weeklyTotalSales = new Map<string, number>()
+      if (trendWindows.length > 0) {
+        const trendRange: DateRange = {
+          start: trendWindows[0].start,
+          end: trendWindows[trendWindows.length - 1].end,
+        }
+        const trendDaily = await loadStatement({ range: trendRange, storeId, granularity: "daily" })
+        weeklyTotalSales = weeklySalesOf(salesByDayOf(trendDaily, trendRange), trendWindows)
+      }
+      return loadLaborTrend({ storeId, accountId, weeks: TREND_WEEKS, endingOn: range.end, weeklyTotalSales })
+    },
     { retryAction: "retryTrend" },
   )
 
