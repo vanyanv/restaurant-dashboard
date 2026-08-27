@@ -1,21 +1,17 @@
 "use client"
 
-import Link from "next/link"
-import { useCallback } from "react"
-import { useRouter } from "next/navigation"
 import {
   MList,
   MoneyLines,
   MStrip,
-  MTop,
   Section,
+  usePageChrome,
   type KvRow,
   type MListRow,
   type MoneyLine,
   type MathRow,
   type SwitchableStore,
 } from "@/components/counter"
-import { writeCounterParams } from "@/lib/counter/url-state"
 import { dataOf } from "@/lib/counter/section-data"
 import type {
   OrderItemRow,
@@ -90,113 +86,75 @@ export function CounterPhoneOrderClient({
   stores: SwitchableStore[]
   sections: OrderSections
 }) {
-  const router = useRouter()
-
   const head = dataOf(sections.head)
   const platform = dataOf(sections.platform)
   const storeName = rowValue(platform, "Store")
   const note = dataOf(sections.keep)?.note
 
   /*
-   * The store sheet, on a page that is about ONE store's order. Selecting a
-   * store cannot re-scope this page, so it goes to that store's LIST — the
-   * same decision the desk island makes, for the same reason.
+   * The one chrome fact this page has that its URL does not: the store it
+   * belongs to, read off the Platform section BY LABEL so `.mtop`'s `.st`
+   * cannot name a different store than the section below it does.
+   *
+   * The three things the shell used to be told and now works out for itself:
+   * `.mback` (`phoneTrail`), the ABSENCE of a date chip (`hasWindow` — `P.order`
+   * is `nodate: true` at line 6569, and one order does not have a range), and
+   * where a store PICK goes (`storeScopeHref` — a record route sends the
+   * reader to that store's list). All three come off the route string in
+   * `src/lib/counter/route-shape.ts`, so they are right on the first paint.
    */
-  const goToStoreList = useCallback(
-    (id: string | null) => {
-      const qs = writeCounterParams(new URLSearchParams(), { storeId: id }).toString()
-      router.push(qs ? `/m/orders?${qs}` : "/m/orders")
-    },
-    [router],
-  )
+  usePageChrome({
+    storeName,
+    storeId: stores.find((s) => s.name === storeName)?.id ?? null,
+  })
 
   return (
-    // `.ct-root` and `.ct-phone` sit ONE ELEMENT ABOVE `.mscroll`, so `.mtop`
-    // is inside them too — `.pframe`'s own arrangement.
-    <div className="ct-root ct-phone">
-      <MTop
-        stores={stores}
-        selectedStoreId={stores.find((s) => s.name === storeName)?.id ?? null}
-        onSelectStore={goToStoreList}
-        back={<BackToOrders />}
-        /*
-         * NO `date`. `phoneFor()` writes `(p.nodate ? '' : CD.chip())` and
-         * `P.order` is `nodate: true` (line 6569): one order does not have a
-         * range. `MTop` emits the slot only when there is something in it, so
-         * the chip is absent rather than present and inert — note 46's exact
-         * defect is a control that is drawn and does nothing.
-         */
-      />
-
-      <div className="mscroll">
-        {/* `buildOrderHead`'s own two strings. The prototype's phone sub is
-            shorter than its desk sub ('DoorDash · 9:32pm' against 'DoorDash ·
-            Aug 21, 9:32pm · 3 items'); the adapter writes one sentence and both
-            surfaces print it, because a second shortened form would be a second
-            place for the stamp to be wrong. */}
-        <div>
-          <h2 className="mtitle">{head?.title ?? "Order"}</h2>
-          {head?.sub ? <p className="msub">{head.sub}</p> : null}
-        </div>
-
-        {/* Two cells, chosen by NAME out of the adapter's five. Nothing here is
-            judged — ruling O-R2 — so no cell carries a reference and the phone
-            draws no bullet and no band. */}
-        <Section bare title="The figures" data={sections.strip}>
-          {(cells) => <MStrip cells={phoneCells(cells)} />}
-        </Section>
-
-        <Section title="Items" meta={dataOf(sections.items)?.meta} data={sections.items}>
-          {(items) => <MList rows={items.rows.map(toListRow)} />}
-        </Section>
-
-        {/* `sec('What you keep', '', money(…))` — no meta in the prototype, and
-            none here. */}
-        <Section title="What you keep" data={sections.keep}>
-          {(keep) => <MoneyLines rows={moneyRows(keep)} />}
-        </Section>
-
-        {/* OUTSIDE the section, exactly as the prototype writes it, and with
-            its own inline type scale. The tax figure lives here and nowhere
-            else on the page: it was never the restaurant's money, so stating it
-            inside the statement would invite subtracting it twice. */}
-        {note ? (
-          <p
-            className="mono"
-            style={{ margin: "8px 0 0", fontSize: "11px", color: "var(--ink-3)" }}
-          >
-            {note}
-          </p>
-        ) : null}
+    /*
+     * A FRAGMENT. `.ct-root.ct-phone`, `.mtop` and `.mscroll` are
+     * `src/app/(mobile)/m/(counter)/layout.tsx`'s now — see
+     * `counter-phone-overview-client.tsx` for the long version.
+     */
+    <>
+      {/* `buildOrderHead`'s own two strings. The prototype's phone sub is
+          shorter than its desk sub ('DoorDash · 9:32pm' against 'DoorDash ·
+          Aug 21, 9:32pm · 3 items'); the adapter writes one sentence and both
+          surfaces print it, because a second shortened form would be a second
+          place for the stamp to be wrong. */}
+      <div>
+        <h2 className="mtitle">{head?.title ?? "Order"}</h2>
+        {head?.sub ? <p className="msub">{head.sub}</p> : null}
       </div>
-    </div>
-  )
-}
 
-/**
- * `.mback`, the phone's back button. `trailOf('order')` is `['orders']`, so
- * `phoneFor()` emits one with the parent's own name.
- *
- * A `<Link>` rather than the prototype's `<button data-goto>`, the same trade
- * `MList` makes: `.mback` styles an `<a>` unchanged, and an anchor gets
- * middle-click, "open in new tab", the correct role and keyboard activation
- * for free. It points at the PHONE's list — a link is also what lands in the
- * address bar and in anything the reader shares.
- */
-function BackToOrders() {
-  return (
-    <Link className="mback" href="/m/orders">
-      <svg
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        aria-hidden="true"
-      >
-        <path d="M10 3.5L5.5 8l4.5 4.5" />
-      </svg>
-      Orders
-    </Link>
+      {/* Two cells, chosen by NAME out of the adapter's five. Nothing here is
+          judged — ruling O-R2 — so no cell carries a reference and the phone
+          draws no bullet and no band. */}
+      <Section bare title="The figures" data={sections.strip}>
+        {(cells) => <MStrip cells={phoneCells(cells)} />}
+      </Section>
+
+      <Section title="Items" meta={dataOf(sections.items)?.meta} data={sections.items}>
+        {(items) => <MList rows={items.rows.map(toListRow)} />}
+      </Section>
+
+      {/* `sec('What you keep', '', money(…))` — no meta in the prototype, and
+          none here. */}
+      <Section title="What you keep" data={sections.keep}>
+        {(keep) => <MoneyLines rows={moneyRows(keep)} />}
+      </Section>
+
+      {/* OUTSIDE the section, exactly as the prototype writes it, and with
+          its own inline type scale. The tax figure lives here and nowhere
+          else on the page: it was never the restaurant's money, so stating it
+          inside the statement would invite subtracting it twice. */}
+      {note ? (
+        <p
+          className="mono"
+          style={{ margin: "8px 0 0", fontSize: "11px", color: "var(--ink-3)" }}
+        >
+          {note}
+        </p>
+      ) : null}
+    </>
   )
 }
 

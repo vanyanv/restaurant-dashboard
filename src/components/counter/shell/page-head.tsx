@@ -31,8 +31,18 @@
  */
 import type { ReactNode } from "react"
 
+/**
+ * The heading's DOM id, and the one `AppShell` names `<main>` with.
+ *
+ * A CONSTANT rather than a `useId()`: the shell renders `<main>` in the layout
+ * and the heading is rendered a level down, in the page, so the two can no
+ * longer share a generated id. One page renders one `PageHead`, so one
+ * document holds one of these.
+ */
+export const PAGE_TITLE_ID = "ct-page-title"
+
 export function PageHead({
-  id,
+  id = PAGE_TITLE_ID,
   title,
   sub,
   children,

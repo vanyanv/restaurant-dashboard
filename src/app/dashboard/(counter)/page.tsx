@@ -5,11 +5,6 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getOverviewSections, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOverviewClient } from "./counter-overview-client"
 
-/** `OWNER` -> `Owner`. The rail prints a role, not an enum member. */
-function titleCase(role: string): string {
-  return role.charAt(0) + role.slice(1).toLowerCase()
-}
-
 /**
  * Counter Overview — the first Counter page (Plan 7). A page composes
  * primitives and calls exactly one adapter; it never imports Prisma or an
@@ -47,8 +42,9 @@ export default async function DashboardPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  // Stores load first — cheap, and the switcher needs SOME list to render
-  // whatever else happens below it.
+  // The rail's switcher is the LAYOUT's now; this list is for the page's own
+  // content — the dispatch line's store lifecycle. `getOverviewStores` is
+  // `cache()`d, so the layout's call and this one are one query per request.
   const stores = await getOverviewStores()
   const sections = await getOverviewSections({
     range: counterParams.range,
@@ -62,12 +58,8 @@ export default async function DashboardPage({
 
   return (
     <CounterOverviewClient
-      pathname="/dashboard"
       params={params.toString()}
       stores={stores}
-      // The rail's account row. Real session values, not a placeholder — the
-      // prototype's "Chris K. / Owner · settings" is the same two facts.
-      user={{ name: session.user.name, role: titleCase(session.user.role) }}
       today={today}
       sections={sections}
     />

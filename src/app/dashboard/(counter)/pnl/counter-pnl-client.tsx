@@ -2,18 +2,18 @@
 
 import Link from "next/link"
 import { Fragment, useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
-  AppShell,
   Cascade,
   DateControl,
+  PageHead,
   Section,
   STAGE_TAG,
   Strip,
   Table,
   WeekTable,
+  usePageChrome,
   type Column,
-  type RailUser,
   type Row,
   type SwitchableStore,
 } from "@/components/counter"
@@ -146,15 +146,20 @@ function statementRows(s: PnlStatement): Row[] {
   })
 }
 
+/** The ⌘K palette's "Ask about P&L" group. Module-level, so the shell is not
+ *  republished on every render of this page. */
+const ASK_SUGGESTIONS = [
+  "Why is the bottom line where it is?",
+  "Which line moved most against the comparison?",
+  "What would posting the outstanding invoices do to this?",
+]
+
 export function CounterPnlClient({
-  pathname,
   params: paramsString,
   stores,
-  user,
   today,
   sections,
 }: {
-  pathname: string
   /**
    * The query string this page was rendered for, as PLAIN TEXT — not a
    * `URLSearchParams` instance. Props cross the RSC boundary as plain
@@ -164,13 +169,16 @@ export function CounterPnlClient({
    */
   params: string
   stores: SwitchableStore[]
-  user: RailUser
   today: Date
   sections: CounterPnlSections
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
+
+  // The one chrome fact this page has that its URL does not.
+  usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
 
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
@@ -203,19 +211,24 @@ export function CounterPnlClient({
   const stageCount = new Set(stores.map((s) => s.stage)).size
 
   return (
-    <AppShell
-      pathname={pathname}
-      params={params}
-      // `P.pnl.title` is the page's NAME here, not the Overview's sentence
-      // about the window: a statement is the same document whatever range it
-      // is drawn over, and the range is the next line down.
-      title="Profit and loss"
-      // The prototype's own four terms — store, window, days, comparison. The
-      // day count is the one this page cannot leave out: every fixed line
-      // below is prorated across it.
-      sub={rangeSubtitle(storeName, range, comparisonId, { days: true })}
-      crumbLeaf="P&L"
-      actions={
+    /*
+     * A FRAGMENT: the rail, the topbar, the store switcher and the ⌘K surface
+     * are `(counter)/layout.tsx`'s now. `crumbLeaf="P&L"` went with them and
+     * did not need re-stating — `Topbar` derives the leaf from `pathname`
+     * against the same `NAV_GROUPS` the rail lights its current item from, and
+     * that destination is already called "P&L".
+     */
+    <>
+      <PageHead
+        // `P.pnl.title` is the page's NAME here, not the Overview's sentence
+        // about the window: a statement is the same document whatever range it
+        // is drawn over, and the range is the next line down.
+        title="Profit and loss"
+        // The prototype's own four terms — store, window, days, comparison. The
+        // day count is the one this page cannot leave out: every fixed line
+        // below is prorated across it.
+        sub={rangeSubtitle(storeName, range, comparisonId, { days: true })}
+      >
         <DateControl
           presetId={presetId}
           comparisonId={comparisonId}
@@ -225,21 +238,8 @@ export function CounterPnlClient({
           onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
-      }
-      stores={stores}
-      selectedStoreId={counterParams.storeId}
-      onSelectStore={(id) => push({ storeId: id })}
-      storeName={selectedStore?.name ?? null}
-      user={user}
-      today={today}
-      presetId={presetId}
-      onSelectPreset={(id) => push({ presetId: id })}
-      askSuggestions={[
-        "Why is the bottom line where it is?",
-        "Which line moved most against the comparison?",
-        "What would posting the outstanding invoices do to this?",
-      ]}
-    >
+      </PageHead>
+
       {/* The strip and the sentence under it — one section, because the
           sentence is a reading OF those five figures. Both sit at page level,
           above the first `.sec`, as `P.pnl.desk()` writes them. */}
@@ -355,7 +355,7 @@ export function CounterPnlClient({
       >
         {(lines) => <ByStore lines={lines} />}
       </Section>
-    </AppShell>
+    </>
   )
 }
 

@@ -12,13 +12,34 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, within } from "@testing-library/react"
 
 const push = vi.fn()
-// The island calls `useRouter()` unconditionally (the controls push), and a
-// plain RTL render is not an App Router tree.
+// The island and the SHELL around it both read the router unconditionally, and
+// a plain RTL render is not an App Router tree. `SEARCH` is set by the wrapper
+// below so the shell reads the same query string the island was handed.
+let SEARCH = ""
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
+  usePathname: () => "/dashboard/pnl",
+  useSearchParams: () => new URLSearchParams(SEARCH),
 }))
 
-import { CounterPnlClient } from "@/app/dashboard/pnl/counter-pnl-client"
+import { AppShell } from "@/components/counter"
+import { CounterPnlClient as PnlIsland } from "@/app/dashboard/(counter)/pnl/counter-pnl-client"
+
+/**
+ * The page as its LAYOUT composes it — `AppShell` is
+ * `src/app/dashboard/(counter)/layout.tsx`'s now.
+ */
+function CounterPnlClient(props: React.ComponentProps<typeof PnlIsland>) {
+  SEARCH = props.params
+  return (
+    <AppShell stores={props.stores} user={USER} today={props.today}>
+      <PnlIsland {...props} />
+    </AppShell>
+  )
+}
+
+/** The rail's account row — the layout's now, not the page's. */
+const USER = { name: "Chris Karimian", role: "Owner" }
 import { ready, empty, failed } from "@/lib/counter/section-data"
 import { trailingWeeks } from "@/lib/counter/date-range"
 import type { PnlSections } from "@/lib/counter/adapters/pnl"
@@ -27,14 +48,12 @@ const TODAY = new Date(2026, 7, 25) // Tuesday 25 Aug 2026
 const WEEKS = trailingWeeks(TODAY, 8)
 
 const base = {
-  pathname: "/dashboard/pnl",
   // Plain text, never a URLSearchParams instance — see the island's own note.
   params: "",
   stores: [
     { id: "hollywood", name: "Hollywood", stage: "trading" as const },
     { id: "glendale", name: "Glendale", stage: "pre_open" as const },
   ],
-  user: { name: "Chris Karimian", role: "Owner" },
   today: TODAY,
 }
 

@@ -1,18 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import {
-  MDateSheet,
-  MList,
-  MStrip,
-  MTop,
-  Section,
-  type MListRow,
-  type SwitchableStore,
-} from "@/components/counter"
-import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import type { ComparisonId, DateRange, PresetId } from "@/lib/counter/date-range"
+import { MList, MStrip, Section, type MListRow } from "@/components/counter"
 import { dataOf } from "@/lib/counter/section-data"
 import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapters/orders"
 
@@ -74,32 +62,10 @@ import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapter
  * formatted. Every figure below is printed, never computed.
  */
 export function CounterPhoneOrdersClient({
-  params: paramsString,
-  stores,
-  today,
   sections,
 }: {
-  /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
-  params: string
-  stores: SwitchableStore[]
-  today: Date
   sections: OrdersSections
 }) {
-  const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
-  const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
-  const router = useRouter()
-
-  /** Every control on this page goes through here, exactly as the desk's do. */
-  const push = useCallback(
-    (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
-      router.push(qs ? `/m/orders?${qs}` : "/m/orders", { scroll: false })
-    },
-    [params, router],
-  )
-
-  const { range, presetId, comparisonId } = counterParams
-
   const figures = dataOf(sections.strip)
   const orders = cellValue(figures, "Orders")
   const netSales = cellValue(figures, "Net sales")
@@ -110,52 +76,38 @@ export function CounterPhoneOrdersClient({
   const shown = Math.min(dataOf(sections.list)?.rows.length ?? 0, PHONE_ROWS)
 
   return (
-    // `.ct-root` and `.ct-phone` sit ONE ELEMENT ABOVE `.mscroll`, so `.mtop`
-    // is inside them too — `.pframe`'s own arrangement.
-    <div className="ct-root ct-phone">
-      <MTop
-        stores={stores}
-        selectedStoreId={counterParams.storeId}
-        onSelectStore={(id) => push({ storeId: id })}
-        date={
-          <MDateSheet
-            presetId={presetId}
-            comparisonId={comparisonId}
-            range={range}
-            onPreset={(id: PresetId) => push({ presetId: id })}
-            onComparison={(id: ComparisonId) => push({ comparisonId: id })}
-            onRange={(next: DateRange) => push({ range: next })}
-          />
-        }
-      />
-
-      <div className="mscroll">
-        {/* The page's NAME — a list of orders is the same document whatever
-            window it is drawn over, and the window is in `.mtop` one element
-            up, along with the store. */}
-        <div>
-          <h2 className="mtitle">Orders</h2>
-          {orders && netSales ? (
-            <p className="msub">
-              {orders} orders &middot; {netSales}
-            </p>
-          ) : null}
-        </div>
-
-        {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
-            is judged — ruling O-R2 — so no cell carries a reference and the
-            phone draws no bullet and no band. */}
-        <Section bare title="The figures" data={sections.strip}>
-          {(cells) => <MStrip cells={phoneCells(cells)} />}
-        </Section>
-
-        {/* `sec('Latest', '8 shown', mlist(ORDERS.slice(0, 6), 'order'))`. No
-            filter bar above it and no pager below it — see the file note. */}
-        <Section title="Latest" meta={`${shown} shown`} data={sections.list}>
-          {(l) => <MList rows={l.rows.slice(0, PHONE_ROWS).map(toListRow)} />}
-        </Section>
+    /*
+     * A FRAGMENT. `.ct-root.ct-phone`, `.mtop` and `.mscroll` are
+     * `src/app/(mobile)/m/(counter)/layout.tsx`'s now, mounted once for all
+     * four rebuilt `/m` routes instead of rebuilt by every one of them. What
+     * is rendered here is what goes INSIDE `.mscroll`, unchanged.
+     */
+    <>
+      {/* The page's NAME — a list of orders is the same document whatever
+          window it is drawn over, and the window is in `.mtop` one element
+          up, along with the store. */}
+      <div>
+        <h2 className="mtitle">Orders</h2>
+        {orders && netSales ? (
+          <p className="msub">
+            {orders} orders &middot; {netSales}
+          </p>
+        ) : null}
       </div>
-    </div>
+
+      {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
+          is judged — ruling O-R2 — so no cell carries a reference and the
+          phone draws no bullet and no band. */}
+      <Section bare title="The figures" data={sections.strip}>
+        {(cells) => <MStrip cells={phoneCells(cells)} />}
+      </Section>
+
+      {/* `sec('Latest', '8 shown', mlist(ORDERS.slice(0, 6), 'order'))`. No
+          filter bar above it and no pager below it — see the file note. */}
+      <Section title="Latest" meta={`${shown} shown`} data={sections.list}>
+        {(l) => <MList rows={l.rows.slice(0, PHONE_ROWS).map(toListRow)} />}
+      </Section>
+    </>
   )
 }
 

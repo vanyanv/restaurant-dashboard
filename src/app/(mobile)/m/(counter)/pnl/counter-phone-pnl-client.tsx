@@ -1,29 +1,18 @@
 "use client"
 
 import { useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import {
   Cascade,
-  MDateSheet,
   MList,
   MStrip,
-  MTop,
   MoneyLines,
   Section,
   type MListRow,
   type MoneyLine,
-  type SwitchableStore,
   type WeekRow,
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import {
-  dayCount,
-  monthDay,
-  rangeLabel,
-  type ComparisonId,
-  type DateRange,
-  type PresetId,
-} from "@/lib/counter/date-range"
+import { dayCount, monthDay, rangeLabel, type DateRange } from "@/lib/counter/date-range"
 import { money, pct } from "@/lib/counter/format"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections, PnlStatement } from "@/lib/counter/adapters/pnl"
@@ -87,28 +76,16 @@ import type { PnlSections, PnlStatement } from "@/lib/counter/adapters/pnl"
  */
 export function CounterPhonePnlClient({
   params: paramsString,
-  stores,
   today,
   sections,
 }: {
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
-  stores: SwitchableStore[]
   today: Date
   sections: PnlSections
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
-  const router = useRouter()
-
-  /** Every control on this page goes through here, exactly as the desk's do. */
-  const push = useCallback(
-    (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
-      router.push(qs ? `/m/pnl?${qs}` : "/m/pnl", { scroll: false })
-    },
-    [params, router],
-  )
 
   /**
    * Where a week row goes. `writeCounterParams({ range })` writes `?from=…&to=…`
@@ -128,7 +105,7 @@ export function CounterPhonePnlClient({
     [params],
   )
 
-  const { range, presetId, comparisonId } = counterParams
+  const { range } = counterParams
   /**
    * The window's own ENDS — "Aug 20 – Aug 26" — never the preset's name.
    *
@@ -142,78 +119,61 @@ export function CounterPhonePnlClient({
   const days = dayCount(range)
 
   return (
-    // `.ct-root` and `.ct-phone` sit ONE ELEMENT ABOVE `.mscroll`, so `.mtop`
-    // is inside them too — `.pframe`'s own arrangement. `.mtop` reads
-    // `--chrome` and `--line`, which the alias layer declares only on a
-    // Counter root, and `.ct-phone` is the phone's type scale. See
-    // `counter-phone-overview-client.tsx` for the long version.
-    <div className="ct-root ct-phone">
-      <MTop
-        stores={stores}
-        selectedStoreId={counterParams.storeId}
-        onSelectStore={(id) => push({ storeId: id })}
-        date={
-          <MDateSheet
-            presetId={presetId}
-            comparisonId={comparisonId}
-            range={range}
-            onPreset={(id: PresetId) => push({ presetId: id })}
-            onComparison={(id: ComparisonId) => push({ comparisonId: id })}
-            onRange={(next: DateRange) => push({ range: next })}
-          />
-        }
-      />
-
-      <div className="mscroll">
-        {/*
-          The page's NAME, not a sentence about the range — a statement is the
-          same document whatever window it is drawn over, and the window is the
-          line beneath. The store is not in this sub: `.mtop`'s `.st` is
-          already showing it, one element up.
-        */}
-        <div>
-          <h2 className="mtitle">Profit and loss</h2>
-          <p className="msub">
-            {windowLabel} · {days} {days === 1 ? "day" : "days"}
-          </p>
-        </div>
-
-        {/* Two cells. The reading paragraph beside them on the desk is not on
-            this surface, so the strip is the whole headline here. */}
-        <Section bare title="The figures" data={sections.headline}>
-          {(h) => <MStrip cells={h.phoneCells} />}
-        </Section>
-
-        <Section title="Where it went" meta={windowLabel} data={sections.cascade}>
-          {(c) => <Cascade start={c.start} cuts={c.cuts} end={c.end} />}
-        </Section>
-
-        {/* SIX weeks, not the desk's eight, and the most recent six — the
-            prototype's own `weekRows(6)`, oldest first. */}
-        <Section title="Week by week" meta="tap a week" data={sections.weeks}>
-          {(w) => <MList rows={w.rows.slice(-6).map((row) => toWeekRow(row, weekHref))} />}
-        </Section>
-
-        <Section title="The statement" meta={windowLabel} data={sections.statement}>
-          {(s) => (
-            <>
-              <MoneyLines rows={statementRows(s)} />
-              {/*
-                Inside the section rather than the prototype's sibling
-                position, because it prints a figure OFF this section's data:
-                a note naming a number that failed to load is worse than no
-                note. The desk's statement footnote sits in the same place for
-                the same reason.
-              */}
-              <p className="mono" style={{ margin: "8px 0 0" }}>
-                Rent and the other monthly lines are charged at {s.fixedInRange} for these {days}{" "}
-                {days === 1 ? "day" : "days"}, not a whole month.
-              </p>
-            </>
-          )}
-        </Section>
+    /*
+     * A FRAGMENT. `.ct-root.ct-phone`, `.mtop` and `.mscroll` are
+     * `src/app/(mobile)/m/(counter)/layout.tsx`'s now — see
+     * `counter-phone-overview-client.tsx` for the long version. What is
+     * rendered here is what goes INSIDE `.mscroll`, unchanged.
+     */
+    <>
+      {/*
+        The page's NAME, not a sentence about the range — a statement is the
+        same document whatever window it is drawn over, and the window is the
+        line beneath. The store is not in this sub: `.mtop`'s `.st` is
+        already showing it, one element up.
+      */}
+      <div>
+        <h2 className="mtitle">Profit and loss</h2>
+        <p className="msub">
+          {windowLabel} · {days} {days === 1 ? "day" : "days"}
+        </p>
       </div>
-    </div>
+
+      {/* Two cells. The reading paragraph beside them on the desk is not on
+          this surface, so the strip is the whole headline here. */}
+      <Section bare title="The figures" data={sections.headline}>
+        {(h) => <MStrip cells={h.phoneCells} />}
+      </Section>
+
+      <Section title="Where it went" meta={windowLabel} data={sections.cascade}>
+        {(c) => <Cascade start={c.start} cuts={c.cuts} end={c.end} />}
+      </Section>
+
+      {/* SIX weeks, not the desk's eight, and the most recent six — the
+          prototype's own `weekRows(6)`, oldest first. */}
+      <Section title="Week by week" meta="tap a week" data={sections.weeks}>
+        {(w) => <MList rows={w.rows.slice(-6).map((row) => toWeekRow(row, weekHref))} />}
+      </Section>
+
+      <Section title="The statement" meta={windowLabel} data={sections.statement}>
+        {(s) => (
+          <>
+            <MoneyLines rows={statementRows(s)} />
+            {/*
+              Inside the section rather than the prototype's sibling
+              position, because it prints a figure OFF this section's data:
+              a note naming a number that failed to load is worse than no
+              note. The desk's statement footnote sits in the same place for
+              the same reason.
+            */}
+            <p className="mono" style={{ margin: "8px 0 0" }}>
+              Rent and the other monthly lines are charged at {s.fixedInRange} for these {days}{" "}
+              {days === 1 ? "day" : "days"}, not a whole month.
+            </p>
+          </>
+        )}
+      </Section>
+    </>
   )
 }
 

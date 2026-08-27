@@ -1,19 +1,18 @@
 "use client"
 
-import { useId, useMemo, type ReactNode } from "react"
+import { useCallback, useMemo, useState, type ReactNode } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Rail, type RailUser } from "./rail"
-import { PageHead } from "./page-head"
+import { PAGE_TITLE_ID } from "./page-head"
 import { Topbar } from "./topbar"
+import { PageChromeContext, type PageChrome } from "./page-chrome"
 import type { SyncState } from "./sync-chip"
 import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
 import { AskSurface } from "@/components/counter/ask/ask-surface"
-import type { AskContext } from "@/lib/counter/ask-context"
-import type { PresetId, RangeId } from "@/lib/counter/date-range"
-
-/** Stable across renders — a caller that doesn't pass `params` should not
- *  cause `AskSurface` to re-derive context off a fresh object every render. */
-const EMPTY_PARAMS = new URLSearchParams()
+import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import { hasWindow, storeScopeHref } from "@/lib/counter/route-shape"
+import type { PresetId } from "@/lib/counter/date-range"
 
 /**
  * The frame every page sits inside, as `deskFor()` builds it (prototype line
@@ -37,6 +36,38 @@ const EMPTY_PARAMS = new URLSearchParams()
  * inside the scrolling screen; and the topbar was reduced to the three things
  * the design puts in it.
  *
+ * ---------------------------------------------------------------------------
+ * THIS IS MOUNTED BY A LAYOUT, NOT BY A PAGE
+ * ---------------------------------------------------------------------------
+ *
+ * `src/app/dashboard/(counter)/layout.tsx` renders it once around every desk
+ * Counter route. It used to be rendered INSIDE each page's client island — 4
+ * mount sites, 0 layouts — and a page does not survive a sibling navigation in
+ * the App Router while a layout does, so clicking a rail item destroyed and
+ * rebuilt the rail, the topbar, the store switcher and the ⌘K surface. From a
+ * reader's side that is indistinguishable from a browser reload.
+ *
+ * WHAT MADE THE MOVE CHEAP: the chrome is already URL-driven. The store
+ * switcher and the date control both read `readCounterParams` and write
+ * `writeCounterParams` — they were `useSearchParams()` consumers wearing
+ * callback props. Here they read the URL and push their own changes, so
+ * `pathname`, `params`, `presetId`, `onSelectPreset`, `selectedStoreId` and
+ * `onSelectStore` DISAPPEARED from the interface rather than relocating.
+ *
+ * `PageHead` did not move here with them. The title sentence, the sub-line and
+ * the date control are genuinely the page's, they live INSIDE `#ct-main` (the
+ * surface `npm run fidelity` measures), and a page renders its own `<PageHead>`
+ * as the first of the `children` handed to this shell — which is exactly where
+ * this component used to put it, so the rendered DOM under `#ct-main` is
+ * unchanged.
+ *
+ * The four facts a page knows and a URL does not — the breadcrumb leaf, the
+ * store an ORDER belongs to, where picking a store should go on a record page,
+ * and the palette's own suggestions — arrive through `PageChromeContext`. See
+ * `page-chrome.tsx` for why that is an effect and what it can and cannot move.
+ *
+ * ---------------------------------------------------------------------------
+ *
  * HOW THIS PAGE SCROLLS, and why there is no `sticky` anywhere. The prototype's
  * rail is not sticky and never was — `.appwrap` is `flex:1;min-height:0` and
  * `.screenwrap` is `overflow-y:auto`, so the SCREEN scrolls inside a frame that
@@ -59,61 +90,75 @@ const EMPTY_PARAMS = new URLSearchParams()
  * through the same delegated `[data-askabout]` listener every `.askmini` uses.
  */
 export function AppShell({
-  pathname,
-  params = EMPTY_PARAMS,
-  title,
-  sub,
-  crumbLeaf,
-  actions,
   stores,
-  selectedStoreId = null,
-  onSelectStore,
-  storeName = null,
   user,
   sync,
   today,
-  presetId,
-  onSelectPreset,
-  askSuggestions,
-  onAsk,
   children,
 }: {
-  pathname: string
-  params?: URLSearchParams
-  /** The page head's own sentence — "7 days to Aug 21", not "Overview". */
-  title: string
-  /** "HOLLYWOOD · AUG 15 – 21, 2026 · VS THE SAME 4 WEEKDAYS" — the caps are CSS. */
-  sub?: string
-  /** What the breadcrumb calls this page; defaults to the rail destination's label. */
-  crumbLeaf?: string
-  /** `.phactions` — the date control, and any view tabs before it. */
-  actions?: ReactNode
   stores?: SwitchableStore[]
-  selectedStoreId?: string | null
-  onSelectStore?: (id: string | null) => void
-  /** The selected store's name, for the breadcrumb and the Ask context sentence. */
-  storeName?: string | null
   user?: RailUser
   sync?: { state: SyncState; at?: Date; now: Date }
   today?: Date
-  /**
-   * The current range preset and the way to change it. `AskSurface` draws the
-   * prototype's "Change the range" group from these; without `onSelectPreset`
-   * it draws no such group, because a palette row that changes nothing is the
-   * defect note 46 names.
-   */
-  presetId?: RangeId
-  onSelectPreset?: (id: PresetId) => void
-  /** The page's own suggested questions — the palette's "Ask about {page}" group. */
-  askSuggestions?: string[]
-  /** Wired up by the plan that gives the surface something to answer with. */
-  onAsk?: (question: string, context: AskContext) => void
   children: ReactNode
 }) {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
   // Same "resolve once, at mount" contract as DateControl's own default — a
   // caller not passing `today` should not get a moving target on every render.
   const resolvedToday = useMemo(() => today ?? new Date(), [today])
-  const titleId = useId()
+
+  /*
+   * A real `URLSearchParams`, rebuilt from the hook's read-only one. The desk
+   * islands used to receive the query string as PLAIN TEXT across the RSC
+   * boundary and reconstruct it for exactly this reason; read here it never
+   * crosses a boundary at all, so the class instance is safe.
+   */
+  const params = useMemo(
+    () => new URLSearchParams(searchParams?.toString() ?? ""),
+    [searchParams],
+  )
+  const { presetId, storeId } = useMemo(
+    () => readCounterParams(params, resolvedToday),
+    [params, resolvedToday],
+  )
+
+  const push = useCallback(
+    (next: Parameters<typeof writeCounterParams>[1], href = pathname) => {
+      const qs = writeCounterParams(params, next).toString()
+      // push, not replace: note 19's "a range that only changes the label is a
+      // lie" cuts the other way too — a range change is a real navigation an
+      // owner expects the back button to undo.
+      router.push(qs ? `${href}?${qs}` : href, { scroll: false })
+    },
+    [params, pathname, router],
+  )
+
+  const [page, setPage] = useState<PageChrome>({})
+
+  /*
+   * On a page scoped by `?store=` this rewrites the current URL. On a RECORD
+   * route it goes to that store's list instead — selecting a store cannot
+   * re-scope a page about one order, and `storeScopeHref` is where that
+   * decision lives now that both order islands no longer write it out.
+   */
+  const onSelectStore = useCallback(
+    (id: string | null) => push({ storeId: id }, storeScopeHref(pathname)),
+    [push, pathname],
+  )
+  const selectedStoreId = page.storeId !== undefined ? page.storeId : storeId
+  const storeName =
+    page.storeName !== undefined
+      ? page.storeName
+      : (stores?.find((s) => s.id === storeId)?.name ?? null)
+
+  // A page with no window (an order) draws no "Change the range" group: a
+  // palette row that changes nothing is note 46's defect exactly. Read off the
+  // route rather than published by the page, so it is right on the first paint.
+  const windowed = hasWindow(pathname)
+  const onSelectPreset = useCallback((id: PresetId) => push({ presetId: id }), [push])
 
   return (
     // `minmax(0,1fr)`, never `1fr`: a bare `1fr` is `minmax(auto,1fr)`, whose
@@ -165,7 +210,7 @@ export function AppShell({
           // with no store list at all (`stores` omitted) starts its trail at
           // the page instead of naming an aggregate it does not have.
           storeName={storeName ?? (stores ? "All stores" : undefined)}
-          leaf={crumbLeaf}
+          leaf={page.leaf}
           sync={sync}
         />
 
@@ -180,13 +225,13 @@ export function AppShell({
              *
              * `aria-labelledby` the page head's own `<h2>`: the heading LEVEL
              * belongs to `.pagehead h2`, which is the selector that styles it,
-             * so the landmark carries the naming instead.
+             * so the landmark carries the naming instead. The id is a CONSTANT
+             * rather than a `useId()` now that the heading is rendered a level
+             * down, in the page — one page renders one `PageHead`, and
+             * `PageHead` writes this id by default.
              */}
-            <main id="ct-main" className="screen" aria-labelledby={titleId}>
-              <PageHead id={titleId} title={title} sub={sub}>
-                {actions}
-              </PageHead>
-              {children}
+            <main id="ct-main" className="screen" aria-labelledby={PAGE_TITLE_ID}>
+              <PageChromeContext.Provider value={setPage}>{children}</PageChromeContext.Provider>
             </main>
           </div>
         </div>
@@ -209,10 +254,9 @@ export function AppShell({
           stores={stores}
           selectedStoreId={selectedStoreId}
           onSelectStore={onSelectStore}
-          presetId={presetId}
-          onSelectPreset={onSelectPreset}
-          suggestions={askSuggestions}
-          onSubmit={onAsk}
+          presetId={windowed ? presetId : undefined}
+          onSelectPreset={windowed ? onSelectPreset : undefined}
+          suggestions={page.askSuggestions}
         />
       </div>
     </div>

@@ -51,6 +51,8 @@ const m = vi.hoisted(() => ({
 // `useRouter()`, and a plain RTL render is not an App Router tree.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: m.push }),
+  usePathname: () => "/dashboard/orders/1f708833",
+  useSearchParams: () => new URLSearchParams(),
   notFound: m.notFound,
   redirect: m.redirect,
 }))
@@ -61,8 +63,9 @@ vi.mock("@/lib/counter/adapters/overview", () => ({ getOverviewStores: m.getOver
 vi.mock("next-auth", () => ({ getServerSession: m.getServerSession }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
-import { CounterOrderClient } from "@/app/dashboard/orders/[id]/counter-order-client"
-import OrderPage from "@/app/dashboard/orders/[id]/page"
+import { AppShell } from "@/components/counter"
+import { CounterOrderClient } from "@/app/dashboard/(counter)/orders/[id]/counter-order-client"
+import OrderPage from "@/app/dashboard/(counter)/orders/[id]/page"
 import { ready, empty, failed, loading } from "@/lib/counter/section-data"
 import type { OrderItems, OrderKeep, OrderSections } from "@/lib/counter/adapters/orders"
 import type { KvRow, QueueItem } from "@/components/counter"
@@ -228,16 +231,20 @@ const sections = (over: Partial<OrderSections> = {}): OrderSections => ({
   ...over,
 })
 
+/**
+ * The page as its LAYOUT composes it. `AppShell` is
+ * `src/app/dashboard/(counter)/layout.tsx`'s now; this island keeps `PageHead`
+ * and publishes the three chrome facts a URL cannot carry — the crumb leaf,
+ * the store the order belongs to, and the palette's questions — through
+ * `usePageChrome`. `render` flushes effects, so the trail below reads the
+ * record's name exactly as it does in a browser.
+ */
 function renderDesk(over: Partial<OrderSections> = {}) {
   m.push.mockClear()
   return render(
-    <CounterOrderClient
-      pathname="/dashboard/orders/1f708833"
-      stores={STORES}
-      user={{ name: "Chris Karimian", role: "Owner" }}
-      today={TODAY}
-      sections={sections(over)}
-    />,
+    <AppShell stores={STORES} user={{ name: "Chris Karimian", role: "Owner" }} today={TODAY}>
+      <CounterOrderClient stores={STORES} sections={sections(over)} />
+    </AppShell>,
   )
 }
 

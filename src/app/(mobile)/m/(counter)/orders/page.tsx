@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getOrdersSections } from "@/lib/counter/adapters/orders"
-import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneOrdersClient } from "./counter-phone-orders-client"
 
 export const dynamic = "force-dynamic"
@@ -60,9 +59,6 @@ export default async function MobileOrdersPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  // The switcher's list, shared with the Overview rather than re-queried, so
-  // the phone's store sheet cannot offer a store the desk's rail does not.
-  const stores = await getOverviewStores()
   const sections = await getOrdersSections({
     range: counterParams.range,
     comparisonId: counterParams.comparisonId,
@@ -72,15 +68,19 @@ export default async function MobileOrdersPage({
   })
 
   return (
-    <div data-perf-ready="/m/orders">
-      <CounterPhoneOrdersClient
-        // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
-        // the RSC boundary with its prototype stripped.
-        params={params.toString()}
-        stores={stores}
-        today={today}
-        sections={sections}
-      />
-    </div>
+    <>
+      <CounterPhoneOrdersClient sections={sections} />
+      {/*
+       * The perf harness's marker (`scripts/mobile-transition-perf.ts`), which
+       * used to be a `<div>` WRAPPING the island. The island no longer brings
+       * its own `.mscroll` — that is the `(counter)` layout's now — so a
+       * wrapper here would land INSIDE `.mscroll`, whose `display:grid` +
+       * `gap:11px` and `> *:nth-child()` entry delays are written against the
+       * page's blocks being its direct children. `hidden` keeps it out of the
+       * grid entirely (`display:none` is not a grid item), and LAST keeps
+       * every existing block's `nth-child` index where it was.
+       */}
+      <span hidden data-perf-ready="/m/orders" />
+    </>
   )
 }

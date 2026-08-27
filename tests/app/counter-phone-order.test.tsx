@@ -40,6 +40,8 @@ const m = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: m.push }),
+  usePathname: () => "/m/orders/1f708833",
+  useSearchParams: () => new URLSearchParams(),
   notFound: m.notFound,
   redirect: m.redirect,
 }))
@@ -48,8 +50,9 @@ vi.mock("@/lib/counter/adapters/overview", () => ({ getOverviewStores: m.getOver
 vi.mock("next-auth", () => ({ getServerSession: m.getServerSession }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
-import { CounterPhoneOrderClient } from "@/app/(mobile)/m/orders/[id]/counter-phone-order-client"
-import MobileOrderDetailPage from "@/app/(mobile)/m/orders/[id]/page"
+import { PhoneShell } from "@/components/counter"
+import { CounterPhoneOrderClient } from "@/app/(mobile)/m/(counter)/orders/[id]/counter-phone-order-client"
+import MobileOrderDetailPage from "@/app/(mobile)/m/(counter)/orders/[id]/page"
 import { ready, empty, failed } from "@/lib/counter/section-data"
 import type { OrderItems, OrderKeep, OrderSections } from "@/lib/counter/adapters/orders"
 import type { KvRow, QueueItem } from "@/components/counter"
@@ -199,9 +202,19 @@ const sections = (over: Partial<OrderSections> = {}): OrderSections => ({
   ...over,
 })
 
+/**
+ * The page as its LAYOUT composes it. `.ct-root.ct-phone`, `.mtop` and
+ * `.mscroll` moved out of this island into
+ * `src/app/(mobile)/m/(counter)/layout.tsx`, so a test rendering the island
+ * alone would be asserting against half a page.
+ */
 function renderPhone(over: Partial<OrderSections> = {}) {
   m.push.mockClear()
-  return render(<CounterPhoneOrderClient stores={STORES} sections={sections(over)} />)
+  return render(
+    <PhoneShell stores={STORES}>
+      <CounterPhoneOrderClient stores={STORES} sections={sections(over)} />
+    </PhoneShell>,
+  )
 }
 
 const scroll = (c: HTMLElement) => c.querySelector(".mscroll") as HTMLElement

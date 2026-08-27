@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { getStores } from "@/app/actions/store/crud-actions"
 import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import { getSplhSeries } from "@/app/actions/splh-actions"
@@ -387,11 +388,22 @@ const CARD_STAGE_FOR: Record<LifecycleStage, SwitchableStore["stage"]> = {
   ready: "trading",
 }
 
-/** The account's stores, for the `StoreSwitcher`. Fails closed to `[]`, same as `getStores` itself. */
-export async function getOverviewStores(): Promise<SwitchableStore[]> {
+/**
+ * The account's stores, for the `StoreSwitcher`. Fails closed to `[]`, same as
+ * `getStores` itself.
+ *
+ * `cache()`d because it is now asked for TWICE in one request: once by
+ * `src/app/dashboard/(counter)/layout.tsx` for the rail's switcher, and again
+ * by any page that needs the same list for its own content (the per-store
+ * ledger, the orders list's store column). React dedupes the two calls within
+ * a request, so hoisting the chrome did not add a query.
+ */
+export const getOverviewStores = cache(async function getOverviewStores(): Promise<
+  SwitchableStore[]
+> {
   const stores = await getStores()
   return stores.map((s) => ({ id: s.id, name: s.name, stage: CARD_STAGE_FOR[s.lifecycleStage] }))
-}
+})
 
 /* ── Plumbing ─────────────────────────────────────────────────────────── */
 
