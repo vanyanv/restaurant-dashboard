@@ -22,6 +22,34 @@ import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 
+/**
+ * The discount given that day, as a POSITIVE amount.
+ *
+ * `OtterDailySummary.fpDiscounts` / `.tpDiscounts` are stored as SIGNED
+ * DEDUCTIONS, the same convention as `OtterOrder.discount` /`.commission`
+ * (`src/lib/counter/order-signs.ts`). Counted on the live database
+ * 2026-08-26, over all 3,430 rows:
+ *
+ *   fpDiscounts   > 0:     0    < 0:   335
+ *   tpDiscounts   > 0:     0    < 0: 1,110
+ *   fp + tp       > 0:     0    < 0: 1,445
+ *
+ * So `d.discount > 0` — the test this function replaces — was false for every
+ * day in the table, and `getPromoRoi` returned `events: []`, `totalLift: 0`,
+ * `blendedRoi: null` in production, always. `getPromoOpportunities` forwards
+ * that to the model, which then tells the owner the store has run no
+ * promotions. Every fixture in the test beside this file used the positive
+ * shape, which is why it passed review.
+ *
+ * `Math.max(0, …)` rather than a bare negation, for the same reason
+ * `feeAmount` uses it: were the column's convention ever to flip, reporting no
+ * discount is the safe reading — a negated positive would report a NEGATIVE
+ * discount and turn every ROI upside down.
+ */
+function discountGiven(fp: number | null, tp: number | null): number {
+  return Math.max(0, -((fp ?? 0) + (tp ?? 0)))
+}
+
 const DEFAULT_LOOKBACK_DAYS = 90
 const PROMO_DISCOUNT_PCT_MIN_ABSOLUTE = 0.03
 const PROMO_BASELINE_MULTIPLIER = 1.5
@@ -31,6 +59,7 @@ export interface PromoEvent {
   weekday: number
   grossSales: number
   netSales: number
+  /** Dollars discounted that day, as a POSITIVE amount. See `discountGiven`. */
   discount: number
   discountPct: number
   baselineNetSales: number
@@ -120,7 +149,10 @@ export async function getPromoRoi(input: {
     }
     bucket.grossSales += (row.fpGrossSales ?? 0) + (row.tpGrossSales ?? 0)
     bucket.netSales += (row.fpNetSales ?? 0) + (row.tpNetSales ?? 0)
-    bucket.discount += (row.fpDiscounts ?? 0) + (row.tpDiscounts ?? 0)
+    // Positive from here down: `discount` is the amount GIVEN, so the
+    // threshold test, the fallback denominator (`netSales + discount` is the
+    // gross) and `lift / discount` all read the way they are written.
+    bucket.discount += discountGiven(row.fpDiscounts, row.tpDiscounts)
     byDate.set(key, bucket)
   }
 

@@ -45,8 +45,14 @@ function row(d: DayFixture) {
     tpNetSales: d.tpNet ?? 0,
     fpGrossSales: d.fpGross ?? (d.fpNet ?? 0) + (d.fpDisc ?? 0),
     tpGrossSales: d.tpGross ?? (d.tpNet ?? 0) + (d.tpDisc ?? 0),
-    fpDiscounts: d.fpDisc ?? 0,
-    tpDiscounts: d.tpDisc ?? 0,
+    // NEGATIVE, as the columns are actually stored: 0 of 3,430 rows positive
+    // on either one, counted 2026-08-26. `fpDisc` here is the amount GIVEN,
+    // and the fixture signs it the way the database does. Every fixture in
+    // this file used the positive shape until now — the one shape the table
+    // has no rows of — which is why `d.discount > 0` survived review while
+    // excluding every real promo day in production.
+    fpDiscounts: -(d.fpDisc ?? 0),
+    tpDiscounts: -(d.tpDisc ?? 0),
   }
 }
 
@@ -132,6 +138,28 @@ describe("getPromoRoi", () => {
     expect(e.netSales).toBeCloseTo(1000, 5)
     expect(e.discount).toBeCloseTo(200, 5)
     expect(e.lift).toBeCloseTo(200, 5) // 1000 actual − 800 baseline
+  })
+
+  it("reports the discount it detected as a positive amount", async () => {
+    // `getPromoOpportunities` hands this straight to the model, and the tool
+    // description promises "roi is lift_dollars / discount_dollars". A negative
+    // discount there inverts the ROI as well as the prose.
+    vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue(
+      [
+        { date: "2026-04-04", fpNet: 1000, fpGross: 1000 },
+        { date: "2026-04-11", fpNet: 1000, fpGross: 1000 },
+        { date: "2026-04-18", fpNet: 1000, fpGross: 1000 },
+        { date: "2026-05-02", fpNet: 1500, fpDisc: 200, fpGross: 1700 },
+      ].map(row) as never,
+    )
+    const result = await getPromoRoi({ asOf: new Date("2026-05-08T00:00:00Z") })
+    if (!result || !result.ok) throw new Error("expected ok")
+    expect(result.data.events).toHaveLength(1)
+    expect(result.data.events[0].discount).toBeGreaterThan(0)
+    expect(result.data.events[0].discountPct).toBeGreaterThan(0)
+    expect(result.data.totalDiscount).toBeCloseTo(200, 5)
+    expect(result.data.blendedRoi).toBeGreaterThan(0)
   })
 
   it("does not flag any days when discount share is uniformly negligible", async () => {
