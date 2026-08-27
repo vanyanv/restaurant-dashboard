@@ -3,6 +3,14 @@ import {
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "./date-range"
 import { CHANNELS, type ChannelId } from "./channels"
+import {
+  DEFAULT_ALERT_SEGMENT,
+  isAlertSegment,
+  isAlertSeverity,
+  isAlertSource,
+  type AlertSegment,
+} from "./alert-filters"
+import type { AlertSeverity, AlertSource } from "@/generated/prisma/client"
 
 /**
  * The range and the store live in the URL.
@@ -56,6 +64,28 @@ export interface CounterParams {
    * UNTRUSTED. See `readDay`.
    */
   day: string | null
+  /**
+   * The alert inbox's segmented control — `P.alerts.seg`, `['Open','All','Muted']`.
+   *
+   * A single value rather than a list, because the three are mutually
+   * exclusive readings of the same table. Defaults to `open`, which is the
+   * prototype's own first-pressed segment and the only one an inbox should
+   * open on.
+   */
+  segment: AlertSegment
+  /**
+   * The pressed severity toggles on the alert inbox. EMPTY IS EVERY SEVERITY,
+   * exactly as it is for `channels` — see that field's note. Clear must arrive
+   * here as `[]`, never as all three ids.
+   */
+  severities: AlertSeverity[]
+  /**
+   * The pressed source toggles. Empty is every source, same rule.
+   *
+   * All five are RENDERED whatever is in here (ruling N-R1); this is only
+   * which of them are pressed.
+   */
+  sources: AlertSource[]
 }
 
 /**
@@ -128,6 +158,29 @@ function readChannels(params: URLSearchParams): ChannelId[] {
  * `parseIsoDay` rather than a bare regex, so `2026-02-31` is rejected rather
  * than rolled into March.
  */
+/**
+ * `sev=CRITICAL,WATCH` / `src=ANOMALY_EVENT` — the inbox's two toggle rows.
+ *
+ * The same shape as `readChannels` and for the same reason: anything
+ * unrecognised is DROPPED rather than thrown on, because a link from before an
+ * enum member was renamed is a normal thing to click and an inbox that 500s on
+ * a stale query string is worse than one that shows everything.
+ */
+function readIdList<T extends string>(
+  params: URLSearchParams,
+  key: string,
+  guard: (v: string) => v is T,
+): T[] {
+  const raw = params.get(key)
+  if (raw === null || raw === "") return []
+  const out: T[] = []
+  for (const part of raw.split(",")) {
+    const id = part.trim()
+    if (guard(id) && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
 function readDay(params: URLSearchParams): string | null {
   const raw = params.get("day")
   if (raw === null || raw === "") return null
@@ -166,6 +219,12 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
     channels: readChannels(params),
     search: params.get("q") ?? "",
     day: readDay(params),
+    segment: (() => {
+      const raw = params.get("seg")
+      return raw !== null && isAlertSegment(raw) ? raw : DEFAULT_ALERT_SEGMENT
+    })(),
+    severities: readIdList(params, "sev", isAlertSeverity),
+    sources: readIdList(params, "src", isAlertSource),
   }
 }
 
@@ -176,7 +235,12 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
  */
 export function writeCounterParams(
   current: URLSearchParams,
-  next: Partial<Pick<CounterParams, "comparisonId" | "storeId" | "channels" | "search" | "day">> & {
+  next: Partial<
+    Pick<
+      CounterParams,
+      "comparisonId" | "storeId" | "channels" | "search" | "day" | "segment" | "severities" | "sources"
+    >
+  > & {
     presetId?: PresetId
     /**
      * An arbitrary window — a pressed week (note 53) or a stepped period.
@@ -248,6 +312,25 @@ export function writeCounterParams(
   if (next.day !== undefined) {
     if (next.day === null) out.delete("day")
     else out.set("day", next.day)
+  }
+  /*
+   * The alert inbox's three keys, all dropped at their default so a shared
+   * link stays short — and, for the two lists, so `?sev=` and no `sev` key at
+   * all cannot come to mean different things. `readIdList` reads both as "no
+   * toggle pressed", which IS "every severity"; writing all three ids instead
+   * would be a filter, and Clear must never narrow.
+   */
+  if (next.segment !== undefined) {
+    if (next.segment === DEFAULT_ALERT_SEGMENT) out.delete("seg")
+    else out.set("seg", next.segment)
+  }
+  if (next.severities !== undefined) {
+    if (next.severities.length === 0) out.delete("sev")
+    else out.set("sev", next.severities.join(","))
+  }
+  if (next.sources !== undefined) {
+    if (next.sources.length === 0) out.delete("src")
+    else out.set("src", next.sources.join(","))
   }
 
   return out

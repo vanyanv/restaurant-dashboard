@@ -36,6 +36,14 @@ export interface InboxAlert {
   body: string | null
   occurredOn: Date
   detectedAt: Date
+  /**
+   * When the alert was closed — set by `acknowledgeAlert` AND by
+   * `dismissAlert`, which is exactly why it is not an "acknowledged" signal.
+   * Measured 2026-08-26: ten rows carry one and all ten are DISMISSED. Read
+   * it for HOW LONG something took to close, never for WHETHER it was
+   * acknowledged (ruling N-R2 — `status` is the only source for that).
+   */
+  acknowledgedAt: Date | null
   explanation: string | null
 }
 
@@ -46,7 +54,33 @@ export interface AlertInboxData {
     critical: number
     watch: number
     info: number
+    /**
+     * `status = ACKNOWLEDGED`, and nothing else. Today it is 0.
+     *
+     * NOT a count of rows with an `acknowledgedAt` — see that field. Sourcing
+     * it there would report ten dismissals as ten acknowledgements, which is
+     * the single most dangerous line on the inbox page.
+     */
+    acknowledged: number
+    /** `status = DISMISSED`. */
+    dismissed: number
   }
+  /**
+   * Every source's row count within the same store scope and horizon, ALL
+   * STATUSES — including the four that have never fired. The inbox renders
+   * one toggle per source carrying this number (ruling N-R1), so a zero here
+   * is rendered as `0` rather than as an absent toggle.
+   */
+  bySource: Record<AlertSource, number>
+  /**
+   * The account's mute rules (`AlertPreference.muted = true`), narrowed to
+   * what routing needs. Zero rows on the live database.
+   *
+   * The RULES, not a count of them, because the inbox's "Muted" segment has to
+   * show which alerts a rule suppresses — and a count could only ever produce
+   * a hard-coded empty list, which is a guess dressed as a measurement.
+   */
+  muteRules: Array<{ storeId: string | null; target: AlertTarget | null }>
   /** Distinct stores in scope, for the filter rail. */
   stores: Array<{ id: string; name: string }>
 }
@@ -64,6 +98,21 @@ export interface AlertInboxFilters {
 }
 
 const PAGE_SIZE = 100
+
+const ALL_SOURCES: AlertSource[] = [
+  "ANOMALY_EVENT",
+  "PRICE_DELTA",
+  "HARRI_VARIANCE",
+  "QUANTITY_SPIKE",
+  "NEW_PRODUCT",
+]
+
+/** Every source at zero — the shape `bySource` always has, so a source with no
+ *  rows is a `0` rather than a missing key the caller has to `?? 0` at every
+ *  read site. */
+function emptyBySource(): Record<AlertSource, number> {
+  return Object.fromEntries(ALL_SOURCES.map((s) => [s, 0])) as Record<AlertSource, number>
+}
 
 export async function getAlertInbox(
   filters: AlertInboxFilters = {},
@@ -88,7 +137,13 @@ export async function getAlertInbox(
   if (scopedStoreIds.length === 0) {
     return {
       ok: true,
-      data: { alerts: [], counts: { open: 0, critical: 0, watch: 0, info: 0 }, stores },
+      data: {
+        alerts: [],
+        counts: { open: 0, critical: 0, watch: 0, info: 0, acknowledged: 0, dismissed: 0 },
+        bySource: emptyBySource(),
+        muteRules: [],
+        stores,
+      },
     }
   }
 
@@ -102,7 +157,7 @@ export async function getAlertInbox(
     ...(filters.source ? { source: filters.source } : {}),
   }
 
-  const [rows, bySeverity] = await Promise.all([
+  const [rows, tally, muteRules] = await Promise.all([
     prisma.alert.findMany({
       where,
       orderBy: [{ severity: "desc" }, { occurredOn: "desc" }, { detectedAt: "desc" }],
@@ -119,22 +174,46 @@ export async function getAlertInbox(
         body: true,
         occurredOn: true,
         detectedAt: true,
+        acknowledgedAt: true,
         explanation: true,
       },
     }),
+    /*
+     * ONE cross-tab, replacing what used to be a severity-only groupBy over
+     * OPEN rows. Every count the inbox prints — the three severities, the two
+     * closed statuses and the five source tallies — is a projection of this
+     * single result, so no figure on the page costs a query of its own and no
+     * two of them can be scoped differently by accident.
+     *
+     * The `status: "OPEN"` filter is GONE from the `where` and moved into the
+     * projections below, because `acknowledged` and `dismissed` are questions
+     * about the statuses this used to exclude. `countFor` re-applies it, so
+     * `counts.critical/watch/info/open` mean exactly what they meant before.
+     */
     prisma.alert.groupBy({
-      by: ["severity"],
+      by: ["severity", "status", "source"],
       where: {
         storeId: { in: scopedStoreIds },
         occurredOn: { gte: anomalyHorizon() },
-        status: "OPEN",
       },
       _count: { _all: true },
     }),
+    // The account's hard mutes. Zero rows today; asked for rather than assumed
+    // so the inbox's "Muted" segment reports a measurement.
+    prisma.alertPreference.findMany({
+      where: { accountId, muted: true },
+      select: { storeId: true, target: true },
+    }),
   ])
 
+  const sum = (pick: (r: (typeof tally)[number]) => boolean) =>
+    tally.reduce((n, r) => (pick(r) ? n + r._count._all : n), 0)
+
   const countFor = (s: AlertSeverity) =>
-    bySeverity.find((r) => r.severity === s)?._count._all ?? 0
+    sum((r) => r.status === "OPEN" && r.severity === s)
+
+  const bySource = emptyBySource()
+  for (const r of tally) bySource[r.source] += r._count._all
 
   return {
     ok: true,
@@ -148,7 +227,12 @@ export async function getAlertInbox(
         watch: countFor("WATCH"),
         info: countFor("INFO"),
         open: countFor("CRITICAL") + countFor("WATCH") + countFor("INFO"),
+        // STATUS, not `acknowledgedAt`. See `InboxAlert.acknowledgedAt`.
+        acknowledged: sum((r) => r.status === "ACKNOWLEDGED"),
+        dismissed: sum((r) => r.status === "DISMISSED"),
       },
+      bySource,
+      muteRules,
       stores,
     },
   }

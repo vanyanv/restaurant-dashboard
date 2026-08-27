@@ -22,6 +22,10 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       count: vi.fn(),
     },
+    // The account's hard mutes. Zero rows on the live database; the inbox asks
+    // for the RULES rather than a count so the "Muted" segment can report a
+    // measurement instead of a hard-coded empty list.
+    alertPreference: { findMany: vi.fn() },
   },
 }))
 
@@ -43,6 +47,7 @@ beforeEach(() => {
   vi.mocked(prisma.store.findMany).mockResolvedValue([
     { id: "s1", name: "Hollywood" },
   ] as never)
+  vi.mocked(prisma.alertPreference.findMany).mockResolvedValue([] as never)
 })
 
 describe("getAlertInbox", () => {
@@ -94,14 +99,62 @@ describe("getAlertInbox", () => {
 
   it("counts open alerts by severity", async () => {
     vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    // The tally is now a severity x status x source cross-tab rather than a
+    // severity-only groupBy over OPEN rows, so that one result can answer the
+    // three severities, the two closed statuses and the five source tallies.
+    // The OPEN scope moved out of the `where` and into this projection.
     vi.mocked(prisma.alert.groupBy).mockResolvedValue([
-      { severity: "CRITICAL", _count: { _all: 2 } },
-      { severity: "WATCH", _count: { _all: 5 } },
+      { severity: "CRITICAL", status: "OPEN", source: "ANOMALY_EVENT", _count: { _all: 2 } },
+      { severity: "WATCH", status: "OPEN", source: "ANOMALY_EVENT", _count: { _all: 5 } },
+      { severity: "WATCH", status: "DISMISSED", source: "ANOMALY_EVENT", _count: { _all: 3 } },
     ] as never)
 
     const res = await getAlertInbox()
     if (!res.ok) throw new Error("expected ok")
-    expect(res.data.counts).toEqual({ critical: 2, watch: 5, info: 0, open: 7 })
+    expect(res.data.counts).toEqual({
+      critical: 2,
+      watch: 5,
+      info: 0,
+      open: 7,
+      acknowledged: 0,
+      // A dismissal is NOT an acknowledgement, and this is the query-level
+      // half of that ruling: the two statuses are counted separately and
+      // neither is read off `acknowledgedAt`, which both of them set.
+      dismissed: 3,
+    })
+  })
+
+  it("tallies every source, including the four that have never fired", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    vi.mocked(prisma.alert.groupBy).mockResolvedValue([
+      { severity: "CRITICAL", status: "OPEN", source: "ANOMALY_EVENT", _count: { _all: 40 } },
+      { severity: "WATCH", status: "DISMISSED", source: "ANOMALY_EVENT", _count: { _all: 10 } },
+    ] as never)
+
+    const res = await getAlertInbox()
+    if (!res.ok) throw new Error("expected ok")
+    // All five keys present, all statuses summed — this is what the five
+    // source toggles read, and a missing key would render as a missing toggle.
+    expect(res.data.bySource).toEqual({
+      ANOMALY_EVENT: 50,
+      PRICE_DELTA: 0,
+      HARRI_VARIANCE: 0,
+      QUANTITY_SPIKE: 0,
+      NEW_PRODUCT: 0,
+    })
+  })
+
+  it("carries acknowledgedAt onto the row", async () => {
+    vi.mocked(getServerSession).mockResolvedValue(owner as never)
+    const closedAt = new Date("2026-08-26T05:48:00Z")
+    vi.mocked(prisma.alert.findMany).mockResolvedValue([
+      { id: "a1", storeId: "s1", status: "DISMISSED", acknowledgedAt: closedAt },
+    ] as never)
+
+    const res = await getAlertInbox({ includeResolved: true })
+    if (!res.ok) throw new Error("expected ok")
+    // Without it there is no time-to-close median to compute at all.
+    expect(res.data.alerts[0].acknowledgedAt).toBe(closedAt)
   })
 })
 
