@@ -100,9 +100,11 @@ async function hideDevChrome(page: Page): Promise<void> {
 }
 
 async function main() {
-  const [route, out, width, theme] = process.argv.slice(2)
+  const [route, out, width, theme, height] = process.argv.slice(2)
   if (!route || !out) {
-    console.error("usage: npm run shot -- <route> <out.png> [width] [light|dark]")
+    console.error(
+      "usage: npm run shot -- <route> <out.png> [width] [light|dark] [height]",
+    )
     process.exit(1)
   }
   if (theme && theme !== "light" && theme !== "dark") {
@@ -112,7 +114,18 @@ async function main() {
 
   const browser = await chromium.launch()
   const context = await browser.newContext({
-    viewport: { width: Number(width) || 1440, height: 1000 },
+    // HEIGHT IS A REAL ARGUMENT, and on a Counter page it is the only one that
+    // works. `fullPage: true` grows the shot to the document's height — but a
+    // Counter page does not scroll the document. `AppShell` scrolls INSIDE
+    // `#ct-main`, so the document is exactly the viewport and `fullPage` is a
+    // no-op: everything below 1000px is simply absent from the image, with no
+    // clipping artefact to give it away. Task 6 hit this while trying to read
+    // a day book that starts around y=1100 and had to work around it with a
+    // scratch copy of this file.
+    //
+    // Pass a tall viewport instead. 3000 covers every Counter page built so
+    // far; the group Analytics desk page needs about 1100.
+    viewport: { width: Number(width) || 1440, height: Number(height) || 1000 },
   })
   // Counter's dark theme is NOT the OS preference. `counter.css` pins
   // `:root { color-scheme: light }` deliberately (the ~95% of the app that is
