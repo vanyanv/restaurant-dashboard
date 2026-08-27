@@ -122,6 +122,42 @@ describe("channelSeries", () => {
     expect(series.blendedPct).toBeCloseTo(22.3, 1)
   })
 
+  it("reads commissionShares bucket by bucket against a hand-computed figure", () => {
+    const series = channelSeries(statement())
+
+    // Bucket 0, by hand, from the fixture's own dollars:
+    //   Uber commission     4324.664592 × 0.21 =  908.179564
+    //   DoorDash commission 2215.675078 × 0.25 =  553.918770
+    //   four-channel total  2313.636904 + 4324.664592 + 2215.675078 + 43.726191
+    //                                          = 8897.702765
+    //   (908.179564 + 553.918770) / 8897.702765 × 100 = 16.4325…%
+    const uber0 = 4324.664592 * 0.21
+    const dd0 = 2215.675078 * 0.25
+    const total0 = 2313.636904 + 4324.664592 + 2215.675078 + 43.726191
+    expect(series.commissionShares).toHaveLength(LABELS.length)
+    expect(series.commissionShares[0]).toBeCloseTo(((uber0 + dd0) / total0) * 100, 6)
+    expect(series.commissionShares[0]).toBeCloseTo(16.4325, 3)
+
+    // Every entry is a positive percentage: the GL rows are stored negative and
+    // the sign is flipped exactly once, never twice and never left alone.
+    for (const share of series.commissionShares) expect(share).toBeGreaterThan(0)
+  })
+
+  it("reconciles commissionShares with the range totals it is a per-bucket reading of", () => {
+    const series = channelSeries(statement())
+    const bucketTotals = LABELS.map((_, i) =>
+      series.bands.reduce((acc, b) => acc + b.values[i], 0),
+    )
+    // Dollars back out of the shares, summed, is the range's own commission —
+    // one quantity, read two ways.
+    const dollars = series.commissionShares.reduce(
+      (acc, share, i) => acc + (share / 100) * bucketTotals[i],
+      0,
+    )
+    expect(dollars).toBeCloseTo(series.commission, 6)
+    expect((dollars / series.total) * 100).toBeCloseTo(series.commissionPct, 6)
+  })
+
   it("sums every bucket's four shares to 100 (assertion 4)", () => {
     const series = channelSeries(statement())
     for (let i = 0; i < LABELS.length; i++) {
@@ -223,11 +259,15 @@ describe("a bucket with zero sales on all four channels (assertion 11)", () => {
     for (const b of series.bands) {
       expect(b.shares[lastBucket]).toBe(0)
     }
+    // The bucket that sold nothing pays no commission, and `0` is the answer —
+    // not `NaN` from a divide by an empty day.
+    expect(series.commissionShares[lastBucket]).toBe(0)
 
     for (const b of series.bands) {
       for (const share of b.shares) expect(Number.isNaN(share)).toBe(false)
       for (const value of b.values) expect(Number.isNaN(value)).toBe(false)
     }
+    for (const share of series.commissionShares) expect(Number.isNaN(share)).toBe(false)
     expect(Number.isNaN(series.total)).toBe(false)
     expect(Number.isNaN(series.marketplaceShare)).toBe(false)
     expect(Number.isNaN(series.commissionPct)).toBe(false)
