@@ -53,9 +53,9 @@ import type { BriefingLine, MathRow, QueueItem, RecordMark, Tone, WeekDay } from
  *
  * The rule has teeth here specifically. The week's total is printed three
  * times — the headline figure, the strip's first cell and the phone's first
- * cell — and all three read `vitals.weekForecast.total`, which
- * `computeVitals` derived from the same `days` the picker renders. A second
- * sum taken here would be a fourth opinion about one week.
+ * cell — and all three read ONE function, `weekTotal`, over ONE series, the
+ * `WeekDay[]` `buildDecisionsWeek` hands the picker. A second sum taken here
+ * would be a fourth opinion about one week.
  *
  * ## What it must never do: sum `ForecastDailyRevenue` itself
  *
@@ -70,24 +70,39 @@ import type { BriefingLine, MathRow, QueueItem, RecordMark, Tone, WeekDay } from
  * through `newestGenerationPerDay` or it is a bug regardless of what the
  * loader did.
  *
- * ## The headline's week and the picker's week are not the same seven days
+ * ## The headline's week IS the picker's week (ruling N-R17)
  *
- * They were until ruling N-R14, and the difference is deliberate rather than a
- * drift to reconcile. `vitals.weekForecast.total` — the headline figure, the
- * strip's first cell and the phone's first cell — is the ROLLING week
- * `getDecisionsView` loads: today and the six days after it. The picker is the
- * CALENDAR week, Monday to Sunday, because a picker of forward days has no
- * actual to show against any of them and "forecast against actual" was
- * therefore seven grey cells.
+ * It was not, between N-R14 and N-R17, and the split was documented rather
+ * than fixed. `vitals.weekForecast.total` is the ROLLING window
+ * `getDecisionsView` loads — today and the six days after it — while the
+ * picker is the CALENDAR week, Monday to Sunday, because a picker of forward
+ * days has no actual to show against any of them and "forecast against
+ * actual" was therefore seven grey cells. On 2026-08-27 the headline read
+ * $51,338 and the seven cells beneath it summed to $52,111: $773 apart, on one
+ * page, both labelled "this week".
  *
- * They answer different questions — what the next seven days will take, and
- * how this week's calls have landed — and the prototype has the same split:
- * its headline says $38,930 where its own `WK` sums to $34,930. **Do not
- * "fix" one into the other by summing the picker here.** That sum would be a
- * second opinion about the week's pot, which is the defect the paragraph above
- * this one exists to prevent; if the two should be one window, that is a
- * change to what `computeVitals` is given, not a sum taken in a translation
- * layer.
+ * Prototype note 39 — **a total is the sum of the series beside it** — and
+ * this codebase has already repaired one violation of it: the tax row in
+ * `MathLines`, drawn as a subtraction and then not applied. "The prototype
+ * does it too" (its own headline says $38,930 over a `WK` summing $34,930)
+ * was the argument rejected then, and the prototype's own comment records the
+ * repair.
+ *
+ * So `weekTotal` sums `buildDecisionsWeek`'s output — the merged Mon–Sun
+ * series the picker renders, settled half and forward half — and the headline,
+ * the desk strip's first cell and the phone strip's first cell all read it.
+ * **This is not a second sum of the week.** It is the one series, summed once,
+ * by the one function three callers share; nothing here computes a new window
+ * and nothing re-derives a day. `vitals.weekForecast.total` is no longer read
+ * by this page.
+ *
+ * What still comes from the vitals is the DELTA beside the figure ("▲ 6.1% on
+ * last week"), because it is not a total: `computeVitals` recovers it from
+ * each forward day's own `pctVsTrailing`, and a settled day carries no
+ * comparison against the same weekday a week earlier. It is therefore a rate
+ * measured over the forward window sitting beside a calendar-week total, which
+ * is owed work — a calendar-week comparison needs the PRIOR week's rows, which
+ * is a second load and a second ruling, not a sum taken here.
  *
  * ## One promise per section (ruling N-R13)
  *
@@ -341,19 +356,42 @@ function loadError(error: "no_session" | "store_not_in_account" | "no_stores"): 
 
 /**
  * The week's forecast — ONE number, read by the headline, the desk strip and
- * the phone strip.
+ * the phone strip, and it is the sum of the series the picker draws.
  *
- * `vitals.weekForecast.total` and NOT a sum taken here. Note that it is also
- * not `view.potUsdPerWeek`, which is the sum of the ACTIONS' weekly impact —
- * a different quantity that happens to be money per week. The prototype's
- * "This week's pot" is the revenue the week is forecast to take ($38,930
- * against a strip that also says "▲ 6.1% on last week"); an actions total has
- * no last-week to move against.
+ * Ruling N-R17, and the module note above is the argument. `week` is
+ * `buildDecisionsWeek`'s output: the merged Mon–Sun cells, the settled half
+ * from `loadSettledDays` and the forward half from `view.days`. Summing THAT
+ * is not a second opinion about the week — it is the only opinion, taken once,
+ * over the exact seven figures printed underneath it. Reading
+ * `vitals.weekForecast.total` here instead is what put $51,338 above a picker
+ * summing $52,111.
+ *
+ * A cell's `forecast` is what the cell PRINTS, so this total cannot drift from
+ * the row below it even if the merge changes which half a day comes from.
+ * Null when the week has no cells at all — distinct from a forecast of zero,
+ * and the state a store with no forecast rows written is genuinely in.
+ *
+ * Note it is also not `view.potUsdPerWeek`, which is the sum of the ACTIONS'
+ * weekly impact — a different quantity that happens to be money per week. The
+ * prototype's "This week's pot" is the revenue the week is forecast to take
+ * ($38,930 against a strip that also says "▲ 6.1% on last week"); an actions
+ * total has no last-week to move against.
  */
-function weekTotal(view: DecisionsView): number | null {
-  return view.vitals.weekForecast.total
+function weekTotal(week: WeekDay[]): number | null {
+  if (week.length === 0) return null
+  return week.reduce((sum, d) => sum + d.forecast, 0)
 }
 
+/**
+ * "▲ 6.1% on last week", or that there is nothing to compare against.
+ *
+ * A RATE, not a total, which is why N-R17 leaves it on the vitals:
+ * `computeVitals` recovers the prior week by dividing each forward day by its
+ * own `pctVsTrailing`, and a settled cell carries no such comparison. So this
+ * is measured over the forward window while the figure beside it is the
+ * calendar week. Stated in the module note as owed work rather than closed by
+ * inventing a prior week here.
+ */
 function weekDelta(view: DecisionsView): { text: string; tone?: DeltaTone } {
   const v = view.vitals.weekForecast.vsPriorWeek
   if (v === null) return { text: "no comparison set", tone: "is-flat" }
@@ -373,8 +411,8 @@ function insideOf(view: DecisionsView): { inside: number | null; sample: number 
   return { inside: Math.round(s.intervalCoverage80 * s.sampleSize), sample: s.sampleSize }
 }
 
-export function buildDecisionsHead(view: DecisionsView): DecisionsHead {
-  const total = weekTotal(view)
+export function buildDecisionsHead(view: DecisionsView, week: WeekDay[]): DecisionsHead {
+  const total = weekTotal(week)
   const d = weekDelta(view)
   const value = money(total)
   const { inside, sample } = insideOf(view)
@@ -463,8 +501,8 @@ function coverageWord(view: DecisionsView): string {
     : "80% interval, wide"
 }
 
-export function buildDecisionsStrip(view: DecisionsView): StripCell[] {
-  const total = weekTotal(view)
+export function buildDecisionsStrip(view: DecisionsView, week: WeekDay[]): StripCell[] {
+  const total = weekTotal(week)
   const d = weekDelta(view)
   const { inside, sample } = insideOf(view)
   const gap = view.vitals.laborGap
@@ -1220,12 +1258,34 @@ export function getDecisionsSectionPromises(
       "retryDecisions",
     )
 
+  /**
+   * The three sections that print the week's TOTAL, over the same series the
+   * picker draws (ruling N-R17).
+   *
+   * `buildDecisionsWeek` is called once per section rather than hoisted into a
+   * shared promise, deliberately: it is a pure merge of two arrays already in
+   * memory, so calling it three times costs three map-and-sorts and cannot
+   * disagree with itself — whereas a hoisted `weekP` would be a fourth place
+   * that decides what the week is. The ONE-FUNCTION rule is about there being
+   * one implementation, not one invocation.
+   *
+   * The cost of the fix is that the headline and the strip now wait for
+   * `settledP` as well as `viewP` — one extra `findMany` before the biggest
+   * figure on the page can paint. That is the price of the figure being true,
+   * and `loadSettledDays` fails closed to `[]`, so a settled query that broke
+   * degrades the headline to the forward half rather than taking it down.
+   */
+  const withWeekDays = <T,>(
+    f: (view: DecisionsView, week: WeekDay[]) => SectionData<T>,
+  ): Promise<SectionData<T>> => withWeek((view, settled) => f(view, buildDecisionsWeek(view, settled)))
+
   return {
-    head: simple(buildDecisionsHead),
-    strip: simple(buildDecisionsStrip),
+    head: withWeekDays((view, week) => ready(buildDecisionsHead(view, week))),
+    strip: withWeekDays((view, week) => ready(buildDecisionsStrip(view, week))),
     briefing: simple(buildDecisionsBriefing),
 
     // Monday to Sunday, forecast against actual — not the forward window.
+    // The same series the headline and the strip sum, one function above.
     week: withWeek((view, settled) => ready(buildDecisionsWeek(view, settled))),
 
     // The one section that can be asked about a day the week does not have.
