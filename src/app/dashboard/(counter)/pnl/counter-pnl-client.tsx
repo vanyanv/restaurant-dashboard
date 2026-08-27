@@ -27,6 +27,7 @@ import {
   type ComparisonId,
 } from "@/lib/counter/date-range"
 import { count, money, pct } from "@/lib/counter/format"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   PnlSections,
   PnlStatement,
@@ -85,8 +86,18 @@ import type {
  *    `ct-` token layer, and `text-ct-warn` resolves to the same token.
  */
 
-/** The shapes `page.tsx` hands this island — the adapter's own, imported rather than restated. */
-export type CounterPnlSections = PnlSections
+/** The shapes `page.tsx` hands this island — the adapter's own, imported rather than restated. *
+ * ## What this island receives, per section
+ *
+ * The resolved `SectionData` or the PROMISE of it (`SectionSources`).
+ *
+ * The page hands over promises — `Section` opens a Suspense boundary per
+ * section and unwraps each with `use()`, so one slow query holds up one
+ * section and nothing else. The union keeps the resolved half so this island
+ * renders identically when it is handed finished data, which is what every
+ * test of it does and what makes those tests worth anything.
+ */
+export type CounterPnlSections = SectionSources<PnlSections>
 
 /** "the prior period" — the comparison named the way a sentence names it. */
 function comparisonName(id: ComparisonId): string {

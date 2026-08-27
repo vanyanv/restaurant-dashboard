@@ -18,9 +18,9 @@ import {
 } from "@/components/counter"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeSubtitle, stepRange } from "@/lib/counter/date-range"
-import { dataOf } from "@/lib/counter/section-data"
 import { CHANNELS, type ChannelId } from "@/lib/counter/channels"
 import type { OrdersList, OrdersRow, OrdersSections } from "@/lib/counter/adapters/orders"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Orders — the desk list, composed from `P.orders.desk()`
@@ -85,8 +85,18 @@ import type { OrdersList, OrdersRow, OrdersSections } from "@/lib/counter/adapte
  *   `Failed` draw one, and `.btn` is a landmark the prototype does not have
  *   here. No Counter page passes one yet; when one does it will be every page
  *   at once.
+ *
+ * ## What this island receives, per section
+ *
+ * The resolved `SectionData` or the PROMISE of it (`SectionSources`).
+ *
+ * The page hands over promises — `Section` opens a Suspense boundary per
+ * section and unwraps each with `use()`, so one slow query holds up one
+ * section and nothing else. The union keeps the resolved half so this island
+ * renders identically when it is handed finished data, which is what every
+ * test of it does and what makes those tests worth anything.
  */
-export type CounterOrdersSections = OrdersSections
+export type CounterOrdersSections = SectionSources<OrdersSections>
 
 /**
  * How long the search box waits before it writes what was typed into the URL.
@@ -360,13 +370,14 @@ export function CounterOrdersClient({
          * weekday it is made of is a fact about the range, not a page
          * decision, so `OrdersByHour` carries the string beside its chart.
          *
-         * `Section.meta` is a prop rather than something the body can set, so
-         * the value has to be lifted out here — `dataOf` reads it or gets
-         * null, which is not a status branch: `Section` gates `meta` on
-         * having data by itself, so the head is right in all six states
-         * without this file knowing which one it is in.
+         * A FUNCTION, not `dataOf(sections.byHour)?.meta`. Since Task 3 this
+         * section is a PROMISE — there is no resolved value in this file to
+         * lift a string out of — so the qualifier is read inside `Section`,
+         * where the value has landed. Still not a status branch: `Section`
+         * gates `meta` on having data by itself, so the head is right in all
+         * six states without this file knowing which one it is in.
          */
-        meta={dataOf(sections.byHour)?.meta}
+        meta={(h) => h.meta}
         data={sections.byHour}
       >
         {(h) => (

@@ -1,8 +1,10 @@
 "use client"
 
+import { Suspense, use } from "react"
 import { MList, MStrip, Section, type MListRow } from "@/components/counter"
-import { dataOf } from "@/lib/counter/section-data"
+import { dataOf, isPendingSource, type SectionSource } from "@/lib/counter/section-data"
 import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapters/orders"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Orders — the phone.
@@ -50,9 +52,16 @@ import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapter
  * one screenful and the strip covers the range, so a sub summed off the list
  * would read "6 orders" on a 187-order day.
  *
- * `dataOf` is the sanctioned accessor for exactly this (the desk lifts its
- * hour-chart meta the same way) — it is not a status branch, and a strip that
- * did not load leaves the title with no sub rather than printing " orders · ".
+ * `dataOf` is the sanctioned accessor for exactly this — it is not a status
+ * branch, and a strip that did not load leaves the title with no sub rather
+ * than printing " orders · ".
+ *
+ * Since Task 3 the strip arrives as a PROMISE, so the sub reads it inside its
+ * own tiny Suspense boundary (`OrdersSub`) rather than off a resolved object.
+ * Its fallback is `null` — which is exactly what this line already rendered
+ * for a strip that had not loaded, so the title stands alone for a beat and
+ * the sub appears under it. The alternative was to await the strip in the page
+ * and hold the whole list behind it for one sentence.
  *
  * ## No arithmetic on `discount` or `commission`, anywhere on this page
  *
@@ -64,17 +73,8 @@ import type { OrdersRow, OrdersSections, StripCell } from "@/lib/counter/adapter
 export function CounterPhoneOrdersClient({
   sections,
 }: {
-  sections: OrdersSections
+  sections: SectionSources<OrdersSections>
 }) {
-  const figures = dataOf(sections.strip)
-  const orders = cellValue(figures, "Orders")
-  const netSales = cellValue(figures, "Net sales")
-
-  // How many rows the list will actually draw, for the section's meta. The
-  // prototype's `'8 shown'` is a literal beside a six-row list; ours says what
-  // it showed, which is the same claim made honestly.
-  const shown = Math.min(dataOf(sections.list)?.rows.length ?? 0, PHONE_ROWS)
-
   return (
     /*
      * A FRAGMENT. `.ct-root.ct-phone`, `.mtop` and `.mscroll` are
@@ -88,11 +88,9 @@ export function CounterPhoneOrdersClient({
           up, along with the store. */}
       <div>
         <h2 className="mtitle">Orders</h2>
-        {orders && netSales ? (
-          <p className="msub">
-            {orders} orders &middot; {netSales}
-          </p>
-        ) : null}
+        <Suspense fallback={null}>
+          <OrdersSub strip={sections.strip} />
+        </Suspense>
       </div>
 
       {/* Two cells, chosen by NAME out of the adapter's five. Nothing here
@@ -103,11 +101,42 @@ export function CounterPhoneOrdersClient({
       </Section>
 
       {/* `sec('Latest', '8 shown', mlist(ORDERS.slice(0, 6), 'order'))`. No
-          filter bar above it and no pager below it — see the file note. */}
-      <Section title="Latest" meta={`${shown} shown`} data={sections.list}>
+          filter bar above it and no pager below it — see the file note.
+
+          The meta is a FUNCTION of the list because it is a claim ABOUT the
+          list: the prototype's `'8 shown'` is a literal beside a six-row list,
+          and ours says what it actually showed. `Section` calls it once the
+          value is in hand, which is the only place that count exists. */}
+      <Section
+        title="Latest"
+        meta={(l) => `${Math.min(l.rows.length, PHONE_ROWS)} shown`}
+        data={sections.list}
+      >
         {(l) => <MList rows={l.rows.slice(0, PHONE_ROWS).map(toListRow)} />}
       </Section>
     </>
+  )
+}
+
+/**
+ * The two figures under the page title: the ORDER COUNT and the NET for the
+ * whole matched range, read off the strip the adapter already built.
+ *
+ * Its own component because it `use()`s a promise, and a Suspense boundary
+ * only catches what renders inside it — calling `use()` in the island itself
+ * would suspend the whole page and put the list behind the sub-line. It reads
+ * data and never a status: `dataOf` is the sanctioned accessor and gives null
+ * for every state that has no figures, which renders nothing at all.
+ */
+function OrdersSub({ strip }: { strip: SectionSource<StripCell[]> }) {
+  const figures = dataOf(isPendingSource(strip) ? use(strip) : strip)
+  const orders = cellValue(figures, "Orders")
+  const netSales = cellValue(figures, "Net sales")
+  if (!orders || !netSales) return null
+  return (
+    <p className="msub">
+      {orders} orders &middot; {netSales}
+    </p>
   )
 }
 

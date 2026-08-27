@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getOverviewSections, getOverviewStores } from "@/lib/counter/adapters/overview"
+import { getOverviewSectionPromises, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneOverviewClient } from "./counter-phone-overview-client"
 
 export const dynamic = "force-dynamic"
@@ -62,13 +62,17 @@ export default async function MobileHomePage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  const stores = await getOverviewStores()
-  const sections = await getOverviewSections({
+  // NOT AWAITED — one promise per section, each unwrapped inside its own
+  // Suspense boundary by `Section`. See the desk page's note. Started before
+  // the store list so the two are concurrent.
+  const sections = getOverviewSectionPromises({
     range: counterParams.range,
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
   })
+
+  const stores = await getOverviewStores()
 
   return (
     <>

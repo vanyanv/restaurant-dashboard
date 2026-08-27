@@ -18,6 +18,7 @@ import {
 import { readCounterParams } from "@/lib/counter/url-state"
 import { dayCount, rangeLabel, rangeSubtitle, rangeTitle } from "@/lib/counter/date-range"
 import { count, money } from "@/lib/counter/format"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   OverviewSections,
   OverviewStoreCard,
@@ -98,7 +99,7 @@ export function CounterPhoneOverviewClient({
   params: string
   stores: SwitchableStore[]
   today: Date
-  sections: OverviewSections
+  sections: SectionSources<OverviewSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])

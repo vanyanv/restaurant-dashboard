@@ -40,6 +40,7 @@ import {
   type DateRange,
 } from "@/lib/counter/date-range"
 import { count, money } from "@/lib/counter/format"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   OverviewSections,
   OverviewStoreCard,
@@ -96,8 +97,18 @@ import type {
  *   and `getRevenueForecast`'s horizon starts TODAY while this page's default
  *   range ends yesterday — so it would be a permanently empty box on the view
  *   a reader lands on. `/dashboard/forecasts` serves it as a page.
+ *
+ * ## What this island receives, per section
+ *
+ * The resolved `SectionData` or the PROMISE of it (`SectionSources`).
+ *
+ * The page hands over promises — `Section` opens a Suspense boundary per
+ * section and unwraps each with `use()`, so one slow query holds up one
+ * section and nothing else. The union keeps the resolved half so this island
+ * renders identically when it is handed finished data, which is what every
+ * test of it does and what makes those tests worth anything.
  */
-export type OverviewClientSections = OverviewSections
+export type OverviewClientSections = SectionSources<OverviewSections>
 
 /**
  * The dispatch line's facts, and nowhere else to get them.

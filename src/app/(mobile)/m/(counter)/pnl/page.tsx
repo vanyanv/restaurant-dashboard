@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { getPnlSections } from "@/lib/counter/adapters/pnl"
+import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
 import { CounterPhonePnlClient } from "./counter-phone-pnl-client"
 
 export const dynamic = "force-dynamic"
@@ -53,7 +53,9 @@ export default async function MobilePnlPage({
   const today = new Date()
   const counterParams = readCounterParams(params, today)
 
-  const sections = await getPnlSections({
+  // NOT AWAITED — one promise per section, each unwrapped inside its own
+  // Suspense boundary by `Section`. See the desk page's note.
+  const sections = getPnlSectionPromises({
     range: counterParams.range,
     comparisonId: counterParams.comparisonId,
     storeId: counterParams.storeId,

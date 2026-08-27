@@ -56,3 +56,74 @@ export async function classify<T>(
     )
   }
 }
+
+/**
+ * An adapter's streaming return: the same record of sections, one promise per
+ * key.
+ *
+ * This is the shape Task 3 of the streaming-architecture plan turns on. The
+ * awaited `getXSections` still exists — every test and the two order-detail
+ * pages use it — but it is now a thin `awaitSections()` over the streaming
+ * variant, so there is exactly ONE piece of code deciding what each section
+ * holds. Two implementations of "what is in the strip" is how two surfaces
+ * come to print two different numbers for one day.
+ */
+export type StreamedSections<S> = { [K in keyof S]: Promise<S[K]> }
+
+/**
+ * What a page CLIENT accepts: either half of `SectionSource`, per key.
+ *
+ * A client island is typed on this rather than on `StreamedSections` so the
+ * same island renders identically whether the page streamed its sections or
+ * resolved them first — which is what keeps every existing island test, all of
+ * which hand over plain `ready()` values with no promise anywhere, meaningful.
+ */
+export type SectionSources<S> = { [K in keyof S]: S[K] | Promise<S[K]> }
+
+/**
+ * The streaming record, awaited back into a plain one.
+ *
+ * `Promise.all` over the values, so this costs exactly what awaiting the
+ * adapter always cost: the slowest section. Nothing here changes what a
+ * section holds.
+ */
+export async function awaitSections<S extends object>(
+  streamed: StreamedSections<S>,
+): Promise<S> {
+  const keys = Object.keys(streamed) as Array<keyof S>
+  const values = await Promise.all(keys.map((k) => streamed[k]))
+  const out = {} as S
+  keys.forEach((k, i) => {
+    out[k] = values[i] as S[typeof k]
+  })
+  return out
+}
+
+/**
+ * The last-resort guard on a streamed section: a rejection becomes a `failed`
+ * section instead of a page.
+ *
+ * `classify` already promises never to throw, and every loader goes through
+ * it. What is new in the streaming shape is the SECOND half of a section —
+ * the `mapReady(...)` that turns a loaded rollup into cells — which now runs
+ * inside a promise rather than inside the page's own `await`. Before Task 3 a
+ * builder that threw took the whole page down with a 500; unguarded here it
+ * would instead reject a promise that a client component is about to `use()`,
+ * which React reports as an unhandled error on the nearest boundary — a
+ * blank page with a worse explanation.
+ *
+ * So every section promise an adapter returns is wrapped in this. It also
+ * means no adapter can hand back a promise nothing is listening on, which is
+ * what an unhandled rejection warning at request time actually is.
+ */
+export function guardSection<T>(
+  promise: Promise<SectionData<T>>,
+  retryAction: string,
+): Promise<SectionData<T>> {
+  return promise.catch((err: unknown) =>
+    failed<T>(
+      err instanceof Error ? err.message : "Something went wrong building this section",
+      retryAction,
+    ),
+  )
+}

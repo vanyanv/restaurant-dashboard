@@ -168,3 +168,37 @@ export function mapReadyTo<T, U>(
   }
   return mapReady(sd, () => undefined as never)
 }
+
+/**
+ * What a page may hand a `Section`: the resolved thing, or the promise of it.
+ *
+ * Task 3 of the streaming-architecture plan. A page used to `await` its whole
+ * adapter and hand one finished record to one client component, so the strip
+ * could not paint until the chart's query came back. Now an adapter hands back
+ * a record of PROMISES, a page passes each one straight through, and `Section`
+ * unwraps it inside its own Suspense boundary — so a section waits for its own
+ * query and for nothing else.
+ *
+ * The union keeps the resolved form because two of the eight Counter pages
+ * genuinely have nothing to stream: `/dashboard/orders/[id]` and its phone
+ * twin build all seven of their sections from ONE `getOrderDetail` load, and
+ * both read the head and the platform rows synchronously to title the page.
+ * Splitting one query into seven promises that resolve in the same tick would
+ * be a picture of streaming rather than streaming. They pass resolved
+ * `SectionData` and every other page passes promises, through one prop.
+ *
+ * It is NOT a status branch and cannot become one: nothing here reads
+ * `.status`, and a page still has no way to ask what state its data is in.
+ */
+export type SectionSource<T> = SectionData<T> | Promise<SectionData<T>>
+
+/**
+ * Is this the promise half of a `SectionSource`?
+ *
+ * Duck-typed on `.then` rather than `instanceof Promise` on purpose: what a
+ * client component receives across the RSC boundary is React's own thenable,
+ * not necessarily a native `Promise`, and `instanceof` is false for it.
+ */
+export function isPendingSource<T>(source: SectionSource<T>): source is Promise<SectionData<T>> {
+  return typeof (source as { then?: unknown } | null)?.then === "function"
+}
