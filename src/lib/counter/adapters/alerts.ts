@@ -222,13 +222,22 @@ export function median(values: number[]): number | null {
  * dropped for the same reason.
  *
  * `population` is what the cell's note is written from. Today every closed row
- * is a DISMISSAL, so the note reads "over dismissals" — and it will say
+ * is a DISMISSAL, so the note reads "over 1 dismissal" — and it will say
  * something different on its own the day an alert is genuinely acknowledged,
  * rather than keeping a label that has quietly stopped being true.
+ *
+ * ONLY THE ROWS THE INBOX ACTUALLY LOADED, which is the horizon's own scope
+ * and not the whole table. Measured 2026-08-27: `Alert` holds ten dismissals,
+ * but nine of them occurred on 2026-07-25 and 2026-07-27 — outside
+ * `anomalyHorizon()` — so one is in scope and the median is a median of one
+ * number. That is why the cell NAMES ITS POPULATION SIZE rather than saying
+ * "over dismissals": a median over n=1 is a single measurement wearing the
+ * word median, and the count is the only thing that tells a reader which it
+ * is looking at.
  */
 export function timeToClose(alerts: InboxAlert[]): {
   hours: number[]
-  population: "dismissals" | "closed alerts"
+  population: { one: string; many: string }
 } {
   const closed = alerts.filter((a) => a.status !== "OPEN" && a.acknowledgedAt !== null)
   const hours: number[] = []
@@ -237,7 +246,12 @@ export function timeToClose(alerts: InboxAlert[]): {
     if (ms >= 0) hours.push(ms / HOUR_MS)
   }
   const allDismissed = closed.length > 0 && closed.every((a) => a.status === "DISMISSED")
-  return { hours, population: allDismissed ? "dismissals" : "closed alerts" }
+  return {
+    hours,
+    population: allDismissed
+      ? { one: "dismissal", many: "dismissals" }
+      : { one: "closed alert", many: "closed alerts" },
+  }
 }
 
 /** `1.8 h` under two days, `2.1 d` beyond it, an em dash for nothing at all. */
@@ -399,7 +413,10 @@ function buildStrip(data: AlertInboxData): AlertStripCell[] {
       label: "Median time to close",
       value: durationWords(median(hours)),
       delta: null,
-      note: hours.length === 0 ? "nothing closed yet" : `over ${population}`,
+      note:
+        hours.length === 0
+          ? "nothing closed yet"
+          : `over ${hours.length} ${hours.length === 1 ? population.one : population.many}`,
     },
   ]
 }
