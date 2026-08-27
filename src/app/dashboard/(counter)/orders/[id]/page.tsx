@@ -73,11 +73,19 @@ export default async function OrderPage({
   // content — it is how the store NAMED on the Platform section becomes the id
   // the rail shows as picked. `getOverviewStores` is `cache()`d, so the
   // layout's call and this one are one query per request.
-  const stores = await getOverviewStores()
-  const sections = await getOrderSections({
-    orderId: id,
-    accountId: session.user.accountId,
-  })
+  //
+  // `Promise.all`, not two sequential `await`s: the store list and the order's
+  // sections don't depend on each other, so awaiting them one after another
+  // was the waterfall the spec's defect 5 named. This page still awaits both
+  // (see the note above on why it does not stream), but there is no reason
+  // for the second query to wait on the first one to land.
+  const [stores, sections] = await Promise.all([
+    getOverviewStores(),
+    getOrderSections({
+      orderId: id,
+      accountId: session.user.accountId,
+    }),
+  ])
 
   if (isMissing(sections.head)) notFound()
 
