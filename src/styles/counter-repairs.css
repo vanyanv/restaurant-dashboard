@@ -78,3 +78,34 @@ button.wkd {
   border: none;
   appearance: none;
 }
+
+/* `useLinkStatus`'s pending mark on a rail item (streaming-architecture plan,
+   task 5). Not in the prototype at all — there is no destination in
+   `docs/counter/counter-prototype.html` for a class the prototype never draws,
+   so it lives here rather than in the generated sheet.
+
+   Absolutely positioned against `.navbtn{position:relative}`
+   (counter-components.css:899) rather than laid out in flow with `.badge`/
+   `.kb`, because `Rail`'s `RailLinkPending` renders `null` once `pending` goes
+   false (see rail.tsx) — the element exists ONLY for the transient window
+   between a click and the destination's paint, and must not reflow either
+   sibling when it appears or disappears. `tpulse` is the same "something is
+   in flight" language `.tstep.is-reading i` already uses for the Ask
+   surface's own busy state. */
+.navbtn__pending {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: tpulse 1.15s var(--ease) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbtn__pending {
+    animation: none !important;
+  }
+}

@@ -1,7 +1,7 @@
 "use client"
 
 import { Fragment, useState } from "react"
-import Link from "next/link"
+import Link, { useLinkStatus } from "next/link"
 import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
 import { NAV_ICONS } from "./nav-icons"
 import { Wordmark } from "./wordmark"
@@ -45,12 +45,42 @@ import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
  * tab, and the ported rules (`.navbtn`, `.navbtn[aria-current="page"]`, the
  * accent bar in `::before`) are all class- and attribute-keyed, so they apply
  * to an `<a>` unchanged.
+ *
+ * ## Prefetch (streaming-architecture plan, task 5)
+ *
+ * No `prefetch` prop is set on any `<Link>` below, and that is deliberate
+ * rather than an oversight: the default is `"auto"`, which prefetches a
+ * static route in full and a DYNAMIC route down to its nearest `loading.tsx`
+ * on viewport entry and hover. Every Counter route this rail can link to
+ * already has a `loading.tsx` (Task 2), so hovering an item already warms its
+ * destination's shell with no code here to add. Setting `prefetch={true}`
+ * would force the FULL dynamic response to prefetch on hover — every
+ * section's data, for every item a reader's mouse merely crosses — which is
+ * the opposite of the per-section isolation Task 3 exists for.
  */
 
 export interface RailUser {
   name: string
   /** "Owner", "Developer" — printed under the name, beside "settings". */
   role: string
+}
+
+/**
+ * Task 5's third change: Next 16's `useLinkStatus` — readable only from a
+ * descendant of the `<Link>` it reports on, which is why this is a child
+ * component rather than a hook call inside `RailLink` itself.
+ *
+ * Renders NOTHING once `pending` goes false, rather than an always-present
+ * element toggled by a class: the settled DOM (the state `npm run fidelity`
+ * measures) must come out byte-identical to a `.navbtn` with no pending
+ * feedback at all, and `null` is the only value that guarantees that. The dot
+ * only exists for the moment between a click and the destination's own
+ * paint — after prefetch, `useLinkStatus`'s own docs say that moment is often
+ * skipped entirely.
+ */
+function RailLinkPending() {
+  const { pending } = useLinkStatus()
+  return pending ? <span className="navbtn__pending" aria-hidden="true" /> : null
 }
 
 function RailLink({ item, pathname }: { item: NavItem; pathname: string }) {
@@ -65,6 +95,7 @@ function RailLink({ item, pathname }: { item: NavItem; pathname: string }) {
       {/* The prototype prints the shortcut on Ask alone, and ours is real:
           AskSurface listens for ⌘K from anywhere (note 46). */}
       {item.id === "ask" ? <span className="kb">⌘K</span> : null}
+      <RailLinkPending />
     </Link>
   )
 }

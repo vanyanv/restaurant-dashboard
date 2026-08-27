@@ -82,11 +82,16 @@ export default async function MobileOrderDetailPage({
 
   // The switcher's list, shared with the Overview rather than re-queried, so
   // the phone's store sheet cannot offer a store the desk's rail does not.
-  const stores = await getOverviewStores()
-  const sections = await getOrderSections({
-    orderId: id,
-    accountId: session.user.accountId,
-  })
+  //
+  // `Promise.all`, not two sequential `await`s — see the desk page's note:
+  // the store list and the order's sections don't depend on each other.
+  const [stores, sections] = await Promise.all([
+    getOverviewStores(),
+    getOrderSections({
+      orderId: id,
+      accountId: session.user.accountId,
+    }),
+  ])
 
   if (isMissing(sections.head)) notFound()
 
