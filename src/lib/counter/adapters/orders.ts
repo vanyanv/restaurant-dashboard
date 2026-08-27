@@ -226,9 +226,14 @@ export interface OrderItemRow {
   /** A sub-item. The prototype indents it and drops the `<b>`. */
   modifier: boolean
   qty: string
-  /** What the channel charged. */
+  /**
+   * What the customer was charged for this line — `LineCost.charged`, the
+   * channel's own price less this line's share of any order-level discount.
+   * NOT the menu price: on two orders in three the line carries the
+   * pre-discount figure, and a column of those sums to more than the ticket.
+   */
   price: string
-  /** `charged × (1 − commission rate)` — the discount is already in it. */
+  /** `charged × (1 − commission rate)`. */
   keep: string
   /** `not costed` when no recipe stands behind this line. */
   cost: string
@@ -238,11 +243,41 @@ export interface OrderItemRow {
   uncosted: boolean
 }
 
+/**
+ * A row drawn BELOW the Total, chaining it to the order's own ticket.
+ *
+ * The Total is the sum of the lines above it and nothing is allowed to change
+ * that (rule 1, prototype note 39). But the lines do not always reach the
+ * ticket — 60 of the 500 most recently drained orders fall short, by a median
+ * $3.59 and up to $40.47 — and a table whose bottom line is $32.19 under a
+ * strip that says $35.19 has told a reader two things and reconciled neither.
+ *
+ * So the shortfall is drawn as a term, and the ticket beneath it as the sum:
+ * every row here IS summed into the figure below it, which is the same rule
+ * `MathLines` enforces on the panel beside this table. Nothing is stated and
+ * left unapplied.
+ */
+export interface OrderReconcileRow {
+  key: string
+  label: string
+  /** The price column's figure, already signed and formatted. */
+  price: string
+  /** The after-commission column's figure. */
+  keep: string
+  /** The closing row — the order's own ticket and net, drawn like the Total. */
+  strong: boolean
+}
+
 export interface OrderItems {
   meta: string
   rows: OrderItemRow[]
   /** The sum of `rows`. Never `OtterOrder.total` — rule 1. */
   total: OrderItemRow
+  /**
+   * The chain from that sum to the order's ticket. EMPTY when the lines
+   * already reach it, which is 88% of drained orders.
+   */
+  reconcile: OrderReconcileRow[]
 }
 
 export interface OrderKeep {
@@ -870,14 +905,43 @@ export function buildOrderStrip(order: OrderDetail, costs: LineCost[]): StripCel
 }
 
 /**
- * The lines, and a total row that is the SUM OF THE ROWS ABOVE IT.
+ * The lines, a total row that is the SUM OF THE ROWS ABOVE IT, and the chain
+ * from that total to the order's own ticket.
  *
  * Rule 1, and the reason this function is handed `costs` rather than a number:
  * `OtterOrder.total` carries tax and can disagree with the lines by more than
  * rounding, and a total row that disagrees with the column a reader is looking
- * at destroys the only thing a table like this is for. `order` is here for the
- * meta alone — specifically to tell "this order has no lines" apart from "this
- * order's lines have not been drained from Otter yet".
+ * at destroys the only thing a table like this is for.
+ *
+ * ## Why there is a chain under the total at all
+ *
+ * The strip above this table prints `ticketOf(order)` and this table's Total
+ * printed `Σ line.price`, and the page said nothing about the difference.
+ * Measured over the 500 most recently drained orders (2026-08-26):
+ *
+ *   Σ line.price === ticket (nothing to say)              264
+ *   Σ line.price  >  ticket (an order-level discount)     176
+ *   Σ line.price  <  ticket (lines missing or partial)     60
+ *
+ * — so the gap was the state of 47% of orders, not an edge case, and it has
+ * TWO causes that need two different treatments.
+ *
+ * **The discount is not a shortfall.** It is distributed across the lines by
+ * `lineScale`, so the price column is what the customer paid and the Total is
+ * the ticket. Nothing is left to reconcile and no row is drawn; the meta says
+ * the discount was applied, because a reader holding the receipt would
+ * otherwise find every line a few cents light with no explanation.
+ *
+ * **Missing lines are a shortfall and cannot be reconciled**, because the data
+ * is absent — Otter delivers an order first and its lines later, and 60 of 500
+ * were still short. That one is drawn: a "not on any line here" term and the
+ * ticket beneath it as the sum, so the table reaches the same figure the strip
+ * does with the difference stated rather than implied. `lineScale` never
+ * scales lines UP, so this residual is never negative.
+ *
+ * `order` is here for the ticket, and for the meta — specifically to tell
+ * "this order has no lines" apart from "this order's lines have not been
+ * drained from Otter yet".
  */
 export function buildOrderItems(order: OrderDetail, costs: LineCost[]): OrderItems {
   const rows: OrderItemRow[] = costs.map((l) => ({
@@ -885,7 +949,7 @@ export function buildOrderItems(order: OrderDetail, costs: LineCost[]): OrderIte
     name: l.name,
     modifier: l.modifier,
     qty: count(l.quantity),
-    price: money(l.price, { cents: true }),
+    price: money(l.charged, { cents: true }),
     keep: money(l.keep, { cents: true }),
     cost: l.cost === null ? "not costed" : money(l.cost, { cents: true }),
     margin: marginFigure(l.keep, l.cost),
@@ -893,7 +957,8 @@ export function buildOrderItems(order: OrderDetail, costs: LineCost[]): OrderIte
   }))
 
   const qty = costs.reduce((t, l) => t + l.quantity, 0)
-  const price = costs.reduce((t, l) => t + l.price, 0)
+  const listed = costs.reduce((t, l) => t + l.price, 0)
+  const price = costs.reduce((t, l) => t + l.charged, 0)
   const keep = costs.reduce((t, l) => t + l.keep, 0)
   const costed = costs.filter((l) => l.cost !== null)
   const cost = costed.length === 0 ? null : costed.reduce((t, l) => t + (l.cost ?? 0), 0)
@@ -901,13 +966,52 @@ export function buildOrderItems(order: OrderDetail, costs: LineCost[]): OrderIte
   const items = costs.filter((l) => !l.modifier).length
   const modifiers = costs.length - items
 
+  const ticket = ticketOf(order)
+  const rate = commissionRateOf(order)
+  // A cent, not zero: `charged` is a float product and the column is printed
+  // to cents, so a residual smaller than what the table can draw is not a
+  // residual — it is a row that would read "$0.00 not on any line here".
+  const shortfall = ticket - price
+  const missing = costs.length > 0 && shortfall >= 0.005
+  const spread = costs.length > 0 && listed - price >= 0.005
+
+  const reconcile: OrderReconcileRow[] = missing
+    ? [
+        {
+          key: "missing",
+          label: "Not on any line here",
+          price: money(shortfall, { cents: true }),
+          // The same rate the lines were charged at. The absent lines paid the
+          // marketplace too, which is why "Net to you" beside this table is
+          // larger than the after-commission total above.
+          keep: money(shortfall * (1 - rate), { cents: true }),
+          strong: false,
+        },
+        {
+          key: "ticket",
+          label: "Ticket",
+          price: money(ticket, { cents: true }),
+          keep: money(netOf(order), { cents: true }),
+          strong: true,
+        },
+      ]
+    : []
+
+  const meta: string[] = []
+  if (costs.length > 0) {
+    meta.push(plural(items, "line"))
+    if (modifiers > 0) meta.push(plural(modifiers, "modifier"))
+    if (spread) meta.push(`${money(listed - price, { cents: true })} off, spread across the lines`)
+    if (missing) meta.push(`${money(shortfall, { cents: true })} of the ticket is on no line here`)
+  }
+
   return {
     meta:
       costs.length === 0
         ? order.detailsFetchedAt === null
           ? "line detail not drained yet"
           : "no lines on this order"
-        : [plural(items, "line"), ...(modifiers > 0 ? [plural(modifiers, "modifier")] : [])].join(" · "),
+        : meta.join(" · "),
     rows,
     total: {
       key: "total",
@@ -920,6 +1024,7 @@ export function buildOrderItems(order: OrderDetail, costs: LineCost[]): OrderIte
       margin: marginFigure(keep, cost),
       uncosted: cost === null,
     },
+    reconcile,
   }
 }
 

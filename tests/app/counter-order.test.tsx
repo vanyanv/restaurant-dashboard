@@ -163,6 +163,9 @@ const ITEMS: OrderItems = {
     margin: "59%",
     uncosted: false,
   },
+  // These lines already reach the order's ticket, so there is nothing to
+  // reconcile. The chain itself is exercised below.
+  reconcile: [],
 }
 
 const KEEP: OrderKeep = {
@@ -403,6 +406,38 @@ describe("Counter one order — the desk", () => {
     const total = rows[4]
     expect(cellsOf(total)).toEqual(["Total", "4", "$40.79", "$30.59", "$12.46", "59%"])
     expect(total.querySelectorAll("td b")).toHaveLength(6)
+  })
+
+  /*
+   * The chain the adapter draws under the Total when the drained lines do not
+   * reach the ticket — 60 of the 500 most recently drained orders, including
+   * the fidelity gate's own pinned one ($32.19 of lines on a $35.19 ticket).
+   * Without it the table's bottom line sat under a strip saying something else
+   * and the page reconciled neither.
+   */
+  it("draws the shortfall and the ticket under the total, and bolds the ticket", () => {
+    const { container } = renderDesk({
+      items: ready({
+        ...ITEMS,
+        reconcile: [
+          { key: "missing", label: "Not on any line here", price: "$3.00", keep: "$2.25", strong: false },
+          { key: "ticket", label: "Ticket", price: "$35.19", keep: "$26.39", strong: true },
+        ],
+      }),
+    })
+    const rows = itemRows(main(container))
+    expect(rows).toHaveLength(7) // four lines, the total, and the two-row chain
+    // Qty, food cost and margin are absent rather than dashed: there is no
+    // quantity of "not on any line here" to state.
+    expect(cellsOf(rows[5])).toEqual(["Not on any line here", "", "$3.00", "$2.25", "", ""])
+    expect(cellsOf(rows[6])).toEqual(["Ticket", "", "$35.19", "$26.39", "", ""])
+    expect(rows[5].querySelectorAll("td b")).toHaveLength(0)
+    expect(rows[6].querySelectorAll("td b")).toHaveLength(3)
+  })
+
+  it("draws nothing extra when the lines already reach the ticket", () => {
+    const { container } = renderDesk()
+    expect(itemRows(main(container))).toHaveLength(5)
   })
 
   it("makes no row a link — the adapter carries no destination for a line", () => {

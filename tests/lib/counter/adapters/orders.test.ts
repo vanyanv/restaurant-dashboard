@@ -802,6 +802,106 @@ describe("one order, one ticket", () => {
 })
 
 /*
+ * One page, one ticket — the second half of it.
+ *
+ * The strip printed `ticketOf` and the Items table printed `Σ line.price`, one
+ * above the other, and nothing on the page said they were different
+ * quantities. On the fidelity gate's own pinned order that was $35.19 over
+ * $32.19, and "Net to you" $26.39 over an after-commission total of $24.14.
+ *
+ * Measured over the 500 most recently drained orders on 2026-08-26:
+ * 264 reconcile exactly, 176 have lines summing ABOVE the ticket (an
+ * order-level discount the lines do not carry), 60 below it (lines missing or
+ * partial, median $3.59, max $40.47). Two causes, two treatments — the
+ * discount is distributed onto the lines, the shortfall is drawn as a term.
+ */
+describe("the items table and the ticket above it", () => {
+  const items = (o: OrderDetail) => buildOrderItems(o, costsFor(o))
+  const strip = (o: OrderDetail, label: string) =>
+    buildOrderStrip(o, costsFor(o)).find((c) => c.label === label)?.value
+
+  /*
+   * The gate's own pinned order, read from the database on 2026-08-26:
+   * subtotal 35.19, NO discount, $8.80 of commission (25.0%) and lines that
+   * sum to 32.19. Its $3.00 gap is missing lines, not a discount — which is
+   * why one message for both causes would have been wrong about this one.
+   */
+  const PINNED = {
+    subtotal: 35.19,
+    discount: 0,
+    commission: -8.8,
+    items: [
+      { id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 24.19, subItems: [] },
+      { id: "i2", skuId: "SKU-FRIES", name: "Cheese Fries", quantity: 1, price: 8.0, subItems: [] },
+    ],
+  }
+
+  /** A 50%-off order whose lines carry the FULL menu price. 176 of 500 look like this. */
+  const HALF_OFF = {
+    subtotal: 41.5,
+    discount: -20.75,
+    commission: -5.19,
+    items: [
+      {
+        id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 24.0,
+        subItems: [
+          { id: "s1", skuId: "SKU-ONION", name: "Add Grilled Onion", quantity: 1, price: 1.5, subHeader: "Extras" },
+        ],
+      },
+      { id: "i2", skuId: "SKU-FRIES", name: "Cheese Fries", quantity: 1, price: 16.0, subItems: [] },
+    ],
+  }
+
+  it("draws no chain at all when the lines already reach the ticket", () => {
+    // The default fixture: Σ line.price === subtotal === ticket.
+    expect(items(order()).reconcile).toEqual([])
+    expect(items(order()).total.price).toBe(strip(order(), "Ticket"))
+  })
+
+  it("totals the lines to the ticket the strip prints, on a discounted order", () => {
+    const o = order(HALF_OFF)
+    expect(strip(o, "Ticket")).toBe("$20.75")
+    expect(items(o).total.price).toBe("$20.75")
+    // …and the after-commission column reaches the same net the money panel does.
+    expect(items(o).total.keep).toBe(strip(o, "You keep"))
+  })
+
+  it("says the discount was spread rather than leaving the lines unexplained", () => {
+    expect(items(order(HALF_OFF)).meta).toContain("$20.75 off, spread across the lines")
+    // And says nothing of the sort when there was no discount.
+    expect(items(order()).meta).not.toContain("spread")
+  })
+
+  it("names the shortfall as a term and closes the chain on the ticket", () => {
+    const o = order(PINNED)
+    const chain = items(o).reconcile
+    expect(chain.map((r) => r.label)).toEqual(["Not on any line here", "Ticket"])
+    expect(chain[0].price).toBe("$3.00")
+    expect(chain[1].price).toBe("$35.19")
+    expect(chain[1].price).toBe(strip(o, "Ticket"))
+    expect(chain[1].keep).toBe(strip(o, "You keep"))
+    expect(chain[1].strong).toBe(true)
+  })
+
+  it("makes every row of that chain add up — note 39, on both money columns", () => {
+    const t = items(order(PINNED))
+    const [missing, ticket] = t.reconcile
+    expect(cash(t.total.price) + cash(missing.price)).toBeCloseTo(cash(ticket.price), 2)
+    expect(cash(t.total.keep) + cash(missing.keep)).toBeCloseTo(cash(ticket.keep), 2)
+  })
+
+  it("states the shortfall in the meta too, where a reader meets the section", () => {
+    expect(items(order(PINNED)).meta).toContain("$3.00 of the ticket is on no line here")
+  })
+
+  it("never invents a shortfall out of a discount", () => {
+    // `lineScale` scales lines DOWN to the ticket, never up, so the residual
+    // cannot be negative — the discounted order has no chain at all.
+    expect(items(order(HALF_OFF)).reconcile).toEqual([])
+  })
+})
+
+/*
  * The margin column, under a Contribution figure that was always right.
  *
  * `keep = line.price × (1 − commissionRate)` applied a correct rate to a price
@@ -821,6 +921,7 @@ describe("a margin the order actually earned", () => {
       items: [{ id: "i1", skuId: "SKU-SLIDER", name: "Double Slider", quantity: 1, price: 20, subItems: [] }],
     })
     const row = buildOrderItems(o, costsFor(o)).rows[0]
+    expect(row.price).toBe("$10.00")
     expect(row.keep).toBe("$8.75")
     // (8.75 − 3.10) / 8.75 = 64.6%. On the undiscounted $17.50 keep it would
     // have read 82.3% — a figure that flatters by nearly twenty points.

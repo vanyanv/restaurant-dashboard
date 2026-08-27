@@ -151,6 +151,9 @@ const ITEMS: OrderItems = {
     margin: "60%",
     uncosted: false,
   },
+  // The phone draws no total row and no chain — `mlist` is the lines alone —
+  // so this is here for the type and stays empty.
+  reconcile: [],
 }
 
 const KEEP: OrderKeep = {
