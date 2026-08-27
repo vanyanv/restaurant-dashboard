@@ -118,6 +118,38 @@
  *     structurally cannot reach them, unlike a regex rule that would see
  *     every editorial page and need LEGACY to look away from it.
  *
+ * --- Task 4 (ruling S-R6: streaming itself was unenforced) ---
+ *
+ * Task 3 of the streaming-architecture plan moved six of the eight Counter
+ * pages off `await getXSections(...)` onto `getXSectionPromises(...)`,
+ * NOT awaited, so `Section` can stream each one behind its own boundary.
+ * Neither `no-shell-in-page` nor `no-route-without-loading` catches a page
+ * written against the old awaited shape — a page is written by copying the
+ * page before it, the test cycle is off, and with 51 of 54 Counter pages
+ * still unbuilt, "the last page did it right" is not a mechanism.
+ *
+ *   - `no-awaited-sections-in-page` is deliberately NOT a `RULES` entry,
+ *     for the same reason `no-route-without-loading` isn't: `RULES` regex
+ *     entries run over every file the other rules reach (any `.tsx`/`.ts`
+ *     under `ROOTS`), and `await get\w*Sections\(` only means something on a
+ *     `page.tsx` that owns a section-loading call — matching it against a
+ *     client island or a layout would be noise. `findAwaitedSectionsViolations`
+ *     walks `page.tsx` files under `COUNTER_ROUTE_GROUPS` directly, the same
+ *     scope `findRouteLoadingViolations` uses and for the same reason: the
+ *     ~19 remaining editorial pages live outside both `(counter)` groups, so
+ *     this check structurally cannot reach them and needs no LEGACY
+ *     exemption of its own.
+ *   - Two routes are exempted BY NAME, not by pattern:
+ *     `src/app/dashboard/(counter)/orders/[id]/page.tsx` and
+ *     `src/app/(mobile)/m/(counter)/orders/[id]/page.tsx`. Ruling S-R5: all
+ *     seven of their sections come from one `getOrderDetail` load, so seven
+ *     promises resolving in the same tick would be a picture of streaming
+ *     rather than streaming, and the page must resolve `head` before
+ *     rendering at all, to decide its 404. Naming the two exact paths (rather
+ *     than, say, excusing any `page.tsx` under an `[id]` segment) means the
+ *     exemption cannot silently widen to cover a THIRD route someone adds
+ *     later without deciding, again, that it deserves the same exception.
+ *
  * --- Known holes, left as regex-over-text limitations (not fixed) ---
  *
  *   - Dynamic Tailwind classes: `` `bg-${color}-500` `` or
@@ -638,6 +670,65 @@ export function findRouteLoadingViolations(
   return violations
 }
 
+/** `await get<anything>Sections(` — the pre-Task-3 shape every streaming page moved off. */
+const AWAITED_SECTIONS_PATTERN = /\bawait\s+get\w*Sections\s*\(/
+
+/**
+ * The two order-detail routes, exempted BY NAME rather than by pattern — see
+ * the module comment's "Task 4" section for ruling S-R5 and why naming the
+ * exact paths (rather than, say, any `page.tsx` under an `[id]` segment)
+ * matters. Exported so a test can assert the exemption is exactly these two
+ * paths and nothing wider.
+ */
+export const AWAITED_SECTIONS_ALLOWED = [
+  join(process.cwd(), "src", "app", "dashboard", "(counter)", "orders", "[id]", "page.tsx"),
+  join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "orders", "[id]", "page.tsx"),
+]
+
+/**
+ * `no-awaited-sections-in-page` — Task 4 of the streaming-architecture plan,
+ * ruling S-R6. Like `no-route-without-loading`, this is deliberately NOT a
+ * `RULES` entry: the pattern only means something on a `page.tsx` that owns a
+ * section-loading call, not on every `.tsx`/`.ts` under `ROOTS`. Walks
+ * `page.tsx` files under `routeGroupRoots` directly and needs no LEGACY
+ * exemption for the same structural reason `findRouteLoadingViolations`
+ * doesn't: the ~19 remaining editorial pages live outside both `(counter)`
+ * route groups.
+ */
+export function findAwaitedSectionsViolations(
+  routeGroupRoots: string[] = COUNTER_ROUTE_GROUPS,
+): Violation[] {
+  const violations: Violation[] = []
+  for (const root of routeGroupRoots) {
+    let files: string[]
+    try {
+      files = walk(root)
+    } catch {
+      continue // a route group that does not exist yet is not a violation
+    }
+    for (const file of files) {
+      if (!file.endsWith(`${sep}page.tsx`)) continue
+      if (AWAITED_SECTIONS_ALLOWED.includes(file)) continue
+      const content = readFileSync(file, "utf8")
+      // Comment-stripped, like every RULES pattern — a doc comment quoting
+      // the old `await getXSections(...)` shape (as this file's own module
+      // comment now does) must not trip the rule it is describing.
+      const lines = stripComments(content).split("\n")
+      lines.forEach((text, i) => {
+        if (AWAITED_SECTIONS_PATTERN.test(text)) {
+          violations.push({
+            file: relative(process.cwd(), file),
+            line: i + 1,
+            rule: "no-awaited-sections-in-page",
+            text: text.trim(),
+          })
+        }
+      })
+    }
+  }
+  return violations
+}
+
 export function lintCounter(
   roots: string[],
   opts: { ignoreLegacy?: boolean; baselineCommit?: string } = {},
@@ -690,6 +781,9 @@ export function lintCounter(
     roots.some((r) => isUnder(group, r)),
   )
   violations.push(...findRouteLoadingViolations(routeGroupsInScope))
+  // `no-awaited-sections-in-page`, Task 4's rule — same directory-check shape
+  // and same scoping reason as `findRouteLoadingViolations` just above.
+  violations.push(...findAwaitedSectionsViolations(routeGroupsInScope))
   return violations
 }
 
