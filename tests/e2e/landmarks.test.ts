@@ -396,13 +396,19 @@ describe("every gated page carries a floor and a written reason for each absence
     // Manifest order, which is the prototype's own page order — not the order
     // they were gated in. `decisions` and `alerts` joined on 2026-08-27, which
     // is why they sit between Overview and Orders rather than at the end.
+    // `analytics` and `analyticsstore` joined the same day and are further
+    // apart than they read: the manifest keeps the prototype's rail order for
+    // the group pages and its own tail for the per-store ones, so the store
+    // page sits after `pnl` rather than beside its own group page.
     expect(gated.map((p) => p.protoId)).toEqual([
       "overview",
       "decisions",
       "alerts",
       "orders",
       "order",
+      "analytics",
       "pnl",
+      "analyticsstore",
     ])
   })
 
