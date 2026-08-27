@@ -231,6 +231,12 @@ export interface DecisionQueue {
   meta: string
 }
 
+/** The same, in `.mli` shape. See `DecisionsSections.phoneQueue`. */
+export interface PhoneQueue {
+  items: MListRow[]
+  meta: string
+}
+
 export interface DecisionsSections {
   head: SectionData<DecisionsHead>
   strip: SectionData<StripCell[]>
@@ -244,14 +250,18 @@ export interface DecisionsSections {
   /**
    * The same three items, as the phone's `.mlist` rows (ruling N-R16).
    *
-   * A FIELD beside `queue`, built here from the same actions — not a mapping
-   * in the phone client. `MListRow.value` is the desk's own `lead` string and
+   * A FIELD beside `queue`, built here from the same items — not a mapping in
+   * the phone client. `MListRow.value` is the desk's own `lead` string and
    * `note` is the desk's own deadline words, so the two surfaces cannot print
    * one item's figure two ways. A page that maps `queue` into `MListRow`s
    * itself is one edit away from formatting the impact differently from the
    * desk, and nothing would catch it.
+   *
+   * It carries `meta` for the same reason `DecisionQueue` does: the phone's
+   * `.sec__head` prints the same "3 of 5" the desk's does, and a section's
+   * head qualifier belongs to that section's data.
    */
-  phoneQueue: SectionData<MListRow[]>
+  phoneQueue: SectionData<PhoneQueue>
 }
 
 export interface DecisionsSectionsInput {
@@ -1071,6 +1081,14 @@ export function buildDecisionQueue(actions: DecisionAction[]): DecisionQueueItem
   })
 }
 
+/** The queue section: the three shown items, and the cap said out loud. */
+export function buildQueueSection(view: DecisionsView): DecisionQueue {
+  return {
+    items: buildDecisionQueue(view.actions),
+    meta: `${Math.min(QUEUE_SHOWN, view.actions.length)} of ${view.actions.length}`,
+  }
+}
+
 /**
  * The same three items, as `.mli` rows (ruling N-R16).
  *
@@ -1084,18 +1102,21 @@ export function buildDecisionQueue(actions: DecisionAction[]): DecisionQueueItem
  * prototype's own single `'down'` on the Saturday row: the tone marks the
  * item you lose by waiting, not every item with a date.
  */
-export function buildPhoneQueue(items: DecisionQueueItem[]): MListRow[] {
-  return items.map((i) => ({
-    key: i.key,
-    title: i.title,
-    // The claim without the confidence meter's prose — the phone row has two
-    // lines and the deadline already has the right-hand slot below.
-    detail: firstSentence(i.why),
-    value: `${i.lead}${i.unit ?? ""}`,
-    note: i.note,
-    noteTone: i.note === "decays daily" ? ("down" as const) : undefined,
-    href: i.href,
-  }))
+export function buildPhoneQueue(queue: DecisionQueue): PhoneQueue {
+  return {
+    meta: queue.meta,
+    items: queue.items.map((i) => ({
+      key: i.key,
+      title: i.title,
+      // The claim without the confidence meter's prose — the phone row has
+      // two lines and the deadline already has the right-hand slot below.
+      detail: firstSentence(i.why),
+      value: `${i.lead}${i.unit ?? ""}`,
+      note: i.note,
+      noteTone: i.note === "decays daily" ? ("down" as const) : undefined,
+      href: i.href,
+    })),
+  }
 }
 
 /** The claim, without the evidence that follows it. `.mli span` is one line. */
@@ -1234,14 +1255,11 @@ export function getDecisionsSectionPromises(
     ledger: simple((view) => buildLedger(view.decisions)),
 
     // N-R6: three of the loader's five, and the cap said out loud beside them.
-    queue: simple((view) => ({
-      items: buildDecisionQueue(view.actions),
-      meta: `${Math.min(QUEUE_SHOWN, view.actions.length)} of ${view.actions.length}`,
-    })),
+    queue: simple(buildQueueSection),
 
     // N-R16: the same three, as the phone's rows. Built from the desk's own
-    // items, so one figure has one presentation.
-    phoneQueue: simple((view) => buildPhoneQueue(buildDecisionQueue(view.actions))),
+    // section, so one figure has one presentation.
+    phoneQueue: simple((view) => buildPhoneQueue(buildQueueSection(view))),
   }
 }
 

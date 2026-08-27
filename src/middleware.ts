@@ -6,6 +6,7 @@ const PHONE_UA = /iPhone|iPod|Android.*Mobile/i
 const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard": "/m",
   "/dashboard/chat": "/m/chat",
+  "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
   "/dashboard/menu": "/m/menu",
