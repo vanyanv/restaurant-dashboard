@@ -81,6 +81,10 @@ export default async function LaborPage({
     range: counterParams.range,
     storeId: counterParams.storeId,
     accountId: session.user.accountId,
+    // The SAME `today` the params reader and the island get. Only the week
+    // strip's `is-today` reads it: the cell marked is the reader's actual day
+    // when the range contains it, and no cell at all when it does not.
+    today,
   })
 
   // The switcher's list. Shared with the Overview rather than re-queried, so
