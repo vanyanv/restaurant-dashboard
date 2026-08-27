@@ -227,6 +227,41 @@ There is no last month. The cell shows the median that exists — over dismissal
 **N-R8 — Both pages stay owner-gated on the alerts side and open on the decisions side, matching today.**
 `getAlertInbox` already requires `hasOwnerAccess`; `getDecisionsView` does not. Do not change either. *Cost if wrong:* a manager sees the week ahead and not the alert inbox, which is the behaviour that ships today.
 
+
+**N-R13 — the decisions adapter returns a promise PER SECTION, even though one
+loader resolves them all today.**
+
+Task 5/6's rewrite proposed a single justified `await`, on the reasoning that
+`getDecisionsView` is one loader returning one value — the same argument that
+earned the order-detail routes their exemption (S-R5). That argument is true of
+`getAlertInbox`, which really is one `findMany` plus a `groupBy`. **It is not
+true of `getDecisionsView`, which runs NINE independent queries across nine
+tables in a single `Promise.all`:**
+
+```
+storeWeatherSignal   storeEventSignal      harriShift
+forecastHourlyOrders otterHourlySummary    forecastDailyRevenue
+decisionLog          otterDailySummary     mlForecastEvaluation
+```
+
+Those feed genuinely different sections. The accuracy scorecard comes from
+`mlForecastEvaluation`; the ledger from `decisionLog`; the week picker from
+`forecastDailyRevenue`; the labor gap from `harriShift` + `forecastHourlyOrders`.
+A single `await` makes the scorecard wait on the weather signals.
+
+*Ruling:* the adapter exposes a promise per section — derived from ONE shared
+`getDecisionsView()` promise for now, so nothing resolves faster today and no
+query is duplicated. **The point is the page's shape, not today's timing.** When
+`getDecisionsView` is later decomposed into per-concern loaders, the sections
+begin streaming for free and **the page does not change**. A single `await`
+would make that later decomposition a page rewrite as well as a loader one.
+
+`getAlertInbox` keeps its single `await` and its named exemption in
+`AWAITED_SECTIONS_ALLOWED` — one query is one query.
+
+*Cost if wrong:* the decisions adapter carries a promise-per-section API that
+buys nothing until the loader is split. That is a shape, not a cost.
+
 ---
 
 ## Task 1: The four flat primitives
