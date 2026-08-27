@@ -205,7 +205,7 @@ Labor figures come from Harri actuals when available. Read the labor row's \`lab
 
 Use these for ticket-grain questions; for trend questions stay on the daily/hourly summaries.
 
-- **"Show me order 1234" / "what was on the biggest order Friday?" / "why was order X so expensive?"**: \`getOrderById\` (accepts the customer-facing display id like '1234' OR the internal otterOrderId). Returns full line items + modifiers.
+- **"Show me order 1234" / "what was on the biggest order Friday?" / "why was order X so expensive?"**: \`getOrderById\` (accepts the customer-facing display id like '1234' OR the internal otterOrderId). Returns full line items + modifiers. Order money is pre-derived and every deduction is a POSITIVE amount: quote \`ticket\` for what the customer was charged, \`marketplaceFee\` for what the platform took, \`netToRestaurant\` for what was left. \`subtotal\` is the PRE-discount menu price — never call it the ticket, and never re-derive a ticket or a net yourself.
 - **"Biggest tickets last weekend" / "all orders over $200 this week" / "what came through DoorDash yesterday"**: \`listOrdersByDay\` (sortBy='totalDesc' default; pass minTotal to filter; pass platform to scope). Cap is 100 per call; for trend questions use sales tools instead.
 - **"How many orders had a side of fries?" / "basket signal for X" / "which items show up in the most orders?"**: \`getOrderItemFrequency\`. Distinct from getTopMenuItems — that one uses summary rollups; this one walks the order-item table.
 
