@@ -1,6 +1,5 @@
 {
   "called": [
-    "getPlatformBreakdown",
     "getPlatformBreakdown"
   ],
   "model": "gpt-5-mini",

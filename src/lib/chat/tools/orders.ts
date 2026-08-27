@@ -5,6 +5,7 @@
 // Friday", "what was on order #1234?") without dumping the full Otter API.
 
 import { z } from "zod"
+import { feeAmount, netOf, ticketOf } from "@/lib/counter/order-signs"
 import {
   dateRangeSchema,
   parseDateRange,
@@ -35,6 +36,29 @@ export type OrderItemChatRow = {
   modifiers: { name: string; quantity: number; price: number; group: string | null }[]
 }
 
+/*
+ * ## Why this result carries no raw money column
+ *
+ * `OtterOrder.discount` and `OtterOrder.commission` are stored as SIGNED
+ * DEDUCTIONS — negative numbers ADDED to reach a net (0 of 40,055 discount
+ * rows positive, 0 of 25,648 commission rows positive; see
+ * `src/lib/counter/order-signs.ts`). This tool returned both at their raw
+ * stored sign, and NOTHING in the model's reachable context said so:
+ * `describe-schema.ts` does not mention `OtterOrder`, and the system prompt's
+ * only sign paragraph is scoped to `getPnlSummary`'s row matrix.
+ *
+ * On the real row `3926DEFE` (subtotal 74.94, discount −37.47, commission
+ * −9.37) the model's natural derivations gave a $112.41 ticket and $121.78
+ * kept, where the order page says $37.47 and $28.10, and described the fee as
+ * "a commission of −$9.37", which reads as a credit. The chat was a fifth
+ * surface answering the question the Orders pages answer, and the only one
+ * answering it wrong.
+ *
+ * So the columns do not leave the tool. Every figure below is the one the
+ * pages print, through `ticketOf` / `feeAmount` / `netOf`, and every deduction
+ * is a POSITIVE amount named as a deduction. A sign contract the model has to
+ * apply correctly is weaker than a number that is already right.
+ */
 export type OrderDetailChatResult = {
   found: boolean
   storeId?: string
@@ -44,11 +68,22 @@ export type OrderDetailChatResult = {
   fulfillmentMode?: string | null
   orderStatus?: string | null
   customerName?: string | null
+  /** Menu price of the lines, BEFORE any discount. Not what the customer paid. */
   subtotal?: number
+  /** The discount given, as a positive amount. Already taken off `ticket`. */
+  discountGiven?: number
+  /** What the customer was charged: `subtotal − discountGiven`. THE ticket. */
+  ticket?: number
+  /** What the marketplace took, as a positive amount. 0 on an in-house order. */
+  marketplaceFee?: number
+  /** `marketplaceFee / ticket`, 0..1. The rate this order was actually billed at. */
+  marketplaceFeeRate?: number
+  /** `ticket − marketplaceFee` — what the order left behind before food cost. */
+  netToRestaurant?: number
+  /** Collected and remitted by the platform. Never the restaurant's money. */
   tax?: number
   tip?: number
-  commission?: number
-  discount?: number
+  /** The platform's own grand total column: net + tax + tip. */
   total?: number
   items?: OrderItemChatRow[]
 }
@@ -56,7 +91,7 @@ export type OrderDetailChatResult = {
 export const getOrderById: ChatTool<typeof orderByIdParams, OrderDetailChatResult> = {
   name: "getOrderById",
   description:
-    "Returns full detail for one order: line items, modifiers, totals, fees. Accepts the public order number (externalDisplayId, like '1234') or the internal otterOrderId. Owner-scoped — orders from another account return found=false. Use for 'what was on order 1234?', 'why was order X so expensive?', 'show me the items in last night's biggest ticket'.",
+    "Returns full detail for one order: line items, modifiers, totals, fees. Accepts the public order number (externalDisplayId, like '1234') or the internal otterOrderId. Owner-scoped — orders from another account return found=false. Use for 'what was on order 1234?', 'why was order X so expensive?', 'show me the items in last night's biggest ticket'. Money is pre-derived and every deduction is a POSITIVE amount: ticket = what the customer was charged (subtotal less discountGiven), marketplaceFee = what the platform took, netToRestaurant = ticket - marketplaceFee. Use those directly; do NOT re-derive a ticket or a net from subtotal, and do not add or subtract tax or tip to reach them.",
   parameters: orderByIdParams,
   async execute(args, ctx) {
     const ownerStoreIds = await resolveStoreIds(ctx, undefined)
@@ -83,10 +118,15 @@ export const getOrderById: ChatTool<typeof orderByIdParams, OrderDetailChatResul
       orderStatus: order.orderStatus,
       customerName: order.customerName,
       subtotal: order.subtotal,
+      // Positive, and named as what it is. The column is negative.
+      discountGiven: -order.discount,
+      ticket: ticketOf(order),
+      marketplaceFee: feeAmount(order),
+      marketplaceFeeRate:
+        ticketOf(order) > 0 ? feeAmount(order) / ticketOf(order) : 0,
+      netToRestaurant: netOf(order),
       tax: order.tax,
       tip: order.tip,
-      commission: order.commission,
-      discount: order.discount,
       total: order.total,
       items: order.items.map((it) => ({
         name: it.name,
@@ -139,15 +179,23 @@ export type OrderListChatRow = {
   platform: string
   referenceTimeLocal: string
   fulfillmentMode: string | null
+  /** The platform's own grand total column: net + tax + tip. */
   total: number
+  /** Menu price of the lines, BEFORE any discount. Not what the customer paid. */
   subtotal: number
+  /** What the customer was charged. This, not `subtotal`, is the ticket. */
+  ticket: number
+  /** What the marketplace took, as a positive amount. */
+  marketplaceFee: number
+  /** `ticket − marketplaceFee`. */
+  netToRestaurant: number
   itemCount: number
 }
 
 export const listOrdersByDay: ChatTool<typeof ordersByDayParams, OrderListChatRow[]> = {
   name: "listOrdersByDay",
   description:
-    "Returns individual orders for an owner-scoped slice of stores and a date range. Use for order-grain questions: 'biggest tickets last Friday', 'all orders over $200 this week', 'what came through DoorDash yesterday'. Default sort is totalDesc (biggest first). Use sortBy='timeDesc' for chronological. Cap is 100; for trend questions, use getDailySales / getHourlyTrend instead.",
+    "Returns individual orders for an owner-scoped slice of stores and a date range. Use for order-grain questions: 'biggest tickets last Friday', 'all orders over $200 this week', 'what came through DoorDash yesterday'. Default sort is totalDesc (biggest first). Use sortBy='timeDesc' for chronological. Cap is 100; for trend questions, use getDailySales / getHourlyTrend instead. `ticket` is what the customer was charged and `subtotal` is the PRE-discount menu price — quote `ticket` when asked what an order was worth. `marketplaceFee` and `netToRestaurant` are pre-derived positives; do not re-derive them.",
   parameters: ordersByDayParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
@@ -178,6 +226,11 @@ export const listOrdersByDay: ChatTool<typeof ordersByDayParams, OrderListChatRo
         fulfillmentMode: true,
         total: true,
         subtotal: true,
+        // Selected so the row can carry a ticket. Returning `subtotal` under a
+        // description that invites the model to call it the ticket is the same
+        // defect as handing over the raw columns, one step quieter.
+        discount: true,
+        commission: true,
         _count: { select: { items: true } },
       },
     })
@@ -191,6 +244,9 @@ export const listOrdersByDay: ChatTool<typeof ordersByDayParams, OrderListChatRo
       fulfillmentMode: o.fulfillmentMode,
       total: o.total,
       subtotal: o.subtotal,
+      ticket: ticketOf(o),
+      marketplaceFee: feeAmount(o),
+      netToRestaurant: netOf(o),
       itemCount: o._count.items,
     }))
   },

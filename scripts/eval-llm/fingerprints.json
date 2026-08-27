@@ -30,13 +30,13 @@
     "floor": 0.75
   },
   "chat-tool-choice": {
-    "sha256": "637c688f4623dbde",
+    "sha256": "2dbeea32f092df54",
     "model": "gpt-5-mini",
-    "evaluatedAt": "2026-08-22",
+    "evaluatedAt": "2026-08-27",
     "cases": 12,
     "passed": 12,
     "passRate": 1,
-    "costUsd": 0.03416,
+    "costUsd": 0.03098,
     "floor": 0.75
   }
 }

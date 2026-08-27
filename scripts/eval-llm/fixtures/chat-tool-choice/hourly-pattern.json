@@ -1,11 +1,5 @@
 {
   "called": [
-    "getHourlyTrend",
-    "getHourlyTrend",
-    "getHourlyTrend",
-    "getHourlyTrend",
-    "getHourlyTrend",
-    "getHourlyTrend",
     "getHourlyTrend"
   ],
   "model": "gpt-5-mini",
