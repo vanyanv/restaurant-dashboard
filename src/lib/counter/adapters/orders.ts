@@ -228,7 +228,7 @@ export interface OrderItemRow {
   qty: string
   /** What the channel charged. */
   price: string
-  /** `price × (1 − commission rate)`. */
+  /** `charged × (1 − commission rate)` — the discount is already in it. */
   keep: string
   /** `not costed` when no recipe stands behind this line. */
   cost: string
@@ -1278,6 +1278,7 @@ export async function getOrderSections(input: OrderSectionsInput): Promise<Order
       recipeBySku: buildRecipeBySku(lines, itemMappings, subMappings),
       costByRecipe,
       commissionRate: commissionRateOf(order),
+      ticket: ticketOf(order),
     })
 
     const carriedBySku = await countCarried(
