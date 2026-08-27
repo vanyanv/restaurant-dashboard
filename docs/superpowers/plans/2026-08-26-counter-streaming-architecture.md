@@ -12,6 +12,56 @@
 
 ---
 
+---
+
+## Working mode — BUILD VELOCITY (set 2026-08-26, overrides the step structure below)
+
+**Owner's decision: skip writing tests; build the product.**
+
+Every task in this plan is written with a TDD cycle — write the failing test,
+run it red, implement, run it green, mutate to prove it. **Those steps are now
+optional and should be skipped by default.** Implement directly.
+
+The test code is left in the plan text deliberately: it is a precise
+specification of the intended behaviour, and it is the fastest reading of what
+each piece must do. **Read it as the spec. Do not write it as a test.**
+
+### What you still run before every commit
+
+```
+npx tsc --noEmit     types
+npm run tokens       the design-system rules, which are build failures
+npm run build        it compiles
+npm run fidelity     Playwright against the prototype — the only check left
+                     that looks at the rendered page
+```
+
+`npm test` still runs the EXISTING suite and must stay green — do not break what
+is already there, and do not delete tests to make it pass.
+
+### The one carve-out
+
+**Money arithmetic keeps its assertions.** Pure functions that compute a figure
+an owner reads — signs, ticket/fee/net, rates, totals, coverage ratios — get a
+handful of plain assertions. Not a TDD cycle, not fixtures, not mocks: a few
+`expect` lines on real values.
+
+This is not principle, it is this codebase's measured failure mode. Three money
+bugs this month were invisible to reading, to types and to review: discounts and
+commissions stored NEGATIVE (0 of 40,055 rows matched the shape every fixture
+used), one order printing two different tickets on one page, and promo ROI
+returning an empty set in production because `d.discount > 0` is false for every
+row. None crashed. None looked wrong.
+
+### Where the risk now sits, stated once
+
+Skipping tests moves the cost of a regression from "a red test in 40 seconds" to
+"a wrong number on a page nobody checked". `npm run fidelity` catches structure
+and appearance. **Nothing left catches a wrong figure that renders beautifully.**
+That is the accepted trade, recorded here so it is a decision and not a surprise.
+
+---
+
 ## Global Constraints
 
 - **`npm run fidelity` must pass at the end of EVERY task, not only at the end of the plan.** Four surfaces are gated and green today. This plan is a large structural change to gated pages; the gate is the only thing standing between it and silent visual drift.
