@@ -18,7 +18,12 @@ import {
 } from "@/components/counter"
 import { writeCounterParams } from "@/lib/counter/url-state"
 import { dataOf } from "@/lib/counter/section-data"
-import type { OrderItemRow, OrderItems, OrderSections } from "@/lib/counter/adapters/orders"
+import type {
+  OrderItemRow,
+  OrderItems,
+  OrderReconcileRow,
+  OrderSections,
+} from "@/lib/counter/adapters/orders"
 
 /**
  * Counter — one order, on the desk. Composed from `P.order.desk()`
@@ -255,7 +260,14 @@ function ItemsTable({ items, channel }: { items: OrderItems; channel: string | n
   return (
     <Table
       columns={columns}
-      rows={[...items.rows.map(lineRow), totalRow(items.total)]}
+      rows={[
+        ...items.rows.map(lineRow),
+        totalRow(items.total),
+        // The chain from that total to the order's own ticket, when the drained
+        // lines do not reach it. Empty on 88% of orders, and never a row the
+        // adapter did not compute — see `buildOrderItems`.
+        ...items.reconcile.map(reconcileRow),
+      ]}
     />
   )
 }
@@ -293,6 +305,27 @@ function totalRow(t: OrderItemRow): Row {
       keep: <b>{t.keep}</b>,
       cost: <b>{t.cost}</b>,
       margin: <b>{t.margin}</b>,
+    },
+  }
+}
+
+/**
+ * One row of the reconciliation chain under the Total.
+ *
+ * Only the two money columns are filled. Qty, food cost and margin are left
+ * absent rather than dashed: a quantity for "not on any line here" would be a
+ * figure this page does not have, and an em dash in a numeric column reads as
+ * one that was looked for. `Cell`s are keyed by column, so an omitted key
+ * renders an empty cell and cannot shift the row.
+ */
+function reconcileRow(r: OrderReconcileRow): Row {
+  const strong = (v: string) => (r.strong ? <b>{v}</b> : v)
+  return {
+    key: r.key,
+    cells: {
+      item: strong(r.label),
+      price: strong(r.price),
+      keep: strong(r.keep),
     },
   }
 }
