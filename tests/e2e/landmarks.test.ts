@@ -392,10 +392,18 @@ describe("every gated page carries a floor and a written reason for each absence
   // hand-written copy of it that someone forgets to add.
   const gated = PAGES.filter((p) => p.status === "counter")
 
-  it("has at least the four pages this phase gated", () => {
+  it("has every page gated so far, in manifest order", () => {
     // Manifest order, which is the prototype's own page order — not the order
-    // they were gated in.
-    expect(gated.map((p) => p.protoId)).toEqual(["overview", "orders", "order", "pnl"])
+    // they were gated in. `decisions` and `alerts` joined on 2026-08-27, which
+    // is why they sit between Overview and Orders rather than at the end.
+    expect(gated.map((p) => p.protoId)).toEqual([
+      "overview",
+      "decisions",
+      "alerts",
+      "orders",
+      "order",
+      "pnl",
+    ])
   })
 
   for (const page of gated) {

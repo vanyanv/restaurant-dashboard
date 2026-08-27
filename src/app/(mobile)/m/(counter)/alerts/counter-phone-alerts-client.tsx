@@ -33,14 +33,23 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * assembled here out of two counts, because a page that formats its own
  * version of a figure is a second opinion about that figure.
  *
- * ## The Acknowledged section has zero rows and still draws its list
+ * ## The second section is "Closed", not "Acknowledged" (N-R18)
  *
- * `mlist` is a landmark; its `.mli`s are not. So the section renders the shell
- * over an empty array rather than an empty state, which would emit a `.empty`
- * landmark `P.alerts.phone` does not have (N-R4/N-R5). Its head says
- * "none yet" rather than the prototype's "last 30 days", because there is
- * nothing in the last 30 days to name — and it starts saying "last 30 days"
- * by itself the moment there is.
+ * The prototype titles it `sec('Acknowledged', 'last 30 days', mlist(2))`.
+ * Scoped to `status = ACKNOWLEDGED` this database has zero rows, and the
+ * section drew its `mlist` shell over them — chosen so that `Empty` would not
+ * emit a `.empty` landmark the prototype lacks. What that rendered was a
+ * heading over a blank white panel, and the fidelity gate measured it as
+ * three rendering differences (an `.mlist` with no children has no grid track
+ * and no text). Avoiding the extra landmark did not make the section render.
+ *
+ * So it holds what is CLOSED — the same rows the desk's median time-to-close
+ * is measured over — and the adapter names the population in the meta
+ * ("1 dismissal"). N-R2 is untouched: the two figures that could call a
+ * dismissal an acknowledgement are the desk strip's cell and the `.msub`
+ * above, and both still read `status = ACKNOWLEDGED`, which is still 0.
+ * A window with nothing closed in it carries one stated row rather than a
+ * blank list. All of that is decided in the adapter; this file prints it.
  *
  * ## The phone is a route, not a breakpoint
  *
@@ -110,11 +119,11 @@ export function CounterPhoneAlertsClient({
         {(l) => <MList rows={l.rows.map(listRow)} />}
       </Section>
 
-      {/* Zero rows today, and it draws its `mlist` over them. See the file note. */}
+      {/* What is no longer open, never a blank panel. See the file note. */}
       <Section
-        title="Acknowledged"
+        title="Closed"
         meta={(l) => l.meta}
-        data={sections.phoneAcknowledged}
+        data={sections.phoneClosed}
         pending={pending}
       >
         {(l) => <MList rows={l.rows.map(listRow)} />}
@@ -135,12 +144,17 @@ export function CounterPhoneAlertsClient({
  *
  * No `href`: there is no per-alert page, and `.mli.is-link` is set from `href`
  * alone, so a row without one cannot advertise a tap that does nothing.
+ *
+ * A row with no `severityLabel` gets no `.mtag` at all. That is the stated row
+ * a closed list carries when nothing has closed (N-R18) — a sentence, not an
+ * alert — and giving it an "Info" pill would file it as the mildest of five
+ * alerts rather than as the absence of any.
  */
 function listRow(r: PhoneAlertRow): MListRow {
   return {
     key: r.key,
     title: r.title,
     detail: r.detail,
-    value: <Tag tone={r.severityTone}>{r.severityLabel}</Tag>,
+    value: r.severityLabel ? <Tag tone={r.severityTone}>{r.severityLabel}</Tag> : null,
   }
 }

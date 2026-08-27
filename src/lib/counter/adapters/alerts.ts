@@ -57,6 +57,14 @@ import type { PillSeverity, TagTone } from "@/components/counter"
  * - **N-R4/N-R5** — the muted list renders its table shell over zero rows,
  *   never the empty state: `.empty` is a landmark `P.alerts.desk` does not
  *   have, and an extra landmark is never forgiven by the fidelity gate.
+ * - **N-R18** — the PHONE's second list holds what is CLOSED, not what is
+ *   acknowledged, and is never empty. Scoped to `status = ACKNOWLEDGED` it
+ *   held zero rows and drew a blank panel under its own heading, which is
+ *   N-R4's shell rule applied where it does not work: `mlist` is a landmark
+ *   and its `.mli`s are not, so a shell over nothing satisfies the STRUCTURE
+ *   pass and fails the RENDERING one (no grid track, no text). The count that
+ *   N-R2 protects is untouched — it is the strip cell and the `.msub`, both
+ *   still `status = ACKNOWLEDGED`, both still 0.
  *
  * ## One load, and the page awaits it
  *
@@ -150,11 +158,18 @@ export interface AlertsChart {
 export interface PhoneAlertRow {
   key: string
   title: string
-  /** "Anomalies · 1d ago". */
+  /** "Anomalies · 1d ago". Empty on the stated row — see `NOTHING_CLOSED`. */
   detail: string
-  severity: PillSeverity
+  /**
+   * Absent on the stated row and present on every alert.
+   *
+   * A row with no severity is a SENTENCE, not an alert judged as harmless,
+   * and `listRow` gives it no `.mtag` at all rather than an "Info" pill that
+   * would read as a fifth alert of the mildest kind.
+   */
+  severity?: PillSeverity
   /** The word inside the `.mtag`. */
-  severityLabel: string
+  severityLabel?: string
   severityTone?: TagTone
 }
 
@@ -177,7 +192,12 @@ export interface AlertsSections {
   chart: SectionData<AlertsChart>
   phoneHead: SectionData<PhoneAlertsHead>
   phoneOpen: SectionData<PhoneAlertList>
-  phoneAcknowledged: SectionData<PhoneAlertList>
+  /**
+   * What is no longer open — N-R18. NOT "acknowledged": `status =
+   * ACKNOWLEDGED` is 0 in this database and a list scoped to it renders a
+   * blank panel under a heading. See the section builder.
+   */
+  phoneClosed: SectionData<PhoneAlertList>
 }
 
 export interface AlertsQuery {
@@ -235,11 +255,26 @@ export function median(values: number[]): number | null {
  * word median, and the count is the only thing that tells a reader which it
  * is looking at.
  */
+/**
+ * The rows that are no longer open, and can say WHEN they closed.
+ *
+ * ONE definition, read by the median cell and by the phone's second list
+ * (N-R18). Two filters spelled out separately is how a page comes to print
+ * "over 1 dismissal" beside a list of none.
+ *
+ * Both halves are load-bearing. A non-OPEN status without an `acknowledgedAt`
+ * cannot be measured and is not evidence that anyone dealt with it; a
+ * timestamp on an OPEN row is a backfill, not a closure.
+ */
+export function closedAlerts(alerts: InboxAlert[]): InboxAlert[] {
+  return alerts.filter((a) => a.status !== "OPEN" && a.acknowledgedAt !== null)
+}
+
 export function timeToClose(alerts: InboxAlert[]): {
   hours: number[]
   population: { one: string; many: string }
 } {
-  const closed = alerts.filter((a) => a.status !== "OPEN" && a.acknowledgedAt !== null)
+  const closed = closedAlerts(alerts)
   const hours: number[] = []
   for (const a of closed) {
     const ms = a.acknowledgedAt!.getTime() - a.detectedAt.getTime()
@@ -502,6 +537,21 @@ function buildChart(data: AlertInboxData, today: Date): AlertsChart {
 /** The phone's six-row cap. Six `.mli`s is what fits above the fold. */
 const PHONE_ROWS = 6
 
+/**
+ * The row a closed list carries when nothing has closed (N-R18).
+ *
+ * Not an `Empty`: that emits a `.empty` landmark `P.alerts.phone` does not
+ * have, and an extra landmark is never forgiven. Not a blank panel either,
+ * which is what the section drew before. `ANOMALY_RELEVANCE_DAYS` is named
+ * rather than written out so the sentence cannot drift from the window the
+ * inbox actually loaded.
+ */
+const NOTHING_CLOSED: PhoneAlertRow = {
+  key: "nothing-closed",
+  title: `Nothing closed in the last ${ANOMALY_RELEVANCE_DAYS} days`,
+  detail: "",
+}
+
 function buildPhoneRows(alerts: InboxAlert[], today: Date): PhoneAlertRow[] {
   return buildRows(alerts, today)
     .slice(0, PHONE_ROWS)
@@ -617,16 +667,64 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
       }
     }),
     /*
-     * Zero rows today, and it renders its `mlist` shell over them rather than
-     * an empty state — same ruling as the desk's table, and `mlist` is the
-     * landmark while its `.mli`s are not.
+     * N-R18 — the second list holds what is CLOSED, and it is never empty.
+     *
+     * ## What it held before, and what that rendered
+     *
+     * `status === "ACKNOWLEDGED" || status === "EXPLAINED"`, which is 0 rows
+     * in this database and 0 rows for as long as nothing in the product
+     * writes either status. The section rendered its `mlist` shell over the
+     * empty array — chosen so that `Empty` would not emit a `.empty` landmark
+     * `P.alerts.phone` does not have — and what an owner saw was a heading
+     * saying "Acknowledged · none yet" above a blank white panel. Photographed
+     * at 390px before this change.
+     *
+     * The fidelity gate says the same thing in numbers: an `.mlist` with no
+     * children computes `grid-template-columns: none` where the prototype's
+     * computes one track, and carries no text where the prototype's carries
+     * its rows'. Three rendering differences on a surface that is otherwise
+     * 8 landmarks of 8. Avoiding the extra `.empty` did not make the section
+     * render; it made it render nothing.
+     *
+     * ## What it holds now
+     *
+     * `closedAlerts` — the SAME predicate the median time-to-close cell reads,
+     * so the list and the figure above it cannot disagree about which rows
+     * count as dealt with. In scope today that is one dismissal (nine of the
+     * account's ten fall outside `anomalyHorizon()`), so the list has a row
+     * and the panel has content.
+     *
+     * ## N-R2 is untouched
+     *
+     * The heading is "Closed" and the meta NAMES the population from
+     * `timeToClose` — "1 dismissal", and something else on its own the day an
+     * alert is genuinely acknowledged. Nothing here calls a dismissal an
+     * acknowledgement: the count that could is the desk strip's
+     * `counts.acknowledged` and the phone subtitle's, both still `status =
+     * ACKNOWLEDGED` and both still reading 0.
+     *
+     * ## The empty case still has to render
+     *
+     * A horizon with nothing closed in it is an ordinary week, not an alarm,
+     * so it must not fail the gate — and it must not draw a blank panel
+     * either. It gets ONE STATED ROW instead. That is the same rule
+     * `movesFor` follows in the decisions adapter ("a day with no signal says
+     * so rather than being left blank: an empty paragraph reads as a feature
+     * that broke"), and a `.mli` is not a landmark, so saying it costs the
+     * comparison nothing. It is a sentence, not an `Empty`, and not a control
+     * that does nothing.
      */
-    phoneAcknowledged: mapReady(view, ({ inbox: d }) => {
-      const done = d.alerts.filter((a) => a.status === "ACKNOWLEDGED" || a.status === "EXPLAINED")
-      const rows = buildPhoneRows(done, today)
+    phoneClosed: mapReady(view, ({ inbox: d }) => {
+      const closed = closedAlerts(d.alerts)
+      const rows = buildPhoneRows(closed, today)
+      const { one, many } = timeToClose(d.alerts).population
+      if (rows.length === 0) return { rows: [NOTHING_CLOSED], meta: "none yet" }
       return {
         rows,
-        meta: rows.length === 0 ? "none yet" : `last ${ANOMALY_RELEVANCE_DAYS} days`,
+        meta:
+          rows.length < closed.length
+            ? `${rows.length} of ${closed.length}`
+            : `${closed.length} ${closed.length === 1 ? one : many}`,
       }
     }),
   }
