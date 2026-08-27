@@ -58,6 +58,8 @@ describe("getOrdersList — early returns still satisfy OrderListResponse", () =
       netSales: 0,
       commission: 0,
       thirdPartyNetSales: 0,
+      thirdPartyCount: 0,
+      thirdPartyWithFees: 0,
     })
   })
 
@@ -69,6 +71,8 @@ describe("getOrdersList — early returns still satisfy OrderListResponse", () =
       netSales: 0,
       commission: 0,
       thirdPartyNetSales: 0,
+      thirdPartyCount: 0,
+      thirdPartyWithFees: 0,
     })
   })
 
@@ -79,6 +83,8 @@ describe("getOrdersList — early returns still satisfy OrderListResponse", () =
       netSales: 0,
       commission: 0,
       thirdPartyNetSales: 0,
+      thirdPartyCount: 0,
+      thirdPartyWithFees: 0,
     })
   })
 })
@@ -168,11 +174,44 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
       .mockResolvedValueOnce(sums(50000, -1200, -8000) as never) // overall
       .mockResolvedValueOnce(sums(30000, -500, -8000) as never) // 3P-only
 
+    // count() is called four times: totalCount, undrainedCount, and the two
+    // halves of the fee-coverage ratio.
+    vi.mocked(prisma.otterOrder.count)
+      .mockResolvedValueOnce(120)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(80)
+      .mockResolvedValueOnce(36)
+
     const result = await getOrdersList()
     expect(result.totals.netSales).toBe(48800)
     // Reported positive: it is a fee, not a negative number.
     expect(result.totals.commission).toBe(8000)
     expect(result.totals.thirdPartyNetSales).toBe(29500)
+    // The strip cannot tell a complete fee bill from a fraction of one without
+    // these two — `adjusted_commission`'s coverage ran 43.7% in April 2026 and
+    // 0% in May, and the cell printed a confident total on both.
+    expect(result.totals.thirdPartyCount).toBe(80)
+    expect(result.totals.thirdPartyWithFees).toBe(36)
+  })
+
+  it("counts the fee coverage over MARKETPLACE orders, not over the whole range", async () => {
+    await getOrdersList()
+    const calls = vi.mocked(prisma.otterOrder.count).mock.calls
+    // totalCount, undrainedCount, 3P count, 3P-with-a-fee count.
+    expect(calls).toHaveLength(4)
+
+    const third = calls[2][0]?.where as { AND?: Array<{ platform?: { notIn?: string[] } }> }
+    expect(third.AND?.[1]?.platform?.notIn).toEqual(
+      expect.arrayContaining(["css-pos", "bnm-web"]),
+    )
+
+    const withFees = calls[3][0]?.where as {
+      AND?: Array<{ commission?: unknown; AND?: unknown }>
+    }
+    // Narrowed by commission ON TOP of the same marketplace scope: a ratio
+    // whose halves are drawn from different populations is not a coverage.
+    expect(JSON.stringify(withFees)).toContain("commission")
+    expect(JSON.stringify(withFees)).toContain("css-pos")
   })
 
   it("excludes the in-house platform from the thirdPartyNetSales aggregate", async () => {

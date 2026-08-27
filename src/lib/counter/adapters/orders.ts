@@ -322,6 +322,12 @@ const DASH = "—"
 /** How far back "sells N times a period" looks, in days. */
 const CARRIED_LOOKBACK_DAYS = 28
 
+/**
+ * The share of a range's marketplace orders that must carry a commission
+ * before the strip will state a fee total as fact. See `buildOrdersStrip`.
+ */
+const FEE_COVERAGE_FLOOR = 0.95
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 /** Written out, because "the last four Thus" is not a sentence. */
@@ -473,10 +479,14 @@ export function buildOrdersStrip(
    * that paid no fees — it is a range whose fees we do not have.
    *
    * `OtterOrder.commission` comes from Otter's `adjusted_commission`, and its
-   * coverage is erratic: counted on 2026-08-26, marketplace orders carrying a
-   * commission ran 5,908 of 6,094 in January, 0 of 6,145 in May, 4,393 of
-   * 7,559 in July and **0 of 6,307 in August**. So a reader opening this page
-   * today would be told DoorDash and Uber Eats took $0.
+   * coverage is erratic. Counted on 2026-08-26, marketplace orders carrying a
+   * commission by month:
+   *
+   *   Jan 96.9%   Feb 96.8%   Mar 96.8%   Apr 43.7%
+   *   May  0.0%   Jun  0.0%   Jul 58.1%   Aug  0.0%
+   *
+   * So a reader opening this page in August would be told DoorDash and Uber
+   * Eats took $0.
    *
    * That is the same lie `channel-mix.ts` refuses to tell about Grubhub, and
    * it is worse here because the P&L answers the same question a DIFFERENT way
@@ -486,13 +496,31 @@ export function buildOrdersStrip(
    * is precisely this, and the resolution note 60 takes is that a figure
    * nobody can stand behind is not printed.
    *
-   * So the cell goes blank and SAYS it is not recorded. It is not reconciled
-   * against the P&L's modelled figure, because a modelled figure and an
-   * observed one are different questions and quietly substituting one for the
-   * other is how the two pages came to disagree in the first place. The real
-   * repair is upstream, in the sync — recorded as a follow-up.
+   * ## Why a COVERAGE ratio and not `commission > 0`
+   *
+   * The guard used to fire only at EXACTLY zero coverage, which is the one
+   * month in three it catches. On April's 43.7% the cell printed
+   * `$13,927 · 10.8% of 3P` as fact, against an observed rate of 31.2% on the
+   * orders that DO carry a fee — an understatement of roughly $17,400. July's
+   * 58.1% printed `$22,910 · 14.7% of 3P` against 32.6%. The observed rate
+   * among covered orders held between 28% and 33% all year, so the fee rate
+   * never moved; only the sync did. A figure half the truth is exactly the
+   * claim ruling O-R13 says not to print, told at a different threshold.
+   *
+   * The floor is 95%: January's 96.9% is the shape that must still print (the
+   * recorded total is then within a few percent of the bill), April's 43.7%
+   * is the shape that must not.
+   *
+   * The cell does NOT fall back to an estimate built from the observed rate.
+   * A modelled figure and an observed one are different questions, and quietly
+   * substituting one for the other is how this page and the P&L came to
+   * disagree in the first place. The real repair is upstream, in the sync.
    */
-  const feesRecorded = now.totals.commission > 0 || now.totals.thirdPartyNetSales === 0
+  const coverage =
+    now.totals.thirdPartyCount > 0
+      ? now.totals.thirdPartyWithFees / now.totals.thirdPartyCount
+      : 1
+  const feesRecorded = coverage >= FEE_COVERAGE_FLOOR
 
   return [
     { label: "Orders", value: count(now.totalCount), delta: orders.text, deltaTone: orders.tone },
@@ -512,7 +540,11 @@ export function buildOrdersStrip(
       // The prototype puts this in `c[2]` (`.d`), not in `c[4]` (`.band`) —
       // see the report. Money leaving is `is-down` whichever way it moved.
       delta: !feesRecorded
-        ? "not recorded for this range"
+        ? now.totals.thirdPartyWithFees === 0
+          ? "not recorded for this range"
+          : // A partly-covered range: the fraction is the fact, and the total
+            // is the thing nobody can stand behind.
+            `only ${pct(coverage * 100, { scaled: true })} of 3P orders have a fee on file`
         : feeShare === null
           ? "no marketplace sales"
           : `${pct(feeShare, { scaled: true })} of 3P`,

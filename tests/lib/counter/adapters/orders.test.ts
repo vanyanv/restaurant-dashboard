@@ -108,7 +108,13 @@ function listResponse(over: Partial<OrderListResponse> = {}): OrderListResponse 
     platforms: ["css-pos", "doordash", "ubereats"],
     totalCount: 187,
     undrainedCount: 0,
-    totals: { netSales: 4_812.5, commission: 684, thirdPartyNetSales: 2_935.6 },
+    totals: {
+      netSales: 4_812.5,
+      commission: 684,
+      thirdPartyNetSales: 2_935.6,
+      thirdPartyCount: 96,
+      thirdPartyWithFees: 96,
+    },
     ...over,
   }
 }
@@ -237,7 +243,13 @@ describe("buildOrdersStrip", () => {
       listResponse(),
       listResponse({
         totalCount: 170,
-        totals: { netSales: 4_400, commission: 600, thirdPartyNetSales: 2_700 },
+        totals: {
+          netSales: 4_400,
+          commission: 600,
+          thirdPartyNetSales: 2_700,
+          thirdPartyCount: 88,
+          thirdPartyWithFees: 88,
+        },
       }),
       on,
     )
@@ -995,7 +1007,15 @@ describe("money that moves the right way", () => {
 
   it("keeps the strip's marketplace fees positive", () => {
     const cells = buildOrdersStrip(
-      listResponse({ totals: { netSales: 1000, commission: 250, thirdPartyNetSales: 1000 } }),
+      listResponse({
+        totals: {
+          netSales: 1000,
+          commission: 250,
+          thirdPartyNetSales: 1000,
+          thirdPartyCount: 40,
+          thirdPartyWithFees: 40,
+        },
+      }),
       null,
       noComparison,
     )
@@ -1006,32 +1026,83 @@ describe("money that moves the right way", () => {
 
 describe("fees nobody recorded", () => {
   /*
-   * `OtterOrder.commission` coverage is erratic — 0 of 6,307 marketplace
-   * orders in August 2026, against 5,908 of 6,094 in January. A range with
-   * real DoorDash volume and no commission on file has fees we do not have,
-   * not fees of zero.
+   * `OtterOrder.commission` coverage is erratic. Marketplace orders carrying a
+   * commission, counted on the live account 2026-08-26:
+   *
+   *   Jan 96.9%   Feb 96.8%   Mar 96.8%   Apr 43.7%
+   *   May  0.0%   Jun  0.0%   Jul 58.1%   Aug  0.0%
+   *
+   * The observed rate among the orders that DO carry one held at 28–33% all
+   * year, so the fee rate never moved — only the sync did. A range with real
+   * marketplace volume and a fraction of its fees on file has fees we do not
+   * have, not the fees it can see.
    */
-  const fees = (totals: { netSales: number; commission: number; thirdPartyNetSales: number }) =>
-    buildOrdersStrip(listResponse({ totals }), null, noComparison).find(
-      (c) => c.label === "Marketplace fees",
-    )
+  const fees = (totals: Partial<OrderListResponse["totals"]>) =>
+    buildOrdersStrip(
+      listResponse({
+        totals: {
+          netSales: 8000,
+          commission: 0,
+          thirdPartyNetSales: 5000,
+          thirdPartyCount: 100,
+          thirdPartyWithFees: 100,
+          ...totals,
+        },
+      }),
+      null,
+      noComparison,
+    ).find((c) => c.label === "Marketplace fees")
 
   it("says the fees are not recorded rather than printing $0 on real 3P volume", () => {
-    const cell = fees({ netSales: 8000, commission: 0, thirdPartyNetSales: 5000 })
+    const cell = fees({ commission: 0, thirdPartyWithFees: 0 })
     expect(cell?.value).toBe(DASH)
     expect(cell?.delta).toBe("not recorded for this range")
   })
 
   it("still prints a real figure when the fees ARE on file", () => {
-    const cell = fees({ netSales: 8000, commission: 1250, thirdPartyNetSales: 5000 })
+    const cell = fees({ commission: 1250 })
     expect(cell?.value).toBe("$1,250")
     expect(cell?.delta).toBe("25.0% of 3P")
   })
 
   it("calls a range with no marketplace sales at all $0, because that one is true", () => {
-    const cell = fees({ netSales: 8000, commission: 0, thirdPartyNetSales: 0 })
+    const cell = fees({ commission: 0, thirdPartyNetSales: 0, thirdPartyCount: 0, thirdPartyWithFees: 0 })
     expect(cell?.value).toBe("$0")
     expect(cell?.delta).toBe("no marketplace sales")
+  })
+
+  /*
+   * The half-covered range, which is the one the old `commission > 0` guard
+   * waved through. April 2026: 43.7% coverage, printing `$13,927 · 10.8% of
+   * 3P` as fact against an observed 31.2% — roughly $17,400 understated, with
+   * nothing on the page saying so.
+   */
+  it("withholds the total on a half-covered range instead of stating half a bill", () => {
+    const cell = fees({ commission: 13_927, thirdPartyCount: 5835, thirdPartyWithFees: 2548 })
+    expect(cell?.value).toBe(DASH)
+    expect(cell?.delta).toBe("only 43.7% of 3P orders have a fee on file")
+    // Never `is-down`: a tone is a reading, and there is nothing to read.
+    expect(cell?.deltaTone).toBe("is-flat")
+  })
+
+  it("tells a half-covered range apart from one with nothing on file at all", () => {
+    expect(fees({ thirdPartyWithFees: 0 })?.delta).toBe("not recorded for this range")
+    expect(fees({ thirdPartyWithFees: 58 })?.delta).toBe(
+      "only 58.0% of 3P orders have a fee on file",
+    )
+  })
+
+  it("still prints January's 96.9%, which is complete enough to stand behind", () => {
+    // The floor has to clear the ordinary state of a healthy sync. January ran
+    // 5,908 of 6,094; blanking that would be the cell refusing every month.
+    const cell = fees({
+      commission: 28_106,
+      thirdPartyNetSales: 104_089,
+      thirdPartyCount: 6094,
+      thirdPartyWithFees: 5908,
+    })
+    expect(cell?.value).toBe("$28,106")
+    expect(cell?.delta).toBe("27.0% of 3P")
   })
 })
 
