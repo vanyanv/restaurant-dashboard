@@ -396,12 +396,19 @@ export function CounterLaborClient({
           {(r) => (
             <>
               <Table columns={ROLE_COLUMNS} rows={roleRows(r)} />
-              {/* Only when there is something to say — a null note must not
-                  leave an empty padded body behind it. */}
+              {/* NO `.sec__body` around this note. `sec__body` is a landmark
+                  class and `P.labor.desk()` writes ZERO of them for this
+                  section — `tbl()` returns `raw()`, so the prototype's `sec()`
+                  emits the table alone. The note therefore carries the body's
+                  own inset (`.sec__body{padding:13px 15px}`) inline rather than
+                  opening a second landmark to get it. The P&L's "By store"
+                  wraps its notes because its OWN prototype section writes two
+                  `sec__body` (`counter-prototype.html:5327`); this one does not.
+                  Only when there is something to say. */}
               {r.note ? (
-                <div className="sec__body">
-                  <p className="mono">{r.note}</p>
-                </div>
+                <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                  {r.note}
+                </p>
               ) : null}
             </>
           )}
@@ -418,9 +425,10 @@ export function CounterLaborClient({
           {(l) => (
             <>
               <Table columns={LEAK_COLUMNS} rows={leakRows(l)} />
-              <div className="sec__body">
-                <p className="mono">{l.note}</p>
-              </div>
+              {/* Unwrapped, for the reason the role note above is unwrapped. */}
+              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                {l.note}
+              </p>
             </>
           )}
         </Section>
