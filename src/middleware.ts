@@ -6,6 +6,7 @@ const PHONE_UA = /iPhone|iPod|Android.*Mobile/i
 const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard": "/m",
   "/dashboard/alerts": "/m/alerts",
+  "/dashboard/analytics": "/m/analytics",
   "/dashboard/chat": "/m/chat",
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
@@ -22,9 +23,10 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu-profit": "/m/product-mix",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
-  // Analytics, COGS, Stores had no mobile equivalent left after the mobile
-  // bloat deletion — leave those desktop paths unmapped (mobilePathFor
-  // returns null and the request stays on desktop).
+  // COGS and Stores had no mobile equivalent left after the mobile bloat
+  // deletion — leave those desktop paths unmapped (mobilePathFor returns null
+  // and the request stays on desktop). Analytics was in that list until it was
+  // rebuilt on Counter with a phone surface of its own; it is mapped above.
   // Settings folded into /m/more (profile + sign-out) — map straight there
   // instead of through /m/settings (which itself now just redirects to
   // /m/more) to avoid an unnecessary extra hop.
@@ -40,8 +42,8 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
 // prefix" match: several mobile pages (ingredients, menu, operations, ...)
 // are flat and have no `[id]`-style route at all, so blindly carrying over
 // a sub-path 404s. For those, mobilePathFor returns null and the request is
-// left on desktop. (Analytics, COGS, and Stores were deleted from mobile
-// entirely — see DESKTOP_TO_MOBILE above.)
+// left on desktop. (COGS and Stores were deleted from mobile entirely — see
+// DESKTOP_TO_MOBILE above.)
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   ["/dashboard/invoices", "/m/invoices"],
   ["/dashboard/orders", "/m/orders"],
