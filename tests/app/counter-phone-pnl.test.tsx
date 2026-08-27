@@ -19,9 +19,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, fireEvent, within } from "@testing-library/react"
 
 const push = vi.fn()
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
+// The SHELL around the island reads the URL directly now. `SEARCH` is set by
+// `renderPhone` so it sees the same query string the page was rendered for.
+let SEARCH = ""
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  usePathname: () => "/m/pnl",
+  useSearchParams: () => new URLSearchParams(SEARCH),
+}))
 
-import { CounterPhonePnlClient } from "@/app/(mobile)/m/pnl/counter-phone-pnl-client"
+import { PhoneShell } from "@/components/counter"
+import { CounterPhonePnlClient } from "@/app/(mobile)/m/(counter)/pnl/counter-phone-pnl-client"
 import { ready, failed } from "@/lib/counter/section-data"
 import { trailingWeeks } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
@@ -109,15 +117,19 @@ const sections: PnlSections = {
   foodCause: { status: "not_computed", owed: "a cause-attribution model" },
 }
 
+/**
+ * The page as its LAYOUT composes it. `.ct-root.ct-phone`, `.mtop` and
+ * `.mscroll` moved out of this island into
+ * `src/app/(mobile)/m/(counter)/layout.tsx`, so a test rendering the island
+ * alone would be asserting against half a page.
+ */
 function renderPhone(params = "", over: Partial<PnlSections> = {}) {
   push.mockClear()
+  SEARCH = params
   return render(
-    <CounterPhonePnlClient
-      params={params}
-      stores={STORES}
-      today={TODAY}
-      sections={{ ...sections, ...over }}
-    />,
+    <PhoneShell stores={STORES} today={TODAY}>
+      <CounterPhonePnlClient params={params} today={TODAY} sections={{ ...sections, ...over }} />
+    </PhoneShell>,
   )
 }
 

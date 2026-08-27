@@ -1,7 +1,25 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, within } from "@testing-library/react"
+
+/*
+ * `AppShell` reads the URL itself now — it is mounted by
+ * `src/app/dashboard/(counter)/layout.tsx`, not by a page, and the store
+ * switcher and the ask surface read `usePathname()` / `useSearchParams()`
+ * instead of taking `pathname`, `params`, `selectedStoreId`, `onSelectStore`,
+ * `presetId` and `onSelectPreset` as props. Outside a real App Router tree
+ * those hooks throw, so this stands one in for them; `PATHNAME` is what the
+ * per-test `shell()` below drives.
+ */
+let PATHNAME = "/dashboard"
+vi.mock("next/navigation", () => ({
+  usePathname: () => PATHNAME,
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: () => {} }),
+}))
+
 import { AppShell, EntryItem } from "@/components/counter/shell/app-shell"
+import { PageHead } from "@/components/counter/shell/page-head"
 
 function setReducedMotion(matches: boolean) {
   vi.stubGlobal("matchMedia", () => ({
@@ -15,16 +33,30 @@ const stores = [
   { id: "glendale", name: "Glendale", stage: "pre_open" as const },
 ]
 
-function shell(props: Partial<Parameters<typeof AppShell>[0]> = {}) {
+/**
+ * The shell as a LAYOUT renders it, with a page's own `PageHead` as the first
+ * of its children — which is exactly where the shell used to render it, and
+ * why the DOM under `#ct-main` did not move when the chrome went up a level.
+ */
+function shell(
+  props: Partial<Parameters<typeof AppShell>[0]> & { sub?: string; actions?: React.ReactNode } = {},
+) {
+  const { sub, actions, ...shellProps } = props
   return render(
-    <AppShell pathname="/dashboard" title="7 days to Aug 21" {...props}>
+    <AppShell {...shellProps}>
+      <PageHead title="7 days to Aug 21" sub={sub}>
+        {actions}
+      </PageHead>
       <p>page body</p>
     </AppShell>,
   )
 }
 
 describe("AppShell", () => {
-  beforeEach(() => vi.unstubAllGlobals())
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    PATHNAME = "/dashboard"
+  })
 
   it("builds the prototype's frame: rail, then .app > .topbar + .appwrap > .screenwrap > .screen", () => {
     const { container } = shell()
@@ -65,7 +97,7 @@ describe("AppShell", () => {
 
   // THE FIRST OF TASK 5'S THREE STRUCTURAL CORRECTIONS.
   it("puts the store switcher in the rail, not in the topbar", () => {
-    const { container } = shell({ stores, selectedStoreId: "hollywood", onSelectStore: () => {} })
+    const { container } = shell({ stores })
     expect(container.querySelector("aside.rail .rail__store")).toBeTruthy()
     expect(container.querySelector(".topbar .rail__store")).toBeNull()
   })
@@ -81,7 +113,7 @@ describe("AppShell", () => {
   })
 
   it("names the aggregate in the breadcrumb when a store list exists but none is picked", () => {
-    const { container } = shell({ stores, onSelectStore: () => {} })
+    const { container } = shell({ stores })
     expect((container.querySelector(".crumbs") as HTMLElement).textContent).toBe(
       "All stores/Overview",
     )

@@ -6,11 +6,6 @@ import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { isMissing } from "@/lib/counter/section-data"
 import { CounterOrderClient } from "./counter-order-client"
 
-/** `OWNER` -> `Owner`. The rail prints a role, not an enum member. */
-function titleCase(role: string): string {
-  return role.charAt(0) + role.slice(1).toLowerCase()
-}
-
 /**
  * Counter — one order, the desk detail (Phase C, page 3, surface 3).
  *
@@ -57,8 +52,10 @@ export default async function OrderPage({
 
   const { id } = await params
 
-  // The switcher's list. Shared with the Overview rather than re-queried, so
-  // the rail cannot offer one page a store the other does not have.
+  // The rail's switcher is the LAYOUT's now; this list is for the page's own
+  // content — it is how the store NAMED on the Platform section becomes the id
+  // the rail shows as picked. `getOverviewStores` is `cache()`d, so the
+  // layout's call and this one are one query per request.
   const stores = await getOverviewStores()
   const sections = await getOrderSections({
     orderId: id,
@@ -68,14 +65,6 @@ export default async function OrderPage({
   if (isMissing(sections.head)) notFound()
 
   return (
-    <CounterOrderClient
-      pathname={`/dashboard/orders/${id}`}
-      stores={stores}
-      user={{ name: session.user.name, role: titleCase(session.user.role) }}
-      // Resolved here rather than in the island: a moving `new Date()` on the
-      // client is a different instant from the one the server rendered with.
-      today={new Date()}
-      sections={sections}
-    />
+    <CounterOrderClient stores={stores} sections={sections} />
   )
 }

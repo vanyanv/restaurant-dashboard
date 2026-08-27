@@ -11,27 +11,52 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, within } from "@testing-library/react"
 
-// CounterOverviewClient calls useRouter() (for the controls' router.push)
-// unconditionally on every render. Outside a real Next.js App Router tree —
-// which is exactly what a plain RTL render is — that throws an invariant.
-// None of these tests click a control, so a no-op push is enough.
+/*
+ * Both the island and the SHELL around it call `useRouter()` / `usePathname()`
+ * / `useSearchParams()` unconditionally. Outside a real Next.js App Router
+ * tree — which is exactly what a plain RTL render is — those throw an
+ * invariant. None of these tests clicks a control, so a no-op push is enough;
+ * `SEARCH` is set by the wrapper below so the shell reads the same query
+ * string the island was handed, exactly as they do in the browser.
+ */
+let SEARCH = ""
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: () => {} }),
+  usePathname: () => "/dashboard",
+  useSearchParams: () => new URLSearchParams(SEARCH),
 }))
 
-import { CounterOverviewClient } from "@/app/dashboard/counter-overview-client"
+import { AppShell } from "@/components/counter"
+import { CounterOverviewClient as OverviewIsland } from "@/app/dashboard/(counter)/counter-overview-client"
+
+/**
+ * The page as its LAYOUT composes it. `AppShell` moved out of this island into
+ * `src/app/dashboard/(counter)/layout.tsx`, so a test that rendered the island
+ * alone would be asserting against half a page — and every assertion below
+ * about `main#ct-main`, `.crumbs` or the rail's store popover would be
+ * measuring something the browser never renders.
+ */
+function CounterOverviewClient(props: React.ComponentProps<typeof OverviewIsland>) {
+  SEARCH = props.params
+  return (
+    <AppShell stores={props.stores} user={USER} today={props.today}>
+      <OverviewIsland {...props} />
+    </AppShell>
+  )
+}
+
+/** The rail's account row — the layout's now, not the page's. */
+const USER = { name: "Chris Karimian", role: "Owner" }
 import { ready, failed, notComputed, empty } from "@/lib/counter/section-data"
 import type { OverviewSections } from "@/lib/counter/adapters/overview"
 
 const base = {
-  pathname: "/dashboard",
   // A plain query string, not a URLSearchParams instance — see the
   // component's own doc comment on why (RSC serialisation strips a class
   // instance's prototype; a real browser catches this, a unit test that
   // constructs the component directly does not).
   params: "",
   stores: [{ id: "hollywood", name: "Hollywood", stage: "trading" as const }],
-  user: { name: "Chris Karimian", role: "Owner" },
   today: new Date(2026, 7, 25),
 }
 

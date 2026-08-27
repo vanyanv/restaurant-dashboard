@@ -71,13 +71,24 @@ export default async function MobileHomePage({
   })
 
   return (
-    <div data-perf-ready="/m">
+    <>
       <CounterPhoneOverviewClient
         params={params.toString()}
         stores={stores}
         today={today}
         sections={sections}
       />
-    </div>
+      {/*
+       * The perf harness's marker (`scripts/mobile-transition-perf.ts`), which
+       * used to be a `<div>` WRAPPING the island. The island no longer brings
+       * its own `.mscroll` — that is the `(counter)` layout's now — so a
+       * wrapper here would land INSIDE `.mscroll`, whose `display:grid` +
+       * `gap:11px` and `> *:nth-child()` entry delays are written against the
+       * page's blocks being its direct children. `hidden` keeps it out of the
+       * grid entirely (`display:none` is not a grid item), and LAST keeps
+       * every existing block's `nth-child` index where it was.
+       */}
+      <span hidden data-perf-ready="/m" />
+    </>
   )
 }

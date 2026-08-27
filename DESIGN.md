@@ -343,7 +343,36 @@ media settings.
 
 `AppShell` (`src/components/counter/shell/app-shell.tsx`) is the frame every
 Counter page sits inside: a skip link, a 212px rail column (`Wordmark` above
-`Rail`), an optional topbar slot, and `<main id="ct-main">` for the page.
+`Rail`), the topbar, and `<main id="ct-main">` for the page.
+
+**A LAYOUT mounts it, not a page.** `src/app/dashboard/(counter)/layout.tsx`
+renders it once around every rebuilt desk route; `PhoneShell`
+(`shell/phone-shell.tsx`) does the same for the four rebuilt `/m` routes from
+`src/app/(mobile)/m/(counter)/layout.tsx`. It used to be rendered inside each
+page's client island — 4 desk mount sites and 4 phone ones, 0 layouts — and a
+page does not survive a sibling navigation in the App Router while a layout
+does, so clicking a rail item destroyed and rebuilt the rail, the topbar, the
+store switcher and the ⌘K surface every time.
+
+**That was cheap because the chrome is URL-driven.** The store switcher and
+the date control both read `readCounterParams` and write `writeCounterParams`
+— they were `useSearchParams()` consumers wearing callback props. In the
+layout they read the URL and push their own changes, so `pathname`, `params`,
+`presetId`, `onSelectPreset`, `selectedStoreId` and `onSelectStore`
+disappeared from the interface rather than moving up it. `PageHead` stays with
+the page: the title sentence, the sub-line and the date control are genuinely
+page-specific, and they live inside `#ct-main`, which is the surface
+`npm run fidelity` measures — so the DOM under it did not move.
+
+Two smaller pieces carry what is left. `src/lib/counter/route-shape.ts`
+answers what a ROUTE STRING can answer — whether the page has a window at all
+(`nodate: true` in the prototype), where "pick a store" goes on a page that
+`?store=` cannot re-scope, and the phone's back trail — on the server, in the
+first render. `shell/page-chrome.tsx` carries what only a page's own DATA
+knows, which today is three fields on `/dashboard/orders/<id>`: the crumb
+leaf, the store the order belongs to, and the palette's questions. Those are
+published in an effect, so they land on hydration rather than first paint;
+all three sit outside `#ct-main` and none is a landmark class.
 
 **Seventeen destinations, in five groups, declared once.** They live in
 `src/lib/counter/nav.ts` as `NAV_GROUPS`, and nowhere else builds this list —
@@ -576,27 +605,44 @@ found alongside it — `/dashboard` rendering inside two navigation shells at
 once, with a ⌘K collision to match — which the `(editorial)` route group
 below fixed.
 
-## The `(editorial)` route group, and how a page migrates
+## The `(counter)` and `(editorial)` route groups, and how a page migrates
 
 `src/app/dashboard/(editorial)/` holds every page still on the pre-Counter
-design — ~19 directories as of the 2026-08-25 split, everything under
-`src/app/dashboard/` except `page.tsx` and `counter-overview-client.tsx`.
-Its `layout.tsx` carries the editorial chrome: the cream `AppSidebarClient`
-sidebar, `ChatDrawerProvider`/`ChatDrawerClient` (the "Owner Analyst" drawer
-and its own ⌘K listener), `WelcomeMarquee`, the four editorial stylesheets,
-and Fraunces. `src/app/dashboard/layout.tsx` — the layout Counter pages
-get instead — carries only what every route under `/dashboard` needs
-regardless of design system: a session read and `PageViewTracker`.
+design — ~19 directories. Its `layout.tsx` carries the editorial chrome: the
+cream `AppSidebarClient` sidebar, `ChatDrawerProvider`/`ChatDrawerClient` (the
+"Owner Analyst" drawer and its own ⌘K listener), `WelcomeMarquee`, the four
+editorial stylesheets, and Fraunces.
+
+`src/app/dashboard/(counter)/` holds every desk page that HAS been rebuilt —
+`/dashboard`, `/dashboard/orders`, `/dashboard/orders/<id>`, `/dashboard/pnl`
+— and its `layout.tsx` carries the Counter chrome: `AppShell`, and the one
+`getOverviewStores()` call the rail's switcher needs.
+`src/app/(mobile)/m/(counter)/` is the same arrangement on the phone, for the
+same reason: `src/app/(mobile)/m/layout.tsx` is shared with a dozen editorial
+`/m` pages that have their own toolbar, so the Counter phone shell needs a
+group of its own to sit above.
+
+`src/app/dashboard/layout.tsx` — the parent of both groups — carries only what
+every route under `/dashboard` needs regardless of design system: a session
+read and `PageViewTracker`. Two route groups under one thin layout is the
+shape: neither shell can reach the other's pages.
+
+Two routes deliberately stay OUTSIDE `(counter)` even though a Counter page
+links to them: `/dashboard/pnl/[storeId]` and `/m/pnl/[storeId]`. The first is
+a `permanentRedirect` shim that renders nothing, and the second is still
+editorial.
 
 Parenthesised segments are a Next.js route group: they organise the file
 tree without becoming a URL segment, so `(editorial)/orders/page.tsx` still
 serves `/dashboard/orders`, not `/dashboard/(editorial)/orders` — verified
 against the real `next build` route manifest, not assumed. This is also the
 mechanism for the rest of the Counter migration: a page moves off the old
-design by moving out of `(editorial)/` (and, for a `page.tsx`, being
-rewritten against the rules on this page) — no routing change, no redirect,
-just `git mv` and a rewrite. `ls src/app/dashboard/(editorial)` answers
-"what's still editorial" at any point in the migration.
+design by moving out of `(editorial)/` and into `(counter)/` (and, for a
+`page.tsx`, being rewritten against the rules on this page) — no routing
+change, no redirect, just `git mv` and a rewrite.
+`ls src/app/dashboard/(editorial)` answers "what's still editorial" at any
+point in the migration, and `ls src/app/dashboard/(counter)` answers the
+other half of the same question.
 
 Before this split, `/dashboard` rendered inside two navigation shells at
 once — Counter's own `AppShell` nested inside the pre-Counter

@@ -1,22 +1,20 @@
 "use client"
 
-import { useCallback, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { type ReactNode } from "react"
 import {
-  AppShell,
   Kv,
   MathLines,
+  PageHead,
   Queue,
   Section,
   Strip,
   Table,
+  usePageChrome,
   type Column,
   type KvRow,
-  type RailUser,
   type Row,
   type SwitchableStore,
 } from "@/components/counter"
-import { writeCounterParams } from "@/lib/counter/url-state"
 import { dataOf } from "@/lib/counter/section-data"
 import type {
   OrderItemRow,
@@ -85,71 +83,60 @@ import type {
  *   what emits `.askmini`, and `P.order.desk()` passes it on none of its five.
  *   The ⌘K surface still carries this page's own suggestions.
  */
+/** The ⌘K palette's "Ask about this order" group. Module-level, so the shell
+ *  is not republished on every render of this page. */
+const ASK_SUGGESTIONS = [
+  "What did this order actually leave behind?",
+  "Which line on this order is not costed?",
+  "How much did the marketplace take on this one?",
+]
+
 export function CounterOrderClient({
-  pathname,
   stores,
-  user,
-  today,
   sections,
 }: {
-  pathname: string
   stores: SwitchableStore[]
-  user: RailUser
-  today: Date
   sections: OrderSections
 }) {
-  const router = useRouter()
-
   const head = dataOf(sections.head)
   const platform = dataOf(sections.platform)
   const channel = rowValue(platform, "Channel")
   const storeName = rowValue(platform, "Store")
 
   /*
-   * The rail's store switcher, on a page that is about ONE store's order.
+   * THE ONLY CHROME THIS PAGE STILL PUBLISHES, and the reason `PageChrome`
+   * exists at all: none of the three can be read off the URL.
    *
-   * Selecting a store here cannot re-scope this page — the order belongs to
-   * the store it belongs to — so it goes to that store's LIST instead, which is
-   * the only thing "show me Glendale" can honestly mean from here. The
-   * alternative was to drop the switcher (omit `onSelectStore` and `Rail`
-   * renders none), which would take a control off one page's rail and leave a
-   * reader wondering where it went.
+   *   - the trail names the RECORD at its leaf ("Hollywood / Orders / Order
+   *     #4821"), which is `Topbar`'s own documented contract for a detail
+   *     route, and the record's name comes out of an adapter;
+   *   - the store is read off the Platform section BY LABEL, so the rail
+   *     cannot name a different store than the section below it does;
+   *   - the palette's questions are this page's own.
+   *
+   * Where a store PICK goes is not here: `route-shape.ts` knows that a record
+   * route sends the reader to that store's list, because selecting a store
+   * cannot re-scope a page about one order and `?store=` on this URL would
+   * mean nothing.
    */
-  const goToStoreList = useCallback(
-    (id: string | null) => {
-      const qs = writeCounterParams(new URLSearchParams(), { storeId: id }).toString()
-      router.push(qs ? `/dashboard/orders?${qs}` : "/dashboard/orders")
-    },
-    [router],
-  )
+  usePageChrome({
+    leaf: head?.title,
+    storeName,
+    storeId: stores.find((s) => s.name === storeName)?.id ?? null,
+    askSuggestions: ASK_SUGGESTIONS,
+  })
 
   return (
-    <AppShell
-      pathname={pathname}
-      // The record, not the route: `Order #4821`, with the channel, the stamp
-      // and the line count underneath it — `buildOrderHead`'s own two strings.
-      // A head that has not loaded leaves the masthead with a name and no
-      // sentence rather than an empty line where a sentence goes.
-      title={head?.title ?? "Order"}
-      sub={head?.sub}
-      // "Hollywood / Orders / Order #4821" — the trail names the RECORD at its
-      // leaf, which is `Topbar`'s own documented contract for a detail route.
-      crumbLeaf={head?.title}
-      stores={stores}
-      // The store is read off the Platform section BY LABEL rather than being
-      // passed down separately, so the rail cannot name a different store than
-      // the section below it does.
-      selectedStoreId={stores.find((s) => s.name === storeName)?.id ?? null}
-      onSelectStore={goToStoreList}
-      storeName={storeName}
-      user={user}
-      today={today}
-      askSuggestions={[
-        "What did this order actually leave behind?",
-        "Which line on this order is not costed?",
-        "How much did the marketplace take on this one?",
-      ]}
-    >
+    <>
+      <PageHead
+        // The record, not the route: `Order #4821`, with the channel, the stamp
+        // and the line count underneath it — `buildOrderHead`'s own two strings.
+        // A head that has not loaded leaves the masthead with a name and no
+        // sentence rather than an empty line where a sentence goes.
+        title={head?.title ?? "Order"}
+        sub={head?.sub}
+      />
+
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
           written in `P.order.desk()`. Ruling O-R2: no cell here is judged
           against anything, because nothing in this schema publishes a
@@ -214,7 +201,7 @@ export function CounterOrderClient({
           {(items) => <Queue items={items} />}
         </Section>
       </div>
-    </AppShell>
+    </>
   )
 }
 

@@ -13,9 +13,19 @@ import { describe, it, expect, vi } from "vitest"
 import { render, fireEvent, within } from "@testing-library/react"
 
 const push = vi.fn()
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
+// The SHELL around the island reads the URL directly now — `usePathname()` for
+// the back trail and whether the page has a window, `useSearchParams()` for the
+// store. `SEARCH` is set by `renderPhone` so the two agree, as they do in a
+// browser.
+let SEARCH = ""
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  usePathname: () => "/m",
+  useSearchParams: () => new URLSearchParams(SEARCH),
+}))
 
-import { CounterPhoneOverviewClient } from "@/app/(mobile)/m/counter-phone-overview-client"
+import { PhoneShell } from "@/components/counter"
+import { CounterPhoneOverviewClient } from "@/app/(mobile)/m/(counter)/counter-phone-overview-client"
 import { ready, notComputed } from "@/lib/counter/section-data"
 import type { OverviewSections } from "@/lib/counter/adapters/overview"
 
@@ -70,15 +80,24 @@ function dateSheet(container: HTMLElement): HTMLElement {
   return document.getElementById(id) as HTMLElement
 }
 
+/**
+ * The page as its LAYOUT composes it. `.ct-root.ct-phone`, `.mtop` and
+ * `.mscroll` moved out of this island into
+ * `src/app/(mobile)/m/(counter)/layout.tsx`, so a test rendering the island
+ * alone would be asserting against half a page.
+ */
 function renderPhone(params = "") {
   push.mockClear()
+  SEARCH = params
   return render(
-    <CounterPhoneOverviewClient
-      params={params}
-      stores={STORES}
-      today={new Date(2026, 7, 25)}
-      sections={sections}
-    />,
+    <PhoneShell stores={STORES} today={new Date(2026, 7, 25)}>
+      <CounterPhoneOverviewClient
+        params={params}
+        stores={STORES}
+        today={new Date(2026, 7, 25)}
+        sections={sections}
+      />
+    </PhoneShell>,
   )
 }
 

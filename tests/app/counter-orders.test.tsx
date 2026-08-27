@@ -20,13 +20,36 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { act, render, fireEvent } from "@testing-library/react"
 
 const push = vi.fn()
-// Both the island's controls and `Table`'s own row navigation call
-// `useRouter()`, and a plain RTL render is not an App Router tree.
+// The island's controls, `Table`'s own row navigation AND the shell around
+// them all read the router, and a plain RTL render is not an App Router tree.
+// `SEARCH` is set by the wrapper below so the shell reads the same query
+// string the island was handed, exactly as they do in the browser.
+let SEARCH = ""
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
+  usePathname: () => "/dashboard/orders",
+  useSearchParams: () => new URLSearchParams(SEARCH),
 }))
 
-import { CounterOrdersClient } from "@/app/dashboard/orders/counter-orders-client"
+import { AppShell } from "@/components/counter"
+import { CounterOrdersClient as OrdersIsland } from "@/app/dashboard/(counter)/orders/counter-orders-client"
+
+/**
+ * The page as its LAYOUT composes it — `AppShell` is
+ * `src/app/dashboard/(counter)/layout.tsx`'s now, so the island alone is half
+ * a page and has no `main#ct-main` to assert against.
+ */
+function CounterOrdersClient(props: React.ComponentProps<typeof OrdersIsland>) {
+  SEARCH = props.params
+  return (
+    <AppShell stores={props.stores} user={USER} today={props.today}>
+      <OrdersIsland {...props} />
+    </AppShell>
+  )
+}
+
+/** The rail's account row — the layout's now, not the page's. */
+const USER = { name: "Chris Karimian", role: "Owner" }
 import { ready, empty, failed, loading } from "@/lib/counter/section-data"
 import type { OrdersList, OrdersSections } from "@/lib/counter/adapters/orders"
 
@@ -35,14 +58,12 @@ const TODAY = new Date(2026, 7, 25) // Tuesday 25 Aug 2026
 const main = (c: HTMLElement) => c.querySelector("main#ct-main") as HTMLElement
 
 const base = {
-  pathname: "/dashboard/orders",
   // Plain text, never a URLSearchParams instance — see the island's own note.
   params: "",
   stores: [
     { id: "hollywood", name: "Hollywood", stage: "trading" as const },
     { id: "glendale", name: "Glendale", stage: "pre_open" as const },
   ],
-  user: { name: "Chris Karimian", role: "Owner" },
   today: TODAY,
 }
 

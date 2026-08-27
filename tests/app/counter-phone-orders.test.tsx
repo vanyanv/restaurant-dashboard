@@ -28,9 +28,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, fireEvent, within } from "@testing-library/react"
 
 const push = vi.fn()
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
+// The SHELL around the island reads the URL directly now. `SEARCH` is set by
+// `renderPhone` so it sees the same query string the page was rendered for.
+let SEARCH = ""
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+  usePathname: () => "/m/orders",
+  useSearchParams: () => new URLSearchParams(SEARCH),
+}))
 
-import { CounterPhoneOrdersClient } from "@/app/(mobile)/m/orders/counter-phone-orders-client"
+import { PhoneShell } from "@/components/counter"
+import { CounterPhoneOrdersClient } from "@/app/(mobile)/m/(counter)/orders/counter-phone-orders-client"
 import { ready, failed } from "@/lib/counter/section-data"
 import type { OrdersList, OrdersSections } from "@/lib/counter/adapters/orders"
 
@@ -108,15 +116,19 @@ const sections = (over: Partial<OrdersSections> = {}): OrdersSections => ({
   ...over,
 })
 
+/**
+ * The page as its LAYOUT composes it. `.ct-root.ct-phone`, `.mtop` and
+ * `.mscroll` moved out of this island into
+ * `src/app/(mobile)/m/(counter)/layout.tsx`, so a test rendering the island
+ * alone would be asserting against half a page.
+ */
 function renderPhone(params = "", over: Partial<OrdersSections> = {}) {
   push.mockClear()
+  SEARCH = params
   return render(
-    <CounterPhoneOrdersClient
-      params={params}
-      stores={STORES}
-      today={TODAY}
-      sections={sections(over)}
-    />,
+    <PhoneShell stores={STORES} today={TODAY}>
+      <CounterPhoneOrdersClient sections={sections(over)} />
+    </PhoneShell>,
   )
 }
 

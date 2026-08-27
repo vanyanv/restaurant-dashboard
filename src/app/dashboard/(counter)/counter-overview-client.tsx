@@ -2,9 +2,8 @@
 
 import Link from "next/link"
 import { useCallback, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
-  AppShell,
   AskBar,
   Chart,
   ChannelRows,
@@ -16,6 +15,7 @@ import {
   LeadFigure,
   MoneyLines,
   Moving,
+  PageHead,
   Queue,
   Say,
   Section,
@@ -24,7 +24,6 @@ import {
   Table,
   type DispatchItem,
   type QueueItem,
-  type RailUser,
   type StoreCard,
   type SwitchableStore,
 } from "@/components/counter"
@@ -154,14 +153,11 @@ function netSalesLabel(range: DateRange): string {
 }
 
 export function CounterOverviewClient({
-  pathname,
   params: paramsString,
   stores,
-  user,
   today,
   sections,
 }: {
-  pathname: string
   /**
    * The query string Overview was rendered for, as PLAIN TEXT — not a
    * `URLSearchParams` instance. A page.tsx (Server Component) rendering this
@@ -176,12 +172,11 @@ export function CounterOverviewClient({
    */
   params: string
   stores: SwitchableStore[]
-  /** The signed-in reader, for the rail's account row. */
-  user: RailUser
   today: Date
   sections: OverviewClientSections
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
@@ -282,16 +277,28 @@ export function CounterOverviewClient({
       : { key: e.key, tone: e.tone, lead: e.lead, unit: e.unit, title: e.title, body: e.body }
 
   return (
-    <AppShell
-      pathname={pathname}
-      params={params}
-      // The title is a sentence about the WINDOW — "7 days to Aug 21" — not the
-      // word "Overview", which the breadcrumb already says. Both strings come
-      // from `date-range.ts` so no second page can word them differently.
-      title={rangeTitle(range)}
-      sub={rangeSubtitle(selectedStore?.name ?? "All stores", range, comparisonId)}
-      crumbLeaf="Overview"
-      actions={
+    /*
+     * A FRAGMENT, not a shell. The rail, the topbar, the store switcher and
+     * the ⌘K surface are `src/app/dashboard/(counter)/layout.tsx`'s now — they
+     * are URL-driven, so hoisted into the layout they read the URL and push
+     * their own changes, and `stores` / `user` / `presetId` / `onSelectPreset`
+     * / `selectedStoreId` / `onSelectStore` / `storeName` / `pathname` /
+     * `params` all disappeared from this call rather than moving up it.
+     *
+     * `PageHead` stays, first inside `#ct-main`, exactly where the shell used
+     * to render it — the title sentence, the sub-line and the date control are
+     * genuinely this page's, and they are the only part of the old `AppShell`
+     * call that the fidelity gate measures.
+     */
+    <>
+      <PageHead
+        // The title is a sentence about the WINDOW — "7 days to Aug 21" — not
+        // the word "Overview", which the breadcrumb already says. Both strings
+        // come from `date-range.ts` so no second page can word them
+        // differently.
+        title={rangeTitle(range)}
+        sub={rangeSubtitle(selectedStore?.name ?? "All stores", range, comparisonId)}
+      >
         <DateControl
           presetId={presetId}
           comparisonId={comparisonId}
@@ -301,19 +308,8 @@ export function CounterOverviewClient({
           onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
-      }
-      stores={stores}
-      selectedStoreId={counterParams.storeId}
-      onSelectStore={(id) => push({ storeId: id })}
-      storeName={selectedStore?.name ?? null}
-      user={user}
-      today={today}
-      // The ⌘K palette's "Change the range" group, from the same state the
-      // date control above is drawn from — so the two can never disagree
-      // about which preset is current.
-      presetId={presetId}
-      onSelectPreset={(id) => push({ presetId: id })}
-    >
+      </PageHead>
+
       {/* `.dispatch` is the first thing inside the screen, above everything.
           No `.go` action: the prototype's points at its alerts queue and ours
           would point at `/dashboard/needs-you`, which `nav.ts` declares and
@@ -529,6 +525,6 @@ export function CounterOverviewClient({
           )}
         </Section>
       </div>
-    </AppShell>
+    </>
   )
 }

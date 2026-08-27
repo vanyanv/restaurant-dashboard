@@ -2,17 +2,17 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
-  AppShell,
   Chart,
   DateControl,
   Filters,
+  PageHead,
   Section,
   Strip,
   Table,
+  usePageChrome,
   type Column,
-  type RailUser,
   type Row,
   type SwitchableStore,
 } from "@/components/counter"
@@ -170,15 +170,20 @@ function orderRows(rows: OrdersRow[]): Row[] {
   }))
 }
 
+/** The ⌘K palette's "Ask about Orders" group. Module-level, so the shell is
+ *  not republished on every render of this page. */
+const ASK_SUGGESTIONS = [
+  "Which channel took the most orders in this range?",
+  "What did the marketplaces charge me?",
+  "Which hour is busiest, and is it normal?",
+]
+
 export function CounterOrdersClient({
-  pathname,
   params: paramsString,
   stores,
-  user,
   today,
   sections,
 }: {
-  pathname: string
   /**
    * The query string this page was rendered for, as PLAIN TEXT — not a
    * `URLSearchParams` instance. Props cross the RSC boundary as plain
@@ -188,13 +193,16 @@ export function CounterOrdersClient({
    */
   params: string
   stores: SwitchableStore[]
-  user: RailUser
   today: Date
   sections: CounterOrdersSections
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
+
+  // The one chrome fact this page has that its URL does not.
+  usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
 
   /*
    * The pending search write, cleared by the effect's own cleanup.
@@ -305,16 +313,20 @@ export function CounterOrdersClient({
   }, [push])
 
   return (
-    <AppShell
-      pathname={pathname}
-      params={params}
-      // `P.orders.title` — the page's NAME. A list of orders is the same
-      // document whatever window it is drawn over, and the window is the next
-      // line down.
-      title="Orders"
-      // `R.head()`, the prototype's default sub: store · window · comparison.
-      sub={rangeSubtitle(storeName, range, comparisonId)}
-      actions={
+    /*
+     * A FRAGMENT: the rail, the topbar, the store switcher and the ⌘K surface
+     * are `(counter)/layout.tsx`'s now. Everything they used to be handed from
+     * here is URL-driven and read there instead.
+     */
+    <>
+      <PageHead
+        // `P.orders.title` — the page's NAME. A list of orders is the same
+        // document whatever window it is drawn over, and the window is the
+        // next line down.
+        title="Orders"
+        // `R.head()`, the prototype's default sub: store · window · comparison.
+        sub={rangeSubtitle(storeName, range, comparisonId)}
+      >
         <DateControl
           presetId={presetId}
           comparisonId={comparisonId}
@@ -324,21 +336,8 @@ export function CounterOrdersClient({
           onStep={(direction) => push({ range: stepRange(range, direction) })}
           onRange={(next) => push({ range: next })}
         />
-      }
-      stores={stores}
-      selectedStoreId={counterParams.storeId}
-      onSelectStore={(id) => push({ storeId: id })}
-      storeName={selectedStore?.name ?? null}
-      user={user}
-      today={today}
-      presetId={presetId}
-      onSelectPreset={(id) => push({ presetId: id })}
-      askSuggestions={[
-        "Which channel took the most orders in this range?",
-        "What did the marketplaces charge me?",
-        "Which hour is busiest, and is it normal?",
-      ]}
-    >
+      </PageHead>
+
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
           written in `P.orders.desk()`. Ruling O-R2: no cell here is judged
           against anything, because nothing in this schema publishes a
@@ -392,7 +391,7 @@ export function CounterOrdersClient({
           </>
         )}
       </Section>
-    </AppShell>
+    </>
   )
 }
 

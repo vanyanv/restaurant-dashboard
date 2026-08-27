@@ -156,39 +156,26 @@ const COUNTER_ROOT_CLASSES = ["ct-root", "ct-phone", "frame", "pframe", "login"]
 
 /** `file suffix -> the one class it may emit`. Nothing else, nowhere else. */
 const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
+  // The desk frame, mounted once by `src/app/dashboard/(counter)/layout.tsx`.
   { file: "components/counter/shell/app-shell.tsx", token: "ct-root" },
   // The ⌘K palette, which portals to document.body and must carry the alias
   // layer out with it. See the note above.
   { file: "components/counter/ask/ask-surface.tsx", token: "ct-root" },
-  // The phone surface. `/m` is Counter Overview on a phone, and it composes no
-  // `AppShell` — the desk's rail and topbar are not the phone's chrome — so it
-  // mounts the alias layer itself. See the note above.
-  { file: "app/(mobile)/m/counter-phone-overview-client.tsx", token: "ct-root" },
+  // The PHONE frame, mounted once by `src/app/(mobile)/m/(counter)/layout.tsx`.
+  // The desk's rail and topbar are not the phone's chrome, so the phone has a
+  // shell of its own; it mounts the alias layer one element above `.mscroll`
+  // so `.mtop` is inside it too.
+  //
+  // This list used to name FOUR phone islands — `/m`, `/m/pnl`, `/m/orders`
+  // and `/m/orders/[id]` — because each of them opened with its own
+  // `.ct-root.ct-phone`, and rebuilt the whole frame on every tab change.
+  // They are one shell in one layout now, and the list is shorter for it.
+  { file: "components/counter/shell/phone-shell.tsx", token: "ct-root" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
   // desk's ink and ground, which is a defect worth failing on.
-  { file: "app/(mobile)/m/counter-phone-overview-client.tsx", token: "ct-phone" },
-  // The SECOND phone surface: `/m/pnl` is the Counter P&L on a phone
-  // (`src/middleware.ts` rewrites `/dashboard/pnl` there on a phone user
-  // agent). Same arrangement as `/m` above, same pair of classes, and the
-  // same reason it mounts the alias layer itself.
-  { file: "app/(mobile)/m/pnl/counter-phone-pnl-client.tsx", token: "ct-root" },
-  { file: "app/(mobile)/m/pnl/counter-phone-pnl-client.tsx", token: "ct-phone" },
-  // The THIRD phone surface: `/m/orders` is the Counter orders list on a
-  // phone (`src/middleware.ts` rewrites `/dashboard/orders` there on a phone
-  // user agent). Same arrangement and the same pair of classes again — the
-  // island mounts them one element above `.mscroll` so `.mtop` is inside the
-  // alias layer too.
-  { file: "app/(mobile)/m/orders/counter-phone-orders-client.tsx", token: "ct-root" },
-  { file: "app/(mobile)/m/orders/counter-phone-orders-client.tsx", token: "ct-phone" },
-  // The FOURTH phone surface: `/m/orders/[id]` is one order on a phone
-  // (`src/middleware.ts` rewrites `/dashboard/orders/<id>` there on a phone
-  // user agent). A detail route, but the arrangement is the list's exactly —
-  // no `AppShell`, the island mounts the alias layer itself one element above
-  // `.mscroll`, and `.mtop` is inside it.
-  { file: "app/(mobile)/m/orders/[id]/counter-phone-order-client.tsx", token: "ct-root" },
-  { file: "app/(mobile)/m/orders/[id]/counter-phone-order-client.tsx", token: "ct-phone" },
+  { file: "components/counter/shell/phone-shell.tsx", token: "ct-phone" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -244,11 +231,14 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
       new Set(["ct-root", "ct-phone"]),
     )
     // Pinned, so the list cannot grow a file without someone reading this
-    // note. Six files: the desk shell, the ⌘K palette, and the four phone
-    // surfaces (/m, /m/pnl, /m/orders, /m/orders/[id]) — each of the phones
-    // carrying both classes.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(10)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(6)
+    // note. THREE files now, down from six: the desk shell, the ⌘K palette,
+    // and the phone shell — which carries both classes. The four phone
+    // islands (/m, /m/pnl, /m/orders, /m/orders/[id]) each opened with their
+    // own `.ct-root.ct-phone` until the chrome moved into
+    // `src/app/(mobile)/m/(counter)/layout.tsx`; one shell in one layout is
+    // both fewer mount sites and one that survives a tab change.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(4)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(3)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
