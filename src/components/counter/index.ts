@@ -41,6 +41,9 @@ export { Briefing, type BriefingLine } from "./surface/briefing"
 export { Dots } from "./surface/dots"
 export { Tag, StatusPill, type TagTone, type PillSeverity } from "./surface/tag"
 export { WeekPicker, type WeekDay } from "./surface/week-picker"
+/* The labour week's own strip. Same two classes as `WeekPicker`, deliberately
+   not the same component — see its docblock (L-R15). */
+export { WeekStrip, type WeekStripDay } from "./surface/week-strip"
 export { Record, type RecordMark } from "./surface/record"
 
 export { AskSurface } from "./ask/ask-surface"
