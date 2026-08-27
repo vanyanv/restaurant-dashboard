@@ -80,15 +80,25 @@ interface FidelityPageBase {
    * ignorable as the permanently green one that let this happen.
    */
   report?: boolean
-  /**
-   * Named contrast exceptions, for elements the 4.5:1 rule flags but which are
-   * genuinely fine (ruling F-R6). The threshold NEVER moves — an exception is
-   * a reviewable line naming the element and the ratio it actually measures,
-   * the same pattern `src/styles/counter.css` already uses for its documented
-   * WCAG exceptions. A lowered threshold would silently forgive every element
-   * on the page; this forgives exactly one, in writing, with its number.
+  /*
+   * `contrastAllowances` USED TO BE DECLARED HERE and is deliberately gone.
+   *
+   * It described named exceptions to a 4.5:1 contrast rule (ruling F-R6), and
+   * nothing in this repo ever read it — one occurrence in the whole tree, the
+   * declaration itself. The contrast pass it was written for was never built,
+   * because the owner ruled WCAG out of scope for this rebuild, so the field
+   * was a typed promise the gate does not keep: a page could declare one,
+   * watch the compiler accept it, and reasonably conclude something was being
+   * checked.
+   *
+   * This project has now found the same shape twice elsewhere —
+   * `hasOwnerAccess`, which returns true for every value its enum can hold,
+   * and `buildPeriods`, whose comment documented an invariant its own body
+   * broke. A field that looks load-bearing and is not is worse than no field;
+   * `statement.ts` says so in its own words about a parameter it removed for
+   * exactly this reason. One line to add back, against a real reader, on the
+   * day a contrast pass exists.
    */
-  contrastAllowances?: Array<{ selector: string; reason: string; measured: number }>
   /**
    * Landmarks the prototype renders that this page CANNOT, because nothing in
    * the database publishes what they would say — with the count, per surface,
