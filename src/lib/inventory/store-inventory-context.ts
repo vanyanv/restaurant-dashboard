@@ -164,6 +164,16 @@ export interface ContextIngredient {
   id: string
   name: string
   recipeUnit: string | null
+  /**
+   * The pack definition, all four fields optional so a caller that has none
+   * still type-checks — but a caller that omits them gets the pre-2026-08-28
+   * behaviour, where every case-priced delivery was dropped. See
+   * `convertDelivered` in `usage-math.ts`.
+   */
+  caseUnit?: string | null
+  recipeUnitsPerCase?: number | null
+  innerPackUnit?: string | null
+  innerPacksPerCase?: number | null
 }
 
 /** Batched twin of `computeRunningOnHand` — same maths, no queries. */
@@ -182,6 +192,12 @@ export function runningOnHandFromContext(
       (l) => l.invoiceDate >= sinceFilter,
     ),
     recipeUnit,
+    {
+      caseUnit: ingredient.caseUnit ?? null,
+      recipeUnitsPerCase: ingredient.recipeUnitsPerCase ?? null,
+      innerPackUnit: ingredient.innerPackUnit ?? null,
+      innerPacksPerCase: ingredient.innerPacksPerCase ?? null,
+    },
   )
 
   const depletionQty = sumDepletion(

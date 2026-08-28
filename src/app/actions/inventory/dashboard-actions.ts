@@ -85,7 +85,19 @@ export async function getInventoryDashboardData(input: {
     prisma.canonicalIngredient.findMany({
       where: { accountId: user.accountId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, category: true, recipeUnit: true },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        recipeUnit: true,
+        // Without these four, `runningOnHandFromContext` drops every delivery
+        // written in cases — which is nearly all of them. See
+        // `convertDelivered` in src/lib/inventory/usage-math.ts.
+        caseUnit: true,
+        recipeUnitsPerCase: true,
+        innerPackUnit: true,
+        innerPacksPerCase: true,
+      },
     }),
     prisma.vendorLeadTime.findMany({
       where: { accountId: user.accountId },

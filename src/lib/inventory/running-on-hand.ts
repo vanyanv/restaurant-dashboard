@@ -33,7 +33,17 @@ export async function computeRunningOnHand(input: {
 
   const ingredient = await prisma.canonicalIngredient.findUnique({
     where: { id: input.ingredientId },
-    select: { id: true, name: true, recipeUnit: true },
+    select: {
+      id: true,
+      name: true,
+      recipeUnit: true,
+      // The pack is the CS -> recipe-unit factor. Without it every delivery on
+      // a case-priced invoice is dropped; see `convertDelivered`.
+      caseUnit: true,
+      recipeUnitsPerCase: true,
+      innerPackUnit: true,
+      innerPacksPerCase: true,
+    },
   })
   if (!ingredient) return null
   const recipeUnit = ingredient.recipeUnit ?? ""
@@ -69,7 +79,7 @@ export async function computeRunningOnHand(input: {
     select: { quantity: true, unit: true },
   })
 
-  const { deliveriesQty, partial } = sumDeliveries(deliveryLines, recipeUnit)
+  const { deliveriesQty, partial } = sumDeliveries(deliveryLines, recipeUnit, ingredient)
 
   const sales = await prisma.otterMenuItem.findMany({
     where: {
