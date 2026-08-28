@@ -36,13 +36,33 @@ export interface NavGroup {
   items: NavItem[]
 }
 
+/*
+ * Three of these hrefs pointed at routes that have never existed, and because
+ * the rail renders on every Counter page they were 404s reachable from all 22
+ * of them. Verified live, not inferred:
+ *
+ *   /dashboard/needs-you  404  →  /dashboard/alerts
+ *   /dashboard/inventory  404  →  /dashboard/operations/inventory
+ *   /dashboard/vendors    404  →  /dashboard/operations/vendors
+ *
+ * The LABELS were right and stay. "Needs you" is the prototype's own rail name
+ * for `P.alerts` (prototype line 2256: "Alerts + Decisions → Needs you"), so
+ * the id, the label and the bell are what it intended; only the destination
+ * was wrong. Inventory and Vendors both live one level deeper than the rail
+ * assumed, under `/dashboard/operations/`.
+ *
+ * An href here is not checked by anything — `npm run tokens` reads Counter
+ * design rules, not route existence, and a `<Link>` to a missing route is
+ * valid TypeScript. The check is `scripts/counter-lint.ts`' job only if
+ * somebody teaches it; until then, changing one of these means loading it.
+ */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
     caption: "Today",
     items: [
       { id: "overview", label: "Overview", href: "/dashboard", icon: "LayoutDashboard", exact: true },
       { id: "ask", label: "Ask", href: "/dashboard/ask", icon: "MessageSquare" },
-      { id: "needs-you", label: "Needs you", href: "/dashboard/needs-you", icon: "Bell" },
+      { id: "needs-you", label: "Needs you", href: "/dashboard/alerts", icon: "Bell" },
       { id: "orders", label: "Orders", href: "/dashboard/orders", icon: "Receipt" },
     ],
   },
@@ -66,9 +86,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     caption: "Stock and suppliers",
     items: [
       { id: "invoices", label: "Invoices", href: "/dashboard/invoices", icon: "FileText" },
-      { id: "inventory", label: "Inventory", href: "/dashboard/inventory", icon: "Package" },
+      { id: "inventory", label: "Inventory", href: "/dashboard/operations/inventory", icon: "Package" },
       { id: "ingredients", label: "Ingredients", href: "/dashboard/ingredients", icon: "Carrot" },
-      { id: "vendors", label: "Vendors", href: "/dashboard/vendors", icon: "Truck" },
+      { id: "vendors", label: "Vendors", href: "/dashboard/operations/vendors", icon: "Truck" },
     ],
   },
   {
