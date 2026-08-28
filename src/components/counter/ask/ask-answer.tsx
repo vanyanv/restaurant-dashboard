@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { Strip } from "@/components/counter/surface/strip"
+import { MStrip } from "@/components/counter/shell/m-strip"
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
@@ -94,12 +95,23 @@ import { askAnswer, askFailure, askQuestion, type AskState } from "@/lib/counter
  *     On the page that delegation would open the PALETTE over the page and
  *     answer there — so the page passes a handler instead, and the chip stops
  *     carrying the attribute. Exactly one path fires either way.
+ *   - `figures`, which strip draws the quartet. `.strip` is a six-track grid
+ *     whose track count is `data-n`; at the phone's 316px those tracks are
+ *     ~50px wide and the figures overflow the column. `.mstrip` is the same
+ *     four fields in the phone's own two-column grid, and it is what every
+ *     other figure on a `/m` page is already drawn with — the third surface
+ *     changes the strip, not the answer.
+ *
+ * A fourth prop, and NOT a fourth renderer: what an answer IS — the verdict,
+ * the figures, the caveat, the "Read" row, the follow-ups, and the order they
+ * come in — is decided once, here, for all three.
  */
 export function AskAnswerBody({
   state,
   className = "askans__body",
   verdictShownAbove = false,
   onFollowUp,
+  figures = "strip",
 }: {
   state: AskState
   className?: string
@@ -107,6 +119,8 @@ export function AskAnswerBody({
   verdictShownAbove?: boolean
   /** Present on a surface that answers a follow-up itself; absent in the palette. */
   onFollowUp?: (question: string) => void
+  /** `.strip` on the desk's two surfaces, `.mstrip` on the phone. */
+  figures?: "strip" | "mstrip"
 }) {
   const { status } = state
   const answer = askAnswer(state)
@@ -114,8 +128,8 @@ export function AskAnswerBody({
 
   const filed = answer?.filed ?? null
   const empty = answer?.form === "empty"
-  const figures = empty ? [] : (filed?.figures ?? [])
-  const cells: FigureProps[] = figures.map((f) => ({
+  const filedFigures = empty ? [] : (filed?.figures ?? [])
+  const cells: FigureProps[] = filedFigures.map((f) => ({
     label: f.label,
     value: f.value,
     ...(f.delta
@@ -145,7 +159,13 @@ export function AskAnswerBody({
       ) : (
         <>
           {lead ? <p className="ans__lead">{lead}</p> : null}
-          {cells.length > 0 ? <Strip cells={cells} /> : null}
+          {/* `MStrip` reads the same `FigureProps` quartet; a figure filed by
+              the model carries no `reference`, so the phone cell's band —
+              which opens only inside `reference ? … : ''` — is correctly
+              absent rather than silently swallowing a caption. */}
+          {cells.length > 0 ? (
+            figures === "mstrip" ? <MStrip cells={cells} /> : <Strip cells={cells} />
+          ) : null}
           {caveat ? <p className="callout">{caveat}</p> : null}
           {!empty && note ? <p className="ans__lead">{note}</p> : null}
 

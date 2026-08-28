@@ -7,6 +7,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard": "/m",
   "/dashboard/alerts": "/m/alerts",
   "/dashboard/analytics": "/m/analytics",
+  "/dashboard/ask": "/m/ask",
   "/dashboard/chat": "/m/chat",
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
@@ -27,7 +28,16 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // COGS and Stores had no mobile equivalent left after the mobile bloat
   // deletion — leave those desktop paths unmapped (mobilePathFor returns null
   // and the request stays on desktop). Analytics was in that list until it was
-  // rebuilt on Counter with a phone surface of its own; it is mapped above.
+  // rebuilt on Counter with a phone surface of its own; it is mapped above,
+  // and so is Ask, which was unmapped for the different reason that /m/ask did
+  // not exist until the Counter Ask page was built on both surfaces.
+  //
+  // The list is NOT exhaustive of what is unmapped: /dashboard/admin/monitoring
+  // has a phone page (/m/monitoring) and no entry here, so a phone lands on the
+  // desktop admin view. That predates this map's Counter entries and is left
+  // alone rather than mapped on the way past — it is an admin route, and
+  // whether the phone view is the intended destination is a question for
+  // whoever owns it, not a side effect of adding Ask.
   // Settings folded into /m/more (profile + sign-out) — map straight there
   // instead of through /m/settings (which itself now just redirects to
   // /m/more) to avoid an unnecessary extra hop.

@@ -17,6 +17,7 @@ import {
   type StoreCard,
 } from "@/components/counter"
 import { readCounterParams } from "@/lib/counter/url-state"
+import { ASK_PHONE_ROUTE, askHref } from "@/lib/counter/ask-context"
 import { dayCount, rangeLabel, rangeSubtitle, rangeTitle } from "@/lib/counter/date-range"
 import { count, money } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -120,6 +121,24 @@ export function CounterPhoneOverviewClient({
   const windowLabel = rangeLabel(range, "custom")
   const comparing = comparisonId !== "none"
   const days = dayCount(range)
+
+  /*
+   * The `.masksheet`'s two chips, each carrying its own question to `/m/ask`.
+   * `origin` is this route's own path — `describeAskContext` resolves it back
+   * through the desk's nav strings, so the answer's scope sentence says
+   * "Answering about Overview" rather than naming no page at all.
+   */
+  const askSuggestions = useMemo(
+    () =>
+      [
+        "Why is food cost where it is?",
+        comparing ? "What changed?" : "What moved this range?",
+      ].map((question) => ({
+        question,
+        href: askHref({ question, params, origin: "/m", route: ASK_PHONE_ROUTE }),
+      })),
+    [comparing, params],
+  )
 
   /**
    * A store's row and the panel it opens. The panel is built here rather than
@@ -238,15 +257,24 @@ return (
         )}
       </Section>
 
-      {/* No state: a store that is not trading is still a store you can ask
-          about, which is why the prototype prints this in every state. */}
+      {/*
+        No state: a store that is not trading is still a store you can ask
+        about, which is why the prototype prints this in every state.
+
+        IT POINTS AT ASK NOW. Until `/m/ask` existed, the row and both chips
+        opened `/m/chat` — the editorial thread — and none of them carried its
+        own question, so three controls had one destination and the chip that
+        said "Why is food cost where it is?" landed on an empty box. Each href
+        is built by `askHref`, the one builder the desk's "Open in Ask" and
+        `PhoneShell`'s `[data-askabout]` delegation also use, so the store and
+        the window travel with the question and the answer is a link.
+      */}
       <AskSheet
         prompt={`Ask about ${days === 1 ? "today" : "this range"}`}
-        href="/m/chat"
-        suggestions={[
-          "Why is food cost where it is?",
-          comparing ? "What changed?" : "What moved this range?",
-        ]}
+        // No question: the row opens Ask's own "nothing asked yet" state,
+        // which names the scope and offers three starters.
+        href={askHref({ question: "", params, origin: "/m", route: ASK_PHONE_ROUTE })}
+        suggestions={askSuggestions}
       />
 
       <Section bare title="The figures" data={sections.strip} pending={pending}>

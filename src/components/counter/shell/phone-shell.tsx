@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState, useTransition, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { MTop } from "./m-top"
@@ -9,6 +9,7 @@ import { PageChromeContext, type PageChrome } from "./page-chrome"
 import { CounterTransitionContext, type CounterTransition } from "./counter-transition"
 import type { SwitchableStore } from "./store-switcher"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import { askHref, ASK_PHONE_ROUTE } from "@/lib/counter/ask-context"
 import { hasWindow, phoneTrail, storeScopeHref } from "@/lib/counter/route-shape"
 import type { ComparisonId, DateRange, PresetId } from "@/lib/counter/date-range"
 
@@ -99,6 +100,51 @@ export function PhoneShell({
     },
     [params, pathname, router, startTransition],
   )
+
+  /*
+   * ---------------------------------------------------------------------
+   * THE PHONE'S ANSWER TO `[data-askabout]`
+   * ---------------------------------------------------------------------
+   *
+   * `AppShell` mounts one `AskSurface`, which listens on `document` for a
+   * click inside any `[data-askabout]` element and answers in the palette.
+   * `Section` emits that attribute on its "Ask about this" button on EVERY
+   * surface — so on the phone, where no palette is mounted, every one of
+   * those buttons was drawn and did nothing. Note 55 is the same defect one
+   * layer up ("this button was rendered on fifty pages and wired to
+   * nothing"); rebuilding the page and leaving the button dead would have
+   * been shipping it a second time.
+   *
+   * A palette is the wrong answer at 316px — it is a sheet over the page you
+   * asked from, on a column that has no room to be behind anything — so the
+   * phone ASKS BY NAVIGATING: `askHref` builds the same address the desk's
+   * "Open in Ask" builds, with the store, the window and the page the
+   * question was asked from, and `/m/ask` answers it. The question is in the
+   * URL, so the back button is what "close the answer" means here, and the
+   * answer is a link the reader can send.
+   *
+   * The listener sits in the SHELL and not in each page for the same reason
+   * `AskSurface` sits in `AppShell`: one delegation for every route under it,
+   * mounted once, surviving a tab change.
+   */
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null
+      const askEl = target?.closest("[data-askabout]")
+      if (!askEl) return
+      // `data-askabout=""` is the bare opener — Ask with nothing asked yet,
+      // which is a real state `/m/ask` draws rather than a dead click.
+      const question = askEl.getAttribute("data-askabout") ?? ""
+      startTransition(() => {
+        router.push(
+          askHref({ question, params, origin: pathname, route: ASK_PHONE_ROUTE }),
+          { scroll: false },
+        )
+      })
+    }
+    document.addEventListener("click", onClick)
+    return () => document.removeEventListener("click", onClick)
+  }, [params, pathname, router, startTransition])
 
   const [page, setPage] = useState<PageChrome>({})
   const transition = useMemo<CounterTransition>(
