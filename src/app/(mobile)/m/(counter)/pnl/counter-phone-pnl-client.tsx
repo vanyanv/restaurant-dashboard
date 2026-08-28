@@ -36,7 +36,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  *
  * ## The phone is a route, not a breakpoint
  *
- * `src/middleware.ts` rewrites `/dashboard/pnl` to `/m/pnl` on a phone user
+ * `src/proxy.ts` rewrites `/dashboard/pnl` to `/m/pnl` on a phone user
  * agent, so THIS is what a phone renders and what `npm run fidelity`'s
  * `fidelity-mobile` project measures against `P.pnl.phone()`. Taking a
  * screenshot of `/dashboard/pnl` at 390px photographs the desk squeezed and

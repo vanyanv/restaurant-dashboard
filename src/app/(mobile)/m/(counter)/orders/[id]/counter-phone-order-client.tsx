@@ -37,7 +37,7 @@ import type {
  *
  * ## The phone is a route, not a breakpoint
  *
- * `src/middleware.ts` rewrites `/dashboard/orders/<id>` to `/m/orders/<id>` on
+ * `src/proxy.ts` rewrites `/dashboard/orders/<id>` to `/m/orders/<id>` on
  * a phone user agent, so THIS is what a phone renders and what
  * `npm run fidelity`'s `fidelity-mobile` project measures against
  * `P.order.phone()`. A screenshot of the desk route at 390px photographs the

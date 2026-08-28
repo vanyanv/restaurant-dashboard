@@ -183,7 +183,7 @@ The existing `freezeForecast` in `decision-log-actions.ts` dedupes correctly, an
 | Path | Change |
 |---|---|
 | `src/components/counter/index.ts` | Export the five new primitives. |
-| `src/middleware.ts` | Add `/dashboard/decisions` → `/m/decisions` and `/dashboard/alerts` → `/m/alerts` to the phone rewrite map. Unaffected by the route-group rewrite below — `MOBILE_ROUTES` maps URL paths, and `(counter)` never appears in a URL. |
+| `src/proxy.ts` | Add `/dashboard/decisions` → `/m/decisions` and `/dashboard/alerts` → `/m/alerts` to the phone rewrite map. Unaffected by the route-group rewrite below — `MOBILE_ROUTES` maps URL paths, and `(counter)` never appears in a URL. |
 | `scripts/counter-lint.ts` | `AWAITED_SECTIONS_ALLOWED` gains the four new page paths (Tasks 5, 6, 8, 9) — each of those four is a single-load page in the order-detail shape, not the streaming-pages shape. See Task 5's rewrite note. |
 | `e2e/fidelity/manifest.ts` | Flip `decisions` and `alerts` to `status: "counter"` with measured baselines. |
 | `src/app/actions/alerts/inbox-actions.ts` | Add the lifecycle counts the page needs (Task 7) — no behaviour change to existing callers. |
@@ -1287,7 +1287,7 @@ git commit -m "feat(counter): the week ahead, on the desk"
 
 **Files:**
 - Create: `src/app/(mobile)/m/(counter)/decisions/page.tsx`, `src/app/(mobile)/m/(counter)/decisions/counter-phone-decisions-client.tsx`, `src/app/(mobile)/m/(counter)/decisions/loading.tsx`
-- Modify: `src/middleware.ts`, `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED`)
+- Modify: `src/proxy.ts`, `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED`)
 - Test: `tests/app/counter-phone-decisions.test.tsx`
 
 **Interfaces:**
@@ -1301,7 +1301,7 @@ The middleware change below is unaffected by any of this: `MOBILE_ROUTES` maps U
 
 Prototype (`P.decisions.phone`, line 4762): `.mtitle` + `.msub`, an `mstrip` of two cells, a `Section` "The call this week" holding a bar chart, a `Section` "What to do" holding an `mlist` of three, and one `.mbtn.mbtn--primary`.
 
-Add to the `MOBILE_ROUTES` map in `src/middleware.ts`:
+Add to the `MOBILE_ROUTES` map in `src/proxy.ts`:
 
 ```ts
 "/dashboard/decisions": "/m/decisions",
@@ -1323,7 +1323,7 @@ it("never renders an .empty landmark", () => { /* … */ })
 
 ```bash
 npm test && npm run tokens && npx tsc --noEmit && npm run build
-git add -A "src/app/(mobile)" src/middleware.ts scripts/counter-lint.ts tests/app
+git add -A "src/app/(mobile)" src/proxy.ts scripts/counter-lint.ts tests/app
 git commit -m "feat(counter): the week ahead, on a phone"
 ```
 
@@ -1508,7 +1508,7 @@ git commit -m "feat(counter): open right now, on the desk"
 
 **Files:**
 - Create: `src/app/(mobile)/m/(counter)/alerts/page.tsx`, `src/app/(mobile)/m/(counter)/alerts/counter-phone-alerts-client.tsx`, `src/app/(mobile)/m/(counter)/alerts/loading.tsx`
-- Modify: `src/middleware.ts`, `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED`)
+- Modify: `src/proxy.ts`, `scripts/counter-lint.ts` (`AWAITED_SECTIONS_ALLOWED`)
 - Test: `tests/app/counter-phone-alerts.test.tsx`
 
 ### Rewritten 2026-08-26, against the same shell contract as Task 5
@@ -1534,7 +1534,7 @@ it("prints the live counts in the subtitle", () => { /* '77 open · 0 acknowledg
 
 ```bash
 npm test && npm run tokens && npx tsc --noEmit && npm run build
-git add -A "src/app/(mobile)" src/middleware.ts scripts/counter-lint.ts tests/app
+git add -A "src/app/(mobile)" src/proxy.ts scripts/counter-lint.ts tests/app
 git commit -m "feat(counter): open right now, on a phone"
 ```
 

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 /**
  * Counter — one order, the phone detail (Phase C, page 3, surface 4).
  *
- * `src/middleware.ts` rewrites `/dashboard/orders/<id>` to `/m/orders/<id>` on
+ * `src/proxy.ts` rewrites `/dashboard/orders/<id>` to `/m/orders/<id>` on
  * a phone user agent, so this route IS the phone surface of an order, and it is
  * what `npm run fidelity`'s `fidelity-mobile` project measures against
  * `P.order.phone()`.

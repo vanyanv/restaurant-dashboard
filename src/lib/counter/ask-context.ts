@@ -115,7 +115,7 @@ export function describeAskContext({
 export const ASK_ROUTE = "/dashboard/ask"
 
 /**
- * The same page on the phone. `src/middleware.ts` redirects `/dashboard/ask`
+ * The same page on the phone. `src/proxy.ts` redirects `/dashboard/ask`
  * here on a phone user agent, so this is what a phone actually renders — and
  * a link BUILT on the phone points straight at it rather than paying for the
  * redirect hop, exactly as `/m`'s own links do.

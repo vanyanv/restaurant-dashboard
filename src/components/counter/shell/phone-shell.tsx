@@ -15,7 +15,7 @@ import type { ComparisonId, DateRange, PresetId } from "@/lib/counter/date-range
 
 /**
  * The phone's chrome, and the counterpart of `AppShell` on the surface a phone
- * actually renders (`src/middleware.ts` redirects `/dashboard` to `/m` on a
+ * actually renders (`src/proxy.ts` redirects `/dashboard` to `/m` on a
  * phone user agent, so this — not the desk island — is what
  * `npm run fidelity`'s `fidelity-mobile` project measures).
  *

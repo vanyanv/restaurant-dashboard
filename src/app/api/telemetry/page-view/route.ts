@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -27,6 +28,21 @@ const NO_CONTENT = () => new NextResponse(null, { status: 204 })
 
 export async function POST(req: Request): Promise<NextResponse> {
   try {
+    /*
+     * The highest-volume write path in the app — one row per navigation,
+     * written from the client — and it had no ceiling. `PageView` is already
+     * the table the nightly retention cron describes as its biggest, so a
+     * navigation loop or a misbehaving client could inflate it between runs,
+     * against a Neon plan whose storage is a tracked metric.
+     *
+     * A 429 here is returned rather than swallowed into NO_CONTENT, because a
+     * client being told to slow down is the one thing this endpoint SHOULD
+     * say out loud — the beacon can then stop rather than keep hammering.
+     * Everything else stays silent, per the note above.
+     */
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    if (limited) return limited
+
     const session = await getServerSession(authOptions)
     const userId = session?.user?.id
     if (!userId) return NO_CONTENT()

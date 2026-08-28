@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 /**
  * Counter Analytics — the group page, on a phone.
  *
- * `src/middleware.ts` rewrites `/dashboard/analytics` to `/m/analytics` on a
+ * `src/proxy.ts` rewrites `/dashboard/analytics` to `/m/analytics` on a
  * phone user agent, so this route IS the phone surface, and it is what
  * `npm run fidelity`'s `fidelity-mobile` project measures against
  * `P.analytics.phone()`.

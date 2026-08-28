@@ -381,7 +381,7 @@ same as judging a day against a floor, which L-R1 forbids.
 **Delete:** `src/app/dashboard/(editorial)/labor/**` and
 `src/app/(mobile)/m/labor/**`.
 
-**Modify:** `src/middleware.ts` (the store sub-path allowlist already carries
+**Modify:** `src/proxy.ts` (the store sub-path allowlist already carries
 `/dashboard/labor` → `/m/labor`; check before adding), `e2e/fidelity/manifest.ts`.
 
 ---

@@ -106,7 +106,7 @@ grows a labour total.
 
 **R5 (Plan 8) — the phone gets Counter by composition, not by duplication.**
 Decision 4 of the brainstorm is "both surfaces together, page by page." Plan 7
-shipped Overview desk-only, and `src/middleware.ts:6-29` redirects phone user
+shipped Overview desk-only, and `src/proxy.ts:6-29` redirects phone user
 agents from `/dashboard` to the editorial `/m` — so no phone has ever seen a
 Counter page. The spec's §2.2 layout implies a second page module per route
 under `(mobile)/m/**`; sixteen remaining pages × two modules is thirty-two page
@@ -135,7 +135,7 @@ by adding a module back under `(mobile)/m/**`.
 | `src/app/dashboard/counter-pnl-client.tsx` *(create)* | the client island |
 | `src/app/dashboard/pnl/[storeId]/page.tsx` *(create)* | redirect shim → `/dashboard/pnl?store=<id>` |
 | `src/components/counter/shell/app-shell.tsx` *(modify)* | phone composition: rail as a sheet below `md` |
-| `src/middleware.ts` *(modify)* | drop `/dashboard` and `/dashboard/pnl` from the redirect map |
+| `src/proxy.ts` *(modify)* | drop `/dashboard` and `/dashboard/pnl` from the redirect map |
 | `docs/counter/pnl-verification.md` *(create)* | what was rendered and measured |
 
 ---
@@ -2626,14 +2626,14 @@ git commit -m "feat(counter): the P&L, on Counter"
 
 ### Task 7: The phone composition, and the redirect that hides it
 
-Ruling R5. `src/middleware.ts:6-29` sends phone user agents from `/dashboard`
+Ruling R5. `src/proxy.ts:6-29` sends phone user agents from `/dashboard`
 to `/m` — so no phone has ever loaded a Counter page, including the Overview
 that shipped in Plan 7.
 
 **Files:**
 - Modify: `src/components/counter/shell/app-shell.tsx`
 - Modify: `src/components/counter/shell/topbar.tsx`
-- Modify: `src/middleware.ts`
+- Modify: `src/proxy.ts`
 - Test: `tests/components/counter/shell/app-shell.test.tsx` (exists — extend)
 - Test: `tests/lib/middleware.test.ts` (exists — extend; if it does not,
   create it and assert the map directly)
@@ -2688,7 +2688,7 @@ it("still sends a phone away from routes that have not been", () => {
 })
 ```
 
-Export `DESKTOP_TO_MOBILE` from `src/middleware.ts` if it is not already
+Export `DESKTOP_TO_MOBILE` from `src/proxy.ts` if it is not already
 exported.
 
 - [ ] **Step 2: Run them and watch them fail**
@@ -2752,7 +2752,7 @@ overflowing the viewport.
 
 - [ ] **Step 4: Retire the two redirects**
 
-In `src/middleware.ts`, delete the `"/dashboard": "/m"` and
+In `src/proxy.ts`, delete the `"/dashboard": "/m"` and
 `"/dashboard/pnl": "/m/pnl"` entries, and add above the map:
 
 ```ts
@@ -2784,7 +2784,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/components/counter/shell tests/components/counter src/middleware.ts tests/lib
+git add src/components/counter/shell tests/components/counter src/proxy.ts tests/lib
 git commit -m "feat(counter): the phone gets the pages it was being redirected away from"
 ```
 

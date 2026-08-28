@@ -11,6 +11,7 @@ import {
 import { openai } from "@ai-sdk/openai"
 import { Prisma } from "@/generated/prisma/client"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
+import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { prisma } from "@/lib/prisma"
 import { recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
@@ -54,6 +55,20 @@ export async function POST(req: Request) {
       { status: 403 },
     )
   }
+
+  /*
+   * The owner gate limits WHO can call this, not HOW OFTEN. Every request
+   * here is a billed OpenAI call with a multi-step tool loop behind it and
+   * maxDuration 60, so a stuck client retry loop or a stolen session spends
+   * real money for as long as it runs. Eleven other routes already use these
+   * tiers; this was the expensive one without them.
+   *
+   * `moderate` (30/min) rather than `strict`: a person asking follow-up
+   * questions in a conversation is a normal thing to do, and 2/min would
+   * refuse it.
+   */
+  const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+  if (limited) return limited
 
   const ownerId = session.user.id
   const accountId = session.user.accountId

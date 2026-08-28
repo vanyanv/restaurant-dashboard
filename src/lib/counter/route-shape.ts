@@ -24,7 +24,7 @@
  * to mean. `nodate: true` in the prototype (line 6569).
  *
  * One entry per surface, because the desk and the phone are different routes
- * for the same page (`src/middleware.ts` redirects on a phone user agent).
+ * for the same page (`src/proxy.ts` redirects on a phone user agent).
  */
 const RECORD_ROUTES: readonly { readonly match: RegExp; readonly list: string }[] = [
   { match: /^\/dashboard\/orders\/[^/]+\/?$/, list: "/dashboard/orders" },
@@ -65,7 +65,7 @@ export function storeScopeHref(pathname: string): string {
  * pathname. That is how the phone's Ask would have prepended "Answering about
  * Dashboard" to a question asked from Analytics.
  *
- * A RULE, not a table, and deliberately: `src/middleware.ts` maps a desk path
+ * A RULE, not a table, and deliberately: `src/proxy.ts` maps a desk path
  * to a phone path by keeping the segment name (`/dashboard/x` → `/m/x`) for
  * every route where both exist, so the inverse is the same rule read
  * backwards. The three that do NOT follow it — `/dashboard/settings` → `/m/more`,

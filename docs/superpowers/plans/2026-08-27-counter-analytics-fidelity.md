@@ -426,7 +426,7 @@ nothing to list gets a different subject or `not_computed`, not an empty list.
 
 **Modify:**
 
-- `src/middleware.ts` — two rewrites (A-R9)
+- `src/proxy.ts` — two rewrites (A-R9)
 - `e2e/fidelity/manifest.ts` — `analytics` and `analyticsstore` to
   `status: "counter"` with measured baselines (Task 9)
 
@@ -1009,7 +1009,7 @@ git commit -m "fix(pnl): periods walked in local time dropped every day after a 
 
 **Files:**
 - Create: `src/app/dashboard/(counter)/analytics/{page,loading,counter-analytics-client}.tsx`
-- Modify: `src/middleware.ts`
+- Modify: `src/proxy.ts`
 - Delete: `src/app/dashboard/(editorial)/analytics/page.tsx`,
   `error.tsx`, `loading.tsx` and `components/` (keep `[storeId]/` until Task 6)
 
@@ -1348,7 +1348,7 @@ git commit -m "feat(counter): one store's analytics, with the day book the group
 
 **Files:**
 - Create: `src/app/(mobile)/m/(counter)/analytics/[storeId]/{page,loading,counter-phone-store-analytics-client}.tsx`
-- Modify: `src/middleware.ts` — the store rewrite (A-R9)
+- Modify: `src/proxy.ts` — the store rewrite (A-R9)
 
 **Composition** (`P.analyticsstore.phone()`, line 7648):
 

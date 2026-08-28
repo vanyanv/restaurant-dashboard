@@ -1,3 +1,14 @@
+/*
+ * Renamed from `src/middleware.ts` for Next 16, which deprecates that file
+ * convention — `next build` emits "The \"middleware\" file convention is
+ * deprecated. Please use \"proxy\" instead." and already labels this entry
+ * `ƒ Proxy (Middleware)` in its route table.
+ *
+ * Nothing else changed: `withAuth`, the shutdown gate, the phone redirect map
+ * and the `config.matcher` export are byte-for-byte what they were. Kept as a
+ * pure rename precisely so the shutdown gate — which is live in production
+ * and blanks the app for everyone but the OWNER — has an empty diff to read.
+ */
 import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
 

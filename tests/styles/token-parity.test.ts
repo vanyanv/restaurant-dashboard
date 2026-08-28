@@ -137,7 +137,7 @@ function contrast(a: string, b: string): number {
  * way.
  *
  * THE THIRD EXCEPTION (Phase C task 4, the phone). `/m` is Counter Overview's
- * phone surface — `src/middleware.ts` redirects `/dashboard` there on a phone
+ * phone surface — `src/proxy.ts` redirects `/dashboard` there on a phone
  * user agent — and it is the FIRST Counter root mounted underneath a layout
  * that imports the editorial stylesheets (`(mobile)/m/layout.tsx` loads
  * `editorial-tokens.css` and `editorial-mobile.css`, and still renders the
