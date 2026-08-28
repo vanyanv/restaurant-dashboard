@@ -986,7 +986,45 @@ export const PAGES: FidelityPage[] = [
   { protoId: "countnew", name: "Inventory", protoRoute: "/dashboard/operations/inventory/count/new", route: "/dashboard/operations/inventory/count/new", status: "editorial" },
   { protoId: "counts", name: "Inventory", protoRoute: "/dashboard/operations/inventory/counts", route: "/dashboard/operations/inventory/counts", status: "editorial" },
   { protoId: "countsession", name: "A count", protoRoute: "/dashboard/operations/inventory/counts/aug-14", route: "/dashboard/operations/inventory/counts/aug-14", status: "editorial" },
-  { protoId: "ingredients", name: "Ingredients", protoRoute: "/dashboard/ingredients", route: "/dashboard/ingredients", status: "editorial" },
+  {
+    protoId: "ingredients",
+    name: "Ingredients",
+    protoRoute: "/dashboard/ingredients",
+    route: "/dashboard/ingredients",
+    mobileRoute: "/m/ingredients",
+    report: true,
+    // MEASURED: 34 of the prototype's 34 on the desk, 9 of 9 on the phone,
+    // tally for tally with no allowance.
+    //
+    // Three sections changed subject, all argued in
+    // docs/counter/measurements/2026-08-28-ingredients.md:
+    //
+    //   - The first strip cell reads "▲ 8 this month" in the prototype. All 76
+    //     canonical ingredients were created between 19 April and 3 May, and
+    //     NONE in the thirty days since, while 39 invoices arrived. The
+    //     truthful delta is that the pipeline stopped.
+    //   - "Review inbox" is a list of AI proposals waiting on a decision.
+    //     Every one of this account's ten is already decided. What is actually
+    //     waiting is 24 unmatched invoice lines — and they are 11 products,
+    //     not 24: eight of them are one can liner under eight spellings. So it
+    //     shows clusters, because the work is one alias per product.
+    //   - "Needs review" leads with the gap that is 43x bigger than the
+    //     unmatched lines: 43 of 76 ingredients appear in NO recipe and carry
+    //     $36,589 of purchases, against $825 of unmatched lines.
+    //
+    // The price monitor is drawn as PERCENT CHANGE, not dollars. Its three
+    // biggest ingredients cost $4.39/lb, $118.71/cs and $28.00/cs; on one
+    // dollar axis the largest line in the account is a flat rule along the
+    // bottom. The prototype's fixture dodges this by picking three items that
+    // all cost between $2 and $5.
+    //
+    // The catalogue's 30d column reads the SAME weekly medians the chart is
+    // drawn from, so the two cannot disagree. Two single readings 30 days
+    // apart put fries at −40% where eight weekly medians put them at −13%,
+    // because "CS" covers two different case sizes.
+    status: "counter",
+    baseline: { desktop: 34, mobile: 9 },
+  },
   { protoId: "ingredient", name: "An ingredient", protoRoute: "/dashboard/ingredients/ground-beef-80-20", route: "/dashboard/ingredients/ground-beef-80-20", status: "editorial" },
   { protoId: "prices", name: "Ingredients", protoRoute: "/dashboard/ingredients/prices", route: "/dashboard/ingredients/prices", status: "editorial" },
   { protoId: "vendors", name: "Vendors", protoRoute: "/dashboard/operations/vendors", route: "/dashboard/operations/vendors", status: "editorial" },
