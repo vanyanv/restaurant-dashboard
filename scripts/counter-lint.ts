@@ -139,7 +139,12 @@
  *     ~19 remaining editorial pages live outside both `(counter)` groups, so
  *     this check structurally cannot reach them and needs no LEGACY
  *     exemption of its own.
- *   - Two routes are exempted BY NAME, not by pattern:
+ *   - `await Promise.all([..., getXSections(...)])` is NOT caught: the
+ *     pattern is line-oriented and looks for `await get\w*Sections(`, which a
+ *     loader called inside a `Promise.all` never produces. The desk menu-item
+ *     route does exactly this and is legitimately exempt anyway, so the hole
+ *     has not yet hidden a real violation — but it would.
+ *   - Routes are exempted BY NAME, not by pattern:
  *     `src/app/dashboard/(counter)/orders/[id]/page.tsx` and
  *     `src/app/(mobile)/m/(counter)/orders/[id]/page.tsx`. Ruling S-R5: all
  *     seven of their sections come from one `getOrderDetail` load, so seven
@@ -701,6 +706,18 @@ export const AWAITED_SECTIONS_ALLOWED = [
   join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "orders", "[id]", "page.tsx"),
   join(process.cwd(), "src", "app", "dashboard", "(counter)", "alerts", "page.tsx"),
   join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "alerts", "page.tsx"),
+  // The two menu-item detail routes, for the order-detail routes' reason:
+  // the page's own TITLE is the record's name, so the headline has to resolve
+  // before anything renders — both to fill the masthead without moving it and
+  // to decide the 404 for an item that never sold in the window.
+  //
+  // The DESK one is listed even though the pattern does not currently catch
+  // it: it calls the loader inside a `Promise.all([...])`, so no single line
+  // reads `await get*Sections(`. That is a hole in the pattern, not an
+  // exemption it earned, and listing the path here records the decision where
+  // the next reader will look for it rather than leaving it to chance.
+  join(process.cwd(), "src", "app", "dashboard", "(counter)", "menu", "catalog", "[item]", "page.tsx"),
+  join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "menu", "catalog", "[item]", "page.tsx"),
 ]
 
 /**
