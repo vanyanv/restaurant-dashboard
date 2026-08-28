@@ -112,8 +112,17 @@ const EMPTY_STORE = {
   rentPct: 0,
 }
 
+/**
+ * A rollup answer.
+ *
+ * `perPeriod` mirrors `combined`, once per period — which is what the real
+ * rollup produces for a fixture whose every period holds the same figures, and
+ * what the eight-weeks table now reads. Passing `periods` through from the
+ * call lets the fixture answer an eight-period request with eight entries, the
+ * way the real one does, instead of one.
+ */
 function rollup(over: Record<string, unknown> = {}) {
-  return {
+  const base = {
     storeCount: 2,
     combined: kpis(),
     perStore: [store("holly", "Hollywood"), store("gln", "Glendale", EMPTY_STORE)],
@@ -123,6 +132,19 @@ function rollup(over: Record<string, unknown> = {}) {
     ],
     ...over,
   }
+  return {
+    ...base,
+    perPeriod:
+      (over.perPeriod as unknown[]) ??
+      (base.periods as unknown[]).map(() => base.combined),
+  }
+}
+
+/** The default mock: answers with one perPeriod entry per period asked for. */
+function rollupFor(arg: { periods?: unknown[] }, over: Record<string, unknown> = {}) {
+  return arg.periods
+    ? rollup({ ...over, periods: arg.periods })
+    : rollup(over)
 }
 
 const HOLLY = {
@@ -164,7 +186,8 @@ const CHANNELS = [
 
 function happyPath() {
   vi.mocked(getStores).mockResolvedValue([HOLLY, GLENDALE] as never)
-  vi.mocked(getAllStoresPnL).mockResolvedValue(rollup() as never)
+  vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+    rollupFor(arg)) as never)
   vi.mocked(loadChannelMix).mockResolvedValue(CHANNELS as never)
   vi.mocked(loadStripTargets).mockResolvedValue(FOOD_TARGET as never)
 }
@@ -198,35 +221,37 @@ beforeEach(() => {
 /* ── The shape of the load ────────────────────────────────────────────── */
 
 describe("getPnlSections — the loads", () => {
-  it("loads the selected range once and each of the eight weeks once", async () => {
+  it("loads the selected range once and ALL eight weeks in one more call", async () => {
     await load()
-    // 1 selected + 8 weeks. No comparison was asked for, so no ninth window.
-    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(9)
+    // Was 9 — the selected range plus one rollup per week. The eight weeks are
+    // now a single call carrying eight explicit periods, which is the whole of
+    // what `loadWeekStatements` changed.
+    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(2)
   })
 
   it("adds exactly one more window when a comparison is chosen", async () => {
     await load({ comparisonId: "prev" })
-    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(10)
+    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(3)
   })
 
   it("asks each week for the bounds the page will use when that row is pressed", async () => {
     await load()
     const weeks = trailingWeeks(today, 8)
     const asked = vi.mocked(getAllStoresPnL).mock.calls.map((c) => c[0])
-    for (const w of weeks) {
+    // The promise a week row makes is that its figures are the figures the
+    // page shows when that row is pressed. That used to be kept by asking for
+    // each week's exact bounds in its own call; it is now kept by asking for
+    // them as explicit PERIODS in one call. Same promise, one round trip —
+    // and the bounds are still asserted, because a period whose boundaries
+    // drifted would label a row with one week and fill it with another.
+    const weeksCall = asked.find((a) => a.periods)
+    expect(weeksCall, "no call carried explicit week periods").toBeTruthy()
+    const periods = weeksCall!.periods!
+    expect(periods).toHaveLength(8)
+    for (const [i, w] of weeks.entries()) {
       const bounds = toQueryBounds({ start: w.start, end: w.end })
-      expect(
-        asked.some(
-          (a) =>
-            a.startDate.getTime() === bounds.startDate.getTime() &&
-            a.endDate.getTime() === bounds.endDate.getTime() &&
-            // A week is seven days or fewer, so the page reads it daily. The
-            // row's promise is that its figures are the page's figures, and
-            // that only holds if both loads ask the same question.
-            a.granularity === "daily",
-        ),
-        `no load for the week of ${w.start.toDateString()}`,
-      ).toBe(true)
+      expect(periods[i].startDate.getTime()).toBe(bounds.startDate.getTime())
+      expect(periods[i].endDate.getTime()).toBe(bounds.endDate.getTime())
     }
   })
 
@@ -234,7 +259,15 @@ describe("getPnlSections — the loads", () => {
     // A `weekday` window contains four occurrences and would derive "weekly"
     // from itself — a comparison of two different things.
     await load({ comparisonId: "weekday" })
-    for (const [arg] of vi.mocked(getAllStoresPnL).mock.calls) {
+    // Only the calls that let the rollup BUCKET for them. The eight-weeks call
+    // states its periods outright, so its `granularity` is ignored and saying
+    // anything about it here would be asserting a value nothing reads.
+    const inferred = vi
+      .mocked(getAllStoresPnL)
+      .mock.calls.map(([arg]) => arg)
+      .filter((arg) => !arg.periods)
+    expect(inferred.length).toBeGreaterThan(0)
+    for (const arg of inferred) {
       expect(arg.granularity).toBe("daily")
     }
   })
@@ -289,9 +322,11 @@ describe("prime cost", () => {
     // Zero labour over a range with sales is a store whose labour is neither
     // clocked nor budgeted. "0.0%" would be the same lie as a $0 commission.
     const noLabor = { ...kpis(), laborValue: 0, laborPct: 0 }
-    vi.mocked(getAllStoresPnL).mockResolvedValue(
-      rollup({ combined: noLabor, perStore: [{ ...store("holly", "Hollywood"), ...noLabor }] }) as never,
-    )
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+      rollupFor(arg, {
+        combined: noLabor,
+        perStore: [{ ...store("holly", "Hollywood"), ...noLabor }],
+      })) as never)
     const s = await load()
     expect(cellOf(s, "Prime cost")).toBeUndefined()
     expect(cellOf(s, "Labor")).toBeUndefined()
@@ -380,9 +415,9 @@ describe("absences", () => {
     // the strip must never inherit the week table's failure. The weeks are
     // their own `classify`, so this is the case that decides which of the two
     // a reader loses.
-    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date; periods?: unknown[] }) =>
       arg.startDate.getTime() === toQueryBounds(range).startDate.getTime()
-        ? rollup()
+        ? rollupFor(arg)
         : { error: "the weekly rollup timed out" }) as never)
 
     const s = await load()
@@ -407,15 +442,21 @@ describe("absences", () => {
     // A week with no labour posted has no labour rate. A 0 in the middle of a
     // sparkline draws a collapse that did not happen — the same lie as a
     // "0.0%" labour cell, one element over.
-    const weeks = trailingWeeks(today, 8)
-    const silent = toQueryBounds({ start: weeks[3].start, end: weeks[3].end }).startDate.getTime()
-    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
-      arg.startDate.getTime() === silent
-        ? rollup({
-            combined: kpis({ laborValue: 0, laborPct: 0 }),
-            perStore: [store("holly", "Hollywood", { laborValue: 0, laborPct: 0 })],
-          })
-        : rollup()) as never)
+    // ONE week is silent, the fourth. This used to be expressed by keying on
+    // the startDate of that week's own rollup call; the eight weeks are now a
+    // single call, so the silence lives at index 3 of `perPeriod` — which is
+    // the same fact stated where the real rollup states it.
+    const SILENT_WEEK = 3
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) => {
+      const base = rollupFor(arg)
+      if (!arg.periods) return base
+      return {
+        ...base,
+        perPeriod: (base.perPeriod as Array<Record<string, number>>).map((k, i) =>
+          i === SILENT_WEEK ? { ...k, laborValue: 0, laborPct: 0 } : k,
+        ),
+      }
+    }) as never)
 
     const s = await load()
     const labor = cellOf(s, "Labor")?.reference?.series
@@ -539,9 +580,9 @@ describe("the statement table", () => {
       cogsValue: COGS - 2_133.6,
       cogsPct: (COGS - 2_133.6) / GROSS,
     }
-    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date; periods?: unknown[] }) =>
       arg.startDate.getTime() === toQueryBounds({ start: new Date(2026, 7, 10), end: new Date(2026, 7, 16) }).startDate.getTime()
-        ? rollup({ combined: then, perStore: [{ ...store("holly", "Hollywood"), ...then }] })
+        ? rollupFor(arg, { combined: then, perStore: [{ ...store("holly", "Hollywood"), ...then }] })
         : rollup()) as never)
 
     const s = await load({ comparisonId: "prev" })
@@ -556,9 +597,9 @@ describe("the statement table", () => {
 
   it("prices a move in the dollars it is worth at this range's volume", async () => {
     const then = { ...kpis(), cogsValue: COGS - 1_524, cogsPct: (COGS - 1_524) / GROSS }
-    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date; periods?: unknown[] }) =>
       arg.startDate.getTime() === toQueryBounds({ start: new Date(2026, 7, 10), end: new Date(2026, 7, 16) }).startDate.getTime()
-        ? rollup({ combined: then, perStore: [{ ...store("holly", "Hollywood"), ...then }] })
+        ? rollupFor(arg, { combined: then, perStore: [{ ...store("holly", "Hollywood"), ...then }] })
         : rollup()) as never)
 
     const s = await load({ comparisonId: "prev" })
@@ -590,9 +631,9 @@ describe("the statement table", () => {
 
   it("divides the four-occurrence weekday window's money before comparing it", async () => {
     const four = { ...kpis(), grossSales: GROSS * 4, netAfterCommissions: (GROSS - COMMISSIONS) * 4 }
-    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date }) =>
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { startDate: Date; periods?: unknown[] }) =>
       arg.startDate.getTime() < range.start.getTime() - 7 * 86_400_000
-        ? rollup({ combined: four, perStore: [{ ...store("holly", "Hollywood"), ...four }] })
+        ? rollupFor(arg, { combined: four, perStore: [{ ...store("holly", "Hollywood"), ...four }] })
         : rollup()) as never)
 
     const s = await load({ comparisonId: "weekday" })
@@ -633,7 +674,8 @@ describe("empty is two different states (note 23)", () => {
   })
 
   it("is `pre_open` for a pre-open store selected out of a trading account", async () => {
-    vi.mocked(getAllStoresPnL).mockResolvedValue(rollup() as never)
+    vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) =>
+    rollupFor(arg)) as never)
     const s = await load({ storeId: "gln" })
     expect(s.headline.status).toBe("empty")
     if (s.headline.status === "empty") expect(s.headline.reason).toBe("pre_open")
@@ -667,9 +709,11 @@ describe("by store", () => {
 
   it("takes that list off the SAME rollup call, not a second one", async () => {
     await load({ storeId: "holly" })
-    // 1 selected + 8 weeks. A tenth call would be the second rollup this whole
-    // plan exists to prevent.
-    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(9)
+    // The point of this test is unchanged and is the whole plan: the by-store
+    // table must come off a call the page already made. What changed is how
+    // many that is — 1 selected + 1 for all eight weeks, where it used to be
+    // 1 + 8. A THIRD call here would be the second rollup this prevents.
+    expect(vi.mocked(getAllStoresPnL)).toHaveBeenCalledTimes(2)
   })
 
   it("gives a store that has not traded no figures at all, and says why", async () => {

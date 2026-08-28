@@ -6,6 +6,7 @@ import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/
 import {
   granularityFor,
   loadStatement,
+  loadWeekStatements,
   type Statement,
   type StoreStatement,
 } from "@/lib/counter/statement"
@@ -1063,23 +1064,29 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
   )
 
   /*
-   * One statement per week, and deliberately NOT one wide query bucketed
-   * weekly. Two reasons, and the second is the one that matters: the
-   * rollup's weekly buckets start on SUNDAY while `trailingWeeks` runs
-   * Monday to Sunday, so a bucketed read would label a row with one week and
-   * fill it with another; and each of these loads uses the same bounds and
-   * the same granularity the page will use when that row is PRESSED, which
-   * is the same 10-minute cache entry. The row's promise — "these are the
-   * figures you will see" — is then true by construction rather than by
-   * arithmetic that happens to agree.
+   * ONE query for all eight weeks, bucketed by the Monday boundaries this
+   * page uses.
+   *
+   * It was eight separate `loadStatement` calls — eight rollups, five Prisma
+   * queries each — and the reason given was real: the rollup's weekly buckets
+   * start on SUNDAY while `trailingWeeks` runs Monday to Sunday, so a
+   * bucketed read would label a row with one week and fill it with another.
+   *
+   * That was a property of `buildPeriods`, not of the rollup. It now accepts
+   * explicit `periods`, so this states the boundaries and nothing infers
+   * them. Each week's figures come from `perPeriod[i]`, which the rollup
+   * builds by indexing the very arrays it sums into `combined` — so a week
+   * here and the same week asked for alone are the same arithmetic on the
+   * same rows.
+   *
+   * The other half of the old reasoning — that each week's own call shared a
+   * cache entry with the drill-down when a row is pressed — is given up
+   * knowingly. Pressing a week now costs one rollup that eight page loads no
+   * longer pay for between them.
    */
-  const weeksP = classify(
-    () =>
-      Promise.all(
-        windows.map((w) => loadStatement({ range: { start: w.start, end: w.end }, storeId })),
-      ),
-    { retryAction: "retryWeeks" },
-  )
+  const weeksP = classify(() => loadWeekStatements(windows, storeId), {
+    retryAction: "retryWeeks",
+  })
 
   const targetsP = classify(() => loadStripTargets(storeId, accountId), {
     retryAction: "retryTargets",
