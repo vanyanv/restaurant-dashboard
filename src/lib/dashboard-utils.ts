@@ -96,7 +96,22 @@ export function resolveRangeDates(
 
 /** Get "today" as a YYYY-MM-DD string in LA timezone (works correctly on Vercel/UTC servers). */
 export function todayInLA(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: LA_TZ })
+  return laDateOf(new Date())
+}
+
+/**
+ * The LA calendar date a given instant falls on, `yyyy-MM-dd`.
+ *
+ * Split out of `todayInLA` so a caller that already has a `now` — the chat's
+ * system prompt builder, whose `now` is injectable so the eval can freeze it —
+ * can name the business day without reaching for the wall clock itself.
+ *
+ * `toISOString().slice(0, 10)` is the trap this replaces: at 17:34 PDT on
+ * 27 August it returns `2026-08-28`, so anything using it to mean "today"
+ * names tomorrow for the last seven hours of every LA day.
+ */
+export function laDateOf(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: LA_TZ })
 }
 
 /** Get a Date for start-of-day of a given LA-local date (defaults to today in LA). */

@@ -1,8 +1,8 @@
 {
-  "called": [
-    "getHourlyTrend"
-  ],
+  "called": [],
   "model": "gpt-5-mini",
-  "pass": true,
-  "failures": []
+  "pass": false,
+  "failures": [
+    "answered without calling a tool; expected one of getHourlyTrend"
+  ]
 }

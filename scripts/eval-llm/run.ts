@@ -19,6 +19,7 @@
  */
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs"
+import { laDateOf } from "@/lib/dashboard-utils"
 import { join } from "node:path"
 
 import OpenAI from "openai"
@@ -427,7 +428,11 @@ async function main() {
 
   if (record) {
     const prints = promptFingerprints()
-    const today = new Date().toISOString().slice(0, 10)
+    // The LA business day, not a UTC slice. `toISOString().slice(0, 10)`
+    // stamps TOMORROW for the last seven hours of every LA day — this file
+    // recorded `2026-08-28` for a run made at 17:40 PDT on the 27th. Same
+    // defect that was live in the chat system prompt, found the same evening.
+    const today = laDateOf(new Date())
     const existing: Record<string, FingerprintRecord> = (() => {
       try {
         return JSON.parse(readFileSync(FINGERPRINTS_PATH, "utf8"))
