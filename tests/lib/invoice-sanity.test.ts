@@ -4,6 +4,7 @@ import {
   composeReviewReasons,
   findLineMathMismatches,
   findPackShapeAnomalies,
+  findEmptyExtraction,
   findTotalReconciliationMismatch,
   normalizeCatchWeightMeatLines,
   normalizeCountPackLines,
@@ -356,10 +357,10 @@ describe("normalizeCountPackLines", () => {
 })
 
 describe("findTotalReconciliationMismatch", () => {
-  const li = (lineNumber: number, extendedPrice: number) => ({
+  const li = (lineNumber: number, extendedPrice: number, productName?: string) => ({
     lineNumber,
     sku: null,
-    productName: `Line ${lineNumber}`,
+    productName: productName ?? `Line ${lineNumber}`,
     description: null,
     category: null,
     quantity: 1,
@@ -383,13 +384,65 @@ describe("findTotalReconciliationMismatch", () => {
     expect(result).toBeNull()
   })
 
-  it("passes when lines sum to totalAmount minus tax (fee row extracted as a line)", () => {
+  it("passes when a NAMED charge row is extracted as a line below the subtotal", () => {
+    // The IFS shape. "Fuel Charge" is one of the four names in
+    // @/lib/invoice-charges, so it comes off the goods side and the remaining
+    // $152.80 ties to the printed subtotal exactly.
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 100), li(2, 52.8), li(3, 7.75, "Fuel Charge")],
+        subtotal: 152.8,
+        taxAmount: 12.2,
+        totalAmount: 172.75,
+      })
+    )
+    expect(result).toBeNull()
+  })
+
+  it("flags an UNNAMED extra line of the same size, which the old rule let through", () => {
+    // Identical arithmetic to the test above with one word changed. The old
+    // rule passed a sum landing near any of {subtotal, total − tax, total},
+    // so $160.55 found `total − tax` and escaped. On this account that
+    // three-reference escape hatch let 223 of 226 invoices through and the
+    // rule flagged neither of the two worth $4,166 between them.
     const result = findTotalReconciliationMismatch(
       extraction({
         lineItems: [li(1, 100), li(2, 52.8), li(3, 7.75)],
         subtotal: 152.8,
         taxAmount: 12.2,
         totalAmount: 172.75,
+      })
+    )
+    expect(result).not.toBeNull()
+    expect(result!.closestReference).toBeCloseTo(152.8, 2)
+    expect(result!.gap).toBeCloseTo(7.75, 2)
+  })
+
+  it("flags the Premier Meats 2250793 shape: one credit line extracted twice", () => {
+    // A $2,691.45 credit memo for 623 lb of Creekstone beef whose single
+    // return line was stored twice. Anything reading lines rather than the
+    // header sees 1,246 lb returned. It sat MATCHED with no reason attached.
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, -2691.45), li(2, -2691.45)],
+        subtotal: -2691.45,
+        taxAmount: null,
+        totalAmount: -2691.45,
+        isReturn: true,
+      })
+    )
+    expect(result).not.toBeNull()
+    expect(result!.lineSum).toBeCloseTo(-5382.9, 2)
+    expect(result!.gap).toBeCloseTo(2691.45, 2)
+  })
+
+  it("falls back to total less tax only when the vendor prints no subtotal", () => {
+    const result = findTotalReconciliationMismatch(
+      extraction({
+        lineItems: [li(1, 152.8)],
+        subtotal: null,
+        taxAmount: 12.2,
+        totalAmount: 165,
       })
     )
     expect(result).toBeNull()
@@ -448,7 +501,7 @@ describe("findTotalReconciliationMismatch", () => {
     expect(result).toBeNull()
   })
 
-  it("skips invoices with no priced lines or a zero total", () => {
+  it("leaves the no-lines shape to findEmptyExtraction, which is a bigger defect", () => {
     expect(
       findTotalReconciliationMismatch(
         extraction({ lineItems: [], subtotal: null, taxAmount: null, totalAmount: 100 })
@@ -462,18 +515,88 @@ describe("findTotalReconciliationMismatch", () => {
   })
 })
 
+describe("findEmptyExtraction", () => {
+  const li = (lineNumber: number, extendedPrice: number | null, productName = `Line ${lineNumber}`) => ({
+    lineNumber,
+    sku: null,
+    productName,
+    description: null,
+    category: null,
+    quantity: 1,
+    unit: "CS",
+    packSize: null,
+    unitSize: null,
+    unitSizeUom: null,
+    unitPrice: extendedPrice ?? 0,
+    extendedPrice: extendedPrice as number,
+  })
+
+  it("flags the IFS G95788-00 shape: a header with no lines under it", () => {
+    // $1,474.06 of goods, zero lines stored, status MATCHED, no rule with an
+    // opinion — because the reconciliation check returned early on an empty
+    // line list. Every ingredient and price on that delivery is absent while
+    // the invoice total makes the books look complete.
+    const result = findEmptyExtraction(extraction({ lineItems: [], totalAmount: 1543.56 }))
+    expect(result).not.toBeNull()
+    expect(result!.storedLines).toBe(0)
+  })
+
+  it("flags an invoice whose only stored lines carry no readable price", () => {
+    const result = findEmptyExtraction(
+      extraction({ lineItems: [li(1, null), li(2, null)], totalAmount: 400 })
+    )
+    expect(result).not.toBeNull()
+    expect(result!.storedLines).toBe(2)
+  })
+
+  it("flags an invoice whose only stored lines are charge rows", () => {
+    // Surcharges alone are not a delivery. Nothing here reaches the catalogue.
+    const result = findEmptyExtraction(
+      extraction({
+        lineItems: [li(1, 7.75, "Fuel Charge"), li(2, 6.5, "Pallet Charge")],
+        totalAmount: 900,
+      })
+    )
+    expect(result).not.toBeNull()
+  })
+
+  it("passes an invoice with at least one priced goods line", () => {
+    expect(
+      findEmptyExtraction(extraction({ lineItems: [li(1, 50)], totalAmount: 50 }))
+    ).toBeNull()
+  })
+
+  it("ignores zero-total rows, which carry no claim to be missing anything", () => {
+    expect(findEmptyExtraction(extraction({ lineItems: [], totalAmount: 0 }))).toBeNull()
+  })
+})
+
 describe("composeReviewReasons", () => {
   const base = {
     dateSuspect: false,
     mathMismatches: [] as ReturnType<typeof findLineMathMismatches>,
     packAnomalies: [] as ReturnType<typeof findPackShapeAnomalies>,
     totalMismatch: null,
+    emptyExtraction: null,
     matchConfidence: 1,
     matched: true,
   }
 
   it("returns nothing for a clean, confidently matched invoice", () => {
     expect(composeReviewReasons(base)).toEqual([])
+  })
+
+  it("leads with no_lines, which subsumes every line-level reason under it", () => {
+    const reasons = composeReviewReasons({
+      ...base,
+      emptyExtraction: { totalAmount: 1543.56, storedLines: 0 },
+      matched: false,
+      matchConfidence: null,
+    })
+    expect(reasons[0].kind).toBe("no_lines")
+    expect(reasons[0].message).toContain("$1,543.56")
+    // A store-match reason would be noise next to "none of it arrived".
+    expect(reasons.map((r) => r.kind)).not.toContain("no_store_match")
   })
 
   it("carries line numbers on line-math reasons so rows can be flagged", () => {

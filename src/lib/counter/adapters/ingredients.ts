@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma"
+import { isNonIngredientRow } from "@/lib/invoice-charges"
+import { splitReach, type ReachSplit } from "@/lib/counter/ingredient-reach"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { shortLabels } from "@/lib/counter/short-labels"
@@ -34,20 +37,35 @@ import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter
  *
  * `RecipeMappingProposal` holds ten rows and every one is decided — three
  * accepted, seven rejected. There is no pending proposal to review. What IS
- * waiting is 24 unmatched invoice lines, and they are not 24 products: eight
- * of them are the same can liner under eight spellings. So "Review inbox"
- * shows the clusters rather than the lines, because the work is one alias per
- * cluster and not one decision per row.
+ * waiting is 24 unmatched invoice lines, and they are not 24 products. So
+ * "Review inbox" shows clusters rather than lines, because the work is one
+ * alias per cluster and not one decision per row.
  *
- * ## The biggest gap is not the unmatched lines
+ * The clusters are keyed on the vendor's part number, not on the words —
+ * `clusterKey` explains why, and it is a correction to what this page shipped
+ * saying. Seven of the eight can-liner spellings are IFS part 30819; the
+ * eighth is part 213232 and is a different liner.
+ *
+ * ## The biggest gap is not the unmatched lines, and it is not $36,589 either
  *
  * The 24 unmatched lines are worth $846. **43 of the 76 ingredients — 57% —
- * appear in no recipe at all, and they carry $36,589 of purchases**: foam
- * containers, fry shortening, mayonnaise, gloves. That food and packaging is
- * bought, costed, and flows into no plate, so every plate cost in this product
- * is understated by whatever share of it is genuinely food. It is 43× the
- * unmatched figure and it is the section the prototype gives to unmatched
- * lines.
+ * appear in no recipe at all, and they carry $36,589 of purchases.** Both
+ * true, and the second figure is the wrong one to put in front of an owner:
+ * $21,817 of it is foam containers, gloves and can liners, which are SUPPOSED
+ * to be outside plate cost, and −$1,302 of it is a fuel surcharge and a credit
+ * memo that are not ingredients at all.
+ *
+ * **What understates plate cost is $16,074 of food across 17 ingredients** —
+ * fry shortening $4,456, mayonnaise $3,562, lemonade syrup $2,138. That is
+ * still 19× the unmatched figure, it is still the section the prototype gives
+ * to unmatched lines, and unlike $36,589 it is a list somebody can work
+ * through. `src/lib/counter/ingredient-reach.ts` draws the line and both this
+ * page and COGS read it from there.
+ *
+ * Two of those 17 are the same product twice — "sysco classic mayonnaise
+ * banquet xhv duty" and "sys cls mayonnaise banquet xhv duty", "mustard
+ * packets 5.5gr" and "mustard packets 5.5 g". The catalogue has the same
+ * name-splitting problem as the invoice vendors and the menu's item names.
  */
 
 /** Rows drawn before a table stops. */
@@ -160,6 +178,8 @@ interface WeekPoint {
 interface UnmatchedRow {
   productName: string
   vendorName: string
+  /** The vendor's own part number, when the extractor read one. */
+  sku: string | null
   n: number
   spend: number
 }
@@ -182,7 +202,7 @@ interface IngredientData {
   weekly: WeekPoint[]
   unmatched: UnmatchedRow[]
   modifiers: ModRow[]
-  orphans: { n: number; spend: number; top: string[] }
+  orphans: ReachSplit
   categories: Array<{ name: string; items: number; costed: number; spend30: number }>
   today: Date
 }
@@ -275,12 +295,14 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
         AND li."unitPrice" > 0
         AND i."invoiceDate" >= DATE_TRUNC('week', ${today}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
       GROUP BY 1, 2 ORDER BY 2`,
-    prisma.$queryRaw<Array<{ product: string; vendor: string; n: number; spend: number }>>`
-      SELECT li."productName" AS product, i."vendorName" AS vendor,
+    prisma.$queryRaw<
+      Array<{ product: string; vendor: string; sku: string | null; n: number; spend: number }>
+    >`
+      SELECT li."productName" AS product, i."vendorName" AS vendor, li.sku AS sku,
              COUNT(*)::int AS n, SUM(li."extendedPrice")::float AS spend
       FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
       WHERE i."accountId" = ${accountId} AND li."canonicalIngredientId" IS NULL
-      GROUP BY 1, 2 ORDER BY 4 DESC`,
+      GROUP BY 1, 2, 3 ORDER BY 5 DESC`,
     storeIds.length === 0
       ? Promise.resolve([])
       : prisma.$queryRaw<
@@ -297,15 +319,17 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
           LEFT JOIN "Recipe" r ON r.id = m."recipeId"
           WHERE o."storeId" = ANY(${storeIds}) AND o."referenceTimeLocal" >= ${d30}
           GROUP BY 1 ORDER BY 2 DESC LIMIT 40`,
-    prisma.$queryRaw<Array<{ name: string; spend: number }>>`
-      SELECT ci.name, COALESCE(SUM(li."extendedPrice"), 0)::float AS spend
+    prisma.$queryRaw<
+      Array<{ id: string; name: string; category: string | null; spend: number }>
+    >`
+      SELECT ci.id, ci.name, ci.category, COALESCE(SUM(li."extendedPrice"), 0)::float AS spend
       FROM "CanonicalIngredient" ci
       LEFT JOIN "InvoiceLineItem" li ON li."canonicalIngredientId" = ci.id
       WHERE ci."accountId" = ${accountId}
         AND NOT EXISTS (
           SELECT 1 FROM "RecipeIngredient" ri WHERE ri."canonicalIngredientId" = ci.id
         )
-      GROUP BY ci.id ORDER BY 2 DESC`,
+      GROUP BY ci.id ORDER BY 4 DESC`,
     prisma.$queryRaw<
       Array<{ category: string; items: number; costed: number; spend30: number }>
     >`
@@ -367,7 +391,8 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
     })),
     unmatched: unmatched.map((u) => ({
       productName: u.product,
-      vendorName: u.vendor,
+      vendorName: normalizeVendorName(u.vendor),
+      sku: u.sku,
       n: u.n,
       spend: u.spend,
     })),
@@ -378,11 +403,7 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       mapsTo: m.maps_to,
       cost: null,
     })),
-    orphans: {
-      n: orphanRows.length,
-      spend: orphanRows.reduce((t, o) => t + o.spend, 0),
-      top: orphanRows.slice(0, 3).map((o) => titleCase(o.name)),
-    },
+    orphans: splitReach(orphanRows),
     categories: categories.map((c) => ({
       name: c.category,
       items: c.items,
@@ -408,14 +429,36 @@ const moveText = (m: number | null) =>
 /**
  * A key that collapses spellings of the same product.
  *
- * Upper-cased, non-letters dropped, then the first three words kept. That is
- * enough to fuse `CAN LINER 40X46 1.5MIL BLK CORELESS`, `Can Liner Black
- * Coreless`, `CAN LINER CLR` and five more into one cluster, and it is
- * deliberately no more clever than that: this key decides what a HUMAN is
- * shown, never what gets written, so a cluster that is wrong costs a glance.
+ * **The vendor's own part number when there is one**, and only the first two
+ * words of the name when there is not.
+ *
+ * The name key came first and it was wrong in both directions. This account's
+ * eight can-liner spellings — `CAN LINER 40X46 1.5MIL BLK CORELESS`, `Can
+ * Liner Black Coreless`, `CAN LINER` and five more — are not eight products,
+ * and grouping them on "CAN LINER" said so correctly. But it also swept in
+ * `CAN LINER CLR`, which is IFS part **213232** where the other seven are IFS
+ * **30819**: black coreless liners and clear liners, one word apart in the
+ * name and a different product in the stockroom. The page told the owner one
+ * alias would clear ten lines. One alias clears seven of them.
+ *
+ * That matters more than a miscount, because it reframes the work. Seven
+ * spellings under one part number are not a naming problem at all — they are
+ * one missing `IngredientSkuMatch` row for (Individual FoodService, 30819).
+ * The vendor has been telling us which product it is on every line; nothing
+ * was reading it.
+ *
+ * The name fallback stays for lines the extractor read no part number from,
+ * where a guess from the words is the only thing on offer. It is deliberately
+ * no cleverer than two words: this key decides what a HUMAN is shown, never
+ * what gets written, so a cluster that is wrong costs a glance.
  */
-function clusterKey(name: string): string {
-  return name
+function clusterKey(row: { productName: string; vendorName: string; sku: string | null }): string {
+  const sku = row.sku?.trim()
+  // Scoped by vendor: part numbers are a vendor's private namespace, and two
+  // suppliers both numbering something 30819 is not a coincidence worth
+  // merging on.
+  if (sku) return `${row.vendorName.toUpperCase()}\u0000${sku.toUpperCase()}`
+  return row.productName
     .toUpperCase()
     .replace(/[^A-Z ]/g, " ")
     .split(/\s+/)
@@ -431,10 +474,16 @@ function headlineOf(d: IngredientData): IngredientHeadline {
   const unmatchedLines = d.unmatched.reduce((t, u) => t + u.n, 0)
   const unmatchedSpend = d.unmatched.reduce((t, u) => t + u.spend, 0)
 
+  // The FOOD, not the total. 43 items and $36,589 is the true headline of the
+  // whole gap, and it is the wrong number for a cell that has one line to say
+  // what it costs the reader: over half of it is foam containers and gloves,
+  // which are supposed to be outside plate cost. What understates a plate is
+  // the 17 food items and $16,074, and that is what this cell counts. The
+  // queue item below states all three.
   const orphanCell: FigureProps = {
-    label: "In no recipe",
-    value: count(d.orphans.n),
-    delta: `${money(d.orphans.spend)} bought`,
+    label: "Food in no recipe",
+    value: count(d.orphans.food.n),
+    delta: `${money(d.orphans.food.spend)} bought`,
     deltaTone: "is-down",
   }
   const unmatchedCell: FigureProps = {
@@ -579,7 +628,7 @@ function catalogueOf(d: IngredientData): IngredientCatalogue {
 function inboxOf(d: IngredientData): IngredientInbox {
   const groups = new Map<string, UnmatchedRow[]>()
   for (const u of d.unmatched) {
-    const k = clusterKey(u.productName)
+    const k = clusterKey(u)
     groups.set(k, [...(groups.get(k) ?? []), u])
   }
 
@@ -588,6 +637,7 @@ function inboxOf(d: IngredientData): IngredientInbox {
       const spend = rows.reduce((t, r) => t + r.spend, 0)
       const lines = rows.reduce((t, r) => t + r.n, 0)
       const vendors = new Set(rows.map((r) => r.vendorName))
+      const skus = new Set(rows.map((r) => r.sku?.trim()).filter(Boolean) as string[])
       // The longest spelling, because it is the one carrying the size and the
       // material — "CAN LINER" alone would name the cluster after its least
       // useful member.
@@ -600,16 +650,29 @@ function inboxOf(d: IngredientData): IngredientInbox {
         // line ellipsises at about thirty characters, and the money is what
         // ranks the row — put it last and the reader sees "8 spellings · 10
         // lines …" and nothing that says whether it matters.
+        // Money, then the PART NUMBER, then the counts. This line ellipsises
+        // at about thirty characters in the prototype's three-column split,
+        // so the order is the priority: the money ranks the row and the part
+        // number is the thing the owner types into the alias. Both were below
+        // the cut when the part number went last, which made adding it
+        // pointless.
         sub:
           `${money(spend, { cents: true })} · ` +
+          (skus.size === 1 ? `part ${[...skus][0]} · ` : "") +
           `${count(rows.length)} ${rows.length === 1 ? "spelling" : "spellings"} · ` +
           `${count(lines)} ${lines === 1 ? "line" : "lines"} · ` +
           [...vendors].join(", "),
         agreement: rows.length,
-        // How many spellings agree is how confident a cluster is: one line
-        // seen once might be anything; eight spellings of the same words are
-        // unambiguously one product.
-        tone: (rows.length >= 4 ? "good" : rows.length >= 2 ? "warn" : "bad") as InboxCluster["tone"],
+        // A cluster keyed on the vendor's own part number is certain, however
+        // many spellings it has: the vendor said so. Only the name-keyed
+        // fallback has to earn confidence from agreement between spellings.
+        tone: (skus.size === 1
+          ? "good"
+          : rows.length >= 4
+            ? "good"
+            : rows.length >= 2
+              ? "warn"
+              : "bad") as InboxCluster["tone"],
         spend,
       }
     })
@@ -625,9 +688,12 @@ function inboxOf(d: IngredientData): IngredientInbox {
     // these, and they are clusters rather than lines because the work is one
     // alias per product, not one decision per row.
     note:
-      `Grouped by the first two words, so the eight spellings of one can liner are one row ` +
-      `rather than eight. Nothing here has been written: the auto-matcher runs in shadow mode ` +
-      `and every proposal it has ever made — all ten — has already been decided by hand.`,
+      `Grouped by the vendor's own part number where the line carries one, and by the first two ` +
+      `words where it does not. Seven spellings of "can liner" are IFS part 30819 and collapse to ` +
+      `one row; the eighth is part 213232, a clear liner rather than a black one, and stays its ` +
+      `own row. ` +
+      `Nothing here has been written: the auto-matcher runs in shadow mode and every proposal it ` +
+      `has ever made — all ten — has already been decided by hand.`,
   }
 }
 
@@ -654,18 +720,28 @@ function modifiersOf(d: IngredientData): IngredientModifiers {
 
 function workOf(d: IngredientData): IngredientWork {
   const biggest = [...d.unmatched].sort((a, b) => b.spend - a.spend)
-  const clusters = new Set(d.unmatched.map((u) => clusterKey(u.productName)))
+  const clusters = new Set(d.unmatched.map((u) => clusterKey(u)))
   const items: QueueItem[] = [
     {
       key: "orphans",
       tone: "bad",
-      lead: count(d.orphans.n),
+      lead: count(d.orphans.food.n),
       unit: "items",
-      title: "Bought, and in no recipe",
+      title: "Food bought, and in no recipe",
+      // Three figures, because there are three and only one of them is work.
+      // This section used to print $36,589 and the sentence "some of that is
+      // genuinely not food" — true, and unactionable: it left the owner to
+      // guess which share, and the honest answer turned out to be under half.
       body:
-        `${money(d.orphans.spend)} of purchases sits against ingredients that appear in no ` +
-        `recipe — ${d.orphans.top.join(", ")} lead it. Some of that is genuinely not food, and ` +
-        `some of it is: every plate cost in this product is understated by whatever share is.`,
+        `${money(d.orphans.food.spend)} of food sits against ingredients that appear in no recipe — ` +
+        `${d.orphans.food.top.slice(0, 3).map((r) => titleCase(r.name)).join(", ")} lead it. ` +
+        `Every plate cost in this product is understated by some part of that. ` +
+        `A further ${money(d.orphans.supplies.spend)} across ${count(d.orphans.supplies.n)} items ` +
+        `is packaging and cleaning, which belongs outside plate cost` +
+        (d.orphans.artifacts.n > 0
+          ? `, and ${count(d.orphans.artifacts.n)} more are not ingredients at all — a delivery ` +
+            `surcharge and a credit memo the extractor filed into the catalogue.`
+          : "."),
       act: "See what it cost",
       href: "/dashboard/cogs",
     },

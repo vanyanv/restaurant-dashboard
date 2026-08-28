@@ -1,6 +1,7 @@
 // Sanity checks applied to OpenAI-extracted invoice data before persistence.
 
 import type { InvoiceExtraction } from "@/types/invoice"
+import { goodsLines, goodsSum } from "@/lib/invoice-charges"
 
 export const PAST_DATE_TOLERANCE_DAYS = 60
 export const FUTURE_DATE_TOLERANCE_DAYS = 30
@@ -110,26 +111,54 @@ export const TOTAL_RECONCILIATION_TOLERANCE = 0.02
 export const TOTAL_RECONCILIATION_MIN_GAP_DOLLARS = 1
 
 export interface TotalReconciliationMismatch {
-  /** Sum of every finite line extendedPrice. */
+  /** Sum of every finite line extendedPrice, charge rows excluded. */
   lineSum: number
   subtotal: number | null
   taxAmount: number | null
   totalAmount: number
-  /** The printed reference the lineSum came closest to. */
+  /** The printed reference the lineSum was measured against. */
   closestReference: number
   /** |lineSum − closestReference|. */
   gap: number
   tolerance: number
+  /**
+   * How many priced goods lines the sum was taken over. Zero means the
+   * extraction produced a header and nothing under it.
+   */
+  goodsLineCount: number
 }
 
 /**
  * Cross-check the extracted line items against the invoice's own printed
- * totals. Vendors differ on whether fee rows (fuel surcharge, pallet charge)
- * are printed as line items and whether the subtotal includes them, so the
- * line sum passes if it lands near ANY of: subtotal, totalAmount − tax, or
- * totalAmount. A sum that matches none of them means lines were dropped,
- * duplicated, or had quantities corrupted — the extraction can't be trusted
- * even when each surviving line looks internally consistent.
+ * totals.
+ *
+ * Two things about this are load-bearing, and both were wrong before
+ * 2026-08-28.
+ *
+ * **1. Charge rows come off the goods side, and then the subtotal is the
+ * reference.** Individual FoodService prints pallet and fuel charges below
+ * the subtotal rule and the extractor reads them as products. Excluding
+ * exactly the four names in `@/lib/invoice-charges` takes this account from
+ * 173 of 226 reconciling to 219 — see that module for why the set is exact
+ * names and not a regex.
+ *
+ * **2. It compares against ONE reference, not the closest of three.** The
+ * previous version passed a line sum that landed near ANY of {subtotal,
+ * total − tax, total}, which is three chances to look right. On this account
+ * that let 223 of 226 through and the rule flagged 2 invoices — including
+ * neither of the two worth $4,166 between them. With charges excluded the
+ * subtotal is the correct and only reference, and `total − tax` is the
+ * fallback for invoices that print no subtotal at all.
+ *
+ * A sum that misses it means lines were dropped, duplicated, or had
+ * quantities corrupted — the extraction can't be trusted even when each
+ * surviving line looks internally consistent.
+ *
+ * Returns null when the invoice has no priced goods lines at all. That is NOT
+ * a pass: it is a different and larger defect, and `findEmptyExtraction`
+ * reports it. Reconciling a header against nothing would only ever produce a
+ * gap equal to the whole invoice, which reads as an arithmetic error rather
+ * than as the missing-lines problem it is.
  */
 export function findTotalReconciliationMismatch(
   extraction: Pick<
@@ -140,27 +169,18 @@ export function findTotalReconciliationMismatch(
   const totalAmount = Number(extraction.totalAmount)
   if (!Number.isFinite(totalAmount) || Math.abs(totalAmount) < 0.01) return null
 
-  const pricedLines = extraction.lineItems.filter((li) =>
-    Number.isFinite(Number(li.extendedPrice))
-  )
-  if (pricedLines.length === 0) return null
-  const lineSum = pricedLines.reduce((sum, li) => sum + Number(li.extendedPrice), 0)
+  const priced = goodsLines(extraction.lineItems)
+  if (priced.length === 0) return null
+  const lineSum = goodsSum(extraction.lineItems)
 
   const subtotal = extraction.subtotal != null ? Number(extraction.subtotal) : null
   const taxAmount = extraction.taxAmount != null ? Number(extraction.taxAmount) : null
 
-  const references: number[] = [totalAmount, totalAmount - (taxAmount ?? 0)]
-  if (subtotal != null && Number.isFinite(subtotal)) references.push(subtotal)
-
-  let closestReference = references[0]
-  let gap = Math.abs(lineSum - references[0])
-  for (const ref of references) {
-    const refGap = Math.abs(lineSum - ref)
-    if (refGap < gap) {
-      gap = refGap
-      closestReference = ref
-    }
-  }
+  // The subtotal is what the goods side is supposed to add up to. Only when a
+  // vendor prints none do we fall back to backing tax out of the total.
+  const closestReference =
+    subtotal != null && Number.isFinite(subtotal) ? subtotal : totalAmount - (taxAmount ?? 0)
+  const gap = Math.abs(lineSum - closestReference)
 
   const tolerance = Math.max(
     TOTAL_RECONCILIATION_MIN_GAP_DOLLARS,
@@ -168,7 +188,42 @@ export function findTotalReconciliationMismatch(
   )
   if (gap <= tolerance) return null
 
-  return { lineSum, subtotal, taxAmount, totalAmount, closestReference, gap, tolerance }
+  return {
+    lineSum,
+    subtotal,
+    taxAmount,
+    totalAmount,
+    closestReference,
+    gap,
+    tolerance,
+    goodsLineCount: priced.length,
+  }
+}
+
+export interface EmptyExtraction {
+  totalAmount: number
+  /** Rows stored against the invoice, including unpriced and charge rows. */
+  storedLines: number
+}
+
+/**
+ * An invoice that carries a total but no priced goods lines.
+ *
+ * This used to be the first `return null` inside the reconciliation check,
+ * which meant the single worst extraction outcome — a header with nothing
+ * under it — was the one shape that could never be flagged. IFS G95788-00 sat
+ * MATCHED with $1,474.06 of goods and zero lines, and no rule had an opinion
+ * about it: every ingredient, every price and every quantity on that delivery
+ * is simply absent from the account, and the invoice total makes the books
+ * look complete.
+ */
+export function findEmptyExtraction(
+  extraction: Pick<InvoiceExtraction, "lineItems" | "totalAmount">
+): EmptyExtraction | null {
+  const totalAmount = Number(extraction.totalAmount)
+  if (!Number.isFinite(totalAmount) || Math.abs(totalAmount) < 0.01) return null
+  if (goodsLines(extraction.lineItems).length > 0) return null
+  return { totalAmount, storedLines: extraction.lineItems.length }
 }
 
 // ─── Review reasons ───
@@ -185,6 +240,7 @@ export interface ReviewReason {
     | "line_math"
     | "pack_shape"
     | "total_reconciliation"
+    | "no_lines"
     | "low_match_confidence"
     | "no_store_match"
     | "unknown"
@@ -202,11 +258,35 @@ export function composeReviewReasons(input: {
   mathMismatches: LineMathMismatch[]
   packAnomalies: PackShapeAnomaly[]
   totalMismatch: TotalReconciliationMismatch | null
+  /**
+   * Optional, and only because of where it is called from. The sync route and
+   * the backfill both pass it and both must. The pre-Counter invoice detail
+   * page replays these rules at read time for rows that never had reasons
+   * stored, and it lives under a path whose lint exemption is keyed to its
+   * bytes being unchanged — editing it to add one argument would cost it the
+   * exemption and demand a full Counter rebuild of a page already slated for
+   * deletion. Omitting it there costs nothing real: every row that has this
+   * defect now carries the reason on the row itself, written by the backfill.
+   */
+  emptyExtraction?: EmptyExtraction | null
   /** Store auto-match confidence 0..1, or null when no store matched. */
   matchConfidence: number | null
   matched: boolean
 }): ReviewReason[] {
   const reasons: ReviewReason[] = []
+
+  // First, because it subsumes every line-level reason below: there are no
+  // lines to have anything wrong with.
+  if (input.emptyExtraction) {
+    const e = input.emptyExtraction
+    reasons.push({
+      kind: "no_lines",
+      message:
+        `The invoice totals ${fmt(e.totalAmount)} but extraction produced ` +
+        (e.storedLines === 0 ? "no line items at all" : `${e.storedLines} line(s) with no readable price`) +
+        " — nothing on this delivery reached the ingredient catalogue. Re-run extraction against the PDF.",
+    })
+  }
 
   if (input.dateSuspect) {
     reasons.push({
@@ -242,9 +322,10 @@ export function composeReviewReasons(input: {
     reasons.push({
       kind: "total_reconciliation",
       message:
-        `The ${fmt(t.lineSum)} sum of extracted lines doesn't reconcile with the invoice's printed total ` +
-        `${fmt(t.closestReference)} (gap ${fmt(t.gap)}) — lines were likely dropped or corrupted during extraction. ` +
-        "Compare the line list against the PDF before approving.",
+        `The ${fmt(t.lineSum)} of goods on ${t.goodsLineCount} extracted line(s) doesn't reconcile with the ` +
+        `invoice's printed ${t.subtotal != null ? "subtotal" : "total less tax"} ${fmt(t.closestReference)} ` +
+        `(gap ${fmt(t.gap)}) — lines were likely dropped, duplicated, or had quantities corrupted during ` +
+        "extraction. Compare the line list against the PDF before approving.",
     })
   }
 
