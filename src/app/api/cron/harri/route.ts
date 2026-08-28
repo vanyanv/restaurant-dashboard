@@ -3,7 +3,7 @@ import { withCronAuth, parseJsonBody } from "@/lib/cron-auth"
 import { runHarriLaborSync } from "@/lib/harri-labor-sync"
 import { runHarriScheduleSync } from "@/lib/harri-schedule-sync"
 import { scheduleSyncWindow } from "@/lib/harri-schedule"
-import { bustTags } from "@/lib/cache/cached"
+import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
 
 // Raised from 60 when the schedule sync joined this route: it adds four
 // week-addressable gateway calls plus a transaction each, on top of the labor
@@ -65,7 +65,21 @@ export const POST = withCronAuth(
       }
 
       if (result.daysWritten > 0 || Number(schedule.shiftsWritten ?? 0) > 0) {
-        await bustTags(["harri", "pnl", "dash"])
+        /*
+         * The P&L half is busted by month rather than through the broad "pnl"
+         * tag — same reason as the hourly Otter route: this runs every four
+         * hours over a three-day labour window and used to evict every cached
+         * statement for every range.
+         *
+         * The union of BOTH windows, not just the labour one. The schedule
+         * sync writes forward rows, and although the rollup reads only
+         * `actualCost` today, a bust that is too narrow shows stale money
+         * while one that is too wide costs a refetch — so the wider union is
+         * the right side to err on.
+         */
+        const from = startDate < schedStart ? startDate : schedStart
+        const to = endDate > schedEnd ? endDate : schedEnd
+        await bustTags(["harri", "dash", ...monthTagsForRange(from, to)])
       }
       return NextResponse.json({ storeId, days, ...result, schedule })
     } catch (error) {

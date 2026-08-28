@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 
 /**
  * What the six figures in Overview's headline strip are judged against — and,
@@ -87,10 +87,9 @@ export async function loadStripTargets(
   storeId: string | null,
   accountId: string,
 ): Promise<StripTargets> {
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { targetCogsPct: true },
-  })
+  // Shared with every other loader on the page — see `@/lib/account-stores`.
+  // Same rows this used to select for itself, same account-scoping.
+  const stores = await getScopedStores(accountId, storeId)
 
   const foodPlan = agreedTarget(stores.map((s) => s.targetCogsPct))
 

@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { CHANNELS, type ChannelId } from "@/lib/counter/channels"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { getScopedStores } from "@/lib/account-stores"
 
 /**
  * Per-channel net, orders, commission and average ticket for a range.
@@ -142,16 +143,12 @@ export async function loadChannelMix(
   const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true, uberCommissionRate: true, doordashCommissionRate: true },
-  })
-  // A storeId that is not on this account resolves to no stores, not to the
-  // whole account.
+  // One `cache()`d store read per request, shared with every other loader on
+  // the page, instead of this function's own query — which the Overview's
+  // per-store fan-out used to repeat once per store. `getScopedStores` keeps
+  // the contract below exactly: a storeId that is not on this account
+  // resolves to no stores, not to the whole account.
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return []
 
   const ratesByStore = new Map<string, StoreRates>(stores.map((s) => [s.id, s]))

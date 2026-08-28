@@ -187,13 +187,33 @@ describe("loadChannelMix", () => {
   })
 
   it("scopes to the account, and to one store when one is selected", async () => {
+    // The store read moved to `@/lib/account-stores`, which is `cache()`d and
+    // shared with every other loader on a page — one query per request instead
+    // of this function's own, and of the Overview's per-store repeat of it.
+    // The two guarantees that were asserted here are unchanged and are both
+    // still asserted, at the new seam:
+    //
+    //   1. THE ACCOUNT BOUNDARY IS IN SQL. It never moved into JavaScript, and
+    //      must not: the query is what stops a stranger's store being read at
+    //      all. Only the narrowing to one store — which can just filter an
+    //      already-account-scoped set — happens in memory.
+    //   2. A selected store is the only one whose rates and rows are used.
     vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      store("s1"),
+      store("s2"),
+    ] as never)
+
     await loadChannelMix({ range, storeId: "s1", accountId })
 
-    expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toEqual({
-      where: { accountId, isActive: true, id: "s1" },
-      select: { id: true, uberCommissionRate: true, doordashCommissionRate: true },
+    expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toMatchObject({
+      where: { accountId, isActive: true },
     })
+
+    // The summary read is given s1 and only s1, though the account has two.
+    const sql = vi.mocked(prisma.$queryRaw).mock.calls[0][0] as { values: unknown[] }
+    expect(sql.values).toContain("s1")
+    expect(sql.values).not.toContain("s2")
   })
 
   it("returns nothing for a storeId that is not on the account", async () => {

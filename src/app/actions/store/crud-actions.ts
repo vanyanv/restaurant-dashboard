@@ -6,6 +6,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
+import { cache } from "react"
 
 const createStoreSchema = z.object({
   name: z.string().min(1, "Store name is required").max(100),
@@ -65,23 +66,47 @@ export async function createStore(formData: FormData) {
   }
 }
 
+/**
+ * `getStores`' body, `cache()`d so a request pays for it once.
+ *
+ * Measured on `/dashboard/pnl` with the Prisma query log: this ran THREE
+ * times in a single render, each time a whole-row `Store` scan with the
+ * identical `accountId = $1 AND isActive = $2` predicate — the page's loaders
+ * each call `getStores()` independently and none of them knew the others had.
+ *
+ * NOT EXPORTED, and not moved to `@/lib/account-stores` beside its narrow
+ * sibling. Two separate constraints pin it here:
+ *
+ *   1. This is a `"use server"` module, where every EXPORT must be an async
+ *      function. `cache()` returns a plain function, so exporting this
+ *      directly would break the directive's contract. A module-local const is
+ *      untouched by that rule, and `getStores` below stays the async export
+ *      its twenty-three call sites import by name.
+ *   2. It resolves a session, so it must not sit in `@/lib/account-stores` —
+ *      that module is imported by `loadStripTargets` and `loadChannelMix`,
+ *      both of which document that they must not pull `@/lib/auth` in at
+ *      module load. See the note in that file.
+ *
+ * Whole rows and `createdAt desc` are both unchanged and both load-bearing:
+ * `(editorial)/components/sections/ratings-section.tsx` sorts around that
+ * ordering by name, and the callers may read any column.
+ */
+const getStoresCached = cache(async () => {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return []
+
+  return prisma.store.findMany({
+    where: {
+      accountId: session.user.accountId,
+      isActive: true,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+})
+
 export async function getStores() {
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return []
-    }
-
-    const stores = await prisma.store.findMany({
-      where: {
-        accountId: session.user.accountId,
-        isActive: true,
-      },
-      orderBy: { createdAt: "desc" },
-    })
-
-    return stores
+    return await getStoresCached()
   } catch (error) {
     console.error("Get stores error:", error)
     return []
