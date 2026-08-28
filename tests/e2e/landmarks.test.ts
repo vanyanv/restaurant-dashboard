@@ -408,9 +408,11 @@ describe("every gated page carries a floor and a written reason for each absence
       "order",
       "analytics",
       "pnl",
+      "cogs",
       "labor",
       "analyticsstore",
       "laborstore",
+      "cogsstore",
     ])
   })
 

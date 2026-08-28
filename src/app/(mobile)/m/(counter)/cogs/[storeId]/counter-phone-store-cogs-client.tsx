@@ -3,7 +3,6 @@
 import { useMemo } from "react"
 import {
   Chart,
-  MList,
   MStrip,
   Section,
   useCounterTransition,
@@ -20,11 +19,17 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * One store's COGS, on a phone — `P.cogsstore.phone()`
  * (`docs/counter/counter-prototype.html:7780`).
  *
- * Three sections: the strip, the plan chart against this store's own target,
- * and what moved. The desk route's worst-margin table is not here, the same
- * way the group phone page carries neither the category ring nor the item
- * table — a four-column table of items and points is not readable at 340px,
- * and the prototype's own phone composition stops before it.
+ * TWO sections: the strip and the plan chart against this store's own target.
+ * That is where `P.cogsstore.phone()` stops — mtitle, msub, `mstrip`, one
+ * `sec`, and nothing after it.
+ *
+ * The first cut of this file carried "What moved" as a third section, copied
+ * from the group phone page's shape rather than read off this page's own
+ * prototype. The fidelity gate measured it immediately: **prototype 5
+ * landmarks, ours 9** — a `.sec`, its head, its body and an `.mlist`, four
+ * EXTRA, and an extra is never forgiven (ruling F-R8). The desk route keeps
+ * the movement table; this surface does not, the same way the group phone
+ * page carries neither the category ring nor the item table.
  *
  * ## Everything shown is the adapter's own phone payload
  *
@@ -95,15 +100,6 @@ export function CounterPhoneStoreCogsClient({
         pending={pending}
       >
         {(p) => <Chart {...p.phoneChart} fmt={PCT} />}
-      </Section>
-
-      <Section
-        title="What moved"
-        meta={(m) => m.meta}
-        data={sections.moved}
-        pending={pending}
-      >
-        {(m) => <MList rows={m.phoneRows} />}
       </Section>
     </>
   )

@@ -8,9 +8,9 @@ import { loading } from "@/lib/counter/section-data"
  *
  * Same construction and reason as `../loading.tsx`. Order and titles mirror
  * `counter-phone-store-cogs-client.tsx`: the store note and strip, the plan
- * chart against this store's own target, then what moved. Three entries, the
- * same shape the group phone page stops at — the category ring and the item
- * tables are desk-only.
+ * chart against this store's own target. TWO entries, which is where
+ * `P.cogsstore.phone()` stops — the movement table is desk-only on this route
+ * (see the client's own note on the four extra landmarks it cost).
  */
 export default function MobileStoreCogsLoading() {
   return (
@@ -19,9 +19,6 @@ export default function MobileStoreCogsLoading() {
         {() => null}
       </Section>
       <Section title="Against this store's target" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="What moved" data={loading()}>
         {() => null}
       </Section>
     </>
