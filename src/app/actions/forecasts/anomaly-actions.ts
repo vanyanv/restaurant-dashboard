@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { getCachedSession, resolveStoreContext } from "./_shared"
 import { anomalyHorizon } from "@/lib/anomaly-window"
+import { pageSize } from "@/lib/paging"
 
 export type AnomalyTarget = "REVENUE" | "MENU_ITEM" | "INGREDIENT" | "LABOR" | "REFUNDS"
 export type AnomalyMethod = "ZSCORE" | "ISOLATION_FOREST"
@@ -46,7 +47,7 @@ export async function getOpenAnomalies(input: {
   if (!resolved.ok) return resolved
   const { storeIds, storeName, storeIdOut, storeNameById } = resolved.ctx
 
-  const limit = input.limit ?? 20
+  const limit = pageSize(input.limit, 20)
   // Bounded to the relevance horizon — an anomaly from three months ago is not
   // "open", and fifty of them drown the ones that still matter.
   const events = await prisma.anomalyEvent.findMany({

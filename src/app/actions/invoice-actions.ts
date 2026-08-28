@@ -19,6 +19,7 @@ import type {
   InvoiceVendorRow,
 } from "@/types/invoice"
 import { logger } from "@/lib/logger"
+import { pageNumber, pageSize } from "@/lib/paging"
 
 function isoToStartOfDay(iso: string): Date {
   return new Date(`${iso}T00:00:00`)
@@ -165,9 +166,14 @@ export async function getInvoiceList(filters?: {
     vendor,
     startDate,
     endDate,
-    page = 1,
-    limit = 25,
+    page: rawPage,
+    limit: rawLimit,
   } = filters ?? {}
+
+  // Bounded: `take: limit` and `skip: (page - 1) * limit` below go straight
+  // to Prisma, and a server action's arguments are caller-supplied.
+  const limit = pageSize(rawLimit, 25)
+  const page = pageNumber(rawPage)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { accountId: session.user.accountId }
