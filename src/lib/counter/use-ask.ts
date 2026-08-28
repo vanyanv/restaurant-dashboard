@@ -7,6 +7,7 @@ import { returnForm, selectFiledReturn, type FiledReturn } from "@/lib/chat/retu
 import type { AskContext } from "./ask-context"
 import {
   askStateFor,
+  askSteps,
   proseFrom,
   toolNamesFrom,
   type AskState,
@@ -67,8 +68,10 @@ export function useAsk(): {
       }
     }
 
-    if (status === "submitted" || status === "streaming") return { status: "asking", question }
-
+    // The in-flight turn, found BEFORE the streaming check rather than after.
+    // It is the same message either way — the SDK appends parts to it as they
+    // arrive — and reading it while streaming is the entire point: those parts
+    // are the reading log the answer's loading state draws.
     let last: (typeof messages)[number] | undefined
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i]?.role === "assistant") {
@@ -76,11 +79,31 @@ export function useAsk(): {
         break
       }
     }
+    const parts = (last?.parts ?? []) as unknown as ReturnPart[]
+
+    /*
+     * WHY THIS CARRIES STEPS NOW.
+     *
+     * It used to return `{ status: "asking", question }` and nothing else, so
+     * `AskAnswerBody` had one static line — "Reading the numbers…" — to show
+     * for the whole turn. Measured end to end in a browser, that line sat
+     * unchanged for 32.8 of 33.8 seconds: the surface knew the model had
+     * called `getDailySales`, got its answer, and moved on to file the return,
+     * and said none of it.
+     *
+     * The prototype had already designed the alternative and the CSS was
+     * already ported — `.thinking` and `.tstep` in counter-components.css,
+     * under the comment "the loading state of an answer is the reading" —
+     * with no component emitting either. See `Thinking`.
+     */
+    if (status === "submitted" || status === "streaming") {
+      return { status: "asking", question, steps: askSteps(parts) }
+    }
+
     // `ready` with no assistant turn yet is the tick between `ask()` setting
     // the question and the SDK moving to `submitted`.
-    if (!last) return { status: "asking", question }
+    if (!last) return { status: "asking", question, steps: [] }
 
-    const parts = (last.parts ?? []) as unknown as ReturnPart[]
     const filed = selectFiledReturn(parts)
 
     return {

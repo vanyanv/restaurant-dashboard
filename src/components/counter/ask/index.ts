@@ -33,3 +33,14 @@ export { AskBar } from "./ask-bar"
 export { AskSheet } from "./ask-sheet"
 export { AskAnswerPane, AskAnswerBody } from "./ask-answer"
 export { AskComposer } from "./ask-composer"
+/*
+ * The reading log an answer shows while it is worked out.
+ *
+ * HERE RATHER THAN IN `surface/`, and that placement is load-bearing: it
+ * imports `TOOL_LABELS`, ~300 lines of label data, and the main barrel is
+ * imported by ~100 files. Exported from there it put that map into all 42
+ * Counter routes and pushed two phone routes back over budget — the same
+ * defect, one size down, that splitting this entry point out fixed in the
+ * first place. It belongs with the Ask code, which already loads the labels.
+ */
+export { Thinking } from "./thinking"
