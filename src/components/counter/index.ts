@@ -50,6 +50,9 @@ export { WeekPicker, type WeekDay } from "./surface/week-picker"
    not the same component — see its docblock (L-R15). */
 export { WeekStrip, type WeekStripDay } from "./surface/week-strip"
 export { Record, type RecordMark } from "./surface/record"
+/* The route-level failure, for an `error.tsx`. Reuses `Failed` so a route
+   failure and a section failure cannot look like two different things. */
+export { RouteFailed } from "./surface/route-failed"
 
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"

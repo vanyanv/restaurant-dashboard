@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs"
 import { Role } from "@/generated/prisma/client"
 import { recordLoginEvent } from "@/lib/monitoring/login-audit"
 import { extractFirstName, markSignIn, markSignOut } from "@/lib/welcome"
+import { logger } from "@/lib/logger"
 
 declare module "next-auth" {
   interface Session {
@@ -56,8 +57,6 @@ export const authOptions: NextAuthOptions = {
             return null
           }
 
-          await prisma.$connect()
-
           const user = await prisma.user.findUnique({
             where: {
               email: credentials.email
@@ -99,10 +98,30 @@ export const authOptions: NextAuthOptions = {
             accountId: user.accountId
           }
         } catch (error) {
+          /*
+           * A thrown error here is NOT a wrong password — `authorize` already
+           * returned null for that above. This is the database being
+           * unreachable, or bcrypt failing. Returning null still refuses the
+           * sign-in (correct), but swallowing it silently made an outage
+           * indistinguishable from a typo for whoever was reading the logs.
+           */
+          logger.error("[auth] credentials authorize failed", {
+            emailTried: email,
+            message: error instanceof Error ? error.message : String(error),
+          })
           return null
-        } finally {
-          await prisma.$disconnect()
         }
+        /*
+         * NO `$disconnect()` HERE, and no `$connect()` above.
+         *
+         * `prisma` is the process-wide singleton backed by a pg Pool. Vercel
+         * Fluid Compute reuses one instance across concurrent requests, so
+         * disconnecting at the end of a sign-in ended the pool for every OTHER
+         * request that instance was serving — a connection teardown and a cold
+         * reconnect on every login, successful or not, charged to unrelated
+         * work. Prisma connects lazily on first query and is meant to stay
+         * connected for the life of the instance.
+         */
       }
     })
   ],
