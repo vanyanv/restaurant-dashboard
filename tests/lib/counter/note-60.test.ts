@@ -132,7 +132,15 @@ const CHANNELS = [{ channel: "house", net: GROSS, orders: 6_000, commission: 0, 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getStores).mockResolvedValue([STORE_FILE] as never)
-  vi.mocked(getAllStoresPnL).mockResolvedValue(ROLLUP as never)
+  // Answers with one `perPeriod` entry per period asked for, each equal to
+  // `combined` — which is what the real rollup returns for a fixture whose
+  // every period holds the same figures, and is exactly the invariant this
+  // file exists to check: the eight week rows must print the headline's
+  // numbers, not numbers of their own.
+  vi.mocked(getAllStoresPnL).mockImplementation((async (arg: { periods?: unknown[] }) => {
+    const periods = arg.periods ?? ROLLUP.periods
+    return { ...ROLLUP, periods, perPeriod: periods.map(() => KPIS) }
+  }) as never)
   vi.mocked(loadChannelMix).mockResolvedValue(CHANNELS as never)
   vi.mocked(loadStripTargets).mockResolvedValue(TARGETS as never)
   // The Overview's other sections are not what this test is about; they only

@@ -2,7 +2,14 @@ import { getAllStoresPnL } from "@/app/actions/store/pnl-actions"
 import type { AllStoresPnLResult } from "@/app/actions/store/pnl-types"
 import type { Period, PnLRow } from "@/lib/pnl"
 import { primeCost, type PrimeCost } from "@/lib/counter/prime-cost"
-import { bucketFor, dayCount, toQueryBounds, type Bucket, type DateRange } from "@/lib/counter/date-range"
+import {
+  bucketFor,
+  dayCount,
+  toQueryBounds,
+  type Bucket,
+  type DateRange,
+  type WeekWindow,
+} from "@/lib/counter/date-range"
 
 /**
  * The statement, once.
@@ -297,4 +304,95 @@ export async function loadStatement(input: StatementInput): Promise<Statement> {
     rows: storeId === null ? result.consolidatedRows : selected[0].rows,
     periods: result.periods,
   }
+}
+
+/**
+ * ONE rollup call for N contiguous windows, instead of one call per window.
+ *
+ * ## What this replaces
+ *
+ * `getPnlSectionPromises` built the eight-week table by calling
+ * `loadStatement` once per week — eight rollups, each five Prisma queries.
+ * Its comment explained why it could not be one call: the rollup's weekly
+ * buckets start on SUNDAY while `trailingWeeks` runs Monday to Sunday, so a
+ * bucketed read would label a row with one week and fill it with another.
+ *
+ * That was true of `buildPeriods`, not of the rollup. `getAllStoresPnL` now
+ * takes explicit `periods`, so the caller states the Monday boundaries and
+ * nothing infers them — and the objection disappears rather than being worked
+ * around.
+ *
+ * ## Why the figures cannot drift from `loadStatement`'s
+ *
+ * Each window's lines come from `result.perPeriod[i]`, which the rollup builds
+ * by INDEXING the same per-period arrays it sums into `combined`. So a week
+ * here and the same week asked for on its own are the same arithmetic on the
+ * same rows, not two derivations that happen to agree. `linesFrom` is shared,
+ * so even the shaping is one function.
+ *
+ * `perStore` is deliberately EMPTY on these statements. The eight-week table
+ * reads only the headline columns, and a per-store split per week would mean
+ * carrying N x stores line sets to render nothing — the one thing this change
+ * exists to stop.
+ */
+export async function loadWeekStatements(
+  windows: WeekWindow[],
+  storeId: string | null,
+): Promise<Statement[]> {
+  if (windows.length === 0) return []
+
+  const result = await getAllStoresPnL({
+    startDate: toQueryBounds({ start: windows[0].start, end: windows[0].end }).startDate,
+    endDate: toQueryBounds({
+      start: windows[windows.length - 1].start,
+      end: windows[windows.length - 1].end,
+    }).endDate,
+    // Ignored for bucketing when `periods` is given; still part of the shape
+    // the rollup caches under.
+    granularity: "weekly",
+    periods: windows.map((w) => ({
+      label: w.start.toISOString().slice(0, 10),
+      startDate: toQueryBounds({ start: w.start, end: w.end }).startDate,
+      endDate: toQueryBounds({ start: w.start, end: w.end }).endDate,
+      days: w.days,
+      isPartial: w.partial,
+    })),
+  })
+  if ("error" in result) throw new Error(result.error)
+
+  const allStores = result.perStore.map(storeStatement)
+  const scoped =
+    storeId === null ? null : result.perStore.find((p) => p.storeId === storeId)
+
+  return windows.map((w, i) => {
+    const k = result.perPeriod[i]
+    /*
+     * A selected store that the rollup has no row for is the same
+     * `storeNotFound` case `loadStatement` reports, and for the same reason:
+     * silently widening to the account would answer a question nobody asked.
+     */
+    if (storeId !== null && !scoped) {
+      return {
+        ...NO_LINES,
+        days: w.days,
+        prime: primeFor(NO_LINES),
+        perStore: [],
+        allStores,
+        storeNotFound: true,
+        rows: [],
+        periods: result.periods,
+      }
+    }
+    const lines = linesFrom(k)
+    return {
+      ...lines,
+      days: w.days,
+      prime: primeFor(lines),
+      perStore: [],
+      allStores,
+      storeNotFound: false,
+      rows: [],
+      periods: result.periods,
+    }
+  })
 }

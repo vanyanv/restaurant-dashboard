@@ -486,6 +486,21 @@ export async function getAllStoresPnL(input: {
   startDate: Date
   endDate: Date
   granularity: Granularity
+  /**
+   * Bucket boundaries, supplied rather than inferred.
+   *
+   * `buildPeriods` derives buckets from `granularity`, and its weekly buckets
+   * start on SUNDAY. Counter's trailing-weeks table runs Monday to Sunday, so
+   * a caller wanting eight Monday weeks could not ask for them — it had to
+   * make eight separate rollup calls, one per week, which is where 8 of this
+   * page's 10 calls came from.
+   *
+   * When present this is used verbatim and `granularity` is ignored for
+   * bucketing. It still forms part of the cache key via the caller's own
+   * bounds, so two callers asking for different bucketings of the same range
+   * cannot collide.
+   */
+  periods?: Period[]
 }): Promise<AllStoresPnLResult> {
   const session = await getServerSession(authOptions)
   if (!session?.user) return { error: "Unauthorized" }
@@ -510,7 +525,8 @@ export async function getAllStoresPnL(input: {
   try {
     const stores = await pnlStoresCached(session.user.accountId)
 
-    const periods = buildPeriods(input.startDate, input.endDate, input.granularity)
+    const periods =
+      input.periods ?? buildPeriods(input.startDate, input.endDate, input.granularity)
     if (stores.length === 0 || periods.length === 0) {
       return {
         storeCount: 0,
@@ -529,6 +545,7 @@ export async function getAllStoresPnL(input: {
         },
         perStore: [],
         consolidatedRows: [],
+        perPeriod: [],
         periods,
       }
     }
@@ -617,6 +634,8 @@ export async function getAllStoresPnL(input: {
       harriByStore.set(r.storeId, arr)
     }
 
+    const perStoreComputed: Array<ReturnType<typeof computeStorePnL>> = []
+
     const perStore = stores.map((store) => {
       const storeSummaries = byStore.get(store.id) ?? []
       const bucketed = bucketSummariesByPeriod(storeSummaries, periods)
@@ -641,6 +660,7 @@ export async function getAllStoresPnL(input: {
         harriLaborByPeriod,
         customFixedExpenses: toCustomFixedExpenses(expensesByStore.get(store.id) ?? []),
       })
+      perStoreComputed.push(computed)
 
       const grossSales = sum(computed.totalSales)
       const netAfterCommissions = sum(computed.netAfterCommissions)
@@ -715,11 +735,51 @@ export async function getAllStoresPnL(input: {
       periods
     )
 
+    /*
+     * `combined`, per period. Same arithmetic as the block above, indexed
+     * instead of summed — deliberately NOT re-derived from `consolidatedRows`,
+     * which would mean mapping GL row codes back onto these fields and getting
+     * one wrong silently.
+     */
+    const perPeriod = periods.map((_p, i) => {
+      const at = (xs: number[][]) => sum(xs.map((v) => v[i] ?? 0))
+      const gross = at(perStoreComputed.map((c) => c.totalSales))
+      const cogs = at(perStoreComputed.map((c) => c.cogsValues))
+      const labor = at(perStoreComputed.map((c) => c.laborValues))
+      const rent = at(perStoreComputed.map((c) => c.rentValues))
+      const fixed =
+        labor +
+        rent +
+        at(perStoreComputed.map((c) => c.towelsValues)) +
+        at(perStoreComputed.map((c) => c.cleaningValues)) +
+        sum(
+          perStoreComputed.map((c) =>
+            sum(c.customFixedValues.map((row) => row[i] ?? 0)),
+          ),
+        )
+      const bottom = at(perStoreComputed.map((c) => c.bottomLine))
+      const r = (v: number) => (gross === 0 ? 0 : v / gross)
+      return {
+        grossSales: gross,
+        netAfterCommissions: at(perStoreComputed.map((c) => c.netAfterCommissions)),
+        fixedCosts: fixed,
+        bottomLine: bottom,
+        marginPct: gross === 0 ? 0 : bottom / gross,
+        cogsValue: cogs,
+        cogsPct: r(cogs),
+        laborValue: labor,
+        laborPct: r(labor),
+        rentValue: rent,
+        rentPct: r(rent),
+      }
+    })
+
     return {
       storeCount: stores.length,
       combined,
       perStore,
       consolidatedRows,
+      perPeriod,
       periods,
     }
   } catch (error) {
