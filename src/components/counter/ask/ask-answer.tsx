@@ -7,7 +7,7 @@ import { MStrip } from "@/components/counter/shell/m-strip"
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
-import { askAnswer, askFailure, askQuestion, type AskState } from "@/lib/counter/use-ask"
+import { askAnswer, askFailure, askQuestion, type AskState } from "@/lib/counter/ask-state"
 
 /**
  * The answer that fills `.cmdk__pane[data-cmdans]` — `askRender()` at line

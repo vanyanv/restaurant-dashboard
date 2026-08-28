@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  AskBar,
   Chart,
   ChannelRows,
   Dispatch,
@@ -28,6 +27,9 @@ import {
   type StoreCard,
   type SwitchableStore,
 } from "@/components/counter"
+import {
+  AskBar,
+} from "@/components/counter/ask"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
   bucketFor,

@@ -54,11 +54,21 @@ export { Record, type RecordMark } from "./surface/record"
    failure and a section failure cannot look like two different things. */
 export { RouteFailed } from "./surface/route-failed"
 
-export { AskSurface } from "./ask/ask-surface"
-export { AskBar } from "./ask/ask-bar"
-export { AskSheet } from "./ask/ask-sheet"
-export { AskAnswerPane, AskAnswerBody } from "./ask/ask-answer"
-export { AskComposer } from "./ask/ask-composer"
+/*
+ * The Ask surface is NOT re-exported here. It lives behind its own entry
+ * point, `@/components/counter/ask`.
+ *
+ * `ask-surface.tsx` reaches `@/lib/counter/use-ask`, which imports `useChat`
+ * from `@ai-sdk/react` and `DefaultChatTransport` from `ai`. A barrel is one
+ * module graph and this one is imported by ~100 files, so while those exports
+ * sat here every Counter route shipped the AI SDK for a component only three
+ * pages render. Measured before the split: `/m/alerts` and `/dashboard/alerts`
+ * within 2.6 KB of each other at ~344 KB gzipped, and every `/m/**` route
+ * ~1.8x its budget.
+ *
+ * The three pages that render one import from `@/components/counter/ask`;
+ * everything else gets ⌘K through `AppShell`, which loads it on demand.
+ */
 
 export { AppShell, EntryItem } from "./shell/app-shell"
 export { PhoneShell } from "./shell/phone-shell"

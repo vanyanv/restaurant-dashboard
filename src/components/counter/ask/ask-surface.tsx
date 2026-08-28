@@ -10,7 +10,7 @@ import { PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-range"
 import { NAV_ICONS } from "@/components/counter/shell/nav-icons"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { AskAnswerPane } from "@/components/counter/ask/ask-answer"
-import { askQuestion, type AskState } from "@/lib/counter/use-ask"
+import { askQuestion, type AskState } from "@/lib/counter/ask-state"
 import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
 
 /**

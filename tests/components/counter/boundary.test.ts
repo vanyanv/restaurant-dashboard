@@ -38,12 +38,32 @@ describe("the Counter public surface", () => {
   // rule so a second ask/*.tsx file (a results pane, a history list, ...)
   // fails this test the same way a forgotten surface/ or shell/ export
   // would, rather than silently working unexported.
-  it("re-exports every ask primitive, so a page imports from one place", () => {
-    const barrel = readFileSync(BARREL, "utf8")
+  // ask/ moved OUT of the main barrel and behind its own entry point,
+  // `@/components/counter/ask`. The completeness rule is unchanged in spirit
+  // — every ask/*.tsx must be reachable from a barrel rather than only by a
+  // deep path — it just points at the second barrel now.
+  //
+  // The split is a bundle boundary, not a taste one: ask-surface.tsx reaches
+  // `@ai-sdk/react` and `ai` through `@/lib/counter/use-ask`, and while these
+  // sat in the main barrel every one of the ~100 files that import it pulled
+  // the AI SDK into its route. `ask-mount.tsx` is exempt because it is the
+  // lazy wrapper AppShell loads via next/dynamic; exporting it from the
+  // barrel would let something import it eagerly and undo that.
+  it("re-exports every ask primitive from the ask entry point", () => {
+    const askBarrel = readFileSync(join(ASK, "index.ts"), "utf8")
     for (const f of readdirSync(ASK).filter((f) => f.endsWith(".tsx"))) {
       const name = f.replace(/\.tsx$/, "")
-      expect(barrel).toMatch(new RegExp(`from "\\./ask/${name}"`))
+      if (name === "ask-mount") continue
+      expect(askBarrel).toMatch(new RegExp(`from "\\./${name}"`))
     }
+  })
+
+  it("keeps the AI SDK out of the main barrel", () => {
+    // The regression this guards is invisible: re-adding an ask export here
+    // costs no test and no type error, and shows up only as ~40 KB on every
+    // Counter route.
+    const barrel = readFileSync(BARREL, "utf8")
+    expect(barrel).not.toMatch(/from "\.\/ask\//)
   })
 
   it("does NOT re-export the state components — they belong to surface/ alone", () => {
