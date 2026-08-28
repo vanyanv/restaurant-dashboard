@@ -11,6 +11,7 @@ import type { SyncState } from "./sync-chip"
 import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
 import { AskSurface } from "@/components/counter/ask/ask-surface"
+import { useAsk } from "@/lib/counter/use-ask"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { hasWindow, storeScopeHref } from "@/lib/counter/route-shape"
 import type { PresetId } from "@/lib/counter/date-range"
@@ -178,6 +179,23 @@ export function AppShell({
   const windowed = hasWindow(pathname)
   const onSelectPreset = useCallback((id: PresetId) => push({ presetId: id }), [push])
 
+  /*
+   * ASK LIVES HERE FOR THE SAME REASON THE PALETTE DOES.
+   *
+   * `AskSurface` has taken an `onSubmit` since it was written and nothing ever
+   * passed one, so ⌘K could jump to a page and change a store and could not
+   * ask the thing it is named after — with a full chat backend, 116 tools and
+   * a structured answer format sitting behind `POST /api/chat` the whole time.
+   *
+   * The hook is mounted in the LAYOUT, not in a page, for the reason the rest
+   * of this file exists: a page does not survive a sibling navigation and a
+   * layout does. An in-flight question that died because the reader clicked a
+   * rail item — while the palette itself stayed on screen — would be the same
+   * class of defect as the rebuilt-on-every-click rail this component was
+   * moved here to fix.
+   */
+  const { state: askState, ask, reset: resetAsk } = useAsk()
+
   return (
     // `minmax(0,1fr)`, never `1fr`: a bare `1fr` is `minmax(auto,1fr)`, whose
     // minimum is the track's MIN-CONTENT — so at 390px the content column
@@ -277,6 +295,9 @@ export function AppShell({
           presetId={windowed ? presetId : undefined}
           onSelectPreset={windowed ? onSelectPreset : undefined}
           suggestions={page.askSuggestions}
+          onSubmit={ask}
+          askState={askState}
+          onAskBack={resetAsk}
         />
       </div>
     </div>
