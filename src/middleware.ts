@@ -9,6 +9,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/analytics": "/m/analytics",
   "/dashboard/ask": "/m/ask",
   "/dashboard/chat": "/m/chat",
+  "/dashboard/cogs": "/m/cogs",
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
   "/dashboard/invoices": "/m/invoices",
@@ -25,12 +26,14 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu-profit": "/m/product-mix",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
-  // COGS and Stores had no mobile equivalent left after the mobile bloat
-  // deletion — leave those desktop paths unmapped (mobilePathFor returns null
-  // and the request stays on desktop). Analytics was in that list until it was
+  // Stores had no mobile equivalent left after the mobile bloat deletion —
+  // leave that desktop path unmapped (mobilePathFor returns null and the
+  // request stays on desktop). Analytics was in that list until it was
   // rebuilt on Counter with a phone surface of its own; it is mapped above,
   // and so is Ask, which was unmapped for the different reason that /m/ask did
-  // not exist until the Counter Ask page was built on both surfaces.
+  // not exist until the Counter Ask page was built on both surfaces. COGS was
+  // in that list too until this task gave it a phone route of its own — see
+  // the entry above.
   //
   // The list is NOT exhaustive of what is unmapped: /dashboard/admin/monitoring
   // has a phone page (/m/monitoring) and no entry here, so a phone lands on the
@@ -53,8 +56,9 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
 // prefix" match: several mobile pages (ingredients, menu, operations, ...)
 // are flat and have no `[id]`-style route at all, so blindly carrying over
 // a sub-path 404s. For those, mobilePathFor returns null and the request is
-// left on desktop. (COGS and Stores were deleted from mobile entirely — see
-// DESKTOP_TO_MOBILE above.)
+// left on desktop. (Stores was deleted from mobile entirely — see
+// DESKTOP_TO_MOBILE above. COGS has a mobile page now, but it is flat like
+// ingredients/menu/operations, so it is not listed here.)
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   ["/dashboard/analytics", "/m/analytics"],
   ["/dashboard/invoices", "/m/invoices"],
