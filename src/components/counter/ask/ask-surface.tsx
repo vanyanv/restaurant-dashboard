@@ -112,13 +112,39 @@ import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
  * DELIBERATE DIVERGENCES, EACH ONE RULED
  * ---------------------------------------------------------------------------
  *
- * 1. F-R10 — THE PRE-FILL. The prototype's suggestion rows call
- *    `askAnywhere(q)`, which renders an answer and DISCARDS whatever was in
- *    the input. Ours pre-fill the input instead: a question someone typed is
- *    not the palette's to throw away. Each suggestion carries `data-askabout`
- *    and no click handler of its own — the document-level delegation below
- *    (the same one `AskBar` and `Section`'s `.askmini` use) does the pre-fill,
- *    so there is one path in, not two.
+ * 1. F-R10 — THE PRE-FILL, BUT ONLY INSIDE THIS PALETTE. The prototype's
+ *    suggestion rows call `askAnywhere(q)`, which renders an answer and
+ *    DISCARDS whatever was in the input. A row rendered INSIDE this surface —
+ *    a suggestion under "Ask about {page}", or a follow-up chip in
+ *    `AskAnswerPane`'s own `.sugs` — still only pre-fills: the reader is
+ *    already looking at the input and gets to see and edit the question
+ *    before it goes anywhere.
+ *
+ *    Everything ELSE carrying `data-askabout` — `Section`'s `.askmini` and
+ *    `AskBar`'s opener and chips — lives out on the page, not in this
+ *    surface, and Task 2 made those SUBMIT on click: clicking a button
+ *    labelled "Ask about this" already is the decision, there is nothing left
+ *    to confirm in an input the reader never asked to see. The one delegated
+ *    `click` listener below tells the two apart with
+ *    `askEl.closest('[data-cmdk]')` — true for anything painted inside this
+ *    component's own portalled root, false for anything out on the page — and
+ *    only ever calls `openSurface` (pre-fill) for the former, `openSurface`
+ *    THEN `submit` for the latter. An empty carried question (`AskBar`'s bare
+ *    opener, `data-askabout=""`) has nothing to submit, so it only opens,
+ *    exactly as `⌘K` opening blank does.
+ *
+ *    No suggestion, chip or mini-button carries a click handler of its own —
+ *    the document-level delegation below is still the one path in.
+ *
+ *    A CLICK ARRIVING OVER A TYPED-BUT-UNSUBMITTED QUESTION: `openSurface`
+ *    has always reset the input on every open, including the plain `⌘K`
+ *    re-open — that predates this task. A `.askmini`/`AskBar` click reuses
+ *    that same reset, for the same reason: the palette that held the old
+ *    draft was already CLOSED (its scrim covers the whole screen while open,
+ *    so nothing under it is clickable), and closing an unsubmitted question
+ *    without sending it is already how this surface treats a draft as
+ *    abandoned. This task did not add a new way to lose a draft; it reused
+ *    the existing one.
  * 2. `.cmdk__pane[data-cmdans]` ARRIVED WITH THE THING THAT FILLS IT. This
  *    entry used to record its absence: the prototype's pane renders
  *    `askRender()`, a keyword-scored lookup over invented answers, and an
@@ -328,6 +354,12 @@ export function AskSurface({
     },
     [onSubmit, context, close, askState],
   )
+  // The document-level `click` listener below is mounted ONCE (see its own
+  // effect's empty-ish dep list) and would otherwise close over the `submit`
+  // from that first render forever — stale `context`/`onSubmit`/`askState`
+  // included. Same fix as `askBackRef` above, for the same reason.
+  const submitRef = useRef(submit)
+  submitRef.current = submit
 
   /* ---------------------------------------------------------------- rows */
 
@@ -490,7 +522,17 @@ export function AskSurface({
     function onClick(e: MouseEvent) {
       const target = e.target as HTMLElement | null
       const askEl = target?.closest("[data-askabout]")
-      if (askEl) openSurface(askEl.getAttribute("data-askabout") ?? "")
+      if (!askEl) return
+      const value = askEl.getAttribute("data-askabout") ?? ""
+      openSurface(value)
+      // Divergence 1, above: a row painted INSIDE this palette's own portalled
+      // root (a suggestion, or an `AskAnswerPane` follow-up chip) only
+      // pre-fills. Everything else carrying `data-askabout` — `.askmini`,
+      // `AskBar` — lives on the page and its click IS the ask, so it submits
+      // too, unless there is nothing to submit (the ask bar's bare opener
+      // carries `data-askabout=""`).
+      const fromThisPalette = askEl.closest("[data-cmdk]") !== null
+      if (!fromThisPalette && value.trim().length > 0) submitRef.current(value)
     }
     document.addEventListener("keydown", onKeyDown)
     document.addEventListener("click", onClick)

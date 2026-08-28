@@ -251,6 +251,16 @@ function SectionBody<T>({
   const asked = askAbout === true ? title : askAbout
   const question = asked ? asked.replace(/<[^>]+>/g, "") : null
 
+  // The button carries the QUESTION and nothing else — no store, no range.
+  // `AskSurface` derives both from the URL directly (`AppShell` reads
+  // `usePathname`/`useSearchParams` ONCE and passes them to
+  // `describeAskContext`), not from whatever window this section happened to
+  // render for. Today those always agree, because this page (like every
+  // Counter page) renders every one of its sections FROM that same URL. The
+  // day a section renders a different window than the URL says — a comparison
+  // range, a manual override — this button will ask about the wrong range and
+  // nothing here will fail to compile or lint to catch it.
+
   // `wrap` is where `.sec__body` is decided, once. In `bare` mode it never
   // wraps — there is no section body — but every state below is otherwise the
   // same markup it has always been.
