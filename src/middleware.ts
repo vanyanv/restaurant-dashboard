@@ -57,10 +57,10 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
 // are flat and have no `[id]`-style route at all, so blindly carrying over
 // a sub-path 404s. For those, mobilePathFor returns null and the request is
 // left on desktop. (Stores was deleted from mobile entirely — see
-// DESKTOP_TO_MOBILE above. COGS has a mobile page now, but it is flat like
-// ingredients/menu/operations, so it is not listed here.)
+// DESKTOP_TO_MOBILE above.)
 const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   ["/dashboard/analytics", "/m/analytics"],
+  ["/dashboard/cogs", "/m/cogs"],
   ["/dashboard/invoices", "/m/invoices"],
   ["/dashboard/labor", "/m/labor"],
   ["/dashboard/orders", "/m/orders"],
