@@ -772,7 +772,27 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "menu", name: "Menu profit", protoRoute: "/dashboard/menu-profit", route: "/dashboard/menu-profit", status: "editorial" },
+  {
+    protoId: "menu",
+    name: "Menu profit",
+    protoRoute: "/dashboard/menu-profit",
+    route: "/dashboard/menu-profit",
+    query: "?range=d30",
+    mobileRoute: "/m/menu-profit",
+    report: true,
+    // MEASURED. Desk: 21 of the prototype's 21, landmark for landmark, and no
+    // allowance of any kind — the honesty section changed its SUBJECT (partial
+    // cost, not unmapped items; see the adapter's docblock) but kept every
+    // landmark, its two buttons included. Phone: 9.
+    //
+    // The two dark-mode literals this page surfaced were both in the generated
+    // sheet and neither belonged to this page: `.mdot.PUZZLE`'s quadrant
+    // colour and the pressed `.qbtn .n` count. Repaired in
+    // `counter-repairs.css` against `--ct-quadrant-puzzle` and
+    // `--ct-ink-inverse-3`, because nothing had ever rendered either class.
+    status: "counter",
+    baseline: { desktop: 21, mobile: 9 },
+  },
   {
     protoId: "labor",
     name: "Labor",

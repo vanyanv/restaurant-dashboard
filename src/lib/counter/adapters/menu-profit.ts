@@ -15,7 +15,14 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, MatrixPoint, MListRow, QueueItem, Row } from "@/components/counter"
+import type { ChartSpec } from "@/lib/counter/chart-geometry"
+import type {
+  FigureProps,
+  MatrixPoint,
+  MListRow,
+  QueueItem,
+  Row,
+} from "@/components/counter"
 
 /**
  * Menu profit — `P.menu` (`docs/counter/counter-prototype.html:5441`).
@@ -74,6 +81,12 @@ export interface MenuProfitHeadline {
 
 export interface MatrixSection {
   points: MatrixPoint[]
+  /**
+   * The phone's degradation of the same section: four rows, one per quadrant,
+   * naming what is in it. `P.menu.phone()` draws exactly this — a scatter is
+   * not a reading at 340px, but the four groups are the whole point of it.
+   */
+  phoneRows: MListRow[]
   medianUnits: number
   medianMargin: number
   axisLabel: string
@@ -97,17 +110,28 @@ export interface CoverageBar {
   tone: string
 }
 
+export interface CoverageAction {
+  label: string
+  href: string
+  /** `.btn--primary` — one per row, the prototype's shape. */
+  primary?: boolean
+}
+
 export interface CoverageSection {
   /** The lead figure — the share that is NOT understated. */
   headline: string
   bars: CoverageBar[]
   callout: string
+  /** `.btnrow` — where the reader goes to close the gap. */
+  actions: CoverageAction[]
   meta: string
 }
 
 export interface LedgerSection {
   rows: Row[]
   phoneRows: MListRow[]
+  /** `P.menu.phone()`'s "Profit by item" — the top six by contribution. */
+  phoneChart: ChartSpec
   meta: string
   note: string
 }
@@ -128,6 +152,25 @@ export interface MenuProfitInput {
 
 const LEDGER_ROWS = 12
 const PHONE_ROWS = 5
+/**
+ * FOUR bars, where `P.menu.phone()` draws six.
+ *
+ * Its six fit because its fixture's item names are single short words
+ * ("Truffle", "Salmon"). This menu's are "Signature Double Patty & Cheese
+ * Slider (Chris' or Eddy's Way)". Six columns leave about fifty pixels of axis
+ * each — six monospace characters — at which every label is both unreadable
+ * and identical to its neighbour. Measured on the render at 390px: six touch,
+ * four do not.
+ */
+const PHONE_CHART_ROWS = 4
+/** Names shown per quadrant on the phone's group list before the "+N more". */
+const GROUP_NAMES = 3
+/**
+ * How wide a bar label may be. Six bars share 390px minus the card inset, so
+ * this is the budget at which two neighbouring labels stop touching — measured
+ * on the render, not guessed.
+ */
+const LABEL_CHARS = 9
 
 /** The prototype's own quadrant words, in the order its legend writes them. */
 const QUADRANT_WORD: Record<MenuEngineeringRow["quadrant"], string> = {
@@ -136,6 +179,14 @@ const QUADRANT_WORD: Record<MenuEngineeringRow["quadrant"], string> = {
   PUZZLE: "Puzzle",
   DOG: "Dog",
 }
+
+/** The order `P.menu.phone()` lists the groups in. */
+const QUADRANT_ORDER: MenuEngineeringRow["quadrant"][] = [
+  "STAR",
+  "PLOWHORSE",
+  "PUZZLE",
+  "DOG",
+]
 
 function headlineOf(
   data: MenuEngineeringData,
@@ -189,10 +240,16 @@ function headlineOf(
 }
 
 function matrixOf(data: MenuEngineeringData, days: number): MatrixSection {
+  // `itemName` is NOT unique: `getMenuEngineering` returns a row per item per
+  // category, and this menu sells seven items under two categories each (the
+  // POS emits some with a category and some without — see the Menu hub's own
+  // note). Keying a dot by name alone collided on all seven and React dropped
+  // half of them silently, which is a chart quietly missing points rather than
+  // an error anyone would see.
   const points: MatrixPoint[] = data.rows
     .filter((r) => r.marginPct !== null)
     .map((r) => ({
-      key: r.itemName,
+      key: `${r.itemName}::${r.category}`,
       label: r.itemName,
       units: r.soldQty,
       margin: r.marginPct as number,
@@ -207,6 +264,7 @@ function matrixOf(data: MenuEngineeringData, days: number): MatrixSection {
 
   return {
     points,
+    phoneRows: groupRowsOf(data),
     medianUnits: data.medianVelocity,
     medianMargin: data.medianUnitMargin,
     axisLabel: `Units sold, ${count(days)} days →`,
@@ -217,6 +275,92 @@ function matrixOf(data: MenuEngineeringData, days: number): MatrixSection {
       `because the medians are what define the four quadrants. Both axes scale to this menu's own ` +
       `range, so one runaway seller cannot flatten every other dot against the left edge.`,
   }
+}
+
+/**
+ * The four quadrants as a list, for the phone.
+ *
+ * The prototype joins EVERY item name in a group — its fixture has twelve
+ * items across four groups, so the longest line is three names. This menu has
+ * fifty-one and the Dogs alone are fifteen; that line would be a paragraph
+ * inside a list row. Three names and a count of the rest says the same thing
+ * in the space a phone row has.
+ */
+function groupRowsOf(data: MenuEngineeringData): MListRow[] {
+  return QUADRANT_ORDER.map((q) => {
+    const rows = data.rows.filter((r) => r.quadrant === q)
+    const named = rows.slice(0, GROUP_NAMES).map((r) => r.itemName)
+    const rest = rows.length - named.length
+    return {
+      key: q,
+      title: `${QUADRANT_WORD[q]}s`,
+      detail:
+        rows.length === 0
+          ? "none in this window"
+          : named.join(", ") + (rest > 0 ? ` +${count(rest)} more` : ""),
+      value: count(rows.length),
+    }
+  })
+}
+
+/**
+ * Short, DISTINCT bar labels.
+ *
+ * The prototype takes each name's first word cut to six characters. On this
+ * menu that collides immediately — the two biggest sellers are "Signature
+ * Double Patty & Cheese Slider" and "Signature Slider Fries & Drink Combo",
+ * both of which become "Signat".
+ *
+ * Growing the label a word at a time until it is unique does not fix it
+ * either, which is worth writing down because it is the obvious fix and it is
+ * wrong twice: it makes uniqueness a property of the FULL label while the
+ * reader only ever sees the truncated one ("Signature" and "Signature Slider"
+ * both cut back to "Signature…"), and where the first word does happen to
+ * differ it stops there, so "2 Slider Combo" and "1 Slider Combo" become "2"
+ * and "1" — unique, and meaningless.
+ *
+ * So: cut every name to the budget FIRST, then repair whatever still collides
+ * by dropping the words those names share at the front. Two names starting
+ * "Signature" lose it and become "Double Patt…" and "Slider Frie…", which is
+ * both distinct and readable. The shared prefix is the part carrying no
+ * information in that group by definition.
+ */
+function shortLabels(names: string[]): string[] {
+  const cut = (text: string) =>
+    text.length > LABEL_CHARS ? `${text.slice(0, LABEL_CHARS - 1)}\u2026` : text
+
+  const out = names.map(cut)
+
+  // A group is the set of positions sharing one truncated label. Only those
+  // need repairing; everything else is already distinct and stays untouched.
+  const groups = new Map<string, number[]>()
+  out.forEach((label, i) => groups.set(label, [...(groups.get(label) ?? []), i]))
+
+  for (const members of groups.values()) {
+    if (members.length < 2) continue
+    const words = members.map((i) => names[i].split(/\s+/))
+    let shared = 0
+    while (
+      words.every((w) => w.length > shared + 1) &&
+      words.every((w) => w[shared] === words[0][shared])
+    ) {
+      shared += 1
+    }
+    if (shared === 0) continue
+    members.forEach((i, n) => {
+      out[i] = cut(words[n].slice(shared).join(" "))
+    })
+  }
+
+  // Anything still identical after that (the same item under two categories)
+  // takes a prime rather than printing two bars a reader cannot tell apart.
+  const seen = new Set<string>()
+  return out.map((label) => {
+    let unique = label
+    while (seen.has(unique)) unique += "\u2032"
+    seen.add(unique)
+    return unique
+  })
 }
 
 /**
@@ -342,7 +486,14 @@ function coverageOf(data: MenuEngineeringData): CoverageSection {
         tone: "gp-2",
       },
       {
-        label: `Unmapped`,
+        // NOT "Unmapped". This bar is `unmappedRevenue + missingCostRevenue`
+        // and only the first of those is unmapped — $62 against $428 measured,
+        // where the $428 IS mapped to a recipe that priced nothing. Calling the
+        // pair "Unmapped" put a figure eight times the real one under that word,
+        // directly beside a meta line reading "99.8% mapped" — the section
+        // contradicting itself. What the two share is that neither carries any
+        // cost, which is what the callout already calls them.
+        label: `Not costed at all`,
         value: money(c.unmappedRevenue + c.missingCostRevenue),
         share: share(c.unmappedRevenue + c.missingCostRevenue),
         tone: "gp-1",
@@ -352,8 +503,19 @@ function coverageOf(data: MenuEngineeringData): CoverageSection {
       `${money(c.partialCostRevenue)} of revenue sits on recipes that walked but did not price ` +
       `every line, so those margins are OPTIMISTIC by whatever the missing lines cost. That is ` +
       `${pct(share(c.partialCostRevenue), { scaled: true })} of the menu, against ` +
-      `${money(c.unmappedRevenue + c.missingCostRevenue)} that is not costed at all. ` +
-      `The unmapped gap the header figure measures is the small one here.`,
+      `${money(c.unmappedRevenue + c.missingCostRevenue)} that carries no cost at all — ` +
+      `of which ${money(c.unmappedRevenue)} is genuinely unmapped, the gap the header ` +
+      `figure measures and the small one here.`,
+    // The prototype's two, aimed at this section's subject rather than its
+    // own: its primary is "Map the six", because unmapped items are its gap.
+    // Ours is the partial-cost one, and a recipe with an unpriced line is
+    // fixed in the same place — but the two buttons cannot name a count the
+    // way the prototype's does, because `MenuEngineeringCoverage` publishes
+    // four revenue figures and no item counts.
+    actions: [
+      { label: "Price the missing lines", href: "/dashboard/recipes", primary: true },
+      { label: "See which items", href: "/dashboard/menu/catalog" },
+    ],
     meta: `${pct(c.coveragePct, { scaled: true })} mapped · the gap is elsewhere`,
   }
 }
@@ -369,7 +531,7 @@ function ledgerOf(data: MenuEngineeringData): LedgerSection {
 
   return {
     rows: shown.map((r) => ({
-      key: r.itemName,
+      key: `${r.itemName}::${r.category}`,
       cells: {
         item: r.itemName,
         quadrant: QUADRANT_WORD[r.quadrant],
@@ -379,12 +541,32 @@ function ledgerOf(data: MenuEngineeringData): LedgerSection {
       },
     })),
     phoneRows: shown.slice(0, PHONE_ROWS).map((r) => ({
-      key: r.itemName,
+      key: `${r.itemName}::${r.category}`,
       title: r.itemName,
       detail: `${count(r.soldQty)} sold · ${QUADRANT_WORD[r.quadrant]}`,
       value: money(r.totalContribution),
       note: r.marginPct === null ? undefined : pct(r.marginPct, { scaled: true }),
     })),
+    phoneChart: (() => {
+      const top = ranked.slice(0, PHONE_CHART_ROWS)
+      return {
+        type: "bars",
+        h: 128,
+        zero: true,
+        labels: shortLabels(top.map((r) => r.itemName)),
+        series: [
+          {
+            name: "Contribution",
+            color: "var(--ink)",
+            data: top.map((r) => r.totalContribution),
+          },
+        ],
+        // No `fmt`: `Chart`'s default IS money, and passing a function
+        // through a section would put a non-serialisable value on a promise
+        // that crosses the RSC boundary.
+        alt: "Contribution by item",
+      } satisfies ChartSpec
+    })(),
     meta: `${count(shown.length)} of ${count(data.rows.length)} · by contribution`,
     note: LEDGER_COLUMNS_NOTE,
   }
