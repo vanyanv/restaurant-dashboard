@@ -142,10 +142,21 @@ async function main() {
 
   if (activeStores.length === 0) {
     if (storeIdFilter) {
-      console.error(
-        `No active Otter store found for storeId=${storeIdFilter}. Exiting.`,
+      // Two very different situations, and conflating them turned a deliberate
+      // skip into a red workflow: a storeId that matches nothing is a stale or
+      // mistyped shard and must fail loudly, while a storeId that matches a
+      // store we chose not to sync (inactive, or pre_open and therefore
+      // holding no upstream data) is the intended outcome and exits clean.
+      const known = otterStores.find((os) => os.storeId === storeIdFilter)
+      if (!known) {
+        console.error(`No Otter store mapping for storeId=${storeIdFilter}. Exiting.`)
+        process.exit(1)
+      }
+      console.log(
+        `${known.store.name} is ${known.store.isActive ? `${known.store.lifecycleStage} (never traded)` : "inactive"} — nothing to sync. Skipping.`,
       )
-      process.exit(1)
+      await prisma.$disconnect()
+      return
     }
     console.log("No active Otter stores found. Exiting.")
     await prisma.$disconnect()
