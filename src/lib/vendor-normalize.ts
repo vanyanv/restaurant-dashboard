@@ -2,6 +2,10 @@ const VENDOR_ALIASES: Record<string, string> = {
   "sysco": "Sysco",
   "us foods": "US Foods",
   "individual foodservice": "Individual FoodService",
+  // The same vendor's own abbreviation, from a different invoice template.
+  // Invoice numbering (I01054-00) and email subject format both match the
+  // spelled-out spelling; it is one legal entity under two renderings.
+  "ifs individual foodservice": "Individual FoodService",
   "restaurant depot": "Restaurant Depot",
   "performance food group": "Performance Food Group",
   "ben e. keith": "Ben E. Keith",
@@ -12,6 +16,11 @@ const VENDOR_ALIASES: Record<string, string> = {
   "vitco foodservice": "Vitco Foodservice",
   "vitco": "Vitco Foodservice",
   "premier meats": "Premier Meats & Crystal Bay",
+  // NOT here on purpose: "Premier Deli Services, Inc." ($3,031, one invoice,
+  // subject "Fw: Boar's Head 4/8/26 Invoices") and "Bear State Kitchen"
+  // ($3,398, one AR statement). Sharing a word with Premier Meats is not
+  // evidence of sharing a legal entity, and folding a distinct supplier into
+  // another vendor's total is a worse error than showing it separately.
 }
 
 export function normalizeVendorName(raw: string): string {

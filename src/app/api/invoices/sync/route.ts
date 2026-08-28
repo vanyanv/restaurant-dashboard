@@ -8,7 +8,7 @@ import { extractInvoiceData } from "@/lib/gemini-invoice"
 import { matchInvoiceToStore } from "@/lib/address-matcher"
 import type { InvoiceSyncProgressEvent } from "@/types/invoice"
 import { isCronRequest, rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
-import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, composeReviewReasons, type ReviewReason } from "@/lib/invoice-sanity"
+import { sanitizeInvoiceDate, findLineMathMismatches, findPackShapeAnomalies, findTotalReconciliationMismatch, findEmptyExtraction, composeReviewReasons, type ReviewReason } from "@/lib/invoice-sanity"
 import { applyPackShapePriors, buildPackShapePriors, type PackShapePrior } from "@/lib/invoice-pack-prior"
 import { putInvoicePdf, type InvoicePdfUpload } from "@/lib/blob"
 import { sendGraphMail } from "@/lib/graph-mail"
@@ -479,8 +479,27 @@ async function runSync(
       )
     }
 
+    // A header with no priced goods lines under it. Checked separately from
+    // the reconciliation above, which cannot see this shape: with nothing to
+    // sum it returned early and the invoice passed. IFS G95788-00 sat MATCHED
+    // that way with $1,474.06 of goods and not one line stored.
+    const emptyExtraction = findEmptyExtraction(inv.extraction)
+    if (emptyExtraction) {
+      logger.warn(
+        `[invoice-sync] empty extraction on ${contextLabel}: total ` +
+        `$${emptyExtraction.totalAmount.toFixed(2)} with ${emptyExtraction.storedLines} stored line(s) ` +
+        "and no priced goods — nothing from this delivery reaches the catalogue"
+      )
+    }
+
     let status: "MATCHED" | "REVIEW" | "PENDING"
-    if (dateSuspect || mathMismatches.length > 0 || packAnomalies.length > 0 || totalMismatch) {
+    if (
+      dateSuspect ||
+      mathMismatches.length > 0 ||
+      packAnomalies.length > 0 ||
+      totalMismatch ||
+      emptyExtraction
+    ) {
       status = "REVIEW"
     } else if (match) {
       status = match.confidence >= 0.85 ? "MATCHED" : "REVIEW"
@@ -497,6 +516,7 @@ async function runSync(
             mathMismatches,
             packAnomalies,
             totalMismatch,
+            emptyExtraction,
             matchConfidence: match?.confidence ?? null,
             matched: Boolean(match),
           })

@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+import { isChargeRow } from "@/lib/invoice-charges"
+import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
 import { comparisonRange, rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -52,27 +54,6 @@ const PHONE_ROWS = 4
 const QUEUE_ITEMS = 3
 /** A line reconciles when it lands inside half a cent. */
 const EPSILON = 0.02
-
-/**
- * Line rows that are NOT goods.
- *
- * Individual FoodService prints its delivery surcharges below the subtotal
- * rule and the extractor reads them as products, so 47 of this account's
- * invoices failed a naive `SUM(extendedPrice) = subtotal` check for a reason
- * that is not an extraction defect. Excluding exactly these four names takes
- * the account from 173 of 226 reconciling to 219 of 226 — and the seven that
- * remain are all genuinely wrong (measurement §1, §2).
- *
- * Matched on the exact name on purpose. A regex on `fuel|pallet|delivery`
- * catches product names that contain those words and silently un-reconciles
- * invoices that were fine — it did, on 90 Sysco rows, the first time.
- */
-const CHARGE_ROWS = new Set([
-  "Fuel Charge",
-  "Pallet Charge",
-  "Miscellaneous Charge",
-  "Total SALES TAX",
-])
 
 export type InvoiceStatusId = "REVIEW" | "APPROVED" | "MATCHED"
 
@@ -293,7 +274,11 @@ async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
   const all: LoadedInvoice[] = rows.map((r) => ({
     id: r.id,
     number: r.invoiceNumber,
-    vendor: r.vendorName,
+    // Normalized HERE and nowhere downstream: the list, the spend chart, the
+    // product table and the review queue all read `.vendor`, and a page that
+    // merges in one of those four and not the others is worse than one that
+    // never merges at all.
+    vendor: normalizeVendorName(r.vendorName),
     invoiceDate: r.invoiceDate,
     totalAmount: r.totalAmount,
     subtotal: r.subtotal,
@@ -340,7 +325,7 @@ const printedOf = (i: LoadedInvoice) => i.subtotal ?? i.totalAmount
 /** What the extracted lines say the goods came to, with the four charge rows removed. */
 function goodsOf(i: LoadedInvoice): number {
   let sum = 0
-  for (const l of i.lines) if (!CHARGE_ROWS.has(l.productName)) sum += l.extendedPrice
+  for (const l of i.lines) if (!isChargeRow(l.productName)) sum += l.extendedPrice
   return sum
 }
 
@@ -352,18 +337,20 @@ const sum = (list: LoadedInvoice[]) => list.reduce((t, i) => t + i.totalAmount, 
 /* -- vendors ---------------------------------------------------------- */
 
 /**
- * Ten vendor names, six vendors (measurement §3). `Vitco Foodservice` and
- * `VITCO FOODSERVICE` are one supplier; so are `Sysco` and
- * `Sysco Los Angeles, Inc.` — except that the second pair does NOT merge under
- * this key, and that is deliberate. Upper-casing and dropping punctuation is a
- * heuristic that can only ever fix a spelling, never a different name, and a
- * key aggressive enough to merge "Sysco Los Angeles, Inc." into "Sysco" would
- * also merge two genuinely different companies that share a first word.
+ * Ten vendor names, seven vendors — and the merge happens once, at the load
+ * boundary above, so every figure on this page counts a supplier the same way.
  *
- * So the page merges what a spelling explains and PRINTS the variants it
- * merged. The rest is a vendor table's job, which is the Vendors page.
+ * This file used to carry its own key, `name.toUpperCase().replace(/[^A-Z]/g,
+ * "")`, with a comment arguing that "Sysco Los Angeles, Inc." must NOT merge
+ * into "Sysco" because a casing heuristic cannot tell a spelling from a
+ * different company. The argument was right and the conclusion was wrong: the
+ * answer is not a cleverer heuristic, it is to stop guessing. `normalizeVendorName`
+ * is a curated alias table — a human decided that those two strings are one
+ * legal entity, and that "Premier Deli Services, Inc." is not Premier Meats.
+ *
+ * (The old key was also never called. The page grouped on the raw string, so
+ * it reported Sysco at $104,038 when Sysco is $155,430.)
  */
-const vendorKey = (name: string) => name.toUpperCase().replace(/[^A-Z]/g, "")
 
 /* -- sections --------------------------------------------------------- */
 
@@ -657,7 +644,7 @@ function reviewOf(d: InvoiceData): InvoiceReview {
 
   const goods = d.all.reduce((t, i) => t + goodsOf(i), 0)
   const charges = d.all.reduce(
-    (t, i) => t + i.lines.filter((l) => CHARGE_ROWS.has(l.productName)).reduce((s, l) => s + l.extendedPrice, 0),
+    (t, i) => t + i.lines.filter((l) => isChargeRow(l.productName)).reduce((s, l) => s + l.extendedPrice, 0),
     0,
   )
   const printed = d.all.reduce((t, i) => t + printedOf(i), 0)
@@ -722,7 +709,7 @@ function productsOf(d: InvoiceData): InvoiceProducts {
     const by = new Map<string, Agg>()
     for (const i of list) {
       for (const l of i.lines) {
-        if (CHARGE_ROWS.has(l.productName)) continue
+        if (isChargeRow(l.productName)) continue
         const key = l.canonicalId ?? `raw:${l.productName}`
         const a = by.get(key) ?? {
           name: l.canonicalName ?? l.productName,
