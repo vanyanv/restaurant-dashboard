@@ -24,6 +24,47 @@ export function money(v: number | null, opts: { cents?: boolean } = {}): string 
   return v < 0 ? `($${abs})` : `$${abs}`
 }
 
+/**
+ * A price PER UNIT, which is the one money figure two decimals is not enough
+ * for.
+ *
+ * Ingredient costs run from $4.86 a pound to $0.0013 a case of bath tissue.
+ * At two decimals the second prints "$0.00", which reads as free beside a
+ * column of real prices — and it is not free, it is a cost small enough that
+ * two decimals cannot hold it. So anything that would round away to zero gets
+ * the digits it needs, up to four, and everything else stays at the two the
+ * rest of the product uses.
+ */
+export function unitCost(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return DASH
+  const abs = Math.abs(v)
+  const digits = abs > 0 && abs < 0.01 ? 4 : 2
+  const body = abs.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
+  return v < 0 ? `($${body})` : `$${body}`
+}
+
+/**
+ * Title Case for a name stored lower-cased.
+ *
+ * `CanonicalIngredient.name` and the names on the invoice's costed-ingredient
+ * rows are both stored lower-cased, and both are printed in tables beside
+ * proper nouns.
+ *
+ * A word boundary is not enough: `\b` sits between the apostrophe and the `s`
+ * of "eddy's", so `\b[a-z]` writes "Eddy'S". The boundary that matters is a
+ * letter preceded by something that is neither a letter nor an apostrophe.
+ *
+ * The supplier's own abbreviations are left exactly as they are — "grnd"
+ * becomes "Grnd", not "Ground". Expanding them would be inventing a name the
+ * invoice never said.
+ */
+export function titleCase(s: string): string {
+  return s.replace(/(^|[^A-Za-z'])([a-z])/g, (_, pre: string, c: string) => pre + c.toUpperCase())
+}
+
 export function moneyCompact(v: number | null): string {
   if (v === null || !Number.isFinite(v)) return DASH
   const sign = v < 0 ? "-" : ""

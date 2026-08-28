@@ -952,7 +952,37 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 27, mobile: 9 },
   },
   { protoId: "invoice", name: "An invoice", protoRoute: "/dashboard/invoices/I28517", route: "/dashboard/invoices/I28517", status: "editorial" },
-  { protoId: "inventory", name: "Inventory", protoRoute: "/dashboard/operations/inventory", route: "/dashboard/operations/inventory", status: "editorial" },
+  {
+    protoId: "inventory",
+    name: "Inventory",
+    protoRoute: "/dashboard/operations/inventory",
+    route: "/dashboard/operations/inventory",
+    mobileRoute: "/m/operations/inventory",
+    report: true,
+    // MEASURED: 30 of the prototype's 30 on the desk, 8 of 8 on the phone,
+    // tally for tally with no allowance.
+    //
+    // This is the first page whose prototype asks, section by section, for
+    // data that does not exist — not a smaller gap than the fixture's, NONE.
+    // There is no par level in the schema, no shrink or waste table, zero
+    // `InventoryAdjustment` rows, zero `IngredientModelState` rows, and
+    // `StockCount.status` has never been COMPLETED: three attempts on this
+    // store, all in May, the fullest of them ten lines of soda syrup.
+    //
+    // So the page states NO on-hand quantity anywhere. With no completed count
+    // the running integral runs from the first invoice — 226 days — and Coke
+    // reads −590,000 ml even after the pack-conversion fix in the commit
+    // before it. What it states instead is what a count would settle:
+    // $375,594 delivered on the invoices against $356,527 used by the recipes,
+    // both measured, neither derived from the other, 5.1% apart and never
+    // checked against a shelf.
+    //
+    // The phone is the prototype's landmark shape and NOT its keypad. That
+    // keypad is built and works at /m/count; restyling it is P.countnew's job.
+    // See docs/counter/measurements/2026-08-28-inventory.md.
+    status: "counter",
+    baseline: { desktop: 30, mobile: 8 },
+  },
   { protoId: "countnew", name: "Inventory", protoRoute: "/dashboard/operations/inventory/count/new", route: "/dashboard/operations/inventory/count/new", status: "editorial" },
   { protoId: "counts", name: "Inventory", protoRoute: "/dashboard/operations/inventory/counts", route: "/dashboard/operations/inventory/counts", status: "editorial" },
   { protoId: "countsession", name: "A count", protoRoute: "/dashboard/operations/inventory/counts/aug-14", route: "/dashboard/operations/inventory/counts/aug-14", status: "editorial" },

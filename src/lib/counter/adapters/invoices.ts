@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
 import { comparisonRange, rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -698,20 +698,6 @@ function reviewOf(d: InvoiceData): InvoiceReview {
 }
 
 /**
- * `CanonicalIngredient.name` is stored lower-cased and the supplier's own
- * abbreviations survive into it — "ground beef fine grnd 73/27 creekstone".
- * Title-casing is presentation and belongs here, not in the column; the
- * abbreviations are the extractor's and are left exactly as they are, because
- * silently expanding "grnd" would be inventing a name the invoice never said.
- */
-const titleCase = (s: string) =>
-  // A word boundary is not enough: `\b` sits between the apostrophe and the
-  // `s` of "eddy's", so `\b[a-z]` writes "Eddy'S". The boundary that matters
-  // is a letter preceded by something that is neither a letter nor an
-  // apostrophe.
-  s.replace(/(^|[^A-Za-z'])([a-z])/g, (_, pre: string, c: string) => pre + c.toUpperCase())
-
-/**
  * What the spend was on — grouped on the CANONICAL ingredient.
  *
  * 481 distinct product names cover the same goods four spellings deep; ground
@@ -785,7 +771,7 @@ function productsOf(d: InvoiceData): InvoiceProducts {
           : `${count(r.a.vendors.size)} vendors`,
       qty: `${count(Math.round(r.a.qty))}${r.a.unit ? ` ${r.a.unit.toLowerCase()}` : ""}`,
       spend: money(r.a.spend),
-      price: r.up === null ? "—" : `${money(r.up, { cents: true })}${r.a.unit ? ` / ${r.a.unit.toLowerCase()}` : ""}`,
+      price: r.up === null ? "—" : `${unitCost(r.up)}${r.a.unit ? ` / ${r.a.unit.toLowerCase()}` : ""}`,
       moved:
         r.move === null
           ? "no prior"
@@ -801,7 +787,7 @@ function productsOf(d: InvoiceData): InvoiceProducts {
       detail:
         r.up === null
           ? [...r.a.vendors][0]
-          : `${money(r.up, { cents: true })}${r.a.unit ? ` / ${r.a.unit.toLowerCase()}` : ""}`,
+          : `${unitCost(r.up)}${r.a.unit ? ` / ${r.a.unit.toLowerCase()}` : ""}`,
       value: money(r.a.spend),
       note: r.move === null ? undefined : `${r.move > 0 ? "▲" : "▼"} ${Math.abs(r.move).toFixed(0)}%`,
       noteTone: r.move !== null && r.move > 0 ? "down" : "up",

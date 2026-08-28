@@ -21,13 +21,15 @@ for data that does not exist. Not "a smaller gap than the fixture's" — **none*
 | On-hand value, 8 weeks | One series point would need one completed count |
 | Adjust on hand | **0 `InventoryAdjustment` rows**, ever |
 
-Four stock counts exist:
+Four stock counts exist on the account, **three of them on Hollywood** (the
+fourth is on a store that has not opened, so the page, which is per-store, says
+three):
 
 ```
-2026-05-12  IN_PROGRESS  10 lines
-2026-05-12  ABANDONED     0 lines
-2026-05-08  ABANDONED     0 lines
-2026-05-08  IN_PROGRESS   0 lines
+2026-05-12  IN_PROGRESS  10 lines   Hollywood
+2026-05-12  ABANDONED     0 lines   Hollywood
+2026-05-08  ABANDONED     0 lines   Hollywood
+2026-05-08  IN_PROGRESS   0 lines   (pre-open store)
 ```
 
 The fullest of them is ten lines, seven of which are soda syrup — somebody
@@ -82,8 +84,19 @@ scope and is left alone; it is flagged here because it is live.**
   `miscellaneous charges fuel surcharge`, `ground beef fine grnd 73/27
   creekstone return/cancelled order`. Those are not ingredients. They are
   invoice rows that the auto-matcher promoted into the pantry.
-- **$332,192 of goods has been delivered and costed** in the un-anchored
-  window, and nothing has ever checked it against a shelf.
+- **$375,594 of costed ingredient has been delivered** in the un-anchored
+  window (Σ `InvoiceLineItem.extendedPrice` where a canonical ingredient is
+  matched), against **$356,527 the recipes say was used** over the same days
+  (Σ `DailyCogsItem.lineCost`, the figure COGS and the P&L read). The gap is
+  **$19,067, 5.1% of what came in**, and nothing has ever checked it against a
+  shelf.
+
+  Both halves are measured. The obvious alternative — Σ `costPerRecipeUnit` ×
+  converted quantity — came to **$666,365**, against $383,935 of invoices ever
+  issued, because `costPerRecipeUnit` and `recipeUnitsPerCase` are derived from
+  different pack readings on rows the sanity checker has already flagged for
+  pack shape. Two measured figures other pages already agree on beat one
+  reconstruction of them.
 - **Weekly deliveries of costed ingredients**, the last 8 weeks:
   $2,491 · $20,151 · $13,012 · $18,971 · $18,166 · $13,958 · $15,170.
   That is a real series and it is what a count is checked against.
@@ -108,10 +121,10 @@ Every section keeps the prototype's shape and landmark sequence.
   series that exists.
 - **"Next count"** → the attempt that stopped, and the button through to the
   count flow that already works at `/m/count`.
-- **"Adjust on hand"** → **"What a count would settle"**: delivered minus
-  theoretical usage over the un-anchored window, and the difference nothing has
-  verified. Three money lines, which is what the prototype's slot holds, and
-  the arithmetic is the argument for counting.
+- **"Adjust on hand"** → **"What a count would settle"**: $375,594 delivered
+  against $356,527 used, and the $19,067 nothing has verified. Three money
+  lines, which is what the prototype's slot holds, and the arithmetic is the
+  argument for counting.
 
 ## 5. On the phone
 
