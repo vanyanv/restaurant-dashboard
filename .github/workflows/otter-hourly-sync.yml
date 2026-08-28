@@ -1,9 +1,13 @@
 name: Otter Hourly Sync
 on:
   schedule:
-    # Every hour for the dashboard "Service by the hour" card.
-    # 2-day rolling window covers late-arriving orders + retroactive Otter edits.
-    - cron: '0 * * * *'
+    # Hourly for the dashboard "Service by the hour" card, but only while the
+    # restaurant is trading. Hollywood serves 10:00-02:00 local; UTC 17:00-10:59
+    # covers that year-round (PDT and PST). The seven runs a day that used to
+    # land between 03:00 and 09:00 local fetched a window nobody had touched.
+    # Nothing is lost: the 2-day rolling window means a retroactive Otter edit
+    # made at 06:00 is still picked up by the 10:00 run.
+    - cron: '0 17-23,0-10 * * *'
   workflow_dispatch:
 
 concurrency:

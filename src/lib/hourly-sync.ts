@@ -12,6 +12,7 @@ import { todayInLA, startOfDayLA, endOfDayLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
 import { withJobRun } from "@/lib/monitoring/job-run"
 import { computeOrderNetSales } from "@/lib/hourly-sync-helpers"
+import { shouldSyncStore } from "@/lib/store-lifecycle"
 
 export interface HourlySyncResult {
   storesProcessed: number
@@ -78,10 +79,10 @@ async function runHourlySyncInner(opts?: {
     select: {
       otterStoreId: true,
       storeId: true,
-      store: { select: { isActive: true } },
+      store: { select: { isActive: true, lifecycleStage: true } },
     },
   })
-  const active = otterStores.filter((os) => os.store.isActive)
+  const active = otterStores.filter((os) => shouldSyncStore(os.store))
   if (active.length === 0) {
     return { storesProcessed: 0, rowsFetched: 0, bucketsWritten: 0, datesCovered: [] }
   }

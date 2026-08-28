@@ -292,8 +292,28 @@ async function getOtterJwt(): Promise<string> {
 const MAX_RETRIES = 3
 const RETRY_BASE_MS = 2000
 // Statuses worth a backoff-and-retry rather than an immediate throw: 403
-// (transient access-denied), 429 (rate limit), and 502/503/504 (upstream blips).
-const RETRYABLE_STATUSES = new Set([403, 429, 502, 503, 504])
+// (transient access-denied), 429 (rate limit), and 500/502/503/504 (upstream
+// blips). 500 joined the set on 2026-08-28 — see AUTH_SUSPECT_STATUSES.
+const RETRYABLE_STATUSES = new Set([403, 429, 500, 502, 503, 504])
+
+/**
+ * Statuses that may mean "this token is no longer good" even though they don't
+ * say so.
+ *
+ * 401 is the honest one. 500 is here because of the 2026-08-28 outage: with a
+ * token that was valid by its own `exp` but had aged, the aggregated
+ * metrics_explorer dataset returned `500 Internal error` for every store while
+ * the customer_orders dataset kept serving on the identical secret. The daily
+ * sync therefore hard-failed for twelve hours, retrying an unauthenticated
+ * request three times, while the hourly and orders syncs stayed green.
+ *
+ * We can't see inside Otter to confirm 500 *means* auth, so this is deliberately
+ * cheap rather than clever: re-auth once, on the first 500 only, then fall back
+ * to ordinary 5xx backoff. If the 500 was a genuine Otter fault we have spent
+ * one sign-in; if it was the token, the sync heals itself the way the 401 path
+ * already does.
+ */
+const AUTH_SUSPECT_STATUSES = new Set([401, 500])
 
 async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]> {
   let jwt = await getOtterJwt()
@@ -322,7 +342,12 @@ async function queryOtterEndpoint(url: string, body: object): Promise<OtterRow[]
     }
     clearTimeout(timeout)
 
-    if (response.status === 401 && attempt < MAX_RETRIES) {
+    if (
+      AUTH_SUSPECT_STATUSES.has(response.status) &&
+      attempt < MAX_RETRIES &&
+      // A 500 buys exactly one re-auth; 401 keeps its original behaviour.
+      (response.status !== 500 || attempt === 1)
+    ) {
       jwt = await refreshOtterJwtAfterAuthFailure(response.status)
       continue
     }

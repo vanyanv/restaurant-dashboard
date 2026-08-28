@@ -65,20 +65,23 @@ async function main() {
 
   const { prisma } = await import("../src/lib/prisma")
   const { runDetailsDrain } = await import("../src/lib/otter-orders-sync")
+  const { shouldSyncStore } = await import("../src/lib/store-lifecycle")
 
   // Fail fast if the store doesn't exist or is inactive — the matrix would
   // otherwise quietly do nothing for a stale storeId.
   const store = await prisma.store.findUnique({
     where: { id: storeId },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, isActive: true, lifecycleStage: true },
   })
   if (!store) {
     console.error(`Store ${storeId} not found.`)
     await prisma.$disconnect()
     process.exit(1)
   }
-  if (!store.isActive) {
-    console.log(`Store ${store.name} is inactive. Skipping.`)
+  if (!shouldSyncStore(store)) {
+    console.log(
+      `Store ${store.name} is ${store.isActive ? `${store.lifecycleStage} (never traded)` : "inactive"}. Skipping.`,
+    )
     await prisma.$disconnect()
     return
   }

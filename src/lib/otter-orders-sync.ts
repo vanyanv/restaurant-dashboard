@@ -9,6 +9,7 @@ import {
   type OrderDetailsPayload,
 } from "@/lib/otter"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { shouldSyncStore } from "@/lib/store-lifecycle"
 
 /**
  * Replace an order's line items + sub-items inside an open transaction.
@@ -190,9 +191,9 @@ async function runOrdersSyncInner(
   endDateOverride?: Date
 ): Promise<OrdersSyncResult> {
   const otterStores = await prisma.otterStore.findMany({
-    include: { store: { select: { id: true, isActive: true } } },
+    include: { store: { select: { id: true, isActive: true, lifecycleStage: true } } },
   })
-  const activeOtterStores = otterStores.filter((os) => os.store.isActive)
+  const activeOtterStores = otterStores.filter((os) => shouldSyncStore(os.store))
 
   if (activeOtterStores.length === 0) {
     return {

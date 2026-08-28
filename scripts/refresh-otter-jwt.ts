@@ -59,9 +59,21 @@ const OTTER_HEADERS = {
   "application-version": "fddebf256f27323d4bb2dfe5e021eba83cdb8a41",
 }
 
+/**
+ * Otter UUIDs used only to prove a freshly-minted token can actually read data.
+ *
+ * These are Hollywood's, deliberately. They used to be one Van Nuys UUID and
+ * one Glendale UUID — both stores are pre-open and have never served a
+ * customer, so the verification query could only ever come back empty and
+ * "Verification passed: got 0 row(s)" meant nothing beyond "Otter returned
+ * 200". Hollywood trades every day, so a zero here is a real signal.
+ *
+ * Hardcoded because this script runs in CI without DATABASE_URL and must not
+ * grow a Prisma dependency just to look up two constants.
+ */
 const STORE_IDS = [
-  "10b8d83b-db0e-4637-8ce6-ef3b60081f11",
-  "2fb629b7-2a22-429c-80cf-de2ae6d4a662",
+  "f8f941a6-9c18-49ed-896a-5b2213ba09a4",
+  "8c836303-8d5d-4c32-b9d1-a1ca5325b191",
 ]
 
 function loadEnvLocal(): Record<string, string> {
@@ -120,13 +132,20 @@ function updateEnvLocal(jwt: string): LegStatus {
   }
 }
 
+function isoDay(d: Date, endOfDay: boolean): string {
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, "0")
+  const dd = String(d.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`
+}
+
 async function verifyToken(jwt: string): Promise<boolean> {
+  // Seven days, not just today: the rotation runs at 00:00 UTC, which is
+  // mid-afternoon in Los Angeles on the *previous* business day, and a
+  // single-day window that happens to be empty tells us nothing.
   const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, "0")
-  const dd = String(now.getDate()).padStart(2, "0")
-  const minDate = `${yyyy}-${mm}-${dd}T00:00:00.000Z`
-  const maxDate = `${yyyy}-${mm}-${dd}T23:59:59.999Z`
+  const minDate = isoDay(new Date(now.getTime() - 7 * 86_400_000), false)
+  const maxDate = isoDay(now, true)
 
   const body = {
     columns: [{ type: "metric", key: "fp_sales_financials_gross_sales" }],
@@ -156,6 +175,16 @@ async function verifyToken(jwt: string): Promise<boolean> {
     const data = await res.json()
     if (data.rows && Array.isArray(data.rows)) {
       console.log(`  Verification passed: got ${data.rows.length} row(s)`)
+      if (data.rows.length === 0) {
+        // Not fatal — refusing to save a good token because Otter had a data
+        // blip is worse than saving it. But Hollywood trades daily, so an
+        // empty week means either the token can read nothing or Otter is
+        // returning nothing, and both are worth seeing in the cron log.
+        console.warn(
+          "  WARNING: seven days of Hollywood returned no rows. The token was accepted" +
+            " but proved no data access.",
+        )
+      }
       return true
     }
     console.error("  Verification failed: unexpected response shape")

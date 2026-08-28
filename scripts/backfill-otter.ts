@@ -112,6 +112,7 @@ async function main() {
   const { prisma } = await import("../src/lib/prisma")
   const { runMetricsSyncForStore } = await import("../src/lib/otter-metrics-sync")
   const { withPrismaRetry } = await import("../src/lib/prisma-retry")
+  const { shouldSyncStore } = await import("../src/lib/store-lifecycle")
 
   const { days, dailyOnly, storeIdFilter, includeRatings } = parseArgs()
 
@@ -128,13 +129,15 @@ async function main() {
   const otterStores = await withPrismaRetry(
     () =>
       prisma.otterStore.findMany({
-        include: { store: { select: { id: true, name: true, isActive: true } } },
+        include: {
+          store: { select: { id: true, name: true, isActive: true, lifecycleStage: true } },
+        },
       }),
     { label: "backfill-otter:otterStore.findMany" },
   )
   const activeStores = otterStores.filter(
     (os) =>
-      os.store.isActive && (storeIdFilter == null || os.storeId === storeIdFilter),
+      shouldSyncStore(os.store) && (storeIdFilter == null || os.storeId === storeIdFilter),
   )
 
   if (activeStores.length === 0) {

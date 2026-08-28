@@ -10,11 +10,23 @@
  *   1. Did the job run on cadence?        → reuses isOverdue / JOB_SCHEDULES
  *   2. Is the data it owns actually fresh? → JOB_DATA_OWNERSHIP, below
  *
+ * The two are not weighted equally, and on 2026-08-28 that mattered in the
+ * other direction: GitHub delivers about two thirds of this repo's scheduled
+ * runs, so question 1 kept answering "no" for jobs whose data was current, and
+ * the check sat red on nothing. Question 1 now only fails past the
+ * OVERDUE_CEILING_MULTIPLIER — before that it is a note. Question 2 fails on
+ * its own terms, which is what caught the real outage the same day.
+ *
  * Pure functions only. The cron route gathers the readings; this file just
  * decides, so the decision is unit-testable without a database.
  */
 
-import { JOB_SCHEDULES, isOverdue } from "./job-schedules"
+import {
+  JOB_SCHEDULES,
+  OVERDUE_CEILING_MULTIPLIER,
+  isFarOverdue,
+  isOverdue,
+} from "./job-schedules"
 
 /**
  * What each job is responsible for producing.
@@ -44,11 +56,13 @@ export const JOB_DATA_OWNERSHIP: Record<string, JobDataOwnership> = {
     column: "syncedAt",
     maxAgeMinutes: 60 * 8,
   },
+  // 10h, not 8h: the hourly sync only runs while Hollywood is trading, so
+  // updatedAt legitimately sits still for the 7h the restaurant is closed.
   "otter.hourly.sync": {
     kind: "timestamp",
     table: "OtterHourlySummary",
     column: "updatedAt",
-    maxAgeMinutes: 60 * 8,
+    maxAgeMinutes: 60 * 10,
   },
   "otter.orders.sync": {
     kind: "timestamp",
@@ -126,12 +140,22 @@ export function detectStaleness(
     // failing the check, so the alert keeps meaning "something broke".
     if (!r.lastRunAt) {
       notes.push(`${r.jobName}: has never recorded a run`)
-    } else if (isOverdue(r.jobName, r.lastRunAt, now)) {
+    } else if (isFarOverdue(r.jobName, r.lastRunAt, now)) {
       problems.push({
         jobName: r.jobName,
         reason: "overdue",
-        detail: `expected ${schedule.description}, last ran ${describeAge(now, r.lastRunAt)}`,
+        detail:
+          `expected ${schedule.description}, last ran ${describeAge(now, r.lastRunAt)}` +
+          ` — past ${OVERDUE_CEILING_MULTIPLIER}x cadence`,
       })
+    } else if (isOverdue(r.jobName, r.lastRunAt, now)) {
+      // Between 1.5x and 3x cadence is what GitHub's scheduler does to this
+      // repo on an ordinary day. Say so, but don't call it an incident — the
+      // data check below is what decides whether anything is actually wrong.
+      notes.push(
+        `${r.jobName}: last ran ${describeAge(now, r.lastRunAt)}` +
+          ` (expected ${schedule.description}) — scheduler drift`,
+      )
     }
 
     const owns = JOB_DATA_OWNERSHIP[r.jobName]

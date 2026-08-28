@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withCronAuth } from "@/lib/cron-auth"
 import { withJobRun } from "@/lib/monitoring/job-run"
+import { shouldSyncStore } from "@/lib/store-lifecycle"
 
 /**
  * Enumerate active stores plus their Otter UUIDs for matrix fan-out from
@@ -20,9 +21,11 @@ export const GET = withCronAuth(async () => {
     { triggeredBy: "github-actions" },
     async ({ addRows }) => {
       const otterStores = await prisma.otterStore.findMany({
-        include: { store: { select: { id: true, name: true, isActive: true } } },
+        include: {
+          store: { select: { id: true, name: true, isActive: true, lifecycleStage: true } },
+        },
       })
-      const active = otterStores.filter((os) => os.store.isActive)
+      const active = otterStores.filter((os) => shouldSyncStore(os.store))
 
       const grouped = new Map<string, { storeId: string; name: string; otterStoreIds: string[] }>()
       for (const os of active) {
