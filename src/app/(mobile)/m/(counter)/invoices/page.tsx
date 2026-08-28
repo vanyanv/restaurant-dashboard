@@ -1,0 +1,47 @@
+import { getServerSession } from "next-auth"
+import { redirect } from "next/navigation"
+import { authOptions } from "@/lib/auth"
+import { readCounterParams } from "@/lib/counter/url-state"
+import { getInvoicesSectionPromises } from "@/lib/counter/adapters/invoices"
+import { CounterPhoneInvoicesClient } from "./counter-phone-invoices-client"
+
+export const dynamic = "force-dynamic"
+
+/**
+ * Invoices, on a phone — `P.invoices.phone()`
+ * (`docs/counter/counter-prototype.html:5698`).
+ *
+ * Calls `getInvoicesSectionPromises`, the same function the desk calls.
+ */
+export default async function MobileInvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const session = await getServerSession(authOptions)
+  if (!session) redirect("/login")
+
+  const sp = await searchParams
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (typeof value === "string") params.set(key, value)
+  }
+
+  const today = new Date()
+  const counterParams = readCounterParams(params, today)
+
+  const sections = getInvoicesSectionPromises({
+    range: counterParams.range,
+    presetId: counterParams.presetId,
+    storeId: counterParams.storeId,
+    accountId: session.user.accountId,
+    today,
+  })
+
+  return (
+    <>
+      <CounterPhoneInvoicesClient sections={sections} />
+      <span hidden data-perf-ready="/m/invoices" />
+    </>
+  )
+}

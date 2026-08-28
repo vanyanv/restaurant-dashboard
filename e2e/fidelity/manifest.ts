@@ -922,7 +922,35 @@ export const PAGES: FidelityPage[] = [
   },
   { protoId: "usage", name: "COGS", protoRoute: "/dashboard/operations/product-usage", route: "/dashboard/operations/product-usage", status: "editorial" },
   { protoId: "operations", name: "Operations", protoRoute: "/dashboard/operations", route: "/dashboard/operations", status: "editorial" },
-  { protoId: "invoices", name: "Invoices", protoRoute: "/dashboard/invoices", route: "/dashboard/invoices", status: "editorial" },
+  {
+    protoId: "invoices",
+    name: "Invoices",
+    protoRoute: "/dashboard/invoices",
+    route: "/dashboard/invoices",
+    query: "?range=d7",
+    mobileRoute: "/m/invoices",
+    report: true,
+    // MEASURED: 27 of the prototype's 27 on the desk, 9 of 9 on the phone,
+    // tally for tally with no allowance.
+    //
+    // Two sections keep their shape and change their subject, and both are
+    // argued in docs/counter/measurements/2026-08-28-invoices.md:
+    //
+    //   - "What we hold" was drawn for an account where 3 of 34 invoices
+    //     predated object storage. All 226 here have their PDF, so the panel
+    //     asks the next question instead — which of the documents we hold were
+    //     actually read into lines. One was not.
+    //   - "Fix before approving" is NOT the status=REVIEW list. The two
+    //     largest errors in the account are both MATCHED: a return extracted
+    //     twice and an invoice with a header and no lines. The queue is
+    //     ordered by what the mistake is worth.
+    //
+    // The reconciliation check itself is the finding. Run naively it reports
+    // 53 broken invoices; excluding the four named delivery and tax rows from
+    // the goods side it reports 7, and the 47 in between were never wrong.
+    status: "counter",
+    baseline: { desktop: 27, mobile: 9 },
+  },
   { protoId: "invoice", name: "An invoice", protoRoute: "/dashboard/invoices/I28517", route: "/dashboard/invoices/I28517", status: "editorial" },
   { protoId: "inventory", name: "Inventory", protoRoute: "/dashboard/operations/inventory", route: "/dashboard/operations/inventory", status: "editorial" },
   { protoId: "countnew", name: "Inventory", protoRoute: "/dashboard/operations/inventory/count/new", route: "/dashboard/operations/inventory/count/new", status: "editorial" },
