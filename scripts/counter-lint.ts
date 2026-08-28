@@ -675,6 +675,43 @@ export function findRouteLoadingViolations(
   return violations
 }
 
+/**
+ * `no-group-without-error`, the sibling of the rule above and an ABSENCE for
+ * the same reason — there is no line of text that says "this route group has
+ * no error boundary".
+ *
+ * Each `(counter)` route group root must hold an `error.tsx`. Not each route:
+ * an `error.tsx` at the group root covers every page under it, and Next
+ * resolves the NEAREST boundary, so a per-route file would only be needed
+ * where a route wants a different message. One per group is the floor.
+ *
+ * Why this is worth a rule. Both groups had none, so all 42 rebuilt pages
+ * fell through to `src/app/global-error.tsx` — which replaces the whole
+ * document (losing the rail, the topbar and the only way to navigate out),
+ * says "a failure in the application shell" for what is one page throwing,
+ * and paints the pre-Counter cream palette with no dark theme. `Section`
+ * catches every LOAD failure, which is exactly why nobody noticed the render
+ * ones had nowhere to go.
+ */
+export function findRouteErrorViolations(
+  routeGroupRoots: string[] = COUNTER_ROUTE_GROUPS,
+): Violation[] {
+  const violations: Violation[] = []
+  for (const root of routeGroupRoots) {
+    if (!existsSync(root)) continue // a group that does not exist yet is not a violation
+    if (!existsSync(join(root, "error.tsx"))) {
+      const rel = relative(process.cwd(), root)
+      violations.push({
+        file: rel,
+        line: 1,
+        rule: "no-group-without-error",
+        text: `${rel} is a Counter route group with no error.tsx at its root`,
+      })
+    }
+  }
+  return violations
+}
+
 /** `await get<anything>Sections(` — the pre-Task-3 shape every streaming page moved off. */
 const AWAITED_SECTIONS_PATTERN = /\bawait\s+get\w*Sections\s*\(/
 
@@ -816,6 +853,10 @@ export function lintCounter(
     roots.some((r) => isUnder(group, r)),
   )
   violations.push(...findRouteLoadingViolations(routeGroupsInScope))
+  // `no-group-without-error` — same directory-check shape and same scoping as
+  // the loading rule above. A group with no `error.tsx` sends every render
+  // failure under it to the root boundary, which replaces the document.
+  violations.push(...findRouteErrorViolations(routeGroupsInScope))
   // `no-awaited-sections-in-page`, Task 4's rule — same directory-check shape
   // and same scoping reason as `findRouteLoadingViolations` just above.
   violations.push(...findAwaitedSectionsViolations(routeGroupsInScope))
