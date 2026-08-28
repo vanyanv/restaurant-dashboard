@@ -11,7 +11,7 @@ import {
   usePageChrome,
   type SwitchableStore,
 } from "@/components/counter"
-import { askHref, describeAskContext } from "@/lib/counter/ask-context"
+import { ASK_STARTERS, askHref, describeAskContext } from "@/lib/counter/ask-context"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { askAnswer, askPending, askStateFor, useAsk } from "@/lib/counter/use-ask"
@@ -83,20 +83,14 @@ import { askAnswer, askPending, askStateFor, useAsk } from "@/lib/counter/use-as
  * reintroduce it — the model's own `followUps` are the offer instead.
  */
 
-/**
+/*
  * The page's own opening questions — the palette's "Ask about Ask" group, and
  * the chips a reader who arrived from the rail is shown instead of a blank.
  *
- * Module-level so the shell is not republished on every render, and phrased as
- * questions this backend can actually answer: each names a department the
- * tools cover, rather than advertising an ability the model would have to
- * refuse (K-R3).
+ * They live in `ask-context.ts` because the PHONE's Ask offers the same three
+ * (`/m/ask`), and two lists would have drifted the first time one was edited.
+ * Still module-level, so the shell is not republished on every render.
  */
-const STARTERS = [
-  "How were sales last week?",
-  "Which channel is costing the most to sell through?",
-  "What is driving food cost right now?",
-]
 
 export function CounterAskClient({
   params: paramsString,
@@ -117,7 +111,7 @@ export function CounterAskClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
-  usePageChrome({ askSuggestions: STARTERS })
+  usePageChrome({ askSuggestions: [...ASK_STARTERS] })
   const { startTransition } = useCounterTransition()
 
   const question = (params.get("q") ?? "").trim()
@@ -275,7 +269,7 @@ export function CounterAskClient({
               can send.
             </p>
             <div className="sugs">
-              {STARTERS.map((q) => (
+              {ASK_STARTERS.map((q) => (
                 <button className="sug" type="button" key={q} onClick={() => push(q)}>
                   {q}
                 </button>

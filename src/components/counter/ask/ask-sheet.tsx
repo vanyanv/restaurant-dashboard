@@ -30,21 +30,36 @@ import { AskGlyph } from "@/components/counter/surface/ask-glyph"
  *    once; the phone has room for two chips and no room for a label.
  * 3. **Every control NAVIGATES.** `AskBar` carries `data-askabout`, which the
  *    one `AskSurface` mounted in `AppShell` picks up through its delegated
- *    document listener and opens in place. The phone composes no `AppShell`,
- *    so there is no surface listening — a `data-askabout` here would be note
- *    46's defect exactly: a shortcut printed on a surface that opens nothing.
+ *    document listener and answers IN PLACE, over the page. The phone composes
+ *    no `AppShell` and no palette: `PhoneShell` catches the same attribute and
+ *    pushes `/m/ask?q=…` instead, because a 316px column has no room to open a
+ *    surface over itself. So these are `<Link>`s outright — an anchor gets the
+ *    address bar, long-press-to-copy and "open in new tab" for free, and it is
+ *    the destination the delegation would have computed anyway.
  *    The prototype's own `data-goto="ask"` navigates too, so this is the
  *    prototype's behaviour reached through a real router.
  *
- * A suggestion therefore opens the Ask page rather than pre-filling it: `/m/chat`
- * takes no question parameter, and inventing one that its client ignores would
- * be the same defect one layer down. The prototype's suggestions do not
- * pre-fill either.
+ * A suggestion therefore ASKS by navigating: `/m/ask?q=…` reads its question
+ * off the URL, so the chip that says "Why is food cost where it is?" lands on
+ * that question being answered, not on an empty box with the question typed
+ * into it. Each chip carries its own href for that reason — the caller builds
+ * them with `askHref`, the same builder the desk's "Open in Ask" uses, so the
+ * store and the window travel with the question.
+ *
+ * This used to point at `/m/chat` with two chips that all opened the same
+ * empty editorial thread, which was note 46's defect at one remove: three
+ * controls, one destination, and none of them carrying what it said.
  *
  * `Section` is the sole state renderer (R3). The prototype prints this sheet
  * in every state including `empty` — a store that is not trading is still a
  * store you can ask about — so it takes plain props and no status.
  */
+/** A chip: the question, and the address that answers it. */
+export interface AskSuggestion {
+  question: string
+  href: string
+}
+
 export function AskSheet({
   prompt,
   href,
@@ -52,10 +67,10 @@ export function AskSheet({
 }: {
   /** `.ph` — "Ask about today", "Ask about this range". */
   prompt: string
-  /** The Ask page this surface's questions open. */
+  /** Ask with nothing asked yet — the row opens the page's own empty state. */
   href: string
-  /** The chips. Omit them and no `.sugs` is drawn. */
-  suggestions?: string[]
+  /** The chips, each with the address that answers it. Omit them and no `.sugs` is drawn. */
+  suggestions?: readonly AskSuggestion[]
 }) {
   return (
     <div className="masksheet">
@@ -65,9 +80,9 @@ export function AskSheet({
       </Link>
       {suggestions.length > 0 ? (
         <div className="sugs">
-          {suggestions.map((q) => (
-            <Link key={q} className="sug" href={href}>
-              {q}
+          {suggestions.map((s) => (
+            <Link key={s.question} className="sug" href={s.href}>
+              {s.question}
             </Link>
           ))}
         </div>

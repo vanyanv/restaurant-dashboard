@@ -1,6 +1,7 @@
 import { rangeLabel } from "./date-range"
 import { readCounterParams } from "./url-state"
 import { NAV_GROUPS, isActive } from "./nav"
+import { deskRouteFor } from "./route-shape"
 
 /**
  * What a question is about — derived, never passed.
@@ -50,9 +51,17 @@ export function describeAskContext({
    */
   origin?: string | null
 }): AskContext {
+  /*
+   * BOTH SURFACES RESOLVE THROUGH THE DESK'S ROUTE STRINGS. `NAV_GROUPS` is
+   * the desk rail's own list, so `/m/analytics` matches nothing in it and the
+   * phone's questions would all have travelled subjectless. `deskRouteFor` is
+   * the middleware's mapping read backwards; a phone path with no desk twin
+   * comes back as a non-destination and resolves to nothing, which is the
+   * same outcome as before rather than a guess.
+   */
   const items = NAV_GROUPS.flatMap((g) => g.items)
-  const here = items.find((i) => isActive(i, pathname))
-  const from = origin ? items.find((i) => isActive(i, origin)) : undefined
+  const here = items.find((i) => isActive(i, deskRouteFor(pathname)))
+  const from = origin ? items.find((i) => isActive(i, deskRouteFor(origin))) : undefined
 
   /*
    * THE ASK PAGE IS NOT A SUBJECT.
@@ -106,6 +115,33 @@ export function describeAskContext({
 export const ASK_ROUTE = "/dashboard/ask"
 
 /**
+ * The same page on the phone. `src/middleware.ts` redirects `/dashboard/ask`
+ * here on a phone user agent, so this is what a phone actually renders — and
+ * a link BUILT on the phone points straight at it rather than paying for the
+ * redirect hop, exactly as `/m`'s own links do.
+ */
+export const ASK_PHONE_ROUTE = "/m/ask"
+
+/** Either surface of Ask. A question never records Ask itself as its origin. */
+function isAskRoute(pathname: string): boolean {
+  return pathname === ASK_ROUTE || pathname === ASK_PHONE_ROUTE
+}
+
+/**
+ * The three questions Ask opens with, on both surfaces.
+ *
+ * Module-level and shared so the desk's empty state and the phone's offer the
+ * same three, and phrased as questions this backend can actually answer: each
+ * names a department the tools cover, rather than advertising an ability the
+ * model would have to refuse (K-R3).
+ */
+export const ASK_STARTERS = [
+  "How were sales last week?",
+  "Which channel is costing the most to sell through?",
+  "What is driving food cost right now?",
+] as const
+
+/**
  * The query keys that describe WHAT is being answered, and the only ones that
  * travel to Ask.
  *
@@ -134,12 +170,20 @@ export function askHref({
   question,
   params,
   origin = null,
+  route = ASK_ROUTE,
 }: {
   question: string
   params: URLSearchParams
   /** The route the question is leaving. Null on Ask itself, where the origin
    *  already sits in `?asked=` and is carried through unchanged. */
   origin?: string | null
+  /**
+   * WHICH Ask. The desk's by default; `ASK_PHONE_ROUTE` from anything under
+   * `/m`, because the phone shell is what a phone reader is standing in and
+   * `/dashboard/ask` would only bounce them back here through the middleware.
+   * The query string either takes is identical — one builder, two doors.
+   */
+  route?: string
 }): string {
   const out = new URLSearchParams()
   for (const key of SCOPE_KEYS) {
@@ -150,9 +194,9 @@ export function askHref({
   const q = question.trim()
   if (q) out.set("q", q)
 
-  const from = origin && origin !== ASK_ROUTE ? origin : params.get("asked")
+  const from = origin && !isAskRoute(origin) ? origin : params.get("asked")
   if (from) out.set("asked", from)
 
   const qs = out.toString()
-  return qs ? `${ASK_ROUTE}?${qs}` : ASK_ROUTE
+  return qs ? `${route}?${qs}` : route
 }

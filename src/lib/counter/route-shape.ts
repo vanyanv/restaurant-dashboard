@@ -56,6 +56,33 @@ export function storeScopeHref(pathname: string): string {
 }
 
 /**
+ * The DESK route a phone route is the phone of — `/m/analytics` →
+ * `/dashboard/analytics`, `/m` → `/dashboard`.
+ *
+ * `NAV_GROUPS` is written in desk hrefs (it is the desk's rail), so anything
+ * that resolves a route to a nav destination — `Topbar`'s crumb,
+ * `describeAskContext`'s subject — resolves nothing at all when handed a `/m`
+ * pathname. That is how the phone's Ask would have prepended "Answering about
+ * Dashboard" to a question asked from Analytics.
+ *
+ * A RULE, not a table, and deliberately: `src/middleware.ts` maps a desk path
+ * to a phone path by keeping the segment name (`/dashboard/x` → `/m/x`) for
+ * every route where both exist, so the inverse is the same rule read
+ * backwards. The three that do NOT follow it — `/dashboard/settings` → `/m/more`,
+ * `/dashboard/menu-profit` → `/m/product-mix`, `/dashboard/admin/monitoring`
+ * → `/m/monitoring` — come back as `/dashboard/more`, `/dashboard/product-mix`
+ * and `/dashboard/monitoring`, none of which is a nav destination, so they
+ * resolve to NOTHING rather than to the wrong page. That is the same trade
+ * `describeAskContext` already makes with its untrusted `?asked=`: a value it
+ * cannot match is dropped, never guessed at.
+ */
+export function deskRouteFor(pathname: string): string {
+  if (pathname === "/m") return "/dashboard"
+  if (pathname.startsWith("/m/")) return `/dashboard/${pathname.slice("/m/".length)}`
+  return pathname
+}
+
+/**
  * `trailOf()` for the phone's `.mback`. A root tab has no trail and gets no
  * back button — a back button to nowhere is the same defect as a chevron to
  * nowhere.
