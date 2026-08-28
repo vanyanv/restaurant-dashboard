@@ -388,6 +388,9 @@ function gapsOf(data: CatalogData): CatalogGaps {
   const rows = rowsOf(data)
   const unmappedMods = rows.filter((r) => r.isModifier && !r.mapped)
   const unmappedItems = rows.filter((r) => !r.isModifier && !r.mapped)
+  // Case- and whitespace-insensitive, because that is exactly the collision
+  // being detected.
+  const trimmedMapped = new Set([...data.mappedModifiers].map((n) => n.trim().toLowerCase()))
   const servings = unmappedMods.reduce((t, r) => t + r.soldQty, 0)
   const free = unmappedMods.filter((r) => r.price === "—" || r.price === "$0.00")
   const itemRevenue = unmappedItems.reduce(
@@ -398,19 +401,32 @@ function gapsOf(data: CatalogData): CatalogGaps {
   const items: QueueItem[] = []
 
   if (unmappedMods.length > 0) {
+    // Three of the fifteen unmapped modifiers on this menu are the SAME name
+    // as a mapped one with a leading or trailing space — " Add Sauce",
+    // " Remove Cheese", "Make it a Triple ". Counting them as mapping work
+    // overstates it by a fifth and points the owner at recipes when the fix is
+    // a trim in the sync. They are separated here rather than silently folded
+    // in, because both facts are actionable and they are actionable by
+    // different people.
+    const variants = unmappedMods.filter((r) => trimmedMapped.has(r.item.trim().toLowerCase()))
+    const real = unmappedMods.filter((r) => !trimmedMapped.has(r.item.trim().toLowerCase()))
     items.push({
       key: "modifiers",
       tone: "bad",
       lead: count(servings),
       title: `${count(servings)} modifier servings left the kitchen with no cost`,
       body:
-        `${count(unmappedMods.length)} of ${count(data.modifiers.size)} modifiers carry no ` +
-        `recipe. ${count(free.length)} of them are FREE, so they earn nothing and never ` +
-        `appear in anything ranked by revenue — but the food still went out. ` +
-        `${unmappedMods
+        `${count(real.length)} of ${count(data.modifiers.size)} modifiers carry no recipe. ` +
+        `${count(free.length)} of them are FREE, so they earn nothing and never appear in ` +
+        `anything ranked by revenue — but the food still went out. ` +
+        `${real
           .slice(0, 3)
           .map((r) => `${r.item} ${r.sold}`)
-          .join(", ")}.`,
+          .join(", ")}.` +
+        (variants.length > 0
+          ? ` A further ${count(variants.length)} are the same name as a mapped modifier with ` +
+            `a stray space, which is a trim in the sync rather than a recipe.`
+          : ""),
       act: "Map the modifiers",
       href: "/dashboard/recipes",
     })

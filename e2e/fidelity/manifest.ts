@@ -879,7 +879,27 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 13, mobile: 9 },
   },
-  { protoId: "catalogitem", name: "A menu item", protoRoute: "/dashboard/menu/catalog/neddy-burger", route: "/dashboard/menu/catalog/neddy-burger", status: "editorial" },
+  {
+    protoId: "catalogitem",
+    name: "A menu item",
+    protoRoute: "/dashboard/menu/catalog/neddy-burger",
+    // The prototype's slug is invented. `soda` is a real item on this account
+    // that sells every day of any window, so the route resolves whatever range
+    // the gate happens to run — an item that stops selling would 404 the gate
+    // rather than fail it, which is a far more confusing signal.
+    route: "/dashboard/menu/catalog/soda",
+    query: "?range=d30",
+    mobileRoute: "/m/menu/catalog/soda",
+    report: true,
+    // MEASURED: 15 of the prototype's 15 on the desk, 5 on the phone, landmark
+    // for landmark with no allowance. Two of the channel table's columns read
+    // "not recorded for this range" on every row — `OtterOrder.commission` is
+    // non-zero on 25,648 orders all time and on NONE of the 10,339 in the
+    // trailing thirty days — which is the Orders page's own answer to the same
+    // gap, in the same words. See the adapter's docblock.
+    status: "counter",
+    baseline: { desktop: 15, mobile: 5 },
+  },
   { protoId: "recipes", name: "Recipes", protoRoute: "/dashboard/recipes", route: "/dashboard/recipes", status: "editorial" },
   { protoId: "recipe", name: "Recipe", protoRoute: "/dashboard/recipes/double-slider", route: "/dashboard/recipes/double-slider", status: "editorial" },
   { protoId: "productmix", name: "Menu profit", protoRoute: "/dashboard/product-mix", route: "/dashboard/product-mix", status: "editorial" },
