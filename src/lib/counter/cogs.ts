@@ -114,6 +114,47 @@ export interface CogsItem {
   lost: number | null
 }
 
+/**
+ * One calendar day's cost, keyed the way a `@db.Date` column reads back.
+ *
+ * `day` is `date.toISOString().slice(0, 10)` — the same `dbDay` construct
+ * `labor-week.ts` and `staffing-curve.ts` already use for their own date
+ * columns, and the same string `date-range.ts`'s `isoDay(localDate)`
+ * produces for the same calendar day. That pairing is the whole point: the
+ * adapter walks the range in LOCAL days and looks each one up here, exactly
+ * as `salesByDayOf` does against the statement.
+ *
+ * Days with no row are ABSENT rather than zero. A day the materialiser has
+ * not reached is not a day that cost nothing, and the chart draws a gap for
+ * it rather than a plunge to the axis.
+ */
+export interface CogsDay {
+  /** `YYYY-MM-DD`. */
+  day: string
+  cost: number
+}
+
+/**
+ * The invoices that have not reached the cost above — `Invoice.status`
+ * `REVIEW`.
+ *
+ * DELIBERATELY NOT BOUNDED BY THE PAGE'S RANGE. An invoice sitting in review
+ * is a backlog, not a reading of a window: it is money the ingredient prices
+ * behind `lineCost` have not seen yet, whenever it arrived. Scoping it to a
+ * seven-day range would print "0 waiting" on a page whose costs are stale by
+ * a month of unposted paper. Measured 2026-08-27: 13 invoices worth $19,627
+ * across the whole table, against the prototype's invented "3 · $2,140".
+ *
+ * `oldest` is the earliest `invoiceDate` among them, so the caller can say
+ * how long the backlog has been standing rather than only how big it is.
+ */
+export interface UnpostedInvoices {
+  count: number
+  /** Sum of `totalAmount`. Returns and credit memos are stored negative and net out here. */
+  total: number
+  oldest: Date | null
+}
+
 export interface CogsWindow {
   cost: number
   /** THE STATEMENT'S Total Sales. Never `DailyCogsItem.salesRevenue` (C-R1). */
@@ -288,7 +329,7 @@ export async function loadCogs(input: {
   /** THE STATEMENT'S Total Sales, off the statement the adapter already
    *  loaded (C-R1). Never derived here from `DailyCogsItem`. */
   sales: number
-}): Promise<{ window: CogsWindow; items: CogsItem[] }> {
+}): Promise<{ window: CogsWindow; items: CogsItem[]; byDay: CogsDay[] }> {
   const { range, storeId, accountId, sales } = input
   const { startDate, endDate } = toQueryBounds(range)
 
@@ -313,6 +354,7 @@ export async function loadCogs(input: {
         unmappedLines: 0,
       }),
       items: [],
+      byDay: [],
     }
   }
   const storeIds = stores.map((s) => s.id)
@@ -321,6 +363,7 @@ export async function loadCogs(input: {
   const rows = await prisma.dailyCogsItem.findMany({
     where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
     select: {
+      date: true,
       itemName: true,
       category: true,
       salesRevenue: true,
@@ -336,6 +379,7 @@ export async function loadCogs(input: {
   let unmappedLines = 0
   const categoryCost = new Map<string, number>()
   const itemAgg = new Map<string, { cost: number; revenue: number; units: number }>()
+  const dayCost = new Map<string, number>()
 
   for (const r of rows) {
     cost += r.lineCost
@@ -343,6 +387,11 @@ export async function loadCogs(input: {
     if (r.status === "UNMAPPED") unmappedLines += 1
 
     categoryCost.set(r.category, (categoryCost.get(r.category) ?? 0) + r.lineCost)
+    // `dbDay`: a `@db.Date` column reads back as UTC midnight, so the ISO
+    // slice is the calendar day the row was written for. Never local getters
+    // here — west of Greenwich they name the previous day.
+    const day = r.date.toISOString().slice(0, 10)
+    dayCost.set(day, (dayCost.get(day) ?? 0) + r.lineCost)
 
     const bucket = itemAgg.get(r.itemName) ?? { cost: 0, revenue: 0, units: 0 }
     bucket.cost += r.lineCost
@@ -367,5 +416,51 @@ export async function loadCogs(input: {
     cogsItem({ itemName, cost: agg.cost, revenue: agg.revenue, units: agg.units, plan }),
   )
 
-  return { window, items }
+  const byDay: CogsDay[] = [...dayCost.entries()]
+    .map(([day, dCost]) => ({ day, cost: dCost }))
+    .sort((a, b) => a.day.localeCompare(b.day))
+
+  return { window, items, byDay }
+}
+
+/**
+ * The unposted-invoice backlog (C-R6). One aggregate, account-scoped first
+ * for the same reason `loadCogs` resolves stores before it reads a cost row.
+ *
+ * A `storeId` narrows to that store's invoices. `Invoice.storeId` is
+ * nullable, so an invoice the sync could not attribute to a store is counted
+ * on the group page and not on any store page — which is the truthful
+ * answer, and the caller's `meta` says so rather than quietly folding
+ * unattributed paper into whichever store the reader happens to be on.
+ */
+export async function loadUnpostedInvoices(input: {
+  storeId: string | null
+  accountId: string
+}): Promise<UnpostedInvoices> {
+  const { storeId, accountId } = input
+
+  const where = {
+    accountId,
+    status: "REVIEW" as const,
+    ...(storeId ? { storeId } : {}),
+  }
+
+  const [agg, oldest] = await Promise.all([
+    prisma.invoice.aggregate({
+      where,
+      _count: { _all: true },
+      _sum: { totalAmount: true },
+    }),
+    prisma.invoice.findFirst({
+      where: { ...where, invoiceDate: { not: null } },
+      orderBy: { invoiceDate: "asc" },
+      select: { invoiceDate: true },
+    }),
+  ])
+
+  return {
+    count: agg._count._all,
+    total: agg._sum.totalAmount ?? 0,
+    oldest: oldest?.invoiceDate ?? null,
+  }
 }
