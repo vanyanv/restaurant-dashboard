@@ -9,6 +9,8 @@ import { listOwnerStores } from "@/lib/chat/owner-scope"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
 import { authOptions } from "@/lib/auth"
 import { consumePendingWelcome } from "@/lib/welcome"
+import { NextAuthSessionProvider } from "@/lib/session-provider"
+import { QueryProvider } from "@/lib/query-client"
 import "@/styles/editorial-tokens.css"
 import "@/styles/editorial-dashboard.css"
 // Despite the name, editorial-auth.css also carries the whole Settings
@@ -68,6 +70,21 @@ export default async function EditorialLayout({
     : []
 
   return (
+    /*
+     * The two providers that were in the ROOT layout until they were measured.
+     * Only this tree uses them — `useQuery` in components/analytics and
+     * components/monitoring, `useSession` in app-sidebar.tsx — and keeping
+     * them here spares every Counter route, every /m route and both
+     * signed-out pages a query client, framer-motion and a client-side
+     * session fetch they never read.
+     *
+     * `session` is PASSED, not omitted. Without the prop, SessionProvider
+     * performs its own `GET /api/auth/session` on first load — a round trip
+     * for a value this layout has already resolved on the server, and a
+     * `status: "loading"` first render for anything reading `useSession`.
+     */
+    <NextAuthSessionProvider session={session}>
+      <QueryProvider>
     <div className={`${fraunces.variable} editorial-surface`}>
       <ChatDrawerProvider>
         <SidebarProvider defaultOpen={defaultPinned}>
@@ -85,5 +102,7 @@ export default async function EditorialLayout({
         <ChatDrawerClient stores={chatStores} />
       </ChatDrawerProvider>
     </div>
+      </QueryProvider>
+    </NextAuthSessionProvider>
   )
 }

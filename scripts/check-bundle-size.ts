@@ -49,6 +49,24 @@ const BUDGETS: BudgetRule[] = [
     match: (r) => r === "/login" || r === "/" || r === "/signup/[token]",
     uncompressedBytes: 800_000,
   },
+  /*
+   * The routes that TALK TO THE MODEL, and so legitimately carry
+   * `@ai-sdk/react` + `ai`. Listed by exact path rather than a pattern, so a
+   * new route cannot quietly inherit an AI-sized budget by being named
+   * "ask" — if a fourth route needs the SDK, that is a decision someone makes
+   * here on purpose.
+   *
+   * Every OTHER Counter route used to carry it too, through a barrel: the
+   * pure Ask state and the hook that calls the model lived in one module, so
+   * anything reading an `AskState` dragged the SDK in behind it. That put 40
+   * routes at ~1230 KB. They are now ~650, and this rule exists so the three
+   * that are supposed to be heavy do not force the budget up for the rest.
+   */
+  {
+    label: "AI SDK routes (ask + chat)",
+    match: (r) => r === "/m/ask" || r === "/dashboard/ask" || r === "/m/chat",
+    uncompressedBytes: 1_250_000,
+  },
   {
     label: "mobile shell",
     match: (r) => r.startsWith("/m"),

@@ -1,7 +1,5 @@
 import type { Metadata } from "next"
 import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google"
-import { NextAuthSessionProvider } from "@/lib/session-provider"
-import { QueryProvider } from "@/lib/query-client"
 import { CounterThemeProvider, themeNoFlashScript } from "@/components/counter/theme-provider"
 import { Toaster } from "sonner"
 import "./globals.css"
@@ -48,13 +46,28 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeNoFlashScript }} />
       </head>
       <body className={`${dmSans.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${dmSans.className}`}>
+        {/*
+          * ONLY what every route needs. `NextAuthSessionProvider` and
+          * `QueryProvider` used to wrap everything from here, which put a
+          * TanStack query client, a next-auth client session fetch and —
+          * through `QueryProvider`'s `MotionConfig` — the whole of
+          * framer-motion on the critical path of every first paint, including
+          * `/login` (218.9 KB gzipped) and `/shutdown` (164.5 KB), the two
+          * routes a signed-out visitor sees.
+          *
+          * Neither is used outside the editorial tree: `useQuery` appears only
+          * in `components/analytics` and `components/monitoring`, `useSession`
+          * only in `app-sidebar.tsx`, and no Counter component imports
+          * framer-motion at all (`components/counter/motion/` is hand-rolled).
+          * Both now live in `(editorial)/layout.tsx`.
+          *
+          * `CounterThemeProvider` stays: its no-flash script has to run before
+          * first paint, which is the whole reason it is inline in <head>.
+          * `Toaster` stays because `toast()` is called from both trees.
+          */}
         <CounterThemeProvider>
-          <NextAuthSessionProvider>
-            <QueryProvider>
-              {children}
-              <Toaster richColors position="top-right" />
-            </QueryProvider>
-          </NextAuthSessionProvider>
+          {children}
+          <Toaster richColors position="top-right" />
         </CounterThemeProvider>
       </body>
     </html>
