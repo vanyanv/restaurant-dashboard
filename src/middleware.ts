@@ -18,12 +18,13 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/operations": "/m/operations",
   "/dashboard/orders": "/m/orders",
   "/dashboard/pnl": "/m/pnl",
-  // Desktop Product Mix was retired into Menu Profit (the two ranked menu
-  // items by the same measure, and Menu Profit's own docblock called the
-  // Product Mix scatter superseded). /m/product-mix stays — it is the phone's
-  // only menu-performance view — so Menu Profit maps to it, and the retired
-  // desktop path keeps its mapping for bookmarks.
-  "/dashboard/menu-profit": "/m/product-mix",
+  // Menu Profit now HAS a phone surface of its own, built on Counter from the
+  // same adapter the desk uses, so it points there rather than at
+  // /m/product-mix. That mapping was a stand-in from when the phone's only
+  // menu-performance view was the pre-Counter Product Mix page; the retired
+  // desktop /dashboard/product-mix keeps pointing at it for bookmarks until
+  // that page is rebuilt in turn.
+  "/dashboard/menu-profit": "/m/menu-profit",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
   // Stores had no mobile equivalent left after the mobile bloat deletion —

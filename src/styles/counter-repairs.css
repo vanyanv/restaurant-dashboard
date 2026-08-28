@@ -109,3 +109,39 @@ button.wkd {
     animation: none !important;
   }
 }
+
+/* `.mdot.PUZZLE` is the one quadrant colour the generated sheet writes as a
+   LITERAL — `oklch(45% 0.11 250)`, carried straight over from the prototype
+   (counter-components.css:700). Its three siblings are all tokens
+   (`--good`, `--signal`, `--bad`), so they invert with the theme and this one
+   does not: on the dark theme the other three lift and the Puzzles stay a
+   dark navy against a dark ground, which the dark-mode gate reads as a page
+   whose colours are merely different rather than themed.
+
+   `--ct-quadrant-puzzle` in `counter.css` names that exact value and gives it
+   the dark arm the other three already have, via the same `light-dark()` pair
+   every colour in that block uses. The override lives HERE because
+   `counter-components.css` is generated and may not be hand-edited; when the
+   generator next emits `.mdot.PUZZLE`, it should emit the token and this rule
+   should go. */
+.mdot.PUZZLE {
+  background: var(--ct-quadrant-puzzle);
+}
+
+/* The other literal in the matrix legend. A PRESSED `.qbtn` inverts — `--ink`
+   ground, `--surface` text (counter-components.css:242) — and the generated
+   sheet dims its count with a fixed light grey, `oklch(78% 0.010 55)`
+   (line 243). That reads on the light theme, where the pressed chip is dark.
+   On the dark theme the chip's ground becomes light and the count stays light
+   grey on it: the same colour on both themes, legible on one.
+
+   `--ct-ink-inverse-3` in `counter.css` names the pair: the light arm is the
+   prototype's own value, the dark arm its mirror. A `color-mix()` of
+   `--surface` and `--ink` expresses the same relationship and was tried first,
+   but it computes to a plain `oklch()` and the dark-mode gate resolves
+   computed colours against the token set — a mix is untraceable to a token
+   even when both its inputs are tokens. When the generator next emits line
+   243 it should emit this token and this rule should go. */
+.qbtn[aria-pressed="true"] .n {
+  color: var(--ct-ink-inverse-3);
+}

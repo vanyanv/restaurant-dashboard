@@ -144,6 +144,14 @@
   --ct-ink:          light-dark(oklch(24% 0.014 40), oklch(93% 0.010 60));
   --ct-ink-2:        light-dark(oklch(47% 0.012 45), oklch(74% 0.011 55));
   --ct-ink-3:        light-dark(oklch(52.5% 0.011 50), oklch(65% 0.011 52));  /* light corrected from 55% (prototype) via 53.5%, see file header */
+  /* Muted text sitting ON an inverted chip - a pressed .qbtn is --ink ground
+     with --surface text, and its count steps back from that. The light arm is
+     the prototype's own literal from counter-components.css line 243; the dark
+     arm is its mirror, since on that theme the chip's ground is the light one.
+     A color-mix of --surface and --ink says the same thing and computes to a
+     literal, which the dark-mode gate cannot trace back to a token - so it is
+     named here, like every other pair. */
+  --ct-ink-inverse-3: light-dark(oklch(78% 0.010 55), oklch(42% 0.008 55));
 
   /* action + state
      Fix round 3 (post-review): round 2 solved bad/warn/accent/signal

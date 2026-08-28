@@ -128,8 +128,11 @@ export function Matrix({
             }}
           >
             <b>{active.label}</b>
-            {active.detail.map((d) => (
-              <span key={d}>{d}</span>
+            {/* Index-keyed on purpose: two detail lines can legitimately read
+                the same ("0 sold" and "0 sold" on an item with neither), and
+                the list is static per point. */}
+            {active.detail.map((d, i) => (
+              <span key={i}>{d}</span>
             ))}
           </div>
         ) : null}
