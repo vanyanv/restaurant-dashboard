@@ -492,8 +492,19 @@ async function main() {
     }
   })
 
-  // Navigate to the Otter login page and fill in the form
-  await page.goto("https://manager.tryotter.com", { waitUntil: "networkidle" })
+  // Navigate to the Otter login page and fill in the form.
+  //
+  // Do NOT wait for "networkidle" here. The login SPA holds a connection open
+  // for the life of the page, so the 500ms of network silence networkidle
+  // waits for never arrives and the goto burns its whole timeout — that is the
+  // 2026-08-28 failure, where every daily run died on `page.goto: Timeout
+  // 30000ms exceeded` while the form was actually interactive in under three
+  // seconds. The email field is the real readiness signal, so wait for that.
+  await page.goto("https://manager.tryotter.com", {
+    waitUntil: "domcontentloaded",
+    timeout: 60_000,
+  })
+  await page.waitForSelector('[data-testid="op-auth_email-field"]', { timeout: 60_000 })
 
   // Fill email and password, click sign in
   await page.fill('[data-testid="op-auth_email-field"]', email)
