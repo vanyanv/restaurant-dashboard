@@ -8,7 +8,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { empty, mapReady, ready, type SectionData } from "@/lib/counter/section-data"
-import type { DonutSlice, FigureProps, QueueItem } from "@/components/counter"
+import type { DonutSlice, FigureProps, MListRow, QueueItem } from "@/components/counter"
 
 /**
  * The Menu hub — `P.menuhub` (`docs/counter/counter-prototype.html:7274`).
@@ -69,8 +69,8 @@ export interface MenuHubHeadline {
 
 export interface MenuWorkSection {
   items: QueueItem[]
-  /** The phone's `.mlist`, three rows of [title, body, ""]. */
-  phoneRows: Array<{ key: string; cells: [string, string, string]; href: string }>
+  /** The phone's `.mlist` — real `MListRow`s, each carrying its own href. */
+  phoneRows: MListRow[]
 }
 
 export interface MenuCategoriesSection {
@@ -324,7 +324,14 @@ function work(): MenuWorkSection {
     })),
     phoneRows: WORK.map((w) => ({
       key: w.key,
-      cells: [w.title, w.body.split(",")[0], ""] as [string, string, string],
+      title: w.title,
+      // The first clause only. The desk's full sentence is three lines at
+      // 340px, and `.mlist`'s second line is one.
+      detail: w.body.split(",")[0],
+      // No figure on the right: these are destinations, not readings. `value`
+      // is required, so it carries the chevron's own affordance and nothing
+      // else — an empty string rather than a zero, which would read as one.
+      value: "",
       href: w.href,
     })),
   }
