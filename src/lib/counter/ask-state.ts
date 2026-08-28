@@ -79,9 +79,43 @@ export interface AskAnswer {
   form: ReturnForm
 }
 
+/**
+ * One thing the model is doing, or has done, while an answer is in flight.
+ *
+ * This is the whole of what `.tstep` renders — see `Thinking`. `reading` is a
+ * tool whose call has gone out and whose output has not landed; `read` is one
+ * whose output has. Those are the only two states a part can be in that the
+ * reader has any use for: `input-streaming` and `input-available` are both
+ * "asked, waiting", and the difference between them is plumbing.
+ */
+export interface AskStep {
+  /** The registered tool name — `labelFor` turns it into words. */
+  tool: string
+  /**
+   * NOT named `status`. That word belongs to `SectionData` in this codebase,
+   * and `no-status-branch` matches `.status ===` textually — it cannot tell an
+   * `AskStep` from a section, so calling this `status` made every read of it
+   * look like the defect that rule exists to catch. `state` is also the AI
+   * SDK's own word for the same thing on a message part.
+   */
+  state: "reading" | "read"
+}
+
 export type AskState =
   | { status: "idle" }
-  | { status: "asking"; question: string }
+  | {
+      status: "asking"
+      question: string
+      /**
+       * What has been read so far, in the order it was read.
+       *
+       * EMPTY IS A REAL STATE and not a missing one: for the first seconds of
+       * a turn the model is choosing a tool and has called nothing, so there
+       * is genuinely nothing to report. `Thinking` draws its own opening step
+       * for that rather than an empty box.
+       */
+      steps: AskStep[]
+    }
   | { status: "answered"; answer: AskAnswer }
   | { status: "failed"; question: string; message: string }
 
@@ -168,5 +202,55 @@ export function askPending(state: AskState): boolean {
  */
 export function askStateFor(state: AskState, question: string): AskState {
   if (!question) return state
-  return state.status === "idle" ? { status: "asking", question } : state
+  return state.status === "idle" ? { status: "asking", question, steps: [] } : state
+}
+
+/**
+ * The steps a turn has taken so far, or none when it is not in flight.
+ *
+ * A reader of `AskState` gets this the way it gets the answer, the failure and
+ * the question — through an accessor, not by inspecting `.status`. That is the
+ * convention this file already sets (`askAnswer`, `askFailure`, `askQuestion`,
+ * `askPending`), and it is also what keeps `no-status-branch` satisfied in the
+ * component: `npm run tokens` matches `.status ===` textually and cannot tell
+ * an `AskState` from a `SectionData`, so a branch in `ask-answer.tsx` reads as
+ * the defect that rule exists to catch. Doing the narrowing here is both the
+ * house style and the honest place for it.
+ */
+export function askReading(state: AskState): AskStep[] {
+  return state.status === "asking" ? state.steps : []
+}
+
+/**
+ * The reading log for a turn in flight.
+ *
+ * `toolNamesFrom` answers a different question — what a FINISHED turn read,
+ * for the "Read" row — so it keeps only `output-available` parts and drops
+ * `fileReturn`, which reads nothing. Both exclusions are wrong here.
+ *
+ * A step whose output has not landed is exactly the one the reader is waiting
+ * on, and it is the only step worth animating. And filing the return is a
+ * whole model round trip — measured at roughly a third of a turn's wall clock
+ * — so hiding it would leave the log looking finished while the reader waits
+ * through the longest step of all.
+ *
+ * De-duplicated by tool name, keeping the FURTHEST state reached: a tool
+ * called twice is one line that ends up `read`, not two lines disagreeing.
+ */
+export function askSteps(parts: readonly ReturnPart[]): AskStep[] {
+  const order: string[] = []
+  const reached = new Map<string, "reading" | "read">()
+
+  for (const p of parts) {
+    if (!p || typeof p.type !== "string") continue
+    const name = p.toolName ?? (p.type.startsWith("tool-") ? p.type.slice("tool-".length) : null)
+    if (!name) continue
+    if (!reached.has(name)) order.push(name)
+    // Only ever advances. An `output-available` part cannot be un-read by a
+    // later `input-streaming` one for the same tool.
+    if (p.state === "output-available") reached.set(name, "read")
+    else if (!reached.has(name)) reached.set(name, "reading")
+  }
+
+  return order.map((tool) => ({ tool, state: reached.get(tool) ?? "reading" }))
 }

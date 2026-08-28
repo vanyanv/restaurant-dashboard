@@ -4,10 +4,17 @@ import Link from "next/link"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { Strip } from "@/components/counter/surface/strip"
 import { MStrip } from "@/components/counter/shell/m-strip"
+import { Thinking } from "@/components/counter/ask/thinking"
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
-import { askAnswer, askFailure, askQuestion, type AskState } from "@/lib/counter/ask-state"
+import {
+  askAnswer,
+  askFailure,
+  askQuestion,
+  askReading,
+  type AskState,
+} from "@/lib/counter/ask-state"
 
 /**
  * The answer that fills `.cmdk__pane[data-cmdans]` — `askRender()` at line
@@ -155,7 +162,14 @@ export function AskAnswerBody({
   return (
     <div className={className} aria-live="polite" aria-busy={status === "asking"}>
       {status === "asking" ? (
-        <p className="ans__lead">Reading the numbers…</p>
+        /*
+         * Was a single static line, "Reading the numbers…", for the whole
+         * turn — 32.8 of 33.8 seconds unchanged, measured in a browser, while
+         * the surface already knew which tools had been called and which had
+         * come back. `Thinking` says it. The prototype designed this state and
+         * its CSS shipped with nothing emitting it; see that component.
+         */
+        <Thinking steps={askReading(state)} />
       ) : (
         <>
           {lead ? <p className="ans__lead">{lead}</p> : null}
