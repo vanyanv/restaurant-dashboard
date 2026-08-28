@@ -360,6 +360,9 @@ export function AskSurface({
   // included. Same fix as `askBackRef` above, for the same reason.
   const submitRef = useRef(submit)
   submitRef.current = submit
+  // Same stale-closure reason as `submitRef`: the delegation is mounted once.
+  const askStateRef = useRef(askState)
+  askStateRef.current = askState
 
   /* ---------------------------------------------------------------- rows */
 
@@ -531,8 +534,19 @@ export function AskSurface({
       // `AskBar` — lives on the page and its click IS the ask, so it submits
       // too, unless there is nothing to submit (the ask bar's bare opener
       // carries `data-askabout=""`).
+      //
+      // AND ONLY WHEN ASK IS ACTUALLY WIRED. With no `askState`, `submit`
+      // closes the surface (there is no pane for an answer to land in), so a
+      // section click would open the palette and immediately throw the
+      // question away — strictly worse than the pre-fill it replaced, and
+      // invisible in the app because the shell always passes `askState`. An
+      // unwired consumer keeps the old behaviour: the question lands in the
+      // input and waits.
       const fromThisPalette = askEl.closest("[data-cmdk]") !== null
-      if (!fromThisPalette && value.trim().length > 0) submitRef.current(value)
+      const askWired = askStateRef.current !== undefined
+      if (!fromThisPalette && askWired && value.trim().length > 0) {
+        submitRef.current(value)
+      }
     }
     document.addEventListener("keydown", onKeyDown)
     document.addEventListener("click", onClick)
