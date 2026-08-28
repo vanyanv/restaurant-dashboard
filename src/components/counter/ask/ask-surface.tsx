@@ -9,6 +9,8 @@ import { NAV_GROUPS } from "@/lib/counter/nav"
 import { PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-range"
 import { NAV_ICONS } from "@/components/counter/shell/nav-icons"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
+import { AskAnswerPane } from "@/components/counter/ask/ask-answer"
+import type { AskState } from "@/lib/counter/use-ask"
 import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
 
 /**
@@ -117,11 +119,34 @@ import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
  *    and no click handler of its own — the document-level delegation below
  *    (the same one `AskBar` and `Section`'s `.askmini` use) does the pre-fill,
  *    so there is one path in, not two.
- * 2. NO `.cmdk__pane[data-cmdans]`. The prototype's answer pane renders
- *    `askRender()` — a keyword-scored lookup over invented answers. This
- *    application has no answer surface yet; `onSubmit` hands the question to
- *    the caller. An empty pane that is `hidden` forever is exactly the dead
- *    markup note 46 is about, so it arrives with the thing that fills it.
+ * 2. `.cmdk__pane[data-cmdans]` ARRIVED WITH THE THING THAT FILLS IT. This
+ *    entry used to record its absence: the prototype's pane renders
+ *    `askRender()`, a keyword-scored lookup over invented answers, and an
+ *    empty pane that is `hidden` forever is exactly the dead markup note 46 is
+ *    about. The pane is now `AskAnswerPane`, driven by `useAsk()` against
+ *    `POST /api/chat` — 116 real tools, a real `fileReturn`, and a "Read" row
+ *    naming what the turn actually read (K-R2). It is rendered ONLY when a
+ *    caller passes `askState`, so a mount with no answer surface wired still
+ *    emits no pane at all and `onSubmit` behaves exactly as it did.
+ *
+ *    Three consequences, each deliberate:
+ *      - Submitting no longer CLOSES the surface when there is a pane to fill.
+ *        The answer takes the space the list was in, so the palette "never
+ *        grows and never navigates" — `cmdkAnswer()`'s own comment.
+ *      - The arrows and Enter go inert while the pane is up, as they do in
+ *        `cmdkOpen`'s keydown (`if (!pane.hidden) return`). Marking a row
+ *        nobody can see, and opening it on Enter, is the defect the mark reset
+ *        below already guards against in the other direction.
+ *      - Escape CLOSES the palette rather than stepping back to the list. The
+ *        prototype makes Escape a two-stage back; here the answer is the thing
+ *        a reader summoned and "Back to search" is a button in the foot, so
+ *        one Escape means one thing everywhere in this application.
+ *
+ *    Reopening the surface (⌘K, or any `[data-askabout]` click) clears the
+ *    answer. A palette that reopens onto last week's question would be showing
+ *    a figure for a store and a range the reader may have changed since.
+ *    F-R10 still holds through all of it: the answer is what gets cleared, and
+ *    the TYPED QUESTION stays in the input.
  * 3. NO "OPEN A VIEW" GROUP. It is built from the prototype's `VIEWS` map of
  *    sub-tabs per page. `nav.ts` declares destinations and no sub-views, so
  *    the group would be a heading over nothing — which is the very thing
@@ -223,6 +248,8 @@ export function AskSurface({
   onSelectPreset,
   suggestions = [],
   onSubmit,
+  askState,
+  onAskBack,
 }: {
   pathname: string
   params: URLSearchParams
@@ -238,6 +265,12 @@ export function AskSurface({
   /** "Ask about {page}" — the page's own suggested questions, or no group. */
   suggestions?: string[]
   onSubmit?: (question: string, context: AskContext) => void
+  /** The lifecycle of the last submitted question. PRESENT is what turns this
+   *  palette into an answering surface: absent, submitting closes it and hands
+   *  the question to `onSubmit` alone, exactly as before. */
+  askState?: AskState
+  /** Throw the answer away and go back to the list. */
+  onAskBack?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState("")
@@ -253,8 +286,19 @@ export function AskSurface({
   // component. State would be captured stale in those closures.
   const openRef = useRef(false)
   openRef.current = open
+  // Same reason as `openRef`: the two listeners below are mounted once, and a
+  // caller that passes an inline `onAskBack` would otherwise re-register both
+  // on every render of the shell.
+  const askBackRef = useRef(onAskBack)
+  askBackRef.current = onAskBack
 
   const context = describeAskContext({ pathname, params, storeName, today })
+
+  // Whether the pane is showing, which is also whether the list is not.
+  const askStatus = askState?.status ?? "idle"
+  const answering = askStatus !== "idle"
+  const answeringRef = useRef(false)
+  answeringRef.current = answering
 
   const close = useCallback(() => {
     setOpen(false)
@@ -266,6 +310,9 @@ export function AskSurface({
     // click while the palette is already open would otherwise record a row
     // inside the palette as the thing to restore focus to.
     if (!openRef.current) restoreFocusRef.current = document.activeElement as HTMLElement | null
+    // Summoning the surface always lands on the list, never on the previous
+    // question's answer — see divergence 2.
+    if (answeringRef.current) askBackRef.current?.()
     setQuestion(prefill)
     setActive(0)
     setOpen(true)
@@ -274,9 +321,12 @@ export function AskSurface({
   const submit = useCallback(
     (q: string) => {
       onSubmit?.(q, context)
-      close()
+      // With a pane to fill, the answer takes the space the list was in. With
+      // no pane wired, the question has left this surface and there is nothing
+      // left here to look at.
+      if (askState === undefined) close()
     },
-    [onSubmit, context, close],
+    [onSubmit, context, close, askState],
   )
 
   /* ---------------------------------------------------------------- rows */
@@ -460,6 +510,11 @@ export function AskSurface({
         close()
         return
       }
+      // `cmdkOpen`'s own guard: `if (!w.querySelector('[data-cmdans]').hidden)
+      // return`. The list is hidden behind the pane, so there is no row to
+      // mark and Enter would re-ask the question that is already answered.
+      // Tab keeps working — a modal that lets Tab walk out is not modal.
+      if (answering && e.key !== "Tab") return
       if (e.key === "ArrowDown") {
         e.preventDefault()
         setActive((i) => i + 1)
@@ -503,7 +558,7 @@ export function AskSurface({
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, close])
+  }, [open, close, answering])
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
@@ -540,7 +595,12 @@ export function AskSurface({
             type="text"
             data-cmdq
             value={question}
-            onChange={(e) => setQuestion(e.target.value)}
+            onChange={(e) => {
+              // Typing IS searching. An answer left on screen while the input
+              // says something else is an answer to a question nobody can see.
+              if (answering) onAskBack?.()
+              setQuestion(e.target.value)
+            }}
             placeholder={`Ask about ${context.store}, or jump to anything…`}
             aria-label="Ask, or jump to anything"
           />
@@ -559,7 +619,7 @@ export function AskSurface({
         </div>
 
         <div className="cmdk__mid">
-          <div className="cmdk__list" data-cmdlist>
+          <div className="cmdk__list" data-cmdlist hidden={answering}>
             {/* "Anything you can type is a question, so the first row is always
                 the question you actually typed — the list underneath is the
                 shortcut, not the point." */}
@@ -602,6 +662,23 @@ export function AskSurface({
               )
             })}
           </div>
+
+          {/* Mounted only when a caller wired an answer surface — the pane is
+              `hidden` between questions, which is what `.cmdk__pane[hidden]`
+              is for, but it is never mounted with nothing that could ever
+              fill it. */}
+          {askState ? (
+            <div className="cmdk__pane" data-cmdans hidden={!answering}>
+              {answering ? (
+                <AskAnswerPane
+                  state={askState}
+                  context={context}
+                  onBack={() => onAskBack?.()}
+                  onLeave={close}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="cmdk__foot">

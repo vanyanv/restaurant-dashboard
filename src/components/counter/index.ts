@@ -49,6 +49,7 @@ export { Record, type RecordMark } from "./surface/record"
 export { AskSurface } from "./ask/ask-surface"
 export { AskBar } from "./ask/ask-bar"
 export { AskSheet } from "./ask/ask-sheet"
+export { AskAnswerPane } from "./ask/ask-answer"
 
 export { AppShell, EntryItem } from "./shell/app-shell"
 export { PhoneShell } from "./shell/phone-shell"
