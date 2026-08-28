@@ -726,7 +726,52 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "cogs", name: "COGS", protoRoute: "/dashboard/cogs", route: "/dashboard/cogs", status: "editorial" },
+  {
+    protoId: "cogs",
+    name: "COGS",
+    protoRoute: "/dashboard/cogs",
+    route: "/dashboard/cogs",
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m/cogs",
+    report: true,
+    // MEASURED. Desk 15 of 15, phone 9 of 9 — landmark for landmark, 0 extra.
+    // The only two differences on either surface are the strip's cell count.
+    status: "counter",
+    baseline: { desktop: 15, mobile: 9 },
+    styleAllowances: [
+      {
+        landmark: "strip",
+        property: "data-n",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The prototype's strip is four cells; ours is three. TWO of its " +
+          "cells cannot be answered and ONE was added in their place. " +
+          "'Waste' is gone because `InventoryAdjustment` holds 0 rows in the " +
+          "whole table and `StockCount` holds 4 — there is no waste series " +
+          "and no honest way to invent one (C-R3). 'Theoretical' is gone " +
+          "because `DailyCogsItem.lineCost` ALREADY IS the theoretical cost, " +
+          "recipes valued at invoice prices times units sold; the only " +
+          "available actual is purchasing, and purchasing is not consumption " +
+          "without an inventory bridge — measured month by month the two " +
+          "swing from 37% under to 38% over inside six months, which is " +
+          "invoice cadence, not waste (C-R4). 'Against plan' was added in " +
+          "their place because `Store.targetCogsPct` is the one reference " +
+          "this schema publishes (C-R9). `data-n` IS the layout, so the " +
+          "track count below is this line's consequence rather than a " +
+          "second finding. The day a store file carries a waste figure or an " +
+          "inventory count lands, both of these lines must fail rather than " +
+          "quietly absorb it.",
+      },
+      {
+        landmark: "strip",
+        property: "grid-template-columns",
+        desktop: 1,
+        mobile: 0,
+        reason: "The track count that follows from the `data-n` above. One cause, two measurements.",
+      },
+    ],
+  },
   { protoId: "menu", name: "Menu profit", protoRoute: "/dashboard/menu-profit", route: "/dashboard/menu-profit", status: "editorial" },
   {
     protoId: "labor",
@@ -830,7 +875,20 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 22, mobile: 9 },
   },
-  { protoId: "cogsstore", name: "COGS", protoRoute: "/dashboard/cogs/hollywood", route: "/dashboard/cogs/hollywood", status: "editorial" },
+  {
+    protoId: "cogsstore",
+    name: "COGS",
+    protoRoute: "/dashboard/cogs/hollywood",
+    // Hollywood's id is a cuid, not the prototype's slug.
+    route: "/dashboard/cogs/cmexd4zia0001jr04ljkdt9na",
+    query: "?range=d7&cmp=weekday",
+    mobileRoute: "/m/cogs/cmexd4zia0001jr04ljkdt9na",
+    report: true,
+    // Landmark for landmark on BOTH surfaces, zero rendering differences,
+    // zero `.empty`. Nothing to declare.
+    status: "counter",
+    baseline: { desktop: 12, mobile: 5 },
+  },
   { protoId: "moninfra", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/infrastructure", route: "/dashboard/admin/monitoring/infrastructure", status: "editorial" },
   { protoId: "moncosts", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/costs", route: "/dashboard/admin/monitoring/costs", status: "editorial" },
   { protoId: "moncache", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/cache", route: "/dashboard/admin/monitoring/cache", status: "editorial" },

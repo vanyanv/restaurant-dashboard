@@ -43,5 +43,5 @@ Structure: 0 missing, 0 extra, 9 matched. Rendering (light): 0 property differen
 
 ### Dark mode — asserted on its own terms, never against the prototype
 
-114 of 193 elements paint a colour of their own; 150 were swept (every element that paints or carries text, not only the 9 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 44 resolved `--ct-*` tokens. 0 defects.
+113 of 192 elements paint a colour of their own; 149 were swept (every element that paints or carries text, not only the 9 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 44 resolved `--ct-*` tokens. 0 defects.
 
