@@ -818,7 +818,25 @@ export const PAGES: FidelityPage[] = [
     ],
   },
   { protoId: "pnlstore", name: "P&L", protoRoute: "/dashboard/pnl/hollywood", route: "/dashboard/pnl/hollywood", status: "editorial" },
-  { protoId: "menuhub", name: "Menu profit", protoRoute: "/dashboard/menu", route: "/dashboard/menu", status: "editorial" },
+  {
+    protoId: "menuhub",
+    // The prototype's own name for this page is "Menu", not "Menu profit" —
+    // that is the sibling at /dashboard/menu-profit. Corrected here because
+    // the report file is titled from it.
+    name: "Menu",
+    protoRoute: "/dashboard/menu",
+    route: "/dashboard/menu",
+    query: "?range=d30",
+    mobileRoute: "/m/menu",
+    report: true,
+    // MEASURED, and the first page in this rebuild that needed no allowance of
+    // any kind: 12 of 12 on the desk, 5 of 5 on the phone, zero extra, zero
+    // rendering differences, zero `.empty`. Every cell the prototype asks for
+    // is answerable here because the page asks about the menu's own shape
+    // rather than about money crossing a denominator.
+    status: "counter",
+    baseline: { desktop: 12, mobile: 5 },
+  },
   { protoId: "catalog", name: "Menu profit", protoRoute: "/dashboard/menu/catalog", route: "/dashboard/menu/catalog", status: "editorial" },
   { protoId: "catalogitem", name: "A menu item", protoRoute: "/dashboard/menu/catalog/neddy-burger", route: "/dashboard/menu/catalog/neddy-burger", status: "editorial" },
   { protoId: "recipes", name: "Recipes", protoRoute: "/dashboard/recipes", route: "/dashboard/recipes", status: "editorial" },
