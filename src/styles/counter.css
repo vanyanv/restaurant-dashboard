@@ -213,6 +213,23 @@
   --ct-mx-3: light-dark(oklch(60.5% 0.031 50), oklch(49% 0.031 50));
   --ct-mx-4: light-dark(oklch(76% 0.025 58),   oklch(26% 0.025 58));
 
+  /* The menu matrix's fourth quadrant. counter-components.css gives
+     .mdot.PUZZLE a bare oklch literal — the prototype's own value, and the one
+     colour in that sheet with no token behind it. Matrix's legend must set
+     --qc inline per button, and a literal in a .tsx fails no-colour-literal,
+     correctly. Named here so the component references a token like everything
+     else does. The dark arm lifts lightness the way every other pair in this
+     block does; the generated dot rule still carries the literal.
+
+     NO CLOSING BRACE MAY APPEAR IN THIS COMMENT, and that is not a style
+     preference. parseTokens in tests/styles/counter-tokens.test.ts slices the
+     root block from its opening brace to the first closing brace, with no
+     comment handling at all — so one written here truncates the token list and
+     every token below it silently disappears from the check. It cost 18
+     failures in the gp ramp, which is nowhere near this line, twice: once for
+     naming a CSS rule longhand, and once inside the sentence warning about it. */
+  --ct-quadrant-puzzle: light-dark(oklch(45% 0.11 250), oklch(68% 0.11 250));
+
   /* one overshoot, split into what made it. Sequential ramp of the bad hue,
      monotone in lightness, fixed to the cause rather than to its size. */
   --ct-gp-1: light-dark(oklch(35.5% 0.125 28), oklch(55.8% 0.125 28));
