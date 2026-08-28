@@ -11,7 +11,11 @@ import { isOperational } from "@/lib/store-lifecycle"
 import { foldSplhSeries } from "@/lib/dashboard/splh-fold"
 import type { SplhPoint } from "@/lib/splh"
 import { COGS_CODE, LABOR_CODE, TOTAL_SALES_CODE, type PnLRow } from "@/lib/pnl"
-import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
+import {
+  loadChannelMix,
+  loadChannelMixByStore,
+  type ChannelReading,
+} from "@/lib/counter/channel-mix"
 import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/targets"
 import { granularityFor, loadStatement, rowValues, type Statement } from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
@@ -971,12 +975,26 @@ export function getOverviewSectionPromises(
 
     return classify(
       async () => {
-        const lists = await Promise.all(
-          operationalIds.map(async (id) =>
-            [id, await loadChannelMix({ range, storeId: id, accountId })] as const,
-          ),
+        /*
+         * ONE query for every store, not one per store.
+         *
+         * This used to map `loadChannelMix` over `operationalIds` — 2 queries
+         * each, uncached, 2N for the section — on the stated grounds that
+         * "loadChannelMix aggregates rather than grouping". Half true: the SQL
+         * always ended `GROUP BY "storeId", "platform"`; only the JS fold threw
+         * the store away. `loadChannelMixByStore` keeps the rows partitioned
+         * and folds each store separately, through the same `foldToChannels`
+         * the account-wide reading uses, so the figures are identical by
+         * construction rather than by two implementations agreeing.
+         *
+         * A selected store narrows this the same way it narrows everything
+         * else; `storeId` is already applied to `operationalIds` above, so
+         * passing null here would widen the section past the page's scope.
+         */
+        const all = await loadChannelMixByStore({ range, storeId, accountId })
+        return new Map<string, ChannelReading[]>(
+          operationalIds.map((id) => [id, all.get(id) ?? []]),
         )
-        return new Map<string, ChannelReading[]>(lists)
       },
       { retryAction: "retryStoreChannels" },
     )

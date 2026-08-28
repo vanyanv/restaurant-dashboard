@@ -154,7 +154,61 @@ export async function loadChannelMix(
   const ratesByStore = new Map<string, StoreRates>(stores.map((s) => [s.id, s]))
   const storeIds = stores.map((s) => s.id)
 
-  const rows = await prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
+  const rows = await queryChannelRows(storeIds, startDate, endDate)
+
+  return foldToChannels(rows, ratesByStore)
+}
+
+/**
+ * The same reading, PER STORE, from ONE query.
+ *
+ * `getOverviewSectionPromises` used to build this by calling
+ * `loadChannelMix` once per operational store — 2 queries each, none of them
+ * cached — which is 2N where 1 will do. The reason given in that adapter was
+ * that "loadChannelMix aggregates rather than grouping", and that was half
+ * true: the SQL has always ended `GROUP BY "storeId", "platform"` and
+ * returned per-store rows. Only the JS fold threw the store away.
+ *
+ * So this shares the query and partitions the rows it already has. A store
+ * with no rows in the range gets an empty array rather than being absent, so
+ * a caller can tell "traded nothing" from "not on this account" — the latter
+ * never reaches here, because `getScopedStores` filtered it out first.
+ */
+export async function loadChannelMixByStore(
+  input: ChannelMixInput,
+): Promise<Map<string, ChannelReading[]>> {
+  const { range, storeId, accountId } = input
+  const { startDate, endDate } = toQueryBounds(range)
+
+  const stores = await getScopedStores(accountId, storeId ?? null)
+  if (stores.length === 0) return new Map()
+
+  const ratesByStore = new Map<string, StoreRates>(stores.map((s) => [s.id, s]))
+  const rows = await queryChannelRows(
+    stores.map((s) => s.id),
+    startDate,
+    endDate,
+  )
+
+  const byStore = new Map<string, SummaryRow[]>()
+  for (const r of rows) {
+    const list = byStore.get(r.storeId) ?? []
+    list.push(r)
+    byStore.set(r.storeId, list)
+  }
+
+  return new Map(
+    stores.map((s) => [s.id, foldToChannels(byStore.get(s.id) ?? [], ratesByStore)]),
+  )
+}
+
+/** The one summary read both loaders share. */
+function queryChannelRows(
+  storeIds: string[],
+  startDate: Date,
+  endDate: Date,
+): Promise<SummaryRow[]> {
+  return prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
     SELECT
       "storeId",
       "platform",
@@ -170,7 +224,20 @@ export async function loadChannelMix(
       AND "date" <= ${endDate}
     GROUP BY "storeId", "platform"
   `)
+}
 
+/**
+ * Summary rows folded into one reading per channel, in CHANNELS order.
+ *
+ * Extracted from `loadChannelMix` so the per-store variant above produces
+ * byte-identical readings rather than a second implementation of the same
+ * arithmetic — two folds is how two surfaces come to print two different
+ * commissions for one range.
+ */
+function foldToChannels(
+  rows: SummaryRow[],
+  ratesByStore: Map<string, StoreRates>,
+): ChannelReading[] {
   const acc = new Map<ChannelId, { net: number; orders: number; commission: number | null }>()
 
   for (const r of rows) {
