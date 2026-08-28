@@ -287,7 +287,48 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "ask", name: "Ask", protoRoute: "/dashboard/chat", route: "/dashboard/chat", status: "editorial" },
+  {
+    protoId: "ask",
+    name: "Ask",
+    protoRoute: "/dashboard/chat",
+    // The Counter Ask page, which exists as of 2026-08-27. `/dashboard/chat`
+    // is still the editorial chat and still works; it is replaced when Ask
+    // grows a conversation, not by the front-door work.
+    route: "/dashboard/ask",
+    mobileRoute: "/m/ask",
+    /*
+     * REPORTED, AND DELIBERATELY NOT GATED. This is the only page in the
+     * manifest whose exclusion is a property of the page rather than of how
+     * far the rebuild has got, so the reason is written here rather than left
+     * to look like unfinished work.
+     *
+     * The prototype's `P.ask` renders in `UI.state === 'live'` — an ANSWER,
+     * with its verdict, figure strip, sources, go buttons and follow-ups. Our
+     * page reaches that state only by asking the model, and the harness loads
+     * a bare route. Measured 2026-08-27: desk 24 landmarks against our 5,
+     * phone 19 against our 4. That difference is not fidelity, it is two
+     * different states — the same trap the `order` entry above documents at
+     * length, where an order with nothing to fix would compare our empty state
+     * against the prototype's full one.
+     *
+     * Passing `query: "?q=…"` would answer that and break something worse: the
+     * landmark COUNT would then depend on a live model call. `FiledReturn`
+     * carries up to three figures and up to three follow-ups, and how many it
+     * files varies per run — so the baseline would move on its own, and a gate
+     * whose number moves on its own is worse than no gate. The plan's own
+     * rule, applied to itself: a baseline nobody can defend is not a baseline.
+     *
+     * What would make this gateable is a deterministic answer — a fixture mode
+     * that renders a canned `FiledReturn` without a model call. That is real
+     * work and it adds a test-only path to a product surface, so it belongs to
+     * whoever wants the gate, with this note as the argument for why.
+     *
+     * Until then `report: true` keeps `docs/counter/fidelity/ask.md`
+     * regenerating, so the drift is visible even though nothing fails on it.
+     */
+    report: true,
+    status: "editorial",
+  },
   {
     protoId: "decisions",
     name: "Needs you",
