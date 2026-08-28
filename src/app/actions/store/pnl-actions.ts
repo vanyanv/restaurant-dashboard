@@ -60,6 +60,37 @@ type DailyCogsRow = {
   recipeId: string | null
 }
 
+/**
+ * Which period a row's date falls in, as a lookup rather than a scan.
+ *
+ * `summarizeDailyCogs` and `computeMovers` both walked `periods.findIndex(...)`
+ * for EVERY row — O(rows x periods). A 90-day range across three stores with a
+ * few hundred menu items is tens of thousands of `DailyCogsItem` rows, and the
+ * rollup runs up to ten times per P&L render, so that comparison count is the
+ * one piece of per-row work worth removing.
+ *
+ * Periods are contiguous and ordered, so a binary search answers exactly what
+ * the linear scan did, including the two edges the scan encoded: a date before
+ * the first period or after the last returns -1, and `endDate` is INCLUSIVE
+ * (the scan tested `t <= p.endDate`). Same answers, same -1, fewer comparisons.
+ */
+function periodIndexer(periods: Period[]): (d: Date) => number {
+  const starts = periods.map((p) => p.startDate.getTime())
+  const ends = periods.map((p) => p.endDate.getTime())
+  return (d: Date) => {
+    const t = d.getTime()
+    let lo = 0
+    let hi = periods.length - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (t < starts[mid]) hi = mid - 1
+      else if (t > ends[mid]) lo = mid + 1
+      else return mid
+    }
+    return -1
+  }
+}
+
 function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
   cogsValues: number[]
   unmappedItems: UnmappedMenuItem[]
@@ -90,11 +121,10 @@ function summarizeDailyCogs(rows: DailyCogsRow[], periods: Period[]): {
     }
   }
 
+  const indexOf = periodIndexer(periods)
+
   for (const row of rows) {
-    const t = row.date.getTime()
-    const idx = periods.findIndex(
-      (p) => t >= p.startDate.getTime() && t <= p.endDate.getTime()
-    )
+    const idx = indexOf(row.date)
     if (idx === -1) continue
 
     rowCountPerPeriod[idx]++
@@ -141,11 +171,10 @@ function computeMovers(
     }
   >()
 
+  const indexOf = periodIndexer(periods)
+
   for (const row of rows) {
-    const t = row.date.getTime()
-    const idx = periods.findIndex(
-      (p) => t >= p.startDate.getTime() && t <= p.endDate.getTime()
-    )
+    const idx = indexOf(row.date)
     if (idx !== currentIdx && idx !== priorIdx) continue
 
     const key = `${row.itemName}:::${row.category}`
