@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useMemo } from "react"
 import {
-  AskSheet,
   ChannelRows,
   Chart,
   MHead,
@@ -16,6 +15,9 @@ import {
   type MListRow,
   type StoreCard,
 } from "@/components/counter"
+import {
+  AskSheet,
+} from "@/components/counter/ask"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { ASK_PHONE_ROUTE, askHref } from "@/lib/counter/ask-context"
 import { dayCount, rangeLabel, rangeSubtitle, rangeTitle } from "@/lib/counter/date-range"

@@ -10,11 +10,29 @@ import { CounterTransitionContext, type CounterTransition } from "./counter-tran
 import type { SyncState } from "./sync-chip"
 import type { SwitchableStore } from "./store-switcher"
 import { useEntry } from "@/components/counter/motion/use-entry"
-import { AskSurface } from "@/components/counter/ask/ask-surface"
-import { useAsk } from "@/lib/counter/use-ask"
+import dynamic from "next/dynamic"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { hasWindow, storeScopeHref } from "@/lib/counter/route-shape"
 import type { PresetId } from "@/lib/counter/date-range"
+
+/*
+ * The ⌘K palette, loaded on demand.
+ *
+ * `AskMount` carries `AskSurface` AND `useAsk`, and `use-ask.ts` imports
+ * `useChat` from `@ai-sdk/react` plus `DefaultChatTransport` from `ai`. This
+ * file is re-exported from the Counter barrel that ~100 files import, so an
+ * eager import put the whole AI SDK in the initial JavaScript of all 42
+ * rebuilt routes — for a palette nobody has opened yet.
+ *
+ * `ssr: false` because the palette renders nothing until a keystroke, so
+ * there is no markup worth streaming and no layout shift to avoid. The chunk
+ * begins loading as soon as this component mounts, so ⌘K is live well before
+ * a reader reaches for it.
+ */
+const AskMount = dynamic(
+  () => import("@/components/counter/ask/ask-mount").then((m) => m.AskMount),
+  { ssr: false },
+)
 
 /**
  * The frame every page sits inside, as `deskFor()` builds it (prototype line
@@ -194,7 +212,6 @@ export function AppShell({
    * class of defect as the rebuilt-on-every-click rail this component was
    * moved here to fix.
    */
-  const { state: askState, ask, reset: resetAsk } = useAsk()
 
   return (
     // `minmax(0,1fr)`, never `1fr`: a bare `1fr` is `minmax(auto,1fr)`, whose
@@ -284,7 +301,7 @@ export function AppShell({
          * the palette offers exactly what the rail and the date control offer
          * and cannot drift from either.
          */}
-        <AskSurface
+        <AskMount
           pathname={pathname}
           params={params}
           storeName={storeName}
@@ -295,9 +312,6 @@ export function AppShell({
           presetId={windowed ? presetId : undefined}
           onSelectPreset={windowed ? onSelectPreset : undefined}
           suggestions={page.askSuggestions}
-          onSubmit={ask}
-          askState={askState}
-          onAskBack={resetAsk}
         />
       </div>
     </div>

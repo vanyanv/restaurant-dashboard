@@ -3,18 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  AskAnswerBody,
-  AskComposer,
   DateControl,
   PageHead,
   useCounterTransition,
   usePageChrome,
   type SwitchableStore,
 } from "@/components/counter"
+import {
+  AskAnswerBody,
+  AskComposer,
+} from "@/components/counter/ask"
 import { ASK_STARTERS, askHref, describeAskContext } from "@/lib/counter/ask-context"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { askAnswer, askPending, askStateFor, useAsk } from "@/lib/counter/use-ask"
+import { askAnswer, askPending, askStateFor } from "@/lib/counter/ask-state"
+import { useAsk } from "@/lib/counter/use-ask"
 
 /**
  * Counter Ask on the desk — `P.ask` at line 4504 of
