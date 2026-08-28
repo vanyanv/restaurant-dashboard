@@ -10,6 +10,7 @@ import { resolveStoreIds, storeIdsSchema, ymd } from "./_shared"
 import type { ChatTool } from "./types"
 import { getInventoryDashboardData } from "@/app/actions/inventory/dashboard-actions"
 import { getInventoryCoverageHealth } from "@/app/actions/inventory/coverage-health-actions"
+import { pageSize } from "@/lib/paging"
 
 // ---------------------------------------------------------------------------
 // getInventoryStatus
@@ -213,7 +214,9 @@ export const listStockCountsTool: ChatTool<
   parameters: listCountsParams,
   async execute(args, ctx) {
     const storeIds = await resolveStoreIds(ctx, args.storeIds)
-    const limit = args.limit ?? 15
+    // `args` is written by the model, so this is bounded like any other
+    // caller-supplied page size.
+    const limit = pageSize(args.limit, 15)
     const rows = await ctx.prisma.stockCount.findMany({
       where: {
         storeId: { in: storeIds },

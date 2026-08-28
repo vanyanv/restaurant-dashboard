@@ -184,6 +184,22 @@ export const authOptions: NextAuthOptions = {
  * plus the monitoring page), so any gate that previously read `role === "OWNER"`
  * should use this helper instead. The literal `role === "DEVELOPER"` checks
  * are reserved for monitoring-only routes.
+ *
+ * READ THIS BEFORE REASONING ABOUT WHO CAN SEE WHAT: `Role` currently has
+ * exactly two members, OWNER and DEVELOPER, and this returns true for both.
+ * So every `if (!hasOwnerAccess(...)) redirect(...)` in the app — including
+ * the carefully argued ones on the Counter Overview and P&L — is a branch
+ * that CANNOT be taken today, and has never executed. The gates are not
+ * wrong and are deliberately left in place: they are correct the moment a
+ * third role exists, and deleting them would mean rediscovering the argument
+ * for each one later. But nothing here enforces a role distinction right now,
+ * and a reader who assumes otherwise will draw the wrong conclusion about
+ * what is protected.
+ *
+ * The MANAGER role that made this meaningful was removed by decision. If it
+ * is never coming back, the honest follow-up is to delete the gates rather
+ * than keep them — what should not persist is the current halfway state
+ * where they look load-bearing.
  */
 export function hasOwnerAccess(role: Role | null | undefined): boolean {
   return role === "OWNER" || role === "DEVELOPER"
