@@ -145,3 +145,22 @@ button.wkd {
 .qbtn[aria-pressed="true"] .n {
   color: var(--ct-ink-inverse-3);
 }
+
+/* `.statuspill` has three modifiers in the generated sheet — REVIEW, APPROVED
+   and REJECTED (counter-components.css:321-323) — and this schema's
+   `InvoiceStatus` has a fourth the prototype's fixture never used: MATCHED,
+   which is 194 of the account's 226 invoices and the terminal state the sync
+   writes when nothing tripped a sanity rule.
+
+   Without a rule of its own it renders as `.statuspill`'s bare box: the
+   padding and the radius with no ground and no colour, so the commonest status
+   on the page is the only one that does not look like a pill. The neutral pair
+   here is the one a toneless `.mtag` already uses (line 687), which is the
+   sheet's own answer to "a state, with no judgement in it".
+
+   When the generator next emits the pill block it should emit this modifier
+   and this rule should go. */
+.statuspill.MATCHED {
+  background: var(--sunk);
+  color: var(--ink-2);
+}
