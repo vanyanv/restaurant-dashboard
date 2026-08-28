@@ -74,14 +74,27 @@ table** and `StockCount` has 4. There is no waste series and no honest way to
 invent one. The desk strip is three cells, not four → a `data-n` difference,
 declared through `styleAllowances`, the mechanism the Analytics plan added.
 
-**C-R4 — "Theoretical" needs its own decision before it is drawn.** 60 recipes
-carry 129 `RecipeIngredient` rows between them — about two ingredients each. A
-theoretical food cost computed from that is a line the page cannot defend, and
-drawing it beside the actual invites the reader to trust the gap. **Task 3
-measures the recipe coverage per menu item and decides**: draw it only over
-items whose recipes are complete, and say how many that is, or resolve the
-series `not_computed` and declare the absence. Either is defensible; silently
-drawing a thin line is not.
+**C-R4 — SETTLED BY MEASUREMENT: there is no second series. One line.**
+
+This was left open for Task 3 to decide, on the worry that 60 recipes carrying
+129 ingredient rows could not support a theoretical cost. **That worry was
+wrong and the real answer is elsewhere.**
+
+The recipe walk is nearly complete — 327 of 334 lines `COSTED`, **99.96% of the
+dollar**, because most menu items are combos composing a few base recipes. But
+`DailyCogsItem.lineCost` **IS** the theoretical cost: recipes valued at invoice
+prices times units sold. The prototype draws that against a separate ACTUAL,
+and ours would have to come from purchasing — which is not consumption without
+an inventory bridge. Measured, the theoretical-versus-invoiced gap swings
+**−37% to +38% inside six months**, which is invoice cadence (7 invoices in the
+measured week, 34 in the month), and `StockCount` holds **4 rows in the whole
+table**.
+
+Drawing it would invite an owner to read July as a saving and April as a leak,
+when neither happened. **The strip's "Theoretical" cell and the chart's second
+series are both dropped**, with the month table in the measurement note as the
+reason. That makes the desk strip TWO cells before C-R3's waste drop is even
+counted — see C-R3, and expect the `data-n` allowance to cover both.
 
 **C-R5 — the donut asks a question our column does not answer.** The
 prototype's slices are INGREDIENT categories (Proteins, Produce, Dry goods,
@@ -216,11 +229,7 @@ colour; the caller supplies them from the token set.
 
 **Files:** create `src/lib/counter/adapters/cogs.ts`.
 
-**Step 0 is a measurement, and it decides C-R4.** Count, per menu item sold in
-the window, whether its recipe has a complete ingredient walk. Report the
-number. Then either draw the theoretical series over the complete subset and
-say how many items that is, or resolve it `not_computed` with the count as the
-reason. **Do not draw a line over 129 ingredient rows without saying so.**
+C-R4 is settled — one series, no theoretical. Do not re-open it.
 
 Sections — group page: `headline` (three cells, C-R3), `plan` (the chart with
 its rule), `moved` (ingredient price movement), `categories` (the donut),
