@@ -802,6 +802,103 @@ export function lintCounter(
   // `no-awaited-sections-in-page`, Task 4's rule — same directory-check shape
   // and same scoping reason as `findRouteLoadingViolations` just above.
   violations.push(...findAwaitedSectionsViolations(routeGroupsInScope))
+  // `no-raw-forecast-generation` — NOT scoped to Counter. The four tables
+  // it guards are read from `src/app/actions/**`, `src/lib/chat/**` and
+  // `src/lib/counter/**` alike, and the defect costs the same wherever it
+  // happens, so this one walks every file the run was given.
+  // ROOTS are ABSOLUTE (`join(process.cwd(), ...)`), and the first cut of this
+  // filter compared them against relative strings — so it matched nothing and
+  // the rule silently never ran. Caught by the mutation check, which is the
+  // entire reason the mutation check exists.
+  const forecastScopeInScope = FORECAST_SCOPE.filter((dir) =>
+    roots.some((r) => isUnder(dir, r) || isUnder(r, dir)),
+  )
+  violations.push(...findRawForecastGenerationViolations(forecastScopeInScope))
+  return violations
+}
+
+
+/* ── no-raw-forecast-generation ──────────────────────────────────────────
+
+   FOUR TABLES KEEP EVERY MODEL GENERATION, and summing one without picking
+   the newest is the most expensive silent defect this project has found
+   twice:
+
+     ForecastDailyRevenue   measured 12.70x  ($646,442 against $50,754)
+     ForecastHourlyOrders   measured 13.17x  (35,020 orders against 2,658)
+     ForecastMenuItem       same unique key shape
+     ForecastDailyCategory  same unique key shape
+
+   Each is unique on (..., "generatedAt"), so a range that has been forecast
+   nightly for a fortnight holds fourteen rows per day and a naive
+   aggregate returns fourteen times the truth. Nothing about the number
+   looks wrong — it is the right shape, the right units and roughly the
+   right trend, just multiplied.
+
+   Every reader in the tree handles it correctly today; this rule is what
+   keeps that true. It fires when a file mentions one of the four Prisma
+   accessors and never mentions `generatedAt`, and it is deliberately
+   ignorant of HOW the dedupe is done: `DISTINCT ON`, an `orderBy` with a
+   `take`, or `newestGenerationPerDay` all satisfy it, because all three are
+   legitimate and a regex cannot tell a correct one from a clever wrong one.
+
+   KNOWN HOLES, written down rather than patched over with more regex:
+     - a file that selects `generatedAt` and then ignores it passes. The rule
+       proves the author knew the column exists, not that they used it.
+     - a raw `$queryRaw` naming the TABLE (`"ForecastDailyRevenue"`) rather
+       than the accessor is caught by the same table-name alternative below,
+       but a query built from a string variable is not.
+     - a pure module that receives already-fetched rows (e.g.
+       `hourly-coverage.ts`) never mentions an accessor, so it is correctly
+       silent — the dedupe belongs to whoever queried.
+*/
+const FORECAST_GENERATION_TABLES =
+  /prisma\.forecast(DailyRevenue|HourlyOrders|MenuItem|DailyCategory)\b|"Forecast(DailyRevenue|HourlyOrders|MenuItem|DailyCategory)"/
+
+/**
+ * Its own scope, and deliberately wider than `ROOTS`. The four tables are read
+ * from `src/app/actions/**`, `src/lib/chat/**` and `src/lib/counter/**`, none
+ * of which the Counter rules walk. Scoped the same way the route-group checks
+ * are, so `lintCounter([FIXTURES])` in a test never reaches the real tree.
+ */
+export const FORECAST_SCOPE = [
+  join(process.cwd(), "src", "app"),
+  join(process.cwd(), "src", "lib"),
+]
+
+export function findRawForecastGenerationViolations(
+  scope: string[] = FORECAST_SCOPE,
+): Violation[] {
+  const violations: Violation[] = []
+  const files: string[] = []
+  for (const root of scope) {
+    try {
+      files.push(...walk(root))
+    } catch {
+      continue
+    }
+  }
+  for (const file of files) {
+    if (!file.endsWith(".ts") && !file.endsWith(".tsx")) continue
+    if (file.includes("/generated/")) continue
+    let text: string
+    try {
+      text = stripComments(readFileSync(file, "utf8"))
+    } catch {
+      continue
+    }
+    if (!FORECAST_GENERATION_TABLES.test(text)) continue
+    if (/generatedAt/.test(text)) continue
+    const line = text.split("\n").findIndex((l) => FORECAST_GENERATION_TABLES.test(l)) + 1
+    violations.push({
+      file,
+      line: line || 1,
+      rule: "no-raw-forecast-generation",
+      text:
+        "queries a forecast table that keeps every model generation and never " +
+        "mentions generatedAt — a raw sum measured 12.7x on revenue and 13.17x on hourly orders",
+    })
+  }
   return violations
 }
 
