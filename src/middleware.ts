@@ -15,6 +15,10 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/invoices": "/m/invoices",
   "/dashboard/labor": "/m/labor",
   "/dashboard/menu": "/m/menu",
+  // An exact entry rather than adding /dashboard/menu to DYNAMIC_SUBROUTES:
+  // that would also carry /dashboard/menu/catalog/[id] over to a phone route
+  // that does not exist yet, and a 404 is worse than staying on desktop.
+  "/dashboard/menu/catalog": "/m/menu/catalog",
   "/dashboard/operations": "/m/operations",
   "/dashboard/orders": "/m/orders",
   "/dashboard/pnl": "/m/pnl",
