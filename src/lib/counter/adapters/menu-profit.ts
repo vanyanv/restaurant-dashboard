@@ -16,6 +16,7 @@ import {
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
+import { shortLabels } from "@/lib/counter/short-labels"
 import type {
   FigureProps,
   MatrixPoint,
@@ -304,66 +305,6 @@ function groupRowsOf(data: MenuEngineeringData): MListRow[] {
 }
 
 /**
- * Short, DISTINCT bar labels.
- *
- * The prototype takes each name's first word cut to six characters. On this
- * menu that collides immediately — the two biggest sellers are "Signature
- * Double Patty & Cheese Slider" and "Signature Slider Fries & Drink Combo",
- * both of which become "Signat".
- *
- * Growing the label a word at a time until it is unique does not fix it
- * either, which is worth writing down because it is the obvious fix and it is
- * wrong twice: it makes uniqueness a property of the FULL label while the
- * reader only ever sees the truncated one ("Signature" and "Signature Slider"
- * both cut back to "Signature…"), and where the first word does happen to
- * differ it stops there, so "2 Slider Combo" and "1 Slider Combo" become "2"
- * and "1" — unique, and meaningless.
- *
- * So: cut every name to the budget FIRST, then repair whatever still collides
- * by dropping the words those names share at the front. Two names starting
- * "Signature" lose it and become "Double Patt…" and "Slider Frie…", which is
- * both distinct and readable. The shared prefix is the part carrying no
- * information in that group by definition.
- */
-function shortLabels(names: string[]): string[] {
-  const cut = (text: string) =>
-    text.length > LABEL_CHARS ? `${text.slice(0, LABEL_CHARS - 1)}\u2026` : text
-
-  const out = names.map(cut)
-
-  // A group is the set of positions sharing one truncated label. Only those
-  // need repairing; everything else is already distinct and stays untouched.
-  const groups = new Map<string, number[]>()
-  out.forEach((label, i) => groups.set(label, [...(groups.get(label) ?? []), i]))
-
-  for (const members of groups.values()) {
-    if (members.length < 2) continue
-    const words = members.map((i) => names[i].split(/\s+/))
-    let shared = 0
-    while (
-      words.every((w) => w.length > shared + 1) &&
-      words.every((w) => w[shared] === words[0][shared])
-    ) {
-      shared += 1
-    }
-    if (shared === 0) continue
-    members.forEach((i, n) => {
-      out[i] = cut(words[n].slice(shared).join(" "))
-    })
-  }
-
-  // Anything still identical after that (the same item under two categories)
-  // takes a prime rather than printing two bars a reader cannot tell apart.
-  const seen = new Set<string>()
-  return out.map((label) => {
-    let unique = label
-    while (seen.has(unique)) unique += "\u2032"
-    seen.add(unique)
-    return unique
-  })
-}
-
-/**
  * The three cards, DERIVED. The prototype's are hand-written about items this
  * menu does not have (a milkshake feature, a 2 Slider Combo, jalapeño
  * poppers), so none of them can be ported — only the shape can.
@@ -553,7 +494,7 @@ function ledgerOf(data: MenuEngineeringData): LedgerSection {
         type: "bars",
         h: 128,
         zero: true,
-        labels: shortLabels(top.map((r) => r.itemName)),
+        labels: shortLabels(top.map((r) => r.itemName), LABEL_CHARS),
         series: [
           {
             name: "Contribution",

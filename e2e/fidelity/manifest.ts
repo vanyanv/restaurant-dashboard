@@ -902,7 +902,24 @@ export const PAGES: FidelityPage[] = [
   },
   { protoId: "recipes", name: "Recipes", protoRoute: "/dashboard/recipes", route: "/dashboard/recipes", status: "editorial" },
   { protoId: "recipe", name: "Recipe", protoRoute: "/dashboard/recipes/double-slider", route: "/dashboard/recipes/double-slider", status: "editorial" },
-  { protoId: "productmix", name: "Menu profit", protoRoute: "/dashboard/product-mix", route: "/dashboard/product-mix", status: "editorial" },
+  {
+    protoId: "productmix",
+    // The prototype's own name for this page is "Product mix". The manifest
+    // said "Menu profit", which is a different page.
+    name: "Product mix",
+    protoRoute: "/dashboard/product-mix",
+    route: "/dashboard/product-mix",
+    query: "?range=d30",
+    mobileRoute: "/m/product-mix",
+    report: true,
+    // MEASURED: 12 of the prototype's 12 on the desk, 5 of 5 on the phone,
+    // landmark for landmark with no allowance. The margin bridge writes FIVE
+    // lines where the prototype writes four — ingredient cost and menu price
+    // are two decisions by two different people and this schema separates
+    // them — but `.mathline` is not a landmark, so the shape is unchanged.
+    status: "counter",
+    baseline: { desktop: 12, mobile: 5 },
+  },
   { protoId: "usage", name: "COGS", protoRoute: "/dashboard/operations/product-usage", route: "/dashboard/operations/product-usage", status: "editorial" },
   { protoId: "operations", name: "Operations", protoRoute: "/dashboard/operations", route: "/dashboard/operations", status: "editorial" },
   { protoId: "invoices", name: "Invoices", protoRoute: "/dashboard/invoices", route: "/dashboard/invoices", status: "editorial" },
