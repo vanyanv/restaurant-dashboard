@@ -29,9 +29,12 @@ Gates (from `docs/superpowers/plans/2026-05-12-...`, Task 13):
       string isn't being persisted (regression).
 
   Gate 3 — Empirical 80% coverage for REVENUE
-      Per-store average of intervalCoverage80 over the last 7 days lands in
-      [0.78, 0.82]. Wider acceptance band [0.75, 0.85] is "ship anyway, note";
-      outside [0.75, 0.85] means MAPIE calibration is broken.
+      Measured coverage of the CURRENT model generation's reconciled forecasts
+      (see `_post_epoch_coverage`) lands in [0.78, 0.82]. Wider acceptance band
+      [0.75, 0.85] is "ship anyway, note"; outside [0.75, 0.85] means MAPIE
+      calibration is broken. The 7-day windowEnd query still selects which
+      stores have an opinion to report, and its pooled average is the fallback
+      until the current generation has reconciled anything.
 
   Gate 4 — Reconciliation still healthy
       Re-runs the audit and confirms all three forecast tables remain >= 80%.
@@ -327,23 +330,50 @@ def classify_coverage_row(
     )
 
 
-def _post_epoch_reconciled_counts(conn) -> dict[str, int]:
-    """Reconciled REVENUE observations per store name that were produced by the
-    current model generation, i.e. generated on/after CALIBRATION_EPOCH."""
+def _post_epoch_coverage(conn) -> dict[str, tuple[int, float | None]]:
+    """Measured 80% interval coverage per store, over reconciled REVENUE
+    forecasts produced by the CURRENT model generation.
+
+    This is the number Gate 3 judges, and it is deliberately not
+    `MlForecastEvaluation.intervalCoverage80`. Each of those evaluator rows
+    pools a trailing 35-day window, and the gate then averaged across every
+    horizon and every model version whose windowEnd landed in the last 7 days
+    — on 2026-08-27 that was eight model versions spanning both sides of
+    CALIBRATION_EPOCH. It reported 0.891 and called Hollywood BROKEN while the
+    live model's own reconciled forecasts covered 0.803 over 61 observations,
+    dead centre of the target band.
+
+    The epoch was already threaded into whether a store may be judged; this
+    threads it into what gets judged, which is the half that was missing.
+
+    Pooled across horizons, because that is what there is: coverage does vary
+    with horizon (h=0 ran ~0.70 against h>=8 near 1.00 under the old flat
+    widening, which is what `horizon_calibration` exists to fix), but only 21
+    post-epoch rows carry a `horizonDay` at all. A per-horizon band on n=1..6
+    would be noise. Revisit once the typed rows outnumber the untyped ones.
+    """
     with conn.cursor() as cur:
         cur.execute(
             '''
-            SELECT s.name, COUNT(*)
+            SELECT s.name,
+                   COUNT(*),
+                   AVG(CASE WHEN f."actualRevenue" BETWEEN f.p10 AND f.p90
+                            THEN 1.0 ELSE 0.0 END)
             FROM "ForecastDailyRevenue" f
             JOIN "Store" s ON s.id = f."storeId"
             WHERE f."hourBucket" = 0
               AND f."actualRevenue" IS NOT NULL
+              AND f.p10 IS NOT NULL
+              AND f.p90 IS NOT NULL
               AND f."generatedAt" >= %s::date
             GROUP BY 1
             ''',
             (CALIBRATION_EPOCH,),
         )
-        return {name: int(n) for name, n in cur.fetchall()}
+        return {
+            name: (int(n), None if cov is None else float(cov))
+            for name, n, cov in cur.fetchall()
+        }
 
 
 def gate3_revenue_coverage(conn, target_date: date) -> tuple[bool, str, bool]:
@@ -378,16 +408,21 @@ def gate3_revenue_coverage(conn, target_date: date) -> tuple[bool, str, bool]:
     if not rows:
         return False, f"no REVENUE coverage data with windowEnd in [{window_lo}, {window_hi}]", False
 
-    post_epoch = _post_epoch_reconciled_counts(conn)
+    post_epoch = _post_epoch_coverage(conn)
 
     lines = []
     strict_pass = True
     accept_pass = True
     warming_up_count = 0
     evaluated_count = 0
-    for name, avg_cov, count, max_sample in rows:
+    for name, avg_cov, count, _pooled_sample in rows:
+        epoch_n, epoch_cov = post_epoch.get(name, (0, None))
+        # The evaluator's pooled average still sets the line when the current
+        # generation has nothing to say yet; once it does, its own measured
+        # coverage is what gets band-checked.
+        judged_cov = epoch_cov if epoch_cov is not None else float(avg_cov)
         verdict = classify_coverage_row(
-            name, float(avg_cov), int(count), max_sample, post_epoch.get(name, 0)
+            name, judged_cov, int(count), epoch_n, epoch_n
         )
         lines.append(verdict.line)
         if not verdict.counted:

@@ -153,7 +153,7 @@ def test_gate3_strict_pass_inside_target_band():
     # Second rowset: post-epoch reconciled counts, i.e. how many of those
     # observations the CURRENT model generation produced. Enough here, so
     # the store is genuinely band-checked rather than deferred.
-    canned = [[("alpha", 0.80, 14, 14)], [("alpha", 14)]]
+    canned = [[("alpha", 0.80, 14, 14)], [("alpha", 14, 0.80)]]
     conn = _FakeConn(canned)
 
     strict, detail, accept = ogc.gate3_revenue_coverage(conn, target)
@@ -163,7 +163,7 @@ def test_gate3_strict_pass_inside_target_band():
 
 def test_gate3_accept_band_only_when_drift():
     target = date(2026, 5, 14)
-    canned = [[("alpha", 0.77, 14, 14)], [("alpha", 14)]]  # outside strict, inside accept
+    canned = [[("alpha", 0.77, 14, 14)], [("alpha", 14, 0.77)]]  # outside strict, inside accept
     conn = _FakeConn(canned)
 
     strict, _, accept = ogc.gate3_revenue_coverage(conn, target)
@@ -174,7 +174,7 @@ def test_gate3_accept_band_only_when_drift():
 
 def test_gate3_fails_when_outside_accept_band():
     target = date(2026, 5, 14)
-    canned = [[("alpha", 0.60, 14, 14)], [("alpha", 14)]]
+    canned = [[("alpha", 0.60, 14, 14)], [("alpha", 14, 0.60)]]
     conn = _FakeConn(canned)
 
     strict, _, accept = ogc.gate3_revenue_coverage(conn, target)
@@ -217,7 +217,7 @@ def test_gate3_defers_when_the_current_model_generation_is_thin():
     """26 pooled observations, 2 from the model running today — the shape of the
     2026-08-19 model change. The gate must defer, not call the new model BROKEN."""
     target = date(2026, 5, 14)
-    canned = [[("alpha", 0.648, 7, 26)], [("alpha", 2)]]
+    canned = [[("alpha", 0.648, 7, 26)], [("alpha", 2, 0.648)]]
     conn = _FakeConn(canned)
 
     strict, detail, accept = ogc.gate3_revenue_coverage(conn, target)
