@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 /**
  * Counter P&L — the phone (Phase C, page 2, surface 2).
  *
- * `src/middleware.ts` rewrites `/dashboard/pnl` to `/m/pnl` on a phone user
+ * `src/proxy.ts` rewrites `/dashboard/pnl` to `/m/pnl` on a phone user
  * agent, so this route IS the phone surface of the P&L, and it is what
  * `npm run fidelity`'s `fidelity-mobile` project measures against
  * `P.pnl.phone()`.

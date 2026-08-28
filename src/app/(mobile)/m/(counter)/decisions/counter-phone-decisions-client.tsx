@@ -35,7 +35,7 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  *
  * ## The phone is a route, not a breakpoint
  *
- * `src/middleware.ts` rewrites `/dashboard/decisions` to `/m/decisions` on a
+ * `src/proxy.ts` rewrites `/dashboard/decisions` to `/m/decisions` on a
  * phone user agent. A screenshot of the desk at 390px photographs the desk
  * squeezed and says nothing about this file.
  *

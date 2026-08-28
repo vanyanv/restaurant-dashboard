@@ -1,6 +1,23 @@
 name: Bundle budget
 
+# Runs on PRs AND on direct pushes to main. ci.yml added the push trigger for
+# a reason it spells out — "Work reaches main by direct push here as often as
+# by PR, and a pull_request-only trigger means those commits are never checked
+# at all" — and that lesson was never applied here. It is how 21 of 87 routes
+# drifted 1.8x over budget without anyone being told.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.ts'
+      - 'tailwind.config.ts'
+      - 'postcss.config.mjs'
+      - 'scripts/check-bundle-size.ts'
+      - '.github/workflows/bundle-budget.yml'
   pull_request:
     branches: [main]
     paths:
@@ -44,7 +61,11 @@ jobs:
       - name: Check per-route bundle budgets
         id: budget
         run: |
-          report=$(npm run bundle:check 2>&1)
+          # `|| true` so a failure does not abort before the table is
+          # written: under `bash -e` the assignment itself is the failing
+          # command, and the step summary — the whole point of capturing the
+          # output — never got written on the one run where it mattered.
+          report=$(npm run bundle:check 2>&1) || status=$?
           echo "$report"
           {
             echo "## Bundle budget check"
@@ -53,3 +74,4 @@ jobs:
             echo "$report"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "${status:-0}"

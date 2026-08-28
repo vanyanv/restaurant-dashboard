@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
  * Counter Needs-you — "The week ahead", the phone (`P.decisions.phone`,
  * `docs/counter/counter-prototype.html:4762`).
  *
- * `src/middleware.ts` rewrites `/dashboard/decisions` to `/m/decisions` on a
+ * `src/proxy.ts` rewrites `/dashboard/decisions` to `/m/decisions` on a
  * phone user agent, so this route IS the phone surface of the week, and it is
  * what `npm run fidelity`'s `fidelity-mobile` project will measure against
  * `P.decisions.phone()`.

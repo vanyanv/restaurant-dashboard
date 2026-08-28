@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 /**
  * Counter Overview — the phone.
  *
- * `src/middleware.ts` redirects `/dashboard` to `/m` on a phone user agent, so
+ * `src/proxy.ts` redirects `/dashboard` to `/m` on a phone user agent, so
  * this route IS the phone surface: it is what a reader on a phone gets when
  * they open the dashboard, and it is what `npm run fidelity`'s `fidelity-mobile`
  * project measures against `P.overview.phone()`.

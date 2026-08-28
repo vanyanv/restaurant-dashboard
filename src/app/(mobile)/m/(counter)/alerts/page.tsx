@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
  * Counter Needs-you — "Open right now", the phone (`P.alerts.phone`,
  * `docs/counter/counter-prototype.html:4820`).
  *
- * `src/middleware.ts` rewrites `/dashboard/alerts` to `/m/alerts` on a phone
+ * `src/proxy.ts` rewrites `/dashboard/alerts` to `/m/alerts` on a phone
  * user agent, so this route IS the phone surface of the inbox, and it is what
  * `npm run fidelity`'s `fidelity-mobile` project will measure against
  * `P.alerts.phone()`.

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 /**
  * Counter Labor — the group page, on a phone.
  *
- * `src/middleware.ts` rewrites `/dashboard/labor` to `/m/labor` on a phone
+ * `src/proxy.ts` rewrites `/dashboard/labor` to `/m/labor` on a phone
  * user agent — a mapping this task ADDS; the key was simply missing before
  * it, so a phone reader landing on `/dashboard/labor` stayed on the desk page
  * with no route of its own to redirect to. This route is what

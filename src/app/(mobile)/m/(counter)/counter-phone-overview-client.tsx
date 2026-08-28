@@ -43,7 +43,7 @@ import type { SwitchableStore } from "@/components/counter"
  *
  * ## The phone is a route, not a breakpoint
  *
- * `src/middleware.ts` redirects `/dashboard` to `/m` on a phone user agent, so
+ * `src/proxy.ts` redirects `/dashboard` to `/m` on a phone user agent, so
  * this — not `counter-overview-client.tsx` — is what the phone actually
  * renders, and what `npm run fidelity`'s `fidelity-mobile` project measures.
  * The plan's file list says to put the phone composition in the desk's client

@@ -8,7 +8,7 @@ import { CounterPhoneAskClient } from "./counter-phone-ask-client"
  * Counter Ask — the phone. `P.ask.phone()` at line 4611 of
  * `docs/counter/counter-prototype.html`.
  *
- * `src/middleware.ts` now maps `/dashboard/ask` here on a phone user agent, so
+ * `src/proxy.ts` now maps `/dashboard/ask` here on a phone user agent, so
  * this route IS Ask on a phone: before it, the rail's Ask and the palette's
  * "Open in Ask" both landed a phone reader on a desk page rendered at 390px.
  *
