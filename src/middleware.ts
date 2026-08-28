@@ -17,6 +17,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu": "/m/menu",
   "/dashboard/menu/catalog": "/m/menu/catalog",
   "/dashboard/operations": "/m/operations",
+  "/dashboard/operations/inventory": "/m/operations/inventory",
   "/dashboard/orders": "/m/orders",
   "/dashboard/pnl": "/m/pnl",
   // Menu Profit now HAS a phone surface of its own, built on Counter from the
@@ -69,6 +70,14 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   // base itself is mapped exactly above, so this entry only ever matches the
   // item route below it — the one dynamic sub-path Menu has.
   ["/dashboard/menu/catalog", "/m/menu/catalog"],
+  // Carries /dashboard/operations/inventory to /m/operations/inventory. The
+  // base /dashboard/operations is mapped exactly above to the flat /m/operations,
+  // so this entry only ever matches the sub-paths under it — and today only
+  // Inventory has a Counter phone route, so any OTHER operations sub-path
+  // resolves to a mobile page that does not exist. That is the same 404 risk
+  // this allowlist exists to avoid, which is why the entry is the full
+  // inventory path and not the operations base.
+  ["/dashboard/operations/inventory", "/m/operations/inventory"],
   ["/dashboard/orders", "/m/orders"],
   ["/dashboard/pnl", "/m/pnl"],
 ]
