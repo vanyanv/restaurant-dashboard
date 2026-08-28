@@ -857,7 +857,28 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 12, mobile: 5 },
   },
-  { protoId: "catalog", name: "Menu profit", protoRoute: "/dashboard/menu/catalog", route: "/dashboard/menu/catalog", status: "editorial" },
+  {
+    protoId: "catalog",
+    // The prototype's own name for this page is "Menu catalog". The manifest
+    // said "Menu profit", which is the sibling at /dashboard/menu-profit —
+    // corrected here because the report file is titled from it.
+    name: "Menu catalog",
+    protoRoute: "/dashboard/menu/catalog",
+    route: "/dashboard/menu/catalog",
+    query: "?range=d30",
+    mobileRoute: "/m/menu/catalog",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance:
+    // 13 on the desk, 9 on the phone, zero extra, zero rendering differences.
+    // The page keeps every one of the prototype's slots and changes what two
+    // of them REPORT — the gaps queue leads with unmapped modifiers rather
+    // than unmapped items (3,890 servings against sixty-two dollars), and the
+    // category ring carries a note saying the POS categories do not describe
+    // the food. Both argued in the adapter's docblock and measured in
+    // docs/counter/measurements/2026-08-28-catalog.md.
+    status: "counter",
+    baseline: { desktop: 13, mobile: 9 },
+  },
   { protoId: "catalogitem", name: "A menu item", protoRoute: "/dashboard/menu/catalog/neddy-burger", route: "/dashboard/menu/catalog/neddy-burger", status: "editorial" },
   { protoId: "recipes", name: "Recipes", protoRoute: "/dashboard/recipes", route: "/dashboard/recipes", status: "editorial" },
   { protoId: "recipe", name: "Recipe", protoRoute: "/dashboard/recipes/double-slider", route: "/dashboard/recipes/double-slider", status: "editorial" },
