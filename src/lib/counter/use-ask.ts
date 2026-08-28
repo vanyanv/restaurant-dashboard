@@ -132,6 +132,28 @@ export function askFailure(state: AskState): string | null {
   return state.status === "failed" ? state.message : null
 }
 
+/** A question is in flight. A surface with a send button does not offer a second. */
+export function askPending(state: AskState): boolean {
+  return state.status === "asking"
+}
+
+/**
+ * The state to RENDER for a question that came from a URL rather than a
+ * keystroke — `/dashboard/ask?q=…`.
+ *
+ * `ask()` can only run in an effect, so the server render and the tick before
+ * `useChat` reaches `submitted` both sit at `idle` with a question already in
+ * the address bar. Rendering the idle surface there flashes "nothing asked
+ * yet" over a question the reader can read in their own URL. A question with
+ * nothing yet said about it IS being asked, and this is the one place that
+ * judgement is made — a page branching on the union itself is what
+ * `no-status-branch` exists to stop.
+ */
+export function askStateFor(state: AskState, question: string): AskState {
+  if (!question) return state
+  return state.status === "idle" ? { status: "asking", question } : state
+}
+
 export function useAsk(): {
   state: AskState
   ask: (question: string, context: AskContext) => void

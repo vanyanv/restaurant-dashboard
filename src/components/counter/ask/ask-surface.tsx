@@ -4,13 +4,13 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import { Calendar, Store as StoreGlyph } from "lucide-react"
-import { describeAskContext, type AskContext } from "@/lib/counter/ask-context"
+import { askHref, describeAskContext, type AskContext } from "@/lib/counter/ask-context"
 import { NAV_GROUPS } from "@/lib/counter/nav"
 import { PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-range"
 import { NAV_ICONS } from "@/components/counter/shell/nav-icons"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { AskAnswerPane } from "@/components/counter/ask/ask-answer"
-import type { AskState } from "@/lib/counter/use-ask"
+import { askQuestion, type AskState } from "@/lib/counter/use-ask"
 import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
 
 /**
@@ -729,6 +729,15 @@ export function AskSurface({
                 <AskAnswerPane
                   state={askState}
                   context={context}
+                  /* The question and the window it was asked under, both in
+                     the link — "Open in Ask" that opened an empty page under
+                     the default range would be note 46's defect again: a
+                     destination that does not hold what it promised. */
+                  openHref={askHref({
+                    question: askQuestion(askState),
+                    params,
+                    origin: pathname,
+                  })}
                   onBack={() => onAskBack?.()}
                   onLeave={close}
                 />
