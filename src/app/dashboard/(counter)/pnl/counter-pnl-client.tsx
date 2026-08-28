@@ -7,6 +7,7 @@ import {
   Cascade,
   DateControl,
   PageHead,
+  MoneyLines,
   Section,
   STAGE_TAG,
   Strip,
@@ -35,6 +36,7 @@ import type {
   PnlStoreLine,
   ReadingSegment,
 } from "@/lib/counter/adapters/pnl"
+import type { StoreFixedSections } from "@/lib/counter/adapters/pnl-store"
 
 /**
  * Counter P&L — the second Counter page, composed from `P.pnl.desk()`
@@ -171,6 +173,7 @@ export function CounterPnlClient({
   stores,
   today,
   sections,
+  storeSections = null,
 }: {
   /**
    * The query string this page was rendered for, as PLAIN TEXT — not a
@@ -183,6 +186,16 @@ export function CounterPnlClient({
   stores: SwitchableStore[]
   today: Date
   sections: CounterPnlSections
+  /**
+   * `P.pnlstore`'s fixed-cost table, or null when no store is selected.
+   *
+   * Null rather than an empty section: with every store in view there is no
+   * "this store's fixed costs" to show, and a section that renders its own
+   * empty state would be answering a question nobody asked. Optional so that
+   * rendering the group view — which is what a test constructing this
+   * component directly is doing — needs no placeholder.
+   */
+  storeSections?: SectionSources<StoreFixedSections> | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -347,6 +360,36 @@ export function CounterPnlClient({
         )}
       </Section>
 
+      {/* `P.pnlstore`'s fixed-cost table. Rendered only with a store selected,
+          because that is what it is about — see the page's own note on why
+          this is a section here rather than a route of its own. */}
+      {storeSections ? (
+        <Section
+          title="What this store carries"
+          meta={(f) => f.meta}
+          data={storeSections.fixed}
+          pending={pending}
+          pad={false}
+        >
+          {(f) => (
+            <>
+              <div className="sec__body">
+                <p className="ans__lead" style={{ margin: 0 }}>
+                  {f.lead}
+                </p>
+              </div>
+              <Table columns={FIXED_COLUMNS} rows={f.rows} />
+              <div className="sec__body">
+                <MoneyLines rows={f.money} />
+                <p className="mono" style={{ margin: "11px 0 0" }}>
+                  {f.note}
+                </p>
+              </div>
+            </>
+          )}
+        </Section>
+      ) : null}
+
       {/* Both halves are owed, and both name what is missing rather than
           drawing half an answer as a whole one. `Section` renders that; this
           page only says where the two blocks sit. */}
@@ -387,6 +430,14 @@ export function CounterPnlClient({
     </>
   )
 }
+
+/** `P.pnlstore`'s own four: what it is, a month, this range, which line it lands on. */
+const FIXED_COLUMNS: Column[] = [
+  { key: "line", label: "Line" },
+  { key: "monthly", label: "Monthly", numeric: true },
+  { key: "range", label: "In this range", numeric: true },
+  { key: "lands", label: "Lands on" },
+]
 
 const BY_STORE_COLUMNS: Column[] = [
   { key: "store", label: "Store" },

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
+import { getStoreFixedSectionPromises } from "@/lib/counter/adapters/pnl-store"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPnlClient } from "./counter-pnl-client"
 
@@ -62,12 +63,34 @@ export default async function PnlPage({
     today,
   })
 
+  /*
+   * `P.pnlstore`'s two store-only sections — the fixed costs this store
+   * carries, and the stores excluded from the statement.
+   *
+   * Started only when a store is SELECTED, because that is what they are
+   * about. `P.pnlstore` is a separate page in the prototype and deliberately
+   * is not one here: `src/app/dashboard/pnl/[storeId]/page.tsx` redirects onto
+   * `?store=<id>` and its own comment argues why a store is a param on one
+   * P&L rather than a second composition. The content lands; the route does
+   * not.
+   */
+  const storeSections = counterParams.storeId
+    ? getStoreFixedSectionPromises({
+        range: counterParams.range,
+        comparisonId: counterParams.comparisonId,
+        storeId: counterParams.storeId,
+        accountId: session.user.accountId,
+        today,
+      })
+    : null
+
   // The switcher's list. Shared with the Overview rather than re-queried, so
   // the rail cannot offer one page a store the other does not have.
   const stores = await getOverviewStores()
 
   return (
     <CounterPnlClient
+      storeSections={storeSections}
       // PLAIN TEXT, not the URLSearchParams above: a class instance crosses the
       // RSC boundary with its prototype stripped. See the island's own note.
       params={params.toString()}
