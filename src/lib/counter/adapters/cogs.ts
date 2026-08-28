@@ -979,6 +979,31 @@ function movedRows(rows: IngredientPriceMonitorRow[]): Array<{
 }> {
   return rows
     .flatMap((row) => {
+      /*
+       * AN INGREDIENT IN NO RECIPE CANNOT HAVE MOVED A RECIPE-WALKED COST.
+       *
+       * This section answers "which ingredients moved my food cost", and food
+       * cost on this page is `DailyCogsItem.lineCost` — recipes valued at
+       * invoice prices. An ingredient no recipe references contributes exactly
+       * nothing to that number, however violently its own price moved.
+       *
+       * Without this the table was five rows of packaging and disposables,
+       * led by `paper patty 5.5 x 5.5 dry wax` at $0.01 -> $11.41,
+       * **+107,949.2%** — the loudest figure on the page, about an item used
+       * in zero recipes. That is the pack-metadata mis-parse family this
+       * project already knows: `selectNonSpikeCostIndex` (an 8x median guard)
+       * protects `ingredient-cost.ts` and `canonical-ingredients.ts`, and
+       * `getIngredientPriceMonitoringData` is a THIRD path that has no guard
+       * at all — correctly, because surfacing bad extractions is what a
+       * monitoring page is for. It is the wrong feed to rank a food-cost
+       * table by, and the fix belongs here rather than in the monitor.
+       *
+       * Measured: 76 canonical ingredients, and `paper patty` is one of
+       * several Paper/Supplies rows at 0 recipes. Cups and lids survive this
+       * filter at 9 recipes each, which is right — a drink recipe includes
+       * its cup, so their price genuinely does move the food line.
+       */
+      if (row.recipeUsageCount <= 0) return []
       const change = row.change30dPct
       if (change === null || !Number.isFinite(change)) return []
       const priced = row.history.filter(
