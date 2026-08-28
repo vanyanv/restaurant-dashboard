@@ -1,5 +1,6 @@
 import { listOwnerStores, renderStoreListForPrompt } from "./owner-scope"
 import { buildSituationSnapshot } from "./situation-snapshot"
+import { laDateOf } from "@/lib/dashboard-utils"
 
 /**
  * The static block of the system prompt. Identical across requests so
@@ -305,7 +306,13 @@ export async function buildSystemPrompt(
     buildSituationSnapshot(accountId, now),
   ])
   return composeSystemPrompt({
-    today: now.toISOString().slice(0, 10),
+    // THE LA BUSINESS DAY, not a UTC slice. `toISOString().slice(0, 10)` was
+    // here and returns TOMORROW for the last seven hours of every LA day —
+    // measured at 17:34 PDT on 2026-08-27, it said `2026-08-28`. The model
+    // was therefore told the current, partial trading day was a completed
+    // past one, and answered "Thursday is the weakest day" about a day that
+    // was three hours old. Live in production every evening, not latent.
+    today: laDateOf(now),
     storeBlock: renderStoreListForPrompt(stores),
     snapshot,
   })
@@ -330,7 +337,7 @@ export function composeSystemPrompt(ctx: {
 
 # Per-request context
 
-Today is ${today}.
+Today is ${today}, and it is still trading. A row dated today is a PARTIAL day: never rank it against complete days, never call it the best or the weakest, and say it is incomplete whenever you cite it. For "which day was strongest/weakest", answer over complete days and say you excluded today.
 
 The authenticated owner runs the following stores. Resolve any name the user mentions ("Hollywood", "Glendale", "Van Nuys") against this list before calling a data tool. Pass real ids when scoping; never invent one. Never put a UUID in your written reply.
 

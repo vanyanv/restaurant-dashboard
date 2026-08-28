@@ -87,8 +87,11 @@ export async function buildSituationSnapshot(accountId: string, now: Date = new 
   const totalTxns = last7d.reduce((acc, r) => acc + r.txns7d, 0)
 
   const lines: string[] = []
+  // Today is excluded from these reads (`lt: today`); the rule that says so
+  // to the model lives in `composeSystemPrompt`, not here — this block is
+  // explicitly marked non-authoritative for figures.
   lines.push(
-    `Trailing 7 days (${formatDate(sevenDaysAgo)} → ${formatDate(today)}): net $${formatMoney(totalNet)} across ${formatNum(totalTxns)} orders.`,
+    `Trailing 7 days (${formatDate(sevenDaysAgo)} → ${formatDate(today)}, today excluded): net $${formatMoney(totalNet)} across ${formatNum(totalTxns)} orders.`,
   )
   if (last7d.length > 1) {
     const perStore = last7d
