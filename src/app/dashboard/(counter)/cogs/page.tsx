@@ -17,13 +17,13 @@ import { CounterCogsClient } from "./counter-cogs-client"
  * what is left (`ls src/app/dashboard/(editorial)`). The editorial
  * `/dashboard/cogs` `page.tsx` was deleted in the same commit — both resolved
  * to `/dashboard/cogs`, and Next fails the build on two pages resolving to one
- * path. Its `components/`, its `error.tsx` and its `[storeId]/` subtree all
- * SURVIVE that commit, because `(editorial)/cogs/[storeId]/page.tsx` still
- * imports `parseCogsFilters` from `../components/sections/data` and its shell
- * imports four more section components from the same folder. That is exactly
- * the coupling ruling L-R16 found on the labour route, and the resolution is
- * the same: delete only what has no surviving importer, and let the store-page
- * task take the rest with it.
+ * path. Its `components/`, its `error.tsx` and its `[storeId]/` subtree
+ * SURVIVED that commit for one more step, because
+ * `(editorial)/cogs/[storeId]/page.tsx` still imported `parseCogsFilters` from
+ * `../components/sections/data` and its shell imported four more section
+ * components from the same folder — exactly the coupling ruling L-R16 found on
+ * the labour route. `(counter)/cogs/[storeId]` replaced that last consumer and
+ * took the whole subtree with it, so `(editorial)/cogs` is gone.
  *
  * A page resolves the session, reads the URL params ONCE, calls exactly one
  * adapter and hands plain serialisable props to a client island. It never
