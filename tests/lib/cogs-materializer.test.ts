@@ -60,6 +60,7 @@ function costResult(overrides: Partial<RecipeCostResult> = {}): RecipeCostResult
     totalCost: 2.5,
     lines: [costLine()],
     partial: false,
+    emptyWalk: false,
     ...overrides,
   }
 }

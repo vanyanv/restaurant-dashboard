@@ -324,6 +324,7 @@ export async function previewRecipeCost(input: {
     totalCost: total,
     lines,
     partial,
+    emptyWalk: total === 0,
   }
 }
 
