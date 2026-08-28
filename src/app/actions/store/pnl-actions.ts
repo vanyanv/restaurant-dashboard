@@ -1,5 +1,6 @@
 "use server"
 
+import { cache } from "react"
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
@@ -19,7 +20,7 @@ import {
 import type { UnmappedMenuItem } from "@/types/cogs"
 import { recomputeDailyCogsForRange } from "@/lib/cogs-materializer"
 import { CogsStatus } from "@/generated/prisma/client"
-import { cached, stableKey } from "@/lib/cache/cached"
+import { cached, monthTags, stableKey } from "@/lib/cache/cached"
 import type {
   PnLMover,
   StorePnLResult,
@@ -188,6 +189,53 @@ function computeMovers(
   movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   return movers.slice(0, limit)
 }
+
+/*
+ * The two reads inside `getAllStoresPnL` that DO NOT VARY BY DATE, hoisted
+ * behind a per-request `cache()`.
+ *
+ * `/dashboard/pnl` calls the rollup ten times per render — the selected range,
+ * the comparison, and eight trailing weeks (see `getPnlSectionPromises`).
+ * Only three of the rollup's five queries actually depend on the range; the
+ * store list and the fixed-expense list are identical across all ten and were
+ * being re-fetched every time. Measured on the query log: 12 `Store` and 12
+ * `StoreFixedExpense` reads for one page.
+ *
+ * These sit here rather than in `@/lib/account-stores` because their `select`
+ * is the rollup's own — the fixed-monthly and commission columns
+ * `computeStorePnL` needs — and because that module must stay session-free.
+ *
+ * NOT EXPORTED: this is a `"use server"` file, where every export must be an
+ * async function and `cache()` returns a plain one.
+ *
+ * `cache()` keys on argument identity, so the fixed-expense helper takes a
+ * JOINED STRING rather than the `storeIds` array — two calls with equal but
+ * distinct arrays would otherwise miss each other and cache nothing.
+ */
+const pnlStoresCached = cache(async (accountId: string) =>
+  prisma.store.findMany({
+    where: { accountId, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      fixedMonthlyLabor: true,
+      fixedMonthlyRent: true,
+      fixedMonthlyTowels: true,
+      fixedMonthlyCleaning: true,
+      uberCommissionRate: true,
+      doordashCommissionRate: true,
+    },
+    orderBy: { name: "asc" },
+  }),
+)
+
+const pnlFixedExpensesCached = cache(async (storeIdsKey: string) =>
+  prisma.storeFixedExpense.findMany({
+    where: { storeId: { in: storeIdsKey === "" ? [] : storeIdsKey.split(",") }, isActive: true },
+    orderBy: FIXED_EXPENSE_ORDER,
+    select: { id: true, storeId: true, label: true, amount: true, frequency: true },
+  }),
+)
 
 export async function getStorePnL(input: {
   storeId: string
@@ -422,23 +470,16 @@ export async function getAllStoresPnL(input: {
       g: input.granularity,
     })}`,
     600,
-    ["pnl", `account:${accountId}`],
+    // "pnl" stays: writers that cannot say which dates they touched
+    // (`/api/otter/sync`, a fixed-expense edit — fixed costs are prorated into
+    // EVERY range, so that one is right to be broad) still bust it, and a key
+    // must remain reachable by them. The month tags are what let the hourly
+    // sync stop evicting a statement from six weeks ago that it never wrote.
+    // See `monthTags` in @/lib/cache/cached.
+    ["pnl", `account:${accountId}`, ...monthTags(input.startDate, input.endDate)],
     async () => {
   try {
-    const stores = await prisma.store.findMany({
-      where: { accountId: session.user.accountId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        fixedMonthlyLabor: true,
-        fixedMonthlyRent: true,
-        fixedMonthlyTowels: true,
-        fixedMonthlyCleaning: true,
-        uberCommissionRate: true,
-        doordashCommissionRate: true,
-      },
-      orderBy: { name: "asc" },
-    })
+    const stores = await pnlStoresCached(session.user.accountId)
 
     const periods = buildPeriods(input.startDate, input.endDate, input.granularity)
     if (stores.length === 0 || periods.length === 0) {
@@ -521,11 +562,7 @@ export async function getAllStoresPnL(input: {
       cogsByStore.set(r.storeId, arr)
     }
 
-    const allFixedExpenses = await prisma.storeFixedExpense.findMany({
-      where: { storeId: { in: storeIds }, isActive: true },
-      orderBy: FIXED_EXPENSE_ORDER,
-      select: { id: true, storeId: true, label: true, amount: true, frequency: true },
-    })
+    const allFixedExpenses = await pnlFixedExpensesCached(storeIds.join(","))
     const expensesByStore = new Map<string, FixedExpenseRow[]>()
     for (const e of allFixedExpenses) {
       const arr = expensesByStore.get(e.storeId) ?? []

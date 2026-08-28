@@ -17,9 +17,13 @@ import { loadStripTargets } from "@/lib/counter/targets"
 
 const accountId = "acct-A"
 
+// Rows carry an `id` because the store read now goes through
+// `@/lib/account-stores`, which fetches the account's stores once per request
+// and narrows to the selected one in memory. Ids are `s1`, `s2`, … in order,
+// so `loadStripTargets("s1", …)` selects the FIRST value passed here.
 const withTargets = (...values: Array<number | null>) =>
   vi.mocked(prisma.store.findMany).mockResolvedValue(
-    values.map((targetCogsPct) => ({ targetCogsPct })) as never,
+    values.map((targetCogsPct, i) => ({ id: `s${i + 1}`, targetCogsPct })) as never,
   )
 
 beforeEach(() => vi.clearAllMocks())
@@ -73,19 +77,32 @@ describe("loadStripTargets", () => {
   })
 
   it("scopes to the account, and to one store when one is selected", async () => {
+    // The store read moved to `@/lib/account-stores` — `cache()`d and shared
+    // with every other loader on the page, so a render pays one store query
+    // instead of one per loader. Both guarantees this test was written for
+    // survive, and are both still asserted here:
+    //
+    //   1. THE ACCOUNT BOUNDARY IS IN SQL, not in JavaScript. That is what
+    //      stops `storeId: null` reading every store row in the database —
+    //      the reason this function takes an accountId at all (see its
+    //      docblock). Only the narrowing to one store filters in memory, over
+    //      a set the query already scoped.
+    //   2. Selecting a store answers for THAT store, not the account.
     withTargets(29)
     await loadStripTargets("s1", accountId)
-    expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toEqual({
-      where: { accountId, isActive: true, id: "s1" },
-      select: { targetCogsPct: true },
+    expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toMatchObject({
+      where: { accountId, isActive: true },
     })
 
+    // s1 is 28.5 and s2 is 31 — two stores that do NOT agree, so an unscoped
+    // read would publish no plan at all (see the test above). Selecting s1
+    // answers 28.5, which is only possible if the narrowing happened.
     vi.clearAllMocks()
-    withTargets(29)
-    await loadStripTargets(null, accountId)
-    expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toEqual({
-      where: { accountId, isActive: true },
-      select: { targetCogsPct: true },
+    withTargets(28.5, 31)
+    expect((await loadStripTargets("s1", accountId)).foodCost).toEqual({
+      kind: "target",
+      value: 28.5,
+      better: "low",
     })
   })
 
