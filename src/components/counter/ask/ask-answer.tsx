@@ -72,21 +72,43 @@ import { askAnswer, askFailure, askQuestion, type AskState } from "@/lib/counter
  * what it looked at IS the reason to believe it when it says the answer is not
  * there.
  */
-export function AskAnswerPane({
+/**
+ * The answer ITSELF — everything between the question and whatever chrome the
+ * surface wraps it in. Split out of `AskAnswerPane` for `/dashboard/ask`,
+ * which prints the same answer inside `.ans` on a page instead of inside
+ * `.askans__body` in a palette.
+ *
+ * It is one component and not two because a second renderer is how two
+ * surfaces come to disagree about what an answer looks like — the palette and
+ * the page must show one figure strip, one "Read" row and one refusal, or the
+ * link someone sends is not the answer they saw. Only three things differ, and
+ * all three are props:
+ *
+ *   - `className`, the wrapper the sheet styles (`.askans__body` / `.ans`).
+ *   - `verdictShownAbove`, because the page's HEADLINE is the verdict
+ *     (prototype 4507: "the headline is the answer, so it cannot be there
+ *     before the answer is") and printing it again as the first paragraph
+ *     would be the same sentence twice, three lines apart.
+ *   - `onFollowUp`. In the palette a follow-up chip carries `data-askabout`
+ *     and is caught by the one document-level delegation `AskSurface` mounts.
+ *     On the page that delegation would open the PALETTE over the page and
+ *     answer there — so the page passes a handler instead, and the chip stops
+ *     carrying the attribute. Exactly one path fires either way.
+ */
+export function AskAnswerBody({
   state,
-  context,
-  onBack,
-  onLeave,
+  className = "askans__body",
+  verdictShownAbove = false,
+  onFollowUp,
 }: {
   state: AskState
-  context: AskContext
-  /** "Back to search" — the answer goes, the typed question stays (F-R10). */
-  onBack: () => void
-  /** A destination was taken; the palette should get out of the way. */
-  onLeave: () => void
+  className?: string
+  /** The verdict is the page's `<h2>`; do not print it here as well. */
+  verdictShownAbove?: boolean
+  /** Present on a surface that answers a follow-up itself; absent in the palette. */
+  onFollowUp?: (question: string) => void
 }) {
   const { status } = state
-  const question = askQuestion(state)
   const answer = askAnswer(state)
   const failure = askFailure(state)
 
@@ -101,13 +123,95 @@ export function AskAnswerPane({
       : {}),
   }))
 
+  // The model's own paragraph, kept apart from its verdict — the only text
+  // that can appear twice if the two are not kept straight.
+  const prose = filed && answer?.body ? answer.body : ""
+  const verdictAbove = verdictShownAbove && Boolean(filed?.verdict)
+
   // The lead is the verdict when the model filed one. A turn that answered in
   // prose without filing still has something to say, so its paragraph leads
-  // instead of leaving an empty first line above the sources.
-  const lead = filed?.verdict ?? answer?.body ?? ""
+  // instead of leaving an empty first line above the sources. With the verdict
+  // already in the headline the prose leads instead — and on a REFUSAL the
+  // prose is the callout below, so the lead is empty rather than doubled.
+  const lead = verdictAbove ? (empty ? "" : prose) : (filed?.verdict ?? answer?.body ?? "")
   // …and is then not repeated underneath itself.
-  const note = filed && answer?.body ? answer.body : ""
-  const caveat = failure ?? (empty ? note : "")
+  const note = verdictAbove ? "" : prose
+  const caveat = failure ?? (empty ? prose : "")
+
+  return (
+    <div className={className} aria-live="polite" aria-busy={status === "asking"}>
+      {status === "asking" ? (
+        <p className="ans__lead">Reading the numbers…</p>
+      ) : (
+        <>
+          {lead ? <p className="ans__lead">{lead}</p> : null}
+          {cells.length > 0 ? <Strip cells={cells} /> : null}
+          {caveat ? <p className="callout">{caveat}</p> : null}
+          {!empty && note ? <p className="ans__lead">{note}</p> : null}
+
+          {/* K-R2: an answer names what it read, or it does not ship. The
+              labels are `TOOL_LABELS`' own — the thinking indicator in the
+              editorial chat has said "sales", "invoices", "recipes" for
+              months, and a second vocabulary for the same 116 tools would
+              be two names for one source. */}
+          {answer && answer.read.length > 0 ? (
+            <div className="srcs">
+              <span className="src">Read</span>
+              {answer.read.map((name) => (
+                <span className="src" key={name}>
+                  <b>{labelFor(name).short}</b>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* No click handler of its own in the palette: `data-askabout` is
+              caught by the one document-level delegation `AskSurface` already
+              mounts, so a follow-up pre-fills the input exactly as a
+              suggestion row does (F-R10). One path in, not two. */}
+          {filed && filed.followUps.length > 0 ? (
+            <div className="sugs">
+              {filed.followUps.map((q) =>
+                onFollowUp ? (
+                  <button className="sug" type="button" key={q} onClick={() => onFollowUp(q)}>
+                    {q}
+                  </button>
+                ) : (
+                  <button className="sug" type="button" key={q} data-askabout={q}>
+                    {q}
+                  </button>
+                ),
+              )}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  )
+}
+
+export function AskAnswerPane({
+  state,
+  context,
+  openHref = "/dashboard/ask",
+  onBack,
+  onLeave,
+}: {
+  state: AskState
+  context: AskContext
+  /**
+   * Where "Open in Ask" goes. Built by `AskSurface`, which is the only thing
+   * holding both the question and the search params the scope came from — a
+   * bare `/dashboard/ask` would open the page on no question and the default
+   * window, which is not the answer the reader is looking at.
+   */
+  openHref?: string
+  /** "Back to search" — the answer goes, the typed question stays (F-R10). */
+  onBack: () => void
+  /** A destination was taken; the palette should get out of the way. */
+  onLeave: () => void
+}) {
+  const question = askQuestion(state)
 
   return (
     <div className="askans">
@@ -116,48 +220,7 @@ export function AskAnswerPane({
         <span>{question}</span>
       </div>
 
-      <div className="askans__body" aria-live="polite" aria-busy={status === "asking"}>
-        {status === "asking" ? (
-          <p className="ans__lead">Reading the numbers…</p>
-        ) : (
-          <>
-            {lead ? <p className="ans__lead">{lead}</p> : null}
-            {cells.length > 0 ? <Strip cells={cells} /> : null}
-            {caveat ? <p className="callout">{caveat}</p> : null}
-            {!empty && note ? <p className="ans__lead">{note}</p> : null}
-
-            {/* K-R2: an answer names what it read, or it does not ship. The
-                labels are `TOOL_LABELS`' own — the thinking indicator in the
-                editorial chat has said "sales", "invoices", "recipes" for
-                months, and a second vocabulary for the same 116 tools would
-                be two names for one source. */}
-            {answer && answer.read.length > 0 ? (
-              <div className="srcs">
-                <span className="src">Read</span>
-                {answer.read.map((name) => (
-                  <span className="src" key={name}>
-                    <b>{labelFor(name).short}</b>
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            {/* No click handler of its own: `data-askabout` is caught by the
-                one document-level delegation `AskSurface` already mounts, so a
-                follow-up pre-fills the input exactly as a suggestion row does
-                (F-R10). One path in, not two. */}
-            {filed && filed.followUps.length > 0 ? (
-              <div className="sugs">
-                {filed.followUps.map((q) => (
-                  <button className="sug" type="button" key={q} data-askabout={q}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </>
-        )}
-      </div>
+      <AskAnswerBody state={state} />
 
       <div className="askans__foot">
         {/* `context`, not `filed.scope`: both name a store and a window, and
@@ -173,7 +236,7 @@ export function AskAnswerPane({
         </button>
         {/* Task 3's route. The rail has pointed at it since it was built, so
             this is the status quo rather than a link this task invented. */}
-        <Link className="btn" href="/dashboard/ask" onClick={onLeave}>
+        <Link className="btn" href={openHref} onClick={onLeave}>
           Open in Ask
         </Link>
       </div>
