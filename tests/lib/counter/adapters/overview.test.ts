@@ -12,7 +12,15 @@ vi.mock("@/app/actions/forecasts/revenue-forecast-actions", () => ({
 // adapter importable without a DATABASE_URL, which is the same reason the
 // adapter takes an accountId instead of fetching its own session.
 vi.mock("@/app/actions/ratings/ratings-actions", () => ({ getRatingsSummary: vi.fn() }))
-vi.mock("@/lib/counter/channel-mix", () => ({ loadChannelMix: vi.fn() }))
+vi.mock("@/lib/counter/channel-mix", () => ({
+  loadChannelMix: vi.fn(),
+  // The per-store readings now come from ONE query that keeps the rows
+  // partitioned, rather than N calls to loadChannelMix — see
+  // `loadChannelMixByStore`. Mocked alongside its sibling so this suite keeps
+  // asserting the SHAPE the section produces rather than how many round trips
+  // it took to build it.
+  loadChannelMixByStore: vi.fn(),
+}))
 vi.mock("@/lib/counter/targets", () => ({ loadStripTargets: vi.fn() }))
 
 import { getStores } from "@/app/actions/store/crud-actions"
@@ -22,7 +30,7 @@ import { getSplhSeries } from "@/app/actions/splh-actions"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
 import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
 import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
-import { loadChannelMix } from "@/lib/counter/channel-mix"
+import { loadChannelMix, loadChannelMixByStore } from "@/lib/counter/channel-mix"
 import { loadStripTargets } from "@/lib/counter/targets"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
@@ -192,6 +200,14 @@ function happyPath() {
   vi.mocked(getRevenueForecast).mockResolvedValue(forecast([]) as never)
   vi.mocked(getRatingsSummary).mockResolvedValue(RATINGS as never)
   vi.mocked(loadChannelMix).mockResolvedValue(CHANNELS as never)
+  // Every operational store reads the same fixture, which is what the N-call
+  // version produced too.
+  vi.mocked(loadChannelMixByStore).mockResolvedValue(
+    new Map([
+      ["holly", CHANNELS],
+      ["glendale", CHANNELS],
+    ]) as never,
+  )
   vi.mocked(loadStripTargets).mockResolvedValue(NO_TARGETS as never)
 }
 
@@ -639,6 +655,11 @@ describe("getOverviewSections", () => {
     await load()
     expect(vi.mocked(loadStripTargets)).toHaveBeenCalledWith(null, accountId)
     for (const [arg] of vi.mocked(loadChannelMix).mock.calls) {
+      expect(arg.accountId).toBe(accountId)
+    }
+    // The per-store read is account-scoped for the same reason, and is now a
+    // single call rather than one per store.
+    for (const [arg] of vi.mocked(loadChannelMixByStore).mock.calls) {
       expect(arg.accountId).toBe(accountId)
     }
   })
