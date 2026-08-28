@@ -114,6 +114,10 @@ const NAMED_SLICES = 5
 interface MenuCounts {
   items: number
   categories: MenuCategory[]
+  /** Items the POS emitted under more than one category in the window. */
+  multiCategory: number
+  /** Items that are ONLY ever uncategorized — the real gap, not the duplicates. */
+  onlyUncategorized: number
   unmappedItems: number
   modifiers: number
   unmappedModifiers: number
@@ -135,6 +139,8 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
     return {
       items: 0,
       categories: [],
+      multiCategory: 0,
+      onlyUncategorized: 0,
       unmappedItems: 0,
       modifiers: 0,
       unmappedModifiers: 0,
@@ -189,8 +195,28 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
     byCategory.set(key, set)
   }
 
+  // 7 items in the measured window carry two categories, and FIVE of those
+  // pair a real category with "Uncategorized" — the POS emits the same item
+  // sometimes with a category and sometimes without. So the Uncategorized
+  // slice is not 11 uncategorised items; it is 11 rows, six of which are the
+  // only home their item has. Both numbers go in the note, because "11 items
+  // have no category" would overstate the gap by nearly half.
+  const catsPerItem = new Map<string, Set<string>>()
+  for (const s of sold) {
+    const key = s.category?.trim() ? s.category : "Uncategorized"
+    const set = catsPerItem.get(s.itemName) ?? new Set<string>()
+    set.add(key)
+    catsPerItem.set(s.itemName, set)
+  }
+  const multiCategory = [...catsPerItem.values()].filter((v) => v.size > 1).length
+  const onlyUncategorized = [...catsPerItem.values()].filter(
+    (v) => v.size === 1 && v.has("Uncategorized"),
+  ).length
+
   return {
     items: names.size,
+    multiCategory,
+    onlyUncategorized,
     categories: [...byCategory.entries()]
       .map(([category, set]) => ({ category, items: set.size }))
       .sort((a, b) => b.items - a.items || a.category.localeCompare(b.category)),
@@ -309,15 +335,35 @@ function categories(c: MenuCounts, rangeLabel: string): MenuCategoriesSection {
   const rest = c.categories.slice(NAMED_SLICES)
   const restItems = rest.reduce((t, r) => t + r.items, 0)
 
+  /*
+   * `DonutSlice.value` IS A PERCENTAGE, not the count behind it. The arc is
+   * drawn against the sum of every slice, so a raw count draws the ring
+   * correctly either way — but the legend prints `pct(value, { scaled: true })`
+   * beside each name, and a raw count there renders "23.0%" for 23 items out
+   * of 61. Caught on the first render: the legend read 23.0 / 11.0 / 10.0 /
+   * 10.0 / 5.0 / 9.0, which is the count column with a percent sign on it and
+   * sums to 68 rather than 100.
+   *
+   * The COGS ring got this right by accident — its values were already
+   * percentages of cost. This one had to convert.
+   */
+  // Divided by the SUM OF THE SLICES, not by the item count. Seven items carry
+  // two categories, so the counts total 68 against 61 items — dividing by 61
+  // gave a legend summing to 111.5%, which is what the first render showed.
+  // The arc is already drawn against the slice sum, so this is also the only
+  // divisor that makes the legend agree with the ring beside it.
+  const placements = c.categories.reduce((t, r) => t + r.items, 0) || 1
+  const share = (n: number) => (n / placements) * 100
+
   const slices: DonutSlice[] = named.map((r, i) => ({
     name: r.category,
-    value: r.items,
+    value: share(r.items),
     color: SLICE_COLOURS[i],
   }))
   if (restItems > 0) {
     slices.push({
       name: `Other · ${count(rest.length)}`,
-      value: restItems,
+      value: share(restItems),
       color: SLICE_COLOURS[SLICE_COLOURS.length - 1],
     })
   }
@@ -332,15 +378,19 @@ function categories(c: MenuCounts, rangeLabel: string): MenuCategoriesSection {
     // is 23 of 61 items here and 7.1% of cost on the COGS page).
     center: count(c.items),
     meta: `${count(c.categories.length)} categories · ${rangeLabel}`,
-    note: uncategorized
-      ? `${lead ? `${lead.category} is the largest at ${count(lead.items)} of ${count(c.items)} items. ` : ""}` +
-        `${count(uncategorized.items)} carry no category at all and are drawn as their own slice — ` +
-        `folding them into "Other" would hide the menu's biggest data gap behind a neutral wedge. ` +
-        `This ring counts ITEMS, not money: a category with many cheap items is a wide slice here ` +
-        `and a narrow one on the cost page.`
-      : `${lead ? `${lead.category} is the largest at ${count(lead.items)} of ${count(c.items)} items. ` : ""}` +
-        `This ring counts ITEMS, not money: a category with many cheap items is a wide slice here ` +
-        `and a narrow one on the cost page.`,
+    note:
+      `${lead ? `${lead.category} is the largest at ${count(lead.items)} of ${count(c.items)} items. ` : ""}` +
+      (uncategorized
+        ? `${count(uncategorized.items)} rows carry no category, but only ` +
+          `${count(c.onlyUncategorized)} items are uncategorized everywhere — the POS emits ` +
+          `some items with a category and sometimes without, so the rest appear twice. ` +
+          `They are drawn as their own slice rather than folded into "Other": a ring that ` +
+          `hides the menu's biggest data gap behind a neutral wedge is decoration. `
+        : "") +
+      `${count(c.multiCategory)} items carry more than one category, so the slices total ` +
+      `${count(placements)} placements across ${count(c.items)} items and each share is of ` +
+      `placements, not of items. This ring counts ITEMS, not money: a category with many ` +
+      `cheap items is a wide slice here and a narrow one on the cost page.`,
   }
 }
 
