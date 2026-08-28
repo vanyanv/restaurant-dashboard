@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { CounterAskClient } from "./counter-ask-client"
 
 /**
@@ -71,8 +72,25 @@ export default async function AskPage({
   // store the rail says is selected.
   const stores = await getOverviewStores()
 
+  /*
+   * NOT AWAITED — one promise per section, unwrapped inside `Section` on the
+   * client, the same shape every other Counter page uses. The page's own
+   * answer still streams from `POST /api/chat` after paint; these two are the
+   * history beside it.
+   *
+   * The rail exists at all because the reason it did not is now false: this
+   * page's own note said "there is no thread store behind it", and
+   * `POST /api/chat` has been writing a conversation on every Ask ever since.
+   * See `@/lib/counter/adapters/ask`.
+   */
+  const sections = getAskSectionPromises({
+    accountId: session.user.accountId,
+    conversationId: params.get("c"),
+  })
+
   return (
     <CounterAskClient
+      sections={sections}
       // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
       // the RSC boundary with its prototype stripped.
       params={params.toString()}

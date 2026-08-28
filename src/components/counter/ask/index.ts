@@ -44,3 +44,6 @@ export { AskComposer } from "./ask-composer"
  * first place. It belongs with the Ask code, which already loads the labels.
  */
 export { Thinking } from "./thinking"
+/* The `.convs` rail of past conversations — the prototype's Ask page is a
+   two-column `.askpage` and this is its left column. */
+export { Conversations } from "./conversations"

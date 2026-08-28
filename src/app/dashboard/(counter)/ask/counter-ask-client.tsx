@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
   PageHead,
+  Section,
   useCounterTransition,
   usePageChrome,
   type SwitchableStore,
@@ -12,7 +13,11 @@ import {
 import {
   AskAnswerBody,
   AskComposer,
+  Conversations,
 } from "@/components/counter/ask"
+import { labelFor } from "@/components/chat/tool-labels"
+import type { AskSections } from "@/lib/counter/adapters/ask"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 import { ASK_STARTERS, askHref, describeAskContext } from "@/lib/counter/ask-context"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
@@ -96,6 +101,7 @@ import { useAsk } from "@/lib/counter/use-ask"
  */
 
 export function CounterAskClient({
+  sections,
   params: paramsString,
   stores,
   today,
@@ -108,6 +114,8 @@ export function CounterAskClient({
   params: string
   stores: SwitchableStore[]
   today: Date
+  /** The rail's list and, when `?c=` names one, the thread being read. */
+  sections: SectionSources<AskSections>
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -194,6 +202,40 @@ export function CounterAskClient({
     [params, pathname, router, startTransition],
   )
 
+  /**
+   * Opening a thread is a navigation, like asking is — so a conversation the
+   * reader opened is a link they can send, and the back button walks their
+   * history rather than a hidden component state.
+   *
+   * `?c=` REPLACES `?q=`: the page is either reading a stored thread or
+   * answering a live question, never both. Leaving the question in the URL
+   * would re-ask it against the model the moment the thread was closed.
+   */
+  const openThread = useCallback(
+    (id: string) => {
+      const next = new URLSearchParams(params)
+      next.delete("q")
+      next.set("c", id)
+      startTransition(() => {
+        router.push(`${pathname}?${next.toString()}`, { scroll: false })
+      })
+    },
+    [params, pathname, router, startTransition],
+  )
+
+  /** "New" drops both — an empty Ask, with the scope the reader was in kept. */
+  const newThread = useCallback(() => {
+    const next = new URLSearchParams(params)
+    next.delete("q")
+    next.delete("c")
+    const qs = next.toString()
+    startTransition(() => {
+      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    })
+  }, [params, pathname, router, startTransition])
+
+  const conversationId = params.get("c")
+
   const { range, presetId, comparisonId } = counterParams
   // The window named by its ENDS, as the prototype's sub-line names it
   // ("reading Aug 20 – Aug 26") and as every other Counter page names it.
@@ -236,8 +278,66 @@ export function CounterAskClient({
         />
       </PageHead>
 
-      <div className="chat">
-        {question ? (
+      {/*
+        * `.askpage` — the prototype's two-column Ask: a 206px rail of past
+        * conversations beside the answer. The phone sheet hides the rail
+        * (`.askpage .convs{display:none}` in the narrow query), so this same
+        * grid degrades to one column without a second layout.
+        */}
+      <div className="askpage">
+        <Section bare title="Conversations" data={sections.conversations}>
+          {(items) => (
+            <Conversations
+              items={items}
+              currentId={conversationId}
+              onOpen={openThread}
+              onNew={newThread}
+            />
+          )}
+        </Section>
+
+        <div className="chat">
+        {conversationId ? (
+          /*
+           * A STORED THREAD, read-only, inside its own `Section` so the
+           * restore gets the same six states everything else does — a
+           * skeleton while it loads, a named failure if it does not, rather
+           * than a blank column.
+           *
+           * Its figures are not here and are not reconstructed: `ChatMessage`
+           * keeps the prose and the tool names, never the `FiledReturn` the
+           * strip was built from. See the adapter.
+           */
+          <Section bare title="This conversation" data={sections.thread}>
+            {(t) =>
+              t === null ? null : (
+                <>
+                  {t.turns.map((turn) =>
+                    turn.role === "user" ? (
+                      <div className="youmsg" key={turn.id}>
+                        {turn.text}
+                      </div>
+                    ) : (
+                      <div className="ans" key={turn.id}>
+                        <p className="ans__lead">{turn.text}</p>
+                        {turn.read.length > 0 ? (
+                          <div className="srcs">
+                            <span className="src">Read</span>
+                            {turn.read.map((name) => (
+                              <span className="src" key={name}>
+                                <b>{labelFor(name).short}</b>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ),
+                  )}
+                </>
+              )
+            }
+          </Section>
+        ) : question ? (
           <>
             {/* The question as the reader asked it, in the prototype's own
                 bubble. `useAsk` sends the scope sentence in front of it on the
@@ -280,6 +380,7 @@ export function CounterAskClient({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       <AskComposer
