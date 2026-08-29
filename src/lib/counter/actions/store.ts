@@ -1,6 +1,6 @@
 "use server"
 
-import { updateStore } from "@/app/actions/store-actions"
+import { createStore, updateStore } from "@/app/actions/store-actions"
 
 /**
  * The Counter layer's write path for the store file — same shape as
@@ -51,4 +51,26 @@ export async function saveStoreFile(
   const result = await updateStore(storeId, form)
   if ("error" in result && result.error) return { ok: false, error: result.error }
   return { ok: true }
+}
+
+/**
+ * Create a store. `createStoreSchema` reads name, address and phone — there
+ * is no lifecycle in it, so `Store.lifecycleStage` takes its schema default,
+ * `pre_open`, and the nightly model skips the store until someone moves it
+ * on. The page says that rather than offering a select nothing reads.
+ */
+export async function createStoreRecord(input: {
+  name: string
+  address: string
+  phone: string
+}): Promise<{ ok: true; storeId: string } | { ok: false; error: string }> {
+  const form = new FormData()
+  form.set("name", input.name)
+  if (input.address.trim() !== "") form.set("address", input.address.trim())
+  if (input.phone.trim() !== "") form.set("phone", input.phone.trim())
+
+  const result = await createStore(form)
+  if ("error" in result && result.error) return { ok: false, error: result.error }
+  if (!("store" in result) || !result.store) return { ok: false, error: "no_store_returned" }
+  return { ok: true, storeId: result.store.id }
 }
