@@ -50,10 +50,22 @@ import { useAsk } from "@/lib/counter/use-ask"
  * ONE TURN (K-R4)
  * ---------------------------------------------------------------------------
  *
- * No thread, no history, no `.convs` — there is no thread store behind either
- * surface yet, and the phone does not pretend to one the desk does not have.
- * A follow-up replaces the question in the URL rather than appending a turn,
- * and the composer's placeholder names the scope rather than implying a memory.
+ * No thread, no history, no `.convs`. That was written when neither surface
+ * had a thread store; the desk has one now — `/dashboard/ask` renders 39
+ * stored conversations and reads a thread from `?c=` — and this surface has
+ * not caught up. A follow-up here still replaces the question in the URL
+ * rather than appending a turn, and the composer's placeholder names the
+ * scope rather than implying a memory it does not keep.
+ *
+ * Two consequences worth writing down where the next person will look:
+ *
+ * 1. The phone is BEHIND the desk on this, not deliberately simpler than it.
+ * 2. `/m/chat` — the pre-Counter phone chat — keeps conversation history
+ *    (`listConversations`, 30 of them) and therefore stays. `src/proxy.ts`
+ *    still maps `/dashboard/chat` to it for phones on purpose. Retiring it is
+ *    the reward for giving this surface the rail and the thread, and not
+ *    before: redirecting it today would take history away from the phone to
+ *    tidy a route.
  */
 export function CounterPhoneAskClient({
   params: paramsString,
