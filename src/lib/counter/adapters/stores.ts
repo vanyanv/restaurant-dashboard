@@ -385,9 +385,28 @@ export interface StoreFileInputs {
   note: string
 }
 
+/**
+ * The raw values the store file's form edits, as stored. Separate from
+ * `StoreFileInputs`, which is formatted for reading — a form needs the number,
+ * not "$10,390".
+ */
+export interface StoreFileEditable {
+  storeId: string
+  name: string
+  rent: number | null
+  labor: number | null
+  towels: number | null
+  cleaning: number | null
+  uber: number
+  doordash: number
+  /** Stated, not offered: `updateStoreSchema` does not accept it. */
+  cogsTarget: number | null
+}
+
 export interface StoreFileSections {
   head: SectionData<StoreFileHead>
   inputs: SectionData<StoreFileInputs>
+  editable: SectionData<StoreFileEditable>
   work: SectionData<StoresWork>
 }
 
@@ -431,6 +450,17 @@ export function getStoreFileSectionPromises(
     )
 
   return {
+    editable: s((store) => ({
+      storeId: store.id,
+      name: store.name,
+      rent: store.rent,
+      labor: store.labor,
+      towels: store.towels,
+      cleaning: store.cleaning,
+      uber: store.uber ?? DEFAULT_UBER,
+      doordash: store.doordash ?? DEFAULT_DOORDASH,
+      cogsTarget: store.cogsTarget,
+    })),
     head: s((store) => {
       const monthly = fixedMonthly(store)
       const gaps = missingInputs(store)
