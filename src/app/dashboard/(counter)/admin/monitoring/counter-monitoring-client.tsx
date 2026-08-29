@@ -29,6 +29,11 @@ import type { MonitoringSections } from "@/lib/counter/adapters/monitoring"
  * visible to the owner" — see the page's own note on why no gate can deliver
  * the second claim.
  */
+const TAB_COLUMNS: Column[] = [
+  { key: "tab", label: "Page" },
+  { key: "what", label: "What it answers" },
+]
+
 export type CounterMonitoringSections = SectionSources<MonitoringSections>
 
 const SUBSYSTEM_COLUMNS: Column[] = [
@@ -63,6 +68,16 @@ export function CounterMonitoringClient({
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
+      </Section>
+
+      <Section
+        title="The other pages"
+        meta={(t) => t.meta}
+        data={sections.tabs}
+        pending={pending}
+        pad={false}
+      >
+        {(t) => <Table columns={TAB_COLUMNS} rows={t.rows} />}
       </Section>
 
       <Section

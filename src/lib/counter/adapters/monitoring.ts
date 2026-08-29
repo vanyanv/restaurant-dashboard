@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma"
-import { count, money, pct } from "@/lib/counter/format"
+import { bytes, count, money, pct } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
   guardSection,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
-import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { mapReady, ready, type SectionData } from "@/lib/counter/section-data"
 import type { FigureProps, MListRow, Row } from "@/components/counter"
 
 /**
@@ -74,6 +74,70 @@ export interface MonitoringSections {
   headline: SectionData<MonitoringHeadline>
   subsystems: SectionData<MonitoringSubsystems>
   events: SectionData<MonitoringEvents>
+  tabs: SectionData<MonitoringTabs>
+}
+
+export interface MonitoringTabs {
+  rows: Row[]
+  meta: string
+}
+
+/**
+ * The bridge's sub-pages. Until now they were reachable only by typing the
+ * URL: the legacy `TabStrip` that linked them belongs to the editorial shell
+ * and is not rendered on a Counter page, and nothing replaced it. Six built
+ * pages with no way in is a worse fault than anything on them.
+ *
+ * Static, so it needs no query and resolves with the shell.
+ */
+const TABS: Array<{ href: string; label: string; what: string }> = [
+  {
+    href: "/dashboard/admin/monitoring/ml",
+    label: "Model health",
+    what: "What the nightly forecast predicted, and whether it beat last week",
+  },
+  {
+    href: "/dashboard/admin/monitoring/infrastructure",
+    label: "Infrastructure",
+    what: "Storage, scheduled jobs, and what actually broke",
+  },
+  {
+    href: "/dashboard/admin/monitoring/activity",
+    label: "Activity",
+    what: "Errors and sync runs over the last day",
+  },
+  {
+    href: "/dashboard/admin/monitoring/people",
+    label: "People",
+    what: "Who opens the product, and which pages earn their place",
+  },
+  {
+    href: "/dashboard/admin/monitoring/costs",
+    label: "Costs",
+    what: "What the model and mail spend, by feature",
+  },
+  {
+    href: "/dashboard/admin/monitoring/cache",
+    label: "Cache",
+    what: "Hit rates by prefix",
+  },
+  {
+    href: "/dashboard/admin/monitoring/ingredient-audit",
+    label: "Ingredients",
+    what: "Match quality on the ingredient catalogue",
+  },
+]
+
+function tabsOf(): MonitoringTabs {
+  return {
+    rows: TABS.map((t) => ({
+      key: t.href,
+      href: t.href,
+      ariaLabel: t.label,
+      cells: { tab: t.label, what: t.what },
+    })),
+    meta: `${TABS.length} pages`,
+  }
 }
 
 export interface MonitoringInput {
@@ -143,10 +207,10 @@ async function loadMonitoring(_input: MonitoringInput): Promise<Data> {
         FROM "CacheStat"
         WHERE "hourBucket" >= NOW() - MAKE_INTERVAL(days => ${WINDOW_DAYS})`,
       prisma.$queryRaw<Array<{ mb: number; captured: Date }>>`
-        SELECT ("totalBytes" / 1048576.0)::float AS mb, "capturedAt" AS captured
+        SELECT ("totalBytes" / 1000000.0)::float AS mb, "capturedAt" AS captured
         FROM "DbSnapshot" ORDER BY "capturedAt" DESC LIMIT 2`,
       prisma.$queryRaw<Array<{ mb: number; objects: number }>>`
-        SELECT ("totalBytes" / 1048576.0)::float AS mb, "objectCount"::int AS objects
+        SELECT ("totalBytes" / 1000000.0)::float AS mb, "objectCount"::int AS objects
         FROM "R2BucketSnapshot" ORDER BY "capturedAt" DESC LIMIT 1`,
       prisma.$queryRaw<Array<{ cost24: number; cost30: number; calls24: number }>>`
         SELECT COALESCE(SUM("estimatedCostUsd") FILTER (
@@ -229,7 +293,8 @@ const ago = (d: Date | null): string => {
   return hours < 48 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`
 }
 
-const MB = (v: number | null): string => (v === null ? "—" : `${v.toFixed(0)} MB`)
+/** Megabytes back to bytes, so the shared `bytes()` is the only place a size is worded. */
+const MB = (v: number | null): string => bytes(v === null ? null : v * 1e6)
 
 /* -- sections --------------------------------------------------------- */
 
@@ -446,6 +511,7 @@ export function getMonitoringSectionPromises(
     headline: s(headlineOf),
     subsystems: s(subsystemsOf),
     events: s(eventsOf),
+    tabs: Promise.resolve(ready(tabsOf())),
   }
 }
 

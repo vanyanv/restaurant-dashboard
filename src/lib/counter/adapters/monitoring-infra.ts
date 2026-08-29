@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { count } from "@/lib/counter/format"
+import { bytes, count } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -197,14 +197,6 @@ async function loadInfra(): Promise<InfraData> {
 
 /* ── Shaping ──────────────────────────────────────────────────────────── */
 
-/** Bytes at the scale this product actually operates at — megabytes, not gigabytes. */
-function size(bytes: number | null): string {
-  if (bytes === null || !Number.isFinite(bytes)) return "—"
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`
-  return `${(bytes / 1e3).toFixed(0)} KB`
-}
-
 function duration(ms: number | null): string {
   if (ms === null || !Number.isFinite(ms)) return "—"
   if (ms < 1000) return `${Math.round(ms)}ms`
@@ -242,22 +234,22 @@ function headlineOf(d: InfraData): InfraHeadline {
       : "") +
     `. A further ${count(verdictFailures)} runs are recorded as failures and are not: ` +
     `ml.operator-gate-check exits non-zero to report that a model gate did not pass, ` +
-    `which is the job working. Storage is ${size(d.dbBytes)} of database and ` +
-    `${size(d.r2Bytes)} of files` +
-    (growth !== null ? `, growing ${size(growth)} in ${count(GROWTH_DAYS)} days` : "") +
+    `which is the job working. Storage is ${bytes(d.dbBytes)} of database and ` +
+    `${bytes(d.r2Bytes)} of files` +
+    (growth !== null ? `, growing ${bytes(growth)} in ${count(GROWTH_DAYS)} days` : "") +
     `.`
 
   const cells: FigureProps[] = [
     {
       label: "Database",
-      value: size(d.dbBytes),
-      delta: growth === null ? undefined : `${size(growth)} in ${count(GROWTH_DAYS)}d`,
+      value: bytes(d.dbBytes),
+      delta: growth === null ? undefined : `${bytes(growth)} in ${count(GROWTH_DAYS)}d`,
       deltaTone: "is-flat",
       caption: `snapshot ${ago(d.capturedAt)}`,
     },
     {
       label: "Files",
-      value: size(d.r2Bytes),
+      value: bytes(d.r2Bytes),
       caption: `${count(d.r2Objects)} objects · ${ago(d.r2At)}`,
     },
     {
@@ -293,15 +285,15 @@ function storageOf(d: InfraData): InfraStorage {
       cells: {
         table: t.table,
         rows: count(t.rows),
-        size: size(t.bytes),
+        size: bytes(t.bytes),
         share: total > 0 ? `${((100 * t.bytes) / total).toFixed(1)}%` : "—",
       },
     })),
     meta: `${count(d.tables.length)} largest tables · snapshot ${ago(d.capturedAt)}`,
     note:
       `The snapshot job records only the largest tables, so these ` +
-      `${size(shown)} are ${total > 0 ? ((100 * shown) / total).toFixed(0) : "—"}% of the ` +
-      `${size(total)} total and the rest is spread across everything else. Order rows are the ` +
+      `${bytes(shown)} are ${total > 0 ? ((100 * shown) / total).toFixed(0) : "—"}% of the ` +
+      `${bytes(total)} total and the rest is spread across everything else. Order rows are the ` +
       `bulk of it; every forecast generation ever written is most of the remainder, which is ` +
       `the same reason a range summed without deduplicating on generatedAt reads 12x high.`,
   }
@@ -317,12 +309,12 @@ function filesOf(d: InfraData): InfraFiles {
   return {
     rows: d.prefixes.map((p) => ({
       label: p.prefix,
-      value: `${size(p.bytes)} · ${count(p.objects)} objects`,
+      value: `${bytes(p.bytes)} · ${count(p.objects)} objects`,
     })),
     meta: `bucket snapshot ${ago(d.r2At)}`,
     note:
       `Invoice scans and product photographs. The prototype's strip reads 412 objects and ` +
-      `1.9 GB; the bucket holds ${count(d.r2Objects)} objects and ${size(d.r2Bytes)}, which is ` +
+      `1.9 GB; the bucket holds ${count(d.r2Objects)} objects and ${bytes(d.r2Bytes)}, which is ` +
       `about a twentieth of that.`,
   }
 }
