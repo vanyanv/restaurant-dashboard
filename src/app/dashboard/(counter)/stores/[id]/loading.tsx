@@ -21,6 +21,9 @@ export default function StoreFileLoading() {
           {() => null}
         </Section>
       </div>
+      <Section title="Set the inputs" data={loading()}>
+        {() => null}
+      </Section>
       <Section title="Needs you" data={loading()}>
         {() => null}
       </Section>
