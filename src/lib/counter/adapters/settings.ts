@@ -210,6 +210,10 @@ export interface SettingsAccount {
   rows: KvRow[]
   /** Set when the signed-in user's clock disagrees with where the stores are. */
   clockWarning: string | null
+  /** What the timezone control needs to save: the current values it edits. */
+  editable: { name: string; timezone: string } | null
+  /** The timezones a store in this account actually sits in, offered first. */
+  timezoneChoices: string[]
   meta: string
 }
 
@@ -240,6 +244,13 @@ function accountOf(d: SettingsData): SettingsAccount {
             : "none — all three are owned by the developer account",
         tone: you && you.ownedStores.length === 0 ? "warn" : undefined,
       },
+    ],
+    editable: you === null ? null : { name: you.name, timezone: you.timezone },
+    timezoneChoices: [
+      d.storeTimezoneHint,
+      "America/Denver",
+      "America/Chicago",
+      "America/New_York",
     ],
     clockWarning: wrongClock
       ? `Your clock is set to ${wrongClock} and every store is in ` +

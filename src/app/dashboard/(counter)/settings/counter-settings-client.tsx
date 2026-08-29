@@ -10,9 +10,14 @@ import {
   usePageChrome,
   type Column,
 } from "@/components/counter"
-import { saveNotificationPreferences } from "@/lib/counter/actions/settings"
+import {
+  saveNewPassword,
+  saveNotificationPreferences,
+  saveTimezone,
+} from "@/lib/counter/actions/settings"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
+  SettingsAccount,
   SettingsNotifications,
   SettingsSections,
 } from "@/lib/counter/adapters/settings"
@@ -59,6 +64,142 @@ const TOGGLES = [
     detail: "Sunday evening, the week behind",
   },
 ]
+
+/**
+ * The timezone and the password — the two things the editorial settings could
+ * change and this page must not lose. A page that reports the owner's clock is
+ * three hours out and offers no way to set it would be half a page.
+ */
+function AccountControls({ data }: { data: SettingsAccount }) {
+  const editable = data.editable
+  const [zone, setZone] = useState(editable?.timezone ?? "")
+  const [saving, startSaving] = useTransition()
+  const [zoneSaid, setZoneSaid] = useState<string | null>(null)
+
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState("")
+  const [next, setNext] = useState("")
+  const [confirm, setConfirm] = useState("")
+  const [pwSaid, setPwSaid] = useState<string | null>(null)
+
+  useEffect(() => {
+    setZone(editable?.timezone ?? "")
+  }, [editable?.timezone])
+
+  if (editable === null) return null
+
+  function changeZone(value: string) {
+    setZone(value)
+    setZoneSaid(null)
+    startSaving(async () => {
+      const result = await saveTimezone({ name: editable!.name, timezone: value })
+      setZoneSaid(result.ok ? "Saved." : `Could not save: ${result.error}.`)
+      if (!result.ok) setZone(editable!.timezone)
+    })
+  }
+
+  function submitPassword() {
+    setPwSaid(null)
+    startSaving(async () => {
+      const result = await saveNewPassword({
+        currentPassword: current,
+        newPassword: next,
+        confirmPassword: confirm,
+      })
+      if (result.ok) {
+        setCurrent("")
+        setNext("")
+        setConfirm("")
+        setOpen(false)
+        setPwSaid("Password changed.")
+        return
+      }
+      setPwSaid(result.error)
+    })
+  }
+
+  return (
+    <>
+      <div className="setrow">
+        <div className="tx">
+          <b>Timezone</b>
+          <span>Used wherever a figure is bucketed by day</span>
+        </div>
+        <select
+          className="inp"
+          aria-label="Your timezone"
+          value={zone}
+          disabled={saving}
+          onChange={(e) => changeZone(e.target.value)}
+        >
+          {(data.timezoneChoices.includes(zone)
+            ? data.timezoneChoices
+            : [zone, ...data.timezoneChoices]
+          ).map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="setrow">
+        <div className="tx">
+          <b>Password</b>
+          <span>{pwSaid ?? "Eight characters or more"}</span>
+        </div>
+        <button className="btn" type="button" onClick={() => setOpen((v) => !v)}>
+          {open ? "Cancel" : "Change"}
+        </button>
+      </div>
+
+      {open ? (
+        <div className="setrow" style={{ display: "grid", gap: 8 }}>
+          <input
+            className="inp"
+            type="password"
+            aria-label="Current password"
+            placeholder="Current password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+          <input
+            className="inp"
+            type="password"
+            aria-label="New password"
+            placeholder="New password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
+          <input
+            className="inp"
+            type="password"
+            aria-label="Confirm new password"
+            placeholder="Confirm new password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+          <div className="btnrow">
+            <button
+              className="btn btn--primary"
+              type="button"
+              disabled={saving}
+              onClick={submitPassword}
+            >
+              {saving ? "Saving…" : "Change the password"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {zoneSaid !== null ? (
+        <p className="mono" style={{ margin: "10px 0 0" }}>
+          {zoneSaid}
+        </p>
+      ) : null}
+    </>
+  )
+}
 
 function Notifications({ data }: { data: SettingsNotifications }) {
   const [state, setState] = useState({
@@ -134,6 +275,7 @@ export function CounterSettingsClient({
         {(a) => (
           <>
             <Kv rows={a.rows} />
+            <AccountControls data={a} />
             {a.clockWarning !== null ? (
               <p className="mono" style={{ marginBottom: 0 }}>
                 {a.clockWarning}
