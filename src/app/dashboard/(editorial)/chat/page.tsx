@@ -1,46 +1,16 @@
 import { redirect } from "next/navigation"
-import { unstable_cache } from "next/cache"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { chatPrisma } from "@/lib/chat/prisma-chat"
-import { listOwnerStores } from "@/lib/chat/owner-scope"
-import { listConversations } from "@/lib/chat/conversation"
-import { ChatPageClient } from "./chat-page-client"
 
-/** Conversations are per-account but largely static; fresh-enough at 30s.
- * Tag is invalidated when chat actions create/rename a conversation
- * (revalidateTag in those server actions once we wire that up). The
- * cache key is keyed on accountId, and we serialize Dates to ISO strings
- * here so the cached payload is JSON-stable. */
-const getCachedConversations = unstable_cache(
-  async (accountId: string) => {
-    const rows = await listConversations(chatPrisma, accountId, 100)
-    return rows.map((c) => ({
-      id: c.id,
-      title: c.title,
-      updatedAt: c.updatedAt.toISOString(),
-      createdAt: c.createdAt.toISOString(),
-      messageCount: c.messageCount,
-    }))
-  },
-  ["chat-conversations-by-account"],
-  { revalidate: 30, tags: ["chat-conversations"] }
-)
-
-export default async function ChatPage() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) redirect("/login")
-  if (!hasOwnerAccess(session.user.role)) redirect("/dashboard")
-
-  const [initialConversations, stores] = await Promise.all([
-    getCachedConversations(session.user.accountId),
-    listOwnerStores(session.user.accountId),
-  ])
-
-  return (
-    <ChatPageClient
-      initialConversations={initialConversations}
-      stores={stores.map((s) => ({ id: s.id, name: s.name }))}
-    />
-  )
+// A legacy path kept so old links and bookmarks resolve.
+//
+// `P.ask` gives its route as `/dashboard/chat`, but the rebuilt surface is
+// `/dashboard/ask` and the sidebar has pointed there since. This page went on
+// serving the pre-Counter chat to anyone with the old link — two Ask surfaces,
+// one of them stale.
+//
+// `src/proxy.ts` still maps `/dashboard/chat` to `/m/chat` for phones, which is
+// deliberate: the phone's Counter ask has no thread history and `/m/chat` does,
+// so retiring the mobile one needs its own comparison rather than a redirect
+// tacked onto this.
+export default function ChatPage() {
+  redirect("/dashboard/ask")
 }
