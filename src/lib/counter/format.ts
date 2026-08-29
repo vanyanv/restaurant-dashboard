@@ -163,3 +163,20 @@ export function points(v: number | null): string {
 export function count(v: number | null): string {
   return v === null || !Number.isFinite(v) ? DASH : v.toLocaleString("en-US")
 }
+
+/**
+ * A size in bytes, at the scale this product operates at.
+ *
+ * One function because the figure appears on two pages: the monitoring bridge
+ * and the infrastructure tab both read `DbSnapshot.totalBytes`, and before
+ * this they divided by different constants — 1048576 on one, 1,000,000 on the
+ * other — so the same database read 292 MB on one page and 306 MB on the
+ * page it links to. Decimal, because that is what the bill is denominated in.
+ */
+export function bytes(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return DASH
+  const abs = Math.abs(v)
+  if (abs >= 1e9) return `${(v / 1e9).toFixed(2)} GB`
+  if (abs >= 1e6) return `${(v / 1e6).toFixed(1)} MB`
+  return `${(v / 1e3).toFixed(0)} KB`
+}
