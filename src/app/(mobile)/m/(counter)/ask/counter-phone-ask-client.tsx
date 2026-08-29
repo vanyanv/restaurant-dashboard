@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
+  MList,
+  Section,
   useCounterTransition,
   type SwitchableStore,
 } from "@/components/counter"
@@ -15,6 +17,9 @@ import { rangeLabel } from "@/lib/counter/date-range"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { askAnswer, askPending, askStateFor } from "@/lib/counter/ask-state"
 import { useAsk } from "@/lib/counter/use-ask"
+import { labelFor } from "@/components/chat/tool-labels"
+import type { AskSections } from "@/lib/counter/adapters/ask"
+import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
  * Counter Ask on the phone — `P.ask.phone()` at line 4611 of
@@ -69,11 +74,13 @@ import { useAsk } from "@/lib/counter/use-ask"
  */
 export function CounterPhoneAskClient({
   params: paramsString,
+  sections,
   stores,
   today,
 }: {
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
+  sections: SectionSources<AskSections>
   stores: SwitchableStore[]
   today: Date
 }) {
@@ -158,11 +165,59 @@ export function CounterPhoneAskClient({
   const shown = askStateFor(state, question)
   const answered = askAnswer(shown)
 
+  // `?c=` names a stored thread. Opening one is a NAVIGATION, like asking is,
+  // so the back button walks out of a thread the same way it walks back
+  // through questions — the phone has no palette to close and no Escape key.
+  const conversationId = params.get("c")
+  const threadHref = (id: string) => {
+    const next = new URLSearchParams(paramsString)
+    next.set("c", id)
+    next.delete("q")
+    return `${ASK_PHONE_ROUTE}?${next.toString()}`
+  }
+
   return (
     /* A FRAGMENT: `.ct-root.ct-phone`, `.mtop` and `.mscroll` belong to
        `(mobile)/m/(counter)/layout.tsx`. */
     <>
-      {question ? (
+      {conversationId ? (
+        /*
+         * A STORED THREAD, read-only, in its own `Section` so a restore gets
+         * the same six states everything else does rather than a blank
+         * screen. Its figures are not here and are not rebuilt: `ChatMessage`
+         * keeps the prose and the tool names, never the `FiledReturn` the
+         * strip was drawn from. See the adapter.
+         */
+        <Section bare title="This conversation" data={sections.thread}>
+          {(t) =>
+            t === null ? null : (
+              <div className="mchat">
+                {t.turns.map((turn) =>
+                  turn.role === "user" ? (
+                    <div className="youmsg" key={turn.id}>
+                      {turn.text}
+                    </div>
+                  ) : (
+                    <div className="manswer" key={turn.id}>
+                      <p>{turn.text}</p>
+                      {turn.read.length > 0 ? (
+                        <div className="srcs">
+                          <span className="src">Read</span>
+                          {turn.read.map((name) => (
+                            <span className="src" key={name}>
+                              <b>{labelFor(name).short}</b>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ),
+                )}
+              </div>
+            )
+          }
+        </Section>
+      ) : question ? (
         <div className="mchat">
           {/* The question as the reader asked it. `useAsk` sends the scope
               sentence in front of it on the wire; that plumbing is never
@@ -208,6 +263,31 @@ export function CounterPhoneAskClient({
           </div>
         </div>
       )}
+
+      {/*
+        * PAST QUESTIONS, and only in the state where nothing is being read.
+        *
+        * The desk keeps a 206px rail of conversations beside the answer; the
+        * phone has no room for one and the prototype's own narrow query hides
+        * it (`.askpage .convs{display:none}`). So history is what the phone
+        * shows when there is nothing else to show, which is also when a
+        * reader wants it — after an answer they are reading the answer.
+        */}
+      {conversationId === null && question === null ? (
+        <Section title="What you have asked" data={sections.conversations} pad={false}>
+          {(items) => (
+            <MList
+              rows={items.map((c) => ({
+                key: c.id,
+                title: c.title ?? "Untitled",
+                detail: `${c.turns} ${c.turns === 1 ? "turn" : "turns"}`,
+                value: "",
+                href: threadHref(c.id),
+              }))}
+            />
+          )}
+        </Section>
+      ) : null}
 
       <AskComposer
         // Named scope rather than the prototype's "Ask a follow-up about this

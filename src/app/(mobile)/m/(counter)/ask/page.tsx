@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
+import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneAskClient } from "./counter-phone-ask-client"
 
@@ -33,11 +34,16 @@ import { CounterPhoneAskClient } from "./counter-phone-ask-client"
  * client island. It imports no Prisma and no server action, and branches on no
  * `SectionData` status.
  *
- * There is no `get*SectionPromises` call and so no per-section Suspense — the
- * desk route's own note applies unchanged: this page has no server-rendered
- * sections at all. Its one payload is an answer streamed to the CLIENT after
- * the page has painted, and what a Suspense boundary would have bought (the
- * shell and the reader's own question first) is what already happens.
+ * ## Two payloads, not one
+ *
+ * The live answer is still streamed to the CLIENT after the page has painted,
+ * and needs no Suspense boundary: what one would have bought — the shell and
+ * the reader's own question first — is what already happens.
+ *
+ * History is different and is server-rendered, through the SAME
+ * `getAskSectionPromises` the desk calls. Two surfaces listing conversations
+ * from two queries would eventually disagree about what a conversation is,
+ * and the phone would be the one that was wrong.
  *
  * No owner gate, deliberately, and the desk route has none either: every
  * figure in an answer comes from a tool that carries its own authorisation, so
@@ -68,8 +74,16 @@ export default async function MobileAskPage({
   // selected.
   const stores = await getOverviewStores()
 
+  // `?c=` names a stored thread. Not awaited — the sections stream, and the
+  // reader's question paints before the history does.
+  const sections = getAskSectionPromises({
+    accountId: session.user.accountId,
+    conversationId: params.get("c"),
+  })
+
   return (
     <CounterPhoneAskClient
+      sections={sections}
       // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
       // the RSC boundary with its prototype stripped.
       params={params.toString()}
