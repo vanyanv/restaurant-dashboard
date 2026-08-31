@@ -1,5 +1,21 @@
 "use client"
 
+/*
+ * This file is ALONE in `src/app/(mobile)/m/more/` and the folder has no
+ * `page.tsx`, so it is not a route — `/m/more` resolves to the Counter page in
+ * `(counter)/more/`, which replaced the editorial one that used to sit beside
+ * this.
+ *
+ * It stays here rather than moving to `src/components/mobile/` because
+ * `/m/pnl/[storeId]` still imports it by this path, that page is still
+ * editorial, and the `src/app/(mobile)/m` LEGACY exemption in
+ * `scripts/counter-lint.ts` is keyed to file CONTENT: editing that page's
+ * import line forfeits its exemption and fails `npm run tokens` on a
+ * `no-direct-data-import` it has carried since before Counter. Moving one file
+ * is not worth reopening an editorial page's data layer. It goes when that
+ * page is rebuilt.
+ */
+
 type Props = {
   /** Desktop path to hard-navigate to after the cookie is set. Defaults to
    *  the dashboard home, matching this button's original behavior on the
