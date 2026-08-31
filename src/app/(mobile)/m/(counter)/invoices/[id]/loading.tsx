@@ -10,13 +10,13 @@ export default function MobileInvoiceLoading() {
       <Section bare title="Invoice" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="The figures" data={loading()}>
-        {() => null}
-      </Section>
       <Section title="The document" data={loading()}>
         {() => null}
       </Section>
       <Section title="Needs a decision" data={loading()}>
+        {() => null}
+      </Section>
+      <Section title="Totals" data={loading()}>
         {() => null}
       </Section>
     </>

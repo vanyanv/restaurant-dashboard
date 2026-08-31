@@ -968,7 +968,7 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 27, mobile: 9 },
   },
-  { protoId: "invoice", name: "An invoice", protoRoute: "/dashboard/invoices/I28517", route: "/dashboard/invoices/cmtev883f000204l9jqrsyk5u", mobileRoute: "/m/invoices/cmtev883f000204l9jqrsyk5u", report: true, status: "editorial" },
+  { protoId: "invoice", name: "An invoice", protoRoute: "/dashboard/invoices/I28517", route: "/dashboard/invoices/cmo5096qc001wlfu9t9r2us61", mobileRoute: "/m/invoices/cmo5096qc001wlfu9t9r2us61", report: true, status: "editorial" },
   {
     protoId: "inventory",
     name: "Inventory",
