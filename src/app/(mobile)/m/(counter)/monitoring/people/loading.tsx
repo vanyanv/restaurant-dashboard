@@ -10,7 +10,7 @@ export default function Loading() {
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="Who opens it" data={loading()}>
+      <Section title="Most opened" data={loading()}>
         {() => null}
       </Section>
     </>

@@ -27,12 +27,14 @@ export function CounterPhonePeopleClient({
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
 
-      <Section title="Who opens it" meta={(w) => w.meta} data={sections.who} pending={pending}>
-        {(w) => (
+      {/* `P.monpeople.phone()`'s "Most opened". The desk's who-answer is
+          already on this surface: it is the msub and the first strip cell. */}
+      <Section title="Most opened" meta={(p) => p.meta} data={sections.pages} pending={pending}>
+        {(p) => (
           <>
-            <MList rows={w.phoneRows} />
+            <MList rows={p.phoneRows} />
             <p className="mono" style={{ margin: "11px 0 0" }}>
-              {w.note}
+              {p.note}
             </p>
           </>
         )}
