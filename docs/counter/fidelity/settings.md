@@ -41,25 +41,14 @@ Structure: 10 missing, 3 extra, 18 matched. Rendering (light): 0 property differ
 
 ## fidelity-mobile — phone
 
-**The prototype renders 8 landmarks on this page. We render 0.**
+**The prototype renders 8 landmarks on this page. We render 8.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
-| `.mhead` | 1 | 0 |
-| `.mlist` | 1 | 0 |
-| `.sec` | 2 | 0 |
-| `.sec__body` | 2 | 0 |
-| `.sec__head` | 2 | 0 |
+| `.mhead` | 1 | 1 |
+| `.mlist` | 1 | 1 |
+| `.sec` | 2 | 2 |
+| `.sec__body` | 2 | 2 |
+| `.sec__head` | 2 | 2 |
 
-Structure: 8 missing, 0 extra, 0 matched. Rendering was not compared: the two sides have no landmark in common, so there is nothing here to be right or wrong about. "0 rendering differences" would be a lie, and the gated rendering pass fails outright on this.
-
-### Missing — the prototype has these and we do not
-
-- `#0 .mhead`
-- `#1 .sec`
-- `#2 .sec__head`
-- `#3 .sec__body`
-- `#4 .sec`
-- `#5 .sec__head`
-- `#6 .sec__body`
-- `#7 .mlist`
+Structure: 0 missing, 0 extra, 8 matched. Rendering (light): 0 property differences on the 8 landmarks present on both sides.
