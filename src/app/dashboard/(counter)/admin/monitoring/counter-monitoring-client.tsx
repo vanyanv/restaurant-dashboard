@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Chart,
   MList,
   PageHead,
   Section,
@@ -99,6 +100,24 @@ export function CounterMonitoringClient({
         )}
       </Section>
 
+      {/* `P.monitoring`'s "Sync duration". `JobRun.durationMs` was already
+          being written by every job and read by nothing. */}
+      <Section
+        title="Sync duration"
+        meta={(d) => d.meta}
+        data={sections.duration}
+        pending={pending}
+      >
+        {(d) => (
+          <>
+            <Chart {...d.chart} fmt={SECONDS} />
+            <p className="mono" style={{ margin: "11px 0 0" }}>
+              {d.note}
+            </p>
+          </>
+        )}
+      </Section>
+
       <Section
         title="Recent events"
         meta={(e) => e.meta}
@@ -118,3 +137,6 @@ export function CounterMonitoringClient({
     </>
   )
 }
+
+/** The prototype's own axis unit on this panel. */
+const SECONDS = (v: number) => `${v.toFixed(1)} s`
