@@ -1043,7 +1043,56 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 30, mobile: 8 },
   },
-  { protoId: "countnew", name: "Inventory", protoRoute: "/dashboard/operations/inventory/count/new", route: "/dashboard/operations/inventory/count/new", report: true, status: "editorial" },
+  {
+    protoId: "countnew",
+    name: "Start a count",
+    protoRoute: "/dashboard/operations/inventory/count/new",
+    route: "/dashboard/operations/inventory/count/new",
+    mobileRoute: "/m/operations/inventory/count/new",
+    report: true,
+    // MEASURED: 11 of the prototype's 13 on the desk, 4 of 4 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The two missing
+    // landmarks are declared below.
+    //
+    // The desk was 21 against 13 and the phone had no phone surface at all —
+    // which is the odd one to have been missing, because this page's whole
+    // argument is that counting happens on the phone and the desk is only for
+    // choosing the shape of it. The wizard handed over to nothing.
+    //
+    // Three things went off the desk, and `P.countnew` is a WIZARD rather than
+    // a report, which is the thread joining them: a verdict block, a four-cell
+    // STRIP (this design has none — a strip here answers a question nobody
+    // asked on the way to starting a count), and a "Counts already open"
+    // table. Every figure the strip drew was already a clause of the verdict;
+    // two of the verdict's three clauses were already the sheet's note and the
+    // button's; and what the open-counts table was really for is the sentence
+    // under the button — pressing it on a store with an open count RESUMES a
+    // session from May rather than starting a fresh one. That is right
+    // behaviour and invisible behaviour, and it now reads where the button is
+    // rather than three panels earlier. `NewCountHeadline` is gone entirely.
+    status: "counter",
+    baseline: { desktop: 11, mobile: 4 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "Two of `P.countnew`'s three `.btnrow` buttons: \"Send to " +
+          "Marisol's phone\" and \"Print the sheet\". Neither has anything " +
+          "behind it — this product has no way to address a count to a named " +
+          "person's device (there is one user account that has ever counted, " +
+          "and it is the developer's), and no print stylesheet, so a print " +
+          "button would send the nav rail and the topbar to a clipboard " +
+          "sheet. A button that does nothing is worse than a button that is " +
+          "absent, and `openOf`'s note says both are missing rather than " +
+          "leaving a reader to press and find out. The first button, \"Start " +
+          "on this device\", is rendered and opens or resumes the count. The " +
+          "phone has no `.btnrow` on either side — `P.countnew.phone()` puts " +
+          "a bare `.mbtn` outside every section, and so do we.",
+      },
+    ],
+  },
   {
     protoId: "counts",
     name: "Stock counts",

@@ -5,7 +5,6 @@ import { useState, useTransition } from "react"
 import {
   PageHead,
   Section,
-  Strip,
   Table,
   useCounterTransition,
   usePageChrome,
@@ -26,6 +25,15 @@ import type { NewCountSections } from "@/lib/counter/adapters/new-count"
  *
  * What is not kept is the four room toggles, because no room exists in this
  * data. See the adapter.
+ *
+ * Composed as `P.countnew.desk()` composes it, and no wider: "What to count"
+ * -> "The sheet" -> "Then what". There was a verdict block, a four-cell strip
+ * and a "Counts already open" table above all three, and this design is a
+ * WIZARD — it has no strip at all. Every figure the strip drew was already a
+ * clause of the verdict, and the verdict itself is gone: two of its three
+ * clauses were already the sheet's note and the button's, and the third — how
+ * many counts have ever been finished — is the button's now too, where it
+ * belongs. See `NewCountOpen`.
  */
 const SHEET_COLUMNS: Column[] = [
   { key: "n", label: "#", numeric: true },
@@ -33,13 +41,6 @@ const SHEET_COLUMNS: Column[] = [
   { key: "category", label: "Category" },
   { key: "unit", label: "Counted in" },
   { key: "last", label: "Last counted" },
-]
-
-const OPEN_COLUMNS: Column[] = [
-  { key: "store", label: "Store" },
-  { key: "started", label: "Started" },
-  { key: "age", label: "Age" },
-  { key: "lines", label: "Lines entered", numeric: true },
 ]
 
 export function CounterNewCountClient({
@@ -89,41 +90,6 @@ export function CounterNewCountClient({
         title="Start a count"
         sub="Choose the shape of the count here; count it on the phone"
       />
-
-      <Section bare title="Verdict" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div className="sec">
-            <div className="sec__body">
-              <p className="verdictline" style={{ margin: 0 }}>
-                {h.verdict}
-              </p>
-            </div>
-          </div>
-        )}
-      </Section>
-
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <Strip cells={h.cells} />}
-      </Section>
-
-      <Section
-        title="Counts already open"
-        meta={(o) => o.meta}
-        data={sections.open}
-        pending={pending}
-        pad={false}
-        askAbout="which stock counts are still open"
-      >
-        {(o) => (
-          <>
-            <Table columns={OPEN_COLUMNS} rows={o.rows} />
-            {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {o.note}
-            </p>
-          </>
-        )}
-      </Section>
 
       <Section
         title="What to count"
@@ -181,40 +147,30 @@ export function CounterNewCountClient({
         )}
       </Section>
 
-      <Section bare title="Then what" data={sections.open} pending={pending}>
+      {/* `P.countnew`'s "Then what", and its handover argument verbatim —
+          the reason a desk page exists for a job done on a phone. */}
+      <Section title="Then what" meta="the handover" data={sections.open} pending={pending}>
         {(o) => (
-          <div className="sec">
-            <div className="sec__head">
-              <h2>Then what</h2>
-              <span className="meta">the handover</span>
+          <>
+            <p style={{ margin: "0 0 12px", lineHeight: 1.5 }}>
+              Counting happens on the phone, one line at a time. The desk is for choosing
+              the shape of the count and reading the result — not for typing
+              seventy-six numbers into a table.
+            </p>
+            <div className="btnrow">
+              <button
+                className="btn btn--primary"
+                type="button"
+                onClick={begin}
+                disabled={busy || targetStoreId === null}
+              >
+                {busy ? "Opening…" : o.resumes ? "Resume the open count" : "Start on this device"}
+              </button>
             </div>
-            <div className="sec__body">
-              <p style={{ margin: "0 0 12px", lineHeight: 1.5 }}>
-                Counting happens on the phone, one line at a time. The desk is for
-                choosing the shape of the count and reading the result — not for typing
-                seventy-six numbers into a table.
-              </p>
-              <div className="btnrow">
-                <button
-                  className="btn btn--primary"
-                  type="button"
-                  onClick={begin}
-                  disabled={busy || targetStoreId === null}
-                >
-                  {busy
-                    ? "Opening…"
-                    : o.resumes
-                      ? "Resume the open count"
-                      : "Start on this device"}
-                </button>
-              </div>
-              <p className="mono" style={{ margin: "10px 0 0" }}>
-                {problem === null
-                  ? "There is no send-to-phone and no print. Neither exists behind the prototype's other two buttons, and a button that does nothing is worse than one that is absent."
-                  : `Could not open a count: ${problem}.`}
-              </p>
-            </div>
-          </div>
+            <p className="mono" style={{ margin: "10px 0 0" }}>
+              {problem === null ? o.note : `Could not open a count: ${problem}.`}
+            </p>
+          </>
         )}
       </Section>
     </>
