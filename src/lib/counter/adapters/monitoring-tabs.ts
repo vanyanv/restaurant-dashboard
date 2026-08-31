@@ -285,13 +285,39 @@ export interface CostsFeatures {
   note: string
 }
 
+/**
+ * `P.moncosts`'s "Turns that were not OK · last 20".
+ *
+ * SCOPED ALL-TIME, not to this page's fourteen-day window, because the
+ * prototype scopes it "last 20" rather than "last 20 in the range" — and here
+ * that distinction is the whole panel. Measured: 521 turns, 8 of them not OK
+ * (4 TOOL_FAILED, 4 EMPTY), and NONE in the last thirty days. Windowed to
+ * COST_DAYS this section would be permanently empty and would report a clean
+ * fortnight as though nothing had ever failed.
+ */
+export interface CostsFailures {
+  rows: Row[]
+  meta: string
+  note: string
+}
+
 export interface CostsSections {
   headline: SectionData<CostsHeadline>
   spend: SectionData<CostsSpend>
   features: SectionData<CostsFeatures>
+  failures: SectionData<CostsFailures>
+}
+
+interface CostsFailureRow {
+  id: string
+  occurredAt: Date
+  status: string
+  feature: string | null
+  cost: number | null
 }
 
 interface CostsData {
+  failures: CostsFailureRow[]
   days: Array<{ day: string; calls: number; cost: number; zero: number }>
   features: Array<{
     feature: string
@@ -307,7 +333,7 @@ interface CostsData {
 }
 
 async function loadCosts(): Promise<CostsData> {
-  const [days, features, totals] = await Promise.all([
+  const [days, features, totals, failures] = await Promise.all([
     prisma.$queryRaw<Array<{ day: Date; calls: number; cost: number; zero: number }>>`
       SELECT DATE("occurredAt") AS day, COUNT(*)::int AS calls,
              COALESCE(SUM("estimatedCostUsd"), 0)::float AS cost,
@@ -337,9 +363,20 @@ async function loadCosts(): Promise<CostsData> {
              COALESCE(SUM("estimatedCostUsd") FILTER (
                WHERE "occurredAt" >= NOW() - INTERVAL '30 days'), 0)::float AS cost30
       FROM "AiUsageEvent"`,
+    // NOT windowed. See `CostsFailures`: eight turns in this account's whole
+    // history were not OK and none is recent, so a fourteen-day scope would
+    // draw an empty panel over a real record of failures.
+    prisma.$queryRaw<CostsFailureRow[]>`
+      SELECT t.id, t."occurredAt", t.status, e.feature, e."estimatedCostUsd" AS cost
+        FROM "ChatTurn" t
+        LEFT JOIN "AiUsageEvent" e ON e.id = t."aiUsageEventId"
+       WHERE t.status <> 'OK'
+       ORDER BY t."occurredAt" DESC
+       LIMIT 20`,
   ])
 
   return {
+    failures,
     days: days.map((d) => ({
       day: d.day.toISOString().slice(0, 10),
       calls: d.calls,
@@ -482,6 +519,55 @@ function costsFeaturesOf(d: CostsData): CostsFeatures {
   }
 }
 
+/**
+ * The turns that failed, newest first.
+ *
+ * `status` is a free-text column with a default of "OK", so the outcomes are
+ * whatever the writer put there. The two this account holds are mapped to
+ * words a reader can act on; anything else is shown verbatim rather than
+ * bucketed into "Other", which would hide a status nobody has seen before.
+ */
+const OUTCOME: Record<string, { label: string; tone: string }> = {
+  TOOL_FAILED: { label: "Tool error", tone: "bad" },
+  EMPTY: { label: "Empty answer", tone: "warn" },
+}
+
+function costsFailuresOf(d: CostsData): CostsFailures {
+  const newest = d.failures[0]
+  const days =
+    newest === undefined
+      ? null
+      : Math.floor((Date.now() - new Date(newest.occurredAt).getTime()) / 864e5)
+
+  return {
+    rows: d.failures.map((f) => {
+      const outcome = OUTCOME[f.status]
+      return {
+        key: f.id,
+        cells: {
+          when: new Date(f.occurredAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          }),
+          feature: f.feature ?? "—",
+          outcome: {
+            v: outcome ? outcome.label : f.status,
+            cls: outcome ? outcome.tone : undefined,
+          },
+          cost: f.cost === null ? "—" : micro(f.cost),
+        },
+      }
+    }),
+    meta: d.failures.length === 0 ? "none on record" : `last ${count(d.failures.length)}`,
+    note:
+      newest === undefined || days === null
+        ? "No turn in this account has ever been recorded as anything but OK."
+        : `The most recent was ${count(days)} days ago. This panel is not windowed to the ` +
+          `fourteen days above it: scoped that way it would be empty, which reads as ` +
+          `"nothing has failed" rather than "nothing has failed lately".`,
+  }
+}
+
 export function getCostsSectionPromises(): StreamedSections<CostsSections> {
   const dataP = classify(() => loadCosts(), {
     retryAction: "retryCosts",
@@ -494,6 +580,7 @@ export function getCostsSectionPromises(): StreamedSections<CostsSections> {
     headline: s(costsHeadlineOf),
     spend: s(costsSpendOf),
     features: s(costsFeaturesOf),
+    failures: s(costsFailuresOf),
   }
 }
 

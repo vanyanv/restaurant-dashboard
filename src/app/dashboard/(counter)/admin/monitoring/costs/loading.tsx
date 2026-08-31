@@ -16,6 +16,9 @@ export default function Loading() {
       <Section title="By feature" data={loading()} pad={false}>
         {() => null}
       </Section>
+      <Section title="Turns that were not OK" data={loading()}>
+        {() => null}
+      </Section>
     </>
   )
 }
