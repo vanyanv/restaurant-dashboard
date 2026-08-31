@@ -7,7 +7,7 @@ import {
   guardSection,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
-import { empty, mapReady, type SectionData } from "@/lib/counter/section-data"
+import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import { dayCount, type DateRange } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type {
@@ -616,23 +616,6 @@ export function getStoreFileSectionPromises(
       "retryStoreFile",
     )
 
-  /**
-   * A section whose OWN emptiness is a reading, not the page's. The expense
-   * table is the only one here that can be legitimately empty while the store
-   * itself loaded fine, and `Section` must render `Empty` for it rather than a
-   * table of nothing — note 33's "twelve em-dashes and called it a store list"
-   * applied to a page that has no rows at all.
-   */
-  const sEmpty = <T,>(f: (s: StoreFileRow) => T, isEmpty: (v: T) => boolean) =>
-    guardSection<T>(
-      dataP.then((sd): SectionData<T> => {
-        const mapped = mapReady(sd, (v) => f(v as StoreFileRow))
-        return mapped.status === "ready" && isEmpty(mapped.data)
-          ? empty<T>("no_match")
-          : mapped
-      }),
-      "retryStoreFile",
-    )
 
   return {
     editable: s((store) => ({
@@ -821,12 +804,26 @@ export function getStoreFileSectionPromises(
     }),
 
     /**
-     * Composed and, on this account, EMPTY. `StoreFixedExpense` holds zero
-     * rows across all three stores — measured, not assumed
+     * Composed, and on this account it has NO ROWS. `StoreFixedExpense` holds
+     * zero across all three stores — measured, not assumed
      * (`docs/counter/measurements/2026-08-31-store-file.md`). The prototype's
      * widest panel is a table of six of them.
+     *
+     * READY WITH ZERO ROWS, NOT `Empty`. This is the alerts page's
+     * shell-over-zero-rows trick, and it is here for the reason ruling F-R8
+     * gives: the fidelity gate never forgives an EXTRA, so an `.empty` in
+     * place of the prototype's `.tbl` costs two landmarks — the table that is
+     * missing and the empty state that is extra — where a table with its
+     * columns and no rows costs none.
+     *
+     * It is also the more honest of the two. Note 33's objection was to a
+     * table of em-dashes pretending to be data; a table showing the five
+     * columns an expense line HAS, with no lines under it and a meta saying
+     * so, is a blank panel that tells a reader exactly what to add. Unlike an
+     * empty `.mlist`, a `thead` still carries text, so the rendering pass has
+     * something to compare.
      */
-    expenses: sEmpty<StoreFileExpenses>(
+    expenses: s<StoreFileExpenses>(
       (store) => ({
         columns: [
           { key: "label", label: "Expense" },
@@ -845,9 +842,11 @@ export function getStoreFileSectionPromises(
             range: money(monthlyCostForDays(e.monthly, days) ?? 0),
           },
         })),
-        meta: `${count(store.expenses.length)} line${store.expenses.length === 1 ? "" : "s"} · each becomes its own P&L row`,
+        meta:
+          store.expenses.length === 0
+            ? "none on file · each would become its own P&L row"
+            : `${count(store.expenses.length)} line${store.expenses.length === 1 ? "" : "s"} · each becomes its own P&L row`,
       }),
-      (v) => v.rows.length === 0,
     ),
 
     /**
