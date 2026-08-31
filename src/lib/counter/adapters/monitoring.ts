@@ -12,7 +12,11 @@ import type { FigureProps, MListRow, Row } from "@/components/counter"
 
 /**
  * Monitoring — `P.monitoring` (`docs/counter/counter-prototype.html`), the
- * shell only. The six tabs behind it are their own pages.
+ * shell only. The seven tabs beside it are their own pages, and their own
+ * adapters; this one loads nothing on their behalf. They are reached from the
+ * `.seg` in the page head (`MONITORING_TABS`), which is why the section that
+ * used to list them here — `tabs`, a table of label-and-sentence rows — is
+ * gone. See the client's own note.
  *
  * "The one developer-facing surface."
  *
@@ -90,59 +94,7 @@ export interface MonitoringSections {
   subsystems: SectionData<MonitoringSubsystems>
   events: SectionData<MonitoringEvents>
   duration: SectionData<MonitoringDuration>
-  tabs: SectionData<MonitoringTabs>
 }
-
-export interface MonitoringTabs {
-  rows: Row[]
-  meta: string
-}
-
-/**
- * The bridge's sub-pages. Until now they were reachable only by typing the
- * URL: the legacy `TabStrip` that linked them belongs to the editorial shell
- * and is not rendered on a Counter page, and nothing replaced it. Six built
- * pages with no way in is a worse fault than anything on them.
- *
- * Static, so it needs no query and resolves with the shell.
- */
-const TABS: Array<{ href: string; label: string; what: string }> = [
-  {
-    href: "/dashboard/admin/monitoring/ml",
-    label: "Model health",
-    what: "What the nightly forecast predicted, and whether it beat last week",
-  },
-  {
-    href: "/dashboard/admin/monitoring/infrastructure",
-    label: "Infrastructure",
-    what: "Storage, scheduled jobs, and what actually broke",
-  },
-  {
-    href: "/dashboard/admin/monitoring/activity",
-    label: "Activity",
-    what: "Errors and sync runs over the last day",
-  },
-  {
-    href: "/dashboard/admin/monitoring/people",
-    label: "People",
-    what: "Who opens the product, and which pages earn their place",
-  },
-  {
-    href: "/dashboard/admin/monitoring/costs",
-    label: "Costs",
-    what: "What the model and mail spend, by feature",
-  },
-  {
-    href: "/dashboard/admin/monitoring/cache",
-    label: "Cache",
-    what: "Hit rates by prefix",
-  },
-  {
-    href: "/dashboard/admin/monitoring/ingredient-audit",
-    label: "Ingredients",
-    what: "Match quality on the ingredient catalogue",
-  },
-]
 
 /** One bar per day, in seconds — the unit the prototype's own axis uses. */
 function durationOf(d: Data): MonitoringDuration {
@@ -172,18 +124,6 @@ function durationOf(d: Data): MonitoringDuration {
           `${(worst.median_ms / 1000).toFixed(1)}s. The bar is a median rather than a mean ` +
           `because several jobs share one schedule here, and one long backfill would ` +
           `otherwise read as a slow night.`,
-  }
-}
-
-function tabsOf(): MonitoringTabs {
-  return {
-    rows: TABS.map((t) => ({
-      key: t.href,
-      href: t.href,
-      ariaLabel: t.label,
-      cells: { tab: t.label, what: t.what },
-    })),
-    meta: `${TABS.length} pages`,
   }
 }
 
@@ -581,7 +521,6 @@ export function getMonitoringSectionPromises(
     subsystems: s(subsystemsOf),
     events: s(eventsOf),
     duration: s(durationOf),
-    tabs: Promise.resolve(ready(tabsOf())),
   }
 }
 

@@ -5,11 +5,13 @@ import {
   PageHead,
   Section,
   Strip,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { MONITORING_TABS } from "@/lib/counter/nav"
 import { money } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { MlSections } from "@/lib/counter/adapters/monitoring-ml"
@@ -68,7 +70,11 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
 
   return (
     <>
-      <PageHead title="Model health" sub="Developer-facing · the nightly pipeline" />
+      <PageHead title="Model health" sub="Developer-facing · the nightly pipeline">
+        {/* `viewTabs()` — the eight tabs are chrome on every one of
+            them, not a table of links on the first. */}
+        <SubNav items={MONITORING_TABS} label="Monitoring" />
+      </PageHead>
 
       <Section bare title="Verdict" data={sections.headline} pending={pending}>
         {(h) => (

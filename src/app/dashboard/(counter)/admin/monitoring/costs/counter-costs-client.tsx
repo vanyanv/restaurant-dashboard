@@ -5,11 +5,13 @@ import {
   PageHead,
   Section,
   Strip,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { MONITORING_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CostsSections } from "@/lib/counter/adapters/monitoring-tabs"
 
@@ -43,7 +45,11 @@ export function CounterCostsClient({
 
   return (
     <>
-      <PageHead title="Costs" sub="Developer-facing · what the model layer spends" />
+      <PageHead title="Costs" sub="Developer-facing · what the model layer spends">
+        {/* `viewTabs()` — the eight tabs are chrome on every one of
+            them, not a table of links on the first. */}
+        <SubNav items={MONITORING_TABS} label="Monitoring" />
+      </PageHead>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}

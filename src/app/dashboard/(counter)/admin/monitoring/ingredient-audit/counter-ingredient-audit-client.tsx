@@ -4,11 +4,13 @@ import {
   PageHead,
   Section,
   Strip,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { MONITORING_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { AuditSections } from "@/lib/counter/adapters/monitoring-ingredients"
 
@@ -73,7 +75,11 @@ export function CounterIngredientAuditClient({
       <PageHead
         title="Ingredient audit"
         sub="Developer-facing · what the matcher decided"
-      />
+      >
+        {/* `viewTabs()` — the eight tabs are chrome on every one of
+            them, not a table of links on the first. */}
+        <SubNav items={MONITORING_TABS} label="Monitoring" />
+      </PageHead>
 
       <Section bare title="Verdict" data={sections.headline} pending={pending}>
         {(h) => (

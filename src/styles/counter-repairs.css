@@ -164,3 +164,43 @@ button.wkd {
   background: var(--sunk);
   color: var(--ink-2);
 }
+
+/* `.seg` holds LINKS as well as buttons.
+ *
+ * `viewTabs()` (prototype line 8199) draws a page's siblings as
+ * `<button data-view>` because the prototype is one document with no router
+ * and a "tab" is a re-render. The eight monitoring tabs are eight real routes
+ * here, so `SubNav` draws them as `<a>` — a developer-facing tab you cannot
+ * open in a second one is not much of a tab.
+ *
+ * The ported sheet styles `.seg button` only (counter-components.css:153-155),
+ * so without this an anchor inside a `.seg` renders as body-face underlined
+ * link text in a segmented frame. These are the same three rules, re-aimed,
+ * with two changes and no third:
+ *
+ *   - the pressed selector is `[aria-current="page"]`, not `[aria-pressed]`.
+ *     A link that is the page you are on says so with aria-current; pressed is
+ *     for a control that toggles.
+ *   - `text-decoration:none`, which a `<button>` never needed.
+ *
+ * The raise is `--ct-raise`, the token named for exactly this — see its note
+ * in counter.css. The literal at counter-components.css:155 is one of the 35
+ * the port inherited; re-typing it here would have made it 36, and it paints a
+ * near-white glow in dark. */
+.seg a {
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 3px;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: background-color 0.16s var(--ease), color 0.16s var(--ease);
+}
+.seg a:hover { color: var(--ink) }
+.seg a[aria-current="page"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px var(--ct-raise);
+}
