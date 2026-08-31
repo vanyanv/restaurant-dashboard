@@ -1031,7 +1031,64 @@ export const PAGES: FidelityPage[] = [
   { protoId: "vendor", name: "A vendor", protoRoute: "/dashboard/operations/vendors/ifs-produce", route: "/dashboard/operations/vendors/Sysco", mobileRoute: "/m/operations/vendors/Sysco", report: true, status: "editorial" },
   { protoId: "packaging", name: "Vendors", protoRoute: "/dashboard/operations/packaging", route: "/dashboard/operations/packaging", mobileRoute: "/m/operations/packaging", report: true, status: "editorial" },
   { protoId: "stores", name: "Stores", protoRoute: "/dashboard/stores", route: "/dashboard/stores", mobileRoute: "/m/stores", report: true, status: "editorial" },
-  { protoId: "storecosts", name: "Stores", protoRoute: "/dashboard/stores/hollywood", route: "/dashboard/stores/cmexd4zia0001jr04ljkdt9na", report: true, status: "editorial" },
+  {
+    protoId: "storecosts",
+    name: "Store file",
+    protoRoute: "/dashboard/stores/hollywood",
+    route: "/dashboard/stores/cmexd4zia0001jr04ljkdt9na",
+    report: true,
+    // MEASURED after the range rebuild: 30 of the prototype's 39 on the desk,
+    // 0 extra. Every one of the nine is a BUTTON, and they are declared below.
+    //
+    // STILL `editorial`, and the reason is the phone, not the desk. There is
+    // no `/m/stores/<id>`, so the mobile project lands on the desk route and
+    // compares a desk composition against `P.storecosts.phone()`. Gating that
+    // would report a page that does not exist as a page that renders wrongly.
+    // This flips to "counter" the day the phone surface ships, and the desk
+    // numbers below are what it flips with.
+    status: "editorial",
+    absentLandmarks: [
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The Operating inputs action row. Its two buttons are \"Save " +
+          "inputs\" and \"History\", and the row cannot render with neither: " +
+          "saving already happens in the \"Edit this file\" form below (one " +
+          "page, one write path — the editorial build's second /edit route is " +
+          "exactly what P.storefile collapsed), and no history view of a " +
+          "store file exists anywhere in this product. A row drawn to hold " +
+          "two controls that do not exist is chrome around nothing.",
+      },
+      {
+        landmark: "btn",
+        desktop: 8,
+        mobile: 0,
+        reason:
+          "Eight controls the prototype draws and this product has no action " +
+          "behind. Checked one at a time against the codebase, not assumed: " +
+          "\"Save inputs\" and \"History\" (above); \"Add a line\" — nothing " +
+          "writes `StoreFixedExpense`, `prisma.storeFixedExpense.create` " +
+          "appears nowhere outside the generated client; \"Edit rates\" — the " +
+          "form below already edits both commission rates inline, so a button " +
+          "opening a second editor for them is a second write path to one " +
+          "field; \"Change target\" — `updateStoreSchema` in " +
+          "`@/app/actions/store/crud-actions` does not accept " +
+          "`targetCogsPct`, which the form's own copy already states; " +
+          "\"Change stage\" — `lifecycleStage` is moved by the ML pipeline's " +
+          "`should_promote_to_ready`, not by hand; \"Deactivate this store\" " +
+          "and \"Delete\" — no action exists for either, and both are " +
+          "destructive enough that a button which silently does nothing is " +
+          "worse than no button. " +
+          "This is note 46 and the same subtraction `Empty` and `Owed` make " +
+          "when they drop the prototype's buttons: this codebase does not " +
+          "ship a control that advertises a capability it does not have. " +
+          "Closing these nine by markup would satisfy the gate by breaking " +
+          "the rule the gate exists to protect.",
+      },
+    ],
+  },
   { protoId: "storeedit", name: "Stores", protoRoute: "/dashboard/stores/new", route: "/dashboard/stores/new", report: true, status: "editorial" },
   { protoId: "settings", name: "Settings", protoRoute: "/dashboard/settings", route: "/dashboard/settings", mobileRoute: "/m/more", report: true, status: "editorial" },
   { protoId: "more", name: "More (phone)", protoRoute: "/m/more", route: "/m/more", status: "editorial" },
