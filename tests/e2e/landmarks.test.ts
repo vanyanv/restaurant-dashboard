@@ -421,6 +421,7 @@ describe("every gated page carries a floor and a written reason for each absence
       "inventory",
       "countnew",
       "counts",
+      "countsession",
       "ingredients",
       "ingredient",
       "prices",

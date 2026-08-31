@@ -1144,7 +1144,45 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "countsession", name: "A count", protoRoute: "/dashboard/operations/inventory/counts/aug-14", route: "/dashboard/operations/inventory/counts/cmp39jggu000004lbepv3eiob", report: true, status: "editorial" },
+  {
+    protoId: "countsession",
+    name: "A count",
+    protoRoute: "/dashboard/operations/inventory/counts/aug-14",
+    route: "/dashboard/operations/inventory/counts/cmp39jggu000004lbepv3eiob",
+    mobileRoute: "/m/operations/inventory/counts/cmp39jggu000004lbepv3eiob",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance
+    // of any kind: 13 of 13 on the desk, 5 of 5 on the phone, 0 extra, 0
+    // rendering differences, 0 dark defects. `P.countsession` sets
+    // `nodate: true`, so there is no Apply button to declare either.
+    //
+    // Four things moved, and the page is the same page:
+    //
+    //   - A fifth strip cell. `.strip` compares `data-n`, and this one printed
+    //     4 against the design's 5 — the missing figure is DURATION, which a
+    //     closed count has and an open one does not. This session has no end,
+    //     so the cell reads how long it has been open: 111 days and counting.
+    //   - The `.moneyline` total under the table, and the `.sec__body` that
+    //     was added to pad it. `P.countsession`'s Lines section is a table and
+    //     nothing else, and the total it repeated is the strip's second cell.
+    //   - "What to do", the `.queue` this page had no emitter for. The
+    //     prototype's item is a variance PATTERN across counts, which needs an
+    //     expected quantity nothing here records. Ours is about the session:
+    //     it was opened on 12 May and never closed, and a count only becomes a
+    //     reading when it closes — which is the root of why no variance exists
+    //     anywhere in this account.
+    //
+    // ONE item, not two. The unpriced line is a caveat on a figure and it is
+    // already said under that figure; a worklist repeating a note from two
+    // sections above it is noise, not a second job.
+    //
+    // The phone surface is new, and it clears the last inventory exception in
+    // proxy.ts: `/counts`, `/count/new` and `/counts/<id>` all have phone
+    // pages now, so the dynamic base is back on the rewrite list for the first
+    // time since it shipped two live 404s.
+    status: "counter",
+    baseline: { desktop: 13, mobile: 5 },
+  },
   {
     protoId: "ingredients",
     name: "Ingredients",

@@ -8,7 +8,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, KvRow, MListRow, MoneyLine, Row } from "@/components/counter"
+import type { FigureProps, KvRow, MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
  * Stock counts — `P.counts` and `P.countsession`
@@ -529,6 +529,74 @@ export async function getStockCountsSections(
 
 /* ── One session ──────────────────────────────────────────────────────── */
 
+/** How long a session ran, or has been running — `P.countsession`'s fifth cell. */
+function durationCell(session: Session): FigureProps {
+  const start = session.startedAt
+  if (start === null) {
+    return { label: "Duration", value: "—", delta: "no start recorded", deltaTone: "is-down" }
+  }
+  const end = session.completedAt
+  const mins = Math.round(((end ?? new Date()).getTime() - start.getTime()) / 60000)
+  if (end !== null) {
+    return {
+      label: "Duration",
+      value: mins < 60 ? `${count(mins)} min` : `${(mins / 60).toFixed(1)} h`,
+      delta: `closed ${D(end)}`,
+      deltaTone: "is-flat",
+    }
+  }
+  const days = Math.floor(mins / 1440)
+  return {
+    label: "Open for",
+    value: days === 0 ? `${count(mins)} min` : `${count(days)} days`,
+    delta: `since ${D(start)}, still running`,
+    deltaTone: "is-down",
+  }
+}
+
+/** See `CountSessionWork`. */
+function sessionWorkOf(session: Session, lines: CountedLine[]): CountSessionWork {
+  const items: QueueItem[] = []
+  const start = session.startedAt
+  const days =
+    start === null ? 0 : Math.floor((Date.now() - start.getTime()) / 86_400_000)
+
+  if (session.completedAt === null && session.status === "IN_PROGRESS") {
+    items.push({
+      key: "open",
+      tone: "bad",
+      lead: count(days),
+      unit: days === 1 ? "day" : "days",
+      title: "This count was never closed",
+      body:
+        `Opened ${start === null ? "at an unrecorded time" : `on ${D(start)}`} and still ` +
+        `IN_PROGRESS, with ${count(lines.length)} ` +
+        `${lines.length === 1 ? "line" : "lines"} entered. A count only becomes a reading ` +
+        `when it closes: until then there is no completed session for the next one to be ` +
+        `measured against, which is why no variance exists anywhere in this account.`,
+      act: "See every count",
+      href: "/dashboard/operations/inventory/counts",
+    })
+  } else if (session.status === "ABANDONED") {
+    items.push({
+      key: "abandoned",
+      tone: "warn",
+      lead: count(lines.length),
+      unit: lines.length === 1 ? "line" : "lines",
+      title: "This count was abandoned",
+      body:
+        `It was opened ${start === null ? "at an unrecorded time" : `on ${D(start)}`} and ` +
+        `${lines.length === 0 ? "nothing was ever entered in it" : "abandoned with lines in it"}. ` +
+        `An abandoned count teaches the model nothing and is not a baseline for the next one.`,
+      act: "See every count",
+      href: "/dashboard/operations/inventory/counts",
+    })
+  }
+
+  return { items, meta: `${count(items.length)} open` }
+}
+
+
 export interface CountSessionHead {
   title: string
   sub: string
@@ -539,15 +607,33 @@ export interface CountSessionHead {
 export interface CountSessionLines {
   rows: Row[]
   phoneRows: MListRow[]
-  money: MoneyLine[]
   meta: string
   note: string
+}
+
+/**
+ * `P.countsession`'s "What to do" — one open thing, and only one.
+ *
+ * The prototype's item is a PATTERN across counts ("beef has been short three
+ * counts running"), which needs a variance this account cannot compute. What
+ * it can say about a session is whether the session itself needs something,
+ * and for this one it does: it was opened on 12 May and never closed.
+ *
+ * The unpriced line is deliberately NOT a second item. It is a caveat on a
+ * figure, and it is already said under the figure — the lines note reads "1
+ * line has no cost on the ingredient, so the total is a floor". A worklist
+ * that repeats a note from two sections above it is noise, not a second job.
+ */
+export interface CountSessionWork {
+  items: QueueItem[]
+  meta: string
 }
 
 export interface CountSessionSections {
   head: SectionData<CountSessionHead>
   lines: SectionData<CountSessionLines>
   variance: SectionData<CountsVariance>
+  work: SectionData<CountSessionWork>
 }
 
 export interface CountSessionInput {
@@ -632,6 +718,11 @@ export function getCountSessionSectionPromises(
             delta: "no expected quantity recorded",
             deltaTone: "is-down",
           },
+          // `P.countsession`'s fifth cell is "Duration · 18 min · ▼ 4 min",
+          // which a closed count has and an open one does not. This session
+          // has no end, so the honest fifth figure is how long it has been
+          // going — the same clock, still running.
+          durationCell(session),
         ],
         phoneCells: [valueCell, statusCell],
       }
@@ -665,13 +756,6 @@ export function getCountSessionSectionPromises(
             : `${l.nativeQty.toFixed(2)} ${(l.nativeUnit ?? "").toLowerCase()}`.trim(),
         value: l.value === null ? "—" : money(l.value, { cents: true }),
       })),
-      money: [
-        {
-          label: "Counted stock",
-          value: money(lines.reduce((t, l) => t + (l.value ?? 0), 0)),
-          total: true,
-        },
-      ],
       meta:
         lines.length === 0
           ? "no line"
@@ -687,6 +771,7 @@ export function getCountSessionSectionPromises(
               : `Every line priced.`),
     })),
     variance: s(({ data }) => varianceOf(data)),
+    work: s(({ session, lines }) => sessionWorkOf(session, lines)),
   }
 }
 
