@@ -1641,7 +1641,31 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "more", name: "More (phone)", protoRoute: "/m/more", route: "/m/more", status: "editorial" },
+  {
+    protoId: "more",
+    name: "More (phone)",
+    protoRoute: "/m/more",
+    route: "/m/more",
+    // NOT CAPTURED and not gated, and the reason is a conflict in the fixture
+    // rather than a gap in the product: TWO prototype modules claim `/m/more`.
+    // `P.settings.phone()` composes it as the wordmark, who is signed in, the
+    // notification switches and a list of destinations; `P.more.phone()`
+    // composes it as the wordmark and four grouped destination lists.
+    //
+    // `/m/more` is built as `P.settings.phone()` — that is the composition the
+    // fifth tab actually needs, because the switches and the account line have
+    // nowhere else to live on a phone, and it is gated under `settings` at 8 of
+    // 8. `P.more`'s function is not lost: its list of destinations is the
+    // "More" section there.
+    //
+    // What `P.more` really is, is an argument — "a tab is for something you DO
+    // on your feet: read today, count stock, clear invoices, ask a question.
+    // Everything you merely READ lives one tap deeper." Its desk() is a table
+    // of that reasoning. That is documentation about the navigation, not a
+    // screen this product owes anyone, and measuring it would compare a second
+    // composition against the same DOM and fail by construction.
+    status: "editorial",
+  },
   {
     protoId: "monitoring",
     name: "Monitoring",
