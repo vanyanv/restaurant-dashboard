@@ -61,15 +61,17 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // against `P.*.phone()`, which is that question answered by whoever built
   // them. Unreachable from their desk URL until now.
   //
-  // Seven of the eight tabs have a phone surface. `ml` is the one that does
-  // not, and it needs no exception entry: these are exact matches, not a
-  // dynamic base, so an unmapped tab returns null and stays on desktop.
+  // All eight monitoring tabs have a phone surface now, each built on `MStrip`
+  // and `MList` against `P.*.phone()`. This block used to carry a deferral —
+  // whether a phone view is the intended destination for an admin route — and
+  // then a shrinking list of the tabs that had no phone page. Both are done.
   "/dashboard/admin/monitoring": "/m/monitoring",
   "/dashboard/admin/monitoring/activity": "/m/monitoring/activity",
   "/dashboard/admin/monitoring/cache": "/m/monitoring/cache",
   "/dashboard/admin/monitoring/costs": "/m/monitoring/costs",
   "/dashboard/admin/monitoring/infrastructure": "/m/monitoring/infrastructure",
   "/dashboard/admin/monitoring/ingredient-audit": "/m/monitoring/ingredient-audit",
+  "/dashboard/admin/monitoring/ml": "/m/monitoring/ml",
   "/dashboard/admin/monitoring/people": "/m/monitoring/people",
   // Stores had no mobile equivalent left after the mobile bloat deletion, and
   // this comment said so until `/m/stores` was rebuilt on Counter; the desk
