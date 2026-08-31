@@ -1,4 +1,4 @@
-# Fidelity — Monitoring (`monpeople`)
+# Fidelity — Monitoring · People (`monpeople`)
 
 Route `/dashboard/admin/monitoring/people` · manifest status **editorial** · captured, not gated · measured 2026-08-31
 
