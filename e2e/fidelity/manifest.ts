@@ -920,7 +920,35 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 12, mobile: 5 },
   },
-  { protoId: "usage", name: "COGS", protoRoute: "/dashboard/operations/product-usage", route: "/dashboard/operations/product-usage", query: "?range=d30", mobileRoute: "/m/operations/product-usage", report: true, status: "editorial" },
+  {
+    protoId: "usage",
+    name: "Product usage",
+    protoRoute: "/dashboard/operations/product-usage",
+    route: "/dashboard/operations/product-usage",
+    query: "?range=d30",
+    mobileRoute: "/m/operations/product-usage",
+    report: true,
+    // MEASURED: phone 5 of 5. Desk 16 of the prototype's 21, and the five are
+    // two table sections plus one extra queue item.
+    //
+    // THE TWO SECTIONS ARE DECLINED, NOT MISSING, and the client says so in
+    // its own docblock: `P.usage` advertises "Menu item costs" and "Vendor
+    // prices" as tabs, and both are built elsewhere — menu item costs at
+    // `/dashboard/menu-profit` and in the menu catalog, vendor prices in the
+    // ingredient page's matched-SKU table and the vendor page's basket.
+    // Rebuilding either here is one figure computed twice, which is exactly
+    // what the shared-figure rule exists to stop.
+    //
+    // Recorded here because the manifest was silent about it, and a bare
+    // "16 of 21" reads as an unfinished page. It is not: closing it would mean
+    // breaking a rule this project holds above landmark parity.
+    //
+    // Left ungated rather than declared. `absentLandmarks` is for a landmark
+    // the DATABASE cannot supply; these two the database supplies fine and the
+    // architecture declines to duplicate — a different argument that should
+    // not borrow that field's words.
+    status: "editorial",
+  },
   {
     protoId: "operations",
     name: "Operations",
