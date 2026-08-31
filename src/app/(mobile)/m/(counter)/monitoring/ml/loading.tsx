@@ -3,20 +3,14 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** Model health's loading boundary. */
+/** The phone model-health loading boundary. */
 export default function Loading() {
   return (
     <>
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="Forecast against actual" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Gates" data={loading()} pad={false}>
-        {() => null}
-      </Section>
-      <Section title="Known gaps" data={loading()}>
+      <Section title="Gates" data={loading()}>
         {() => null}
       </Section>
     </>

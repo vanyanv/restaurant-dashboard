@@ -8,7 +8,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, MListRow, Row } from "@/components/counter"
+import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
  * Model health — `P.monml` (`docs/counter/counter-prototype.html`).
@@ -59,6 +59,10 @@ import type { FigureProps, MListRow, Row } from "@/components/counter"
 
 /** The window the gate table reports over. */
 const GATE_DAYS = 30
+/** Rows the phone lists print — `P.monml.phone()` shows three gates. */
+const PHONE_ROWS = 3
+/** A feed that has not written a row in this long is dead, not slow. */
+const SIGNAL_DEAD_MS = 7 * 86_400_000
 /** Days of forecast-against-actual the chart draws. */
 const CHART_DAYS = 21
 /** Rows the runs table prints. */
@@ -312,7 +316,6 @@ function ago(at: Date | null): string {
 }
 
 export interface MlHeadline {
-  verdict: string
   cells: FigureProps[]
   phoneCells: FigureProps[]
 }
@@ -323,22 +326,15 @@ function headlineOf(d: MlData): MlHeadline {
   const evals = d.targets.reduce((s, t) => s + t.evaluations, 0)
   const gate3 = d.gates.find((g) => g.gate.startsWith("gate3"))
 
-  const verdict = revenue
-    ? `The revenue model has beaten the seasonal-naive baseline ${count(revenue.wins)} times ` +
-      `in ${count(revenue.evaluations)} evaluations. Its error averages ` +
-      `${pct(revenue.wape)} against the baseline's ` +
-      `${pct(revenue.baseline)} — a third worse than forecasting last ` +
-      `week's same weekday. The two harder targets are a different story: the model wins ` +
-      `${count(wins - revenue.wins)} of ${count(evals - revenue.evaluations)} there.`
-    : "No evaluation has been written yet."
-
   const cells: FigureProps[] = [
     {
+      // No `caption`: it opens a `.band`, and `P.monml`'s own strip cells are
+      // four-tuples. The words it held ("times the model won") only repeated
+      // the label.
       label: "Revenue vs last week",
       value: `${count(revenue?.wins ?? 0)} of ${count(revenue?.evaluations ?? 0)}`,
-      caption: "times the model won",
       deltaTone: "is-down",
-      delta: revenue ? `${pct(revenue.wape)} vs ${pct(revenue.baseline)}` : undefined,
+      delta: revenue ? `${pct(revenue.wape)} vs ${pct(revenue.baseline)} baseline` : undefined,
     },
     {
       label: "Busy hours vs last week",
@@ -361,7 +357,7 @@ function headlineOf(d: MlData): MlHeadline {
     },
   ]
 
-  return { verdict, cells, phoneCells: cells.slice(0, 2) }
+  return { cells, phoneCells: cells.slice(0, 2) }
 }
 
 export interface MlAccuracy {
@@ -397,60 +393,9 @@ function accuracyOf(d: MlData): MlAccuracy {
   }
 }
 
-export interface MlTargets {
-  rows: Row[]
-  phoneRows: MListRow[]
-  meta: string
-  note: string
-}
-
-function targetsOf(d: MlData): MlTargets {
-  const rows: Row[] = d.targets.map((t) => {
-    const lost = t.wins === 0 && t.evaluations > 0
-    return {
-      key: t.target,
-      cells: {
-        target: TARGET_LABEL[t.target],
-        wins: {
-          v: `${count(t.wins)} of ${count(t.evaluations)}`,
-          cls: lost ? "hot" : undefined,
-        },
-        wape: pct(t.wape),
-        baseline: pct(t.baseline),
-        coverage: pct(t.newestCoverage),
-        version: versionDate(t.newestVersion),
-      },
-    }
-  })
-
-  const menuItem = d.targets.find((t) => t.target === "MENU_ITEM")
-
-  return {
-    rows,
-    phoneRows: d.targets.map((t) => ({
-      key: t.target,
-      title: TARGET_LABEL[t.target],
-      detail: `${pct(t.wape)} vs ${pct(t.baseline)} baseline`,
-      value: `${count(t.wins)} of ${count(t.evaluations)}`,
-      note: "beat last week",
-    })),
-    meta: "every evaluation ever written",
-    note:
-      `The baseline is seasonal-naive — the same weekday last week, one line of code. ` +
-      `Error is WAPE, weighted by volume; MAPE is not shown because the training run records ` +
-      `8.08 million percent for menu items, where dividing by a daily quantity of 1 or 0 makes ` +
-      `the average meaningless. Coverage is what share of actuals landed inside the 80% ` +
-      `interval, so 80% is the target and both directions are wrong. ` +
-      (menuItem
-        ? `The menu-item version reads ${versionDate(menuItem.newestVersion)} because a model ` +
-          `cannot be graded before the days it forecasts have happened — yesterday's has 0 of ` +
-          `210 rows reconciled, and reconciliation accrues down the generations.`
-        : ""),
-  }
-}
-
 export interface MlGates {
   rows: Row[]
+  phoneRows: MListRow[]
   meta: string
   note: string
 }
@@ -479,6 +424,20 @@ function gatesOf(d: MlData): MlGates {
 
   return {
     rows,
+    // `P.monml.phone()` lists three gates, the ones with something to say.
+    // Sorted by how often they fail, so a gate that has never passed cannot be
+    // pushed off the phone by one that always does.
+    phoneRows: [...d.gates]
+      .sort((a, b) => a.passed / (a.days || 1) - b.passed / (b.days || 1))
+      .slice(0, PHONE_ROWS)
+      .map((g) => ({
+        key: g.gate,
+        title: gateLabel(g.gate),
+        detail: `${count(g.passed)} of ${count(g.days)} days`,
+        value: g.lastPassed === null ? "—" : g.lastPassed ? "Pass" : "Fail",
+        note: "",
+        noteTone: (g.lastPassed ? "up" : "down") as "up" | "down",
+      })),
     meta: `last ${count(GATE_DAYS)} days · detail from the newest verdict`,
     note:
       gate2 && revenue
@@ -492,90 +451,87 @@ function gatesOf(d: MlData): MlGates {
   }
 }
 
-export interface MlRuns {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
-function runsOf(d: MlData): MlRuns {
-  return {
-    rows: d.runs.map((r, i) => ({
-      key: `${r.startedAt.toISOString()}-${r.target}-${i}`,
-      cells: {
-        when: r.startedAt.toISOString().slice(0, 16).replace("T", " "),
-        target: TARGET_LABEL[r.target] ?? r.target,
-        rows: count(r.sampleSize),
-        status:
-          r.status === "SUCCEEDED"
-            ? "Succeeded"
-            : { v: r.status.toLowerCase(), cls: "hot" },
-      },
-    })),
-    meta: `newest ${count(d.runs.length)} training runs`,
-    note:
-      `Sample size is training rows, not forecast rows — menu items train on every ` +
-      `(item, day) pair, which is why that count is an order of magnitude larger than revenue's.`,
-  }
-}
-
-export interface MlSignals {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
+/**
+ * `P.monml`'s "Known gaps" — the queue, and where three tables went.
+ *
+ * The prototype lists two: the event signals are dead, and two stores are
+ * pre-open. Ours are DERIVED, not written down, so the list is whatever is
+ * actually wrong tonight:
+ *
+ *   1. Any external feed that has not written a row in a week. `predicthq`
+ *      qualifies — 401 unauthorized on every run since 10 August — which is
+ *      the prototype's own first item, arrived at from the sync history rather
+ *      than from a note.
+ *   2. Any forecast target the model loses to its own seasonal-naive baseline.
+ *      Revenue qualifies and nothing else does: 0 wins in 232 evaluations at
+ *      10.5% error against the baseline's 6.8%, while menu items and orders by
+ *      hour both win comfortably. That is the biggest single fact on this page
+ *      and it had been sitting in a verdict paragraph the design has no room
+ *      for.
+ *
+ * This is what replaced "Against the baseline", "External signals" and
+ * "Training runs" — three tables where `P.monml` has one, and it is not a
+ * table at all. A queue item is a problem with a size and a sentence; a table
+ * is a thing you scan. Both dead feeds and both winning targets are still
+ * measured, they are just not each given a table of their own.
+ */
 /** What each provider feeds the model, in words rather than a table name. */
 const PROVIDER_LABEL: Record<string, string> = {
   "open-meteo": "Weather",
   predicthq: "Local events",
 }
 
-function signalsOf(d: MlData): MlSignals {
-  const dead = d.signals.filter(
-    (s) => s.lastOkAt !== null && Date.now() - s.lastOkAt.getTime() > 7 * 86_400_000,
-  )
+export interface MlGaps {
+  items: QueueItem[]
+  meta: string
+}
 
-  return {
-    rows: d.signals.map((s) => ({
-      key: s.provider,
-      cells: {
-        provider: PROVIDER_LABEL[s.provider] ?? s.provider,
-        rows: count(s.rowsWritten),
-        runs: `${count(s.runs - s.failures)} of ${count(s.runs)}`,
-        last:
-          s.lastOkAt === null
-            ? { v: "never", cls: "hot" }
-            : Date.now() - s.lastOkAt.getTime() > 7 * 86_400_000
-              ? { v: s.lastOkAt.toISOString().slice(0, 10), cls: "hot" }
-              : s.lastOkAt.toISOString().slice(0, 10),
-        error: s.lastError ? { v: s.lastError.slice(0, 44), cls: "hot" } : "—",
-      },
-    })),
-    meta: "every run ever recorded",
-    note:
-      dead.length > 0
-        ? dead
-            .map(
-              (s) =>
-                `${PROVIDER_LABEL[s.provider] ?? s.provider} last wrote a row on ` +
-                `${s.lastOkAt?.toISOString().slice(0, 10)}; every run since has failed, ` +
-                `${count(s.failures)} of them in total. The model still trains — the events ` +
-                `feature is simply absent from every forecast made since, which is what gate 1 ` +
-                `means when its detail reads "events absent".`,
-            )
-            .join(" ")
-        : "Both feeds are current.",
+function gapsOf(d: MlData): MlGaps {
+  const items: QueueItem[] = []
+
+  const dead = d.signals.filter(
+    (x) => x.lastOkAt !== null && Date.now() - x.lastOkAt.getTime() > SIGNAL_DEAD_MS,
+  )
+  for (const x of dead) {
+    const days = Math.round((Date.now() - (x.lastOkAt?.getTime() ?? 0)) / 86_400_000)
+    items.push({
+      key: `signal-${x.provider}`,
+      tone: "warn",
+      lead: count(days),
+      unit: "days dark",
+      title: `${PROVIDER_LABEL[x.provider] ?? x.provider} stopped writing`,
+      body:
+        `Last row on ${x.lastOkAt?.toISOString().slice(0, 10)}; every run since has failed, ` +
+        `${count(x.failures)} in total, newest "${(x.lastError ?? "").slice(0, 44)}". The model ` +
+        `still trains — the feature is simply absent from every forecast made since, which is ` +
+        `what a gate means when its detail reads "events absent".`,
+    })
   }
+
+  for (const t of d.targets) {
+    if (t.evaluations === 0 || t.wins > 0) continue
+    items.push({
+      key: `baseline-${t.target}`,
+      tone: "bad",
+      lead: count(t.wins),
+      unit: `of ${count(t.evaluations)}`,
+      title: `${TARGET_LABEL[t.target]} loses to the naive baseline`,
+      body:
+        `${pct(t.wape)} error against the baseline's ${pct(t.baseline)} — worse than ` +
+        `forecasting the same weekday last week, which is one line of code. The gate named for ` +
+        `the baseline checks that it was COMPUTED, not that the model beat it, so this can run ` +
+        `green for a month. The harder targets are a different story and win.`,
+    })
+  }
+
+  return { items, meta: count(items.length) }
 }
 
 export interface MlSections {
   headline: SectionData<MlHeadline>
   accuracy: SectionData<MlAccuracy>
-  targets: SectionData<MlTargets>
   gates: SectionData<MlGates>
-  signals: SectionData<MlSignals>
-  runs: SectionData<MlRuns>
+  gaps: SectionData<MlGaps>
 }
 
 export function getMlSectionPromises(): StreamedSections<MlSections> {
@@ -589,10 +545,8 @@ export function getMlSectionPromises(): StreamedSections<MlSections> {
   return {
     headline: s(headlineOf),
     accuracy: s(accuracyOf),
-    targets: s(targetsOf),
     gates: s(gatesOf),
-    signals: s(signalsOf),
-    runs: s(runsOf),
+    gaps: s(gapsOf),
   }
 }
 

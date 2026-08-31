@@ -3,6 +3,7 @@
 import {
   Chart,
   PageHead,
+  Queue,
   Section,
   Strip,
   SubNav,
@@ -19,43 +20,25 @@ import type { MlSections } from "@/lib/counter/adapters/monitoring-ml"
 /**
  * Model health — `P.monml`.
  *
- * The prototype's strip leads with "MAPE 8.4%" and "Beat the naive guess, 21
- * of 30". Both are inventions, and the second one is backwards: the revenue
- * model has beaten the seasonal-naive baseline 0 times in 187 evaluations. So
- * this page opens with a sentence, the way Activity does, because an accuracy
- * figure on its own reads fine and the comparison is the whole story.
+ * Composed as `P.monml.desk()` composes it: strip -> "Forecast against
+ * actual" -> "Gates" -> "Known gaps". One table and one queue, not four
+ * tables and a verdict block.
  *
- * See the adapter for the measurements.
+ * The prototype's strip leads with "MAPE 8.4%" and "Beat the naive guess, 21
+ * of 30". Both are inventions, and the second is backwards: the revenue model
+ * has beaten the seasonal-naive baseline 0 times in 232 evaluations. That fact
+ * used to open the page as a verdict paragraph and now leads the queue, which
+ * is where a design puts a known problem with a size on it — and it is a
+ * better home for it, because a queue item can say how big it is.
+ *
+ * "Against the baseline", "External signals" and "Training runs" went the same
+ * way; see `MlGaps`. Nothing stopped being measured.
  */
-const TARGET_COLUMNS: Column[] = [
-  { key: "target", label: "Forecast" },
-  { key: "wins", label: "Beat last week", numeric: true },
-  { key: "wape", label: "Model error", numeric: true },
-  { key: "baseline", label: "Baseline error", numeric: true },
-  { key: "coverage", label: "Coverage, 80%", numeric: true },
-  { key: "version", label: "Graded model" },
-]
-
 const GATE_COLUMNS: Column[] = [
   { key: "gate", label: "Gate" },
   { key: "passed", label: "Days passed", numeric: true },
   { key: "last", label: "Newest" },
   { key: "detail", label: "What it read" },
-]
-
-const SIGNAL_COLUMNS: Column[] = [
-  { key: "provider", label: "Feed" },
-  { key: "rows", label: "Rows written", numeric: true },
-  { key: "runs", label: "Runs that worked", numeric: true },
-  { key: "last", label: "Last good" },
-  { key: "error", label: "Newest error" },
-]
-
-const RUN_COLUMNS: Column[] = [
-  { key: "when", label: "Started" },
-  { key: "target", label: "Forecast" },
-  { key: "rows", label: "Training rows", numeric: true },
-  { key: "status", label: "Result" },
 ]
 
 export function CounterMlClient({ sections }: { sections: SectionSources<MlSections> }) {
@@ -75,18 +58,6 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
             them, not a table of links on the first. */}
         <SubNav items={MONITORING_TABS} label="Monitoring" />
       </PageHead>
-
-      <Section bare title="Verdict" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div className="sec">
-            <div className="sec__body">
-              <p className="verdictline" style={{ margin: 0 }}>
-                {h.verdict}
-              </p>
-            </div>
-          </div>
-        )}
-      </Section>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
@@ -110,24 +81,6 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
       </Section>
 
       <Section
-        title="Against the baseline"
-        meta={(t) => t.meta}
-        data={sections.targets}
-        pending={pending}
-        pad={false}
-        askAbout="does the forecast beat last week"
-      >
-        {(t) => (
-          <>
-            <Table columns={TARGET_COLUMNS} rows={t.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {t.note}
-            </p>
-          </>
-        )}
-      </Section>
-
-      <Section
         title="Gates"
         meta={(g) => g.meta}
         data={sections.gates}
@@ -138,6 +91,7 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
         {(g) => (
           <>
             <Table columns={GATE_COLUMNS} rows={g.rows} />
+            {/* No `.sec__body` — a table section emits the table alone. */}
             <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
               {g.note}
             </p>
@@ -145,39 +99,10 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
         )}
       </Section>
 
-      <Section
-        title="External signals"
-        meta={(g) => g.meta}
-        data={sections.signals}
-        pending={pending}
-        pad={false}
-        askAbout="are the weather and event feeds current"
-      >
-        {(g) => (
-          <>
-            <Table columns={SIGNAL_COLUMNS} rows={g.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {g.note}
-            </p>
-          </>
-        )}
-      </Section>
-
-      <Section
-        title="Training runs"
-        meta={(r) => r.meta}
-        data={sections.runs}
-        pending={pending}
-        pad={false}
-      >
-        {(r) => (
-          <>
-            <Table columns={RUN_COLUMNS} rows={r.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {r.note}
-            </p>
-          </>
-        )}
+      {/* `P.monml`'s "Known gaps". Derived rather than written down — see
+          `MlGaps` — so the list is whatever is actually wrong tonight. */}
+      <Section title="Known gaps" meta={(g) => g.meta} data={sections.gaps} pending={pending}>
+        {(g) => <Queue items={g.items} />}
       </Section>
     </>
   )

@@ -1258,7 +1258,54 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "monml", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ml", route: "/dashboard/admin/monitoring/ml", report: true, status: "editorial" },
+  {
+    protoId: "monml",
+    name: "Monitoring · ML",
+    protoRoute: "/dashboard/admin/monitoring/ml",
+    route: "/dashboard/admin/monitoring/ml",
+    mobileRoute: "/m/monitoring/ml",
+    report: true,
+    // MEASURED: 14 of the prototype's 15 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The one missing landmark
+    // is declared below.
+    //
+    // The desk was 20 against 15 — four tables and a verdict block where the
+    // design has one table and a QUEUE, which this page had no emitter for at
+    // all. "Known gaps" is that queue, and it is derived rather than written
+    // down: any feed that has not written a row in a week, and any forecast
+    // target the model loses to its own seasonal-naive baseline. Tonight that
+    // is exactly two, the same count the prototype hand-wrote — `predicthq`,
+    // 401 on every run since 10 August, and revenue at 0 wins in 232
+    // evaluations. If a third appears the structure pass will say so, which is
+    // the gate working rather than a fragility.
+    //
+    // The revenue fact was the verdict paragraph. A queue item is a better
+    // home for it than a sentence above the strip, because a queue item has a
+    // lead figure and this one is a zero.
+    //
+    // A `.band` also went: the "Revenue vs last week" cell carried a `caption`
+    // reading "times the model won", which only repeated the label and opened
+    // a band the design does not have.
+    status: "counter",
+    baseline: { desktop: 14, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\", the same subtraction `monitoring`, " +
+          "`monpeople`, `moncosts` and the alerts page declare. `P.monml` " +
+          "does not set `nodate`, so the prototype draws `CD.bar()` and its " +
+          "Apply button; this page mounts no `DateControl` because its " +
+          "figures are not a range a reader picks — the gate table is " +
+          "`GATE_DAYS` flat, and every evaluation ever written is what the " +
+          "win counts are over, because 232 comparisons is the sample and a " +
+          "fortnight of it would not be. The phone has no page head furniture " +
+          "on either side.",
+      },
+    ],
+  },
   {
     protoId: "monpeople",
     name: "Monitoring · People",
