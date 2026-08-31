@@ -1443,22 +1443,33 @@ export const PAGES: FidelityPage[] = [
     // MEASURED with that window: 12 of the prototype's 12 on the desk and 5 of
     // 5 on the phone — landmark for landmark, and the phone is clean.
     //
-    // NOT GATED, for one honest difference the window uncovered. Our strip
-    // draws FOUR cells where the prototype draws five, so `.strip` reports
-    // `data-n="4"` against `"5"` and four grid tracks against five. The extra
-    // `.strip` was hiding it: an extra leaves the rendering comparison (F-R8),
-    // so those two differences were never being checked.
+    // GATED: 12 of 12 on the desk and 5 of 5 on the phone, landmark for
+    // landmark, 0 extra, 0 rendering differences, 0 dark defects, and no
+    // allowance of any kind on either surface.
     //
-    // The adapter argues two of the five: `VendorLeadTime` is empty and
-    // nothing records a promised date, so "Median lead time" and the "Breaks,
-    // 90 days" count that leans on it have no source, and delivery cadence and
-    // the reconcile count take their place. That is four for four. The FIFTH,
-    // "Basket price", is the one nobody has ruled on — it is the price
-    // monitor's own figure, and whether a vendor page should restate it or
-    // link to it is the shared-figure rule's question, not a gap to paper over
-    // with a `styleAllowances` line. Declaring the count difference before
-    // that is decided would freeze the answer at "four" by accident.
-    status: "editorial",
+    // The fifth strip cell arrived, which is what this entry was waiting on.
+    // It read: "'Basket price' is the one nobody has ruled on — it is the
+    // price monitor's own figure, and whether a vendor page should restate it
+    // or link to it is the shared-figure rule's question." THE RULE IS THE
+    // ANSWER. CLAUDE.md says a figure shown on two pages comes from one
+    // function in `src/lib/counter/` — it governs the SOURCE, not the number
+    // of places a figure may appear. So the arithmetic moved out of the
+    // vendors list's loader into `@/lib/counter/vendor-basket`, and both pages
+    // call it: the list for its trend column, its chart and its "getting
+    // dearer" worklist item, and this page for its strip cell. One
+    // implementation, two callers, and the count difference closes as a
+    // consequence rather than by a `styleAllowances` line.
+    //
+    // The trend reads its own eight weeks rather than this page's range,
+    // deliberately: a basket DIRECTION needs a run of weeks to be a direction
+    // at all, and the range control here can be set to one day.
+    //
+    // The other four cells were already argued in the adapter: `VendorLeadTime`
+    // is empty and nothing records a promised date, so "Median lead time" and
+    // the "Breaks, 90 days" count that leans on it have no source, and
+    // delivery cadence and the reconcile count take their place.
+    status: "counter",
+    baseline: { desktop: 12, mobile: 5 },
   },
   { protoId: "packaging", name: "Vendors", protoRoute: "/dashboard/operations/packaging", route: "/dashboard/operations/packaging", mobileRoute: "/m/operations/packaging", report: true, status: "editorial" },
   {
