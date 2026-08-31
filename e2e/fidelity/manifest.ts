@@ -1267,7 +1267,39 @@ export const PAGES: FidelityPage[] = [
     ],
   },
   { protoId: "moncache", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/cache", route: "/dashboard/admin/monitoring/cache", mobileRoute: "/m/monitoring/cache", report: true, status: "editorial" },
-  { protoId: "monactivity", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/activity", route: "/dashboard/admin/monitoring/activity", mobileRoute: "/m/monitoring/activity", report: true, status: "editorial" },
+  {
+    protoId: "monactivity",
+    name: "Monitoring · Activity",
+    protoRoute: "/dashboard/admin/monitoring/activity",
+    route: "/dashboard/admin/monitoring/activity",
+    mobileRoute: "/m/monitoring/activity",
+    report: true,
+    // MEASURED: 15 of the prototype's 16 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences. The one missing landmark is declared.
+    //
+    // Two panels arrived: "What happened", the job feed, built from `JobRun`
+    // (5,125 rows, 47 in a day); and "Recent errors", which existed as a table
+    // stacked under the chart inside one "Errors" section and is now its own,
+    // as the prototype composes it.
+    status: "counter",
+    baseline: { desktop: 15, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\" — the alerts page's subtraction, for " +
+          "the reason it gives. `P.monactivity` does not set `nodate` so the " +
+          "prototype draws `CD.bar()`; this page mounts no `DateControl` " +
+          "because every panel on it is fixed at 24 hours (the strip, the " +
+          "hourly chart, the error list and the feed all read the same " +
+          "window) and `PageHead` names it. A control offering to change one " +
+          "of them would have to change all four. The phone has no page head " +
+          "furniture on either side.",
+      },
+    ],
+  },
   { protoId: "moningredients", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ingredient-audit", route: "/dashboard/admin/monitoring/ingredient-audit", report: true, status: "editorial" },
   { protoId: "login", name: "Login", protoRoute: "/login", route: "/login", status: "editorial" },
   { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },
