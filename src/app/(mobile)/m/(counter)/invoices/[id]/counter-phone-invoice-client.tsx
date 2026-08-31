@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { MList, MoneyLines, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MoneyLines, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InvoiceSections } from "@/lib/counter/adapters/invoice"
 
@@ -13,6 +13,16 @@ import type { InvoiceSections } from "@/lib/counter/adapters/invoice"
  * The prototype's alert block is unconditional ("A line is missing"). Here it
  * is dropped entirely when the invoice reconciles — a red banner on a clean
  * record teaches a reader to ignore red banners.
+ *
+ * NO STRIP. `P.invoice.phone()` has none, and the two cells this page used to
+ * put in one — what was extracted, and the gap — are already stated twice
+ * over: in words by the `.mhead` above when there IS a gap, and as figures by
+ * the Totals money-lines below, always. It was the same fact three times.
+ *
+ * "Needs a decision" and "Totals" are TWO sections, as the prototype composes
+ * them. They were one, with the money-lines tacked onto the end of the
+ * decision list — which reads as "these totals belong to these lines" rather
+ * than "here is the document's arithmetic", and cost the page a section.
  */
 export function CounterPhoneInvoiceClient({
   title,
@@ -50,10 +60,6 @@ export function CounterPhoneInvoiceClient({
         )}
       </Section>
 
-      <Section bare title="The figures" data={sections.head} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
-
       <Section
         title="The document"
         meta={(d) => d.meta}
@@ -79,18 +85,19 @@ export function CounterPhoneInvoiceClient({
         data={sections.lines}
         pending={pending}
       >
-        {(l) => (
-          <>
-            {l.phoneRows.length > 0 ? (
-              <MList rows={l.phoneRows} />
-            ) : (
-              <p className="mono" style={{ margin: "0 0 11px" }}>
-                {l.phoneEmpty}
-              </p>
-            )}
-            <MoneyLines rows={l.money} />
-          </>
-        )}
+        {(l) =>
+          l.phoneRows.length > 0 ? (
+            <MList rows={l.phoneRows} />
+          ) : (
+            <p className="mono" style={{ margin: 0 }}>
+              {l.phoneEmpty}
+            </p>
+          )
+        }
+      </Section>
+
+      <Section title="Totals" meta={() => ""} data={sections.lines} pending={pending}>
+        {(l) => <MoneyLines rows={l.money} />}
       </Section>
     </>
   )
