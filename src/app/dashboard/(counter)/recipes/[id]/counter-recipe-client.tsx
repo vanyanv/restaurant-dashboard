@@ -52,12 +52,6 @@ import type { BuilderLine, RecipeBuilder, RecipeSections } from "@/lib/counter/a
  */
 export type CounterRecipeSections = SectionSources<RecipeSections>
 
-const SELLS_COLUMNS: Column[] = [
-  { key: "name", label: "Sold as" },
-  { key: "kind", label: "Kind" },
-  { key: "stores", label: "Stores", numeric: true },
-]
-
 const ASK_SUGGESTIONS = [
   "What is this plate's food cost?",
   "Which ingredient moved this recipe's cost most?",
@@ -172,11 +166,6 @@ export function CounterRecipeClient({
               <p className="mono" style={{ margin: "9px 0 0" }}>
                 {c.foot}
               </p>
-              {c.gap ? (
-                <p className="mono" style={{ margin: "11px 0 0", color: "var(--bad)" }}>
-                  {c.gap.lead} · {c.gap.body}
-                </p>
-              ) : null}
               <p className="mono" style={{ margin: "11px 0 0" }}>
                 {c.note}
               </p>
@@ -184,17 +173,45 @@ export function CounterRecipeClient({
           )}
         </Section>
 
+        {/* `P.recipe`'s "One line has no cost", which was a red paragraph at
+            the foot of "What it costs". The design gives it a panel, and it
+            deserves one: it is the reason the figure above is a floor rather
+            than a price. Its "Match it now" button is declared absent — see
+            the manifest. */}
         <Section
-          title="Sells as"
-          meta={(s) => s.meta}
-          data={sections.sellsAs}
+          title="One line has no cost"
+          meta={(c) => c.gap?.lead ?? "every line priced"}
+          data={sections.cost}
           pending={pending}
-          pad={false}
         >
+          {(c) =>
+            c.gap ? (
+              <p style={{ margin: 0, fontSize: "var(--ct-t-cap)", lineHeight: 1.5 }}>
+                {c.gap.body}
+              </p>
+            ) : (
+              <p style={{ margin: 0, fontSize: "var(--ct-t-cap)", lineHeight: 1.5 }}>
+                Every line on this recipe has a cost, so the plate cost above is exact rather
+                than a floor.
+              </p>
+            )
+          }
+        </Section>
+
+        {/* `.linkpop` chips, which is what `P.recipe` draws here — see
+            `RecipeSellsAs` for why this stopped being a table. */}
+        <Section title="Sells as" meta={(s) => s.meta} data={sections.sellsAs} pending={pending}>
           {(s) => (
             <>
-              <Table columns={SELLS_COLUMNS} rows={s.rows} />
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              {s.links.map((l, i) => (
+                <div className="linkpop" key={l.key} style={i > 0 ? { marginTop: 7 } : undefined}>
+                  {l.name}
+                  <Tag tone={l.kind === "item" ? "good" : "warn"}>
+                    {l.kind === "item" ? "Menu item" : "Modifier"}
+                  </Tag>
+                </div>
+              ))}
+              <p className="mono" style={{ margin: "9px 0 0" }}>
                 {s.note}
               </p>
             </>
@@ -328,7 +345,11 @@ function Builder({ builder }: { builder: RecipeBuilder }) {
         </RowLine>
       ))}
 
-      <div className="btnrow" style={{ marginTop: 12 }}>
+      {/* `P.recipe`'s `.addrow` — a control that ADDS a line, not a row of
+          actions. It sat in a `.btnrow`, which is the class the design uses
+          for the save/confirm/duplicate row underneath and nothing else, and
+          the structure pass counted the second one as an extra. */}
+      <div className="addrow-host" style={{ marginTop: 12 }}>
         <select
           className="inp"
           aria-label="Add an ingredient or a sub-recipe"

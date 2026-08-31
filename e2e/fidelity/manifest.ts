@@ -901,7 +901,52 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 15, mobile: 5 },
   },
   { protoId: "recipes", name: "Recipes", protoRoute: "/dashboard/recipes", route: "/dashboard/recipes", mobileRoute: "/m/recipes", report: true, status: "counter", baseline: { desktop: 14, mobile: 5 } },
-  { protoId: "recipe", name: "Recipe", protoRoute: "/dashboard/recipes/double-slider", route: "/dashboard/recipes/cmm48cpo6000voxu9lafghk62", mobileRoute: "/m/recipes/cmm48cpo6000voxu9lafghk62", report: true, status: "editorial" },
+  {
+    protoId: "recipe",
+    name: "Recipe",
+    protoRoute: "/dashboard/recipes/double-slider",
+    route: "/dashboard/recipes/cmm48cpo6000voxu9lafghk62",
+    mobileRoute: "/m/recipes/cmm48cpo6000voxu9lafghk62",
+    report: true,
+    // MEASURED: the phone is 8 of 8, complete. The desk is 23 of 29 with 0
+    // extra, up from 21 with two.
+    //
+    // Both extras were a class used for the wrong job:
+    //
+    //   - The add-a-line control sat in a `.btnrow`. That class is the design's
+    //     row of ACTIONS — save, confirm, duplicate — and `P.recipe` gives the
+    //     adder its own `.addrow`. Two `.btnrow` where the design has one.
+    //   - "Sells as" was a `.tbl`. `P.recipe` draws `.linkpop` chips, one per
+    //     POS name with a tag beside it, and three columns of two-word cells
+    //     is a table pretending to be a list.
+    //
+    // "One line has no cost" also became the panel the design gives it. It was
+    // a red paragraph at the foot of "What it costs", and it is the reason the
+    // figure above it is a floor rather than a price.
+    //
+    // STILL EDITORIAL, for six: four buttons and the two landmarks of the
+    // "Add an ingredient" picker panel.
+    //
+    // The picker is the one that is WORK rather than a decision. `P.recipe`
+    // has both an `.addrow` inside the builder and a separate pickersheet
+    // section that it opens; ours has the adder and not the sheet. Building it
+    // means lifting the builder's line state out of its component so a sibling
+    // section can push into it — the adapter already ships `pantry` and
+    // `components` for exactly this. It is a refactor of a form that writes
+    // recipe lines, which is not a thing to do quickly.
+    //
+    // The four buttons: "Duplicate" (no action duplicates a recipe), "Match it
+    // now" (nothing in the product matches a SKU to an ingredient by hand —
+    // the matcher is a nightly ladder and its page is a read-only audit),
+    // "Link another item" (nothing links a POS name to a recipe by hand
+    // either), and "Mark confirmed", which IS built and renders — but this
+    // recipe is already confirmed, so a `Tag` reading "Confirmed" stands where
+    // the button would. That last one is data, not a gap, and it is the reason
+    // this page cannot simply declare its four and gate: an unconfirmed recipe
+    // renders five buttons and a gated count of four would fail on the next
+    // recipe anyone opens.
+    status: "editorial",
+  },
   {
     protoId: "productmix",
     // The prototype's own name for this page is "Product mix". The manifest

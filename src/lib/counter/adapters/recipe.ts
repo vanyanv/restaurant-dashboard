@@ -112,8 +112,16 @@ export interface RecipeCost {
   note: string
 }
 
+/**
+ * `P.recipe`'s "Sells as · linked POS items".
+ *
+ * `.linkpop` chips, not a table. The design draws one chip per POS name with a
+ * tag beside it, and three columns of two-word cells is a table pretending to
+ * be a list — a `.tbl` where the design has none, which the structure pass
+ * reads as an extra and is right to.
+ */
 export interface RecipeSellsAs {
-  rows: Row[]
+  links: Array<{ key: string; name: string; kind: "item" | "modifier"; stores: number }>
   meta: string
   note: string
 }
@@ -506,13 +514,11 @@ function costOf(d: Loaded): RecipeCost {
 
 function sellsAsOf(d: Loaded): RecipeSellsAs {
   return {
-    rows: d.posNames.map((p) => ({
+    links: d.posNames.map((p) => ({
       key: `${p.kind}:${p.name}`,
-      cells: {
-        name: p.name,
-        kind: p.kind === "item" ? "menu item" : { v: "modifier", cls: "hot" },
-        stores: count(p.stores),
-      },
+      name: p.name,
+      kind: p.kind === "item" ? ("item" as const) : ("modifier" as const),
+      stores: p.stores,
     })),
     meta:
       d.posNames.length === 0
