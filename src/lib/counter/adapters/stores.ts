@@ -80,6 +80,15 @@ export interface StoresHeadline {
 export interface StoresTable {
   rows: Row[]
   phoneRows: MListRow[]
+  /**
+   * The store the phone's single button opens — `P.stores.phone()` ends with
+   * "Open Hollywood file", a bare `.mbtn` outside every section.
+   *
+   * The TRADING store, because that is the file whose numbers are live today;
+   * the first store otherwise, so a fresh account with nothing open still has
+   * a way into a store file. Null only when there are no stores at all.
+   */
+  primary: { href: string; label: string } | null
   meta: string
   note: string
 }
@@ -386,6 +395,12 @@ function tableOf(d: Data): StoresTable {
       note: missingInputs(s).length === 0 ? "complete" : `${count(missingInputs(s).length)} missing`,
       noteTone: missingInputs(s).length === 0 ? "up" : "down",
     })),
+    primary: (() => {
+      const store = d.stores.find(isTrading) ?? d.stores[0]
+      return store
+        ? { href: `/dashboard/stores/${store.id}`, label: `Open ${shortName(store.name)} file` }
+        : null
+    })(),
     meta: `${count(d.stores.length)} · standing inputs, not a period`,
     note:
       onDefaults > 0

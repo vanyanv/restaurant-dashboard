@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import {
   PageHead,
   Queue,
@@ -26,9 +28,13 @@ import type { StoresSections } from "@/lib/counter/adapters/stores"
  * commission rates, which nothing else in the product reports and which decide
  * the second largest line on that statement.
  *
- * `Add a store` is dropped as a section: it is a button and a paragraph
- * describing a form that already exists at `/dashboard/stores/new`, and a
- * panel whose only content is a link to a page is a link.
+ * `Add a store` is BACK, and the argument for dropping it was wrong in a way
+ * worth writing down. It read: "a panel whose only content is a link to a page
+ * is a link" — true, except there was no link. `/dashboard/stores/new` was
+ * referenced from exactly one place in the tree, `app-sidebar.tsx`, which
+ * belongs to the retired editorial shell and is not rendered on a Counter
+ * page. The form was built, gated and reachable only by typing its URL. The
+ * design put an entrance here for a reason.
  */
 export type CounterStoresSections = SectionSources<StoresSections>
 
@@ -93,6 +99,24 @@ export function CounterStoresClient({
         askAbout="which stores have no rent on file"
       >
         {(w) => <Queue items={w.items} />}
+      </Section>
+
+      {/* `P.stores`' "Add a store", and the four fields it names are the four
+          the form actually asks for. */}
+      <Section title="Add a store" meta="four fields to start" data={sections.table} pending={pending}>
+        {() => (
+          <>
+            <p style={{ margin: "0 0 12px", fontSize: "var(--ct-t-mid)", lineHeight: 1.5 }}>
+              A store needs a <b>name</b>, an <b>address</b> for weather and event signals, a{" "}
+              <b>rent</b> figure and a <b>COGS target</b>. Everything else can wait.
+            </p>
+            <div className="btnrow">
+              <Link className="btn btn--primary" href="/dashboard/stores/new">
+                New store
+              </Link>
+            </div>
+          </>
+        )}
       </Section>
     </>
   )

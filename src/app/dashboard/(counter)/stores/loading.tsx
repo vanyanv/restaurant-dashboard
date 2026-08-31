@@ -3,7 +3,7 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** Stores' loading boundary — the three entries the client renders. */
+/** Stores' loading boundary — the four entries the client renders. */
 export default function StoresLoading() {
   return (
     <>
@@ -14,6 +14,9 @@ export default function StoresLoading() {
         {() => null}
       </Section>
       <Section title="Needs you" data={loading()}>
+        {() => null}
+      </Section>
+      <Section title="Add a store" data={loading()}>
         {() => null}
       </Section>
     </>

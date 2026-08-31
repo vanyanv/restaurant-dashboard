@@ -1314,7 +1314,45 @@ export const PAGES: FidelityPage[] = [
     status: "editorial",
   },
   { protoId: "packaging", name: "Vendors", protoRoute: "/dashboard/operations/packaging", route: "/dashboard/operations/packaging", mobileRoute: "/m/operations/packaging", report: true, status: "editorial" },
-  { protoId: "stores", name: "Stores", protoRoute: "/dashboard/stores", route: "/dashboard/stores", mobileRoute: "/m/stores", report: true, status: "editorial" },
+  {
+    protoId: "stores",
+    name: "Stores",
+    protoRoute: "/dashboard/stores",
+    route: "/dashboard/stores",
+    mobileRoute: "/m/stores",
+    report: true,
+    // MEASURED: the phone is 4 of 4, complete. The desk is 15 matched, 0
+    // missing and ONE extra — `qitem`, 3 against 2.
+    //
+    // It was 11 of 15 with five missing, and the five were the whole "Add a
+    // store" panel. That had been dropped on the argument that "a panel whose
+    // only content is a link to a page is a link" — true, except there was no
+    // link. `/dashboard/stores/new` was referenced from exactly one place in
+    // the tree, `app-sidebar.tsx`, which belongs to the retired editorial
+    // shell and is not rendered on a Counter page. A built, gated form
+    // reachable only by typing its URL. The panel is back.
+    //
+    // The phone lost a `.mstrip` the design does not have and gained the
+    // `.mbtn` it does — `P.stores.phone()` is a masthead, a list and one
+    // button into a store file.
+    //
+    // NOT GATED, for the third `qitem`, and NOT declared: `absentLandmarks`
+    // never forgives an extra (ruling F-R8), and it should not. `workOf`
+    // emits an item per condition that is true, and three are:
+    //
+    //   Glendale and Van Nuys carry no rent (null).
+    //   All three carry Uber 0.21 and DoorDash 0.25, the platform defaults.
+    //   HOLLYWOOD carries a labour budget of exactly $0 while paying wages —
+    //   and Hollywood is the only store trading, so that one is the only
+    //   finding here that moves a live number.
+    //
+    // Collapsing the first and third into one "incomplete inputs" item would
+    // make the count 2 and make the page worse: it would fold the one problem
+    // affecting today's P&L into a note about two construction sites. Three
+    // different stores, three different problems. The fixture hand-wrote two
+    // items; this account has three.
+    status: "editorial",
+  },
   {
     protoId: "storecosts",
     name: "Store file",
