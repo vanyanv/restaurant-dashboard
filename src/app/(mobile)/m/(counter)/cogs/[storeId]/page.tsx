@@ -5,6 +5,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { getStoreCogsSectionPromises } from "@/lib/counter/adapters/cogs"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneStoreCogsClient } from "./counter-phone-store-cogs-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -67,7 +68,7 @@ export default async function MobileStoreCogsPage({
     redirect(rest ? `${href}?${rest}` : href)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(query, today)
 
   const storesP = getOverviewStores()

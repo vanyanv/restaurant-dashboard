@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getMenuProfitSectionPromises } from "@/lib/counter/adapters/menu-profit"
 import { CounterPhoneMenuProfitClient } from "./counter-phone-menu-profit-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -29,7 +30,7 @@ export default async function MobileMenuProfitPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   const sections = getMenuProfitSectionPromises({

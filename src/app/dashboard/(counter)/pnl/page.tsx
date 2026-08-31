@@ -6,6 +6,7 @@ import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
 import { getStoreFixedSectionPromises } from "@/lib/counter/adapters/pnl-store"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPnlClient } from "./counter-pnl-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter P&L — the second Counter page (Phase C, page 2).
@@ -48,7 +49,7 @@ export default async function PnlPage({
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is, and the eight weeks are anchored on
   // today rather than on the range (note 53).
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

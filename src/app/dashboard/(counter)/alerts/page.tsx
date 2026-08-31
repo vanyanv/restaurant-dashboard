@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getAlertsSections } from "@/lib/counter/adapters/alerts"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterAlertsClient } from "./counter-alerts-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Needs-you — "Open right now", the desk surface (`P.alerts.desk`,
@@ -64,7 +65,7 @@ export default async function AlertsPage({
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is, and on this page that decides where
   // the opened-per-day chart's last bar sits.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // `Promise.all`, not two sequential `await`s: the store list and the inbox

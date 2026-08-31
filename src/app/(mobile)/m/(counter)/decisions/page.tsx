@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getDecisionsSectionPromises } from "@/lib/counter/adapters/decisions"
 import { CounterPhoneDecisionsClient } from "./counter-phone-decisions-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -59,7 +60,7 @@ export default async function MobileDecisionsPage({
   // a moving `new Date()` re-evaluated in two places could disagree about
   // which calendar day "today" is, and on this page that decides which WEEK
   // `.msub` names.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

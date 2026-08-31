@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getVendorName, getVendorSectionPromises } from "@/lib/counter/adapters/vendor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterVendorClient } from "./counter-vendor-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -32,7 +33,7 @@ export default async function VendorPage({
     if (typeof value === "string") qs.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(qs, today)
 
   const [stores, named] = await Promise.all([

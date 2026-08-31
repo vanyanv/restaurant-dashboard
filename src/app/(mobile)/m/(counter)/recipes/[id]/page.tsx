@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getRecipeSectionPromises } from "@/lib/counter/adapters/recipe"
 import { CounterPhoneRecipeClient } from "./counter-phone-recipe-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -30,7 +31,7 @@ export default async function MobileRecipePage({
     if (typeof value === "string") qs.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(qs, today)
 
   const sections = getRecipeSectionPromises({

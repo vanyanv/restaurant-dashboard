@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getAnalyticsSectionPromises } from "@/lib/counter/adapters/analytics"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterAnalyticsClient } from "./counter-analytics-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Analytics, the group page — where the sales came from, and when.
@@ -57,7 +58,7 @@ export default async function AnalyticsPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

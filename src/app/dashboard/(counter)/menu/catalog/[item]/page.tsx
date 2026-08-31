@@ -6,6 +6,7 @@ import { getMenuItemSections } from "@/lib/counter/adapters/menu-item"
 import { isMissing } from "@/lib/counter/section-data"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterMenuItemClient } from "./counter-menu-item-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -43,7 +44,7 @@ export default async function MenuItemPage({
     if (typeof value === "string") qs.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(qs, today)
   const input = {
     slug: item,

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { AppShell } from "@/components/counter"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { authOptions } from "@/lib/auth"
+import { counterToday } from "@/lib/counter/today"
 
 /** `OWNER` -> `Owner`. The rail prints a role, not an enum member. */
 function titleCase(role: string): string {
@@ -66,7 +67,7 @@ export default async function CounterLayout({
       }
       // Resolved on the server so the shell and the page below it cannot
       // disagree about which calendar day "today" is.
-      today={new Date()}
+      today={counterToday()}
     >
       {children}
     </AppShell>

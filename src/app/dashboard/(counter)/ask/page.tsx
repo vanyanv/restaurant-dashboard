@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { CounterAskClient } from "./counter-ask-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Ask — `P.ask` at line 4504 of `docs/counter/counter-prototype.html`.
@@ -65,7 +66,7 @@ export default async function AskPage({
   // Resolved once, here, and passed to the island — a moving `new Date()`
   // re-evaluated in two places could disagree about which calendar day
   // "today" is, and this page prints the window it is answering about.
-  const today = new Date()
+  const today = counterToday()
 
   // The switcher's list, shared with every other Counter page rather than
   // re-queried: the store named in the question's scope sentence must be the

@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getAlertsSections } from "@/lib/counter/adapters/alerts"
 import { CounterPhoneAlertsClient } from "./counter-phone-alerts-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -63,7 +64,7 @@ export default async function MobileAlertsPage({
   // a moving `new Date()` re-evaluated in two places could disagree about
   // which calendar day "today" is, and on this page that decides how old every
   // row says it is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // THE SAME CALL, WITH THE SAME ARGUMENTS, as the desk.

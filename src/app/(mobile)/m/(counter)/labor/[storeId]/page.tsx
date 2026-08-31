@@ -5,6 +5,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { getStoreLaborSectionPromises } from "@/lib/counter/adapters/labor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneStoreLaborClient } from "./counter-phone-store-labor-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * One store's Labor — the phone. Sibling of
@@ -85,7 +86,7 @@ export default async function MobileStoreLaborPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(query, today)
 
   // The same cached list `(counter)/layout.tsx` already fetched for the

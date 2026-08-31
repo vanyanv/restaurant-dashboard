@@ -6,6 +6,7 @@ import { getMenuHubSectionPromises } from "@/lib/counter/adapters/menu-hub"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { CounterMenuClient } from "./counter-menu-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * The Menu hub — `P.menuhub` (`docs/counter/counter-prototype.html:7274`).
@@ -41,7 +42,7 @@ export default async function MenuPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

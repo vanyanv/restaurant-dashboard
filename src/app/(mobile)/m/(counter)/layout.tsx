@@ -1,5 +1,6 @@
 import { PhoneShell } from "@/components/counter"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * The Counter chrome on the phone, mounted ONCE for every rebuilt `/m` route.
@@ -38,7 +39,7 @@ export default async function CounterPhoneLayout({
   const stores = await getOverviewStores()
 
   return (
-    <PhoneShell stores={stores} today={new Date()}>
+    <PhoneShell stores={stores} today={counterToday()}>
       {children}
     </PhoneShell>
   )

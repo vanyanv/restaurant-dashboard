@@ -5,6 +5,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { getStoreAnalyticsSectionPromises } from "@/lib/counter/adapters/analytics"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneStoreAnalyticsClient } from "./counter-phone-store-analytics-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * One store's Analytics — the phone. Sibling of
@@ -72,7 +73,7 @@ export default async function MobileStoreAnalyticsPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(query, today)
 
   // The same cached list `(counter)/layout.tsx` already fetched for the

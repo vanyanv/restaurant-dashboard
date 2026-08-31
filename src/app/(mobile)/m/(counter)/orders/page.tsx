@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getOrdersSectionPromises } from "@/lib/counter/adapters/orders"
 import { CounterPhoneOrdersClient } from "./counter-phone-orders-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -56,7 +57,7 @@ export default async function MobileOrdersPage({
   // Resolved once, here, and passed to both the params reader and the island —
   // a moving `new Date()` re-evaluated in two places could disagree about
   // which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

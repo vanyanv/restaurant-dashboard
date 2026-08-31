@@ -111,6 +111,17 @@ export default defineConfig({
       // in .env.local would otherwise blank every page for the e2e user.
       // Real process env beats .env files in Next, and "" is falsy to the gate.
       SERVICE_SHUTDOWN_AT: "",
+      // The clock the fidelity suite compares against, pinned for the same
+      // reason the manifest pins `query: "?range=d7&cmp=weekday"` — so both
+      // sides answer the same question. Unpinned, `trailingWeeks` includes the
+      // running week clipped to today, and on a Monday that week is a day old
+      // with nothing synced: no prime cost, so no `.mtr`, so a red gate one day
+      // in seven. See `src/lib/counter/today.ts`; the override is ignored
+      // wherever VERCEL_ENV is set, so it cannot move a deployment's clock.
+      //
+      // 2026-08-28 is a FRIDAY, chosen so the running week is partial and still
+      // carries data. A Monday would reproduce the very gap this pin closes.
+      COUNTER_TODAY: "2026-08-28",
     },
   },
 })

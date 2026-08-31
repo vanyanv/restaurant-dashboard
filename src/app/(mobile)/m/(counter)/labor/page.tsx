@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getLaborSectionPromises } from "@/lib/counter/adapters/labor"
 import { CounterPhoneLaborClient } from "./counter-phone-labor-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -54,7 +55,7 @@ export default async function MobileLaborPage({
   // Resolved once, here, and passed to both the params reader and the island —
   // a moving `new Date()` re-evaluated in two places could disagree about
   // which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

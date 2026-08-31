@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
 import { CounterPhonePnlClient } from "./counter-phone-pnl-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -50,7 +51,7 @@ export default async function MobilePnlPage({
   // a moving `new Date()` re-evaluated in two places could disagree about
   // which calendar day "today" is, and the weeks are anchored on today rather
   // than on the range (note 53).
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

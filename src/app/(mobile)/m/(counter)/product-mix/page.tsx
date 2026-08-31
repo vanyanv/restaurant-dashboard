@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getProductMixSectionPromises } from "@/lib/counter/adapters/product-mix"
 import { CounterPhoneProductMixClient } from "./counter-phone-product-mix-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -27,7 +28,7 @@ export default async function MobileProductMixPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   const sections = getProductMixSectionPromises({

@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getMenuHubSectionPromises } from "@/lib/counter/adapters/menu-hub"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { CounterPhoneMenuClient } from "./counter-phone-menu-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -36,7 +37,7 @@ export default async function MobileMenuPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   const sections = getMenuHubSectionPromises(
