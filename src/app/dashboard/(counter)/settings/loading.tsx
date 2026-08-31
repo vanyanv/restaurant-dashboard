@@ -16,6 +16,9 @@ export default function Loading() {
       <Section title="Where sign-ins came from" data={loading()} pad={false}>
         {() => null}
       </Section>
+      <Section title="Brand" data={loading()}>
+        {() => null}
+      </Section>
       <Section title="Preferences" data={loading()}>
         {() => null}
       </Section>

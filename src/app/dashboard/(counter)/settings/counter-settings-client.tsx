@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react"
 import {
+  Wordmark,
   Kv,
   PageHead,
   Section,
@@ -310,6 +311,34 @@ export function CounterSettingsClient({
               {s.note}
             </p>
           </>
+        )}
+      </Section>
+
+      {/* `P.settings`' "Brand". Static — it describes the design system, not
+          this account. The prototype's own copy claims the accent is sampled
+          from the wordmark; nothing here records that, so the panel says what
+          the colours are FOR instead. */}
+      <Section title="Brand" meta={() => "used on login and in the rail"} data={sections.brand} pending={pending}>
+        {(b) => (
+          <div style={{ display: "grid", gap: 12, justifyItems: "start" }}>
+            <Wordmark />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {b.swatches.map((sw) => (
+                <span
+                  className="qbtn"
+                  key={sw.key}
+                  style={{ ["--qc" as string]: `var(--${sw.token})` }}
+                >
+                  <i />
+                  {sw.label}
+                  <span className="n">{sw.what}</span>
+                </span>
+              ))}
+            </div>
+            <p className="mono" style={{ margin: 0, maxWidth: "56ch" }}>
+              {b.note}
+            </p>
+          </div>
         )}
       </Section>
 
