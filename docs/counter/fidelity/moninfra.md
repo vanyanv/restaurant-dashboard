@@ -40,11 +40,11 @@ Structure: 1 missing, 11 extra, 10 matched. Rendering (light): 0 property differ
 
 ## fidelity-mobile — phone
 
-**The prototype renders 9 landmarks on this page. We render 24.**
+**The prototype renders 9 landmarks on this page. We render 21.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
-| `.band` | 0 | 4 |
+| `.band` | 0 | 1 |
 | `.kv` | 0 | 2 |
 | `.mlist` | 2 | 0 |
 | `.mstrip` | 1 | 0 |
@@ -54,7 +54,7 @@ Structure: 1 missing, 11 extra, 10 matched. Rendering (light): 0 property differ
 | `.strip` | 0 | 1 |
 | `.tbl` | 0 | 3 |
 
-Structure: 3 missing, 18 extra, 6 matched. Rendering (light): 12 property differences on the 6 landmarks present on both sides.
+Structure: 3 missing, 15 extra, 6 matched. Rendering (light): 12 property differences on the 6 landmarks present on both sides.
 
 ### Missing — the prototype has these and we do not
 
@@ -67,21 +67,18 @@ Structure: 3 missing, 18 extra, 6 matched. Rendering (light): 12 property differ
 - `#1 .sec__body`
 - `#2 .strip`
 - `#3 .band`
-- `#4 .band`
-- `#5 .band`
-- `#6 .band`
+- `#4 .sec`
+- `#6 .tbl`
 - `#7 .sec`
+- `#8 .sec__head`
 - `#9 .tbl`
 - `#10 .sec`
 - `#11 .sec__head`
 - `#12 .tbl`
 - `#13 .sec`
 - `#14 .sec__head`
-- `#15 .tbl`
-- `#16 .sec`
-- `#17 .sec__head`
-- `#19 .kv`
-- `#23 .kv`
+- `#16 .kv`
+- `#20 .kv`
 
 ### Rendering differences
 

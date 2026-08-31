@@ -1025,10 +1025,65 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 34, mobile: 9 },
   },
-  { protoId: "ingredient", name: "An ingredient", protoRoute: "/dashboard/ingredients/ground-beef-80-20", route: "/dashboard/ingredients/cmo58ubkh00143nu9b0c14gi1", mobileRoute: "/m/ingredients/cmo58ubkh00143nu9b0c14gi1", report: true, status: "editorial" },
+  {
+    protoId: "ingredient",
+    name: "An ingredient",
+    protoRoute: "/dashboard/ingredients/ground-beef-80-20",
+    route: "/dashboard/ingredients/cmo58ubkh00143nu9b0c14gi1",
+    mobileRoute: "/m/ingredients/cmo58ubkh00143nu9b0c14gi1",
+    report: true,
+    // MEASURED, and complete on BOTH surfaces: 12 of the prototype's 12 on the
+    // desk, 9 of 9 on the phone, landmark for landmark with zero rendering
+    // differences, zero dark defects and no allowance of any kind.
+    //
+    // It was built complete in `7f9a9a54` and sat `editorial` only because the
+    // manifest had stopped being updated — the page never needed a change, just
+    // someone to look at it.
+    //
+    // The prototype's own subject is "the SKUs billing against it are not all
+    // the same product", and ours renders that from real matches rather than
+    // the invented pair; the shapes agree because the finding is the same one.
+    status: "counter",
+    baseline: { desktop: 12, mobile: 9 },
+  },
   { protoId: "prices", name: "Ingredients", protoRoute: "/dashboard/ingredients/prices", route: "/dashboard/ingredients/prices", report: true, status: "editorial" },
   { protoId: "vendors", name: "Vendors", protoRoute: "/dashboard/operations/vendors", route: "/dashboard/operations/vendors", mobileRoute: "/m/operations/vendors", report: true, status: "editorial" },
-  { protoId: "vendor", name: "A vendor", protoRoute: "/dashboard/operations/vendors/ifs-produce", route: "/dashboard/operations/vendors/Sysco", mobileRoute: "/m/operations/vendors/Sysco", report: true, status: "editorial" },
+  {
+    protoId: "vendor",
+    name: "A vendor",
+    protoRoute: "/dashboard/operations/vendors/ifs-produce",
+    route: "/dashboard/operations/vendors/Sysco",
+    mobileRoute: "/m/operations/vendors/Sysco",
+    // The window the prototype is in, and this page is the textbook case the
+    // `query` docblock above describes rather than a new one. Without it the
+    // gate reported a MISSING `.ch` and an EXTRA `.strip` on the desk, plus two
+    // `data-n`/`grid-template-columns` differences on that strip — all four of
+    // them our `Chart` and the prototype's `chart()` applying the SAME rule to
+    // different-shaped input. One reading is not a chart, so both degrade it to
+    // a strip; ours degraded and the prototype's did not, because ours was
+    // asked for one day and its default is seven.
+    query: "?range=d7&cmp=weekday",
+    report: true,
+    // MEASURED with that window: 12 of the prototype's 12 on the desk and 5 of
+    // 5 on the phone — landmark for landmark, and the phone is clean.
+    //
+    // NOT GATED, for one honest difference the window uncovered. Our strip
+    // draws FOUR cells where the prototype draws five, so `.strip` reports
+    // `data-n="4"` against `"5"` and four grid tracks against five. The extra
+    // `.strip` was hiding it: an extra leaves the rendering comparison (F-R8),
+    // so those two differences were never being checked.
+    //
+    // The adapter argues two of the five: `VendorLeadTime` is empty and
+    // nothing records a promised date, so "Median lead time" and the "Breaks,
+    // 90 days" count that leans on it have no source, and delivery cadence and
+    // the reconcile count take their place. That is four for four. The FIFTH,
+    // "Basket price", is the one nobody has ruled on — it is the price
+    // monitor's own figure, and whether a vendor page should restate it or
+    // link to it is the shared-figure rule's question, not a gap to paper over
+    // with a `styleAllowances` line. Declaring the count difference before
+    // that is decided would freeze the answer at "four" by accident.
+    status: "editorial",
+  },
   { protoId: "packaging", name: "Vendors", protoRoute: "/dashboard/operations/packaging", route: "/dashboard/operations/packaging", mobileRoute: "/m/operations/packaging", report: true, status: "editorial" },
   { protoId: "stores", name: "Stores", protoRoute: "/dashboard/stores", route: "/dashboard/stores", mobileRoute: "/m/stores", report: true, status: "editorial" },
   {
