@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react"
 import {
-  Wordmark,
   Kv,
   PageHead,
   Section,
   Table,
+  toneStyle,
   useCounterTransition,
   usePageChrome,
+  Wordmark,
   type Column,
 } from "@/components/counter"
 import {
@@ -31,13 +32,6 @@ import type {
  * (nothing issues an invite). Both are replaced by a statement of what the
  * data does say rather than a control that would do nothing. See the adapter.
  */
-const SIGNIN_COLUMNS: Column[] = [
-  { key: "agent", label: "Came from" },
-  { key: "signins", label: "Sign-ins", numeric: true },
-  { key: "addresses", label: "Addresses", numeric: true },
-  { key: "last", label: "Most recent" },
-]
-
 const TEAM_COLUMNS: Column[] = [
   { key: "person", label: "Person" },
   { key: "email", label: "Email" },
@@ -275,7 +269,20 @@ export function CounterSettingsClient({
       <Section title="Account" meta={(a) => a.meta} data={sections.account} pending={pending}>
         {(a) => (
           <>
-            <Kv rows={a.rows} />
+            {/* `P.settings`' Account is SETROWS, not a `.kv` — see
+                `SettingRow`. The two that carry a control (the timezone
+                select, the password button) are `AccountControls` below. */}
+            {a.rows.map((r) => (
+              <div className="setrow" key={r.label}>
+                <div className="tx">
+                  <b>{r.label}</b>
+                  <span>{r.detail}</span>
+                </div>
+                <span className="mono" style={toneStyle(r.tone)}>
+                  {r.value}
+                </span>
+              </div>
+            ))}
             <AccountControls data={a} />
             {a.clockWarning !== null ? (
               <p className="mono" style={{ marginBottom: 0 }}>
@@ -300,15 +307,40 @@ export function CounterSettingsClient({
         meta={(s) => s.meta}
         data={sections.signins}
         pending={pending}
-        pad={false}
         askAbout="who has signed in recently"
       >
         {(s) => (
           <>
-            <Table columns={SIGNIN_COLUMNS} rows={s.rows} />
-            {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            {/* `P.settings`' Sessions panel is setrows, one device a line.
+                Ours are the same rows read off the log — see the adapter for
+                why a live session list is not available. */}
+            {s.rows.map((r) => (
+              <div className="setrow" key={r.label}>
+                <div className="tx">
+                  <b>{r.label}</b>
+                  <span>{r.detail}</span>
+                </div>
+                <span className="mono">{r.value}</span>
+              </div>
+            ))}
+            <p className="mono" style={{ margin: "10px 0 0" }}>
               {s.note}
+            </p>
+          </>
+        )}
+      </Section>
+
+      <Section
+        title="Preferences"
+        meta={(p) => p.meta}
+        data={sections.preferences}
+        pending={pending}
+      >
+        {(p) => (
+          <>
+            <Kv rows={p.rows} />
+            <p className="mono" style={{ marginBottom: 0 }}>
+              {p.note}
             </p>
           </>
         )}
@@ -343,22 +375,6 @@ export function CounterSettingsClient({
       </Section>
 
       <Section
-        title="Preferences"
-        meta={(p) => p.meta}
-        data={sections.preferences}
-        pending={pending}
-      >
-        {(p) => (
-          <>
-            <Kv rows={p.rows} />
-            <p className="mono" style={{ marginBottom: 0 }}>
-              {p.note}
-            </p>
-          </>
-        )}
-      </Section>
-
-      <Section
         title="Who can see this"
         meta={(t) => t.meta}
         data={sections.team}
@@ -369,9 +385,14 @@ export function CounterSettingsClient({
         {(t) => (
           <>
             <Table columns={TEAM_COLUMNS} rows={t.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {t.note}
-            </p>
+            {/* `P.settings` closes Team with a real `.sec__body` under the
+                table — it holds the invite buttons there, and the note. We
+                have the note; the buttons are declared in the manifest. */}
+            <div className="sec__body">
+              <p className="mono" style={{ margin: 0 }}>
+                {t.note}
+              </p>
+            </div>
           </>
         )}
       </Section>
