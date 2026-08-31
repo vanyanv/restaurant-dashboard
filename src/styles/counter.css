@@ -140,6 +140,20 @@
    * it does in light. */
   --ct-scrim:        light-dark(oklch(24% 0.014 40 / 0.3), oklch(8% 0.010 60 / 0.55));
 
+  /* The 1px raise under a pressed segment — `.seg button[aria-pressed="true"]`
+   * writes it as a literal (counter-components.css:155), one of the 35 the
+   * ported sheet inherited. It is named here because `counter-repairs.css`
+   * gives the same treatment to a `.seg` LINK (the monitoring tabs are eight
+   * routes, not eight views of one document), and a repair that re-typed the
+   * literal would make it 36.
+   *
+   * Light is that literal verbatim: --ct-ink's light value at 10%. Dark is the
+   * --ct-scrim treatment for the same reason it needed one — --ct-ink themes
+   * to near-white, so the ported value would paint a glow under the pressed
+   * chip instead of seating it. 8% lightness, warm-tinted, at a lower alpha
+   * than the scrim because this is a 1px seat, not a veil over a page. */
+  --ct-raise:        light-dark(oklch(24% 0.014 40 / 0.10), oklch(8% 0.010 60 / 0.45));
+
   /* ink */
   --ct-ink:          light-dark(oklch(24% 0.014 40), oklch(93% 0.010 60));
   --ct-ink-2:        light-dark(oklch(47% 0.012 45), oklch(74% 0.011 55));

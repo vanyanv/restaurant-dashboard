@@ -1,4 +1,4 @@
-# Fidelity — COGS (`usage`)
+# Fidelity — Product usage (`usage`)
 
 Route `/dashboard/operations/product-usage` · manifest status **editorial** · captured, not gated · measured 2026-08-31
 

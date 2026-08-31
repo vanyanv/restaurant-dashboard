@@ -6,35 +6,44 @@ import {
   PageHead,
   Section,
   Strip,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { MONITORING_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { MonitoringSections } from "@/lib/counter/adapters/monitoring"
 
 /**
  * Monitoring, composed from `P.monitoring.desk()`:
  *
- *   strip -> subsystems -> recent events.
+ *   strip -> subsystems -> sync duration -> recent events.
  *
- * `Sync duration` as a chart is dropped. `ExternalSignalSyncRun` carries a
- * `durationMs` per run, but the two providers in this account run three times
- * a day between them and one of them fails in under a second every time — a
- * bar chart of that is a picture of a dead integration's response latency,
- * which is not a thing anyone needs to see over time. The mean duration is a
- * column on the table instead.
+ * Landmark for landmark, in that order. The prototype wraps the last two in a
+ * `.split`; ours are siblings, which is invisible to the gate and identical on
+ * the screen at this width.
+ *
+ * ## The eight tabs are chrome now, not a section
+ *
+ * This page carried a fifth section, "The other pages" — a two-column table of
+ * the seven sibling monitoring routes and a sentence about each. It was
+ * written when those pages were reachable only by typing the URL, and it fixed
+ * that. But it also put a `.sec`, a `.sec__head` and a `.tbl` on a page whose
+ * design has none of them, and it was the only reason this page could not be
+ * gated: the fidelity structure pass never forgives an EXTRA.
+ *
+ * The design's own answer is `viewTabs()` — a `.seg` in `.phactions`, on every
+ * one of the eight, which is what `SubNav` renders here. It is the better
+ * answer regardless of the gate: a table of links is a page telling you where
+ * else you could go, and a segmented control is the set you are already inside.
+ * The sentences it drops were describing pages you are now one click from.
  *
  * The masthead says "developer-facing" rather than the prototype's "not
  * visible to the owner" — see the page's own note on why no gate can deliver
  * the second claim.
  */
-const TAB_COLUMNS: Column[] = [
-  { key: "tab", label: "Page" },
-  { key: "what", label: "What it answers" },
-]
-
 export type CounterMonitoringSections = SectionSources<MonitoringSections>
 
 const SUBSYSTEM_COLUMNS: Column[] = [
@@ -65,20 +74,14 @@ export function CounterMonitoringClient({
       <PageHead
         title="System monitoring"
         sub="Developer-facing · the state of the things that run on their own"
-      />
+      >
+        {/* `viewTabs()` — the eight tabs are chrome on every one of
+            them, not a table of links on the first. */}
+        <SubNav items={MONITORING_TABS} label="Monitoring" />
+      </PageHead>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
-      </Section>
-
-      <Section
-        title="The other pages"
-        meta={(t) => t.meta}
-        data={sections.tabs}
-        pending={pending}
-        pad={false}
-      >
-        {(t) => <Table columns={TAB_COLUMNS} rows={t.rows} />}
       </Section>
 
       <Section

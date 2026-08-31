@@ -76,6 +76,9 @@ export { usePageChrome, type PageChrome } from "./shell/page-chrome"
 export { useCounterTransition, type CounterTransition } from "./shell/counter-transition"
 export { Rail, type RailUser } from "./shell/rail"
 export { PageHead, PAGE_TITLE_ID } from "./shell/page-head"
+/* `.seg` as page chrome — the prototype's `viewTabs()`, with real routes
+   behind it. `MONITORING_TABS` is the one group that uses it today. */
+export { SubNav } from "./shell/sub-nav"
 export { SyncChip, type SyncState } from "./shell/sync-chip"
 export { Calendar } from "./shell/calendar"
 export { Wordmark } from "./shell/wordmark"

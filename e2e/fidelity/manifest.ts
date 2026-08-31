@@ -1220,25 +1220,43 @@ export const PAGES: FidelityPage[] = [
     route: "/dashboard/admin/monitoring",
     mobileRoute: "/m/monitoring",
     report: true,
-    // MEASURED: phone 5 of 5, complete. Desk renders 15 against the
-    // prototype's 13 — one missing (the date control's "Apply") and three
-    // EXTRA, which are one section: "The other pages".
+    // MEASURED: 12 of the prototype's 13 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The one missing landmark
+    // is declared below.
     //
-    // NOT GATED, and the extra is not a mistake to delete quietly. Its
-    // adapter docblock states the case: the editorial `TabStrip` that linked
-    // monitoring's six sub-pages is not rendered on a Counter page and nothing
-    // replaced it, so "six built pages with no way in is a worse fault than
-    // anything on them". The prototype has no equivalent because its own page
-    // index reaches them — an affordance of the fixture, not of the product.
+    // The three EXTRA that held this page at "editorial" were one section,
+    // "The other pages" — a table listing the sibling monitoring routes,
+    // written because the editorial `TabStrip` that used to link them is not
+    // rendered on a Counter page and nothing had replaced it. Six built pages
+    // with no way in was the worse fault, and the table was the honest
+    // stopgap. The design's own answer is `viewTabs()`: a `.seg` in
+    // `.phactions` on all eight, which is what `SubNav` renders now. The table
+    // is gone with it.
     //
-    // `PageHead` already documents "a segmented control" among its expected
-    // children and `.seg` carries rules in the sheet, so the design's answer
-    // is chrome-level tabs across all seven monitoring pages rather than a
-    // table on one of them. That is a navigation decision, not a rendering
-    // one, and it is left for a human. Adding the seg would also cost nothing
-    // structurally: `.seg` is not a landmark and lives outside the extraction
-    // root.
-    status: "editorial",
+    // The seg costs nothing structurally — `.seg` is not a landmark — but it
+    // is NOT outside the extraction root, as the note here used to claim:
+    // `.pagehead` sits inside `.screen` on the prototype side and inside
+    // `#ct-main` on ours, so the dark pass sweeps every one of its eight links
+    // like any other chrome. That is why `--ct-raise` exists rather than a
+    // thirty-sixth inherited literal.
+    status: "counter",
+    baseline: { desktop: 12, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\", the same subtraction `moncosts` and " +
+          "the alerts page declare. `P.monitoring` does not set `nodate`, so " +
+          "the prototype draws `CD.bar()` and its Apply button; this page " +
+          "mounts no `DateControl` because every figure on it is a fixed " +
+          "trailing window chosen by what the underlying tables retain — 24 " +
+          "hours of errors, 7 days of runs and durations — not by a reader. " +
+          "See the page's own note. The phone has no page head furniture on " +
+          "either side.",
+      },
+    ],
   },
   { protoId: "monml", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ml", route: "/dashboard/admin/monitoring/ml", report: true, status: "editorial" },
   {

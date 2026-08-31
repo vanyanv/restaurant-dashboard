@@ -120,3 +120,43 @@ export function isActive(item: NavItem, pathname: string): boolean {
   if (item.exact) return pathname === item.href
   return pathname === item.href || pathname.startsWith(`${item.href}/`)
 }
+
+/**
+ * The eight monitoring tabs, in the prototype's own order.
+ *
+ * `VIEWS.monitoring` (prototype line 8129): "Eight tabs, because the app runs
+ * eight. Bridge first, because it is the one that answers 'is anything broken'
+ * without being read." The prototype draws them with `viewTabs()` as a `.seg`
+ * in `.phactions` — page chrome, beside the date control, on every tab.
+ *
+ * They were a TABLE on the hub until now ("The other pages", six rows of a
+ * label and a sentence), which is why the hub rendered a `.sec`, a
+ * `.sec__head` and a `.tbl` the design does not have. A table of links is a
+ * page telling you where else to go; a segmented control is the place you
+ * already are. The design chose the second, and the sentences it drops were
+ * never on the screen it was drawn for.
+ *
+ * NOT `NavItem`s and not in `NAV_GROUPS`: a monitoring tab is not a rail
+ * destination (note 24 — the rail is seventeen items and "a monitoring tab is
+ * not a destination", prototype line 2207). `Monitoring` itself is the rail
+ * item; these are what it opens onto.
+ *
+ * The labels are the prototype's, not the page titles: `.seg button` is
+ * 11px mono at .08em tracking and eight of them share one row, so "Infra"
+ * fits where "Infrastructure" wraps the control onto a second line.
+ */
+export interface SubNavItem {
+  label: string
+  href: string
+}
+
+export const MONITORING_TABS: readonly SubNavItem[] = [
+  { label: "Bridge", href: "/dashboard/admin/monitoring" },
+  { label: "Infra", href: "/dashboard/admin/monitoring/infrastructure" },
+  { label: "People", href: "/dashboard/admin/monitoring/people" },
+  { label: "Costs", href: "/dashboard/admin/monitoring/costs" },
+  { label: "Model", href: "/dashboard/admin/monitoring/ml" },
+  { label: "Ingredients", href: "/dashboard/admin/monitoring/ingredient-audit" },
+  { label: "Activity", href: "/dashboard/admin/monitoring/activity" },
+  { label: "Cache", href: "/dashboard/admin/monitoring/cache" },
+] as const
