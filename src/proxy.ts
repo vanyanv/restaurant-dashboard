@@ -54,6 +54,22 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu-profit": "/m/menu-profit",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
+  // Monitoring, and a deferral its own pages have since answered. The note
+  // below used to say this was "a question for whoever owns it" — whether the
+  // phone view is the intended destination for an admin route. Five phone
+  // surfaces now exist under /m/monitoring, each built on `MStrip` and `MList`
+  // against `P.*.phone()`, which is that question answered by whoever built
+  // them. Unreachable from their desk URL until now.
+  //
+  // The three tabs WITHOUT a phone page — ml, infrastructure, ingredient-audit
+  // — are deliberately absent from this list, and no exception entry is needed
+  // for them: these are exact matches, not a dynamic base, so an unmapped tab
+  // returns null and stays on desktop.
+  "/dashboard/admin/monitoring": "/m/monitoring",
+  "/dashboard/admin/monitoring/activity": "/m/monitoring/activity",
+  "/dashboard/admin/monitoring/cache": "/m/monitoring/cache",
+  "/dashboard/admin/monitoring/costs": "/m/monitoring/costs",
+  "/dashboard/admin/monitoring/people": "/m/monitoring/people",
   // Stores had no mobile equivalent left after the mobile bloat deletion, and
   // this comment said so until `/m/stores` was rebuilt on Counter; the desk
   // path is mapped exactly above now. Analytics was in that list until it was
@@ -63,12 +79,10 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // in that list too until this task gave it a phone route of its own — see
   // the entry above.
   //
-  // The list is NOT exhaustive of what is unmapped: /dashboard/admin/monitoring
-  // has a phone page (/m/monitoring) and no entry here, so a phone lands on the
-  // desktop admin view. That predates this map's Counter entries and is left
-  // alone rather than mapped on the way past — it is an admin route, and
-  // whether the phone view is the intended destination is a question for
-  // whoever owns it, not a side effect of adding Ask.
+  // The list is NOT exhaustive of what is unmapped, and monitoring used to be
+  // the example here — a phone page with no entry, so a phone landed on the
+  // desktop admin view. It is mapped above now; see that block for why the
+  // question it was waiting on has been answered.
   // Settings folded into /m/more (profile + sign-out) — map straight there
   // instead of through /m/settings (which itself now just redirects to
   // /m/more) to avoid an unnecessary extra hop.

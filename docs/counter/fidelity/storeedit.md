@@ -23,11 +23,11 @@ Structure: 0 missing, 0 extra, 16 matched. Rendering (light): 0 property differe
 
 ## fidelity-mobile — phone
 
-**The prototype renders 4 landmarks on this page. We render 15.**
+**The prototype renders 4 landmarks on this page. We render 16.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
-| `.btn` | 0 | 1 |
+| `.btn` | 0 | 2 |
 | `.btnrow` | 0 | 1 |
 | `.mlist` | 1 | 0 |
 | `.qitem` | 0 | 3 |
@@ -37,7 +37,7 @@ Structure: 0 missing, 0 extra, 16 matched. Rendering (light): 0 property differe
 | `.sec__head` | 1 | 3 |
 | `.tbl` | 0 | 1 |
 
-Structure: 1 missing, 12 extra, 3 matched. Rendering (light): 6 property differences on the 3 landmarks present on both sides.
+Structure: 1 missing, 13 extra, 3 matched. Rendering (light): 6 property differences on the 3 landmarks present on both sides.
 
 ### Missing — the prototype has these and we do not
 
@@ -47,16 +47,17 @@ Structure: 1 missing, 12 extra, 3 matched. Rendering (light): 6 property differe
 
 - `#3 .btnrow`
 - `#4 .btn`
-- `#5 .sec`
-- `#6 .sec__head`
-- `#7 .sec__body`
-- `#8 .queue`
-- `#9 .qitem`
+- `#5 .btn`
+- `#6 .sec`
+- `#7 .sec__head`
+- `#8 .sec__body`
+- `#9 .queue`
 - `#10 .qitem`
 - `#11 .qitem`
-- `#12 .sec`
-- `#13 .sec__head`
-- `#14 .tbl`
+- `#12 .qitem`
+- `#13 .sec`
+- `#14 .sec__head`
+- `#15 .tbl`
 
 ### Rendering differences
 
