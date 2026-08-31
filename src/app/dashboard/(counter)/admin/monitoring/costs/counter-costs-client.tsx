@@ -82,9 +82,37 @@ export function CounterCostsClient({
           </>
         )}
       </Section>
+
+      {/* `P.moncosts`' fourth panel. All-time rather than windowed — see the
+          adapter: eight turns have ever failed and none recently, so the
+          fourteen-day scope this page otherwise uses would draw an empty
+          table over a real record. */}
+      <Section
+        title="Turns that were not OK"
+        meta={(f) => f.meta}
+        data={sections.failures}
+        pending={pending}
+        pad={false}
+      >
+        {(f) => (
+          <>
+            <Table columns={FAILURE_COLUMNS} rows={f.rows} />
+            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              {f.note}
+            </p>
+          </>
+        )}
+      </Section>
     </>
   )
 }
+
+const FAILURE_COLUMNS: Column[] = [
+  { key: "when", label: "When" },
+  { key: "feature", label: "Feature" },
+  { key: "outcome", label: "Outcome" },
+  { key: "cost", label: "Cost", numeric: true },
+]
 
 /** Cents matter here — the whole month is under a dollar. */
 const USD = (v: number) => `$${v.toFixed(3)}`

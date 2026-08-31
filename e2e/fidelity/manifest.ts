@@ -1232,7 +1232,40 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 12, mobile: 5 },
   },
   { protoId: "moninfra", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/infrastructure", route: "/dashboard/admin/monitoring/infrastructure", report: true, status: "editorial" },
-  { protoId: "moncosts", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/costs", route: "/dashboard/admin/monitoring/costs", mobileRoute: "/m/monitoring/costs", report: true, status: "editorial" },
+  {
+    protoId: "moncosts",
+    name: "Monitoring · Costs",
+    protoRoute: "/dashboard/admin/monitoring/costs",
+    route: "/dashboard/admin/monitoring/costs",
+    mobileRoute: "/m/monitoring/costs",
+    report: true,
+    // MEASURED: 11 of the prototype's 12 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The one missing landmark
+    // is declared below.
+    //
+    // "Turns that were not OK" was the gap — three landmarks — and it is built
+    // now from `ChatTurn`, which already carried `status`, `finishReason` and
+    // a join to the usage event's cost.
+    status: "counter",
+    baseline: { desktop: 11, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\", and the same subtraction the alerts " +
+          "page declares for the same reason. `P.moncosts` does not set " +
+          "`nodate`, so the prototype draws `CD.bar()` and its Apply button; " +
+          "this page mounts no `DateControl` because its window is not the " +
+          "reader's to choose — `COST_DAYS` is 14, the feature table is 7 " +
+          "days and the spend total is 30, three fixed spans this page states " +
+          "rather than offers. A control that changed one of them would have " +
+          "to change all three or lie about two. The phone has no page head " +
+          "furniture on either side.",
+      },
+    ],
+  },
   { protoId: "moncache", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/cache", route: "/dashboard/admin/monitoring/cache", mobileRoute: "/m/monitoring/cache", report: true, status: "editorial" },
   { protoId: "monactivity", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/activity", route: "/dashboard/admin/monitoring/activity", mobileRoute: "/m/monitoring/activity", report: true, status: "editorial" },
   { protoId: "moningredients", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ingredient-audit", route: "/dashboard/admin/monitoring/ingredient-audit", report: true, status: "editorial" },
