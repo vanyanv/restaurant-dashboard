@@ -1350,7 +1350,41 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 12, mobile: 5 },
   },
-  { protoId: "moninfra", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/infrastructure", route: "/dashboard/admin/monitoring/infrastructure", report: true, status: "editorial" },
+  {
+    protoId: "moninfra",
+    name: "Monitoring · Infra",
+    protoRoute: "/dashboard/admin/monitoring/infrastructure",
+    route: "/dashboard/admin/monitoring/infrastructure",
+    mobileRoute: "/m/monitoring/infrastructure",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance
+    // of any kind: 11 of 11 on the desk, 9 of 9 on the phone, 0 extra, 0
+    // rendering differences, 0 dark defects. `P.moninfra` sets `nodate: true`,
+    // so there is no Apply button to declare either.
+    //
+    // This page was the furthest OVER its design of any in the manifest: 21
+    // landmarks against 11 on the desk, and on the phone it had no phone
+    // surface at all — the mobile project landed on the desk page and measured
+    // 21 against 9. Both are fixed by the same pass.
+    //
+    // The desk lost four things, and each was somewhere else's job: a verdict
+    // block (`P.monactivity`'s device, not this page's — its figures are in
+    // the strip), an Errors table (`ErrorEvent` belongs to the Activity tab,
+    // which draws it by hour and at a finer grain), a `.kv` of three "not
+    // recorded" rows (a panel built out of absences; it is the closing
+    // paragraph now, which is what `P.moninfra` ends with), and a `.band` on
+    // the Database cell (a `caption` opens one, and this design's strip cells
+    // are four-tuples — the snapshot age moved into the delta, where the
+    // prototype puts its own).
+    //
+    // TWO SUBSTITUTIONS, both recorded on the page: the first table is
+    // Scheduled jobs where the design has Tokens, because nothing here records
+    // a credential's expiry and five green tags derived from nothing read as a
+    // check that ran; and the `.kv` is Files where the design says R2 bucket,
+    // which is the same panel under this product's name for it.
+    status: "counter",
+    baseline: { desktop: 11, mobile: 9 },
+  },
   {
     protoId: "moncosts",
     name: "Monitoring · Costs",
