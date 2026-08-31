@@ -250,18 +250,18 @@ function headlineOf(d: InfraData): InfraHeadline {
     {
       label: "Files",
       value: bytes(d.r2Bytes),
-      caption: `${count(d.r2Objects)} objects · ${ago(d.r2At)}`,
+      delta: `${count(d.r2Objects)} objects · ${ago(d.r2At)}`,
     },
     {
       label: "Runs that failed",
       value: `${count(realFailures)} of ${count(realRuns)}`,
-      caption: `in ${count(JOB_DAYS)} days, gate verdicts excluded`,
+      delta: `in ${count(JOB_DAYS)} days, gate verdicts excluded`,
       deltaTone: realFailures > 0 ? "is-down" : undefined,
     },
     {
       label: "Errors logged",
       value: count(d.errors.length),
-      caption: `in ${count(ERROR_DAYS)} days, all of them the watchdog`,
+      delta: `in ${count(ERROR_DAYS)} days, all of them the watchdog`,
       deltaTone: "is-flat",
     },
   ]

@@ -272,7 +272,7 @@ function headlineOf(d: PriceData): PriceHeadline {
     {
       label: net < 0 ? "The moves are saving" : "The moves are costing",
       value: money(Math.abs(net)),
-      caption: `over ${count(VOLUME_DAYS)} days, at current volume`,
+      delta: `over ${count(VOLUME_DAYS)} days, at current volume`,
       deltaTone: net > 0 ? "is-down" : undefined,
     },
     {
@@ -291,7 +291,7 @@ function headlineOf(d: PriceData): PriceHeadline {
     {
       label: "Pack shape varies",
       value: count(packVaries),
-      caption: `of ${count(d.movers.length)} · one SKU, two pack sizes`,
+      delta: `of ${count(d.movers.length)} · one SKU, two pack sizes`,
       deltaTone: "is-flat",
     },
   ]

@@ -257,29 +257,43 @@ function headlineOf(d: IngredientAuditData): AuditHeadline {
         `"${d.chargeCanonicals.find((c) => c.spend > 0)?.name}", which is not an ingredient.`
       : "")
 
+  /*
+   * DELTA, NOT CAPTION. `Figure` mirrors the prototype's `c[4] || r`: a
+   * caption opens a `.band` and a delta fills the `.d` beside the value.
+   * `P.moningredients`'s own cells are `['Matched', '1,284', 'of 1,412 SKUs',
+   * '']` — four elements, so the qualifying phrase is the DELTA and there is
+   * no band at all.
+   *
+   * Three of these four carried the phrase as a `caption` and a `deltaTone`
+   * with no `delta` to tone, which renders four `.band`s the design does not
+   * have and drops the tone on the floor. Same words, correct slot; the
+   * fidelity gate never forgives an extra, and these were four of them.
+   */
   const cells: FigureProps[] = [
     {
       label: "Applied automatically",
       value: count(applied),
-      caption: applied === 0 ? `${count(shadow)} recorded in shadow, none applied` : "matches",
+      delta: applied === 0 ? `${count(shadow)} recorded in shadow, none applied` : "matches",
       deltaTone: "is-flat",
     },
     {
       label: "Lines matched",
       value: `${count(matchedLines)} of ${count(totalLines)}`,
-      delta: pct(totalLines === 0 ? null : matchedLines / totalLines),
-      caption: `${money(unmatchedSpend)} unmatched`,
+      // The one cell with two facts to state. The share is the reading; the
+      // dollars are what it costs, and they go together in the delta rather
+      // than opening a band for the second half.
+      delta: `${pct(totalLines === 0 ? null : matchedLines / totalLines)} · ${money(unmatchedSpend)} unmatched`,
     },
     {
       label: "Still unmatched",
       value: count(realUnmatched),
-      caption: `${count(d.unmatched.length - realUnmatched)} more are charge rows, correctly declined`,
+      delta: `${count(d.unmatched.length - realUnmatched)} more are charge rows, correctly declined`,
       deltaTone: "is-down",
     },
     {
       label: "Freight matched as food",
       value: money(chargeSpend),
-      caption: `${count(d.chargeCanonicals.length)} canonicals that are not ingredients`,
+      delta: `${count(d.chargeCanonicals.length)} canonicals that are not ingredients`,
       deltaTone: "is-down",
     },
   ]
