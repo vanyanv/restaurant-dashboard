@@ -255,7 +255,12 @@ describe("C2: shallow-checkout resilience", () => {
   it("throws BaselineUnreachableError — not a wall of violations — when the baseline commit can't be read", () => {
     let thrown: unknown
     try {
-      lintCounter([join(process.cwd(), "src", "app", "dashboard")], {
+      // The mobile shell, because it is what is still LEGACY-covered. This
+      // read `src/app/dashboard` until that entry was deleted — the dashboard
+      // tree stopped suppressing anything once 46 of its 51 pages were Counter
+      // pages, and a root with no LEGACY entry never consults the baseline at
+      // all, so the throw this test exists for could not happen there.
+      lintCounter([join(process.cwd(), "src", "app", "(mobile)", "m")], {
         baselineCommit: UNREACHABLE_COMMIT,
       })
     } catch (err) {
