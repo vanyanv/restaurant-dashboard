@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import {
   Kv,
   MoneyLines,
@@ -85,19 +84,34 @@ export function CounterInvoiceClient({
           data={sections.document}
           pending={pending}
         >
+          {/* `P.invoice`'s `docPane()` — the DOCUMENT, not a description of
+              it. "The stored PDF and what the model read out of it, side by
+              side, because the failure that matters is a line the table never
+              got" is the page's own note, and it only works if the PDF is
+              actually here. This was a `.kv` of line counts and a button to
+              open the file in a new tab; the counts are the note underneath
+              (see `countsNote`), which says more than the list did, and the
+              route already serves `Content-Disposition: inline`. */}
           {(d) => (
             <>
-              <Kv rows={d.rows} />
-              <p className="mono" style={{ margin: "11px 0 0" }}>
+              {d.href ? (
+                <object
+                  className="docpane"
+                  data={d.href}
+                  type="application/pdf"
+                  aria-label="The stored invoice PDF"
+                >
+                  {/* Rendered only where the browser cannot display a PDF —
+                      no `.btn`, because it is a fallback rather than an
+                      action the design puts on this panel. */}
+                  <a href={d.href} target="_blank" rel="noreferrer">
+                    Open the PDF
+                  </a>
+                </object>
+              ) : null}
+              <p className="mono" style={{ margin: d.href ? "11px 0 0" : 0 }}>
                 {d.note}
               </p>
-              {d.href ? (
-                <div className="btnrow" style={{ marginTop: 12 }}>
-                  <Link className="btn btn--primary" href={d.href} target="_blank" rel="noreferrer">
-                    Open the PDF
-                  </Link>
-                </div>
-              ) : null}
             </>
           )}
         </Section>
@@ -137,15 +151,16 @@ export function CounterInvoiceClient({
         meta={(l) => l.meta}
         data={sections.lines}
         pending={pending}
-        pad={false}
         askAbout="which lines match nothing in the catalogue"
       >
         {(l) => (
           <>
             <Table columns={LINE_COLUMNS} rows={l.rows} />
-            {/* `.sec__body` restores the padding a `pad={false}` section drops,
-                because the arithmetic below the table is body content rather
-                than another row. */}
+            {/* TWO `.sec__body` here, which is `P.invoice`'s own shape: the
+                section wraps its whole body in one, and the arithmetic under
+                the table gets a second of its own. This section keeps `pad`
+                for that reason — it is the one table section in the product
+                whose design puts the table inside a body. */}
             <div className="sec__body">
               <MoneyLines rows={l.money} />
               <p className="mono" style={{ margin: "11px 0 0" }}>

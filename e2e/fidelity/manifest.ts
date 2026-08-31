@@ -1011,7 +1011,71 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 27, mobile: 9 },
   },
-  { protoId: "invoice", name: "An invoice", protoRoute: "/dashboard/invoices/I28517", route: "/dashboard/invoices/cmo5096qc001wlfu9t9r2us61", mobileRoute: "/m/invoices/cmo5096qc001wlfu9t9r2us61", report: true, status: "editorial" },
+  {
+    protoId: "invoice",
+    name: "An invoice",
+    protoRoute: "/dashboard/invoices/I28517",
+    route: "/dashboard/invoices/cmo5096qc001wlfu9t9r2us61",
+    mobileRoute: "/m/invoices/cmo5096qc001wlfu9t9r2us61",
+    report: true,
+    // MEASURED: 27 of the prototype's 31 on the desk, 14 of 14 on the phone,
+    // 0 extra, 0 rendering differences, 0 dark defects. The four missing
+    // landmarks are one action row and its three buttons.
+    //
+    // The three EXTRA that held this page back were all one panel. `P.invoice`
+    // opens with `docPane()` — the DOCUMENT — and its note says why: "the
+    // stored PDF and what the model read out of it, side by side, because the
+    // failure that matters is a line the table never got". Ours described the
+    // document instead: a `.kv` of line counts and a button to open the file
+    // in a new tab. The PDF is embedded now (the route already served
+    // `Content-Disposition: inline`), and the line counts are the paragraph
+    // underneath, where `countsNote` already said more than the list did —
+    // that the model returned lines which were never stored, and that the
+    // vendor's own subject line is the only outside witness to what the
+    // document contained.
+    //
+    // "What was extracted" also keeps its `pad`, which no other table section
+    // in this product does. `P.invoice` is the one design that puts a table
+    // INSIDE a section body and then opens a second body under it for the
+    // arithmetic — seven `.sec__body` across six sections.
+    //
+    // The phone's "Needs a decision" always draws its `.mlist` now. It fell
+    // back to a paragraph when nothing was flagged, which left the panel as a
+    // heading with prose under it; one row saying nothing needs a decision IS
+    // the list.
+    status: "counter",
+    baseline: { desktop: 27, mobile: 14 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 3,
+        mobile: 0,
+        reason:
+          "\"Approve and post\", \"Add the missing line\" and \"Send back " +
+          "to vendor\". Two have nothing behind them at all: no code path " +
+          "creates an `InvoiceLineItem` by hand (`invoiceLineItem.create` " +
+          "appears only in the generated client), and nothing in this product " +
+          "sends anything to a vendor — the mail integration reads an inbox, " +
+          "it does not reply to one. " +
+          "THE THIRD IS DIFFERENT AND THE ENTRY SHOULD SAY SO: " +
+          "`PATCH /api/invoices/[id]` already accepts `status: \"APPROVED\"` " +
+          "and stamps `matchedAt`, so approving is one call away. It is not " +
+          "wired because approving posts an invoice to COGS, and adding a " +
+          "consequential write to a page while matching its landmark count is " +
+          "the wrong order to make that decision in. Whoever wants it has the " +
+          "shortest path written down here. " +
+          "The phone has no `.btn` on either side.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The row that holds those three. Drawn empty it is furniture, so it " +
+          "arrives with them. The phone has no `.btnrow` on either side.",
+      },
+    ],
+  },
   {
     protoId: "inventory",
     name: "Inventory",

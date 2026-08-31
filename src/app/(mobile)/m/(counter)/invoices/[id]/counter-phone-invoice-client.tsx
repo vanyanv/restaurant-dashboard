@@ -85,15 +85,19 @@ export function CounterPhoneInvoiceClient({
         data={sections.lines}
         pending={pending}
       >
-        {(l) =>
-          l.phoneRows.length > 0 ? (
-            <MList rows={l.phoneRows} />
-          ) : (
-            <p className="mono" style={{ margin: 0 }}>
-              {l.phoneEmpty}
-            </p>
-          )
-        }
+        {/* Always an `.mlist`, which is what `P.invoice.phone()` draws here.
+            A paragraph in its place left the panel as a heading with prose
+            under it — and when there is nothing to decide, ONE row saying so
+            is the list, not the absence of one. */}
+        {(l) => (
+          <MList
+            rows={
+              l.phoneRows.length > 0
+                ? l.phoneRows
+                : [{ key: "none", title: "Nothing needs a decision", detail: l.phoneEmpty, value: "—" }]
+            }
+          />
+        )}
       </Section>
 
       <Section title="Totals" meta={() => ""} data={sections.lines} pending={pending}>
