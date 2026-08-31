@@ -1,17 +1,21 @@
 "use client"
 
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { OperationsSections } from "@/lib/counter/adapters/operations"
 
 /**
- * Operations, on a phone — `P.operations.phone()`: the title, a two-cell strip
- * and the areas.
+ * Operations, on a phone — `P.operations.phone()`: the title and the areas.
  *
- * The prototype's phone view is the areas list alone. The strip is kept
- * because the two cells that survive — how much is open, and how many areas
- * are still being touched — are what decide whether the list below is a
- * to-do or an archive.
+ * NO STRIP, and it used to have one. The note here argued for keeping it
+ * because "how much is open, and how many areas are still being touched" is
+ * what decides whether the list below is a to-do or an archive — which is
+ * true, and is already what the `.msub` one line down says, from the same two
+ * cells. The strip was printing the subtitle again in bigger type.
+ *
+ * The prototype's phone view is the areas list alone and its own subtitle
+ * carries the same fact ("7 open across four areas"), so this is the design
+ * agreeing rather than the design being followed at a cost.
  */
 export function CounterPhoneOperationsClient({
   sections,
@@ -33,9 +37,6 @@ export function CounterPhoneOperationsClient({
         )}
       </Section>
 
-      <Section bare title="The figures" data={sections.headline} pending={pending}>
-        {(h) => <MStrip cells={h.phoneCells} />}
-      </Section>
 
       <Section title="Areas" meta={(a) => a.meta} data={sections.areas} pending={pending}>
         {(a) => <MList rows={a.phoneRows} />}

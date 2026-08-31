@@ -921,7 +921,24 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 12, mobile: 5 },
   },
   { protoId: "usage", name: "COGS", protoRoute: "/dashboard/operations/product-usage", route: "/dashboard/operations/product-usage", query: "?range=d30", mobileRoute: "/m/operations/product-usage", report: true, status: "editorial" },
-  { protoId: "operations", name: "Operations", protoRoute: "/dashboard/operations", route: "/dashboard/operations", mobileRoute: "/m/operations", report: true, status: "editorial" },
+  {
+    protoId: "operations",
+    name: "Operations",
+    protoRoute: "/dashboard/operations",
+    route: "/dashboard/operations",
+    mobileRoute: "/m/operations",
+    report: true,
+    // MEASURED and complete on both surfaces: 13 of the prototype's 13 on the
+    // desk, 4 of 4 on the phone, zero rendering differences, zero dark
+    // defects, no allowance.
+    //
+    // The desk was already exact. The phone carried one extra `.mstrip` whose
+    // own note argued for keeping it — and whose two cells the `.msub` one line
+    // below was already printing, from the same source. It was the subtitle in
+    // bigger type.
+    status: "counter",
+    baseline: { desktop: 13, mobile: 4 },
+  },
   {
     protoId: "invoices",
     name: "Invoices",
