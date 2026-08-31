@@ -7,8 +7,18 @@ import {
   guardSection,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
-import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, KvRow, MListRow, QueueItem, Row } from "@/components/counter"
+import { empty, mapReady, type SectionData } from "@/lib/counter/section-data"
+import { dayCount, type DateRange } from "@/lib/counter/date-range"
+import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
+import type {
+  Column,
+  FigureProps,
+  KvRow,
+  MathRow,
+  MListRow,
+  QueueItem,
+  Row,
+} from "@/components/counter"
 
 /**
  * Stores — `P.stores` and `P.storecosts`
@@ -17,8 +27,21 @@ import type { FigureProps, KvRow, MListRow, QueueItem, Row } from "@/components/
  * "Each store carries its own operating inputs, commission rates and COGS
  * target."
  *
- * `nodate: true` in the prototype and rightly so: a store file is a set of
- * standing inputs, not a period. Neither surface reads the date control.
+ * ## Only ONE of these two pages is dateless, and reading it as both cost the
+ * store file three panels
+ *
+ * `P.stores` declares `nodate: true`. `P.storecosts` does NOT — verified in
+ * the prototype, not inferred: the store list is a set of standing inputs, but
+ * the store FILE prorates every one of them to the selected range and says so
+ * in its own body copy ("Change the range above and this recalculates. A
+ * month-long lease charge never lands in one day.").
+ *
+ * This docblock used to generalise `nodate` across both, and the page repeated
+ * it ("Standing inputs, so no date control"). Three of the file's missing
+ * landmarks followed directly from that one sentence — the "Charged to this
+ * range" strip cell, the whole "How it reaches the P&L" block, and the "In
+ * this range" column of the fixed-expense table are all range-dependent, and
+ * none of them could exist on a page that never read a range.
  *
  * ## The inputs, measured
  *
@@ -99,6 +122,44 @@ interface Data {
   stores: StoreRow[]
 }
 
+/** What a `StoreFixedExpense` is once the cadence is resolved to a month. */
+export interface StoreExpenseLine {
+  id: string
+  label: string
+  /** As the owner entered it, in `frequency`. */
+  amount: number
+  frequency: "WEEKLY" | "MONTHLY" | "ANNUAL"
+  monthly: number
+}
+
+/** The store LIST's row plus the three things only the file reads. */
+interface StoreFileRow extends StoreRow {
+  phone: string | null
+  longitude: number | null
+  expenses: StoreExpenseLine[]
+}
+
+/**
+ * A cadence resolved to a month, in one place.
+ *
+ * `Store.fixedMonthlyTowels` already stores a WEEKLY entry as its monthly
+ * equivalent — its own schema comment says so — so the four columns need no
+ * conversion and `StoreFixedExpense.amount` does. Two conversions with one
+ * rule between them is exactly how a page comes to print two different
+ * monthlies for one expense.
+ */
+const MONTHLY_FROM: Record<StoreExpenseLine["frequency"], number> = {
+  WEEKLY: 52 / 12,
+  MONTHLY: 1,
+  ANNUAL: 1 / 12,
+}
+
+const CADENCE_LABEL: Record<StoreExpenseLine["frequency"], string> = {
+  WEEKLY: "Weekly",
+  MONTHLY: "Monthly",
+  ANNUAL: "Annual",
+}
+
 const SELECT = {
   id: true,
   name: true,
@@ -114,6 +175,26 @@ const SELECT = {
   doordashCommissionRate: true,
   latitude: true,
   openedAt: true,
+} as const
+
+/**
+ * The store file needs the expense LINES as well as the four columns on
+ * `Store`, so it selects on top of `SELECT` rather than widening it — the
+ * stores LIST renders no expense rows and must not pay for them.
+ */
+const FILE_SELECT = {
+  ...SELECT,
+  phone: true,
+  longitude: true,
+  fixedExpenses: {
+    where: { isActive: true },
+    // Ordered in `shapeFile`, not here. A Prisma `orderBy` tuple has to be a
+    // MUTABLE array of `"asc" | "desc"`, and this object is spread from an
+    // `as const` — so the literal is either readonly (rejected) or widened to
+    // `string` (also rejected). Sorting a handful of rows in JS is cheaper
+    // than the type dance and reads the same.
+    select: { id: true, label: true, amount: true, frequency: true, isActive: true },
+  },
 } as const
 
 const shape = (s: {
@@ -146,6 +227,39 @@ const shape = (s: {
   doordash: s.doordashCommissionRate,
   geocoded: s.latitude !== null,
   openedAt: s.openedAt,
+})
+
+/** `shape`, plus what only the file reads. */
+const shapeFile = (
+  s: Parameters<typeof shape>[0] & {
+    phone: string | null
+    longitude: number | null
+    fixedExpenses: Array<{
+      id: string
+      label: string
+      amount: number
+      frequency: string
+      isActive: boolean
+    }>
+  },
+): StoreFileRow => ({
+  ...shape(s),
+  phone: s.phone,
+  longitude: s.longitude,
+  expenses: [...s.fixedExpenses]
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((e) => {
+    const frequency = (
+      e.frequency in MONTHLY_FROM ? e.frequency : "MONTHLY"
+    ) as StoreExpenseLine["frequency"]
+    return {
+      id: e.id,
+      label: e.label,
+      amount: e.amount,
+      frequency,
+      monthly: e.amount * MONTHLY_FROM[frequency],
+      }
+    }),
 })
 
 async function loadStores(input: StoresInput): Promise<Data> {
@@ -403,16 +517,67 @@ export interface StoreFileEditable {
   cogsTarget: number | null
 }
 
+/**
+ * The proration, written out — `P.storecosts`'s "How it reaches the P&L".
+ *
+ * The prototype draws four lines, and the last is the same figure as the
+ * third: monthly, ÷ to a day, × the days in range, and then that total again
+ * under a rule. That repetition is the point of the panel — it is showing its
+ * work, so an owner can see that a lease charge is not landing in one day.
+ */
+export interface StoreFileMath {
+  rows: MathRow[]
+  meta: string
+  note: string
+}
+
+/** `P.storecosts`'s "Fixed expenses" — one `StoreFixedExpense` per row. */
+export interface StoreFileExpenses {
+  columns: Column[]
+  rows: Row[]
+  meta: string
+}
+
+/** An editrow pair: a name, and the figure the owner typed. */
+export interface StoreFileRate {
+  key: string
+  label: string
+  value: string
+  /** The unit that sits in the `<em>`: "%" for a rate, "$" before an amount. */
+  unit: string
+  /** Rendered before the value rather than after. */
+  unitLeads?: boolean
+  note?: string
+}
+
+export interface StoreFileRates {
+  rows: StoreFileRate[]
+  note: string
+}
+
 export interface StoreFileSections {
   head: SectionData<StoreFileHead>
   inputs: SectionData<StoreFileInputs>
+  /** The four operating inputs as editrows, with their cadence conversion. */
+  operating: SectionData<StoreFileRates>
+  math: SectionData<StoreFileMath>
+  expenses: SectionData<StoreFileExpenses>
+  commissions: SectionData<StoreFileRates>
+  targets: SectionData<StoreFileRates>
+  lands: SectionData<KvRow[]>
   editable: SectionData<StoreFileEditable>
-  work: SectionData<StoresWork>
 }
 
 export interface StoreFileInput {
   storeId: string
   accountId: string
+  /**
+   * The window every fixed cost on this page is prorated to. Required, not
+   * optional: a store file that silently prorated to a default month while the
+   * control above it said seven days would be the same defect twice over — a
+   * figure that disagrees with its own label, and a second clock.
+   */
+  range: DateRange
 }
 
 export async function getStoreFileName(
@@ -432,20 +597,40 @@ const MONTH_DAYS = 30
 export function getStoreFileSectionPromises(
   input: StoreFileInput,
 ): StreamedSections<StoreFileSections> {
+  const days = dayCount(input.range)
+
   const dataP = classify(
     async () => {
       const row = await prisma.store.findFirst({
         where: { id: input.storeId, accountId: input.accountId },
-        select: SELECT,
+        select: FILE_SELECT,
       })
-      return row ? shape(row) : null
+      return row ? shapeFile(row) : null
     },
     { retryAction: "retryStoreFile", isEmpty: (s) => s === null, emptyReason: "no_match" },
   )
 
-  const s = <T,>(f: (s: StoreRow) => T) =>
+  const s = <T,>(f: (s: StoreFileRow) => T) =>
     guardSection(
-      dataP.then((sd) => mapReady(sd, (v) => f(v as StoreRow))),
+      dataP.then((sd) => mapReady(sd, (v) => f(v as StoreFileRow))),
+      "retryStoreFile",
+    )
+
+  /**
+   * A section whose OWN emptiness is a reading, not the page's. The expense
+   * table is the only one here that can be legitimately empty while the store
+   * itself loaded fine, and `Section` must render `Empty` for it rather than a
+   * table of nothing — note 33's "twelve em-dashes and called it a store list"
+   * applied to a page that has no rows at all.
+   */
+  const sEmpty = <T,>(f: (s: StoreFileRow) => T, isEmpty: (v: T) => boolean) =>
+    guardSection<T>(
+      dataP.then((sd): SectionData<T> => {
+        const mapped = mapReady(sd, (v) => f(v as StoreFileRow))
+        return mapped.status === "ready" && isEmpty(mapped.data)
+          ? empty<T>("no_match")
+          : mapped
+      }),
       "retryStoreFile",
     )
 
@@ -536,13 +721,30 @@ export function getStoreFileSectionPromises(
         { label: "Stage", value: stageLabel(store) },
         { label: "Active", value: store.active ? "yes" : "no" },
       ],
+      /**
+       * The prototype lists five: Address, Phone, Geocoded, Event radius,
+       * Lifecycle. Four are drawn.
+       *
+       * **Phone is drawn and empty** — the column exists and nothing has ever
+       * populated it on any store, which is a missing input a reader can fix.
+       * **Event radius is not drawn at all**: there is no column, per-store or
+       * otherwise, that parameterises the event-signal radius. The prototype's
+       * "2.5 miles" is its own invention, and a row restating a constant we do
+       * not hold would be a setting that looks editable and is not (note 46).
+       */
       place: [
         { label: "Address", value: store.address ?? "not set" },
+        {
+          label: "Phone",
+          value: store.phone ?? "not set",
+          ...(store.phone === null ? { tone: "bad" as const } : {}),
+        },
         {
           label: "Geocoded",
           value: store.geocoded ? "yes" : "no",
           ...(store.geocoded ? {} : { tone: "bad" as const }),
         },
+        { label: "Lifecycle", value: stageLabel(store) },
       ],
       meta: "standing inputs",
       note:
@@ -552,11 +754,184 @@ export function getStoreFileSectionPromises(
             `third-party margin is computed from them.`
           : `The commission rates were entered rather than defaulted.`,
     })),
-    work: guardSection(
-      dataP.then((sd) => mapReady(sd, (v) => workOf({ stores: [v as StoreRow] }))),
-      "retryStoreFile",
+    /**
+     * The four operating inputs, as the prototype draws them: amount, the
+     * cadence it was entered in, and the monthly equivalent. Towels is the one
+     * that earns the third column — the schema stores a weekly entry already
+     * converted, and this is the only place the product shows its work.
+     */
+    operating: s((store) => ({
+      rows: [
+        rateRow("rent", "Rent", store.rent, "Monthly"),
+        rateRow(
+          "labor",
+          "Fixed labor",
+          store.labor,
+          store.labor === 0 ? "Monthly, salaried — entered as zero" : "Monthly, salaried",
+        ),
+        rateRow(
+          "towels",
+          "Towels & linen",
+          store.towels,
+          store.towels === null
+            ? "Weekly"
+            : `Weekly → ${money(store.towels)}/mo`,
+        ),
+        rateRow("cleaning", "Deep cleaning", store.cleaning, "Monthly"),
+      ],
+      note:
+        store.labor === 0
+          ? `Fixed labor is $0, and that is a value somebody entered rather than a blank. ` +
+            `Every check for "is this store configured" tests for null, so a zero passes ` +
+            `it and the store reads as complete.`
+          : `Each of these lands on the P&L as its own line, prorated to the range above.`,
+    })),
+
+    math: s((store) => {
+      const monthly = fixedMonthly(store) + expensesMonthly(store)
+      const perDay = (monthly * 12) / 365
+      const inRange = monthlyCostForDays(monthly, days) ?? 0
+      return {
+        rows: [
+          { key: "monthly", label: "Fixed cost, monthly", value: money(monthly) },
+          {
+            key: "perday",
+            label: "× 12 ÷ 365 → per day",
+            value: money(perDay, { cents: true }),
+            op: true,
+          },
+          {
+            key: "inrange",
+            label: `× ${count(days)} day${days === 1 ? "" : "s"} in range`,
+            value: money(inRange),
+            op: true,
+          },
+          {
+            key: "charged",
+            label: "Charged to this period",
+            value: money(inRange),
+            strong: true,
+          },
+        ],
+        meta: `for ${count(days)} day${days === 1 ? "" : "s"}`,
+        note:
+          `Change the range above and this recalculates. A month-long lease charge ` +
+          `never lands in one day.`,
+      }
+    }),
+
+    /**
+     * Composed and, on this account, EMPTY. `StoreFixedExpense` holds zero
+     * rows across all three stores — measured, not assumed
+     * (`docs/counter/measurements/2026-08-31-store-file.md`). The prototype's
+     * widest panel is a table of six of them.
+     */
+    expenses: sEmpty<StoreFileExpenses>(
+      (store) => ({
+        columns: [
+          { key: "label", label: "Expense" },
+          { key: "amount", label: "Amount", numeric: true },
+          { key: "cadence", label: "Cadence" },
+          { key: "monthly", label: "Monthly", numeric: true },
+          { key: "range", label: "In this range", numeric: true },
+        ],
+        rows: store.expenses.map((e) => ({
+          key: e.id,
+          cells: {
+            label: e.label,
+            amount: money(e.amount),
+            cadence: CADENCE_LABEL[e.frequency],
+            monthly: money(e.monthly),
+            range: money(monthlyCostForDays(e.monthly, days) ?? 0),
+          },
+        })),
+        meta: `${count(store.expenses.length)} line${store.expenses.length === 1 ? "" : "s"} · each becomes its own P&L row`,
+      }),
+      (v) => v.rows.length === 0,
     ),
+
+    /**
+     * Two rates, not the prototype's three: `Store` carries
+     * `uberCommissionRate` and `doordashCommissionRate` and there is no
+     * Grubhub column. Drawing a third from nothing would be inventing a
+     * contract.
+     */
+    commissions: s((store) => ({
+      rows: [
+        pctRow("uber", "Uber Eats", store.uber),
+        pctRow("doordash", "DoorDash", store.doordash),
+      ],
+      note: defaultRates(store)
+        ? `Both rates are the platform default to the digit, and nothing in the product ` +
+          `distinguishes a default from a rate read off a contract. Every page that ` +
+          `prices a marketplace order reads these two.`
+        : `Every page that prices a marketplace order reads these two.`,
+    })),
+
+    targets: s((store) => ({
+      rows: [
+        pctRow("cogs", "COGS target", store.cogsTarget === null ? null : store.cogsTarget / 100),
+        {
+          key: "prime",
+          label: "Prime ceiling",
+          value: PRIME_CEILING_PCT.toFixed(1),
+          unit: "%",
+          note: "the trade's ceiling, not this store's",
+        },
+      ],
+      note:
+        `The COGS target drives the band on every food-cost chart. The prime ceiling is ` +
+        `${PRIME_CEILING_PCT.toFixed(0)}% for every store — it is a trade constant, and no ` +
+        `column publishes a per-store one.`,
+    })),
+
+    lands: s((store) => [
+      { label: "Rent", value: "Occupancy" },
+      { label: "Fixed labor", value: "Labor" },
+      { label: "Towels, cleaning", value: "Other operating" },
+      {
+        label:
+          store.expenses.length === 0
+            ? "Fixed expenses"
+            : `${count(store.expenses.length)} fixed expenses`,
+        value: store.expenses.length === 0 ? "none on file" : "their own rows",
+        ...(store.expenses.length === 0 ? { tone: "bad" as const } : {}),
+      },
+      { label: "Commissions", value: "Marketplace fees" },
+    ]),
   }
+}
+
+/** An editrow carrying a money amount, or the absence of one. */
+function rateRow(
+  key: string,
+  label: string,
+  value: number | null,
+  note: string,
+): StoreFileRate {
+  return {
+    key,
+    label,
+    value: value === null ? "—" : value.toLocaleString("en-US"),
+    unit: "$",
+    unitLeads: true,
+    note,
+  }
+}
+
+/** An editrow carrying a rate stored as a fraction, shown as points. */
+function pctRow(key: string, label: string, value: number | null): StoreFileRate {
+  return {
+    key,
+    label,
+    value: value === null ? "—" : (value * 100).toFixed(1),
+    unit: "%",
+  }
+}
+
+/** What the expense LINES add to the four columns, per month. */
+function expensesMonthly(store: StoreFileRow): number {
+  return store.expenses.reduce((sum, e) => sum + e.monthly, 0)
 }
 
 export async function getStoreFileSections(
