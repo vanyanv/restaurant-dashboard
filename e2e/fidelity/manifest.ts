@@ -1185,7 +1185,33 @@ export const PAGES: FidelityPage[] = [
   { protoId: "storeedit", name: "Stores", protoRoute: "/dashboard/stores/new", route: "/dashboard/stores/new", report: true, status: "editorial" },
   { protoId: "settings", name: "Settings", protoRoute: "/dashboard/settings", route: "/dashboard/settings", mobileRoute: "/m/more", report: true, status: "editorial" },
   { protoId: "more", name: "More (phone)", protoRoute: "/m/more", route: "/m/more", status: "editorial" },
-  { protoId: "monitoring", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring", route: "/dashboard/admin/monitoring", mobileRoute: "/m/monitoring", report: true, status: "editorial" },
+  {
+    protoId: "monitoring",
+    name: "Monitoring",
+    protoRoute: "/dashboard/admin/monitoring",
+    route: "/dashboard/admin/monitoring",
+    mobileRoute: "/m/monitoring",
+    report: true,
+    // MEASURED: phone 5 of 5, complete. Desk renders 15 against the
+    // prototype's 13 — one missing (the date control's "Apply") and three
+    // EXTRA, which are one section: "The other pages".
+    //
+    // NOT GATED, and the extra is not a mistake to delete quietly. Its
+    // adapter docblock states the case: the editorial `TabStrip` that linked
+    // monitoring's six sub-pages is not rendered on a Counter page and nothing
+    // replaced it, so "six built pages with no way in is a worse fault than
+    // anything on them". The prototype has no equivalent because its own page
+    // index reaches them — an affordance of the fixture, not of the product.
+    //
+    // `PageHead` already documents "a segmented control" among its expected
+    // children and `.seg` carries rules in the sheet, so the design's answer
+    // is chrome-level tabs across all seven monitoring pages rather than a
+    // table on one of them. That is a navigation decision, not a rendering
+    // one, and it is left for a human. Adding the seg would also cost nothing
+    // structurally: `.seg` is not a landmark and lives outside the extraction
+    // root.
+    status: "editorial",
+  },
   { protoId: "monml", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ml", route: "/dashboard/admin/monitoring/ml", report: true, status: "editorial" },
   { protoId: "monpeople", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/people", route: "/dashboard/admin/monitoring/people", mobileRoute: "/m/monitoring/people", report: true, status: "editorial" },
   {

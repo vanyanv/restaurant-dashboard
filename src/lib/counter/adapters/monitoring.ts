@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { bytes, count, money, pct } from "@/lib/counter/format"
 import {
   awaitSections,
@@ -70,10 +71,25 @@ export interface MonitoringEvents {
   note: string
 }
 
+/**
+ * `P.monitoring`'s "Sync duration" — how long the syncs take, by day.
+ *
+ * The prototype draws one bar per day for a single "Otter sync". Ours is the
+ * MEDIAN duration of every job that ran that day, because this account runs
+ * several under one schedule and an average would let one slow backfill stand
+ * in for a normal night.
+ */
+export interface MonitoringDuration {
+  chart: ChartSpec
+  meta: string
+  note: string
+}
+
 export interface MonitoringSections {
   headline: SectionData<MonitoringHeadline>
   subsystems: SectionData<MonitoringSubsystems>
   events: SectionData<MonitoringEvents>
+  duration: SectionData<MonitoringDuration>
   tabs: SectionData<MonitoringTabs>
 }
 
@@ -128,6 +144,37 @@ const TABS: Array<{ href: string; label: string; what: string }> = [
   },
 ]
 
+/** One bar per day, in seconds — the unit the prototype's own axis uses. */
+function durationOf(d: Data): MonitoringDuration {
+  const secs = d.durations.map((r) => r.median_ms / 1000)
+  const runs = d.durations.reduce((t, r) => t + r.runs, 0)
+  const worst = d.durations.reduce<{ day: Date; median_ms: number } | null>(
+    (m, r) => (m === null || r.median_ms > m.median_ms ? r : m),
+    null,
+  )
+
+  return {
+    chart: {
+      type: "bars",
+      h: 142,
+      zero: true,
+      labels: d.durations.map((r) =>
+        new Date(r.day).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      ),
+      series: [{ name: "Median run", color: "var(--ink)", data: secs }],
+      alt: "Median job duration by day, in seconds",
+    },
+    meta: `last ${count(WINDOW_DAYS)} days`,
+    note:
+      worst === null
+        ? "No job has recorded a duration in this window."
+        : `${count(runs)} runs, and the slowest DAY had a median of ` +
+          `${(worst.median_ms / 1000).toFixed(1)}s. The bar is a median rather than a mean ` +
+          `because several jobs share one schedule here, and one long backfill would ` +
+          `otherwise read as a slow night.`,
+  }
+}
+
 function tabsOf(): MonitoringTabs {
   return {
     rows: TABS.map((t) => ({
@@ -156,6 +203,7 @@ interface Provider {
 }
 
 interface Data {
+  durations: Array<{ day: Date; median_ms: number; runs: number }>
   providers: Provider[]
   errors24h: number
   errors7d: number
@@ -173,8 +221,18 @@ interface Data {
 }
 
 async function loadMonitoring(_input: MonitoringInput): Promise<Data> {
-  const [providers, errors, errorSources, cache, db, r2, ai, recentRuns, recentErrors] =
-    await Promise.all([
+  const [
+    providers,
+    errors,
+    errorSources,
+    cache,
+    db,
+    r2,
+    ai,
+    recentRuns,
+    recentErrors,
+    durations,
+  ] = await Promise.all([
       prisma.$queryRaw<
         Array<{
           provider: string
@@ -228,6 +286,16 @@ async function loadMonitoring(_input: MonitoringInput): Promise<Data> {
       prisma.$queryRaw<Array<{ source: string; message: string; at: Date }>>`
         SELECT source, message, "occurredAt" AS at
         FROM "ErrorEvent" ORDER BY "occurredAt" DESC LIMIT 6`,
+      // MEDIAN, not average: several jobs run under one schedule here, and a
+      // single slow backfill would otherwise stand in for a normal night.
+      prisma.$queryRaw<Array<{ day: Date; median_ms: number; runs: number }>>`
+        SELECT DATE("startedAt") AS day,
+               PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY "durationMs")::float AS median_ms,
+               COUNT(*)::int AS runs
+          FROM "JobRun"
+         WHERE "startedAt" >= NOW() - MAKE_INTERVAL(days => ${WINDOW_DAYS})
+           AND "durationMs" IS NOT NULL
+         GROUP BY 1 ORDER BY 1`,
     ])
 
   const dbMb = db[0]?.mb ?? null
@@ -255,6 +323,7 @@ async function loadMonitoring(_input: MonitoringInput): Promise<Data> {
     .slice(0, 8)
 
   return {
+    durations,
     providers: providers.map((p) => ({
       provider: p.provider,
       runs: p.runs,
@@ -511,6 +580,7 @@ export function getMonitoringSectionPromises(
     headline: s(headlineOf),
     subsystems: s(subsystemsOf),
     events: s(eventsOf),
+    duration: s(durationOf),
     tabs: Promise.resolve(ready(tabsOf())),
   }
 }

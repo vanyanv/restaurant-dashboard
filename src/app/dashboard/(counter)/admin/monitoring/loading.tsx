@@ -16,6 +16,9 @@ export default function MonitoringLoading() {
       <Section title="Subsystems" data={loading()} pad={false}>
         {() => null}
       </Section>
+      <Section title="Sync duration" data={loading()}>
+        {() => null}
+      </Section>
       <Section title="Recent events" data={loading()}>
         {() => null}
       </Section>
