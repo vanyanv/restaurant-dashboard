@@ -10,10 +10,13 @@ export default function Loading() {
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="Who opens it" data={loading()} pad={false}>
+      <Section title="Readings" data={loading()}>
         {() => null}
       </Section>
       <Section title="Which pages get opened" data={loading()} pad={false}>
+        {() => null}
+      </Section>
+      <Section title="What this tells you" data={loading()}>
         {() => null}
       </Section>
     </>

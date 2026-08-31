@@ -55,23 +55,62 @@ export interface PeopleHeadline {
   phoneCells: FigureProps[]
 }
 
-export interface PeopleWho {
-  rows: Row[]
-  phoneRows: MListRow[]
+/**
+ * `P.monpeople`'s "Sessions" chart, which is a chart of READINGS here.
+ *
+ * This product records no session boundary — there is no start, no end and no
+ * idle timeout anywhere in the schema — so a sessions series would have to be
+ * invented from page views by picking a gap length, and the gap length would
+ * decide the answer. What IS recorded is a dwell per view, and the page
+ * already argues (see the docblock above) that a view under three seconds is a
+ * navigation rather than a reading. So the bars are readings per day: the same
+ * filter the table below uses, drawn over time.
+ *
+ * A day with no rows draws a zero rather than being dropped. Four of the
+ * window's thirty days have none, and "nobody opened it" is the answer this
+ * tab is asking for — note 33's zero-is-a-reading, on the one page where the
+ * zeros are the finding.
+ *
+ * It does NOT separate the accounts, and the note says so in a sentence rather
+ * than in a second series: the owner contributes two views to one day of the
+ * thirty and neither lasted ten milliseconds, so an owner series would be a
+ * flat line at zero drawn across a developer's working month. The strip
+ * carries that comparison as two figures, which is the shape it deserves.
+ */
+export interface PeopleReadings {
+  chart: ChartSpec
   meta: string
   note: string
 }
 
 export interface PeoplePages {
   rows: Row[]
+  phoneRows: MListRow[]
   meta: string
+  note: string
+}
+
+/**
+ * `P.monpeople`'s "What this tells you" — the verdict, in prose.
+ *
+ * The prototype's is two paragraphs: a claim in body type, and a caveat in
+ * mono. Ours keeps that shape, and it is where "Who opens it" went. That
+ * section was a six-column table with TWO rows — this installation has two
+ * accounts — which is a sentence wearing a table's clothes, and the sentence
+ * is the strongest thing on the page: the owner has opened this product twice
+ * and neither view lasted ten milliseconds. The prototype puts its
+ * strongest claim here too.
+ */
+export interface PeopleVerdict {
+  lead: string
   note: string
 }
 
 export interface PeopleSections {
   headline: SectionData<PeopleHeadline>
-  who: SectionData<PeopleWho>
+  readings: SectionData<PeopleReadings>
   pages: SectionData<PeoplePages>
+  verdict: SectionData<PeopleVerdict>
 }
 
 interface Person {
@@ -90,10 +129,12 @@ interface PeopleData {
   humanViews: number
   medianDwellMs: number | null
   routes: Array<{ route: string; views: number; medianS: number }>
+  /** One row per day IN THE WINDOW, zeros included — see `PeopleReadings`. */
+  daily: Array<{ day: Date; views: number; human: number }>
 }
 
 async function loadPeople(): Promise<PeopleData> {
-  const [people, dwell, routes] = await Promise.all([
+  const [people, dwell, routes, daily] = await Promise.all([
     prisma.$queryRaw<
       Array<{
         email: string | null
@@ -127,6 +168,18 @@ async function loadPeople(): Promise<PeopleData> {
       FROM "PageView"
       WHERE "dwellMs" >= ${HUMAN_DWELL_MS}
       GROUP BY 1 ORDER BY 2 DESC`,
+    // `generate_series` rather than a GROUP BY, so a day nobody opened it is a
+    // zero in the series instead of a missing bar. See `PeopleReadings`.
+    prisma.$queryRaw<Array<{ day: Date; views: number; human: number }>>`
+      SELECT d.day::date AS day,
+             COUNT(p.id)::int AS views,
+             COUNT(p.id) FILTER (WHERE p."dwellMs" >= ${HUMAN_DWELL_MS})::int AS human
+      FROM generate_series(
+             date_trunc('day', NOW() - MAKE_INTERVAL(days => ${WINDOW_DAYS - 1})),
+             date_trunc('day', NOW()),
+             '1 day') AS d(day)
+      LEFT JOIN "PageView" p ON date_trunc('day', p."enteredAt") = d.day
+      GROUP BY 1 ORDER BY 1`,
   ])
 
   return {
@@ -143,6 +196,7 @@ async function loadPeople(): Promise<PeopleData> {
     humanViews: dwell[0]?.human ?? 0,
     medianDwellMs: dwell[0]?.median ?? null,
     routes: routes.map((r) => ({ route: r.route, views: r.views, medianS: r.median_s })),
+    daily,
   }
 }
 
@@ -196,42 +250,76 @@ function peopleHeadlineOf(d: PeopleData): PeopleHeadline {
   }
 }
 
-function peopleWhoOf(d: PeopleData): PeopleWho {
-  const owner = d.people.find((p) => p.role === "OWNER")
+/** The readings, by day — see `PeopleReadings`. */
+function peopleReadingsOf(d: PeopleData): PeopleReadings {
+  const human = d.daily.map((r) => r.human)
+  const quiet = d.daily.filter((r) => r.human === 0).length
+  const busiest = d.daily.reduce<{ day: Date; human: number } | null>(
+    (m, r) => (m === null || r.human > m.human ? r : m),
+    null,
+  )
 
   return {
-    rows: d.people.map((p) => ({
-      key: p.email,
-      cells: {
-        who: p.email,
-        role: p.role,
-        views: p.views === 0 ? { v: "none", cls: "hot" } : count(p.views),
-        real: p.humanViews === 0 ? { v: "none", cls: "hot" } : count(p.humanViews),
-        signins: count(p.signIns),
-        last: p.last === null ? { v: "never", cls: "hot" } : D(p.last),
-      },
-    })),
-    phoneRows: d.people.map((p) => ({
-      key: p.email,
-      title: p.email,
-      detail: `${p.role} · ${count(p.signIns)} sign-ins`,
-      value: count(p.views),
-      note: p.humanViews === 0 ? "no real reading" : `${count(p.humanViews)} over 3s`,
-      noteTone: p.humanViews === 0 ? "down" : "up",
-    })),
-    meta: `${count(d.people.length)} accounts · ${count(WINDOW_DAYS)} days of sign-ins`,
+    chart: {
+      type: "bars",
+      h: 148,
+      zero: true,
+      labels: d.daily.map((r) =>
+        new Date(r.day).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }),
+      ),
+      series: [{ name: "Readings", color: "var(--ink)", data: human }],
+      alt: `Page views over ${HUMAN_DWELL_MS / 1000} seconds, by day`,
+    },
+    meta: `last ${count(WINDOW_DAYS)} days`,
     note:
-      owner === undefined
-        ? `No owner account exists on this installation.`
-        : owner.views === 0
-          ? `The owner has never opened the product. Every page view in the record is the ` +
-            `developer account.`
-          : `The owner has opened it ${count(owner.views)} ` +
-            `${owner.views === 1 ? "time" : "times"}, on ${D(owner.first)}, and ` +
-            `${owner.humanViews === 0 ? "none of those views lasted three seconds" : `${count(owner.humanViews)} lasted longer than three seconds`}. ` +
-            `Everything else here is the developer account, much of it automated — a sign-in ` +
-            `count that does not separate the two answers a different question from the one this ` +
-            `tab asks.`,
+      `Readings, not sessions: nothing in this schema records where one visit ends and the ` +
+      `next begins, so a session count would be a gap length somebody chose. A view over ` +
+      `${count(HUMAN_DWELL_MS / 1000)} seconds is what the record can actually vouch for. ` +
+      (busiest === null
+        ? ""
+        : `The busiest day read ${count(busiest.human)}, and ${count(quiet)} of the ` +
+          `${count(WINDOW_DAYS)} drew nothing at all. `) +
+      `Both accounts are in one series — the owner contributes two views to one of these ` +
+      `days, so a second line would be zero everywhere it could be drawn.`,
+  }
+}
+
+/** The verdict — see `PeopleVerdict`. */
+function peopleVerdictOf(d: PeopleData): PeopleVerdict {
+  const owner = d.people.find((p) => p.role === "OWNER")
+  const others = d.people.filter((p) => p.role !== "OWNER")
+  const devViews = others.reduce((t, p) => t + p.views, 0)
+  const devSignIns = others.reduce((t, p) => t + p.signIns, 0)
+
+  const lead =
+    owner === undefined
+      ? "No owner account exists on this installation, so nothing here is a reading by the person the product is for."
+      : owner.views === 0
+        ? "The owner has never opened this product. Every page view in the record is the developer account, which makes every figure on this page a measurement of the person who built it."
+        : `The owner has opened this product ${count(owner.views)} ` +
+          `${owner.views === 1 ? "time" : "times"}, on ${D(owner.first)}, and ` +
+          `${
+            owner.humanViews === 0
+              ? "not one of those views lasted three seconds"
+              : `${count(owner.humanViews)} lasted longer than three seconds`
+          }. Everything else on this page is the developer account.`
+
+  return {
+    lead,
+    note:
+      `${count(devViews)} developer views and ${count(devSignIns)} sign-ins in ` +
+      `${count(WINDOW_DAYS)} days, much of it automated. This is the whole reason the tab ` +
+      `names the accounts rather than totalling them: a figure that adds the two answers a ` +
+      `different question from the one it asks.` +
+      (owner && owner.views > 0 && owner.humanViews === 0
+        ? ` The beacon itself is unverified in a real browser — the owner's two views recorded ` +
+          `dwells of six and five milliseconds, which is the shape of a page that was opened ` +
+          `and closed, and also the shape of a beacon that fires before it can measure.`
+        : ""),
   }
 }
 
@@ -259,6 +347,14 @@ function peoplePagesOf(d: PeopleData): PeoplePages {
         share: total > 0 ? pct((r.views / total) * 100, { scaled: true }) : "—",
       },
     })),
+    phoneRows: shown.slice(0, PHONE_ROWS).map((r) => ({
+      key: r.route,
+      title: r.route,
+      detail: `${secs(r.medianS)} median`,
+      value: count(r.views),
+      note: total > 0 ? pct((r.views / total) * 100, { scaled: true }) : "—",
+      noteTone: "up" as const,
+    })),
     meta: `${count(d.routes.length)} routes · views over ${count(HUMAN_DWELL_MS / 1000)}s only`,
     note:
       `Counted from the ${count(d.humanViews)} views that lasted more than ` +
@@ -277,7 +373,12 @@ export function getPeopleSectionPromises(): StreamedSections<PeopleSections> {
   })
   const s = <T,>(f: (d: PeopleData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryPeople")
-  return { headline: s(peopleHeadlineOf), who: s(peopleWhoOf), pages: s(peoplePagesOf) }
+  return {
+    headline: s(peopleHeadlineOf),
+    readings: s(peopleReadingsOf),
+    pages: s(peoplePagesOf),
+    verdict: s(peopleVerdictOf),
+  }
 }
 
 export async function getPeopleSections(): Promise<PeopleSections> {

@@ -1266,26 +1266,46 @@ export const PAGES: FidelityPage[] = [
     route: "/dashboard/admin/monitoring/people",
     mobileRoute: "/m/monitoring/people",
     report: true,
-    // MEASURED: phone 5 of 5. Desk 7 of the prototype's 12 — missing the
-    // "Sessions" chart and the "What this tells you" panel, with one extra
-    // table ("Who opens it").
+    // MEASURED: 11 of the prototype's 12 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The one missing landmark
+    // is declared below.
     //
-    // NOT GATED, and NOT a declared absence either, because this is a decision
-    // somebody already made in the opposite direction and wrote down. The
-    // adapter's docblock: the owner has opened this product TWICE, both on 24
-    // August four seconds apart, and every other view and all 703 sign-ins are
-    // the developer account — so "a tab that reports '48 sessions' without
-    // saying whose they are answers a different question from the one it
-    // asks". The chart was replaced by a table naming who, and a verdict line.
+    // This entry used to record an OPEN decision, and it is closed now in the
+    // direction of the design. The page had 7 of 12 — no "Sessions" chart, no
+    // "What this tells you" panel, and an extra table ("Who opens it") — on the
+    // argument that the owner has opened this product TWICE, both on 24 August
+    // four seconds apart, so a sessions chart would be one bar and thirteen
+    // zeros while a table naming the accounts says the real thing.
     //
-    // Verified independently here: the owner's entire history is 2 page views
-    // on 2026-08-24. A daily sessions series is one bar and thirteen zeros.
+    // The argument was right about the FIGURE and wrong about the SHAPE. The
+    // chart is readings per day (a view over three seconds — the filter this
+    // page already argues for), across both accounts, which is a real series
+    // with real zeros: four of the thirty days drew nothing. And "Who opens
+    // it" was a six-column table with two rows, because this installation has
+    // two accounts — a sentence wearing a table's clothes. It is the verdict
+    // panel now, which is where the prototype puts its strongest claim too,
+    // and it says more than the table did: the owner's two views recorded
+    // dwells of six and five milliseconds.
     //
-    // Both readings are defensible — note 33 holds that a zero IS a reading,
-    // and "opened once, never since" is a stark answer to this tab's own
-    // question. Reversing an argued decision to satisfy a landmark count is
-    // not, so the page keeps its table and the choice is left open.
-    status: "editorial",
+    // Nothing was invented to close this. There is still no session boundary
+    // anywhere in the schema, which is why the chart is not called sessions.
+    status: "counter",
+    baseline: { desktop: 11, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\", the same subtraction `monitoring`, " +
+          "`moncosts` and the alerts page declare. `P.monpeople` does not set " +
+          "`nodate`, so the prototype draws `CD.bar()` and its Apply button; " +
+          "this page mounts no `DateControl` because its window is 30 days " +
+          "flat — `WINDOW_DAYS`, which sets the sign-in count, the readings " +
+          "series and the routes table together. The phone has no page head " +
+          "furniture on either side.",
+      },
+    ],
   },
   {
     protoId: "analyticsstore",
