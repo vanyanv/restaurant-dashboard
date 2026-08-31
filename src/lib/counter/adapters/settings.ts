@@ -390,12 +390,53 @@ function preferencesOf(d: SettingsData): SettingsPreferences {
   }
 }
 
+/**
+ * `P.settings`' "Brand" panel — the wordmark and the two identity colours.
+ *
+ * The prototype's copy claims the accent and signal are "taken from the
+ * wordmark, so the interface and the sign over the door agree". NOTHING in
+ * this project records that: `counter.css` documents what `--ct-accent` MEANS
+ * (the proofmark — it marks state, not rest) and how its dark value was
+ * solved, and says nowhere that it was sampled from a logo. So this says what
+ * the two colours are FOR, which is checkable, rather than repeating a
+ * provenance nobody wrote down.
+ */
+export interface SettingsBrand {
+  swatches: Array<{ key: string; label: string; token: string; what: string }>
+  note: string
+}
+
 export interface SettingsSections {
+  brand: SectionData<SettingsBrand>
   account: SectionData<SettingsAccount>
   notifications: SectionData<SettingsNotifications>
   signins: SectionData<SettingsSignins>
   preferences: SectionData<SettingsPreferences>
   team: SectionData<SettingsTeam>
+}
+
+/** Static: it describes the design system, not this account. */
+function brandOf(): SettingsBrand {
+  return {
+    swatches: [
+      {
+        key: "accent",
+        label: "Accent",
+        token: "accent",
+        what: "the proofmark — a hover, a selection, a flagged value",
+      },
+      {
+        key: "signal",
+        label: "Signal",
+        token: "signal",
+        what: "attention that is not an error",
+      },
+    ],
+    note:
+      "Both are `ct-` tokens in src/styles/counter.css and appear on the login " +
+      "screen and in the rail. The accent marks state rather than rest: if it is " +
+      "sitting on more than one element at rest on a screen, something is wrong.",
+  }
 }
 
 export function getSettingsSectionPromises(
@@ -409,6 +450,7 @@ export function getSettingsSectionPromises(
   const s = <T,>(f: (d: SettingsData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retrySettings")
   return {
+    brand: s(brandOf),
     account: s(accountOf),
     notifications: s(notificationsOf),
     signins: s(signinsOf),
