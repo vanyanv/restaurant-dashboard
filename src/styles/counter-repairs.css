@@ -204,3 +204,24 @@ button.wkd {
   color: var(--ink);
   box-shadow: 0 1px 2px var(--ct-raise);
 }
+
+/* `docPane()` — the stored invoice, shown rather than described.
+ *
+ * `P.invoice`'s first panel IS the document: "the stored PDF and what the
+ * model read out of it, side by side, because the failure that matters is a
+ * line the table never got". The prototype draws a facsimile; ours embeds the
+ * real file, which the route already serves `Content-Disposition: inline`.
+ *
+ * The ported sheet has no rule for it — the prototype's pane is a stack of
+ * absolutely-positioned divs faking a page — so the frame is authored here.
+ * Height is a viewport fraction rather than a page count: a two-page invoice
+ * and a nine-page one both want as much of the screen as the panel beside them
+ * uses, and the embed scrolls inside itself. */
+.docpane {
+  display: block;
+  width: 100%;
+  height: min(62vh, 620px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--sunk);
+}
