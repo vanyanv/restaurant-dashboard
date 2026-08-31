@@ -2,8 +2,8 @@
 
 import {
   Kv,
-  MoneyLines,
   PageHead,
+  Queue,
   Section,
   Strip,
   Table,
@@ -73,18 +73,19 @@ export function CounterCountSessionClient({
         {(l) => (
           <>
             <Table columns={LINE_COLUMNS} rows={l.rows} />
-            {/* `.sec__body` restores the padding `pad={false}` drops — the
-                total below the table is body content, not another row. */}
-            <div className="sec__body">
-              <MoneyLines rows={l.money} />
-              <p className="mono" style={{ margin: "11px 0 0" }}>
-                {l.note}
-              </p>
-            </div>
+            {/* No `.sec__body` — `P.countsession`'s Lines section is a table
+                and nothing else, and the counted-stock total this used to
+                repeat here is the strip's second cell. */}
+            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              {l.note}
+            </p>
           </>
         )}
       </Section>
 
+      {/* `P.countsession`'s "What it taught the model" — same shape, a
+          paragraph and a `.kv`, and the same subject: this one lists what a
+          calibration would need instead of what it learned. */}
       <Section title="Variance" meta={(v) => v.meta} data={sections.variance} pending={pending}>
         {(v) => (
           <>
@@ -97,6 +98,13 @@ export function CounterCountSessionClient({
             </p>
           </>
         )}
+      </Section>
+
+      {/* `P.countsession`'s "What to do". Its own item is a variance pattern
+          across counts, which needs an expected quantity; ours is about the
+          session itself. See `CountSessionWork`. */}
+      <Section title="What to do" meta={(w) => w.meta} data={sections.work} pending={pending}>
+        {(w) => <Queue items={w.items} />}
       </Section>
     </>
   )

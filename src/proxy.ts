@@ -119,16 +119,15 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   // page; it has one now, and Next resolves the static segment ahead of
   // `[id]`, so the prefix rewrite lands on the right route by itself.
   ["/dashboard/ingredients", "/m/ingredients"],
-  // The inventory entry USED to live here, carrying every sub-path under
-  // /dashboard/operations/inventory to /m/operations/inventory/… — and its own
-  // comment predicted the failure it then shipped: only `/counts` was ever
-  // built on the phone, so `/count/new` and `/counts/<id>` both rewrote onto
-  // routes that do not exist. Two live 404s, found by the fidelity suite's
-  // landing assertion, not by a report. `/counts` is an EXACT entry above,
-  // and `/count/new` is one now too — `P.countnew.phone()` is the surface the
-  // desk wizard hands over TO, so it was the odd one to be missing. Only
-  // `/counts/<id>` is still desk-only, and it stays out of this list rather
-  // than being carried onto a route that does not exist.
+  // The inventory entry is BACK, and this time it is safe. Its first life
+  // carried every sub-path under /dashboard/operations/inventory to
+  // /m/operations/inventory/… when only `/counts` had been built on the phone,
+  // so `/count/new` and `/counts/<id>` both rewrote onto routes that did not
+  // exist — two live 404s, found by the fidelity suite's landing assertion
+  // rather than by a report. All three have a phone page now: `/counts` and
+  // `/count/new` are EXACT entries above, and `/counts/<id>` is the dynamic
+  // one this line carries.
+  ["/dashboard/operations/inventory", "/m/operations/inventory"],
   ["/dashboard/operations/vendors", "/m/operations/vendors"],
   ["/dashboard/orders", "/m/orders"],
   ["/dashboard/pnl", "/m/pnl"],
