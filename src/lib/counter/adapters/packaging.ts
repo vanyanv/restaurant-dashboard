@@ -65,12 +65,6 @@ export interface PackagingLedger {
   note: string
 }
 
-export interface PackagingFulfilment {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
 export interface PackagingWork {
   items: QueueItem[]
   meta: string
@@ -79,7 +73,6 @@ export interface PackagingWork {
 export interface PackagingSections {
   headline: SectionData<PackagingHeadline>
   ledger: SectionData<PackagingLedger>
-  fulfilment: SectionData<PackagingFulfilment>
   work: SectionData<PackagingWork>
 }
 
@@ -237,37 +230,20 @@ function ledgerOf({ d }: Data): PackagingLedger {
           `${count(worst.inferredUnits)} used against ${count(worst.purchasedUnits)} bought, which ` +
           `is not a variance but an impossibility, and it is the model or the purchase record ` +
           `rather than the kitchen.`
-        : `Every container is inside the band.`),
+        : `Every container is inside the band.`) +
+      // What "Which orders carry it" was for. `P.packaging` has no such table —
+      // it draws a chart in that slot — and the table's whole payload is this
+      // sentence: which orders are in the per-order denominator and which are
+      // not. The per-mode order counts it also printed belong to Orders.
+      ` A dine-in order leaves no container behind, so it is excluded from the ` +
+      `per-order figure rather than diluting it — ${count(d.totals.excludedOrders)} of ` +
+      `${count(d.totals.totalOrders)} orders in this range, worth ` +
+      `${money(d.totals.avoidedDineInCost)} of packaging not bought, which is small here only ` +
+      `because almost nothing is eaten in.`,
   }
 }
 
 /** Which orders carry packaging at all. */
-function fulfilmentOf({ d }: Data): PackagingFulfilment {
-  const t = d.totals
-
-  return {
-    rows: d.fulfillment.map((f) => ({
-      key: f.bucket,
-      cells: {
-        mode: f.label,
-        orders: count(f.orders),
-        share: pct(f.shareOfOrders, { scaled: true }),
-        carries:
-          f.bucket === "DINE_IN"
-            ? { v: "no packaging", cls: "hot" }
-            : "packaged",
-      },
-    })),
-    meta: `${count(t.totalOrders)} orders · ${count(t.excludedOrders)} excluded`,
-    note:
-      `A dine-in order leaves no container behind, so it is excluded from the per-order figure ` +
-      `rather than diluting it — ${count(t.excludedOrders)} of ${count(t.totalOrders)} orders in ` +
-      `this range. That exclusion is worth ${money(t.avoidedDineInCost)} of packaging not bought, ` +
-      `which is small here only because almost nothing is eaten in.`,
-  }
-}
-
-/** Invoice validation — the prototype's own section, with this account's numbers. */
 function workOf({ d, rangeLabel: label }: Data): PackagingWork {
   const items: QueueItem[] = []
 
@@ -345,7 +321,6 @@ export function getPackagingSectionPromises(
   return {
     headline: s(headlineOf),
     ledger: s(ledgerOf),
-    fulfilment: s(fulfilmentOf),
     work: s(workOf),
   }
 }

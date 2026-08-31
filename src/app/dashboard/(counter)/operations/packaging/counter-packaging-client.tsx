@@ -22,15 +22,21 @@ import type { PackagingSections } from "@/lib/counter/adapters/packaging"
 /**
  * Packaging, composed from `P.packaging.desk()`:
  *
- *   strip -> the container ledger -> a split of invoice validation and which
- *   orders carry packaging at all.
+ *   strip -> the container ledger -> invoice validation.
  *
  * The adapter's docblock argues the numbers, and the short version is that the
  * packing model and the purchase record disagree on two of three containers —
- * one at 724% and one at 26%. `P.packaging`'s "Packaging per order" chart is
- * dropped: `getPackagingCostData` reports a per-order figure for the RANGE and
- * not a series, and a chart drawn from one point is a line with nothing to
- * say.
+ * one at 724% and one at 26%.
+ *
+ * `P.packaging`'s "Packaging per order" chart is dropped, and it is the one
+ * thing on this page that is a capability gap rather than a choice:
+ * `getPackagingCostData` packs every order in a RANGE and returns totals, not
+ * a series. A per-day figure would mean running the packer once per day, which
+ * is the whole model per point. See the manifest.
+ *
+ * "Which orders carry it" went the other way — a table this design does not
+ * have, whose whole payload was one sentence about the per-order denominator.
+ * It is the last line of the ledger's note now.
  */
 export type CounterPackagingSections = SectionSources<PackagingSections>
 
@@ -41,13 +47,6 @@ const LEDGER_COLUMNS: Column[] = [
   { key: "unit", label: "Unit cost", numeric: true },
   { key: "spend", label: "Spend", numeric: true },
   { key: "utilisation", label: "Utilisation", numeric: true },
-]
-
-const FULFILMENT_COLUMNS: Column[] = [
-  { key: "mode", label: "How it left" },
-  { key: "orders", label: "Orders", numeric: true },
-  { key: "share", label: "Share", numeric: true },
-  { key: "carries", label: "Packaging" },
 ]
 
 const ASK_SUGGESTIONS = [
@@ -129,33 +128,17 @@ export function CounterPackagingClient({
         )}
       </Section>
 
-      <div className="split">
-        <Section
-          title="Invoice validation"
-          meta={(w) => w.meta}
-          data={sections.work}
-          pending={pending}
-        >
-          {(w) => <Queue items={w.items} />}
-        </Section>
-
-        <Section
-          title="Which orders carry it"
-          meta={(f) => f.meta}
-          data={sections.fulfilment}
-          pending={pending}
-          pad={false}
-        >
-          {(f) => (
-            <>
-              <Table columns={FULFILMENT_COLUMNS} rows={f.rows} />
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-                {f.note}
-              </p>
-            </>
-          )}
-        </Section>
-      </div>
+      {/* No `.split` — `P.packaging` pairs this queue with its per-order
+          chart, and with the chart absent a two-column grid holding one panel
+          is furniture. See the docblock. */}
+      <Section
+        title="Invoice validation"
+        meta={(w) => w.meta}
+        data={sections.work}
+        pending={pending}
+      >
+        {(w) => <Queue items={w.items} />}
+      </Section>
     </>
   )
 }
