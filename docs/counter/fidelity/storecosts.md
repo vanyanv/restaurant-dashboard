@@ -1,4 +1,4 @@
-# Fidelity — Stores (`storecosts`)
+# Fidelity — Store file (`storecosts`)
 
 Route `/dashboard/stores/cmexd4zia0001jr04ljkdt9na` · manifest status **editorial** · captured, not gated · measured 2026-08-31
 
@@ -35,23 +35,22 @@ Structure: 9 missing, 0 extra, 30 matched. Rendering (light): 0 property differe
 
 ## fidelity-mobile — phone
 
-**The prototype renders 9 landmarks on this page. We render 24.**
+**The prototype renders 9 landmarks on this page. We render 30.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
-| `.btn` | 0 | 1 |
+| `.btn` | 0 | 2 |
 | `.btnrow` | 0 | 1 |
-| `.kv` | 0 | 3 |
+| `.kv` | 0 | 2 |
 | `.mlist` | 2 | 0 |
 | `.mstrip` | 1 | 0 |
-| `.qitem` | 0 | 2 |
-| `.queue` | 0 | 1 |
-| `.sec` | 2 | 5 |
-| `.sec__body` | 2 | 5 |
-| `.sec__head` | 2 | 5 |
+| `.sec` | 2 | 8 |
+| `.sec__body` | 2 | 7 |
+| `.sec__head` | 2 | 8 |
 | `.strip` | 0 | 1 |
+| `.tbl` | 0 | 1 |
 
-Structure: 3 missing, 18 extra, 6 matched. Rendering (light): 12 property differences on the 6 landmarks present on both sides.
+Structure: 3 missing, 24 extra, 6 matched. Rendering (light): 12 property differences on the 6 landmarks present on both sides.
 
 ### Missing — the prototype has these and we do not
 
@@ -61,24 +60,30 @@ Structure: 3 missing, 18 extra, 6 matched. Rendering (light): 12 property differ
 
 ### Extra — we render these and the prototype does not
 
-- `#0 .strip`
-- `#4 .kv`
-- `#8 .kv`
-- `#9 .sec`
-- `#10 .sec__head`
-- `#11 .sec__body`
-- `#12 .kv`
-- `#13 .sec`
-- `#14 .sec__head`
-- `#15 .sec__body`
-- `#16 .btnrow`
-- `#17 .btn`
+- `#0 .btn`
+- `#1 .strip`
+- `#8 .sec`
+- `#9 .sec__head`
+- `#10 .sec__body`
+- `#11 .kv`
+- `#12 .sec`
+- `#13 .sec__head`
+- `#14 .tbl`
+- `#15 .sec`
+- `#16 .sec__head`
+- `#17 .sec__body`
 - `#18 .sec`
 - `#19 .sec__head`
 - `#20 .sec__body`
-- `#21 .queue`
-- `#22 .qitem`
-- `#23 .qitem`
+- `#21 .sec`
+- `#22 .sec__head`
+- `#23 .sec__body`
+- `#24 .kv`
+- `#25 .sec`
+- `#26 .sec__head`
+- `#27 .sec__body`
+- `#28 .btnrow`
+- `#29 .btn`
 
 ### Rendering differences
 
