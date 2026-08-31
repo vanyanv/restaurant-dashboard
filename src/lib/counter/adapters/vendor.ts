@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma"
+import {
+  BASKET_FLAT_PCT,
+  BASKET_WEEKS,
+  getVendorBasketTrends,
+} from "@/lib/counter/vendor-basket"
 import { isChargeRow, isNonIngredientRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
@@ -130,6 +135,16 @@ interface Loaded {
   weekly: Array<{ week: string; spend: number }>
   ingredients: number
   basket: BasketRow[]
+  /**
+   * This vendor's own basket median, first week to last, from the ONE function
+   * that computes it — `@/lib/counter/vendor-basket`. `P.vendor`'s fifth strip
+   * cell is "Basket price · ▲ 12% · 30 days", and the vendors LIST has printed
+   * the same figure since it was built. Recomputing it here would have been
+   * the second implementation of one number, which is exactly what CLAUDE.md's
+   * shared-figure rule forbids; the manifest recorded the choice as open
+   * rather than guess at it, and the rule is the answer.
+   */
+  basketTrend: number | null
   rangeLabel: string
 }
 
@@ -142,6 +157,13 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
     select: { id: true },
   })
   const storeIds = stores.map((s) => s.id)
+
+  // The basket trend comes from the shared function rather than a second
+  // implementation — see `Loaded.basketTrend`. It reads its own eight weeks,
+  // which is deliberately NOT this page's range: a basket direction needs a
+  // run of weeks to be a direction at all, and the range control here can be
+  // one day.
+  const basketTrends = await getVendorBasketTrends({ accountId, today })
 
   // Every invoice in the range, then folded by normalized name — the SQL
   // cannot filter on a normalization it does not know about.
@@ -283,6 +305,7 @@ async function loadVendor(input: VendorInput): Promise<Loaded | null> {
     basket: basket
       .filter((b) => b.best !== null)
       .sort((a, b) => Math.abs(b.gapPct ?? 0) - Math.abs(a.gapPct ?? 0)),
+    basketTrend: basketTrends.trend.get(vendor) ?? null,
     rangeLabel: rangeLabel(range, "custom"),
   }
 }
@@ -351,6 +374,23 @@ function headOf(d: Loaded): VendorHead {
         deltaTone: "is-flat",
       },
       brokenCell,
+      // `P.vendor`'s fifth cell — "Basket price · ▲ 12% · 30 days". The FIGURE
+      // is the shared one; only its words are this page's.
+      {
+        label: "Basket price",
+        value:
+          d.basketTrend === null
+            ? "—"
+            : Math.abs(d.basketTrend) < BASKET_FLAT_PCT
+              ? "flat"
+              : `${d.basketTrend > 0 ? "▲" : "▼"} ${Math.abs(d.basketTrend).toFixed(0)}%`,
+        delta:
+          d.basketTrend === null
+            ? "under two weeks of deliveries"
+            : `median line, ${count(BASKET_WEEKS)} weeks`,
+        deltaTone:
+          d.basketTrend !== null && d.basketTrend >= BASKET_FLAT_PCT ? "is-down" : "is-flat",
+      },
     ],
     phoneCells: [spendCell, brokenCell],
   }

@@ -1,4 +1,10 @@
 import { prisma } from "@/lib/prisma"
+import {
+  BASKET_FLAT_PCT,
+  BASKET_WEEKS,
+  foldBasketTrends,
+  loadVendorBasketWeeks,
+} from "@/lib/counter/vendor-basket"
 import { isChargeRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct } from "@/lib/counter/format"
@@ -31,12 +37,10 @@ import type { FigureProps, MListRow, QueueItem, Row } from "@/components/counter
 const TABLE_ROWS = 8
 /** Series on the trend chart — the biggest by spend. */
 const SERIES = 4
-/** Weeks the trend covers. */
-const WEEKS = 8
 /** Rows on the phone's list. */
 const PHONE_ROWS = 5
 /** A trend smaller than this reads "flat". */
-const FLAT_PCT = 2
+const FLAT_PCT = BASKET_FLAT_PCT
 /** A line reconciles when it lands inside half a cent — the Invoices page's own. */
 const EPSILON = 0.02
 /** Characters a legend name is cut to. */
@@ -142,13 +146,7 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
       },
       orderBy: { invoiceDate: "asc" },
     }),
-    prisma.$queryRaw<Array<{ wk: Date; vendor: string; px: number }>>`
-      SELECT DATE_TRUNC('week', i."invoiceDate")::date AS wk, i."vendorName" AS vendor,
-             (PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY li."unitPrice"))::float AS px
-      FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
-      WHERE i."accountId" = ${accountId} AND li."unitPrice" > 0
-        AND i."invoiceDate" >= DATE_TRUNC('week', ${today}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
-      GROUP BY 1, 2 ORDER BY 1`,
+    loadVendorBasketWeeks({ accountId, today }),
   ])
 
   // Fold on the normalized name FIRST. Every figure below — the count, the
@@ -190,34 +188,10 @@ async function loadVendors(input: VendorsInput): Promise<VendorData> {
   }
 
   // Weekly basket medians, indexed to each vendor's own first week — see
-  // `trendOf` for why an absolute axis cannot work here.
-  const byVendor = new Map<string, Array<{ week: string; px: number }>>()
-  for (const w of weekly) {
-    const name = normalizeVendorName(w.vendor)
-    const list = byVendor.get(name) ?? []
-    list.push({ week: w.wk.toISOString().slice(0, 10), px: w.px })
-    byVendor.set(name, list)
-  }
-  // A vendor whose folded spellings both delivered in one week yields two rows
-  // for that week; average them so the series has one point per week.
-  const indexed: VendorData["weekly"] = []
-  const trendOfVendor = new Map<string, number | null>()
-  for (const [name, rows] of byVendor) {
-    const weeks = [...new Set(rows.map((r) => r.week))].sort()
-    const at = (w: string) => {
-      const hits = rows.filter((r) => r.week === w)
-      return hits.reduce((t, r) => t + r.px, 0) / hits.length
-    }
-    const base = at(weeks[0])
-    for (const w of weeks) {
-      indexed.push({ week: w, vendor: name, index: base > 0 ? ((at(w) - base) / base) * 100 : 0 })
-    }
-    const last = at(weeks[weeks.length - 1])
-    trendOfVendor.set(
-      name,
-      weeks.length >= 2 && base > 0 ? ((last - base) / base) * 100 : null,
-    )
-  }
+  // `trendOf` for why an absolute axis cannot work here, and
+  // `@/lib/counter/vendor-basket` for the arithmetic, which the vendor DETAIL
+  // page reads too. One figure, one function (CLAUDE.md's shared-figure rule).
+  const { weekly: indexed, trend: trendOfVendor } = foldBasketTrends(weekly)
 
   const medianGap = (dates: Date[]): number | null => {
     if (dates.length < 2) return null
@@ -475,7 +449,7 @@ function workOf(d: VendorData): VendorWork {
       title: `${rising.name} is getting dearer`,
       body:
         `${rising.name}'s basket median is up ${trendText(rising.trend).replace("▲ ", "")} over ` +
-        `${count(WEEKS)} weeks, on ${money(rising.spend)} of spend in ${d.rangeLabel}. That is ` +
+        `${count(BASKET_WEEKS)} weeks, on ${money(rising.spend)} of spend in ${d.rangeLabel}. That is ` +
         `the vendor's whole basket rather than one line, so it is a conversation about the ` +
         `account and not about a product.`,
       act: "See what they sell",
