@@ -2,6 +2,7 @@
 
 import {
   PageHead,
+  RankBars,
   Section,
   Strip,
   Table,
@@ -61,6 +62,26 @@ export function CounterCacheClient({
             {/* No `.sec__body` — a table section emits the table alone. */}
             <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
               {p.note}
+            </p>
+          </>
+        )}
+      </Section>
+
+      {/* `P.moncache`'s third panel. The same prefixes as the table above,
+          ranked the same way and drawn rather than listed — which is the
+          page's own argument that a blended rate hides a cold prefix behind
+          warm ones. `RankBars` is the port of the prototype's `.rankbar`. */}
+      <Section
+        title="Where the misses are"
+        meta={(m) => m.meta}
+        data={sections.misses}
+        pending={pending}
+      >
+        {(m) => (
+          <>
+            <RankBars rows={m.rows} />
+            <p className="mono" style={{ margin: "11px 0 0" }}>
+              {m.note}
             </p>
           </>
         )}
