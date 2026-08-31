@@ -9,12 +9,14 @@ import {
   Queue,
   Section,
   Strip,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
   type SwitchableStore,
 } from "@/components/counter"
+import { USAGE_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -38,6 +40,14 @@ import type { ProductUsageSections } from "@/lib/counter/adapters/product-usage"
  * is the ingredient page's matched-SKU table and the vendor page's basket.
  * All four are built. Rebuilding either here would be one figure computed
  * twice, which is the thing the shared-figure rule exists to stop.
+ *
+ * The prototype's own objection to that is right, though: "a tab label with
+ * nothing behind it is the same broken promise as a shortcut that opens
+ * nothing." Its `seg` navigates nowhere, which is why it had to stack all
+ * three views onto one page to keep the promise. `USAGE_TABS` keeps it the
+ * other way — the labels are links, and they go to the pages that already
+ * hold those figures. Declining a section is only honest if the reader can
+ * still get to what it would have said.
  */
 export type CounterUsageSections = SectionSources<ProductUsageSections>
 
@@ -95,6 +105,9 @@ export function CounterUsageClient({
         title="Product usage"
         sub={`${storeName} · what the recipes say you used against what you bought`}
       >
+        {/* `P.usage.seg`. The two views this page declines to rebuild are
+            links, not headings — see the docblock. */}
+        <SubNav items={USAGE_TABS} label="Product usage" />
         <DateControl
           presetId={presetId}
           comparisonId={comparisonId}

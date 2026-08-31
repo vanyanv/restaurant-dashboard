@@ -947,6 +947,21 @@ export const PAGES: FidelityPage[] = [
     // the DATABASE cannot supply; these two the database supplies fine and the
     // architecture declines to duplicate — a different argument that should
     // not borrow that field's words.
+    //
+    // The decline is NAVIGABLE now, which it was not when this note was
+    // written. `P.usage.desk()`'s own comment on those two sections is "a tab
+    // label with nothing behind it is the same broken promise as a shortcut
+    // that opens nothing" — and it is right. The prototype's `seg` navigates
+    // nowhere, so stacking all three views onto one page was the only way it
+    // could keep that promise. `USAGE_TABS` keeps it the other way: the three
+    // labels are links, and two of them go to the pages that already hold
+    // those figures. Declining a section is only honest if the reader can
+    // still reach what it would have said.
+    //
+    // `.seg` is not a landmark, so this changes no count. The page is still
+    // 16 of 21, and the remaining gap is those two tables plus one extra
+    // queue item — `workOf` finds three things worth doing where the fixture
+    // hand-wrote two.
     status: "editorial",
   },
   {
