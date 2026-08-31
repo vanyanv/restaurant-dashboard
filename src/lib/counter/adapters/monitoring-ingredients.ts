@@ -8,7 +8,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, Row } from "@/components/counter"
+import type { FigureProps, MListRow, Row } from "@/components/counter"
 
 /**
  * Ingredient audit — `P.moningredients`
@@ -52,6 +52,8 @@ import type { FigureProps, Row } from "@/components/counter"
 
 /** Rows each table prints. */
 const TABLE_ROWS = 10
+/** Rows the phone list prints — `P.moningredients.phone()` shows three. */
+const PHONE_ROWS = 3
 
 interface DecisionRow {
   at: Date
@@ -301,37 +303,9 @@ function headlineOf(d: IngredientAuditData): AuditHeadline {
   return { verdict, cells, phoneCells: cells.slice(0, 2) }
 }
 
-export interface AuditCharges {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
-function chargesOf(d: IngredientAuditData): AuditCharges {
-  return {
-    rows: d.chargeCanonicals.map((c) => ({
-      key: c.name,
-      cells: {
-        canonical: { v: c.name, cls: "hot" },
-        recipes: c.recipes === 0 ? "none" : count(c.recipes),
-        lines: count(c.lines),
-        spellings: count(c.spellings),
-        spend: money(c.spend),
-      },
-    })),
-    meta: `${count(d.chargeCanonicals.length)} of ${count(d.canonicalTotal)} canonicals`,
-    note:
-      `These are freight and tax rows that the matcher promoted into the ingredient ` +
-      `catalogue. Neither is in a recipe, so no plate cost is wrong because of them — but ` +
-      `every figure that reads spend by ingredient counts them, and one of them was created ` +
-      `by the model rung at 0.84 confidence off a line printed "Miscellaneous Charge". The ` +
-      `four names are already declared non-goods in src/lib/invoice-charges.ts for the ` +
-      `invoice reconciliation check; the matcher does not consult it.`,
-  }
-}
-
 export interface AuditDecisions {
   rows: Row[]
+  phoneRows: MListRow[]
   meta: string
   note: string
 }
@@ -359,6 +333,14 @@ function decisionsOf(d: IngredientAuditData): AuditDecisions {
                 : { v: "shadow", cls: "hot" },
       },
     })),
+    phoneRows: d.decisions.slice(0, PHONE_ROWS).map((x, i) => ({
+      key: `${x.at.toISOString()}-${i}`,
+      title: x.canonical,
+      detail: `${rungLabel(x.layer)} · ${x.confidence.toFixed(2)}`,
+      value: x.status === "SUGGESTED" ? "declined" : x.undone ? "undone" : x.status.toLowerCase(),
+      note: "",
+      noteTone: (x.status === "APPLIED" && !x.undone ? "up" : "down") as "up" | "down",
+    })),
     meta: `newest ${count(d.decisions.length)} of ${count(
       Object.values(d.decisionCounts).reduce((s, n) => s + n, 0),
     )}`,
@@ -371,37 +353,25 @@ function decisionsOf(d: IngredientAuditData): AuditDecisions {
   }
 }
 
-export interface AuditUnmatched {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
-function unmatchedOf(d: IngredientAuditData): AuditUnmatched {
-  const skus = new Set(d.unmatched.filter((u) => !u.charge && u.sku).map((u) => u.sku))
-  const charges = d.unmatched.filter((u) => u.charge).length
-
-  return {
-    rows: d.unmatched.slice(0, TABLE_ROWS + 4).map((u, i) => ({
-      key: `${u.sku ?? "none"}-${i}`,
-      cells: {
-        vendor: u.vendor,
-        sku: u.sku ?? "—",
-        printed: u.productName.slice(0, 42),
-        spend: money(u.spend),
-        why: u.charge ? "a charge row, correctly declined" : { v: "no match", cls: "hot" },
-      },
-    })),
-    meta: `${count(d.unmatched.length)} lines · ${count(skus.size)} distinct SKUs`,
-    note:
-      `${count(charges)} of these are charge rows the ladder was right to refuse, so the real ` +
-      `queue is ${count(d.unmatched.length - charges)} lines across ${count(skus.size)} SKUs. ` +
-      `Most of them are one can liner: the same SKU, spelled a different way on every ` +
-      `delivery, which is exactly the case a SKU match is supposed to solve and does not, ` +
-      `because no canonical was ever confirmed for it.`,
-  }
-}
-
+/**
+ * `P.moningredients`'s "The audit — canonical ingredients and what they
+ * cover", including its State column.
+ *
+ * The State is where two separate tables went. This page carried four:
+ * the most-split canonicals, a "Not ingredients" table of the freight rows the
+ * matcher promoted into the catalogue, a "Still unmatched" queue, and the
+ * decisions. The design has two, and it is right — the prototype's own audit
+ * table ends in a State column reading "Component, uncosted" and "No quantity
+ * on I28517", which is the same idea: one row per canonical, and the column
+ * that says what is wrong with it.
+ *
+ * So the charge canonicals are ROWS here, flagged, appended to the most-split
+ * ten if the split ordering did not already reach them — the finding is that
+ * they exist in this table at all, and a reader has to see them in the
+ * catalogue to believe it. The unmatched queue is a strip cell ("Still
+ * unmatched", with the charge rows counted apart) and a sentence, which is
+ * where `P.moningredients` puts it too.
+ */
 export interface AuditCanonicals {
   rows: Row[]
   meta: string
@@ -409,15 +379,26 @@ export interface AuditCanonicals {
 }
 
 function canonicalsOf(d: IngredientAuditData): AuditCanonicals {
+  const seen = new Set(d.canonicals.map((c) => c.name))
+  const shown = [...d.canonicals, ...d.chargeCanonicals.filter((c) => !seen.has(c.name))]
+  const realUnmatched = d.unmatched.filter((u) => !u.charge).length
+  const declined = d.unmatched.length - realUnmatched
+  const skus = new Set(d.unmatched.filter((u) => !u.charge && u.sku).map((u) => u.sku))
+
   return {
-    rows: d.canonicals.map((c) => ({
+    rows: shown.map((c) => ({
       key: c.name,
       cells: {
-        canonical: c.name,
+        canonical: c.charge ? { v: c.name, cls: "hot" } : c.name,
         spellings: count(c.spellings),
         skus: count(c.skus),
         recipes: c.recipes === 0 ? { v: "none", cls: "hot" } : count(c.recipes),
         spend: money(c.spend),
+        state: c.charge
+          ? { v: "not an ingredient", cls: "hot" }
+          : c.recipes === 0
+            ? { v: "in no recipe", cls: "hot" }
+            : "healthy",
       },
     })),
     meta: `${count(TABLE_ROWS)} most-split of ${count(d.canonicalTotal)}`,
@@ -426,16 +407,22 @@ function canonicalsOf(d: IngredientAuditData): AuditCanonicals {
       `is the work: a GROUP BY on what the invoice printed would report the potato roll as ` +
       `twenty-one separate products and split its purchases across all of them. ` +
       `${count(d.noRecipe)} of the ${count(d.canonicalTotal)} canonicals are in no recipe at ` +
-      `all, which is the orphan figure the Ingredients page reports.`,
+      `all, which is the orphan figure the Ingredients page reports. The rows marked "not an ` +
+      `ingredient" are freight and tax lines the matcher promoted into the catalogue — none ` +
+      `is in a recipe, so no plate cost is wrong, but every by-ingredient spend figure counts ` +
+      `them, and their four names are already declared non-goods in ` +
+      `src/lib/invoice-charges.ts for the invoice reconciliation check. The matcher does not ` +
+      `consult it. Off the table: ${count(realUnmatched)} invoice lines across ` +
+      `${count(skus.size)} SKUs still match nothing, mostly one can liner spelled a different ` +
+      `way on every delivery, and a further ${count(declined)} are charge rows the ladder was ` +
+      `right to refuse.`,
   }
 }
 
 export interface AuditSections {
   headline: SectionData<AuditHeadline>
-  charges: SectionData<AuditCharges>
-  decisions: SectionData<AuditDecisions>
-  unmatched: SectionData<AuditUnmatched>
   canonicals: SectionData<AuditCanonicals>
+  decisions: SectionData<AuditDecisions>
 }
 
 export function getAuditSectionPromises(): StreamedSections<AuditSections> {
@@ -448,10 +435,8 @@ export function getAuditSectionPromises(): StreamedSections<AuditSections> {
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryIngredientAudit")
   return {
     headline: s(headlineOf),
-    charges: s(chargesOf),
-    decisions: s(decisionsOf),
-    unmatched: s(unmatchedOf),
     canonicals: s(canonicalsOf),
+    decisions: s(decisionsOf),
   }
 }
 

@@ -1474,7 +1474,40 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "moningredients", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ingredient-audit", route: "/dashboard/admin/monitoring/ingredient-audit", report: true, status: "editorial" },
+  {
+    protoId: "moningredients",
+    name: "Monitoring · Ingredients",
+    protoRoute: "/dashboard/admin/monitoring/ingredient-audit",
+    route: "/dashboard/admin/monitoring/ingredient-audit",
+    mobileRoute: "/m/monitoring/ingredient-audit",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance
+    // of any kind: 7 of 7 on the desk, 5 of 5 on the phone, 0 extra, 0
+    // rendering differences, 0 dark defects. `P.moningredients` sets
+    // `nodate: true`, so there is no Apply button to declare.
+    //
+    // The desk carried FOUR tables where the design has two, plus a verdict
+    // block it has none of — 15 landmarks against 7. Neither extra table was
+    // wrong about its subject; both were the wrong shape for it:
+    //
+    //   - "Not ingredients", the freight rows the matcher promoted into the
+    //     catalogue, is the audit table's STATE column now. That is what the
+    //     prototype's own State column is for — its values are "Component,
+    //     uncosted" and "No quantity on I28517", which is the same idea. The
+    //     charge canonicals are appended to the most-split ten if the split
+    //     ordering did not already reach them, because the finding is that
+    //     they appear in this catalogue at all.
+    //   - "Still unmatched" is a strip cell and a sentence, which is where
+    //     `P.moningredients` puts it: "Unmatched · 128 · $4,120 of spend
+    //     uncosted".
+    //
+    // The verdict is the trailing `<p class="mono">` the design ends with. It
+    // says the same thing at the foot of the page that it said at the head,
+    // and it is the sentence this page exists for: nothing has ever been
+    // auto-matched, so there is no held rate and no revert rate to report.
+    status: "counter",
+    baseline: { desktop: 7, mobile: 5 },
+  },
   { protoId: "login", name: "Login", protoRoute: "/login", route: "/login", status: "editorial" },
   { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },
   { protoId: "shutdown", name: "Shutdown", protoRoute: "/shutdown", route: "/shutdown", status: "editorial" },
