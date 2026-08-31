@@ -7,7 +7,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, KvRow, Row } from "@/components/counter"
+import type { FigureProps, KvRow, MListRow, Row } from "@/components/counter"
 
 /**
  * Infrastructure — `P.moninfra` (`docs/counter/counter-prototype.html`).
@@ -52,6 +52,8 @@ const ERROR_DAYS = 7
 const GROWTH_DAYS = 30
 /** Tables the storage section prints. */
 const TABLE_ROWS = 10
+/** Rows the phone's two lists print — `P.moninfra.phone()` shows three each. */
+const PHONE_ROWS = 3
 
 /**
  * Jobs that exit non-zero to report a verdict rather than a fault. Their
@@ -212,7 +214,6 @@ function ago(at: Date | null): string {
 }
 
 export interface InfraHeadline {
-  verdict: string
   cells: FigureProps[]
   phoneCells: FigureProps[]
 }
@@ -225,27 +226,18 @@ function headlineOf(d: InfraData): InfraHeadline {
   const worst = real.filter((j) => j.failures > 0).sort((a, b) => b.failures - a.failures)[0]
   const growth = d.dbBytes !== null && d.dbBytesThen !== null ? d.dbBytes - d.dbBytesThen : null
 
-  const verdict =
-    `${count(realFailures)} of ${count(realRuns)} scheduled runs failed in ` +
-    `${count(JOB_DAYS)} days` +
-    (worst
-      ? `, ${count(worst.failures)} of them ${worst.job}` +
-        (worst.lastError ? ` returning "${worst.lastError.slice(0, 40)}"` : "")
-      : "") +
-    `. A further ${count(verdictFailures)} runs are recorded as failures and are not: ` +
-    `ml.operator-gate-check exits non-zero to report that a model gate did not pass, ` +
-    `which is the job working. Storage is ${bytes(d.dbBytes)} of database and ` +
-    `${bytes(d.r2Bytes)} of files` +
-    (growth !== null ? `, growing ${bytes(growth)} in ${count(GROWTH_DAYS)} days` : "") +
-    `.`
-
   const cells: FigureProps[] = [
     {
+      // The snapshot age is in the DELTA, not a `caption`. A caption opens
+      // `.band`, and `P.moninfra`'s own strip cells are four-tuples with no
+      // c[4] — the prototype puts its snapshot age in the R2 cell's delta for
+      // exactly this reason ("1.9 GB · snapshot 2h ago").
       label: "Database",
       value: bytes(d.dbBytes),
-      delta: growth === null ? undefined : `${bytes(growth)} in ${count(GROWTH_DAYS)}d`,
+      delta:
+        (growth === null ? "" : `${bytes(growth)} in ${count(GROWTH_DAYS)}d · `) +
+        `snapshot ${ago(d.capturedAt)}`,
       deltaTone: "is-flat",
-      caption: `snapshot ${ago(d.capturedAt)}`,
     },
     {
       label: "Files",
@@ -266,11 +258,12 @@ function headlineOf(d: InfraData): InfraHeadline {
     },
   ]
 
-  return { verdict, cells, phoneCells: cells.slice(0, 2) }
+  return { cells, phoneCells: cells.slice(0, 2) }
 }
 
 export interface InfraStorage {
   rows: Row[]
+  phoneRows: MListRow[]
   meta: string
   note: string
 }
@@ -288,6 +281,13 @@ function storageOf(d: InfraData): InfraStorage {
         size: bytes(t.bytes),
         share: total > 0 ? `${((100 * t.bytes) / total).toFixed(1)}%` : "—",
       },
+    })),
+    phoneRows: d.tables.slice(0, PHONE_ROWS).map((t) => ({
+      key: t.table,
+      title: t.table,
+      detail: `${count(t.rows)} rows`,
+      value: bytes(t.bytes),
+      note: total > 0 ? `${((100 * t.bytes) / total).toFixed(0)}%` : "—",
     })),
     meta: `${count(d.tables.length)} largest tables · snapshot ${ago(d.capturedAt)}`,
     note:
@@ -321,6 +321,7 @@ function filesOf(d: InfraData): InfraFiles {
 
 export interface InfraJobs {
   rows: Row[]
+  phoneRows: MListRow[]
   meta: string
   note: string
 }
@@ -346,6 +347,20 @@ function jobsOf(d: InfraData): InfraJobs {
             : "—",
       },
     })),
+    phoneRows: [...d.jobs]
+      .sort((a, b) => Number(b.failures > 0) - Number(a.failures > 0) || b.runs - a.runs)
+      .slice(0, PHONE_ROWS)
+      .map((j) => ({
+        key: j.job,
+        title: j.job,
+        detail: `${count(j.runs)} runs · ${duration(j.meanMs)}`,
+        value: j.failures === 0 ? "clean" : count(j.failures),
+        note: j.verdictJob ? "verdicts" : j.failures > 0 ? "failed" : "ok",
+        noteTone: (j.verdictJob ? undefined : j.failures > 0 ? "down" : "up") as
+          | "up"
+          | "down"
+          | undefined,
+      })),
     meta: `last ${count(JOB_DAYS)} days`,
     note:
       `ml.operator-gate-check's failures are verdicts, not faults: on a FAILURE run its ` +
@@ -357,64 +372,37 @@ function jobsOf(d: InfraData): InfraJobs {
   }
 }
 
-export interface InfraErrors {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
-function errorsOf(d: InfraData): InfraErrors {
-  const sources = new Set(d.errors.map((e) => e.source))
-  const allWatchdog = [...sources].every((s) => s.startsWith("cron."))
-
-  return {
-    rows: d.errors.map((e, i) => ({
-      key: `${e.at.toISOString()}-${i}`,
-      cells: {
-        when: e.at.toISOString().slice(0, 16).replace("T", " "),
-        source: e.source,
-        message: e.message.slice(0, 90),
-      },
-    })),
-    meta: `last ${count(ERROR_DAYS)} days`,
-    note: allWatchdog
-      ? `Every one of these is the cron watchdog reporting that a job is overdue, not an ` +
-        `application error — there are none of those in the window. They are the same otter ` +
-        `500 burst seen from the other side, which is why they arrive in clusters.`
-      : `Sources beginning "cron." are the watchdog reporting overdue jobs rather than ` +
-        `application errors.`,
-  }
-}
-
 /**
- * What the prototype asks for and this product does not record. Stated rather
- * than rendered as five green tags derived from nothing.
+ * What the prototype asks for and this product does not record.
+ *
+ * A SENTENCE, not a panel. `P.moninfra` ends with a bare `<p class="mono">`
+ * outside any section — "Share is of the 8.4 GB total…" — and this is that
+ * paragraph. It was a `.kv` of three "not recorded" rows until the page was
+ * measured against its design: three rows saying nothing was recorded is a
+ * panel built out of absences, and it cost a `.sec`, a `.sec__head`, a
+ * `.sec__body` and a `.kv` that the design does not have. The argument is what
+ * matters and the argument is prose.
  */
 export interface InfraGaps {
-  rows: KvRow[]
   note: string
 }
 
 function gapsOf(_d: InfraData): InfraGaps {
   return {
-    rows: [
-      { label: "Token expiry", value: "not recorded", tone: "warn" },
-      { label: "Connection pool", value: "not recorded", tone: "warn" },
-      { label: "Per-table growth", value: "top tables only", tone: "warn" },
-    ],
     note:
       `The prototype's Tokens panel lists five integrations with expiry dates and a green ` +
       `"OK" against four of them. Nothing in this database holds a credential's expiry, so ` +
       `those tags would be decoration reading as a check that ran. Two credentials are known ` +
       `dead from their sync history rather than from any expiry field — the events feed on ` +
-      `the model page is one — which is the honest way to find this out today.`,
+      `the model page is one — which is the honest way to find this out today. The pooled ` +
+      `connection count the prototype's strip reports is not recorded anywhere either, and ` +
+      `per-table growth is known only for the tables the snapshot job keeps.`,
   }
 }
 
 export interface InfraSections {
   headline: SectionData<InfraHeadline>
   jobs: SectionData<InfraJobs>
-  errors: SectionData<InfraErrors>
   storage: SectionData<InfraStorage>
   files: SectionData<InfraFiles>
   gaps: SectionData<InfraGaps>
@@ -431,7 +419,6 @@ export function getInfraSectionPromises(): StreamedSections<InfraSections> {
   return {
     headline: s(headlineOf),
     jobs: s(jobsOf),
-    errors: s(errorsOf),
     storage: s(storageOf),
     files: s(filesOf),
     gaps: s(gapsOf),

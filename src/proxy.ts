@@ -61,14 +61,16 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // against `P.*.phone()`, which is that question answered by whoever built
   // them. Unreachable from their desk URL until now.
   //
-  // The three tabs WITHOUT a phone page — ml, infrastructure, ingredient-audit
-  // — are deliberately absent from this list, and no exception entry is needed
-  // for them: these are exact matches, not a dynamic base, so an unmapped tab
-  // returns null and stays on desktop.
+  // The two tabs WITHOUT a phone page — ml and ingredient-audit — are
+  // deliberately absent from this list, and no exception entry is needed for
+  // them: these are exact matches, not a dynamic base, so an unmapped tab
+  // returns null and stays on desktop. Infrastructure was the third until it
+  // got `P.moninfra.phone()`'s two lists and a strip.
   "/dashboard/admin/monitoring": "/m/monitoring",
   "/dashboard/admin/monitoring/activity": "/m/monitoring/activity",
   "/dashboard/admin/monitoring/cache": "/m/monitoring/cache",
   "/dashboard/admin/monitoring/costs": "/m/monitoring/costs",
+  "/dashboard/admin/monitoring/infrastructure": "/m/monitoring/infrastructure",
   "/dashboard/admin/monitoring/people": "/m/monitoring/people",
   // Stores had no mobile equivalent left after the mobile bloat deletion, and
   // this comment said so until `/m/stores` was rebuilt on Counter; the desk
