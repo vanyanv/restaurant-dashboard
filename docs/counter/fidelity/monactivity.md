@@ -30,44 +30,14 @@ Structure: 5 missing, 0 extra, 11 matched. Rendering (light): 0 property differe
 
 ## fidelity-mobile — phone
 
-**The prototype renders 5 landmarks on this page. We render 11.**
+**The prototype renders 5 landmarks on this page. We render 5.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
-| `.ch` | 0 | 1 |
-| `.mlist` | 1 | 0 |
-| `.mstrip` | 1 | 0 |
-| `.sec` | 1 | 3 |
-| `.sec__body` | 1 | 2 |
-| `.sec__head` | 1 | 2 |
-| `.strip` | 0 | 1 |
-| `.tbl` | 0 | 2 |
+| `.mlist` | 1 | 1 |
+| `.mstrip` | 1 | 1 |
+| `.sec` | 1 | 1 |
+| `.sec__body` | 1 | 1 |
+| `.sec__head` | 1 | 1 |
 
-Structure: 2 missing, 8 extra, 3 matched. Rendering (light): 6 property differences on the 3 landmarks present on both sides.
-
-### Missing — the prototype has these and we do not
-
-- `#0 .mstrip`
-- `#4 .mlist`
-
-### Extra — we render these and the prototype does not
-
-- `#1 .sec__body`
-- `#2 .strip`
-- `#3 .sec`
-- `#6 .ch`
-- `#7 .tbl`
-- `#8 .sec`
-- `#9 .sec__head`
-- `#10 .tbl`
-
-### Rendering differences
-
-| landmark | property | prototype | ours |
-|---|---|---|---|
-| `#1 .sec` | `font-size` | `14px` | `13px` |
-| `#1 .sec` | `line-height` | `21px` | `19.5px` |
-| `#2 .sec__head` | `font-size` | `14px` | `13px` |
-| `#2 .sec__head` | `line-height` | `21px` | `19.5px` |
-| `#3 .sec__body` | `font-size` | `14px` | `13px` |
-| `#3 .sec__body` | `line-height` | `21px` | `19.5px` |
+Structure: 0 missing, 0 extra, 5 matched. Rendering (light): 0 property differences on the 5 landmarks present on both sides.
