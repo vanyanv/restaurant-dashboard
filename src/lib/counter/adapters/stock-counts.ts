@@ -70,10 +70,71 @@ export interface CountsVariance {
   meta: string
 }
 
+/**
+ * `P.counts`'s "The count in progress" — the open session, named.
+ *
+ * The prototype's copy is "Marisol started at 9:04pm and is in the walk-in.
+ * Two lines are short so far, worth $61.40". Ours can say who and when and how
+ * far, because those are recorded; it cannot say "short so far", because short
+ * is a variance and no count in this account has ever been COMPLETED to
+ * measure one against.
+ */
+export interface CountsProgress {
+  lead: string
+  meta: string
+  /** Where "Open the count" goes. Absent when nothing is open. */
+  href: string | null
+  note: string
+}
+
 export interface StockCountsSections {
   headline: SectionData<CountsHeadline>
   sessions: SectionData<CountsSessions>
   variance: SectionData<CountsVariance>
+  progress: SectionData<CountsProgress>
+}
+
+/**
+ * The open session. Two are IN_PROGRESS in this account; the newest is the one
+ * a reader means by "the count in progress", and the other is named in the
+ * note rather than hidden.
+ */
+function progressOf(d: Data): CountsProgress {
+  // `startedAt` is nullable, and a session with no start cannot be described
+  // as "opened at" anything — it is excluded rather than dated from null.
+  const open = d.sessions
+    .filter((x) => x.status === "IN_PROGRESS" && x.startedAt !== null)
+    .sort((a, b) => (b.startedAt as Date).getTime() - (a.startedAt as Date).getTime())
+  const it = open[0]
+
+  if (it === undefined) {
+    return {
+      lead: "No count is open right now.",
+      meta: "nothing in progress",
+      href: null,
+      note:
+        `The last session to be opened was ${d.sessions.length === 0 ? "never" : "abandoned"}. ` +
+        `Starting one is the only way anything on this page gets a reading.`,
+    }
+  }
+
+  const startedAt = it.startedAt as Date
+  const days = Math.floor((Date.now() - startedAt.getTime()) / 864e5)
+  return {
+    lead:
+      `${it.by} opened this count on ${DT(startedAt)} at ${it.store} and has entered ` +
+      `${count(it.lines)} line${it.lines === 1 ? "" : "s"}` +
+      (it.value > 0 ? `, worth ${money(it.value)}` : "") +
+      `. It has been open ${count(days)} day${days === 1 ? "" : "s"}.`,
+    meta: `${count(it.lines)} line${it.lines === 1 ? "" : "s"} so far`,
+    href: `/dashboard/operations/inventory/counts/${it.id}`,
+    note:
+      (open.length > 1
+        ? `${count(open.length)} counts are open at once, which is usually one nobody closed. `
+        : "") +
+      `Nothing here says "short so far": short is a variance, and no count in this ` +
+      `account has ever reached COMPLETED for one to be measured against.`,
+  }
 }
 
 export interface StockCountsInput {
@@ -426,6 +487,7 @@ export function getStockCountsSectionPromises(
     headline: s(headlineOf),
     sessions: s(sessionsOf),
     variance: s(varianceOf),
+    progress: s(progressOf),
   }
 }
 
