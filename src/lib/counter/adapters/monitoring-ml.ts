@@ -345,18 +345,18 @@ function headlineOf(d: MlData): MlHeadline {
       value: `${count(d.targets.find((t) => t.target === "BUSY_HOURS")?.wins ?? 0)} of ${count(
         d.targets.find((t) => t.target === "BUSY_HOURS")?.evaluations ?? 0,
       )}`,
-      caption: "the same pipeline, a harder target",
+      delta: "the same pipeline, a harder target",
     },
     {
       label: "Interval coverage gate",
       value: gate3 ? `${count(gate3.passed)} of ${count(gate3.days)}` : "—",
-      caption: `days passed in ${count(GATE_DAYS)}`,
+      delta: `days passed in ${count(GATE_DAYS)}`,
       deltaTone: gate3 && gate3.passed < gate3.days / 2 ? "is-down" : undefined,
     },
     {
       label: "Last trained",
       value: ago(d.lastRunAt),
-      caption: `${count(d.pendingDays)} days forecast ahead`,
+      delta: `${count(d.pendingDays)} days forecast ahead`,
       deltaTone: "is-flat",
     },
   ]
