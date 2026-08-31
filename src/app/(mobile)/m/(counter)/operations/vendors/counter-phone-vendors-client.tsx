@@ -1,12 +1,20 @@
 "use client"
 
-import { Chart, MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { VendorsSections } from "@/lib/counter/adapters/vendors"
 
 /**
- * Vendors, on a phone — `P.vendors.phone()`: the title, a two-cell strip, the
- * trend and a list by spend.
+ * Vendors, on a phone — `P.vendors.phone()`: the title, a two-cell strip and a
+ * list by spend.
+ *
+ * NO PRICE TREND, and it used to have one. The design puts the trend on the
+ * desk and not here, which is the same call this project already made for
+ * itself: the phone is a glance-and-do surface, and a basket index over eight
+ * weeks is analysis. Removing it costs the product nothing — the desk vendors
+ * page renders the identical chart from the identical `trend` section — and a
+ * phone reader keeps the two figures and the ranked list, which are the parts
+ * you can act on standing up.
  *
  * The prototype's second phone cell is `On time · 92%`. Nothing in this schema
  * records a promised delivery date, so it is replaced by the reconciliation
@@ -37,9 +45,6 @@ export function CounterPhoneVendorsClient({
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
 
-      <Section title="Price trend" meta={(t) => t.meta} data={sections.trend} pending={pending}>
-        {(t) => <Chart {...t.phoneChart} fmt={INDEX} />}
-      </Section>
 
       <Section title="By spend" meta={(l) => l.meta} data={sections.list} pending={pending}>
         {(l) => <MList rows={l.rows} />}
@@ -47,6 +52,3 @@ export function CounterPhoneVendorsClient({
     </>
   )
 }
-
-/** Matches the desk client — see its comment. */
-const INDEX = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`

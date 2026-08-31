@@ -13,9 +13,6 @@ export default function MobileVendorsLoading() {
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="Price trend" data={loading()}>
-        {() => null}
-      </Section>
       <Section title="By spend" data={loading()}>
         {() => null}
       </Section>

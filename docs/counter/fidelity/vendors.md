@@ -28,22 +28,14 @@ Structure: 1 missing, 0 extra, 14 matched. Rendering (light): 0 property differe
 
 ## fidelity-mobile — phone
 
-**The prototype renders 5 landmarks on this page. We render 9.**
+**The prototype renders 5 landmarks on this page. We render 5.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
-| `.ch` | 0 | 1 |
 | `.mlist` | 1 | 1 |
 | `.mstrip` | 1 | 1 |
-| `.sec` | 1 | 2 |
-| `.sec__body` | 1 | 2 |
-| `.sec__head` | 1 | 2 |
+| `.sec` | 1 | 1 |
+| `.sec__body` | 1 | 1 |
+| `.sec__head` | 1 | 1 |
 
-Structure: 0 missing, 4 extra, 5 matched. Rendering (light): 0 property differences on the 5 landmarks present on both sides.
-
-### Extra — we render these and the prototype does not
-
-- `#4 .ch`
-- `#5 .sec`
-- `#6 .sec__head`
-- `#7 .sec__body`
+Structure: 0 missing, 0 extra, 5 matched. Rendering (light): 0 property differences on the 5 landmarks present on both sides.
