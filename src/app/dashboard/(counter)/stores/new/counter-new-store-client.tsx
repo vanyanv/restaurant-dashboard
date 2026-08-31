@@ -128,6 +128,19 @@ export function CounterNewStoreClient({
               >
                 {saving ? "Creating…" : "Create the store"}
               </button>
+              {/* `P.storeedit`'s second button, and a real one rather than a
+                  shape: a form that can only be completed has no way out of
+                  itself, and the destination is where the page was opened
+                  from. Disabled while a create is in flight so it cannot
+                  navigate away from a write it has already started. */}
+              <button
+                className="btn btn--quiet"
+                type="button"
+                disabled={saving}
+                onClick={() => router.push("/dashboard/stores")}
+              >
+                Cancel
+              </button>
             </div>
 
             <p className="mono" style={{ margin: "10px 0 0" }}>
