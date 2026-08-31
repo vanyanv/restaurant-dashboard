@@ -1213,7 +1213,34 @@ export const PAGES: FidelityPage[] = [
     status: "editorial",
   },
   { protoId: "monml", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/ml", route: "/dashboard/admin/monitoring/ml", report: true, status: "editorial" },
-  { protoId: "monpeople", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/people", route: "/dashboard/admin/monitoring/people", mobileRoute: "/m/monitoring/people", report: true, status: "editorial" },
+  {
+    protoId: "monpeople",
+    name: "Monitoring · People",
+    protoRoute: "/dashboard/admin/monitoring/people",
+    route: "/dashboard/admin/monitoring/people",
+    mobileRoute: "/m/monitoring/people",
+    report: true,
+    // MEASURED: phone 5 of 5. Desk 7 of the prototype's 12 — missing the
+    // "Sessions" chart and the "What this tells you" panel, with one extra
+    // table ("Who opens it").
+    //
+    // NOT GATED, and NOT a declared absence either, because this is a decision
+    // somebody already made in the opposite direction and wrote down. The
+    // adapter's docblock: the owner has opened this product TWICE, both on 24
+    // August four seconds apart, and every other view and all 703 sign-ins are
+    // the developer account — so "a tab that reports '48 sessions' without
+    // saying whose they are answers a different question from the one it
+    // asks". The chart was replaced by a table naming who, and a verdict line.
+    //
+    // Verified independently here: the owner's entire history is 2 page views
+    // on 2026-08-24. A daily sessions series is one bar and thirteen zeros.
+    //
+    // Both readings are defensible — note 33 holds that a zero IS a reading,
+    // and "opened once, never since" is a stark answer to this tab's own
+    // question. Reversing an argued decision to satisfy a landmark count is
+    // not, so the page keeps its table and the choice is left open.
+    status: "editorial",
+  },
   {
     protoId: "analyticsstore",
     name: "Analytics",
