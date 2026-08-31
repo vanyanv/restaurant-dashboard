@@ -206,8 +206,25 @@ function ago(at: Date): string {
   return `${count(Math.round(hours / 24))} days ago`
 }
 
+/**
+ * One `.setrow`: what it is on the left with a line under it, and what it
+ * currently reads on the right.
+ *
+ * NOT `KvRow`. `P.settings`' Account panel is setrows and this page rendered a
+ * `.kv` above them — two idioms in one panel, and a `.kv` the design does not
+ * have anywhere in Account. A setrow also carries the DETAIL line a `.kv`
+ * cannot ("Last changed 4 months ago" under "Password"), which is most of what
+ * the prototype's rows say.
+ */
+export interface SettingRow {
+  label: string
+  detail: string
+  value: string
+  tone?: "good" | "warn" | "bad"
+}
+
 export interface SettingsAccount {
-  rows: KvRow[]
+  rows: SettingRow[]
   /** Set when the signed-in user's clock disagrees with where the stores are. */
   clockWarning: string | null
   /** What the timezone control needs to save: the current values it edits. */
@@ -223,25 +240,27 @@ function accountOf(d: SettingsData): SettingsAccount {
     you !== null && you.timezone !== d.storeTimezoneHint ? you.timezone : null
 
   return {
+    // `P.settings`' three Account rows, with ours saying what this account
+    // actually holds. The timezone and the password are setrows too, rendered
+    // by `AccountControls` because they carry a control rather than a reading.
     rows: [
-      { label: "Signed in as", value: you?.name ?? "—" },
-      { label: "Email", value: you?.email ?? "—" },
-      { label: "Role", value: you?.role ?? "—" },
       {
-        label: "Your timezone",
-        value: you?.timezone ?? "—",
-        tone: wrongClock ? "bad" : undefined,
+        label: you?.name ?? "—",
+        detail: you?.email ?? "no email on file",
+        value: you?.role ?? "—",
       },
       {
         label: "Stores you can see",
-        value: `${count(d.storeNames.length)} of ${count(d.storeNames.length)} · ${d.storeNames.join(", ")}`,
+        detail: d.storeNames.join(", "),
+        value: `${count(d.storeNames.length)} of ${count(d.storeNames.length)}`,
       },
       {
         label: "Stores you own",
-        value:
+        detail:
           you && you.ownedStores.length > 0
-            ? you.ownedStores.join(", ")
-            : "none — all three are owned by the developer account",
+            ? "the ones your account is named on"
+            : "every store is owned by the developer account",
+        value: you && you.ownedStores.length > 0 ? you.ownedStores.join(", ") : "none",
         tone: you && you.ownedStores.length === 0 ? "warn" : undefined,
       },
     ],
@@ -285,8 +304,19 @@ function notificationsOf(d: SettingsData): SettingsNotifications {
   }
 }
 
+/**
+ * `P.settings`' "Sessions" panel, as far as this auth design can go.
+ *
+ * SETROWS, not a table, because the design's panel is a list of devices and
+ * this is a list of the same thing seen from the log. It was a `.tbl` — an
+ * extra the structure pass never forgives, against a `.sec__body` the design
+ * does have — and four columns of counts where three facts fit on a line.
+ *
+ * What it cannot have is the two buttons: auth is JWT with no session table,
+ * so nothing can be enumerated to end, and `note` says so with the numbers.
+ */
 export interface SettingsSignins {
-  rows: Row[]
+  rows: SettingRow[]
   meta: string
   note: string
 }
@@ -296,13 +326,11 @@ function signinsOf(d: SettingsData): SettingsSignins {
 
   return {
     rows: d.signins.map((r) => ({
-      key: r.agent,
-      cells: {
-        agent: r.agent,
-        signins: count(r.signins),
-        addresses: count(r.addresses),
-        last: ago(r.last),
-      },
+      label: r.agent,
+      detail:
+        `${count(r.signins)} sign-in${r.signins === 1 ? "" : "s"} from ` +
+        `${count(r.addresses)} address${r.addresses === 1 ? "" : "es"}`,
+      value: ago(r.last),
     })),
     meta: `${count(total)} sign-ins in ${count(SIGNIN_DAYS)} days`,
     note:

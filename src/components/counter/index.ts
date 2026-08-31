@@ -16,7 +16,10 @@ export { Spark } from "./surface/spark"
 export { Table, type Column, type Row, type Cell, type CellObject } from "./surface/table"
 export { Queue, type QueueItem } from "./surface/queue"
 export { Kv, type KvRow } from "./surface/kv"
-export { type Tone } from "./surface/tone"
+/* `toneStyle` travels with `Tone` because a page that has a tone and no way to
+   render it re-derives `var(--${tone})` by hand, which is the unchecked string
+   `tone.ts` exists to remove. */
+export { type Tone, toneStyle } from "./surface/tone"
 export { Meter } from "./surface/meter"
 export { CostBar, type CostBand } from "./surface/cost-bar"
 export { RowLine } from "./surface/row-line"

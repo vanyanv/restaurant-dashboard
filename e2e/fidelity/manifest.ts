@@ -1450,7 +1450,74 @@ export const PAGES: FidelityPage[] = [
     ],
   },
   { protoId: "storeedit", name: "Stores", protoRoute: "/dashboard/stores/new", route: "/dashboard/stores/new", report: true, status: "editorial" },
-  { protoId: "settings", name: "Settings", protoRoute: "/dashboard/settings", route: "/dashboard/settings", mobileRoute: "/m/more", report: true, status: "editorial" },
+  {
+    protoId: "settings",
+    name: "Settings",
+    protoRoute: "/dashboard/settings",
+    route: "/dashboard/settings",
+    mobileRoute: "/m/more",
+    report: true,
+    // MEASURED: 21 of the prototype's 28 on the desk, 8 of 8 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The seven missing
+    // landmarks are five buttons and the two rows that would hold them, and
+    // they are declared below in two groups.
+    //
+    // The PHONE was 0 of 8 — no landmark in common, the one shape the harness
+    // refuses to score. `/m/more` was still the editorial page. It is
+    // `P.settings.phone()` now, and its notification switches work, which is
+    // what that page's "edited on desktop" note was apologising for.
+    //
+    // The desk was 21 of 28 with three EXTRA, and all three were an idiom
+    // mismatch rather than surplus content:
+    //
+    //   - Account rendered a `.kv` above its setrows. `P.settings`' Account is
+    //     setrows and has no `.kv` anywhere. A setrow also carries the detail
+    //     line a `.kv` cannot ("Last changed 4 months ago" under "Password"),
+    //     which is most of what the design's rows say.
+    //   - "Where sign-ins came from" was a `.tbl` where the design has a
+    //     `.sec__body` of setrows. Four columns of counts, where three facts
+    //     fit on a line.
+    //   - Preferences and Brand were the wrong way round.
+    //
+    // Team also gained the real `.sec__body` the design closes it with, which
+    // is where its note belongs — it is body content, not a table row.
+    status: "counter",
+    baseline: { desktop: 21, mobile: 8 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 5,
+        mobile: 0,
+        reason:
+          "Five of the prototype's six, in two groups. THREE are the Team " +
+          "panel's \"Invite someone\", \"Resend the invite\" and " +
+          "\"Revoke\": `P.settings`' own comment beside them reads \"there " +
+          "is an invite record, a signup page and a route that redeems a " +
+          "token - and nowhere that issues one\", and that is still true — " +
+          "the `Invite` model carries `expiresAt`, `usedAt` and `revokedAt`, " +
+          "and no action writes a row. TWO are the Sessions panel's \"End\" " +
+          "and \"Sign out everywhere\": auth is `strategy: \"jwt\"` with no " +
+          "session table, so there is nothing to enumerate and nothing to " +
+          "end — `signinsOf`'s note says so with the numbers (every session " +
+          "ever recorded still reads as live, because there have been far " +
+          "more sign-ins than sign-outs). The sixth button, \"Change\" on " +
+          "the password row, IS rendered and works. " +
+          "THIS ENTRY IS A CAPABILITY, NOT A FIGURE, and it goes the day " +
+          "either is built rather than the day a table fills up. The phone " +
+          "has no `.btn` on either side.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "The two rows that hold the five buttons above — one in Sessions, " +
+          "one in Team. A `.btnrow` with nothing in it is furniture, so " +
+          "neither is rendered rather than drawn empty. Both arrive with " +
+          "their buttons. The phone has no `.btnrow` on either side.",
+      },
+    ],
+  },
   { protoId: "more", name: "More (phone)", protoRoute: "/m/more", route: "/m/more", status: "editorial" },
   {
     protoId: "monitoring",
