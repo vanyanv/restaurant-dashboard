@@ -1365,7 +1365,28 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "moncache", name: "Monitoring", protoRoute: "/dashboard/admin/monitoring/cache", route: "/dashboard/admin/monitoring/cache", mobileRoute: "/m/monitoring/cache", report: true, status: "editorial" },
+  {
+    protoId: "moncache",
+    name: "Monitoring · Cache",
+    protoRoute: "/dashboard/admin/monitoring/cache",
+    route: "/dashboard/admin/monitoring/cache",
+    mobileRoute: "/m/monitoring/cache",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance
+    // of any kind: 11 of 11 on the desk, 5 of 5 on the phone, 0 extra, 0
+    // rendering differences, 0 dark defects. `P.moncache` sets `nodate: true`,
+    // so there is not even an Apply button to declare.
+    //
+    // The gap was "Redis, live" — a `.kv` and its section. There is no Redis:
+    // the cache is `CacheStat`, an hourly roll-up in Postgres, so four of the
+    // prototype's six rows (clients, memory ceiling, uptime, evicted keys)
+    // have no counterpart and were not invented. The panel asks the same
+    // question of the table that does exist, and two of its rows are on no
+    // other panel — the writes a miss should have produced (30 of 1,329 did
+    // not) and how many of the 168 hours carry a row (60).
+    status: "counter",
+    baseline: { desktop: 11, mobile: 5 },
+  },
   {
     protoId: "monactivity",
     name: "Monitoring · Activity",

@@ -414,13 +414,20 @@ describe("every gated page carries a floor and a written reason for each absence
       "menuhub",
       "catalog",
       "catalogitem",
+      "recipes",
       "productmix",
+      "operations",
       "invoices",
       "inventory",
       "ingredients",
+      "ingredient",
+      "monitoring",
       "analyticsstore",
       "laborstore",
       "cogsstore",
+      "moncosts",
+      "moncache",
+      "monactivity",
     ])
   })
 

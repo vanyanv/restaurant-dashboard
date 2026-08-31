@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Kv,
   PageHead,
   RankBars,
   Section,
@@ -16,8 +17,13 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CacheSections } from "@/lib/counter/adapters/monitoring-tabs"
 
 /**
- * Cache — `P.moncache`. `nodate: true`, and honoured: the window is 168 hours
- * because that is what `CacheStat` retains, not because a reader chose it.
+ * Cache — `P.moncache`. `nodate: true`, and honoured: 168 hours is the window
+ * this page states, and there is no control to move it.
+ *
+ * It is a CHOICE, not a retention limit — the comment here used to say the
+ * table only keeps that long, and it does not: `CacheStat` reaches back to
+ * 2026-06-14. What the window really costs is on "The counters" below, which
+ * reports how many of the 168 hours carry a row (60, when this was written).
  *
  * The table is sorted by MISSES. That is the prototype's own argument and it
  * holds here: the prefix with the best rate on this page has twenty-three
@@ -68,6 +74,27 @@ export function CounterCacheClient({
             {/* No `.sec__body` — a table section emits the table alone. */}
             <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
               {p.note}
+            </p>
+          </>
+        )}
+      </Section>
+
+      {/* `P.moncache`'s "Redis, live". There is no Redis — the cache is
+          `CacheStat` — so this is the same panel asked of the table we do
+          have, and two of its six rows appear nowhere else on the page: the
+          writes a miss should have produced, and how much of the 168-hour
+          window carries a row at all. See `CacheLive`. */}
+      <Section
+        title="The counters"
+        meta={(l) => l.meta}
+        data={sections.live}
+        pending={pending}
+      >
+        {(l) => (
+          <>
+            <Kv rows={l.rows} />
+            <p className="mono" style={{ margin: "11px 0 0" }}>
+              {l.note}
             </p>
           </>
         )}

@@ -8,7 +8,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, MListRow, RankBar, Row } from "@/components/counter"
+import type { FigureProps, KvRow, MListRow, RankBar, Row } from "@/components/counter"
 
 /**
  * Two of the monitoring tabs — `P.moncache` and `P.moncosts`
@@ -81,9 +81,43 @@ export interface CacheMisses {
   note: string
 }
 
+/**
+ * `P.moncache`'s "Redis, live" — the counters themselves, summed.
+ *
+ * The prototype reads six facts off a Redis server: connected clients, used
+ * memory, keyspace hits and misses, uptime, evicted keys. There is no Redis
+ * here. The cache is `CacheStat`, an hourly roll-up in Postgres, so four of
+ * those six have no counterpart and inventing them would put a memory ceiling
+ * and a client count on the screen that nothing measures.
+ *
+ * What the table DOES publish is six facts of the same kind, and two of them
+ * are on no other panel:
+ *
+ *   - `writes`, which is what a miss is supposed to become. Measured over the
+ *     window: 1,329 misses and 1,299 writes, so thirty misses did not populate
+ *     anything. That is the read-through path failing quietly, and it is
+ *     invisible on a page that only prints hit rates.
+ *   - `busts`, the deliberate invalidations. Zero, all window, on every
+ *     prefix — nothing in this product has ever busted a key on purpose.
+ *
+ * And the sixth is the honest version of "Uptime": how much of the window the
+ * page is actually reading. **60 of 168 hours carry a row.** The masthead says
+ * 168 hours by prefix and it is a window, not a promise; a reader comparing
+ * two prefixes deserves to know that 108 of those hours are silence rather
+ * than zeroes. (Silence because nothing was cached in them — `CacheStat` goes
+ * back to 2026-06-14 and holds 221 rows, so the window is this page's choice,
+ * not the table's limit.)
+ */
+export interface CacheLive {
+  rows: KvRow[]
+  meta: string
+  note: string
+}
+
 export interface CacheSections {
   headline: SectionData<CacheHeadline>
   prefixes: SectionData<CachePrefixes>
+  live: SectionData<CacheLive>
   misses: SectionData<CacheMisses>
 }
 
@@ -91,26 +125,48 @@ interface Prefix {
   prefix: string
   hits: number
   misses: number
+  /** What a miss is supposed to become. See `CacheLive`. */
+  writes: number
   busts: number
   failures: number
 }
 
 interface CacheData {
   prefixes: Prefix[]
+  /**
+   * How many of the window's hours carry a row at all. NOT derivable from
+   * `prefixes` — that sums the buckets away, and a sum cannot tell 60 busy
+   * hours from 168 quiet ones.
+   */
+  hoursRecorded: number
 }
 
 async function loadCache(): Promise<CacheData> {
-  const rows = await prisma.$queryRaw<
-    Array<{ prefix: string; hits: number; misses: number; busts: number; failures: number }>
-  >`
+  const [rows, coverage] = await Promise.all([
+    prisma.$queryRaw<
+      Array<{
+        prefix: string
+        hits: number
+        misses: number
+        writes: number
+        busts: number
+        failures: number
+      }>
+    >`
     SELECT "keyPrefix" AS prefix, COALESCE(SUM(hits), 0)::int AS hits,
-           COALESCE(SUM(misses), 0)::int AS misses, COALESCE(SUM(busts), 0)::int AS busts,
+           COALESCE(SUM(misses), 0)::int AS misses, COALESCE(SUM(writes), 0)::int AS writes,
+           COALESCE(SUM(busts), 0)::int AS busts,
            COALESCE(SUM(failures), 0)::int AS failures
     FROM "CacheStat"
     WHERE "hourBucket" >= NOW() - MAKE_INTERVAL(hours => ${CACHE_HOURS})
     GROUP BY 1
-    ORDER BY 3 DESC`
-  return { prefixes: rows }
+    ORDER BY 3 DESC`,
+    prisma.$queryRaw<Array<{ hours: number }>>`
+    SELECT COUNT(DISTINCT "hourBucket")::int AS hours
+    FROM "CacheStat"
+    WHERE "hourBucket" >= NOW() - MAKE_INTERVAL(hours => ${CACHE_HOURS})`,
+  ])
+  return { prefixes: rows, hoursRecorded: coverage[0]?.hours ?? 0 }
 }
 
 const rateOf = (p: Prefix): number | null =>
@@ -250,6 +306,55 @@ function cacheMissesOf(d: CacheData): CacheMisses {
   }
 }
 
+/** The counters themselves — see `CacheLive`. */
+function cacheLiveOf(d: CacheData): CacheLive {
+  const sum = (f: (p: Prefix) => number) => d.prefixes.reduce((t, p) => t + f(p), 0)
+  const hits = sum((p) => p.hits)
+  const misses = sum((p) => p.misses)
+  const writes = sum((p) => p.writes)
+  const busts = sum((p) => p.busts)
+  const failures = sum((p) => p.failures)
+  const unwritten = misses - writes
+  const quiet = CACHE_HOURS - d.hoursRecorded
+
+  return {
+    rows: [
+      { label: "Hits", value: count(hits) },
+      { label: "Misses", value: count(misses) },
+      // A miss that never became a write is the read-through path failing, so
+      // it is the one row here that can be wrong rather than merely large.
+      {
+        label: "Writes",
+        value: count(writes),
+        ...(unwritten > 0 ? { tone: "warn" as const } : {}),
+      },
+      { label: "Busts", value: count(busts) },
+      { label: "Failures", value: count(failures), ...(failures > 0 ? { tone: "bad" as const } : {}) },
+      {
+        label: "Hours recorded",
+        value: `${count(d.hoursRecorded)} of ${count(CACHE_HOURS)}`,
+        ...(quiet > 0 ? { tone: "warn" as const } : {}),
+      },
+    ],
+    meta: "summed across every prefix",
+    note:
+      (unwritten > 0
+        ? `${count(unwritten)} of ${count(misses)} misses did not become a write. A miss is ` +
+          `supposed to populate the key it just failed to find, so those are reads that ` +
+          `will miss again.`
+        : `Every miss became a write, which is the read-through path working.`) +
+      " " +
+      (quiet > 0
+        ? `${count(quiet)} of the window's ${count(CACHE_HOURS)} hours carry no row at all — ` +
+          `silence, not zeroes. The rates above are over the ${count(d.hoursRecorded)} hours ` +
+          `that do.`
+        : `Every hour of the window carries a row.`) +
+      (busts === 0
+        ? " Nothing has been busted on purpose in this window."
+        : ` ${count(busts)} keys were busted on purpose.`),
+  }
+}
+
 export function getCacheSectionPromises(): StreamedSections<CacheSections> {
   const dataP = classify(() => loadCache(), {
     retryAction: "retryCache",
@@ -258,7 +363,12 @@ export function getCacheSectionPromises(): StreamedSections<CacheSections> {
   })
   const s = <T,>(f: (d: CacheData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryCache")
-  return { headline: s(cacheHeadlineOf), prefixes: s(cachePrefixesOf), misses: s(cacheMissesOf) }
+  return {
+    headline: s(cacheHeadlineOf),
+    prefixes: s(cachePrefixesOf),
+    live: s(cacheLiveOf),
+    misses: s(cacheMissesOf),
+  }
 }
 
 export async function getCacheSections(): Promise<CacheSections> {

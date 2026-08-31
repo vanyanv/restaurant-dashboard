@@ -338,12 +338,23 @@ const LEGACY_BASELINE_COMMIT = "aecadf0f90c87bb7d0dc9c3ccb05f7bade67466b"
  * granularity (a directory, not 80 files), but never wider than a tree that
  * is wholly legacy today.
  */
+/*
+ * `src/app/dashboard` was the first entry here and it is GONE, which is the
+ * outcome this list was shaped to produce. Measured on the day it was deleted:
+ * linting that tree with the exemption OFF produced zero violations, so the
+ * entry suppressed nothing. 46 of its 51 pages are Counter pages now; the five
+ * that are not (`(editorial)/chat`, `(editorial)/operations/costs`,
+ * `(editorial)/operations/recipes`, `(editorial)/stores/[id]/edit` and
+ * `pnl/[storeId]`) break none of these rules — the editorial design kept its
+ * colours in `src/styles/editorial-*.css`, which is why the `src/styles` entry
+ * below is still load-bearing and this one stopped being.
+ *
+ * `tests/styles/counter-lint.test.ts` is what forced the deletion rather than
+ * anyone noticing: an entry that suppresses nothing fails its "still
+ * suppressing at least one real violation" check. The tree is now linted for
+ * real, so a colour literal added to any of those five files fails the gate.
+ */
 export const LEGACY: Array<{ path: string; reason: string }> = [
-  {
-    path: "src/app/dashboard",
-    reason:
-      "Entire tree is the pre-Counter editorial dashboard (~20 rebuild phases replace it page by page per spec §2.3). Shrink this by moving to per-page or per-subtree entries once the first pages are rebuilt, rather than leaving the whole directory listed after partial migration.",
-  },
   {
     path: "src/app/(mobile)/m",
     reason:
