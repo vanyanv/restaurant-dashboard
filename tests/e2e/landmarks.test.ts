@@ -427,6 +427,7 @@ describe("every gated page carries a floor and a written reason for each absence
       "ingredient",
       "prices",
       "vendor",
+      "packaging",
       "storecosts",
       "settings",
       "monitoring",

@@ -1471,7 +1471,82 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 12, mobile: 5 },
   },
-  { protoId: "packaging", name: "Vendors", protoRoute: "/dashboard/operations/packaging", route: "/dashboard/operations/packaging", mobileRoute: "/m/operations/packaging", report: true, status: "editorial" },
+  {
+    protoId: "packaging",
+    name: "Packaging",
+    protoRoute: "/dashboard/operations/packaging",
+    route: "/dashboard/operations/packaging",
+    mobileRoute: "/m/operations/packaging",
+    report: true,
+    // MEASURED: 11 of the prototype's 15 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The four missing are one
+    // panel, declared below.
+    //
+    // The three EXTRA were "Which orders carry it", a four-column table this
+    // design does not have anywhere — `P.packaging` draws a CHART in that
+    // slot. Its whole payload was one sentence about the per-order
+    // denominator (a dine-in order leaves no container behind, so it is
+    // excluded rather than diluting the figure), and that sentence is the last
+    // line of the ledger's note now, with the count and the dollars attached.
+    // The per-mode order counts it also printed belong to Orders.
+    //
+    // The `.split` around the remaining queue went with it: `P.packaging`
+    // pairs that queue with the chart, and a two-column grid holding one panel
+    // is furniture.
+    status: "counter",
+    baseline: { desktop: 11, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "ch",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "`P.packaging`'s \"Packaging per order\" chart, and the one thing " +
+          "on this page that is a capability gap rather than a choice. " +
+          "`getPackagingCostData` packs every order in a RANGE — assigning " +
+          "baskets to containers and pricing them from invoice lines — and " +
+          "returns totals. It has no time axis. A per-day series would mean " +
+          "running that model once per day, which is the whole packer per " +
+          "point, and a chart drawn from the one figure it does return is a " +
+          "line with nothing to say. The phone draws no chart on either side.",
+      },
+      {
+        landmark: "sec",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The section that would hold the chart above. A panel whose only " +
+          "content is a chart that cannot be drawn is a heading over a blank, " +
+          "so it is absent rather than empty — the same subtraction `Empty` " +
+          "makes. It arrives with the series.",
+      },
+      {
+        landmark: "sec__head",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The head of the section above — its title and the range caption " +
+          "beside it. `Section` emits a head and a body together or neither, " +
+          "so this cannot be present while the section it names is not, and " +
+          "it returns with the series the chart needs. Listed separately " +
+          "rather than folded into the `sec` line because `applyAbsenceAllowances` " +
+          "forgives an exact count on an exact landmark signature, and a " +
+          "`sec__head` that went missing for any OTHER reason must still fail.",
+      },
+      {
+        landmark: "sec__body",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The body of that same section, which in `P.packaging` holds the " +
+          "chart and nothing else — there is no note under it to keep the " +
+          "panel alive on its own. Same mechanism as the head above: it is " +
+          "one absence counted by three landmark signatures plus the `.ch`, " +
+          "and each is declared on its own line so that a body disappearing " +
+          "from any of the page's OTHER sections is still a failure.",
+      },
+    ],
+  },
   {
     protoId: "stores",
     name: "Stores",
