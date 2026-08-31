@@ -13,6 +13,9 @@ export default function Loading() {
       <Section title="By prefix" data={loading()} pad={false}>
         {() => null}
       </Section>
+      <Section title="Where the misses are" data={loading()}>
+        {() => null}
+      </Section>
     </>
   )
 }

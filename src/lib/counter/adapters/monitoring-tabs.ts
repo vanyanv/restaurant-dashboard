@@ -8,7 +8,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, MListRow, Row } from "@/components/counter"
+import type { FigureProps, MListRow, RankBar, Row } from "@/components/counter"
 
 /**
  * Two of the monitoring tabs — `P.moncache` and `P.moncosts`
@@ -67,9 +67,24 @@ export interface CachePrefixes {
   note: string
 }
 
+/**
+ * `P.moncache`'s "Where the misses are" — one bar per prefix.
+ *
+ * The same rows as the table above it, ranked the same way and drawn instead
+ * of listed, which is the page's whole argument: "a blended hit rate hides one
+ * cold prefix behind six warm ones, so this page ranks by misses rather than
+ * by rate." A table states that ordering and a bar shows it.
+ */
+export interface CacheMisses {
+  rows: RankBar[]
+  meta: string
+  note: string
+}
+
 export interface CacheSections {
   headline: SectionData<CacheHeadline>
   prefixes: SectionData<CachePrefixes>
+  misses: SectionData<CacheMisses>
 }
 
 interface Prefix {
@@ -204,6 +219,37 @@ function cachePrefixesOf(d: CacheData): CachePrefixes {
   }
 }
 
+/**
+ * The misses, as bars. `d.prefixes` is already ranked by misses, so this
+ * reorders nothing — it draws the order the table is already in.
+ *
+ * The heaviest prefix wears `warn`, which is the prototype's own highlight on
+ * its largest bar. It is the one prefix on the page worth a decision, and the
+ * note names it and its share rather than restating the prototype's invented
+ * "analytics:trend is half of every miss".
+ */
+function cacheMissesOf(d: CacheData): CacheMisses {
+  const total = d.prefixes.reduce((t, p) => t + p.misses, 0)
+  const worst = d.prefixes[0]
+  const share = worst && total > 0 ? worst.misses / total : null
+
+  return {
+    rows: d.prefixes.map((p, i) => ({
+      label: p.prefix,
+      value: count(p.misses),
+      weight: p.misses,
+      ...(i === 0 && p.misses > 0 ? { tone: "warn" } : {}),
+    })),
+    meta: "one bar per prefix",
+    note:
+      worst === undefined || share === null
+        ? "No prefix has recorded a miss in this window."
+        : `${worst.prefix} is ${pct(share * 100, { scaled: true })} of every miss on this ` +
+          `page. It is the one prefix here worth a decision, and a blended rate would ` +
+          `never have named it.`,
+  }
+}
+
 export function getCacheSectionPromises(): StreamedSections<CacheSections> {
   const dataP = classify(() => loadCache(), {
     retryAction: "retryCache",
@@ -212,7 +258,7 @@ export function getCacheSectionPromises(): StreamedSections<CacheSections> {
   })
   const s = <T,>(f: (d: CacheData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryCache")
-  return { headline: s(cacheHeadlineOf), prefixes: s(cachePrefixesOf) }
+  return { headline: s(cacheHeadlineOf), prefixes: s(cachePrefixesOf), misses: s(cacheMissesOf) }
 }
 
 export async function getCacheSections(): Promise<CacheSections> {
