@@ -306,13 +306,45 @@ export interface ActivityStores {
   note: string
 }
 
+/**
+ * `P.monactivity`'s "What happened · last 24 hours" — the job feed.
+ *
+ * One row per `JobRun`, newest first. The prototype's rows are invented and
+ * uniformly cheerful; these are the real ones, and a run that wrote nothing or
+ * carried an `errorMessage` says so.
+ */
+export interface ActivityFeed {
+  rows: Array<{
+    key: string
+    /** `.tm` — how long ago, in the prototype's compact form ("12m", "6h"). */
+    ago: string
+    title: string
+    detail: string
+    /** `.fd--good` / `--warn` / `--bad`. */
+    tone: "good" | "warn" | "bad"
+  }>
+  meta: string
+  note: string
+}
+
 export interface ActivitySections {
   headline: SectionData<ActivityHeadline>
   errors: SectionData<ActivityErrors>
   stores: SectionData<ActivityStores>
+  feed: SectionData<ActivityFeed>
+}
+
+interface ActivityFeedRow {
+  id: string
+  jobName: string
+  startedAt: Date
+  rowsWritten: number | null
+  durationMs: number | null
+  errorMessage: string | null
 }
 
 interface ActivityData {
+  feed: ActivityFeedRow[]
   errors24h: number
   byHour: number[]
   recent: Array<{ at: Date; source: string; message: string }>
@@ -322,7 +354,7 @@ interface ActivityData {
 }
 
 async function loadActivity(): Promise<ActivityData> {
-  const [errors, byHour, recent, syncs, stores] = await Promise.all([
+  const [errors, byHour, recent, syncs, stores, feed] = await Promise.all([
     prisma.$queryRaw<Array<{ n: number }>>`
       SELECT COUNT(*)::int AS n FROM "ErrorEvent"
       WHERE "occurredAt" >= NOW() - INTERVAL '24 hours'`,
@@ -345,11 +377,18 @@ async function loadActivity(): Promise<ActivityData> {
              (SELECT COUNT(*)::int FROM "OtterOrder" o WHERE o."storeId" = s.id
                AND o."referenceTimeLocal" >= NOW() - INTERVAL '30 days') AS orders
       FROM "Store" s ORDER BY s.name`,
+    prisma.$queryRaw<ActivityFeedRow[]>`
+      SELECT id, "jobName", "startedAt", "rowsWritten", "durationMs", "errorMessage"
+        FROM "JobRun"
+       WHERE "startedAt" >= NOW() - INTERVAL '24 hours'
+       ORDER BY "startedAt" DESC
+       LIMIT 12`,
   ])
 
   const hours = Array.from({ length: 24 }, (_, i) => byHour.find((h) => h.hr === i)?.n ?? 0)
 
   return {
+    feed,
     errors24h: errors[0]?.n ?? 0,
     byHour: hours,
     recent,
@@ -361,6 +400,57 @@ async function loadActivity(): Promise<ActivityData> {
       lastOrder: s.last_order,
       orders30d: s.orders,
     })),
+  }
+}
+
+/** "12m", "6h", "1d" — the prototype's compact `.tm` column. */
+function agoOf(at: Date): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 60000))
+  if (mins < 60) return `${mins}m`
+  if (mins < 60 * 24) return `${Math.round(mins / 60)}h`
+  return `${Math.round(mins / 1440)}d`
+}
+
+/**
+ * The job feed. Real runs, so unlike the prototype's six invented rows these
+ * can be dull — and a dull feed IS the reading on a page whose whole question
+ * is "did anything break".
+ *
+ * A run that failed is `bad`. A run that succeeded and wrote NOTHING is
+ * `warn`, not `good`: a sync that completes over zero rows is the shape the
+ * cron-cadence problem takes, and colouring it green would hide exactly the
+ * thing this page is opened to find.
+ */
+function activityFeedOf(d: ActivityData): ActivityFeed {
+  const zero = d.feed.filter((r) => r.errorMessage === null && (r.rowsWritten ?? 0) === 0).length
+  const failed = d.feed.filter((r) => r.errorMessage !== null).length
+
+  return {
+    rows: d.feed.map((r) => {
+      const rows = r.rowsWritten ?? 0
+      const secs = r.durationMs === null ? null : r.durationMs / 1000
+      return {
+        key: r.id,
+        ago: agoOf(r.startedAt),
+        title: r.jobName,
+        detail:
+          r.errorMessage !== null
+            ? r.errorMessage.slice(0, 90)
+            : `${count(rows)} row${rows === 1 ? "" : "s"}` +
+              (secs === null ? "" : ` · ${secs < 10 ? secs.toFixed(1) : Math.round(secs)}s`),
+        tone: r.errorMessage !== null ? "bad" : rows === 0 ? "warn" : "good",
+      }
+    }),
+    meta: "last 24 hours",
+    note:
+      d.feed.length === 0
+        ? "No job has run in the last twenty-four hours, which is itself the finding."
+        : `${count(d.feed.length)} run${d.feed.length === 1 ? "" : "s"} in the window` +
+          (failed > 0 ? `, ${count(failed)} failed` : ", none failed") +
+          (zero > 0
+            ? `, and ${count(zero)} finished having written nothing — a sync that completes ` +
+              `over zero rows looks like success and is the shape a missed schedule takes.`
+            : "."),
   }
 }
 
@@ -519,6 +609,7 @@ export function getActivitySectionPromises(): StreamedSections<ActivitySections>
     headline: s(activityHeadlineOf),
     errors: s(activityErrorsOf),
     stores: s(activityStoresOf),
+    feed: s(activityFeedOf),
   }
 }
 
