@@ -20,15 +20,26 @@ import type { AuditSections } from "@/lib/counter/adapters/monitoring-ingredient
  * The prototype's note is right about where this belongs: *"This used to sit
  * on the owner's pantry, where its scores and model reasoning were three
  * hundred pixels of diagnostics above the ledger."* It is a developer page,
- * and it opens with a sentence because its two headline metrics — a held rate
- * and a revert rate — cannot be computed on this account. See the adapter.
+ * and it CLOSES with a sentence — the prototype's trailing `<p class="mono">`
+ * — because its two headline metrics, a held rate and a revert rate, cannot be
+ * computed on this account. See the adapter.
+ *
+ * Composed as `P.moningredients.desk()` composes it: strip -> "The audit" ->
+ * "Auto-match decisions" -> that closing paragraph. TWO tables, not four.
+ * "Not ingredients" is the audit table's State column now, which is exactly
+ * what the prototype's own State column is for ("Component, uncosted"), and
+ * the unmatched queue is a strip cell and a sentence — also where the design
+ * puts it ("Unmatched · 128 · $4,120 of spend uncosted").
  */
-const CHARGE_COLUMNS: Column[] = [
+
+/** `P.moningredients`' own audit columns, State included. */
+const CANONICAL_COLUMNS: Column[] = [
   { key: "canonical", label: "Canonical ingredient" },
-  { key: "recipes", label: "Recipes", numeric: true },
-  { key: "lines", label: "Invoice lines", numeric: true },
   { key: "spellings", label: "Spellings", numeric: true },
+  { key: "skus", label: "SKUs", numeric: true },
+  { key: "recipes", label: "Recipes", numeric: true },
   { key: "spend", label: "Spend", numeric: true },
+  { key: "state", label: "State" },
 ]
 
 const DECISION_COLUMNS: Column[] = [
@@ -38,22 +49,6 @@ const DECISION_COLUMNS: Column[] = [
   { key: "confidence", label: "Score", numeric: true },
   { key: "rung", label: "Rung" },
   { key: "outcome", label: "Outcome" },
-]
-
-const UNMATCHED_COLUMNS: Column[] = [
-  { key: "vendor", label: "Vendor" },
-  { key: "sku", label: "SKU" },
-  { key: "printed", label: "As printed" },
-  { key: "spend", label: "Spend", numeric: true },
-  { key: "why", label: "Why" },
-]
-
-const CANONICAL_COLUMNS: Column[] = [
-  { key: "canonical", label: "Canonical ingredient" },
-  { key: "spellings", label: "Spellings", numeric: true },
-  { key: "skus", label: "SKUs", numeric: true },
-  { key: "recipes", label: "Recipes", numeric: true },
-  { key: "spend", label: "Spend", numeric: true },
 ]
 
 export function CounterIngredientAuditClient({
@@ -81,33 +76,21 @@ export function CounterIngredientAuditClient({
         <SubNav items={MONITORING_TABS} label="Monitoring" />
       </PageHead>
 
-      <Section bare title="Verdict" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div className="sec">
-            <div className="sec__body">
-              <p className="verdictline" style={{ margin: 0 }}>
-                {h.verdict}
-              </p>
-            </div>
-          </div>
-        )}
-      </Section>
-
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
       </Section>
 
       <Section
-        title="Not ingredients"
+        title="The audit"
         meta={(c) => c.meta}
-        data={sections.charges}
+        data={sections.canonicals}
         pending={pending}
         pad={false}
-        askAbout="which canonical ingredients are not ingredients"
+        askAbout="which ingredients have the most spellings"
       >
         {(c) => (
           <>
-            <Table columns={CHARGE_COLUMNS} rows={c.rows} />
+            <Table columns={CANONICAL_COLUMNS} rows={c.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
             <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
               {c.note}
@@ -134,39 +117,15 @@ export function CounterIngredientAuditClient({
         )}
       </Section>
 
-      <Section
-        title="Still unmatched"
-        meta={(u) => u.meta}
-        data={sections.unmatched}
-        pending={pending}
-        pad={false}
-        askAbout="which invoice lines are still unmatched"
-      >
-        {(u) => (
-          <>
-            <Table columns={UNMATCHED_COLUMNS} rows={u.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {u.note}
-            </p>
-          </>
-        )}
-      </Section>
-
-      <Section
-        title="Spellings held together"
-        meta={(c) => c.meta}
-        data={sections.canonicals}
-        pending={pending}
-        pad={false}
-        askAbout="which ingredients have the most spellings"
-      >
-        {(c) => (
-          <>
-            <Table columns={CANONICAL_COLUMNS} rows={c.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {c.note}
-            </p>
-          </>
+      {/* `P.moningredients`'s trailing `<p class="mono">`, outside any
+          section. This was a verdict block inside a `.sec` until the page was
+          measured against its design, which has no verdict panel here — and
+          the sentence reads the same at the foot as it did at the head. */}
+      <Section bare title="Verdict" data={sections.headline} pending={pending}>
+        {(h) => (
+          <p className="mono" style={{ margin: "2px 0 0" }}>
+            {h.verdict}
+          </p>
         )}
       </Section>
     </>

@@ -3,17 +3,14 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The ingredient audit's loading boundary. */
+/** The phone ingredient-audit loading boundary. */
 export default function Loading() {
   return (
     <>
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="The audit" data={loading()} pad={false}>
-        {() => null}
-      </Section>
-      <Section title="What the ladder decided" data={loading()} pad={false}>
+      <Section title="Recent decisions" data={loading()}>
         {() => null}
       </Section>
     </>
