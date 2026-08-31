@@ -40,7 +40,7 @@ Structure: 8 missing, 0 extra, 43 matched. Rendering (light): 0 property differe
 
 ### Dark mode — asserted on its own terms, never against the prototype
 
-387 of 527 elements paint a colour of their own; 448 were swept (every element that paints or carries text, not only the 43 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 46 resolved `--ct-*` tokens. 0 defects.
+387 of 527 elements paint a colour of their own; 448 were swept (every element that paints or carries text, not only the 43 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 47 resolved `--ct-*` tokens. 0 defects.
 
 
 ## fidelity-mobile — phone
@@ -63,5 +63,5 @@ Structure: 0 missing, 0 extra, 21 matched. Rendering (light): 0 property differe
 
 ### Dark mode — asserted on its own terms, never against the prototype
 
-180 of 256 elements paint a colour of their own; 231 were swept (every element that paints or carries text, not only the 21 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 46 resolved `--ct-*` tokens. 0 defects.
+180 of 256 elements paint a colour of their own; 231 were swept (every element that paints or carries text, not only the 21 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 47 resolved `--ct-*` tokens. 0 defects.
 
