@@ -150,6 +150,27 @@ export interface SubNavItem {
   href: string
 }
 
+/**
+ * `P.usage`'s three tabs — `seg: ['Usage','Menu item costs','Vendor prices']`.
+ *
+ * The prototype's `seg` navigates NOWHERE. It is a display-only control, which
+ * is why `P.usage.desk()` stacks all three views onto one page and comments
+ * that "a tab label with nothing behind it is the same broken promise as a
+ * shortcut that opens nothing".
+ *
+ * Ours are three real routes, and two of them were already built before this
+ * page was: menu item costs is `/dashboard/menu-profit`, and vendor prices —
+ * "the same item, every vendor that sells it" — is the vendor page's basket.
+ * So the product-usage page declines to rebuild either (see its client) and
+ * carries this instead. The promise the labels make is kept by going there,
+ * rather than by computing the same figures a second time under a heading.
+ */
+export const USAGE_TABS: readonly SubNavItem[] = [
+  { label: "Usage", href: "/dashboard/operations/product-usage" },
+  { label: "Menu item costs", href: "/dashboard/menu-profit" },
+  { label: "Vendor prices", href: "/dashboard/operations/vendors" },
+] as const
+
 export const MONITORING_TABS: readonly SubNavItem[] = [
   { label: "Bridge", href: "/dashboard/admin/monitoring" },
   { label: "Infra", href: "/dashboard/admin/monitoring/infrastructure" },
