@@ -7,7 +7,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { QueueItem, Row } from "@/components/counter"
+import type { MListRow, QueueItem, Row } from "@/components/counter"
 
 /**
  * New store — `P.newstore` (`docs/counter/counter-prototype.html`).
@@ -195,6 +195,8 @@ function switchesOf(d: NewStoreData): NewStoreSwitches {
 
 export interface NewStoreChecklist {
   rows: Row[]
+  /** `P.storeedit.phone()`'s "Before it opens" list — one line per store. */
+  phoneRows: MListRow[]
   meta: string
   note: string
 }
@@ -224,8 +226,30 @@ function checklistOf(d: NewStoreData): NewStoreChecklist {
 
   const zeroLabor = d.stores.filter((s) => s.labor === 0)
 
+  const unsetOf = (s: NewStoreData["stores"][number]) =>
+    [
+      s.rent === null ? "rent" : null,
+      s.labor === null ? "fixed labour" : null,
+      s.cogsTarget === null ? "COGS target" : null,
+      s.ratesConfirmed ? null : "commission rates",
+      s.otterLinked ? null : "Otter",
+      s.harriLinked ? null : "Harri",
+    ].filter((x): x is string => x !== null)
+
   return {
     rows,
+    phoneRows: d.stores.map((s) => {
+      const unset = unsetOf(s)
+      return {
+        key: s.id,
+        href: `/dashboard/stores/${s.id}`,
+        title: s.name,
+        detail: unset.length === 0 ? "everything on file" : unset.join(", "),
+        value: unset.length === 0 ? "ready" : `${count(unset.length)} to set`,
+        noteTone: (unset.length === 0 ? "up" : "down") as "up" | "down",
+        note: s.stage === "ready" ? "trading" : "pre-open",
+      }
+    }),
     meta: `${count(d.stores.length)} stores · measured, not a template`,
     note:
       `The prototype puts a checklist of six invented rows here. These are the stores that ` +
