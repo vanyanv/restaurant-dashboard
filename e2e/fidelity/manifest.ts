@@ -1658,7 +1658,41 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "storeedit", name: "Stores", protoRoute: "/dashboard/stores/new", route: "/dashboard/stores/new", report: true, status: "editorial" },
+  {
+    protoId: "storeedit",
+    name: "New store",
+    protoRoute: "/dashboard/stores/new",
+    route: "/dashboard/stores/new",
+    mobileRoute: "/m/stores/new",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance
+    // of any kind: 16 of 16 on the desk, 4 of 4 on the phone, 0 extra, 0
+    // rendering differences, 0 dark defects. `P.storeedit` sets `nodate: true`,
+    // so there is no Apply button to declare either.
+    //
+    // THE DESK WAS ALREADY 16 OF 16. What held this page at editorial was the
+    // phone, which had no surface — the mobile project landed on the desk
+    // route and compared a desk composition against `P.storeedit.phone()`,
+    // 16 against 4.
+    //
+    // And `/dashboard/stores/new` was in `NO_PHONE_PAGE` for exactly one
+    // session, excluded on the reasoning that "a four-field create form is a
+    // desk job". That was wrong on the evidence and the evidence was in the
+    // fixture the whole time: `P.storeedit` HAS a phone composition, it is a
+    // masthead, two fields, a button and the checklist — not the store file's
+    // six currency inputs — and creating a store is the one thing in this
+    // cluster you might genuinely do standing in the new building. The entry
+    // is gone and `NO_PHONE_PAGE` is empty again.
+    //
+    // The fields sit OUTSIDE any section, as the design puts them: `.field2`
+    // carries no landmark class, and a section around two inputs would be a
+    // heading over a form on a surface with no room for either. The desk's
+    // "What each field switches on" queue stays on the desk — three paragraphs
+    // arguing why nothing here is optional is a thing you read before you
+    // start, not while you are typing.
+    status: "counter",
+    baseline: { desktop: 16, mobile: 4 },
+  },
   {
     protoId: "settings",
     name: "Settings",

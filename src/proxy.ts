@@ -148,19 +148,20 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
  * entry here is a page waiting to be built, not a decision: delete it the day
  * the phone surface ships.
  *
- * It emptied once — its `/dashboard/ingredients/prices` entry went the day
- * `P.prices.phone()` was built — and filled again the day `/dashboard/stores`
- * joined the list above. That is the mechanism working: a base goes on the
+ * It is EMPTY, having been emptied twice. The first entry,
+ * `/dashboard/ingredients/prices`, went the day `P.prices.phone()` was built.
+ * The second, `/dashboard/stores/new`, was added when `/dashboard/stores`
+ * joined the list above and removed one session later — it was excluded on the
+ * reasoning that "a four-field create form is a desk job", and that was wrong
+ * on the evidence: `P.storeedit` has a phone composition, it is two fields
+ * here rather than the store file's six, and creating a store is the one thing
+ * in this cluster you might do standing in the new building.
+ *
+ * The mechanism is what matters and it is unchanged: a base goes on the
  * rewrite list when its dynamic child has a phone page, and any SIBLING of
  * that child without one has to be named here or it rewrites onto nothing.
  */
-const NO_PHONE_PAGE = new Set<string>([
-  // `/m/stores/new` does not exist. `P.storeedit` is a create form — four
-  // fields and a submit — and this design puts creation on the desk: the
-  // phone's Stores list links store FILES, and the "New store" button lives
-  // on the desk page beside them.
-  "/dashboard/stores/new",
-])
+const NO_PHONE_PAGE = new Set<string>([])
 
 function mobilePathFor(desktopPath: string): string | null {
   if (DESKTOP_TO_MOBILE[desktopPath]) return DESKTOP_TO_MOBILE[desktopPath]
