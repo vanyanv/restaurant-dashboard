@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getVendorsSectionPromises } from "@/lib/counter/adapters/vendors"
 import { CounterPhoneVendorsClient } from "./counter-phone-vendors-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -26,7 +27,7 @@ export default async function MobileVendorsPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   const sections = getVendorsSectionPromises({

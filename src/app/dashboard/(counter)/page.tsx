@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getOverviewSectionPromises, getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOverviewClient } from "./counter-overview-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Overview — the first Counter page (Plan 7). A page composes
@@ -39,7 +40,7 @@ export default async function DashboardPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   /*

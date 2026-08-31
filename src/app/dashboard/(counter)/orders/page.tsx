@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getOrdersSectionPromises } from "@/lib/counter/adapters/orders"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterOrdersClient } from "./counter-orders-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Orders — the desk list (Phase C, page 3).
@@ -49,7 +50,7 @@ export default async function OrdersPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

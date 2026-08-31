@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getDecisionsSectionPromises } from "@/lib/counter/adapters/decisions"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterDecisionsClient } from "./counter-decisions-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Needs-you — "The week ahead", the desk surface (`P.decisions.desk`,
@@ -53,7 +54,7 @@ export default async function DecisionsPage({
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is, and on this page that decides which
   // WEEK the picker draws.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

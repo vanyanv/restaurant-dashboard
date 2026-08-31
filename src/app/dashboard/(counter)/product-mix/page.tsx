@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getProductMixSectionPromises } from "@/lib/counter/adapters/product-mix"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterProductMixClient } from "./counter-product-mix-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -23,7 +24,7 @@ export default async function ProductMixPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
   const stores = await getOverviewStores()
 

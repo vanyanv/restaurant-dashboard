@@ -4,6 +4,7 @@ import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getCogsSectionPromises } from "@/lib/counter/adapters/cogs"
 import { CounterPhoneCogsClient } from "./counter-phone-cogs-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -53,7 +54,7 @@ export default async function MobileCogsPage({
   // Resolved once, here, and passed to the params reader — a moving
   // `new Date()` re-evaluated in two places could disagree about which
   // calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

@@ -5,6 +5,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { getStoreCogsSectionPromises } from "@/lib/counter/adapters/cogs"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterStoreCogsClient } from "./counter-store-cogs-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter COGS for ONE store — the sibling of `../page.tsx`
@@ -85,7 +86,7 @@ export default async function StoreCogsPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(query, today)
 
   // Started before the sections rather than awaited in front of them: neither

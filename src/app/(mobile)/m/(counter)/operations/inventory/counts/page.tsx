@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getStockCountsSectionPromises } from "@/lib/counter/adapters/stock-counts"
 import { CounterPhoneCountsClient } from "./counter-phone-counts-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -22,7 +23,7 @@ export default async function MobileCountsPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   const sections = getStockCountsSectionPromises({

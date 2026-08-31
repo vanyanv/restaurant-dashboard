@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getMenuProfitSectionPromises } from "@/lib/counter/adapters/menu-profit"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterMenuProfitClient } from "./counter-menu-profit-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Menu profit — `P.menu` (`docs/counter/counter-prototype.html:5441`).
@@ -31,7 +32,7 @@ export default async function MenuProfitPage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

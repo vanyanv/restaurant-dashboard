@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getIngredientName, getIngredientSectionPromises } from "@/lib/counter/adapters/ingredient"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterIngredientClient } from "./counter-ingredient-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -26,7 +27,7 @@ export default async function IngredientPage({
     if (typeof value === "string") qs.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(qs, today)
 
   // The name is awaited; the SECTIONS are not — one indexed lookup buys the

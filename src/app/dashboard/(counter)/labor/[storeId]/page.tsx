@@ -5,6 +5,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { getStoreLaborSectionPromises } from "@/lib/counter/adapters/labor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterStoreLaborClient } from "./counter-store-labor-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Labor for ONE store — the sibling of `../page.tsx`, composed from
@@ -99,7 +100,7 @@ export default async function StoreLaborPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(query, today)
 
   // The switcher's list, started before the sections rather than awaited in

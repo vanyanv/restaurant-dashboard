@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getLaborSectionPromises } from "@/lib/counter/adapters/labor"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterLaborClient } from "./counter-labor-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Labor, the group page — what the hours cost, against the schedule the
@@ -66,7 +67,7 @@ export default async function LaborPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own

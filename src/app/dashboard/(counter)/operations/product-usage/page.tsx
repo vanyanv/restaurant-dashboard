@@ -5,6 +5,7 @@ import { readCounterParams } from "@/lib/counter/url-state"
 import { getProductUsageSectionPromises } from "@/lib/counter/adapters/product-usage"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterUsageClient } from "./counter-usage-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -23,7 +24,7 @@ export default async function ProductUsagePage({
     if (typeof value === "string") params.set(key, value)
   }
 
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
   const stores = await getOverviewStores()
 

@@ -5,6 +5,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { getStoreAnalyticsSectionPromises } from "@/lib/counter/adapters/analytics"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterStoreAnalyticsClient } from "./counter-store-analytics-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Analytics for ONE store — the sibling of `../page.tsx`.
@@ -90,7 +91,7 @@ export default async function StoreAnalyticsPage({
   // Resolved once, here, and passed to both the params reader and the client
   // island — a moving `new Date()` re-evaluated in two places could disagree
   // about which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(query, today)
 
   // The switcher's list, started before the sections rather than awaited in

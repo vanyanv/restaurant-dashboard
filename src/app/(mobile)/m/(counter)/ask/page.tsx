@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneAskClient } from "./counter-phone-ask-client"
+import { counterToday } from "@/lib/counter/today"
 
 /**
  * Counter Ask — the phone. `P.ask.phone()` at line 4611 of
@@ -66,7 +67,7 @@ export default async function MobileAskPage({
   // Resolved once, here, and passed to the island — a moving `new Date()`
   // re-evaluated in two places could disagree about which calendar day
   // "today" is, and this page prints the window it is answering about.
-  const today = new Date()
+  const today = counterToday()
 
   // The switcher's list, shared with the shell rather than re-queried
   // (`getOverviewStores` is `cache()`d, so this costs nothing): the store

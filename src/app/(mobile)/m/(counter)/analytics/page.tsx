@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getAnalyticsSectionPromises } from "@/lib/counter/adapters/analytics"
 import { CounterPhoneAnalyticsClient } from "./counter-phone-analytics-client"
+import { counterToday } from "@/lib/counter/today"
 
 export const dynamic = "force-dynamic"
 
@@ -49,7 +50,7 @@ export default async function MobileAnalyticsPage({
   // Resolved once, here, and passed to both the params reader and the island —
   // a moving `new Date()` re-evaluated in two places could disagree about
   // which calendar day "today" is.
-  const today = new Date()
+  const today = counterToday()
   const counterParams = readCounterParams(params, today)
 
   // NOT AWAITED — one promise per section, each unwrapped inside its own
