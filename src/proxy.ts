@@ -65,6 +65,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // and `MList` against `P.*.phone()`. This block used to carry a deferral —
   // whether a phone view is the intended destination for an admin route — and
   // then a shrinking list of the tabs that had no phone page. Both are done.
+  "/dashboard/operations/inventory/count/new": "/m/operations/inventory/count/new",
   "/dashboard/admin/monitoring": "/m/monitoring",
   "/dashboard/admin/monitoring/activity": "/m/monitoring/activity",
   "/dashboard/admin/monitoring/cache": "/m/monitoring/cache",
@@ -123,9 +124,11 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   // comment predicted the failure it then shipped: only `/counts` was ever
   // built on the phone, so `/count/new` and `/counts/<id>` both rewrote onto
   // routes that do not exist. Two live 404s, found by the fidelity suite's
-  // landing assertion, not by a report. `/counts` is an EXACT entry above now,
-  // and the two sub-paths without a phone page stay on desktop, which is a
-  // page rather than a 404.
+  // landing assertion, not by a report. `/counts` is an EXACT entry above,
+  // and `/count/new` is one now too — `P.countnew.phone()` is the surface the
+  // desk wizard hands over TO, so it was the odd one to be missing. Only
+  // `/counts/<id>` is still desk-only, and it stays out of this list rather
+  // than being carried onto a route that does not exist.
   ["/dashboard/operations/vendors", "/m/operations/vendors"],
   ["/dashboard/orders", "/m/orders"],
   ["/dashboard/pnl", "/m/pnl"],

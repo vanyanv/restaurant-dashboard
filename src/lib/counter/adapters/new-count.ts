@@ -7,7 +7,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
-import type { FigureProps, Row } from "@/components/counter"
+import type { MListRow, Row } from "@/components/counter"
 
 /**
  * Start a count — `P.newcount` (`docs/counter/counter-prototype.html`).
@@ -198,65 +198,10 @@ function daysAgo(at: Date | null): string {
   return `${count(Math.round(days / 30))} months ago`
 }
 
-export interface NewCountHeadline {
-  verdict: string
-  cells: FigureProps[]
-  phoneCells: FigureProps[]
-}
-
-function headlineOf(d: NewCountData): NewCountHeadline {
-  const oldest = [...d.open].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())[0]
-
-  const verdict =
-    (d.completedCounts === 0
-      ? `${count(d.startedCounts)} counts have been started and none finished. `
-      : `${count(d.completedCounts)} of ${count(d.startedCounts)} counts have been finished. `) +
-    (d.targetOpen
-      ? `The button below resumes ${d.targetOpen.storeName}'s count, opened ` +
-        `${daysAgo(d.targetOpen.startedAt)} with ${
-          d.targetOpen.lines === 0
-            ? "nothing entered"
-            : `${count(d.targetOpen.lines)} lines entered`
-        }, rather than opening a new one. `
-      : oldest
-        ? `${count(d.open.length)} counts are open on other stores, the oldest ` +
-          `${daysAgo(oldest.startedAt)}. `
-        : "") +
-    `The sheet is ${count(d.totalLines)} ingredients, of which ${count(d.everCounted)} have ` +
-    `ever been counted, so there is no expected quantity to check the other ` +
-    `${count(d.totalLines - d.everCounted)} against.`
-
-  const cells: FigureProps[] = [
-    {
-      label: "Counts finished",
-      value: `${count(d.completedCounts)} of ${count(d.startedCounts)}`,
-      caption: `last activity ${daysAgo(d.lastActivity)}`,
-      deltaTone: "is-down",
-    },
-    {
-      label: "On the sheet",
-      value: count(d.totalLines),
-      caption: `${count(d.groups.length)} categories`,
-    },
-    {
-      label: "Ever counted",
-      value: count(d.everCounted),
-      caption: `${count(d.totalLines - d.everCounted)} have no expected quantity`,
-      deltaTone: "is-down",
-    },
-    {
-      label: "Counts left open",
-      value: count(d.open.length),
-      caption: oldest ? `oldest ${daysAgo(oldest.startedAt)}` : "none",
-      deltaTone: d.open.length > 0 ? "is-down" : undefined,
-    },
-  ]
-
-  return { verdict, cells, phoneCells: cells.slice(0, 2) }
-}
-
 export interface NewCountGroups {
   groups: CountGroup[]
+  /** `P.countnew.phone()`'s "Areas" list: one line per category, on or off. */
+  phoneRows: MListRow[]
   meta: string
   note: string
 }
@@ -264,6 +209,17 @@ export interface NewCountGroups {
 function groupsOf(d: NewCountData): NewCountGroups {
   return {
     groups: d.groups,
+    // Every category is ON by default — a first count counts everything, and
+    // the phone has no toggle, so this list reports the sheet rather than
+    // offering a choice the desk makes.
+    phoneRows: d.groups.map((g) => ({
+      key: g.category,
+      title: g.category,
+      detail: `${count(g.lines)} line${g.lines === 1 ? "" : "s"} · ${count(g.inRecipe)} in a recipe`,
+      value: "On",
+      note: g.everCounted === 0 ? "never counted" : `${count(g.everCounted)} counted before`,
+      noteTone: (g.everCounted === 0 ? "down" : "up") as "up" | "down",
+    })),
     meta: `${count(d.groups.length)} categories · ${count(d.totalLines)} lines`,
     note:
       `The prototype groups this by room — walk-in, dry store, line, freezer — and no room ` +
@@ -308,42 +264,58 @@ function sheetOf(d: NewCountData): NewCountSheet {
   }
 }
 
+/**
+ * What the button will actually do — `P.countnew` has no table for this and
+ * needs none.
+ *
+ * This was a "Counts already open" TABLE, four columns over the one or two
+ * sessions this account has left open. The design's page is three panels and
+ * none of them is that. What the table was really for is the sentence under
+ * the button: pressing it on a store with an open count RESUMES a session from
+ * May rather than starting a fresh one, which is right behaviour and invisible
+ * behaviour. A sentence says it where the button is; a table said it three
+ * panels earlier.
+ *
+ * It also absorbed the one clause of the deleted verdict that nothing else on
+ * the page says — how many counts have ever been started against how many
+ * finished. The verdict's other two clauses were already the sheet's note and
+ * this one, which is why `NewCountHeadline` is gone rather than moved.
+ */
 export interface NewCountOpen {
-  rows: Row[]
   /** True when the button will continue an existing count rather than open one. */
   resumes: boolean
-  meta: string
   note: string
 }
 
 function openOf(d: NewCountData): NewCountOpen {
+  const oldest = [...d.open].sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())[0]
+
   return {
-    rows: d.open.map((c) => ({
-      key: c.id,
-      href: `/dashboard/operations/inventory/counts/${c.id}`,
-      ariaLabel: `Open the count started at ${c.storeName}`,
-      cells: {
-        store: c.storeName,
-        started: c.startedAt.toISOString().slice(0, 10),
-        age: { v: daysAgo(c.startedAt), cls: "hot" },
-        lines: c.lines === 0 ? { v: "none", cls: "hot" } : count(c.lines),
-      },
-    })),
     resumes: d.targetOpen !== null,
-    meta: d.open.length === 0 ? "none open" : `${count(d.open.length)} open`,
     note:
-      d.open.length === 0
-        ? `No count is open, so starting one opens a new session.`
-        : `Starting a count on a store that already has one open resumes it — ` +
-          `startOrResumeStockCount returns the existing session rather than creating a ` +
-          `second. That is the right behaviour and it is invisible, which is why it is ` +
-          `stated here: pressing the button below on one of these stores continues a count ` +
-          `from May, it does not begin a fresh one.`,
+      (d.completedCounts === 0
+        ? `${count(d.startedCounts)} counts have been started here and none finished. `
+        : `${count(d.completedCounts)} of ${count(d.startedCounts)} counts have been finished. `) +
+      (d.open.length === 0
+        ? `No count is open, so this opens a new session. `
+        : d.targetOpen
+          ? `This RESUMES ${d.targetOpen.storeName}'s count, opened ` +
+            `${daysAgo(d.targetOpen.startedAt)} with ${
+              d.targetOpen.lines === 0
+                ? "nothing entered"
+                : `${count(d.targetOpen.lines)} lines entered`
+            } — startOrResumeStockCount returns the existing session rather than creating a ` +
+            `second. That is right behaviour, and invisible, which is why it is said here ` +
+            `rather than left to be discovered. `
+          : `${count(d.open.length)} count${d.open.length === 1 ? " is" : "s are"} open on ` +
+            `other stores, the oldest ${daysAgo(oldest.startedAt)}. This opens a new one on ` +
+            `the store you are looking at. `) +
+      `There is no send-to-phone and no print: neither exists behind the prototype's other ` +
+      `two buttons, and a button that does nothing is worse than one that is absent.`,
   }
 }
 
 export interface NewCountSections {
-  headline: SectionData<NewCountHeadline>
   groups: SectionData<NewCountGroups>
   sheet: SectionData<NewCountSheet>
   open: SectionData<NewCountOpen>
@@ -360,7 +332,6 @@ export function getNewCountSectionPromises(
   const s = <T,>(f: (d: NewCountData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryNewCount")
   return {
-    headline: s(headlineOf),
     groups: s(groupsOf),
     sheet: s(sheetOf),
     open: s(openOf),
