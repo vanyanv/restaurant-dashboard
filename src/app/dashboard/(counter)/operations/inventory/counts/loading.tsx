@@ -16,6 +16,9 @@ export default function CountsLoading() {
       <Section title="Variance" data={loading()}>
         {() => null}
       </Section>
+      <Section title="The count in progress" data={loading()}>
+        {() => null}
+      </Section>
     </>
   )
 }

@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -132,6 +134,33 @@ export function CounterCountsClient({
             <Kv rows={v.rows} />
             <p className="mono" style={{ margin: "11px 0 0" }}>
               {v.note}
+            </p>
+          </>
+        )}
+      </Section>
+      {/* `P.counts`' "The count in progress". The prototype puts it beside the
+          variance chart; ours states who, when and how far — the three things
+          the schema records — and links to the session. */}
+      <Section
+        title="The count in progress"
+        meta={(p) => p.meta}
+        data={sections.progress}
+        pending={pending}
+      >
+        {(p) => (
+          <>
+            <p style={{ margin: "0 0 12px", fontSize: "var(--ct-t-mid)", lineHeight: 1.5 }}>
+              {p.lead}
+            </p>
+            {p.href ? (
+              <div className="btnrow">
+                <Link className="btn btn--primary" href={p.href}>
+                  Open the count
+                </Link>
+              </div>
+            ) : null}
+            <p className="mono" style={{ margin: "11px 0 0" }}>
+              {p.note}
             </p>
           </>
         )}
