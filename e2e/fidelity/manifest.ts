@@ -1064,7 +1064,28 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 12, mobile: 9 },
   },
   { protoId: "prices", name: "Ingredients", protoRoute: "/dashboard/ingredients/prices", route: "/dashboard/ingredients/prices", report: true, status: "editorial" },
-  { protoId: "vendors", name: "Vendors", protoRoute: "/dashboard/operations/vendors", route: "/dashboard/operations/vendors", mobileRoute: "/m/operations/vendors", report: true, status: "editorial" },
+  {
+    protoId: "vendors",
+    name: "Vendors",
+    protoRoute: "/dashboard/operations/vendors",
+    route: "/dashboard/operations/vendors",
+    mobileRoute: "/m/operations/vendors",
+    report: true,
+    // MEASURED: the phone is 5 of 5, complete. The desk is 14 of 15 and every
+    // tally matches but one — `qitem`, 1 against 2.
+    //
+    // NOT DECLARED, deliberately, and this is the case `absentLandmarks` is
+    // wrong for. `workOf` emits a "rising basket" item only when some vendor
+    // trends past `FLAT_PCT` and a "reconcile" item only when one has broken
+    // invoices. Today the second fires and the first does not. That is a
+    // reading of this window, not a thing the schema cannot express — the day
+    // a vendor's basket climbs, the item appears and any allowance written
+    // here would go stale and start absorbing a real regression.
+    //
+    // So it stays ungated until the queue is stable or the entry can say
+    // something truer than "one fewer than the fixture happened to have".
+    status: "editorial",
+  },
   {
     protoId: "vendor",
     name: "A vendor",
