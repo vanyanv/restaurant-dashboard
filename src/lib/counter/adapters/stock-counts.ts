@@ -62,9 +62,31 @@ export interface CountsSessions {
   note: string
 }
 
+/**
+ * `P.counts`' "Variance by session", which is a chart there and a paragraph
+ * here — see the file docblock for why there is no series to draw.
+ *
+ * It was a `.kv` of four absences ("Lines with an expected quantity — 0",
+ * "Calibration rows — 0") until the page was measured against its design,
+ * which has no `.kv` on it. Four rows that all read zero are a sentence
+ * formatted as a table, and the sentence says more: it can name the column and
+ * the table the zeros come from. Every figure that was in the list is still
+ * here.
+ */
 export interface CountsVariance {
   /** Owed and named: what the section would show, and why it cannot. */
   lead: string
+  /**
+   * The same four absences as `rows`, as a sentence.
+   *
+   * `P.counts` draws a CHART here and `P.countsession` draws a `.kv`, so the
+   * two pages that share this section want the same facts in different shapes.
+   * The count list renders this line; the session page renders `rows`. Four
+   * rows that all read zero are a sentence wearing a table's clothes on a page
+   * whose design has no `.kv` at all — and the sentence can name the column
+   * and the table the zeros come from, which a two-column list cannot.
+   */
+  absences: string
   rows: KvRow[]
   note: string
   meta: string
@@ -440,6 +462,13 @@ function varianceOf(d: Data): CountsVariance {
       `A variance is a counted quantity minus an expected one. This account records the first ` +
       `and has never recorded the second, so there is no shrink figure, no short and no over — ` +
       `not zero variance, but no basis for stating one.`,
+    absences:
+      `${count(d.lines.length)} lines have been counted and ` +
+      `${count(d.linesWithEstimate)} of them carry an expected quantity. ` +
+      `IngredientModelState, the table that would produce one from the recipe walk, holds ` +
+      `${count(d.modelStateRows)} rows, and ` +
+      `${count(d.sessions.filter((x) => x.status === "COMPLETED").length)} of ` +
+      `${count(d.sessions.length)} sessions have ever reached COMPLETED.`,
     rows: [
       { label: "Lines counted", value: count(d.lines.length) },
       {
@@ -454,8 +483,8 @@ function varianceOf(d: Data): CountsVariance {
       },
       {
         label: "Sessions ever completed",
-        value: count(d.sessions.filter((s) => s.status === "COMPLETED").length),
-        ...(d.sessions.every((s) => s.status !== "COMPLETED") && d.sessions.length > 0
+        value: count(d.sessions.filter((x) => x.status === "COMPLETED").length),
+        ...(d.sessions.every((x) => x.status !== "COMPLETED") && d.sessions.length > 0
           ? { tone: "bad" as const }
           : {}),
       },
@@ -465,7 +494,8 @@ function varianceOf(d: Data): CountsVariance {
       `StockCountLine.estimatedQtyAtCount is the column an expectation goes in, and ` +
       `IngredientModelState is the table that would produce one from the recipe walk. ` +
       `Both are empty. A count that closes with an expectation attached is what turns this ` +
-      `section from a list of absences into a number.`,
+      `section from a list of absences into a number — and into the chart the design draws ` +
+      `here.`,
   }
 }
 

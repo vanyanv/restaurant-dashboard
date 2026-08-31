@@ -6,7 +6,6 @@ import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
-  Kv,
   PageHead,
   Section,
   Strip,
@@ -126,13 +125,20 @@ export function CounterCountsClient({
         pending={pending}
         askAbout="why is there no shrink figure"
       >
+        {/* `P.counts`' "Variance by session" is a CHART. There is no series
+            to draw — see the adapter — so this is the paragraph that says so.
+            It was a `.kv` of four zeros until the page was measured: a design
+            with no `.kv` on it, and four rows that all read zero are a
+            sentence wearing a table's clothes. */}
         {(v) => (
           <>
             <p className="ans__lead" style={{ margin: "0 0 14px" }}>
               {v.lead}
             </p>
-            <Kv rows={v.rows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <p style={{ margin: "0 0 12px", fontSize: "var(--ct-t-mid)", lineHeight: 1.5 }}>
+              {v.absences}
+            </p>
+            <p className="mono" style={{ margin: 0 }}>
               {v.note}
             </p>
           </>
