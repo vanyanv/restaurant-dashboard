@@ -1029,7 +1029,57 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 30, mobile: 8 },
   },
   { protoId: "countnew", name: "Inventory", protoRoute: "/dashboard/operations/inventory/count/new", route: "/dashboard/operations/inventory/count/new", report: true, status: "editorial" },
-  { protoId: "counts", name: "Inventory", protoRoute: "/dashboard/operations/inventory/counts", route: "/dashboard/operations/inventory/counts", mobileRoute: "/m/operations/inventory/counts", report: true, status: "editorial" },
+  {
+    protoId: "counts",
+    name: "Stock counts",
+    protoRoute: "/dashboard/operations/inventory/counts",
+    route: "/dashboard/operations/inventory/counts",
+    mobileRoute: "/m/operations/inventory/counts",
+    report: true,
+    // MEASURED: 13 of the prototype's 15 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The two missing
+    // landmarks are declared below and are the SAME absence seen twice.
+    //
+    // The extra that held this page back was a `.kv` in the variance section —
+    // four rows reading "Lines with an expected quantity: 0", "Calibration
+    // rows: 0". The design has no `.kv` here at all, and four rows that all
+    // read zero are a sentence wearing a table's clothes. It is a sentence
+    // now, and it says more than the list did: it can name the column and the
+    // table the zeros come from. The session page still renders the `.kv`,
+    // because `P.countsession` has one.
+    status: "counter",
+    baseline: { desktop: 13, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "ch",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "`P.counts`' \"Variance by session\". A variance is a counted " +
+          "quantity minus an EXPECTED one, and this account has never " +
+          "recorded the second: `StockCountLine.estimatedQtyAtCount` is null " +
+          "on all 10 lines and `IngredientModelState`, the table that would " +
+          "produce an expectation from the recipe walk, holds 0 rows. There " +
+          "is no series — not a flat one, none. `varianceOf` states that in " +
+          "the section instead, with the four counts that would have to move " +
+          "for the chart to exist. The phone draws no chart on either side.",
+      },
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The second button in `P.counts`' `.btnrow`, \"Compare to last " +
+          "week\". The same absence as the chart above, one pass over: a " +
+          "comparison needs a previous count to compare against, and of the 4 " +
+          "`StockCount` rows this account holds, two are IN_PROGRESS and two " +
+          "ABANDONED — none has ever reached COMPLETED. `progressOf` says so " +
+          "in the section's own note. The first button, \"Open the count\", " +
+          "is rendered and goes to the open session. The phone has no " +
+          "`.btnrow` on either side.",
+      },
+    ],
+  },
   { protoId: "countsession", name: "A count", protoRoute: "/dashboard/operations/inventory/counts/aug-14", route: "/dashboard/operations/inventory/counts/cmp39jggu000004lbepv3eiob", report: true, status: "editorial" },
   {
     protoId: "ingredients",
