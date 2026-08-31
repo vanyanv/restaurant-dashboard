@@ -236,7 +236,6 @@ async function loadPrices(): Promise<PriceData> {
 /* ── Shaping ──────────────────────────────────────────────────────────── */
 
 export interface PriceHeadline {
-  verdict: string
   cells: FigureProps[]
   phoneCells: FigureProps[]
 }
@@ -249,25 +248,6 @@ function headlineOf(d: PriceData): PriceHeadline {
   const best = fallen[0] ?? null
   const packVaries = d.movers.filter((m) => m.packVaries).length
 
-  const verdict =
-    `Across ${count(d.movers.length)} ingredients priced on at least ` +
-    `${count(MIN_DELIVERIES)} deliveries, the moves ` +
-    (net < 0
-      ? `are saving ${money(-net)} over ${count(VOLUME_DAYS)} days at current volume`
-      : `cost ${money(net)} over ${count(VOLUME_DAYS)} days at current volume`) +
-    (best
-      ? `, mostly ${best.name} at ${pct(best.move)} — ${money(-best.costs)} of it`
-      : "") +
-    (worst
-      ? `. Against that, ${worst.name} is up ${pct(worst.move)} and costs ` +
-        `${money(worst.costs)}`
-      : "") +
-    `.` +
-    (d.held.length > 0
-      ? ` ${count(d.held.length)} more moved by more than ${count(COST_SPIKE_THRESHOLD)}× and ` +
-        `are held out below, because a move that size is a pack read wrong rather than a price.`
-      : "")
-
   const cells: FigureProps[] = [
     {
       label: net < 0 ? "The moves are saving" : "The moves are costing",
@@ -276,17 +256,19 @@ function headlineOf(d: PriceData): PriceHeadline {
       deltaTone: net > 0 ? "is-down" : undefined,
     },
     {
+      // The ingredient's NAME is the delta, not a `caption`. A caption opens
+      // `.band`, and `P.prices`' own worst-mover cell is a four-tuple that
+      // puts the name exactly here: `['Worst mover', '▲ 31%', 'chicken
+      // thigh', 'is-down']`.
       label: "Costs you most",
       value: worst ? money(worst.costs) : "—",
-      delta: worst ? pct(worst.move) : undefined,
+      delta: worst ? `${pct(worst.move)} · ${worst.name}` : "nothing rose",
       deltaTone: "is-down",
-      caption: worst ? worst.name : "nothing rose",
     },
     {
       label: "Saves you most",
       value: best ? money(-best.costs) : "—",
-      delta: best ? pct(best.move) : undefined,
-      caption: best ? best.name : "nothing fell",
+      delta: best ? `${pct(best.move)} · ${best.name}` : "nothing fell",
     },
     {
       label: "Pack shape varies",
@@ -296,7 +278,7 @@ function headlineOf(d: PriceData): PriceHeadline {
     },
   ]
 
-  return { verdict, cells, phoneCells: cells.slice(0, 2) }
+  return { cells, phoneCells: cells.slice(0, 2) }
 }
 
 export interface PriceChart {
@@ -416,42 +398,25 @@ function moversOf(d: PriceData): PriceMovers {
           : "less but on far more volume"
       })()}. A percentage ranking puts those the other way round and buries the one that ` +
       `matters. A name in red carries more than one pack shape for a single SKU, which is ` +
-      `where a fictional move comes from.`,
-  }
-}
-
-export interface PriceHeld {
-  rows: Row[]
-  meta: string
-  note: string
-}
-
-function heldOf(d: PriceData): PriceHeld {
-  return {
-    rows: d.held.map((m) => ({
-      key: m.id,
-      cells: {
-        ingredient: { v: m.name, cls: "hot" },
-        median: unitCost(m.median),
-        latest: { v: unitCost(m.latest), cls: "hot" },
-        move: { v: pct(m.move), cls: "hot" },
-        deliveries: count(m.deliveries),
-        why: "pack read wrong",
-      },
-    })),
-    meta:
-      d.held.length === 0
-        ? "nothing held out"
-        : `${count(d.held.length)} above ${count(COST_SPIKE_THRESHOLD)}×`,
-    note:
-      d.held.length === 0
-        ? `No ingredient moved by more than ${count(COST_SPIKE_THRESHOLD)}× its trailing ` +
-          `median, so nothing is being kept off the table above.`
-        : `A ${count(COST_SPIKE_THRESHOLD)}× move is not a price. The sanitizer's case cost ` +
-          `$96.69 on one delivery and $101.75 on the next, but its pack was recorded once as ` +
-          `21 gallons and once as 2, so the derived cost per gallon went from $4.60 to $50.88. ` +
-          `These are listed rather than dropped, because the row that needs fixing is the ` +
-          `invoice line, not the price.`,
+      `where a fictional move comes from.` +
+      /*
+       * The held-out rows were a SECOND TABLE until this page was measured
+       * against `P.prices`, which has exactly one. They are a sentence now,
+       * and nothing is lost: the table had one row on this account and its
+       * whole content was the reason it was held out, which is prose.
+       */
+      (d.held.length === 0
+        ? ` Nothing moved by more than ${count(COST_SPIKE_THRESHOLD)}× its trailing median, ` +
+          `so nothing is being kept off this table.`
+        : ` ${count(d.held.length)} ingredient${d.held.length === 1 ? " is" : "s are"} held ` +
+          `off it entirely: ${d.held
+            .slice(0, 3)
+            .map((m) => `${m.name} at ${pct(m.move)}`)
+            .join(", ")}. A move above ${count(COST_SPIKE_THRESHOLD)}× the trailing median is ` +
+          `a pack read wrong rather than a price — the sanitizer's case cost $96.69 on one ` +
+          `delivery and $101.75 on the next, but its pack was recorded once as 21 gallons and ` +
+          `once as 2, so the derived cost per gallon went from $4.60 to $50.88. The row that ` +
+          `needs fixing is the invoice line.`),
   }
 }
 
@@ -459,7 +424,6 @@ export interface PriceSections {
   headline: SectionData<PriceHeadline>
   chart: SectionData<PriceChart>
   movers: SectionData<PriceMovers>
-  held: SectionData<PriceHeld>
 }
 
 export function getPriceSectionPromises(): StreamedSections<PriceSections> {
@@ -474,7 +438,6 @@ export function getPriceSectionPromises(): StreamedSections<PriceSections> {
     headline: s(headlineOf),
     chart: s(chartOf),
     movers: s(moversOf),
-    held: s(heldOf),
   }
 }
 

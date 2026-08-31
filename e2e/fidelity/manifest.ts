@@ -1141,7 +1141,56 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 12, mobile: 9 },
   },
-  { protoId: "prices", name: "Ingredients", protoRoute: "/dashboard/ingredients/prices", route: "/dashboard/ingredients/prices", report: true, status: "editorial" },
+  {
+    protoId: "prices",
+    name: "Price monitor",
+    protoRoute: "/dashboard/ingredients/prices",
+    route: "/dashboard/ingredients/prices",
+    mobileRoute: "/m/ingredients/prices",
+    report: true,
+    // MEASURED: 8 of the prototype's 9 on the desk, 5 of 5 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The one missing landmark
+    // is declared below.
+    //
+    // The desk was 15 against 9 and the phone had no phone surface at all —
+    // the mobile project landed on the desk page and measured 15 against 5.
+    // Four things went, and none of them was a finding lost:
+    //
+    //   - a verdict block. `P.prices` has none, and its figures are the strip.
+    //   - a second table, "Held out". It had ONE row on this account and its
+    //     whole content was the reason that row was held out, which is prose.
+    //     It is the last sentence of the remaining table's note now, where a
+    //     reader is already asking what is not in the list.
+    //   - two `.band`s. The worst- and best-mover cells carried the
+    //     ingredient's name as a `caption`, and `P.prices`' own worst-mover
+    //     cell is a four-tuple that puts the name in the DELTA:
+    //     `['Worst mover', '▲ 31%', 'chicken thigh', 'is-down']`.
+    //
+    // `/m/ingredients/prices` also empties `NO_PHONE_PAGE` in proxy.ts — the
+    // exception list that kept the ingredients prefix rewrite from sending a
+    // phone to a route that did not exist. Its comment said "delete it the day
+    // the phone surface ships", and this is that day.
+    status: "counter",
+    baseline: { desktop: 8, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The date control's \"Apply\". `P.prices` does not set `nodate`, " +
+          "so the prototype draws `CD.bar()` and its Apply button; this page " +
+          "mounts no `DateControl` because its two windows are fixed by what " +
+          "the comparison MEANS rather than by a reader — `HISTORY_DAYS` is " +
+          "120, the span a trailing median is taken over, and `VOLUME_DAYS` " +
+          "is 30, the span the money is priced at. Narrowing the first would " +
+          "change what \"the price moved\" means (see the adapter on the fry " +
+          "price, where window-against-window reports +67% at a moment the " +
+          "price has come all the way back down), and the two cannot move " +
+          "together. The phone has no page head furniture on either side.",
+      },
+    ],
+  },
   {
     protoId: "vendors",
     name: "Vendors",

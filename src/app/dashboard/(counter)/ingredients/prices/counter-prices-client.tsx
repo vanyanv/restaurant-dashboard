@@ -20,6 +20,13 @@ import type { PriceSections } from "@/lib/counter/adapters/prices"
  * *"Ranked by what it costs you, not by percentage."* See the adapter for why
  * the move is measured against a trailing median rather than the previous
  * month, and for the ingredient whose 1,005% rise is a pack read wrong.
+ *
+ * Composed as `P.prices.desk()` composes it: strip -> "What moved" -> one
+ * table. There was a verdict block above the strip, which this design has
+ * none of, and a second "Held out" table, which had one row on this account
+ * and whose whole content was the REASON that row was held out. Both are
+ * prose now — the held-out sentence is the last thing the table's own note
+ * says, where a reader is already asking what is not in it.
  */
 const MOVER_COLUMNS: Column[] = [
   { key: "ingredient", label: "Ingredient" },
@@ -29,15 +36,6 @@ const MOVER_COLUMNS: Column[] = [
   { key: "volume", label: "Volume, 30d", numeric: true },
   { key: "costs", label: "Costs you", numeric: true },
   { key: "recipes", label: "Recipes", numeric: true },
-]
-
-const HELD_COLUMNS: Column[] = [
-  { key: "ingredient", label: "Ingredient" },
-  { key: "median", label: "Was", numeric: true },
-  { key: "latest", label: "Read as", numeric: true },
-  { key: "move", label: "Move", numeric: true },
-  { key: "deliveries", label: "Deliveries", numeric: true },
-  { key: "why", label: "Why held" },
 ]
 
 export function CounterPricesClient({ sections }: { sections: SectionSources<PriceSections> }) {
@@ -53,18 +51,6 @@ export function CounterPricesClient({ sections }: { sections: SectionSources<Pri
         title="Price monitor"
         sub="Every price that moved, ranked by what the move costs you"
       />
-
-      <Section bare title="Verdict" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div className="sec">
-            <div className="sec__body">
-              <p className="verdictline" style={{ margin: 0 }}>
-                {h.verdict}
-              </p>
-            </div>
-          </div>
-        )}
-      </Section>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
@@ -101,24 +87,6 @@ export function CounterPricesClient({ sections }: { sections: SectionSources<Pri
             {/* No `.sec__body` — a table section emits the table alone. */}
             <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
               {m.note}
-            </p>
-          </>
-        )}
-      </Section>
-
-      <Section
-        title="Held out"
-        meta={(h) => h.meta}
-        data={sections.held}
-        pending={pending}
-        pad={false}
-        askAbout="which price moves were rejected as parsing errors"
-      >
-        {(h) => (
-          <>
-            <Table columns={HELD_COLUMNS} rows={h.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
-              {h.note}
             </p>
           </>
         )}

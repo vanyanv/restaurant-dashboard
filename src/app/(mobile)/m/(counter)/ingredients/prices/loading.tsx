@@ -3,17 +3,14 @@
 import { Section } from "@/components/counter"
 import { loading } from "@/lib/counter/section-data"
 
-/** The price monitor's loading boundary. */
+/** The phone price-monitor loading boundary. */
 export default function Loading() {
   return (
     <>
       <Section bare title="The figures" data={loading()}>
         {() => null}
       </Section>
-      <Section title="What moved" data={loading()}>
-        {() => null}
-      </Section>
-      <Section title="Ranked by what it costs you" data={loading()} pad={false}>
+      <Section title="Ranked by cost" data={loading()}>
         {() => null}
       </Section>
     </>
