@@ -500,6 +500,8 @@ export async function getStoresSections(input: StoresInput): Promise<StoresSecti
 /* ── One store's file ─────────────────────────────────────────────────── */
 
 export interface StoreFileHead {
+  /** The store this file is for — the phone's one button links to its desk page. */
+  storeId: string
   title: string
   sub: string
   cells: FigureProps[]
@@ -550,6 +552,8 @@ export interface StoreFileMath {
 export interface StoreFileExpenses {
   columns: Column[]
   rows: Row[]
+  /** `P.storecosts.phone()`'s second list: the line, its cadence, its monthly. */
+  phoneRows: MListRow[]
   meta: string
 }
 
@@ -663,6 +667,7 @@ export function getStoreFileSectionPromises(
         deltaTone: gaps.length > 0 ? "is-down" : "is-flat",
       }
       return {
+        storeId: store.id,
         title: shortName(store.name),
         sub:
           `${stageLabel(store)}${store.address ? ` · ${store.address}` : ""}` +
@@ -857,6 +862,28 @@ export function getStoreFileSectionPromises(
             range: money(monthlyCostForDays(e.monthly, days) ?? 0),
           },
         })),
+        // An `.mlist` with no rows carries no text, and the fidelity gate reads
+        // an element that should say something and says nothing as a defect —
+        // correctly, because on a phone that is a panel with a heading and a
+        // blank underneath it. This account has NO `StoreFixedExpense` rows, so
+        // the empty case states that rather than rendering nothing. The desk's
+        // table survives being empty because its header still speaks.
+        phoneRows:
+          store.expenses.length === 0
+            ? [
+                {
+                  key: "none",
+                  title: "No fixed expenses on file",
+                  detail: "each one added becomes its own P&L row",
+                  value: "—",
+                },
+              ]
+            : store.expenses.map((e) => ({
+                key: e.id,
+                title: e.label,
+                detail: CADENCE_LABEL[e.frequency],
+                value: money(e.monthly),
+              })),
         meta:
           store.expenses.length === 0
             ? "none on file · each would become its own P&L row"

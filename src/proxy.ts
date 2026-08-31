@@ -127,6 +127,10 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   // rather than by a report. All three have a phone page now: `/counts` and
   // `/count/new` are EXACT entries above, and `/counts/<id>` is the dynamic
   // one this line carries.
+  // Carries /dashboard/stores/<id> to /m/stores/<id>. `/stores` itself is an
+  // exact entry above; `/stores/new` has no phone page and is excluded below,
+  // because a four-field create form is a desk job.
+  ["/dashboard/stores", "/m/stores"],
   ["/dashboard/operations/inventory", "/m/operations/inventory"],
   ["/dashboard/operations/vendors", "/m/operations/vendors"],
   ["/dashboard/orders", "/m/orders"],
@@ -144,13 +148,19 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
  * entry here is a page waiting to be built, not a decision: delete it the day
  * the phone surface ships.
  *
- * It is EMPTY, and that is the list working as designed rather than a list
- * nobody kept. Its one entry was `/dashboard/ingredients/prices`, removed the
- * day `P.prices.phone()` was built. The set stays because the next dynamic
- * base with a half-built phone surface needs it, and because an empty
- * exception list is the honest way to say there is nothing being excluded.
+ * It emptied once — its `/dashboard/ingredients/prices` entry went the day
+ * `P.prices.phone()` was built — and filled again the day `/dashboard/stores`
+ * joined the list above. That is the mechanism working: a base goes on the
+ * rewrite list when its dynamic child has a phone page, and any SIBLING of
+ * that child without one has to be named here or it rewrites onto nothing.
  */
-const NO_PHONE_PAGE = new Set<string>([])
+const NO_PHONE_PAGE = new Set<string>([
+  // `/m/stores/new` does not exist. `P.storeedit` is a create form — four
+  // fields and a submit — and this design puts creation on the desk: the
+  // phone's Stores list links store FILES, and the "New store" button lives
+  // on the desk page beside them.
+  "/dashboard/stores/new",
+])
 
 function mobilePathFor(desktopPath: string): string | null {
   if (DESKTOP_TO_MOBILE[desktopPath]) return DESKTOP_TO_MOBILE[desktopPath]

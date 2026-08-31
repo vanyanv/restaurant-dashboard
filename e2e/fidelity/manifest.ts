@@ -1396,17 +1396,31 @@ export const PAGES: FidelityPage[] = [
     name: "Store file",
     protoRoute: "/dashboard/stores/hollywood",
     route: "/dashboard/stores/cmexd4zia0001jr04ljkdt9na",
+    mobileRoute: "/m/stores/cmexd4zia0001jr04ljkdt9na",
     report: true,
     // MEASURED after the range rebuild: 30 of the prototype's 39 on the desk,
     // 0 extra. Every one of the nine is a BUTTON, and they are declared below.
     //
-    // STILL `editorial`, and the reason is the phone, not the desk. There is
-    // no `/m/stores/<id>`, so the mobile project lands on the desk route and
-    // compares a desk composition against `P.storecosts.phone()`. Gating that
-    // would report a page that does not exist as a page that renders wrongly.
-    // This flips to "counter" the day the phone surface ships, and the desk
-    // numbers below are what it flips with.
-    status: "editorial",
+    // The phone surface SHIPPED, which is what this entry said it was waiting
+    // for: "there is no `/m/stores/<id>`, so the mobile project lands on the
+    // desk route and compares a desk composition against
+    // `P.storecosts.phone()`. This flips to counter the day the phone surface
+    // ships, and the desk numbers below are what it flips with." It is 9 of 9
+    // there, landmark for landmark, with no allowance.
+    //
+    // One thing the phone needed that the desk did not: this account holds NO
+    // `StoreFixedExpense` rows, and an `.mlist` with no rows carries no text —
+    // which the gate reads as a defect, correctly, because on a phone it is a
+    // heading with a blank under it. The desk's table survives being empty
+    // because its header still speaks. So the empty case states itself.
+    //
+    // The phone's one button is a LINK to the desk file, not the prototype's
+    // "Save inputs". Editing six currency fields on a phone is the thing this
+    // design argues against elsewhere in its own words — `P.countnew`: "the
+    // desk is for choosing the shape of the count, not for typing 31 numbers
+    // into a table."
+    status: "counter",
+    baseline: { desktop: 30, mobile: 9 },
     absentLandmarks: [
       {
         landmark: "btnrow",
