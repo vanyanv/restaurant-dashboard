@@ -29,6 +29,20 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu/catalog": "/m/menu/catalog",
   "/dashboard/operations": "/m/operations",
   "/dashboard/operations/inventory": "/m/operations/inventory",
+  // Built on Counter with phone surfaces of their own, and unreachable from
+  // their desk URL until they were listed here — the same lag Analytics, COGS
+  // and Ask each had. Found by the fidelity suite's own landing assertion:
+  // the mobile projects asked for the desk path and stayed on it, which is a
+  // phone user following a shared link onto the desktop page.
+  "/dashboard/operations/inventory/counts": "/m/operations/inventory/counts",
+  "/dashboard/operations/packaging": "/m/operations/packaging",
+  "/dashboard/operations/product-usage": "/m/operations/product-usage",
+  "/dashboard/operations/vendors": "/m/operations/vendors",
+  // Stores was deleted from mobile in the bloat sweep and the comment below
+  // still said so; `/m/stores` was rebuilt on Counter since, so the desk path
+  // maps again. The two sub-paths (`/stores/<id>`, `/stores/new`) have no
+  // phone page, so this is an EXACT entry and not a dynamic base.
+  "/dashboard/stores": "/m/stores",
   "/dashboard/orders": "/m/orders",
   "/dashboard/pnl": "/m/pnl",
   // Menu Profit now HAS a phone surface of its own, built on Counter from the
@@ -40,9 +54,9 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/menu-profit": "/m/menu-profit",
   "/dashboard/product-mix": "/m/product-mix",
   "/dashboard/recipes": "/m/recipes",
-  // Stores had no mobile equivalent left after the mobile bloat deletion —
-  // leave that desktop path unmapped (mobilePathFor returns null and the
-  // request stays on desktop). Analytics was in that list until it was
+  // Stores had no mobile equivalent left after the mobile bloat deletion, and
+  // this comment said so until `/m/stores` was rebuilt on Counter; the desk
+  // path is mapped exactly above now. Analytics was in that list until it was
   // rebuilt on Counter with a phone surface of its own; it is mapped above,
   // and so is Ask, which was unmapped for the different reason that /m/ask did
   // not exist until the Counter Ask page was built on both surfaces. COGS was
@@ -81,20 +95,45 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   // base itself is mapped exactly above, so this entry only ever matches the
   // item route below it — the one dynamic sub-path Menu has.
   ["/dashboard/menu/catalog", "/m/menu/catalog"],
-  // Carries /dashboard/operations/inventory to /m/operations/inventory. The
-  // base /dashboard/operations is mapped exactly above to the flat /m/operations,
-  // so this entry only ever matches the sub-paths under it — and today only
-  // Inventory has a Counter phone route, so any OTHER operations sub-path
-  // resolves to a mobile page that does not exist. That is the same 404 risk
-  // this allowlist exists to avoid, which is why the entry is the full
-  // inventory path and not the operations base.
-  ["/dashboard/operations/inventory", "/m/operations/inventory"],
+  // Carries /dashboard/ingredients/<id> to /m/ingredients/<id>. The base is
+  // mapped exactly above; `/ingredients/prices` is excluded below because it
+  // has no phone page.
+  ["/dashboard/ingredients", "/m/ingredients"],
+  // The inventory entry USED to live here, carrying every sub-path under
+  // /dashboard/operations/inventory to /m/operations/inventory/… — and its own
+  // comment predicted the failure it then shipped: only `/counts` was ever
+  // built on the phone, so `/count/new` and `/counts/<id>` both rewrote onto
+  // routes that do not exist. Two live 404s, found by the fidelity suite's
+  // landing assertion, not by a report. `/counts` is an EXACT entry above now,
+  // and the two sub-paths without a phone page stay on desktop, which is a
+  // page rather than a 404.
+  ["/dashboard/operations/vendors", "/m/operations/vendors"],
   ["/dashboard/orders", "/m/orders"],
   ["/dashboard/pnl", "/m/pnl"],
+  ["/dashboard/recipes", "/m/recipes"],
 ]
+
+/**
+ * Desk paths that sit UNDER a `DYNAMIC_SUBROUTES` base and have no phone page
+ * of their own. Without this, the base's prefix match carries them onto a
+ * mobile route that does not exist — a 404 for a phone user, where staying on
+ * the desktop page is at least a page.
+ *
+ * This is the exception list the old inventory entry needed and never had. An
+ * entry here is a page waiting to be built, not a decision: delete it the day
+ * the phone surface ships.
+ */
+const NO_PHONE_PAGE = new Set<string>([
+  // `/m/ingredients/prices` does not exist. The desk price monitor is
+  // `P.prices`; its phone composition is still to be built.
+  "/dashboard/ingredients/prices",
+])
 
 function mobilePathFor(desktopPath: string): string | null {
   if (DESKTOP_TO_MOBILE[desktopPath]) return DESKTOP_TO_MOBILE[desktopPath]
+  // Checked BEFORE the prefix scan: an exception only works if it beats the
+  // base that would otherwise swallow it.
+  if (NO_PHONE_PAGE.has(desktopPath)) return null
   for (const [base, mobileBase] of DYNAMIC_SUBROUTES) {
     if (desktopPath.startsWith(base + "/")) {
       return mobileBase + desktopPath.slice(base.length)
