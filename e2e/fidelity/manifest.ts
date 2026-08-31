@@ -837,7 +837,36 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "pnlstore", name: "P&L", protoRoute: "/dashboard/pnl/hollywood", route: "/dashboard/pnl/hollywood", status: "editorial" },
+  {
+    protoId: "pnlstore",
+    name: "One store P&L",
+    protoRoute: "/dashboard/pnl/hollywood",
+    route: "/dashboard/pnl/hollywood",
+    // NOT CAPTURED and never will be, and the reason is a route that no longer
+    // exists rather than a page that is unbuilt. `/dashboard/pnl/<id>` is a
+    // 308 shim onto `/dashboard/pnl?store=<id>`: the store switcher deletes
+    // this class of route, because a store is a PARAM on one statement rather
+    // than a second page with its own composition. The shim's own docblock
+    // carries the full argument for keeping it alive — bookmarks, four inbound
+    // links and two `revalidatePath` calls.
+    //
+    // The CONTENT is not lost and this is the part worth writing down.
+    // `P.pnlstore`'s reason for existing is its fixed-cost section, "What this
+    // store carries that the group does not", and that section is on
+    // `/dashboard/pnl` — rendered only with a store selected, because that is
+    // what it is about. Its `.split` companion, "The other two", is the
+    // by-store table there.
+    //
+    // Measuring it would compare `P.pnlstore`'s three sections against the
+    // group page's eight and report five extras for a page that is doing more,
+    // not less. `analyticsstore`, `laborstore` and `cogsstore` went the other
+    // way and ARE gated as routes of their own — the prototype's own rule is
+    // why: "three sections here are drawn for one store and have no
+    // group-level equivalent, because a day book across three stores is three
+    // day books." A statement is not a day book. One store's P&L is the group
+    // statement filtered, and the group here is one trading store anyway.
+    status: "editorial",
+  },
   {
     protoId: "menuhub",
     // The prototype's own name for this page is "Menu", not "Menu profit" —
