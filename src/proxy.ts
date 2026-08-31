@@ -112,9 +112,11 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
   // base itself is mapped exactly above, so this entry only ever matches the
   // item route below it — the one dynamic sub-path Menu has.
   ["/dashboard/menu/catalog", "/m/menu/catalog"],
-  // Carries /dashboard/ingredients/<id> to /m/ingredients/<id>. The base is
-  // mapped exactly above; `/ingredients/prices` is excluded below because it
-  // has no phone page.
+  // Carries /dashboard/ingredients/<id> to /m/ingredients/<id>, and
+  // /ingredients/prices to /m/ingredients/prices. The base is mapped exactly
+  // above. `prices` used to need an exception below because it had no phone
+  // page; it has one now, and Next resolves the static segment ahead of
+  // `[id]`, so the prefix rewrite lands on the right route by itself.
   ["/dashboard/ingredients", "/m/ingredients"],
   // The inventory entry USED to live here, carrying every sub-path under
   // /dashboard/operations/inventory to /m/operations/inventory/… — and its own
@@ -139,12 +141,14 @@ const DYNAMIC_SUBROUTES: Array<[string, string]> = [
  * This is the exception list the old inventory entry needed and never had. An
  * entry here is a page waiting to be built, not a decision: delete it the day
  * the phone surface ships.
+ *
+ * It is EMPTY, and that is the list working as designed rather than a list
+ * nobody kept. Its one entry was `/dashboard/ingredients/prices`, removed the
+ * day `P.prices.phone()` was built. The set stays because the next dynamic
+ * base with a half-built phone surface needs it, and because an empty
+ * exception list is the honest way to say there is nothing being excluded.
  */
-const NO_PHONE_PAGE = new Set<string>([
-  // `/m/ingredients/prices` does not exist. The desk price monitor is
-  // `P.prices`; its phone composition is still to be built.
-  "/dashboard/ingredients/prices",
-])
+const NO_PHONE_PAGE = new Set<string>([])
 
 function mobilePathFor(desktopPath: string): string | null {
   if (DESKTOP_TO_MOBILE[desktopPath]) return DESKTOP_TO_MOBILE[desktopPath]
