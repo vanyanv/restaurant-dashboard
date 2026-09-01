@@ -14,7 +14,9 @@ import {
   usePageChrome,
   type Column,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { VENDOR_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -95,6 +97,11 @@ export function CounterVendorsClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* The design's `VIEWS` bar for this family — see `VENDOR_TABS` in
+          `@/lib/counter/nav`. Without it these siblings are pages nothing
+          links to; `.seg` is not a fidelity landmark, so it changes no count. */}
+      <SubNav items={VENDOR_TABS} label="Vendors" />
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}

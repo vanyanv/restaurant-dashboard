@@ -181,3 +181,83 @@ export const MONITORING_TABS: readonly SubNavItem[] = [
   { label: "Activity", href: "/dashboard/admin/monitoring/activity" },
   { label: "Cache", href: "/dashboard/admin/monitoring/cache" },
 ] as const
+
+/**
+ * The same eight on the phone, DERIVED rather than typed out again.
+ *
+ * The phone monitoring pages had no sub-navigation at all: seven of the eight
+ * were reachable only by typing the URL, which
+ * `e2e/mobile/reachability.spec.ts` reports as seven orphans behind one
+ * missing bar. The desk has carried this control since the monitoring rebuild.
+ *
+ * Derived because two hand-written lists of the same eight labels in the same
+ * order is a drift waiting to happen — rename a tab on the desk and the phone
+ * keeps the old word. `src/proxy.ts` makes exactly this substitution when it
+ * sends a phone off `/dashboard/admin/monitoring`, so the mapping is the
+ * product's own rather than this file's invention.
+ */
+/**
+ * The prototype's `VIEWS`, which is where most of this product's navigation
+ * actually lives — and which we had built almost none of.
+ *
+ * `GROUPS` (the rail) holds sixteen destinations and ours matches it exactly.
+ * Everything else the design draws is reached through a `.seg` bar on its
+ * PARENT: "Pages that absorbed another page keep it as a view." So Needs you
+ * is a view of Alerts, Product mix a view of Menu, Prices a view of
+ * Ingredients, Packaging a view of Vendors, and Start a count a view of
+ * Inventory.
+ *
+ * Without those bars the pages exist and nothing reaches them.
+ * `e2e/desktop/reachability.spec.ts` counted nine such pages on the desk and
+ * `e2e/mobile/reachability.spec.ts` nine on the phone, and every one of them
+ * is a `VIEWS` entry we had not drawn. They are not missing pages; they are a
+ * missing navigation.
+ *
+ * Ours are LINKS rather than the prototype's `data-view` buttons, for the
+ * reason `SubNav` gives: our views are real routes, and a route you cannot
+ * bookmark or open in a second tab is not a route.
+ */
+export const ALERT_TABS: readonly SubNavItem[] = [
+  { label: "Now", href: "/dashboard/alerts" },
+  { label: "This week", href: "/dashboard/decisions" },
+] as const
+
+export const INGREDIENT_TABS: readonly SubNavItem[] = [
+  { label: "Catalogue", href: "/dashboard/ingredients" },
+  { label: "Prices", href: "/dashboard/ingredients/prices" },
+] as const
+
+export const VENDOR_TABS: readonly SubNavItem[] = [
+  { label: "Vendors", href: "/dashboard/operations/vendors" },
+  { label: "Packaging", href: "/dashboard/operations/packaging" },
+] as const
+
+export const INVENTORY_TABS: readonly SubNavItem[] = [
+  { label: "On hand", href: "/dashboard/operations/inventory" },
+  { label: "Counts", href: "/dashboard/operations/inventory/counts" },
+  { label: "Start a count", href: "/dashboard/operations/inventory/count/new" },
+] as const
+
+export const MENU_TABS: readonly SubNavItem[] = [
+  { label: "Overview", href: "/dashboard/menu" },
+  { label: "Items", href: "/dashboard/menu/catalog" },
+  { label: "Profit", href: "/dashboard/menu-profit" },
+  { label: "Mix", href: "/dashboard/product-mix" },
+] as const
+
+/** The same five bars on the phone. Derived, for the reason below. */
+const toPhone = (items: readonly SubNavItem[]): readonly SubNavItem[] =>
+  items.map((t) => ({ label: t.label, href: "/m" + t.href.slice("/dashboard".length) }))
+
+export const PHONE_ALERT_TABS = toPhone(ALERT_TABS)
+export const PHONE_INGREDIENT_TABS = toPhone(INGREDIENT_TABS)
+export const PHONE_VENDOR_TABS = toPhone(VENDOR_TABS)
+export const PHONE_INVENTORY_TABS = toPhone(INVENTORY_TABS)
+export const PHONE_MENU_TABS = toPhone(MENU_TABS)
+
+export const PHONE_MONITORING_TABS: readonly SubNavItem[] = MONITORING_TABS.map(
+  (t) => ({
+    label: t.label,
+    href: t.href.replace("/dashboard/admin/monitoring", "/m/monitoring"),
+  }),
+)
