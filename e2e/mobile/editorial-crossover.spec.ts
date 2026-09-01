@@ -8,13 +8,27 @@ import { test, expect } from "@playwright/test"
  *
  * In a PRODUCTION build, navigating from any editorial `/m` route to any
  * Counter `/m` route throws a hydration mismatch (React #418) and React
- * regenerates the tree on the client. Measured, three loads out of three, for
- * every pair tried:
+ * regenerates the tree on the client.
  *
- *     /m/pnl/<id> -> /m/menu     /m/chat -> /m/menu     /m/count -> /m/menu
+ * It is the CROSSING, not any one page. Three editorial routes were tried as
+ * the source — `/m/pnl/<id>`, `/m/chat`, `/m/count` — and four Counter routes
+ * as the destination — `/m/menu`, `/m/invoices`, `/m/orders`, `/m/recipes`.
+ * Every pair fails. Counter to Counter is clean (`/m/invoices -> /m/menu`,
+ * three of three) and so is any of these routes on its own.
  *
- * Counter to Counter is clean (`/m/invoices -> /m/menu`, three of three), and
- * so is any of these routes visited on its own. It is the CROSSING that fails.
+ * ## Who actually hits it
+ *
+ * A full document load, which is what this test does and what a bookmark, a
+ * refresh, a typed URL or a link out of an email does. A tap on a link inside
+ * the app is a client-side route change and never hydrates, so it cannot
+ * produce this. That narrows the exposure without excusing it: the phone is
+ * where people arrive from a bookmark on the home screen, and `/m/chat` and
+ * `/m/count` are two of the five tabs.
+ *
+ * IT IS ONE-WAY, which is the most useful thing known about it. Counter into
+ * editorial is clean every time — `/m/chat` never once threw, in any order.
+ * Only the Counter subtree mis-hydrates, and only when the page before it was
+ * outside that subtree.
  *
  * ## What it is not
  *
@@ -28,17 +42,36 @@ import { test, expect } from "@playwright/test"
  * editorial HOME skeleton over every route in the segment, and removing it
  * changed what the server streams without changing this result.
  *
- * ## The leading hypothesis
+ * ## One hypothesis, tested and WRONG
  *
- * `(mobile)/m/layout.tsx` imports the editorial stylesheets for EVERY route
- * under it, including the twenty Counter ones, which then add their own. React
- * 19 blocks hydration on `<link rel="stylesheet" data-precedence>`, so whether
- * the previous page warmed those sheets changes WHEN hydration runs relative
- * to the stream — and a Suspense boundary that resolves on one side of that
- * line and not the other is exactly this error. The fix would be to stop the
- * shared layout loading the old design's stylesheets for pages that do not use
- * them, which is the "delete it page by page" work this branch is already
- * doing, not a patch.
+ * That it was stylesheet warmth: `(mobile)/m/layout.tsx` loads the editorial
+ * sheets for every route including the Counter ones, React 19 blocks
+ * hydration on `<link rel="stylesheet" data-precedence>`, so a cold Counter
+ * sheet would move hydration relative to the stream. It is disproved twice
+ * over. Warming the Counter sheets first (`/m/invoices` -> `/m/chat` ->
+ * `/m/menu`) fails exactly as before, and `/m/invoices` fails on its SECOND
+ * visit in the same session, when its own sheets cannot be cold.
+ *
+ * Recorded because a wrong lead that has been paid for is worth more than a
+ * blank: whoever picks this up should not spend the afternoon on caching.
+ *
+ * ## What is left to look at
+ *
+ * The structural difference between the two subtrees, given the one-way
+ * asymmetry above. A Counter phone route has an extra async layout —
+ * `(mobile)/m/(counter)/layout.tsx` awaits `getOverviewStores()` — so it
+ * carries a Suspense boundary that an editorial route does not, and its
+ * fallback is the segment-level `/m/loading.tsx` while `/m/chat` and
+ * `/m/pnl/<id>` have `loading.tsx` files of their own. That boundary is where
+ * the mismatch lands: the diff between the server stream and the hydrated DOM
+ * begins at `<template id="B:0">` inside `main.m-shell__main`.
+ *
+ * The wider fix is the one this branch is already heading for. Counter phone
+ * pages render INSIDE the editorial shell — `editorial-surface`, `.m-shell`,
+ * and the editorial `MobileTabBar`, because `PhoneShell` draws `.mtop` and
+ * `.mscroll` and no tab bar of its own. The old design cannot be unloaded from
+ * these routes until that tab bar is rebuilt in Counter, and that is a design
+ * job rather than a bug fix.
  *
  * ## Why it went unseen
  *
@@ -72,10 +105,18 @@ test("crossing from an editorial phone route into a Counter one hydrates cleanly
   const errs: string[] = []
   page.on("pageerror", (e) => errs.push(e.message.slice(0, 200)))
 
-  await page.goto("/m/chat", { waitUntil: "domcontentloaded" })
-  await page.waitForTimeout(1500)
-  await page.goto("/m/menu?range=d30", { waitUntil: "domcontentloaded" })
-  await page.waitForTimeout(2000)
+  // Two crossings rather than one, from different editorial routes into
+  // different Counter ones, so a fix that happens to cure a single pair does
+  // not read as a fix for the defect.
+  for (const [from, to] of [
+    ["/m/chat", "/m/menu?range=d30"],
+    ["/m/count", "/m/invoices"],
+  ]) {
+    await page.goto(from, { waitUntil: "domcontentloaded" })
+    await page.waitForTimeout(1500)
+    await page.goto(to, { waitUntil: "domcontentloaded" })
+    await page.waitForTimeout(2000)
+  }
 
   expect(errs).toEqual([])
 })
