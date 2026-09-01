@@ -1,6 +1,13 @@
 "use client"
 
-import { CostBar, MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import {
+  CostBar,
+  DeskHandoff,
+  MList,
+  MStrip,
+  Section,
+  useCounterTransition,
+} from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { RecipeSections } from "@/lib/counter/adapters/recipe"
 
@@ -16,6 +23,13 @@ import type { RecipeSections } from "@/lib/counter/adapters/recipe"
  * is the one screen in this product where a mistyped quantity silently moves
  * the food-cost line on four other pages. The phone shows what the plate
  * costs and what is wrong with it, and the desk changes it.
+ *
+ * "The desk changes it" is a promise, so the page keeps it: the closing
+ * `.mbtn` is a HANDOFF to the desk builder rather than a save button. It is
+ * the same move the phone store file makes, and it is a `DeskHandoff` rather
+ * than a `<Link>` because the proxy sends a phone straight back off
+ * `/dashboard/**` — a plain link here would land where it started. The second
+ * of the design's two buttons, "Add line", is declared in the manifest.
  */
 export function CounterPhoneRecipeClient({
   sections,
@@ -68,6 +82,16 @@ export function CounterPhoneRecipeClient({
               noteTone: l.missing ? "down" : undefined,
             }))}
           />
+        )}
+      </Section>
+
+      {/* `P.recipe.phone()` closes on two buttons; this is the one this
+          product offers. See the docblock. */}
+      <Section bare title="Edit" data={sections.builder} pending={pending}>
+        {(b) => (
+          <DeskHandoff href={`/dashboard/recipes/${b.recipeId}`}>
+            Edit this recipe on the desk
+          </DeskHandoff>
         )}
       </Section>
     </>

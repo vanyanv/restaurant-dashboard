@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { DeskHandoff, MList, MStrip, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StoreFileSections } from "@/lib/counter/adapters/stores"
 
@@ -76,12 +76,15 @@ export function CounterPhoneStoreFileClient({
         {(e) => <MList rows={e.phoneRows} />}
       </Section>
 
-      {/* `P.storecosts.phone()`'s closing `.mbtn`, outside every section. */}
+      {/* `P.storecosts.phone()`'s closing `.mbtn`, outside every section. It
+          was a `<Link>` to the desk file and could not work: the proxy sends a
+          phone straight back off `/dashboard/**`, so it landed where it
+          started. `DeskHandoff` sets `prefer-desktop` first. */}
       <Section bare title="Edit" data={sections.head} pending={pending}>
         {(h) => (
-          <Link className="mbtn mbtn--primary" href={`/dashboard/stores/${h.storeId}`}>
+          <DeskHandoff href={`/dashboard/stores/${h.storeId}`}>
             Edit this file on the desk
-          </Link>
+          </DeskHandoff>
         )}
       </Section>
     </>

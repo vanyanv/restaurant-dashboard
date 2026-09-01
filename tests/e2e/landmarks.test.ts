@@ -456,6 +456,7 @@ describe("every gated page carries a floor and a written reason for each absence
       "catalog",
       "catalogitem",
       "recipes",
+      "recipe",
       "productmix",
       "usage",
       "operations",
