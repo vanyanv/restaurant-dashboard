@@ -183,6 +183,22 @@ interface FidelityPageBase {
    * Every entry names the absence it is downstream of. A rendering difference
    * that is not the consequence of a declared absence is a rendering defect,
    * and this is the wrong place for it — fix the page.
+   *
+   * ONE OTHER THING BELONGS HERE, added when the shutdown notice arrived, and
+   * it is named so it does not become a loophole: a difference downstream of a
+   * declared ELEMENT choice. `P.shutdown`'s two actions are `mailto:` links,
+   * so ours are `<a class="btn">` where the prototype writes
+   * `<button class="btn">` — a button that sets `location` loses right-click,
+   * copy-address and the keyboard behaviour a mail link has for free. The
+   * ported sheet gives `.btn` no `color`, so the prototype's plain button
+   * takes the user agent's `buttontext` (pure black) and ours inherits
+   * `--ct-ink`. Matching black would mean writing a literal that cannot theme,
+   * and the dark pass would then report it — the port would be copying a UA
+   * default and calling it a design.
+   *
+   * That is the whole of the exception: the ELEMENT is deliberate, the
+   * property is a consequence, and the entry says which. It is not a licence
+   * to forgive a colour somebody simply got wrong.
    */
   styleAllowances?: Array<{
     /** The landmark's full class list, sorted and dot-joined — `signature()`'s key. */
@@ -2322,9 +2338,56 @@ export const PAGES: FidelityPage[] = [
     protoRoute: "/shutdown",
     route: "/shutdown",
     bare: true,
-    // Same as `login` above: still editorial, no Counter content root, so
-    // `report` waits for the page.
-    status: "editorial",
+    // A REWRITE, not a redirect, so the URL stays `/shutdown` on both
+    // surfaces — which is why this names the desk path rather than the phone
+    // route that actually renders. The landed-path assertion compares what the
+    // address bar says.
+    mobileRoute: "/shutdown",
+    // The preview flag, which is what makes this page measurable at all — see
+    // the route's own note. `SERVICE_SHUTDOWN_AT` is unset in every
+    // environment but production, and the page redirects a stranger to `/`
+    // without it; arming the gate to measure this one page would blank the
+    // other 52.
+    query: "?preview=1",
+    report: true,
+    // MEASURED: 3 of 3 on the desk and 1 of 1 on the phone, landmark for
+    // landmark, 0 extra, 0 dark defects. One rendering difference is declared
+    // below.
+    //
+    // BUILT, and it could not be LOOKED at before, let alone measured: the
+    // page redirected to `/` whenever `SERVICE_SHUTDOWN_AT` was unset, so the
+    // one screen that replaces the entire product was visible only by arming
+    // the gate that replaces the entire product. `?preview=1` renders it for a
+    // signed-in reader and says plainly that nothing is shut down; a stranger
+    // guessing the URL still gets bounced to `/`.
+    //
+    // TWO COMPOSITIONS, and the phone's lives at `/shutdown/phone` rather than
+    // `/m/shutdown`: `P.shutdown` is `bare` on both surfaces, and every route
+    // under `/m` inherits the tab bar. A shut-down service offering five tabs
+    // into the product it just stopped serving is the wrong page, and the App
+    // Router has no opt-out of a parent layout. The proxy REWRITES rather than
+    // redirects, so the URL stays `/shutdown` on both surfaces — which is why
+    // `mobileRoute` names the desk path.
+    status: "counter",
+    baseline: { desktop: 3, mobile: 1 },
+    styleAllowances: [
+      {
+        landmark: "btn",
+        property: "color",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "Downstream of a declared ELEMENT choice — see the field's own note. " +
+          "Both actions here are `mailto:` links and belong in an `<a>`; the " +
+          "ported sheet gives `.btn` no `color`, so the prototype's plain " +
+          "`<button>` takes the user agent's `buttontext` (pure black) and " +
+          "ours inherits `--ct-ink`. Matching black would mean writing a " +
+          "literal that cannot theme, and the dark pass would report it. The " +
+          "weight difference this sat beside IS fixed, in counter-repairs.css: " +
+          "`.login button{font:inherit}` names the element, so an anchor styled " +
+          "as a button missed it and came out 200 heavier than the design.",
+      },
+    ],
   },
   {
     protoId: "notfound",

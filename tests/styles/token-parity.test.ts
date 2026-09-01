@@ -193,6 +193,15 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // because the phone's type scale is not the desk's.
   { file: "app/(mobile)/m/login/counter-phone-login-client.tsx", token: "ct-root" },
   { file: "app/(mobile)/m/login/counter-phone-login-client.tsx", token: "ct-phone" },
+  // The shutdown notice, both surfaces. `P.shutdown` is `bare` like the two
+  // sign-in pages and for the same reason — it replaces the product rather
+  // than sitting inside it — so each mounts its own root. The desk's reuses
+  // the design's `.login` grid at one column, which is what the prototype
+  // does: the two pages are the same shape with different words.
+  { file: "app/shutdown/counter-shutdown-client.tsx", token: "ct-root" },
+  { file: "app/shutdown/counter-shutdown-client.tsx", token: "login" },
+  { file: "app/shutdown/phone/counter-phone-shutdown-client.tsx", token: "ct-root" },
+  { file: "app/shutdown/phone/counter-phone-shutdown-client.tsx", token: "ct-phone" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
@@ -260,12 +269,13 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // `src/app/(mobile)/m/(counter)/layout.tsx`; one shell in one layout is
     // both fewer mount sites and one that survives a tab change.
     //
-    // The two sign-in pages are the only entries that are not shells. Both are
-    // `bare` in the prototype — nothing above either mounts the alias layer —
-    // so each mounts its own, and the desk's carries the design's `.login`
-    // grid on the same element. Eight entries, five files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(8)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(5)
+    // The four PUBLIC pages are the entries that are not shells: two sign-in
+    // screens and two shutdown notices. All four are `bare` in the prototype —
+    // nothing above any of them mounts the alias layer — so each mounts its
+    // own, and the two desk ones carry the design's `.login` grid on the same
+    // element. Twelve entries, seven files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(12)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(7)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
