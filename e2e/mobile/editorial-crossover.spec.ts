@@ -88,6 +88,13 @@ import { test, expect } from "@playwright/test"
  * So: warmth, the Suspense boundary, the theme script and `useSearchParams`
  * are all eliminated by measurement. Whatever this is, it is not any of them.
  *
+ * A fifth data point, from the perf work that moved the phone's welcome check
+ * into a `<Suspense>` in `(mobile)/m/layout.tsx` — the SHARED layout, the one
+ * both subtrees render inside. Two production builds, identical but for that
+ * boundary, were probed with the same sequence: `/m/pnl/<id>` then `/m/menu`
+ * throws on both, and `/m/menu` alone is clean on both. Adding a boundary
+ * above the crossing does not move it either.
+ *
  * ## Two measurement traps, both paid for
  *
  * FIRST, a `page.on("response")` handler reading a streamed body returns a
