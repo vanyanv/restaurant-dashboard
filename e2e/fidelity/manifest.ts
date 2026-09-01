@@ -816,6 +816,21 @@ export const PAGES: FidelityPage[] = [
     // strip's cell count, declared below.
     status: "counter",
     baseline: { desktop: 31, mobile: 9 },
+    absentLandmarks: [
+      {
+        landmark: "mbtn",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "`P.labor.phone()` closes with \"Cover Saturday 2-6pm\" — a button " +
+          "that fills a gap in the rota. Nothing in this product writes a " +
+          "shift: Harri is read-only here, the labour adapter reports hours " +
+          "and cost against a budget, and no action anywhere assigns a person " +
+          "to a slot. A button that advertises scheduling this install cannot " +
+          "do is note 46's exact defect. It arrives with a write path to " +
+          "Harri, not before. The desk has no `.mbtn` on either side.",
+      },
+    ],
     styleAllowances: [
       {
         landmark: "strip",
@@ -1131,6 +1146,20 @@ export const PAGES: FidelityPage[] = [
     baseline: { desktop: 27, mobile: 14 },
     absentLandmarks: [
       {
+        landmark: "mbtn",
+        desktop: 0,
+        mobile: 2,
+        reason:
+          "\"Approve\" and \"Add the line\", which are the phone's copies of " +
+          "two of the three `.btn` this page already declares on the desk — " +
+          "same capabilities, same absence, counted again because the phone " +
+          "draws them in its own class. Nothing creates an `InvoiceLineItem` " +
+          "by hand, and approving posts an invoice to COGS through an API " +
+          "that exists but is deliberately not wired to a button yet. The " +
+          "third, \"Open the PDF\", IS rendered — the route serves the file " +
+          "inline, so a phone opens it in the viewer it already has.",
+      },
+      {
         landmark: "btn",
         desktop: 3,
         mobile: 0,
@@ -1190,6 +1219,61 @@ export const PAGES: FidelityPage[] = [
     // See docs/counter/measurements/2026-08-28-inventory.md.
     status: "counter",
     baseline: { desktop: 30, mobile: 8 },
+    absentLandmarks: [
+      {
+        landmark: "mbtn",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "`P.inventory.phone()` is a COUNT-ENTRY KEYPAD — a quantity field, " +
+          "a twelve-key pad and an `.mbtnrow` of \"Skip\" and \"Save & " +
+          "next\" — and this page is an on-hand summary that links to the " +
+          "count wizard. The two compositions differ in kind, which nine " +
+          "shared landmarks hid until `.mbtn` joined the list: the keypad " +
+          "itself is `.pad` and `.padk`, neither of which the gate can see. " +
+          "Ours renders one button where the design renders two, and the one " +
+          "it renders is its own page's primary action rather than the " +
+          "design's secondary. Building the keypad is a feature — entering " +
+          "and saving a line's counted quantity — not a rendering fix, and it " +
+          "belongs to the count session rather than to this summary.",
+      },
+    ],
+    styleAllowances: [
+      {
+        landmark: "mbtn",
+        property: "color",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "Downstream of the `.mbtn` absence above, and the schema's own case: " +
+          "the design's pair is \"Skip\" then a primary \"Save & next\", so " +
+          "its FIRST button is the secondary one. With only one button ours is " +
+          "the page's primary action and wears `.mbtn--primary`. The colours " +
+          "differ because the roles do; they stop differing the day the pair " +
+          "exists.",
+      },
+      {
+        landmark: "mbtn",
+        property: "background-color",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "The same one difference seen through a second property — see the " +
+          "`color` line above. `applyStyleAllowances` forgives an exact count " +
+          "on an exact (landmark, property) pair, so each is written out " +
+          "rather than one covering three.",
+      },
+      {
+        landmark: "mbtn",
+        property: "border-left-color",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "And the third, for the same reason as the two above: a primary " +
+          "`.mbtn` paints its border in the accent where a plain one takes " +
+          "the line colour. One role difference, three properties.",
+      },
+    ],
   },
   {
     protoId: "countnew",
@@ -2173,14 +2257,7 @@ export const PAGES: FidelityPage[] = [
     protoRoute: "/login",
     route: "/login",
     bare: true,
-    // NO `report` YET, and the reason is a measurement that cannot run rather
-    // than one nobody has run. `/login` is still the editorial page: it has no
-    // `#ct-main`, no `main.m-shell__main` and no `<main>`, so `OUR_ROOT` finds
-    // nothing and the capture times out waiting for a content root. Turning
-    // reporting on before the page exists would put a permanent red in
-    // `npm run fidelity`, and a permanently red gate is exactly as ignorable
-    // as the permanently green one this whole harness was built to replace.
-    // It goes on the day the Counter login page lands.
+    report: true,
     status: "editorial",
   },
   { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },

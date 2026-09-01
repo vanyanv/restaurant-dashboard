@@ -88,18 +88,6 @@ export function CounterPhoneNewStoreClient({
                 onChange={(e) => setAddress(e.target.value)}
               />
             </div>
-            {/* `.mbtn`, outside every section — the design's own shape, and no
-                landmark class. Phone is desk-only: no store on this account
-                has one, and it is the field the desk marks optional. */}
-            <button
-              className="mbtn mbtn--primary"
-              type="button"
-              style={{ marginTop: 12 }}
-              disabled={saving || name.trim() === ""}
-              onClick={create}
-            >
-              {saving ? "Creating…" : "Create the store"}
-            </button>
             <p className="mono" style={{ margin: "11px 0 0" }}>
               {problem === null ? f.lifecycleNote : `Could not create the store: ${problem}.`}
             </p>
@@ -120,6 +108,23 @@ export function CounterPhoneNewStoreClient({
               {c.note}
             </p>
           </>
+        )}
+      </Section>
+
+      {/* `P.storeedit.phone()` closes with this, AFTER the checklist — the
+          last thing you read before creating is what the new store will still
+          be missing. It sat above the list until `.mbtn` became a landmark and
+          the gate could see where it actually was. */}
+      <Section bare title="Create" data={sections.form} pending={pending}>
+        {() => (
+          <button
+            className="mbtn mbtn--primary"
+            type="button"
+            disabled={saving || name.trim() === ""}
+            onClick={create}
+          >
+            {saving ? "Creating…" : "Create store"}
+          </button>
         )}
       </Section>
     </>

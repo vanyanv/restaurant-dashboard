@@ -113,6 +113,20 @@ export const LANDMARK_CLASSES = [
   "mlist",
   "mhead",
   "moneyline",
+  /**
+   * ADDED (the all-53 pass). `.mbtn` is the phone's button — the same category
+   * as `btn` and `btnrow` above, which have been on this list since fix round
+   * one — and leaving it off meant the gate could not see a phone button at
+   * ALL. The prototype writes one forty times.
+   *
+   * It was found by `P.login.phone()`, whose entire interactive surface is two
+   * `.mbtn`s and which therefore extracted ZERO landmarks: the harness threw
+   * "the prototype's own phone render has no landmarks. That is a broken
+   * harness, not a clean page" — and it was right, in a way it could not have
+   * been more specific about. A page the gate can see nothing of is a page the
+   * gate cannot hold.
+   */
+  "mbtn",
 ] as const
 
 export type LandmarkClass = (typeof LANDMARK_CLASSES)[number]

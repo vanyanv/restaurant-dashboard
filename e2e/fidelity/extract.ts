@@ -22,7 +22,18 @@
 import type { Landmark, ThemedNode } from "./landmarks"
 
 export interface ExtractArgs {
-  rootSelector: string
+  /**
+   * Candidate roots, tried IN ORDER — not as one comma-joined selector.
+   *
+   * `document.querySelector("a, b")` returns the first match in DOCUMENT
+   * order, which is the opposite of what a fallback list wants. Our phone
+   * pages nest `.ct-phone .mscroll` inside the editorial layout's
+   * `main.m-shell__main`, so a joined selector always picked the `<main>` —
+   * and with it the phone's top chrome, which the prototype's own root
+   * (`.mscroll`) excludes. That asymmetry was invisible for as long as no
+   * class in the chrome was a landmark, and `.mbtn` made one.
+   */
+  rootSelectors: readonly string[]
   landmarkClasses: readonly string[]
   checkedProperties: readonly string[]
   comparedAttributes: readonly string[]
@@ -30,7 +41,10 @@ export interface ExtractArgs {
 
 /** Depth-first landmark sweep, with the three normalisations CHECKED_PROPERTIES documents. */
 export function extractLandmarksInPage(args: ExtractArgs): Landmark[] {
-  const root = document.querySelector(args.rootSelector)
+  let root: Element | null = null
+  for (let i = 0; i < args.rootSelectors.length && root === null; i++) {
+    root = document.querySelector(args.rootSelectors[i])
+  }
   if (!root) return []
   const out: Landmark[] = []
   let order = 0
@@ -130,7 +144,8 @@ export interface ThemedExtract {
  * value the theme actually paints.
  */
 export function extractThemedInPage(args: {
-  rootSelector: string
+  /** Tried in order — see `ExtractArgs.rootSelectors`. */
+  rootSelectors: readonly string[]
   landmarkClasses: readonly string[]
 }): ThemedExtract {
   const empty: ThemedExtract = {
@@ -141,7 +156,10 @@ export function extractThemedInPage(args: {
     tokenValues: [],
     tokenNames: [],
   }
-  const root = document.querySelector(args.rootSelector) as HTMLElement | null
+  let root: HTMLElement | null = null
+  for (let i = 0; i < args.rootSelectors.length && root === null; i++) {
+    root = document.querySelector(args.rootSelectors[i]) as HTMLElement | null
+  }
   if (!root) return empty
 
   // -- the token sweep -----------------------------------------------------
