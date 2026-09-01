@@ -14,9 +14,7 @@ import {
   usePageChrome,
   type Column,
   type SwitchableStore,
-  SubNav,
 } from "@/components/counter"
-import { MENU_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -99,10 +97,20 @@ export function CounterProductMixClient({
         />
       </PageHead>
 
-      {/* The design's `VIEWS` bar for this family — see `MENU_TABS` in
-          `@/lib/counter/nav`. Without it these siblings are pages nothing
-          links to; `.seg` is not a fidelity landmark, so it changes no count. */}
-      <SubNav items={MENU_TABS} label="Menu" />
+      {/* NO VIEW BAR HERE, and it is the only one of the Menu family without
+          one. Adding ANY element between the masthead and the first section on
+          this page throws a hydration mismatch in dev — measured three loads
+          out of three with `<SubNav>`, with the bar moved below the strip, and
+          with a hand-written `<nav className="seg">` carrying no component at
+          all. React reports the server having a `<Suspense>` where the client
+          has the element. The other eleven pages that gained a bar are clean,
+          so this is a fragility in this page rather than in the bar.
+
+          Product mix stays reachable: `MENU_TABS` lives on Menu, Items and
+          Profit, and all three link here. What is lost is the bar working
+          FROM this page, which is a smaller cost than shipping a page that
+          regenerates its tree on every load. See
+          `e2e/desktop/console-sweep.spec.ts`, which is what caught it. */}
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
