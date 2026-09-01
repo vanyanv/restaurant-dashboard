@@ -27,7 +27,8 @@
 import fs from "node:fs"
 import path from "node:path"
 import { test, expect, type Page, type TestInfo } from "@playwright/test"
-import { PAGES, absenceBudget, styleBudget, type FidelityPage } from "./manifest"
+import { PAGES, absenceBudget,
+  extraBudget, styleBudget, type FidelityPage } from "./manifest"
 import { openPrototype, surfaceRoot, type Surface } from "./prototype"
 import { extractLandmarksInPage, extractThemedInPage } from "./extract"
 import {
@@ -35,6 +36,7 @@ import {
   COMPARED_ATTRIBUTES,
   LANDMARK_CLASSES,
   applyAbsenceAllowances,
+  applyExtraAllowances,
   applyStyleAllowances,
   compareLandmarks,
   defectWhere,
@@ -387,23 +389,27 @@ for (const entry of PAGES) {
     // and only those. An extra is never forgiven, a missing landmark with no
     // entry is never forgiven, and an entry that forgives fewer than it
     // budgets for fails as stale. See `applyAbsenceAllowances`.
-    const { unexplained, stale } = applyAbsenceAllowances(
-      structural,
-      absenceBudget(entry, surface),
-    )
+    const absences = applyAbsenceAllowances(structural, absenceBudget(entry, surface))
+    // ...and then the surplus, from a SEPARATE list. Neither forgives the
+    // other's kind: an absence line cannot swallow an extra (ruling F-R8) and
+    // an extra line cannot hide a gap. See `applyExtraAllowances`.
+    const surplus = applyExtraAllowances(absences.unexplained, extraBudget(entry, surface))
+    const unexplained = surplus.unexplained
+    const stale = [...absences.stale, ...surplus.stale]
 
     expect(unexplained.map(describeDiff), headline(entry, surface, proto, ours)).toEqual([])
 
     expect(
       stale.map(
         (s) =>
-          `STALE    ${s.landmark}: the manifest allows ${s.budgeted} absent, ` +
-          `only ${s.used} went missing`,
+          `STALE    ${s.landmark}: the manifest allows ${s.budgeted}, ` +
+          `only ${s.used} occurred`,
       ),
-      `${entry.protoId} (${surface}): an absence allowance forgave fewer ` +
-        `landmarks than it budgets for. Something now publishes what that ` +
-        `landmark is judged against, so the landmark LANDS — delete the line ` +
-        `rather than leave it absorbing a future regression.`,
+      `${entry.protoId} (${surface}): a declared allowance forgave fewer ` +
+        `landmarks than it budgets for. Either something now publishes what ` +
+        `that landmark is judged against, so it LANDS, or the surplus it ` +
+        `named has stopped occurring — delete the line rather than leave it ` +
+        `absorbing a future regression.`,
     ).toEqual([])
 
     if (entry.baseline) {

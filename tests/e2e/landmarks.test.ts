@@ -32,6 +32,7 @@ import {
   requiredContrast,
   isTokenCorrection,
   applyAbsenceAllowances,
+  applyExtraAllowances,
   TOKEN_CORRECTIONS,
   type Difference,
   type Landmark,
@@ -205,6 +206,46 @@ describe("compareLandmarks", () => {
 
   it("counts landmarks by class for the report headline", () => {
     expect(landmarkTally(withStores)).toEqual({ sec: 1, stores: 1, stcard: 1 })
+  })
+})
+
+describe("applyExtraAllowances — landmarks a live account has and a fixture does not", () => {
+  const extra = (cls: string[], order: number): Difference => ({
+    kind: "extra",
+    order,
+    classes: cls,
+  })
+  const missing = (cls: string[], order: number): Difference => ({
+    kind: "missing",
+    order,
+    classes: cls,
+  })
+
+  it("forgives exactly the recorded count, and reports the one past it", () => {
+    // `P.stores` hand-wrote two worklist items; this account satisfies three.
+    // A FOURTH is a finding, not a fixture difference.
+    expect(applyExtraAllowances([extra(["qitem"], 9)], { qitem: 1 }).unexplained).toEqual([])
+    const two = [extra(["qitem"], 9), extra(["qitem"], 10)]
+    expect(applyExtraAllowances(two, { qitem: 1 }).unexplained).toHaveLength(1)
+  })
+
+  it("NEVER forgives a missing landmark, however the budget is written", () => {
+    // The mirror of ruling F-R8. A line written about a surplus must not be
+    // able to pay for a gap, or the two findings stop being told apart.
+    const diffs = [missing(["qitem"], 3)]
+    expect(applyExtraAllowances(diffs, { qitem: 9 }).unexplained).toEqual(diffs)
+  })
+
+  it("reports an allowance that forgave fewer than it budgets for", () => {
+    // The day the account stops producing the third item, the line saying it
+    // does is a lie that would absorb a future extra.
+    const out = applyExtraAllowances([], { qitem: 1 })
+    expect(out.stale).toEqual([{ landmark: "qitem", budgeted: 1, used: 0 }])
+  })
+
+  it("keys on the WHOLE class list, so a compound landmark is not forgiven by a part", () => {
+    const out = applyExtraAllowances([extra(["queue", "qitem"], 0)], { qitem: 3 })
+    expect(out.unexplained).toHaveLength(1)
   })
 })
 
@@ -416,6 +457,7 @@ describe("every gated page carries a floor and a written reason for each absence
       "catalogitem",
       "recipes",
       "productmix",
+      "usage",
       "operations",
       "invoices",
       "invoice",
@@ -426,8 +468,10 @@ describe("every gated page carries a floor and a written reason for each absence
       "ingredients",
       "ingredient",
       "prices",
+      "vendors",
       "vendor",
       "packaging",
+      "stores",
       "storecosts",
       "storeedit",
       "settings",
@@ -459,9 +503,21 @@ describe("every gated page carries a floor and a written reason for each absence
       // Every allowance names something, on at least one surface, and says why
       // in more than a word. A blank reason is how "not built yet" gets
       // laundered into "the database has nothing to say".
-      for (const a of page.absentLandmarks ?? []) {
+      for (const a of [...(page.absentLandmarks ?? []), ...(page.extraLandmarks ?? [])]) {
         expect(a.desktop + a.mobile, `${a.landmark} forgives nothing`).toBeGreaterThan(0)
         expect(a.reason.length, `${a.landmark} has no reason`).toBeGreaterThan(80)
+      }
+
+      // The two lists never name the same landmark on the same surface. A page
+      // claiming a landmark is both missing and surplus is describing two
+      // findings it has not told apart, and the pair would cancel: the absence
+      // line forgives the gap, the extra line forgives the surplus, and the
+      // page could render neither, both, or one of each and still pass.
+      for (const e of page.extraLandmarks ?? []) {
+        const a = (page.absentLandmarks ?? []).find((x) => x.landmark === e.landmark)
+        if (!a) continue
+        expect(a.desktop * e.desktop, `${e.landmark}: absent AND extra on the desk`).toBe(0)
+        expect(a.mobile * e.mobile, `${e.landmark}: absent AND extra on the phone`).toBe(0)
       }
     })
   }
