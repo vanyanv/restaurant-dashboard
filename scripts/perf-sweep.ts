@@ -57,7 +57,13 @@ interface Sample {
   lcp: number
   bytes: number
   jsBytes: number
+  cssBytes: number
+  fontBytes: number
   requests: number
+  /** Cumulative Layout Shift over the whole load. */
+  cls: number
+  /** Total time in tasks over 50ms — the main thread blocked, in ms. */
+  blocking: number
   status: number
 }
 
@@ -96,6 +102,8 @@ const MEASURE_SOURCE = `(() => {
   // not the network was involved.
   var sum = function (rs) { return rs.reduce(function (n, r) { return n + (r.encodedBodySize || 0) }, 0) }
   var js = resources.filter(function (r) { return r.name.indexOf(".js") !== -1 })
+  var css = resources.filter(function (r) { return r.name.indexOf(".css") !== -1 })
+  var fonts = resources.filter(function (r) { return r.initiatorType === "css" && /\.(woff2?|ttf|otf)/.test(r.name) })
   return {
     ttfb: Math.round(nav ? nav.responseStart : 0),
     stream: Math.round(nav ? nav.responseEnd - nav.responseStart : 0),
@@ -103,7 +111,11 @@ const MEASURE_SOURCE = `(() => {
     lcp: Math.round(window.__lcp || 0),
     bytes: (nav ? nav.encodedBodySize : 0) + sum(resources),
     jsBytes: sum(js),
+    cssBytes: sum(css),
+    fontBytes: sum(fonts),
     requests: resources.length + 1,
+    cls: Math.round((window.__cls || 0) * 1000) / 1000,
+    blocking: Math.round(window.__blocking || 0),
     status: 200,
   }
 })()`
@@ -125,11 +137,33 @@ async function openContext(browser: Browser, surface: "desk" | "phone") {
   await context.addInitScript({
     content: `
       window.__lcp = 0
+      window.__cls = 0
+      window.__blocking = 0
       try {
         new PerformanceObserver(function (list) {
           var entries = list.getEntries()
           for (var i = 0; i < entries.length; i++) window.__lcp = Math.round(entries[i].startTime)
         }).observe({ type: "largest-contentful-paint", buffered: true })
+      } catch (e) {}
+      try {
+        // Layout shifts the reader did not cause. An entry with
+        // hadRecentInput is a response to a click, and CLS excludes those.
+        new PerformanceObserver(function (list) {
+          var entries = list.getEntries()
+          for (var i = 0; i < entries.length; i++) {
+            if (!entries[i].hadRecentInput) window.__cls += entries[i].value
+          }
+        }).observe({ type: "layout-shift", buffered: true })
+      } catch (e) {}
+      try {
+        // Total Blocking Time, near enough: every long task's excess over the
+        // 50ms a frame can absorb. This is hydration, mostly.
+        new PerformanceObserver(function (list) {
+          var entries = list.getEntries()
+          for (var i = 0; i < entries.length; i++) {
+            window.__blocking += Math.max(0, entries[i].duration - 50)
+          }
+        }).observe({ type: "longtask", buffered: true })
       } catch (e) {}
     `,
   })
@@ -152,7 +186,8 @@ async function sweep(browser: Browser, surface: "desk" | "phone", routes: string
       process.stdout.write(
         `${surface === "desk" ? "🖥 " : "📱"} ${String(total).padStart(6)}ms  ` +
           `ttfb ${String(best.ttfb).padStart(5)}  stream ${String(best.stream).padStart(6)}  ` +
-          `lcp ${String(best.lcp).padStart(5)}  ${route}\n`,
+          `lcp ${String(best.lcp).padStart(5)}  js ${String(Math.round(best.jsBytes / 1024)).padStart(4)}kB  ` +
+          `tbt ${String(best.blocking).padStart(4)}  cls ${String(best.cls).padStart(5)}  ${route}\n`,
       )
     } catch (error) {
       process.stdout.write(`${surface} FAILED ${route}: ${(error as Error).message}\n`)
@@ -188,6 +223,23 @@ async function main() {
         `js ${String(Math.round(s.jsBytes / 1024)).padStart(4)}kB  ${s.surface} ${s.route}\n`,
     )
   }
+  process.stdout.write(`\nHEAVIEST JAVASCRIPT\n`)
+  for (const s of [...samples].sort((a, b) => b.jsBytes - a.jsBytes).slice(0, 10)) {
+    process.stdout.write(
+      `${String(Math.round(s.jsBytes / 1024)).padStart(5)}kB js  ` +
+        `${String(Math.round(s.cssBytes / 1024)).padStart(4)}kB css  ` +
+        `${String(Math.round(s.fontBytes / 1024)).padStart(4)}kB font  ` +
+        `${String(s.requests).padStart(3)} reqs  ${s.surface} ${s.route}\n`,
+    )
+  }
+  process.stdout.write(`\nMOST BLOCKED MAIN THREAD (tbt) / WORST SHIFT (cls)\n`)
+  for (const s of [...samples].sort((a, b) => b.blocking - a.blocking).slice(0, 8)) {
+    process.stdout.write(`${String(s.blocking).padStart(5)}ms tbt  ${s.surface} ${s.route}\n`)
+  }
+  for (const s of [...samples].sort((a, b) => b.cls - a.cls).slice(0, 8)) {
+    process.stdout.write(`${String(s.cls).padStart(6)} cls  ${s.surface} ${s.route}\n`)
+  }
+
   const totals = samples.map((s) => s.ttfb + s.stream).sort((a, b) => a - b)
   const at = (q: number) => totals[Math.min(totals.length - 1, Math.floor(totals.length * q))]
   process.stdout.write(

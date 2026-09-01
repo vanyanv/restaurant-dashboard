@@ -92,3 +92,4 @@ ml/.venv/
 
 # local runtime logs
 /logs/
+/tmp-perf/
