@@ -218,9 +218,7 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
   d30.setDate(d30.getDate() - 30)
 
   const [
-    total,
-    addedRecently,
-    costedCount,
+    catalogueCounts,
     lineCounts,
     catalogue,
     weekly,
@@ -229,9 +227,22 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
     orphanRows,
     categories,
   ] = await Promise.all([
-    prisma.canonicalIngredient.count({ where: { accountId } }),
-    prisma.canonicalIngredient.count({ where: { accountId, createdAt: { gte: d30 } } }),
-    prisma.canonicalIngredient.count({ where: { accountId, costPerRecipeUnit: { not: null } } }),
+    /*
+     * THREE COUNTS OVER ONE TABLE, asked once.
+     *
+     * These were three `canonicalIngredient.count` calls differing only in a
+     * predicate — the whole catalogue, the last thirty days, and the rows that
+     * carry a cost — so they were three round trips scanning the same account's
+     * rows three times. `FILTER` answers all three in one pass, and
+     * `COUNT(col)` is already "rows where col is not null", which is exactly
+     * what the third asked for.
+     */
+    prisma.$queryRaw<Array<{ total: number; recent: number; costed: number }>>`
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE "createdAt" >= ${d30})::int AS recent,
+             COUNT("costPerRecipeUnit")::int AS costed
+      FROM "CanonicalIngredient"
+      WHERE "accountId" = ${accountId}`,
     prisma.$queryRaw<Array<{ lines: number; matched: number }>>`
       SELECT COUNT(*)::int AS lines,
              COUNT(l."canonicalIngredientId")::int AS matched
@@ -365,9 +376,13 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
   }
 
   return {
-    total,
-    addedRecently,
-    costedCount,
+    // `?? 0` on each: an account with no catalogue at all returns no ROW from
+    // an aggregate with no GROUP BY only if the query fails, but the shape is
+    // an array and reading `[0]` of an empty one is how the two counts below
+    // have always been read.
+    total: catalogueCounts[0]?.total ?? 0,
+    addedRecently: catalogueCounts[0]?.recent ?? 0,
+    costedCount: catalogueCounts[0]?.costed ?? 0,
     lines: lineCounts[0]?.lines ?? 0,
     matched: lineCounts[0]?.matched ?? 0,
     catalogue: catalogue.map((c) => ({
