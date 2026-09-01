@@ -59,6 +59,12 @@ export interface InvoiceReasons {
   rows: Array<{ key: string; kind: string; message: string; lines: string | null }>
   meta: string
   note: string
+  /** The row this section can act on — the decision writes back to it. */
+  invoiceId: string
+  /** `Invoice.status`. REVIEW is the only value that offers a decision. */
+  status: string
+  /** Whether the document is already recorded as a credit rather than a bill. */
+  isReturn: boolean
 }
 
 export interface InvoiceLines {
@@ -536,6 +542,13 @@ function countsNote(d: Loaded): string {
  */
 function reasonsOf(d: Loaded): InvoiceReasons {
   return {
+    // The section that explains a hold is the section that lifts it. The
+    // status and the id travel with the reasons so the panel can offer the
+    // decision beside the argument for it, rather than sending the reader to
+    // a queue screen to act on something they are already looking at.
+    invoiceId: d.id,
+    status: d.status,
+    isReturn: d.isReturn,
     rows: d.reasons.map((r, i) => ({
       key: `${r.kind}:${i}`,
       kind: REASON_LABEL[r.kind] ?? titleCase(r.kind.replace(/_/g, " ")),

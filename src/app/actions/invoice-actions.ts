@@ -677,3 +677,71 @@ export async function setInvoiceIsReturn(
   await bustTags(["invoices", `account:${accountId}`])
   return { ok: true }
 }
+
+/**
+ * Resolve an invoice sitting in REVIEW.
+ *
+ * ## Why this action exists
+ *
+ * `Invoice.status` has carried APPROVED and REJECTED since the enum was
+ * written, and `PATCH /api/invoices/[id]` has been able to set them for just
+ * as long. No screen has ever called it. The sync routes an invoice to REVIEW
+ * whenever `src/lib/invoice-sanity.ts` finds something it cannot vouch for,
+ * writes the `reviewReasons` explaining why, and the owner's only recourse
+ * was to read the explanation and close the tab. **A queue nothing can drain
+ * is not a queue, it is a list of complaints**, and this account has been
+ * accumulating one.
+ *
+ * ## What a decision means
+ *
+ * APPROVED is the owner overriding the sanity check: the numbers are right,
+ * count them. REJECTED is the owner agreeing the document is bad: the totals
+ * are wrong, or it is a duplicate, or it never should have been ingested.
+ *
+ * Neither writes to the line items. That is deliberate and it is the
+ * difference between this and `setInvoiceIsReturn`, which flips signs on the
+ * whole document: a review decision is a judgement ABOUT the record, not an
+ * edit OF it, so the extracted figures stay exactly as the model read them
+ * and the decision is recoverable by setting the status back.
+ *
+ * `matchedAt` is stamped on APPROVED to match what the REST route already
+ * does, so the two paths cannot leave the column in different states.
+ *
+ * ## What still counts
+ *
+ * REJECTED invoices are NOT excluded from spend arithmetic here, because no
+ * spend query in this codebase filters on `status` today — they filter on
+ * `isReturn` and on date. Making rejection subtract money is a separate
+ * change with its own reconciliation, and quietly doing half of it inside a
+ * status write is how a total starts disagreeing with itself. An owner who
+ * wants a bad invoice out of the numbers marks it a return; rejection records
+ * the judgement and takes it off the queue.
+ */
+export async function setInvoiceReviewDecision(
+  invoiceId: string,
+  decision: "APPROVED" | "REJECTED" | "REVIEW",
+): Promise<{ ok: true; status: string } | { ok: false; reason: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false, reason: "unauthenticated" }
+  if (!hasOwnerAccess(session.user.role)) return { ok: false, reason: "forbidden" }
+  const accountId = session.user.accountId
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, accountId },
+    select: { id: true, status: true },
+  })
+  if (!invoice) return { ok: false, reason: "not-found" }
+  if (invoice.status === decision) return { ok: true, status: invoice.status }
+
+  const updated = await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      status: decision,
+      ...(decision === "APPROVED" ? { matchedAt: new Date() } : {}),
+    },
+    select: { status: true },
+  })
+
+  await bustTags(["invoices", `account:${accountId}`])
+  return { ok: true, status: updated.status }
+}
