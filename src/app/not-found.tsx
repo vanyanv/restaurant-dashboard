@@ -8,6 +8,17 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
   display: "swap",
   axes: ["SOFT", "WONK", "opsz"],
+  // Not preloaded. `next/font` emits a preload hint for every font in a route's
+  // entry graph, and Next puts the root `not-found` in EVERY route's entry — so
+  // this 117 KB serif (three axes: SOFT, WONK, opsz — larger than Bricolage, DM
+  // Sans and JetBrains Mono put together) was fetched on every screen in the
+  // product and painted on almost none. Measured with a cold cache: `/login`,
+  // `/dashboard/pnl`, `/dashboard/orders`, `/m`, `/m/orders` and `/m/settings`
+  // all downloaded it and reported zero elements computing to Fraunces.
+  // Without the hint the browser fetches it when a page actually paints with
+  // it, which is what an unused @font-face already does. `display: swap` means
+  // the pages that do use it swap rather than block.
+  preload: false,
 })
 
 export default function NotFound() {
