@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test"
-import { PAGES } from "../fidelity/manifest"
+import { deskRoutes } from "../fidelity/routes"
 
 /**
- * Every internal link on every gated route, followed once.
+ * Every internal link on every route, followed once.
  *
  * A link that 404s is invisible to all four existing gates: it renders, it
  * carries the right class, it matches the design landmark for landmark, and
@@ -22,9 +22,7 @@ import { PAGES } from "../fidelity/manifest"
  *
  * GET only, and never `/api/**`: some of those routes start a sync.
  */
-const ROUTES = [
-  ...new Set(PAGES.filter((p) => p.status === "counter").map((p) => p.route + (p.query ?? ""))),
-]
+const ROUTES = deskRoutes()
 
 test("every internal link resolves", async ({ page }) => {
   test.setTimeout(900_000)

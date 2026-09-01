@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test"
-import { PAGES } from "../fidelity/manifest"
+import { deskRoutes } from "../fidelity/routes"
 
 /**
- * No gated route may scroll sideways, and nothing on it may stick out.
+ * No route may scroll sideways, and nothing on it may stick out.
  *
  * The phone is where this bites hardest, and the desk runs the same sweep
  * because the cause is usually width-independent: the chart's accessible table
@@ -24,14 +24,12 @@ import { PAGES } from "../fidelity/manifest"
  * A one-pixel tolerance: sub-pixel layout rounds, and a 412.5px box on a 412px
  * viewport is a rounding artefact, not a defect.
  */
-const ENTRIES = PAGES.filter((p) => p.status === "counter")
 
-test("no gated route overflows sideways", async ({ page }) => {
+test("no route overflows sideways", async ({ page }) => {
   test.setTimeout(900_000)
   const findings: string[] = []
 
-  for (const entry of ENTRIES) {
-    const route = entry.route + (entry.query ?? "")
+  for (const route of deskRoutes()) {
     await page.goto(route, { waitUntil: "domcontentloaded" })
     await page.waitForTimeout(1200)
 
