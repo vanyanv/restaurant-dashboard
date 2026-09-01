@@ -28,7 +28,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { test, expect, type Page, type TestInfo } from "@playwright/test"
 import { PAGES, absenceBudget, styleBudget, type FidelityPage } from "./manifest"
-import { openPrototype, SURFACE_ROOT, type Surface } from "./prototype"
+import { openPrototype, surfaceRoot, type Surface } from "./prototype"
 import { extractLandmarksInPage, extractThemedInPage } from "./extract"
 import {
   CHECKED_PROPERTIES,
@@ -85,9 +85,13 @@ async function extractOurs(page: Page): Promise<Landmark[]> {
   })
 }
 
-async function extractProto(page: Page, surface: Surface): Promise<Landmark[]> {
+async function extractProto(
+  page: Page,
+  surface: Surface,
+  entry: FidelityPage,
+): Promise<Landmark[]> {
   return page.evaluate(extractLandmarksInPage, {
-    rootSelector: SURFACE_ROOT[surface],
+    rootSelector: surfaceRoot(entry, surface),
     landmarkClasses: [...LANDMARK_CLASSES],
     checkedProperties: [...CHECKED_PROPERTIES],
     comparedAttributes: [...COMPARED_ATTRIBUTES],
@@ -132,12 +136,20 @@ async function openOurs(
   const response = await page.goto(`${entry.route}${entry.query ?? ""}`, {
     waitUntil: "domcontentloaded",
   })
-  await expect(
-    page,
-    `${entry.protoId}: landed on the login page — the fidelity projects run on ` +
-      `the same storageState as the rest of the suite, so this is an auth ` +
-      `failure, not a fidelity finding`,
-  ).not.toHaveURL(/\/login/)
+  // Landing on /login means the session was rejected — EXCEPT on the two pages
+  // whose own route is public. `P.login` IS /login, and `P.shutdown` is the
+  // wall the shutdown gate puts everyone behind; on those two a redirect to
+  // the sign-in page is the page working, not auth failing. Keyed on the
+  // manifest's own `route` rather than a list of ids, so a page that moves
+  // takes its exemption with it.
+  if (!entry.route.startsWith("/login") && !entry.route.startsWith("/shutdown")) {
+    await expect(
+      page,
+      `${entry.protoId}: landed on the login page — the fidelity projects run on ` +
+        `the same storageState as the rest of the suite, so this is an auth ` +
+        `failure, not a fidelity finding`,
+    ).not.toHaveURL(/\/login/)
+  }
 
   // A page that was never served must not be reported as a design difference.
   // Without these two, a 500, a 404 or a guard redirect surfaces as "every
@@ -296,12 +308,12 @@ for (const entry of PAGES) {
     }, testInfo) => {
       const surface = surfaceOf(testInfo)
       const { tab, root } = await protoPage(page, entry.protoId, surface)
-      const proto = await extractProto(tab, surface)
+      const proto = await extractProto(tab, surface, entry)
       expect(
         proto.length,
         `the prototype's own ${surface} render of "${entry.protoId}" has no ` +
           `landmarks. That is a broken harness, not a clean page — check ` +
-          `LANDMARK_CLASSES and SURFACE_ROOT before believing any report.`,
+          `LANDMARK_CLASSES and the surface roots before believing any report.`,
       ).toBeGreaterThan(0)
 
       await openOurs(page, entry, "light")
@@ -329,7 +341,7 @@ for (const entry of PAGES) {
   test(`${entry.protoId}: structure matches the prototype`, async ({ page }, testInfo) => {
     const surface = surfaceOf(testInfo)
     const { tab, root } = await protoPage(page, entry.protoId, surface)
-    const proto = await extractProto(tab, surface)
+    const proto = await extractProto(tab, surface, entry)
     expect(
       proto.length,
       `the prototype's own ${surface} render of "${entry.protoId}" has no landmarks — broken harness`,
@@ -388,7 +400,7 @@ for (const entry of PAGES) {
   test(`${entry.protoId}: rendering matches the prototype`, async ({ page }, testInfo) => {
     const surface = surfaceOf(testInfo)
     const { tab, root } = await protoPage(page, entry.protoId, surface)
-    const proto = await extractProto(tab, surface)
+    const proto = await extractProto(tab, surface, entry)
 
     await openOurs(page, entry, "light")
     const ours = await extractOurs(page)

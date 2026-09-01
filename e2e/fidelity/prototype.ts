@@ -51,6 +51,31 @@ export const SURFACE_ROOT: Record<Surface, string> = {
   phone: "#phoneHost .pframe .mscroll",
 }
 
+/**
+ * The roots for a BARE page — one the prototype renders without the app
+ * chrome at all.
+ *
+ * `deskFor()` (prototype line 8715) opens with `if (p.bare) return p.desk()`,
+ * so a bare page has no `.frame` and no `.screen`; `phoneFor()` does the same
+ * one line down and returns `<div class="pframe">` with no `.mscroll` inside
+ * it. Login and Shutdown are the two: both are public, neither has a rail, a
+ * topbar or a tab bar to strip out, and the whole host IS the page.
+ *
+ * Without this the shelled selector matches nothing, `extractLandmarksInPage`
+ * returns `[]`, and `compareLandmarks([], [])` throws — which is the harness
+ * working exactly as designed (a comparison that finds nothing on both sides
+ * would otherwise pass forever) and is why these two rows sat uncaptured.
+ */
+export const BARE_SURFACE_ROOT: Record<Surface, string> = {
+  desk: "#deskHost",
+  phone: "#phoneHost .pframe",
+}
+
+/** Which root a page uses, shelled or bare. */
+export function surfaceRoot(entry: { bare?: true }, surface: Surface): string {
+  return entry.bare ? BARE_SURFACE_ROOT[surface] : SURFACE_ROOT[surface]
+}
+
 /** Opens the vendored prototype and navigates to one page module. */
 export async function openPrototype(
   page: Page,
@@ -108,10 +133,31 @@ export async function openPrototype(
   })
 
   // 3. the surface actually rendered something
-  const root = page.locator(SURFACE_ROOT[surface])
+  // 2b. the manifest's `bare` claim, checked against what the fixture actually
+  // rendered rather than trusted. It selects the extraction root, so a stale
+  // `true` here would silently measure the wrong subtree — the same class of
+  // mistake the `protoRoute` assertion above exists to catch.
+  //
+  // Checked against the CHROME rather than against `P[id].bare`: the
+  // prototype's page table is a local inside its IIFE and never reaches
+  // `window`, and the chrome is the thing that actually decides the root. A
+  // bare desk render has no `.frame` at all; a bare phone render has a
+  // `.pframe` with no `.mscroll` in it.
+  const chrome = surface === "desk" ? "#deskHost .frame" : "#phoneHost .pframe .mscroll"
+  const chromeCount = await page.locator(chrome).count()
+  expect(
+    chromeCount === 0,
+    `the manifest says "${pageId}" is ${entry.bare ? "" : "not "}bare, and the ` +
+      `prototype's ${surface} render ${chromeCount === 0 ? "has no" : "has"} ` +
+      `\`${chrome}\` — the extraction root is chosen from that flag, so the two ` +
+      `must agree`,
+  ).toBe(Boolean(entry.bare))
+
+  const selector = surfaceRoot(entry, surface)
+  const root = page.locator(selector)
   await expect(
     root,
-    `the prototype's ${surface} surface is missing for "${pageId}"`,
+    `the prototype's ${surface} surface is missing for "${pageId}" (${selector})`,
   ).toHaveCount(1)
   await expect(
     root,
@@ -131,7 +177,7 @@ export async function openPrototype(
       }
       return true
     },
-    SURFACE_ROOT[surface],
+    selector,
     { timeout: 10_000 },
   )
 

@@ -67,6 +67,16 @@ interface FidelityPageBase {
    * mobile projects land on `route` unchanged.
    */
   mobileRoute?: string
+  /**
+   * The prototype renders this page with NO app chrome — `P[id].bare`.
+   *
+   * It selects the fidelity extraction root: a bare page has no `.frame
+   * .screen` on the desk and no `.mscroll` on the phone, so the shelled
+   * selector matches nothing and the harness throws rather than passing on an
+   * empty comparison. `openPrototype` asserts this against the fixture on
+   * every run, so a stale `true` cannot silently measure the wrong subtree.
+   */
+  bare?: true
   /** "editorial" pages are not rebuilt yet and are SKIPPED, not failed. */
   status: PageStatus
   /**
@@ -2157,9 +2167,33 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 7, mobile: 5 },
   },
-  { protoId: "login", name: "Login", protoRoute: "/login", route: "/login", status: "editorial" },
+  {
+    protoId: "login",
+    name: "Login",
+    protoRoute: "/login",
+    route: "/login",
+    bare: true,
+    // NO `report` YET, and the reason is a measurement that cannot run rather
+    // than one nobody has run. `/login` is still the editorial page: it has no
+    // `#ct-main`, no `main.m-shell__main` and no `<main>`, so `OUR_ROOT` finds
+    // nothing and the capture times out waiting for a content root. Turning
+    // reporting on before the page exists would put a permanent red in
+    // `npm run fidelity`, and a permanently red gate is exactly as ignorable
+    // as the permanently green one this whole harness was built to replace.
+    // It goes on the day the Counter login page lands.
+    status: "editorial",
+  },
   { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },
-  { protoId: "shutdown", name: "Shutdown", protoRoute: "/shutdown", route: "/shutdown", status: "editorial" },
+  {
+    protoId: "shutdown",
+    name: "Shutdown",
+    protoRoute: "/shutdown",
+    route: "/shutdown",
+    bare: true,
+    // Same as `login` above: still editorial, no Counter content root, so
+    // `report` waits for the page.
+    status: "editorial",
+  },
   {
     protoId: "notfound",
     name: "Not found",
