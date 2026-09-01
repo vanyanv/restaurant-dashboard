@@ -487,6 +487,77 @@ export function applyAbsenceAllowances(
 }
 
 /**
+ * The mirror of `applyAbsenceAllowances`: extras a page renders that the
+ * prototype does not, forgiven by count from the manifest's written list.
+ *
+ * WHY THIS EXISTS, given that ruling F-R8 says an extra is never forgiven —
+ * and why that ruling still stands where it was made. F-R8 governs
+ * `absentLandmarks`: a line written to explain a MISSING landmark must not
+ * also quietly absorb an extra one, because the two are different findings
+ * with different causes. It is not a claim that no extra can ever be
+ * accounted for.
+ *
+ * What forces the question is a QUEUE over live data. `P.stores`'s "Worth a
+ * look" holds two hand-written items; `workOf` emits one per condition that is
+ * true, and on this account three are — two construction sites with no rent,
+ * and the one trading store carrying a $0 labour budget while paying wages.
+ * Collapsing them to two would fold the finding that moves today's P&L into a
+ * note about building sites. The fixture is a fixture. The account has three.
+ *
+ * THE HAZARD F-R8 NAMES IS REAL AND IS SMALLER THAN THE ALTERNATIVE. An extra
+ * landmark never enters the rendering comparison — there is nothing on the
+ * prototype side to compare it to — so forgiving one leaves one element
+ * style-unchecked. But it is style-unchecked either way: the only other move
+ * is to leave the whole page ungated, which leaves ALL of them unchecked, and
+ * the structure and dark passes off as well. One declared extra on a gated
+ * page checks strictly more than a page that is gated by nothing.
+ *
+ * The three rules are the same three, and the second is the one that matters
+ * here:
+ *
+ *  1. It forgives an exact COUNT on an exact landmark, so a fourth queue item
+ *     is still a failure.
+ *  2. A MISSING landmark is never forgiven by this. Those belong to
+ *     `applyAbsenceAllowances` and come back untouched, so a line written
+ *     about an extra cannot hide a gap.
+ *  3. An allowance with budget left over is reported as stale — the day the
+ *     account stops producing the third item, the line saying it does has to
+ *     go.
+ */
+export function applyExtraAllowances(
+  differences: Difference[],
+  allowed: Readonly<Record<string, number>>,
+): AbsenceOutcome {
+  const left = new Map<string, number>(Object.entries(allowed))
+  const budgeted = new Map<string, number>(Object.entries(allowed))
+  const unexplained: Difference[] = []
+
+  for (const d of differences) {
+    if (d.kind !== "extra") {
+      unexplained.push(d)
+      continue
+    }
+    const key = [...d.classes].sort().join(".")
+    const remaining = left.get(key) ?? 0
+    if (remaining > 0) {
+      left.set(key, remaining - 1)
+      continue
+    }
+    unexplained.push(d)
+  }
+
+  const stale = [...left.entries()]
+    .filter(([, remaining]) => remaining > 0)
+    .map(([landmark, remaining]) => ({
+      landmark,
+      budgeted: budgeted.get(landmark) ?? 0,
+      used: (budgeted.get(landmark) ?? 0) - remaining,
+    }))
+
+  return { unexplained, stale }
+}
+
+/**
  * The same declared absence, seen from the RENDERING side.
  *
  * `applyAbsenceAllowances` opens with `if (d.kind === "style") continue`, and

@@ -134,12 +134,63 @@ interface FidelityPageBase {
    *     saying it cannot has to go, or it would silently absorb a real
    *     regression later.
    *
-   * Every entry names the function that would have produced the landmark and
-   * the thing it has no input for. If you cannot write that sentence, the
-   * landmark is missing because the page is unfinished, and this is the wrong
-   * place for it.
+   * TWO KINDS OF REASON ARE ADMISSIBLE, and only two.
+   *
+   *   1. THE DATABASE PUBLISHES NOTHING for what the landmark would say. The
+   *      entry names the function that would have produced it and the thing it
+   *      has no input for — a table with no rows, a threshold nobody set.
+   *
+   *   2. THE SHARED-FIGURE RULE DECLINES IT. CLAUDE.md: "a figure shown on two
+   *      pages comes from one function in `src/lib/counter/`." Where the
+   *      prototype stacks a second copy of a table that already exists on its
+   *      own page, rebuilding it here is the duplication that rule exists to
+   *      stop, and the entry names WHERE the figure actually lives instead.
+   *      `usage` is the case that forced this: `P.usage` advertises "Menu item
+   *      costs" and "Vendor prices" as tabs of itself, and both are built
+   *      elsewhere. A decline is only honest if the reader can still get
+   *      there, so `USAGE_TABS` makes those two labels links to the pages that
+   *      hold them — which the prototype's own `seg` could not do.
+   *
+   * A reason that is neither means the landmark is missing because the page is
+   * unfinished, and this is the wrong place for it.
    */
   absentLandmarks?: Array<{
+    /** The landmark's full class list, sorted and dot-joined — `signature()`'s key. */
+    landmark: string
+    desktop: number
+    mobile: number
+    reason: string
+  }>
+  /**
+   * The mirror: landmarks this page renders that the prototype does NOT,
+   * because the account it reads has more of something than the fixture
+   * hand-wrote — with the count, per surface, and the reason.
+   *
+   * The prototype's queues are literals. Ours are emitted one per condition
+   * that is TRUE, which is the whole point of them, and a live account can
+   * satisfy more conditions than a designer typed. `P.stores` draws two
+   * "Worth a look" items; this account has three real ones, and folding the
+   * store that is actually trading into a note about two construction sites to
+   * make the count match would make the page worse.
+   *
+   * WHAT THIS IS NOT is a relaxation of ruling F-R8. That ruling says
+   * `absentLandmarks` must never forgive an extra — a line explaining a gap
+   * must not also swallow a surplus — and it still holds: the two lists are
+   * separate, applied separately, and neither forgives the other's kind.
+   * `applyExtraAllowances`'s docblock argues the rest, including the one thing
+   * this genuinely costs (an extra landmark is style-unchecked) and why a page
+   * gated with one declared extra is checked strictly more than a page left
+   * ungated.
+   *
+   * Same three rules: an exact COUNT on an exact landmark, no `missing` ever
+   * forgiven, and a line that forgives fewer than it budgets for fails as
+   * stale.
+   *
+   * Every entry names the builder that emitted the surplus and the condition
+   * that made it true. If you cannot write that sentence, the extra is a
+   * landmark someone rendered by mistake, and this is the wrong place for it.
+   */
+  extraLandmarks?: Array<{
     /** The landmark's full class list, sorted and dot-joined — `signature()`'s key. */
     landmark: string
     desktop: number
@@ -1058,10 +1109,16 @@ export const PAGES: FidelityPage[] = [
     // "16 of 21" reads as an unfinished page. It is not: closing it would mean
     // breaking a rule this project holds above landmark parity.
     //
-    // Left ungated rather than declared. `absentLandmarks` is for a landmark
-    // the DATABASE cannot supply; these two the database supplies fine and the
-    // architecture declines to duplicate — a different argument that should
-    // not borrow that field's words.
+    // DECLARED now, under the second of `absentLandmarks`'s two admissible
+    // reasons. This note used to end "left ungated rather than declared:
+    // `absentLandmarks` is for a landmark the DATABASE cannot supply; these
+    // two the database supplies fine and the architecture declines to
+    // duplicate — a different argument that should not borrow that field's
+    // words." The argument was right and the conclusion was a field that had
+    // only written down one of its two jobs. The shared-figure rule is a
+    // reason of the same standing as an empty table, and CLAUDE.md holds it
+    // ABOVE landmark parity; the field's docblock now says so, and requires a
+    // decline to name where the figure actually lives.
     //
     // The decline is NAVIGABLE now, which it was not when this note was
     // written. `P.usage.desk()`'s own comment on those two sections is "a tab
@@ -1073,11 +1130,66 @@ export const PAGES: FidelityPage[] = [
     // those figures. Declining a section is only honest if the reader can
     // still reach what it would have said.
     //
-    // `.seg` is not a landmark, so this changes no count. The page is still
-    // 16 of 21, and the remaining gap is those two tables plus one extra
-    // queue item — `workOf` finds three things worth doing where the fixture
-    // hand-wrote two.
-    status: "editorial",
+    // `.seg` is not a landmark, so this changes no count. The page is 16 of
+    // 21 and gated there: six absent landmarks are the two declined tables
+    // with their heads, and the one extra is `workOf` finding three things
+    // worth doing where the fixture hand-wrote two.
+    status: "counter",
+    baseline: { desktop: 16, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "sec",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "The \"Menu item costs\" and \"Vendor prices\" sections are " +
+          "DECLINED under the shared-figure rule, not missing. Both figures " +
+          "are built and live elsewhere — menu item costs at " +
+          "/dashboard/menu-profit and in the menu catalog, vendor prices in " +
+          "the ingredient page's matched-SKU table and the vendor page's " +
+          "basket — and CLAUDE.md puts one function per figure above landmark " +
+          "parity. `USAGE_TABS` turns the design's two dead `seg` labels into " +
+          "links to those pages, so the decline costs the reader nothing.",
+      },
+      {
+        landmark: "sec__head",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "The heads of the two declined sections above. A section that is " +
+          "not rendered has no head, so this count moves with that one and " +
+          "for the same reason: the shared-figure rule, not an empty table. " +
+          "It is written on its own line because the harness forgives by " +
+          "landmark class, and a sec-shaped budget cannot pay for a head.",
+      },
+      {
+        landmark: "tbl",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "The two tables themselves — the whole content of the declined " +
+          "sections, and the actual duplication the shared-figure rule stops. " +
+          "Rebuilding either here would compute a figure a second time in a " +
+          "second place, which is the failure that rule names. Same reason as " +
+          "the `sec` and `sec__head` lines, stated separately because each " +
+          "class is budgeted on its own.",
+      },
+    ],
+    extraLandmarks: [
+      {
+        landmark: "qitem",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "`workOf` emits one item per condition that holds and finds three " +
+          "on this account where `P.usage` hand-wrote two. The fixture's " +
+          "queue is a literal; ours is a reading of what is actually true " +
+          "this window, and dropping one to reach the fixture's count would " +
+          "hide a real finding to match a designer's typing. The phone's " +
+          "composition carries no queue, which is why this is declared on the " +
+          "desk alone.",
+      },
+    ],
   },
   {
     protoId: "operations",
@@ -1551,17 +1663,46 @@ export const PAGES: FidelityPage[] = [
     // MEASURED: the phone is 5 of 5, complete. The desk is 14 of 15 and every
     // tally matches but one — `qitem`, 1 against 2.
     //
-    // NOT DECLARED, deliberately, and this is the case `absentLandmarks` is
-    // wrong for. `workOf` emits a "rising basket" item only when some vendor
-    // trends past `FLAT_PCT` and a "reconcile" item only when one has broken
-    // invoices. Today the second fires and the first does not. That is a
-    // reading of this window, not a thing the schema cannot express — the day
-    // a vendor's basket climbs, the item appears and any allowance written
-    // here would go stale and start absorbing a real regression.
+    // DECLARED, having previously been argued the other way on a mistaken
+    // reading of the mechanism. The old note said an allowance here "would go
+    // stale and start absorbing a real regression"; `applyAbsenceAllowances`
+    // does neither. It never forgives an EXTRA, and an allowance with budget
+    // left over is REPORTED as stale — so the day a second item appears, this
+    // line turns the gate red and asks to be deleted. That is the prompt this
+    // page wants, not the risk the old note feared.
     //
-    // So it stays ungated until the queue is stable or the entry can say
-    // something truer than "one fewer than the fixture happened to have".
-    status: "editorial",
+    // And the entry can now say something truer than "one fewer than the
+    // fixture happened to have". `P.vendors`'s "Worth a call" holds two items
+    // and both are about time and price: a basket drifting, and "the slowest
+    // and the dearest". The second is a CAPABILITY GAP, not a quiet window —
+    // `VendorLeadTime` holds 0 rows, so no vendor on this account has a lead
+    // time and "slowest" has nothing to rank. The adapter's `headlineOf`
+    // docblock argues the same gap for the strip's third cell, and names what
+    // is computable instead (cadence, which is delivery-to-delivery rather
+    // than order-to-delivery). A worklist item ranking vendors by a number
+    // that does not exist would be the same lie one column over.
+    //
+    // The item that IS built — "rising basket" — is conditional on a vendor
+    // trending past `BASKET_FLAT_PCT`, and does not fire this window. When it
+    // does, the stale report fires with it.
+    status: "counter",
+    baseline: { desktop: 14, mobile: 5 },
+    absentLandmarks: [
+      {
+        landmark: "qitem",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The second of the design's two \"Worth a call\" items is \"the " +
+          "slowest and the dearest\", and this account has no lead time to " +
+          "rank slowness by: `VendorLeadTime` holds 0 rows, the cron that " +
+          "fills it has never written one, and the adapter's `headlineOf` " +
+          "declines the strip's \"Median lead time\" cell for exactly the " +
+          "same reason rather than printing cadence under the wrong word. " +
+          "The phone's composition has no queue at all, which is why this is " +
+          "declared on the desk alone.",
+      },
+    ],
   },
   {
     protoId: "vendor",
@@ -1708,9 +1849,13 @@ export const PAGES: FidelityPage[] = [
     // `.mbtn` it does — `P.stores.phone()` is a masthead, a list and one
     // button into a store file.
     //
-    // NOT GATED, for the third `qitem`, and NOT declared: `absentLandmarks`
-    // never forgives an extra (ruling F-R8), and it should not. `workOf`
-    // emits an item per condition that is true, and three are:
+    // GATED, on the third `qitem` being DECLARED rather than removed. This
+    // entry used to end "NOT GATED, for the third `qitem`, and NOT declared:
+    // `absentLandmarks` never forgives an extra (ruling F-R8), and it should
+    // not." Both halves are still true and the conclusion no longer follows:
+    // `extraLandmarks` is a separate list, applied separately, and F-R8 is
+    // about not letting ONE line do both jobs. `workOf` emits an item per
+    // condition that is true, and three are:
     //
     //   Glendale and Van Nuys carry no rent (null).
     //   All three carry Uber 0.21 and DoorDash 0.25, the platform defaults.
@@ -1723,7 +1868,25 @@ export const PAGES: FidelityPage[] = [
     // affecting today's P&L into a note about two construction sites. Three
     // different stores, three different problems. The fixture hand-wrote two
     // items; this account has three.
-    status: "editorial",
+    status: "counter",
+    baseline: { desktop: 16, mobile: 4 },
+    extraLandmarks: [
+      {
+        landmark: "qitem",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "`workOf` in the stores adapter emits one item per condition that " +
+          "holds, and this account satisfies three where `P.stores` " +
+          "hand-wrote two: two stores with a null rent, three stores on the " +
+          "platform default commissions, and Hollywood — the only store " +
+          "trading — carrying a labour budget of exactly $0 while paying " +
+          "wages. The third is the only finding on the page that moves a live " +
+          "number, and merging it into the note about the two construction " +
+          "sites to reach the fixture's count would bury it. The phone's " +
+          "composition is a masthead, a list and one button, with no queue.",
+      },
+    ],
   },
   {
     protoId: "storecosts",
@@ -2514,6 +2677,19 @@ export function absenceBudget(
 ): Record<string, number> {
   const out: Record<string, number> = {}
   for (const a of entry.absentLandmarks ?? []) {
+    const n = surface === "desk" ? a.desktop : a.mobile
+    if (n > 0) out[a.landmark] = n
+  }
+  return out
+}
+
+/** The surplus budget for one surface, as `applyExtraAllowances` wants it. */
+export function extraBudget(
+  entry: FidelityPage,
+  surface: "desk" | "phone",
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const a of entry.extraLandmarks ?? []) {
     const n = surface === "desk" ? a.desktop : a.mobile
     if (n > 0) out[a.landmark] = n
   }
