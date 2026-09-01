@@ -2331,7 +2331,51 @@ export const PAGES: FidelityPage[] = [
       },
     ],
   },
-  { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },
+  {
+    protoId: "signup",
+    name: "Accept invite",
+    protoRoute: "/signup/[token]",
+    // A CONCRETE token, because `[token]` is not a URL. "preview" is not a
+    // real invite and never resolves to one — it takes the `?preview=1` branch
+    // below, and any other string falls through to the live lookup.
+    route: "/signup/preview",
+    bare: true,
+    // The proxy REWRITES a phone off `/signup/<token>` onto
+    // `/signup/phone/<token>`, so the URL is the same on both surfaces — which
+    // is why this names the desk path, as `shutdown` does.
+    mobileRoute: "/signup/preview",
+    // The same safeguard `shutdown` uses, for the same reason: an invite
+    // screen is invisible until you send one. You cannot read its wording,
+    // check what it promises about access, or measure it against its design
+    // without minting a real token against the production database. `?preview=1`
+    // renders the composition for a SIGNED-IN reader with the submit disabled
+    // and says so on the page; a stranger with a bad token still gets the
+    // rejection notice.
+    query: "?preview=1",
+    report: true,
+    // MEASURED: 1 of 1 on the desk and 1 of 1 on the phone, landmark for
+    // landmark, 0 extra, 0 rendering differences.
+    //
+    // TWO COMPOSITIONS, and the phone's lives at `/signup/phone/<token>` for
+    // the same reason the phone shutdown notice sits outside `/m`: every route
+    // under that segment inherits the tab bar, and someone who has not got an
+    // account yet cannot be offered five tabs into the account.
+    //
+    // THE FOUR REFUSALS — missing, expired, used, revoked — are NOT part of
+    // `P.signup`. The design draws the accepted invite and nothing else, so
+    // they are this product's own and are drawn once, on the desk route; a
+    // phone that follows a dead link is sent there. They are the last
+    // editorial markup on this route and they go when someone decides what a
+    // refused invite looks like in Counter.
+    //
+    // NOTHING HERE ISSUES AN INVITE. `Invite` has a model, a page and a
+    // redemption route, and no action writes a row — see the `settings` entry,
+    // which declines the same button for the same reason. This page is the
+    // second half of a flow whose first half was never built, which is exactly
+    // why the preview flag has to exist.
+    status: "counter",
+    baseline: { desktop: 1, mobile: 1 },
+  },
   {
     protoId: "shutdown",
     name: "Shutdown",
