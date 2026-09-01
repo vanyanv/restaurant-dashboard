@@ -65,11 +65,16 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // SHAPE MISS — `/m/menu/catalog` links every item by slug, just not this one.
   catalogitem: "reachable by slug from the catalogue; the id matcher cannot see a word",
 
-  // REAL GAP — the phone's stores list closes on one `.mbtn` into a store
-  // file, where the desk's page carries an "Add a store" panel. `P.stores`'s
-  // phone composition is a masthead, a list and that one button, so the
-  // entrance has to come from somewhere the design does draw.
-  storeedit: "nothing on the phone links the new-store form; the desk had the same gap until its panel was built",
+  // `P.stores.phone()` is a masthead, a list and ONE button, and the design
+  // says what that button is: "Open Hollywood file". There is no "Add a
+  // store" on the phone in the prototype, and the desk's panel — built earlier
+  // on this branch — exists because the design draws one THERE.
+  //
+  // So the page is real and gated and its phone entrance is undrawn. Adding a
+  // second `.mbtn` would put a control on the page the design does not have,
+  // to satisfy a check; the honest options are a designed entrance or the
+  // admission that adding a store is a desk job.
+  storeedit: "the design gives the phone's stores page one button and it is not this one",
 }
 
 // Seven more used to be here — usage, packaging, countnew, prices and the

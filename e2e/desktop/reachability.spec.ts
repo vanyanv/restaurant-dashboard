@@ -55,12 +55,17 @@ const NOT_LINKED_BY_DESIGN = new Set([
  * which is the router's knowledge and not worth duplicating for one row.
  */
 const KNOWN_ORPHANS: Record<string, string> = {
-  // The Operations hub is OURS, not the design's — `GROUPS` has no such rail
-  // item and `VIEWS` has no such parent. Its four children are all reachable
-  // (Inventory and Vendors from the rail, Packaging and Counts from their
-  // view bars), so nothing is stranded behind it; the hub itself is the page
-  // with no entrance. Either the rail gains it or it goes.
-  operations: "our own hub; the design's rail has no such item and its four children are each reachable without it",
+  // Operations has an entrance in the design — on the PHONE. `P.more`'s table
+  // lists it there as "a hub of hubs", and the phone's More list carries it.
+  // The desk's `GROUPS` deliberately does not: the rail already links
+  // Invoices, Inventory, Ingredients and Vendors directly, so a hub whose
+  // whole content is four things one click away earns nothing on a desk.
+  //
+  // So this is not a missing link but a page whose desk audience the design
+  // does not think exists. Adding it to the rail would put a sixth item in a
+  // group of four that the prototype wrote deliberately. Left as it is, and
+  // named here, until someone decides whether the desk wants the hub at all.
+  operations: "reachable on the phone, where the design puts it; the desk rail omits it on purpose",
 }
 
 // The three per-store pages used to be listed here. `storeViewTabs` builds
