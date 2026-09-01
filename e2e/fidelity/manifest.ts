@@ -2257,8 +2257,63 @@ export const PAGES: FidelityPage[] = [
     protoRoute: "/login",
     route: "/login",
     bare: true,
+    mobileRoute: "/m/login",
     report: true,
-    status: "editorial",
+    // MEASURED: 1 of the prototype's 2 on the desk, 1 of 2 on the phone, 0
+    // extra, 0 rendering differences. Both missing landmarks are the same
+    // button in the two surfaces' own class, declared below.
+    //
+    // BUILT, and this row could not be measured at all until the harness
+    // learned `bare` pages: `P.login` renders with no rail, no topbar and no
+    // `.screen`, so the shelled extraction root matched nothing and the
+    // comparison threw.
+    //
+    // TWO ROUTES, which is a product change and worth saying so. `P.login` and
+    // `P.login.phone()` are different screens rather than one screen at two
+    // widths — the desk is a two-column grid with an aside and `.btn`s, the
+    // phone is a single column of `.mbtn`s — and a class cannot change with a
+    // media query. `proxy.ts` sends a phone asking for /login to /m/login, the
+    // only rewrite that happens before its public short-circuit; /m/login is
+    // in that short-circuit AND in the shutdown allowlist, so it cannot loop
+    // and cannot lock a phone OWNER out of a shut-down service.
+    //
+    // The phone tab bar is now hidden without a session. It has to be: every
+    // tab it draws needs one, and a sign-in screen offering five dead ends is
+    // worse than no bar. That edit forfeited the file's content-keyed LEGACY
+    // exemption and exposed a `themeColor: "#fbf6ee"` — the pre-Counter cream,
+    // a visibly different colour from the paper the page actually paints. It
+    // is `@/lib/browser-chrome-colour` now, light and dark, outside the linted
+    // roots because `theme-color` is read before any stylesheet and cannot
+    // take a `var()`.
+    status: "counter",
+    baseline: { desktop: 1, mobile: 1 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"Email me a link instead\". A magic link needs an email provider " +
+          "and `authOptions.providers` is `CredentialsProvider` alone — there " +
+          "is no mailer wired to next-auth, no verification token table, and " +
+          "nothing that would send one. The prototype's own `magic` view is a " +
+          "fifth `UI.view` on a page with no server behind it. The button " +
+          "arrives with the provider. The phone draws its own copy in `.mbtn`, " +
+          "declared separately below.",
+      },
+      {
+        landmark: "mbtn",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "The phone's copy of the magic-link button above — same missing " +
+          "provider, counted again because `P.login.phone()` draws it in the " +
+          "phone's own button class. Declared on its own line rather than " +
+          "folded into the `btn` entry because `applyAbsenceAllowances` " +
+          "forgives an exact count on an exact landmark signature, and a " +
+          "`.mbtn` going missing for any other reason must still fail.",
+      },
+    ],
   },
   { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },
   {
