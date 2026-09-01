@@ -23,7 +23,7 @@ const accountId = "acct-A"
 // so `loadStripTargets("s1", …)` selects the FIRST value passed here.
 const withTargets = (...values: Array<number | null>) =>
   vi.mocked(prisma.store.findMany).mockResolvedValue(
-    values.map((targetCogsPct, i) => ({ id: `s${i + 1}`, targetCogsPct })) as never,
+    values.map((targetCogsPct, i) => ({ id: `s${i + 1}`, targetCogsPct, isActive: true })) as never,
   )
 
 beforeEach(() => vi.clearAllMocks())
@@ -90,8 +90,12 @@ describe("loadStripTargets", () => {
     //   2. Selecting a store answers for THAT store, not the account.
     withTargets(29)
     await loadStripTargets("s1", accountId)
+    // `isActive` is no longer part of THIS predicate: the account's stores are
+    // read once per request by `@/lib/account-stores` and each caller applies
+    // its own activity filter over that one result. The account boundary is
+    // what has to stay in SQL, and it does.
     expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toMatchObject({
-      where: { accountId, isActive: true },
+      where: { accountId },
     })
 
     // s1 is 28.5 and s2 is 31 — two stores that do NOT agree, so an unscoped

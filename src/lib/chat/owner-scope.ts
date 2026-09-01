@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getAccountStores } from "@/lib/account-stores"
 
 /**
  * Owner-scope helpers shared by every chat tool. The chat layer never trusts
@@ -53,11 +54,7 @@ export async function listOwnerStores(
   const cached = storeCache.get(accountId)
   if (cached && cached.expiresAt > Date.now()) return cached.stores
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true, address: true },
-    orderBy: { name: "asc" },
-  })
+  const stores = await getAccountStores(accountId)
   storeCache.set(accountId, {
     stores,
     expiresAt: Date.now() + STORE_CACHE_TTL_MS,

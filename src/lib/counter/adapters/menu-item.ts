@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { count, money, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { CHANNEL_FOR_PLATFORM, HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
@@ -157,10 +158,7 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
   const { slug, range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return null
 

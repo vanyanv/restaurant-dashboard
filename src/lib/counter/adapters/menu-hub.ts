@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { count, pct } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
@@ -131,10 +132,7 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
 
   // Scoped through the account first, the same rule `channel-mix.ts` states at
   // length: without it a null `storeId` would mean every store in the database.
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) {
     return {
       items: 0,

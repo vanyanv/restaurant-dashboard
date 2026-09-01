@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { unstable_cache } from "next/cache"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import type { Prisma } from "@/generated/prisma/client"
 import { persistOrderItems } from "@/lib/otter-orders-sync"
 import { HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
@@ -15,10 +16,8 @@ import { HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
  * sync routes once we wire that up); until then the TTL falls back. */
 const getPlatformsForAccount = unstable_cache(
   async (accountId: string): Promise<string[]> => {
-    const stores = await prisma.store.findMany({
-      where: { accountId },
-      select: { id: true },
-    })
+    // The one store query a request makes — `@/lib/account-stores`.
+    const stores = await getAccountStoreRows(accountId)
     const storeIds = stores.map((s) => s.id)
     if (storeIds.length === 0) return []
 
@@ -55,6 +54,15 @@ export type OrderListFilters = {
   detailsOnly?: boolean
   limit?: number
   cursor?: string | null
+  /**
+   * Fetch only `totalCount` and `totals.netSales`, in ONE aggregate.
+   *
+   * For a caller that compares two ranges and shows the second one's headline
+   * figures only — the Orders strip's "vs prior period". Every other field
+   * comes back at its zero value, so this is not a cheaper way to ask the same
+   * question: it is a different, smaller question. See `getOrdersList`.
+   */
+  summaryOnly?: boolean
 }
 
 export type OrderListRow = {
@@ -135,10 +143,9 @@ export async function getOrdersList(
     }
   }
 
-  const stores = await prisma.store.findMany({
-    where: { accountId: session.user.accountId },
-    select: { id: true, name: true },
-  })
+  // The one store query a request makes — see `@/lib/account-stores`. Whole
+  // rows and no `isActive` filter, which is what this call already asked for.
+  const stores = await getAccountStoreRows(session.user.accountId)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) {
     return {
@@ -203,18 +210,25 @@ export async function getOrdersList(
     AND: [where, { platform: { notIn: [...HOUSE_PLATFORMS] } }],
   }
 
-  const [
-    rows,
-    totalCount,
-    undrainedCount,
-    platforms,
-    overallSums,
-    thirdPartySums,
-    thirdPartyCount,
-    thirdPartyWithFees,
-  ] =
-    await Promise.all([
-      prisma.otterOrder.findMany({
+  /*
+   * WHAT THE CALLER ACTUALLY READS.
+   *
+   * `summaryOnly` is the comparison range's load — the Orders strip prints
+   * "vs the prior period" from exactly two numbers off it, `totalCount` and
+   * `totals.netSales` (see `buildOrdersStrip`), and read the other six
+   * queries' answers nowhere. It was still paying for all eight: a page of
+   * rows it discards, the pending-details count, the account's platform list
+   * and three marketplace aggregates. One aggregate answers what it asks.
+   *
+   * The fields a summary load does not fetch come back at their zero value,
+   * which is why this is an opt-in flag on a private-ish action and not the
+   * default: a caller that reads `rows` or `undrainedCount` from a summary
+   * response would be reading an absence as an answer.
+   */
+  const summaryOnly = filters.summaryOnly === true
+
+  const listRows = () =>
+    prisma.otterOrder.findMany({
         where,
         orderBy: { referenceTimeLocal: "desc" },
         take: limit + 1,
@@ -240,40 +254,62 @@ export async function getOrdersList(
           detailsFetchedAt: true,
           _count: { select: { items: true } },
         },
-      }),
-      prisma.otterOrder.count({ where }),
+      })
+
+  const [rows, undrainedCount, platforms, overallSums, thirdPartySums, thirdPartyWithFees] =
+    await Promise.all([
+      summaryOnly
+        ? Promise.resolve([] as Awaited<ReturnType<typeof listRows>>)
+        : listRows(),
       // Served by the partial index OtterOrder_pending_details_idx — see
       // prisma/manual-migrations/2026-05-03_otter_pending_details_index.sql.
-      prisma.otterOrder.count({ where: { ...where, detailsFetchedAt: null } }),
-      getPlatformsForAccount(session.user.accountId),
+      summaryOnly
+        ? Promise.resolve(0)
+        : prisma.otterOrder.count({ where: { ...where, detailsFetchedAt: null } }),
+      summaryOnly
+        ? Promise.resolve([] as string[])
+        : getPlatformsForAccount(session.user.accountId),
       // The Orders strip is about the whole matched range, not the single
       // page `rows` covers (findMany is capped at `limit`), so netSales and
       // commission need their own aggregate under the same `where`.
+      //
+      // `_count` RIDES ALONG rather than being its own `count()` call. It is
+      // the same predicate answered by the same scan, and asking twice cost a
+      // second round trip on every load of this page, on both surfaces.
       prisma.otterOrder.aggregate({
         where,
+        _count: true,
         _sum: { subtotal: true, discount: true, commission: true },
       }),
       // thirdPartyNetSales is what "X% of 3P" is a percentage OF, so it can't
       // be derived from overallSums — it needs the in-house platforms
-      // excluded in its own aggregate.
+      // excluded in its own aggregate. Its `_count` is the denominator of the
+      // coverage ratio the strip grades its fee cell by, and rides along here
+      // for the same reason as above.
       //
       // ANDed rather than spread: `{ ...where, platform: … }` OVERWRITES the
       // reader's own platform filter, so filtering to DoorDash would divide
       // DoorDash fees by every marketplace's sales. Both conditions hold.
-      prisma.otterOrder.aggregate({
-        where: thirdPartyWhere,
-        _sum: { subtotal: true, discount: true },
-      }),
-      // The two halves of the coverage ratio the strip grades its fee cell by.
-      prisma.otterOrder.count({ where: thirdPartyWhere }),
+      summaryOnly
+        ? Promise.resolve(null)
+        : prisma.otterOrder.aggregate({
+            where: thirdPartyWhere,
+            _count: true,
+            _sum: { subtotal: true, discount: true },
+          }),
       // `not: 0`, not `lt: 0`: the question is whether a figure LANDED, and a
       // positive commission would mean the column's convention had changed —
       // which is a thing to notice, not a row to count as missing. `feeAmount`
       // makes its own decision about what such a row is worth.
-      prisma.otterOrder.count({
-        where: { AND: [thirdPartyWhere, { commission: { not: 0 } }] },
-      }),
+      summaryOnly
+        ? Promise.resolve(0)
+        : prisma.otterOrder.count({
+            where: { AND: [thirdPartyWhere, { commission: { not: 0 } }] },
+          }),
     ])
+
+  const totalCount = overallSums._count
+  const thirdPartyCount = thirdPartySums?._count ?? 0
 
   const hasMore = rows.length > limit
   const trimmed = hasMore ? rows.slice(0, limit) : rows
@@ -312,7 +348,7 @@ export async function getOrdersList(
       // "Marketplace fees" is a fee and not a negative number.
       commission: Math.max(0, -(overallSums._sum.commission ?? 0)),
       thirdPartyNetSales:
-        (thirdPartySums._sum.subtotal ?? 0) + (thirdPartySums._sum.discount ?? 0),
+        (thirdPartySums?._sum.subtotal ?? 0) + (thirdPartySums?._sum.discount ?? 0),
       thirdPartyCount,
       thirdPartyWithFees,
     },

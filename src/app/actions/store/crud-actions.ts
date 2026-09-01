@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { z } from "zod"
 import { invalidateOwnerStoreCache } from "@/lib/chat/owner-scope"
 import { cache } from "react"
@@ -95,13 +96,15 @@ const getStoresCached = cache(async () => {
   const session = await getServerSession(authOptions)
   if (!session?.user) return []
 
-  return prisma.store.findMany({
-    where: {
-      accountId: session.user.accountId,
-      isActive: true,
-    },
-    orderBy: { createdAt: "desc" },
-  })
+  // The rows come from `@/lib/account-stores`, which is the ONE store query a
+  // request makes; the predicate and the ordering below are still this
+  // function's own. See that module — four separately-`cache()`d helpers each
+  // ran their own `store.findMany` for the same three rows, so every page paid
+  // between one and six round trips for the same fact.
+  const rows = await getAccountStoreRows(session.user.accountId)
+  return rows
+    .filter((s) => s.isActive)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 })
 
 export async function getStores() {

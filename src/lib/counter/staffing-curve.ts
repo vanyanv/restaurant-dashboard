@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { toQueryBounds } from "@/lib/counter/date-range"
 import { serviceDayOrder } from "@/lib/counter/service-profile"
 import { newestGenerationPerHour } from "@/lib/counter/forecast-generation"
@@ -242,14 +243,7 @@ export async function loadStaffingCurve(input: {
 }): Promise<StaffingCurve | null> {
   const { date, storeId, accountId } = input
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return null
   const storeIds = stores.map((s) => s.id)
 
@@ -338,14 +332,7 @@ export async function loadScheduleGap(input: {
 }): Promise<Array<{ date: string; forecastOrders: number }>> {
   const { storeId, accountId, from } = input
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return []
   const storeIds = stores.map((s) => s.id)
 

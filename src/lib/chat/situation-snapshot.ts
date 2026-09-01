@@ -8,6 +8,7 @@
 // long enough that repeat turns don't pile DB load.
 
 import { prisma } from "@/lib/prisma"
+import { getAccountStores } from "@/lib/account-stores"
 
 const SNAPSHOT_TTL_MS = 60_000
 
@@ -29,10 +30,7 @@ export async function buildSituationSnapshot(accountId: string, now: Date = new 
   const cached = cache.get(accountId)
   if (cached && cached.expiresAt > Date.now()) return cached.text
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true },
-  })
+  const stores = await getAccountStores(accountId)
   if (stores.length === 0) {
     const empty = "(no active stores on account)"
     cache.set(accountId, { text: empty, expiresAt: Date.now() + SNAPSHOT_TTL_MS })

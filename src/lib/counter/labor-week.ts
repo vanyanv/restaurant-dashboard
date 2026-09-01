@@ -1,5 +1,6 @@
 import { addDays } from "date-fns"
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import {
   dayCount,
   isoDay,
@@ -404,14 +405,7 @@ export async function loadLaborWeek(input: {
   const { range, storeId, accountId, salesByDay } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   // A storeId that is not on this account resolves to no stores, not to the
   // whole account (same rule as `loadChannelMix`/`loadServiceProfile`).
   if (stores.length === 0) return { days: [], roles: [], overtimeCost: 0 }
@@ -541,14 +535,7 @@ export async function loadLaborTrend(input: {
 }): Promise<LaborTrendWeek[]> {
   const { storeId, accountId, weeks, endingOn, weeklyTotalSales } = input
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return []
   const storeIds = stores.map((s) => s.id)
 

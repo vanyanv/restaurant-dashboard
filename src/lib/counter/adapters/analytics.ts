@@ -2,6 +2,7 @@ import { getStores } from "@/app/actions/store/crud-actions"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import type { MenuEngineeringData } from "@/app/actions/forecasts/menu-engineering-actions"
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { isOperational } from "@/lib/store-lifecycle"
 import {
   buildPeriods,
@@ -522,10 +523,7 @@ async function loadDailyOrders(input: {
   const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return new Map()
 
   const rows = await prisma.otterDailySummary.groupBy({

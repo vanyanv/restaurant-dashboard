@@ -42,11 +42,7 @@ describe("getMenuEngineering", () => {
 
   it("rejects a cross-account store when storeId is supplied", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-OTHER",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     expect(await getMenuEngineering({ storeId: "s1" })).toEqual({
       ok: false,
       error: "store_not_in_account",
@@ -55,11 +51,9 @@ describe("getMenuEngineering", () => {
 
   it("classifies STAR / PLOWHORSE / PUZZLE / DOG by median split", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     // Four items with explicit (qtySold, unitMargin) so median splits are
     // unambiguous:
     //   Burger:  100 sold, $5 margin   → high vol, high margin → STAR
@@ -103,11 +97,9 @@ describe("getMenuEngineering", () => {
 
   it("attaches elasticity only when the nightly fit is usable", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
       {
         itemName: "Burger",
@@ -183,11 +175,9 @@ describe("getMenuEngineering", () => {
 
   it("filters out long-tail items below minSoldQty", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([
       {
         itemName: "BigSeller",
@@ -209,14 +199,17 @@ describe("getMenuEngineering", () => {
   it("rolls across all owned stores when no storeId is supplied", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
     vi.mocked(prisma.store.findMany).mockResolvedValue([
-      { id: "s1", name: "Store 1" },
-      { id: "s2", name: "Store 2" },
+      { id: "s1", name: "Store 1", isActive: true },
+      { id: "s2", name: "Store 2", isActive: true },
     ] as never)
     vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([] as never)
     await getMenuEngineering({})
+    // One shared, whole-row store query per request — `@/lib/account-stores`.
+    // The name/id projection and the `isActive` filter both moved into the
+    // caller, over rows the account predicate already scoped.
     expect(prisma.store.findMany).toHaveBeenCalledWith({
-      where: { accountId: "acct-A", isActive: true },
-      select: { id: true, name: true },
+      where: { accountId: "acct-A" },
+      orderBy: { name: "asc" },
     })
     expect(prisma.dailyCogsItem.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -227,11 +220,9 @@ describe("getMenuEngineering", () => {
 
   it("handles an empty result with zero medians and empty quadrant counts", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.dailyCogsItem.groupBy).mockResolvedValue([] as never)
     const result = await getMenuEngineering({ storeId: "s1" })
     if (!result || !result.ok) throw new Error("expected ok")
@@ -270,11 +261,9 @@ describe("getMenuEngineering — classification filter + coverage", () => {
 
   beforeEach(() => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.dailyCogsItem.groupBy)
       .mockResolvedValueOnce(FIXTURE as never)
       .mockResolvedValueOnce(STATUS_ROLLUP as never)

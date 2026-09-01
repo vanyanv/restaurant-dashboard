@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import type { GrowthOpportunity } from "@/types/growth"
 import { getCachedSession, resolveStoreContext } from "@/app/actions/forecasts/_shared"
 
@@ -36,11 +37,12 @@ export async function getOpportunities(input: {
   }
   const { storeIds, storeName, storeIdOut } = resolved.ctx
 
-  // Lifecycle gate.
-  const stores = await prisma.store.findMany({
-    where: { id: { in: storeIds } },
-    select: { id: true, lifecycleStage: true },
-  })
+  // Lifecycle gate. `storeIds` came out of `resolveStoreContext`, which read
+  // the account's stores from `@/lib/account-stores` — so this is the same one
+  // query, not a second read of rows already in memory.
+  const stores = (await getAccountStoreRows(user.accountId)).filter((s) =>
+    storeIds.includes(s.id),
+  )
   const anyReady = stores.some((s) => s.lifecycleStage === "ready")
   const lifecycleStage = storeIdOut
     ? (stores.find((s) => s.id === storeIdOut)?.lifecycleStage ?? null)

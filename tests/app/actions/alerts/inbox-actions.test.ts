@@ -45,7 +45,7 @@ beforeEach(() => {
   vi.mocked(prisma.alert.groupBy).mockResolvedValue([] as never)
   vi.mocked(prisma.alert.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "s1", name: "Hollywood" },
+    { id: "s1", name: "Hollywood", isActive: true },
   ] as never)
   vi.mocked(prisma.alertPreference.findMany).mockResolvedValue([] as never)
 })

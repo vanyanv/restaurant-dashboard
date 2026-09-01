@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStores } from "@/lib/account-stores"
 import { cached, stableKey } from "@/lib/cache/cached"
 import { todayInLA } from "@/lib/dashboard-utils"
 import { laDateMinusDays } from "@/lib/hourly-orders"
@@ -571,20 +572,7 @@ export async function getMobilePnLOverview(input: {
     ["mobile", "pnl", `account:${accountId}`],
     async () => {
       try {
-        const stores = await prisma.store.findMany({
-          where: { accountId, isActive: true },
-          select: {
-            id: true,
-            name: true,
-            fixedMonthlyLabor: true,
-            fixedMonthlyRent: true,
-            fixedMonthlyTowels: true,
-            fixedMonthlyCleaning: true,
-            uberCommissionRate: true,
-            doordashCommissionRate: true,
-          },
-          orderBy: { name: "asc" },
-        })
+        const stores = await getAccountStores(accountId)
         const periods = buildPeriods(
           input.startDate,
           input.endDate,

@@ -58,7 +58,7 @@ describe("createStockCount", () => {
 
   it("returns error when storeId is not in the caller's account", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s2" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s2", isActive: true }] as never)
     const result = await createStockCount({ storeId: "s1", countedAt: new Date("2026-05-07") })
     expect(result).toEqual({ ok: false, error: "store_not_in_account" })
     expect(prisma.stockCount.create).not.toHaveBeenCalled()
@@ -66,7 +66,7 @@ describe("createStockCount", () => {
 
   it("creates a count in IN_PROGRESS state with the session user as the counter", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.stockCount.create).mockResolvedValue({
       id: "c1",
       storeId: "s1",
@@ -92,7 +92,7 @@ describe("createStockCount", () => {
 
   it("rejects createStockCount when there is already an open IN_PROGRESS count for that store", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.stockCount.findFirst).mockResolvedValue({ id: "existing-count" } as never)
 
     const result = await createStockCount({ storeId: "s1", countedAt: new Date("2026-05-07") })
@@ -346,7 +346,7 @@ describe("listStockCounts", () => {
 
   it("scopes by accountId and returns most-recent first", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }, { id: "s2" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }, { id: "s2", isActive: true }] as never)
     vi.mocked(prisma.stockCount.findMany).mockResolvedValue([
       { id: "c2", countedAt: new Date("2026-05-07") },
       { id: "c1", countedAt: new Date("2026-04-30") },
@@ -366,7 +366,7 @@ describe("listStockCounts", () => {
 
   it("narrows to a single storeId when one is provided and is in the account", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }, { id: "s2" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }, { id: "s2", isActive: true }] as never)
     vi.mocked(prisma.stockCount.findMany).mockResolvedValue([] as never)
     await listStockCounts({ storeId: "s1" })
     expect(prisma.stockCount.findMany).toHaveBeenCalledWith(

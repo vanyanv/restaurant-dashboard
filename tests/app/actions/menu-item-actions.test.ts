@@ -32,8 +32,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAuthScope).mockResolvedValue(scope as never)
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "s1" },
-    { id: "s2" },
+    { id: "s1", isActive: true },
+    { id: "s2", isActive: true },
   ] as never)
   // upsert returns the args so tests can inspect what the transaction ran
   vi.mocked(prisma.otterItemMapping.upsert).mockImplementation(((args: unknown) =>

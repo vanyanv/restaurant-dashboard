@@ -1,7 +1,7 @@
 import { cache } from "react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 
 interface SessionUser {
   id: string
@@ -35,12 +35,18 @@ export const resolveStoreContext = cache(
     storeId: string | undefined,
     accountId: string,
   ): Promise<ResolveStoreResult> => {
+    // One shared store query per request, not one per helper — see
+    // `@/lib/account-stores`. Both branches below keep the predicate they had:
+    // the scoped one accepts an inactive store (it looked the id up directly
+    // and only checked the account), the aggregate one does not.
+    const rows = await getAccountStoreRows(accountId)
+
     if (storeId) {
-      const store = await prisma.store.findUnique({
-        where: { id: storeId },
-        select: { id: true, name: true, accountId: true },
-      })
-      if (!store || store.accountId !== accountId) {
+      const store = rows.find((s) => s.id === storeId)
+      // A store on another account and a store that does not exist were always
+      // the same answer here — the old lookup fetched by id and then compared
+      // `accountId` — and reading from an account-scoped list says it once.
+      if (!store) {
         return { ok: false, error: "store_not_in_account" }
       }
       return {
@@ -53,10 +59,7 @@ export const resolveStoreContext = cache(
         },
       }
     }
-    const stores = await prisma.store.findMany({
-      where: { accountId, isActive: true },
-      select: { id: true, name: true },
-    })
+    const stores = rows.filter((s) => s.isActive)
     return {
       ok: true,
       ctx: {

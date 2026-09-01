@@ -1,5 +1,6 @@
 import { cache } from "react"
 import { prisma } from "@/lib/prisma"
+import type { Store } from "@/generated/prisma/client"
 
 /**
  * The account's store list, resolved ONCE per request.
@@ -34,12 +35,12 @@ import { prisma } from "@/lib/prisma"
  * adapter take an accountId for the same reason. A session-resolving helper
  * added here would put `@/lib/auth` behind all three of them.
  *
- * `getStores()`'s whole-row equivalent therefore lives in
- * `src/app/actions/store/crud-actions.ts` as a module-local `cache()`d const,
- * next to the session it already resolves, rather than here. It stays whole-row
- * because `getStores` has twenty-three callers across the editorial tree that
- * may read any column; narrowing that return type is a separate change with a
- * much wider blast radius.
+ * `getStores()` therefore keeps its own `cache()`d wrapper in
+ * `src/app/actions/store/crud-actions.ts`, next to the session it resolves —
+ * but the QUERY underneath it is now the one below. It reads the account's
+ * rows from here and applies its own `isActive` filter and `createdAt desc`
+ * ordering, which is what it always meant; what it no longer does is ask the
+ * database a second time for rows another helper had already fetched.
  *
  * ## Scope
  *
@@ -54,33 +55,63 @@ import { prisma } from "@/lib/prisma"
  */
 
 /**
- * The columns Counter's loaders read. Deliberately a UNION of what
- * `loadChannelMix` and `loadStripTargets` each select rather than a whole
- * row: one query serves both, and adding a column here is a decision someone
- * makes on purpose instead of `select`-less drift.
+ * A store row, whole.
+ *
+ * This was a hand-written union of the five columns `loadChannelMix` and
+ * `loadStripTargets` each selected, on the reasoning that a narrow `select` is
+ * a decision rather than drift. That reasoning applied when this module ran
+ * its own query. It no longer does: `getAccountStoreRows` fetches whole rows
+ * because `getStoresCached`'s twenty-three callers may read any column, and
+ * every helper here reads from that one result. A narrower TYPE over wider
+ * DATA is not a saving — it is a description that is not true, and it sent
+ * four callers (the chat owner scope, the COGS lifecycle read, the mobile
+ * fixed-expense snapshot) back to the database for columns they already had.
  */
-export interface AccountStore {
-  id: string
-  name: string
-  /** Nullable in the schema — an unset food-cost plan. */
-  targetCogsPct: number | null
-  uberCommissionRate: number
-  doordashCommissionRate: number
-}
+export type AccountStore = Store
 
-export const getAccountStores = cache(
-  async (accountId: string): Promise<AccountStore[]> =>
+/**
+ * THE store query. One per request per account, whole rows, every store.
+ *
+ * ## Why whole rows, and why inactive ones too
+ *
+ * Because a projection is what split this into four queries in the first
+ * place. `cache()` memoises per function, so four helpers each holding their
+ * own `store.findMany` — this module's five columns, `getStoresCached`'s whole
+ * rows, `resolveStoreContext`'s `{id,name}`, `resolveStoreScope`'s `{id}` —
+ * were four round trips for the same three rows. Measured with
+ * `PRISMA_TRACE=1` over every route, `Store.findMany` ran between one and SIX
+ * times on every page in the product, `/dashboard/forbidden` included.
+ *
+ * A shared query can only collapse them if it is a superset of all four, so
+ * this one drops both narrowing dimensions:
+ *
+ * - **No `select`.** Whole rows, as `getStoresCached` needs — its twenty-three
+ *   callers may read any column.
+ * - **No `isActive` filter.** `resolveStoreScope` deliberately counts inactive
+ *   stores (an order belonging to a closed store is still that account's
+ *   order), while the other three deliberately exclude them. A shared query
+ *   that filtered would silently change the first; each caller applies its own
+ *   predicate below, so all four keep the contract they had.
+ *
+ * The cost of the widening is a handful of columns on a handful of rows —
+ * this account has three stores — against three saved round trips per page.
+ */
+export const getAccountStoreRows = cache(
+  async (accountId: string) =>
     prisma.store.findMany({
-      where: { accountId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        targetCogsPct: true,
-        uberCommissionRate: true,
-        doordashCommissionRate: true,
-      },
+      where: { accountId },
       orderBy: { name: "asc" },
     }),
+)
+
+export const getAccountStores = cache(
+  async (accountId: string): Promise<AccountStore[]> => {
+    const rows = await getAccountStoreRows(accountId)
+    // `isActive` and the `name asc` order are this function's own contract, and
+    // both are preserved exactly: the shared query already sorts by name, and
+    // filtering here is what the `where` used to do.
+    return rows.filter((s) => s.isActive)
+  },
 )
 
 /**

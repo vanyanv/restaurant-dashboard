@@ -78,7 +78,7 @@ describe("getProductUsageData — contract", () => {
     vi.mocked(getServerSession).mockResolvedValue({
       user: { accountId: "acct", id: "u1" },
     } as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.invoiceLineItem.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.recipe.findMany).mockResolvedValue([] as never)
@@ -99,8 +99,8 @@ describe("getProductUsageData — contract", () => {
       user: { accountId: "acct", id: "u1" },
     } as never)
     vi.mocked(prisma.store.findMany).mockResolvedValue([
-      { id: "s1" },
-      { id: "s2" },
+      { id: "s1", isActive: true },
+      { id: "s2", isActive: true },
     ] as never)
     vi.mocked(prisma.invoiceLineItem.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue([] as never)

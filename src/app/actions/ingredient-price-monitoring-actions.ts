@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { computeIngredientLineCost } from "@/lib/recipe-cost"
@@ -105,11 +106,9 @@ export async function getIngredientPriceMonitoringData(
 
   const [stores, recentLineItems, matchedLineItems, canonicals] =
     await Promise.all([
-      prisma.store.findMany({
-        where: { accountId, isActive: true },
-        select: { id: true, name: true },
-        orderBy: { name: "asc" },
-      }),
+      // The one store query a request makes — `@/lib/account-stores` — this
+      // caller's `isActive` filter applied over it.
+      getAccountStoreRows(accountId).then((rows) => rows.filter((s) => s.isActive)),
       prisma.invoiceLineItem.count({
         where: {
           quantity: { not: 0 },

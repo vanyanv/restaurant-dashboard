@@ -10,7 +10,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    store: { findUnique: vi.fn() },
+    store: { findUnique: vi.fn(), findMany: vi.fn() },
     forecastDailyRevenue: { findMany: vi.fn() },
     forecastMenuItem: { findMany: vi.fn() },
     otterItemMapping: { findMany: vi.fn() },
@@ -41,11 +41,7 @@ describe("getFoodCostForecast", () => {
 
   it("rejects a cross-account store", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-OTHER",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     expect(await getFoodCostForecast({ storeId: "s1" })).toEqual({
       ok: false,
       error: "store_not_in_account",
@@ -54,11 +50,9 @@ describe("getFoodCostForecast", () => {
 
   it("computes per-day food cost % from forecasted qty × recipe cost ÷ predicted revenue", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     const day1 = new Date("2026-05-09")
     const gen = new Date("2026-05-08T01:00:00Z")
     vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([
@@ -94,11 +88,9 @@ describe("getFoodCostForecast", () => {
 
   it("counts unmapped items separately and excludes them from food cost", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     const day = new Date("2026-05-09")
     const gen = new Date("2026-05-08T01:00:00Z")
     vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([
@@ -128,11 +120,9 @@ describe("getFoodCostForecast", () => {
 
   it("dedupes to the latest generation per (date) and per (sku, date)", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     const day = new Date("2026-05-09")
     const old = new Date("2026-05-07T01:00:00Z")
     const fresh = new Date("2026-05-08T01:00:00Z")
@@ -162,11 +152,9 @@ describe("getFoodCostForecast", () => {
 
   it("returns blended pct=null when revenue is missing or zero", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.forecastMenuItem.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.otterItemMapping.findMany).mockResolvedValue([] as never)

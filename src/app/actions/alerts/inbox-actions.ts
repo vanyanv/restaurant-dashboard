@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { anomalyHorizon } from "@/lib/anomaly-window"
 import type {
   AlertSeverity,
@@ -123,11 +124,9 @@ export async function getAlertInbox(
   }
   const accountId = session.user.accountId
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  })
+  // The one store query a request makes — `@/lib/account-stores` — with this
+  // caller's own `isActive` filter applied over it.
+  const stores = (await getAccountStoreRows(accountId)).filter((s) => s.isActive)
   const storeName = new Map(stores.map((s) => [s.id, s.name]))
   const scopedStoreIds =
     filters.storeId && storeName.has(filters.storeId)

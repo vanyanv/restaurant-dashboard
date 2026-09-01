@@ -21,6 +21,7 @@ import { getServerSession } from "next-auth"
 import { Prisma } from "@/generated/prisma/client"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStores } from "@/lib/account-stores"
 
 interface SessionUser {
   id: string
@@ -101,18 +102,9 @@ export async function getCashPositionForecast(input: {
         (store.fixedMonthlyCleaning ?? 0)) /
       30
   } else {
-    const stores = await prisma.store.findMany({
-      where: { accountId: user.accountId, isActive: true },
-      select: {
-        id: true,
-        uberCommissionRate: true,
-        doordashCommissionRate: true,
-        fixedMonthlyLabor: true,
-        fixedMonthlyRent: true,
-        fixedMonthlyTowels: true,
-        fixedMonthlyCleaning: true,
-      },
-    })
+    // Whole rows from the one store query a request makes — all seven columns
+    // this used to select are on them. See `@/lib/account-stores`.
+    const stores = await getAccountStores(user.accountId)
     storeIds = stores.map((s) => s.id)
     storeName = "All stores"
     if (stores.length > 0) {

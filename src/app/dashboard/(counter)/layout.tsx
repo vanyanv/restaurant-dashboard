@@ -50,8 +50,14 @@ export default async function CounterLayout({
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
-  const stores = await getOverviewStores()
+  // TOGETHER, not one after the other. Nothing in the shell needs the session
+  // to ask for the stores — `getOverviewStores` resolves its own — so awaiting
+  // them in sequence made the store query wait out a JWT decrypt for no
+  // reason, on the critical path of every desk page's first byte.
+  const [session, stores] = await Promise.all([
+    getServerSession(authOptions),
+    getOverviewStores(),
+  ])
 
   return (
     <AppShell

@@ -44,9 +44,14 @@ describe("resolveStoreScope", () => {
       undefined
     )
 
+    // The `{ id: true }` projection is gone: the account's stores are read
+    // once per request as whole rows by `@/lib/account-stores` and every
+    // helper reads what it needs off that. The account predicate — and the
+    // deliberate ABSENCE of an `isActive` filter, which is this function's
+    // own contract — are unchanged.
     expect(findMany).toHaveBeenCalledWith({
       where: { accountId: "acct-A" },
-      select: { id: true },
+      orderBy: { name: "asc" },
     })
     expect(result).toEqual({
       storeIds: ["s1", "s2", "s3"],
