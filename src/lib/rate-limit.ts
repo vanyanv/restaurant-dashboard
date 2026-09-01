@@ -30,6 +30,26 @@ export const RATE_LIMIT_TIERS = {
   moderate: { limit: 30, windowMs: 60_000 } as RateLimitConfig,
   /** Auth endpoints: 10 req/min per IP */
   auth: { limit: 10, windowMs: 60_000, identifyBy: "ip" as const } as RateLimitConfig,
+  /**
+   * Beacons: 240 req/min.
+   *
+   * A ceiling against a RUNAWAY CLIENT, not against a reader, and the two need
+   * very different numbers. `/api/telemetry/page-view` fires once or twice per
+   * navigation, so someone scanning the dashboard at a page every two seconds
+   * emits around sixty a minute — twice `moderate`'s whole allowance. Under
+   * that tier a normal browsing session started 429ing partway through, and
+   * every one of those showed up as a console error on a product page. It was
+   * found by walking all fifty gated routes in ninety seconds, which is not
+   * even fast.
+   *
+   * The number has to sit above a person because NOTHING CAN SLOW DOWN IN
+   * RESPONSE TO IT. The beacon goes out through `navigator.sendBeacon`, which
+   * reports whether the browser queued the request and never what came back;
+   * a 429 here is invisible to the code that would have to act on it. So the
+   * limiter's job on this path is to stop a loop — four requests a second,
+   * sustained, is a loop — and never to pace a human.
+   */
+  beacon: { limit: 240, windowMs: 60_000 } as RateLimitConfig,
 }
 
 interface RateLimitEntry {
