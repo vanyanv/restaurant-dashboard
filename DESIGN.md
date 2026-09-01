@@ -749,6 +749,27 @@ Three rules came out of the first pass, each measured rather than assumed:
 - **Ask the smaller question.** The Orders strip's comparison ran all eight of
   `getOrdersList`'s queries to read two numbers off the result. Before adding a
   loader to a page, check what the section actually reads.
+- **A font declared in `not-found.tsx` is declared on every route.** Next puts
+  the root not-found in every route's entry graph, so `next/font` emitted a
+  preload hint for the editorial serif — Fraunces, three axes, 118kB, larger
+  than Bricolage, DM Sans and JetBrains Mono put together — on every screen in
+  the product. A preload hint is not lazy the way an unused `@font-face` is:
+  the browser fetches the file whether or not anything paints with it. Measured
+  with a cold cache, `/login`, `/dashboard/pnl`, `/dashboard/orders`, `/m`,
+  `/m/orders`, `/m/settings`, `/dashboard/stores` and `/dashboard/chat` each
+  downloaded it while reporting zero elements computing to Fraunces. All four
+  Fraunces declarations now carry `preload: false`. The two screens that do
+  paint it — `/m/count` and the 404 — still get it, on demand, and `display:
+  swap` makes that a swap rather than a block. Font bytes per screen: 234kB to
+  116kB.
+
+One measurement trap, since it cost a wrong conclusion once: **do not check for
+font preloads by grepping the `<head>`.** On any route with a `loading.tsx` the
+page segment renders after the shell has flushed, so React delivers its font
+hints as `HL[...]` entries in the flight stream rather than as `<link
+rel="preload">` tags. `/login` shows four `as="font"` tags and `/dashboard/pnl`
+shows none, and both start fetching the same font files at ~160ms. The tags
+were never the difference; the hints are.
 
 What the same pass found and deliberately did NOT change, so it is not
 re-litigated: layout shift is ~0 product-wide (worst 0.034); total blocking

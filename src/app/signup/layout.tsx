@@ -7,6 +7,8 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
   display: "swap",
   axes: ["SOFT", "WONK", "opsz"],
+  // See `src/app/not-found.tsx` for why the editorial serif is not preloaded.
+  preload: false,
 })
 
 export default function SignupLayout({

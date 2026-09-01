@@ -31,6 +31,8 @@ const fraunces = Fraunces({
   // slanting the roman, and Fraunces' true italic is a different design, not a
   // slant. Measured against the visual spec: it was faux on every italic.
   style: ["normal", "italic"],
+  // See `src/app/not-found.tsx` for why the editorial serif is not preloaded.
+  preload: false,
 })
 
 /**
