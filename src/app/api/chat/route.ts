@@ -23,11 +23,19 @@ import {
   setConversationTitle,
 } from "@/lib/chat/conversation"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
-import { CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
 import { logger } from "@/lib/logger"
 import { generateConversationTitle } from "@/lib/chat/auto-title"
 
-export const maxDuration = 60
+/*
+ * 60 was the old Vercel ceiling. It is now 300 on every plan, and 60 was
+ * actively truncating turns: the recorded p99 for this feature is 65s, i.e.
+ * the slowest turns were being killed rather than answered. The fixes below
+ * (reasoning effort, and the 57s `rankRecipes` walk) are what make turns
+ * fast; this is the backstop that turns a slow answer into a late answer
+ * instead of no answer at all.
+ */
+export const maxDuration = 300
 
 interface ChatRequestBody {
   messages: UIMessage[]
@@ -164,6 +172,34 @@ export async function POST(req: Request) {
     system,
     messages: modelMessages,
     tools: toolSet,
+    /*
+     * REASONING EFFORT IS THE LARGEST SINGLE LEVER ON THIS ROUTE, AND IT WAS
+     * UNSET.
+     *
+     * `CHAT_ROUTING_MODEL` is gpt-5-mini, a reasoning model, and an unset
+     * effort means `medium`: the model thinks before every tool decision and
+     * again before it writes, and none of that is streamed, so the owner
+     * watches a spinner for the whole of it. Measured in-process against the
+     * real prompt, the real 58 tools and the real database, three questions
+     * per setting, total turn time:
+     *
+     *   medium (the default we were shipping)   39.0s  38.0s
+     *   low                                     22.4s  27.2s
+     *   minimal                                 13.3s  14.6s
+     *
+     * `low` rather than `minimal`. Minimal is roughly twice as fast again,
+     * but it degraded tool routing in the same run: it called `compareSales`
+     * AND `getDailySales` for one question, and `rankRecipes` twice for
+     * another, which is how a fast model turns into a slow turn. `low` held
+     * the same tool choices as `medium` on every question tried while cutting
+     * the wait roughly in half.
+     *
+     * Overridable without a deploy: set `CHAT_REASONING_EFFORT` to compare
+     * settings against the same account.
+     */
+    providerOptions: {
+      openai: { reasoningEffort: CHAT_REASONING_EFFORT },
+    },
     stopWhen: stepCountIs(15),
     onChunk: ({ chunk }) => {
       if (firstTokenMs === null && chunk.type === "text-delta") {

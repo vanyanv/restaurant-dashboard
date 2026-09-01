@@ -9,6 +9,7 @@ import {
 } from "./_shared"
 import type { ChatTool, ChatToolContext } from "./types"
 import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
+import { batchRecipeCosts } from "@/lib/recipe-cost-batch"
 
 /**
  * Recipe tools. Recipes are owner-level (not store-level) — `Recipe.ownerId`
@@ -508,9 +509,35 @@ export const rankRecipes: ChatTool<typeof rankParams, RankRecipesRow[]> = {
       select: { id: true, itemName: true, category: true },
     })
 
+    /*
+     * ONE BATCHED WALK, NOT ONE WALK PER RECIPE.
+     *
+     * This was `for (const r of recipes) await computeRecipeCost(r.id)`, and
+     * `computeRecipeCost` opens a fresh memo per call: it re-fetches the
+     * recipe, then issues one canonical-cost query per ingredient, serially,
+     * against a remote database. Measured on this account — 41 sellable
+     * recipes — that loop took **57.2 seconds**, against a `maxDuration` of
+     * 60 for the whole chat turn. Ranking recipes did not merely feel slow;
+     * it consumed the entire request budget and left nothing for the model,
+     * so "which item has the worst margin?" routinely died at the cap.
+     *
+     * `batchRecipeCosts` is the function every other listing surface already
+     * uses (recipes, ingredient, product-usage, orders, food-cost forecast).
+     * It costs the whole account's graph in a bounded number of queries and
+     * shares one memo, so a component recipe is priced once rather than once
+     * per parent. Same `computeIngredientLineCost`, same `foodCostOverride`
+     * handling, same partial semantics — a figure here cannot disagree with
+     * the one the Recipes page prints, which is the rule in CLAUDE.md.
+     *
+     * `partial` maps to null exactly as `resultCost` did, so a recipe whose
+     * cost is not fully known is still dropped from a cost ranking rather
+     * than ranked on an understated number.
+     */
+    const batched = await batchRecipeCosts(ctx.accountId)
     const costs = new Map<string, number | null>()
     for (const r of recipes) {
-      costs.set(r.id, resultCost(await computeRecipeCost(r.id).catch(() => null)))
+      const c = batched.get(r.id)
+      costs.set(r.id, !c || c.partial ? null : c.totalCost)
     }
 
     if (args.by === "cost") {
