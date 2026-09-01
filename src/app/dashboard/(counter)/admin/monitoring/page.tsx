@@ -14,12 +14,19 @@ export const dynamic = "force-dynamic"
  * tables retain, not by a reader. A control that narrowed nothing would be a
  * control that lies.
  *
- * NO OWNER GATE, and that is not an oversight. The prototype's sub reads
- * "Developer only · not visible to the owner", and no gate in this product can
- * deliver that: `Role` holds only OWNER and DEVELOPER and every access helper
- * accepts both. Adding `hasOwnerAccess` here would be a gate that reads as a
- * restriction and admits everyone — worse than none, because it would be
- * believed.
+ * THE OWNER GATE IS REAL NOW, and it is one directory up. This docblock used
+ * to argue that no gate in this product could deliver the prototype's
+ * "Developer only · not visible to the owner", because `Role` holds only OWNER
+ * and DEVELOPER and every access helper accepts both. That was half right:
+ * `hasOwnerAccess` accepts both, so it is the wrong helper — but a direct
+ * `role !== "DEVELOPER"` is not, and `/api/monitoring/summary` has been making
+ * exactly that comparison all along. The API was developer-only and this page
+ * was not.
+ *
+ * `src/app/dashboard/(counter)/admin/layout.tsx` makes the comparison for the
+ * whole segment and sends an owner to `/dashboard/forbidden`. This page keeps
+ * only its session check, because a layout that has already refused everyone
+ * who should be refused does not need the page to refuse them again.
  */
 export default async function MonitoringPage() {
   const session = await getServerSession(authOptions)

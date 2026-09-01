@@ -446,6 +446,7 @@ describe("every gated page carries a floor and a written reason for each absence
       "signup",
       "shutdown",
       "notfound",
+      "forbidden",
     ])
   })
 
