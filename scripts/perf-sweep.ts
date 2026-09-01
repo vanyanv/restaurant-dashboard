@@ -26,13 +26,26 @@
  *   because a page can be slow for having shipped a chart library it renders
  *   once.
  *
- * ## Warm first, then take the minimum of two
+ * ## Warm first, then take the minimum of two — and the warm-up earns its keep
  *
  * The first hit on a route in a fresh `next start` pays for module loading and
  * an unprimed query plan, and that cost is real but it is paid once per
  * deploy, not once per reader. Timing it would rank pages by which one the
  * sweep happened to open first. So: one discarded warm-up, then two measured
  * loads, keep the faster. A page that is genuinely slow is slow on both.
+ *
+ * The warm-up is no longer discarded entirely. It runs in a FRESH CONTEXT,
+ * and its byte counts are the ones reported, because bytes are the one number
+ * the warm loads cannot tell the truth about: loads two and three are served
+ * from the memory cache, so every asset already fetched reports
+ * `encodedBodySize` 0. That is not a small distortion. This sweep printed
+ * `0kB font` for all 108 route/surface pairs across an entire optimisation
+ * pass while every screen was in fact downloading 234kB of it — the harness
+ * was structurally blind to the largest asset in the product.
+ *
+ * So the two halves of a sample come from two different loads, deliberately:
+ * TIMINGS are what a returning reader waits for the server to produce, and
+ * BYTES are what a first-time visitor downloads. Neither load can give both.
  *
  * Usage:
  *   npx tsx scripts/perf-sweep.ts                     # both surfaces
@@ -103,7 +116,19 @@ const MEASURE_SOURCE = `(() => {
   var sum = function (rs) { return rs.reduce(function (n, r) { return n + (r.encodedBodySize || 0) }, 0) }
   var js = resources.filter(function (r) { return r.name.indexOf(".js") !== -1 })
   var css = resources.filter(function (r) { return r.name.indexOf(".css") !== -1 })
-  var fonts = resources.filter(function (r) { return r.initiatorType === "css" && /\.(woff2?|ttf|otf)/.test(r.name) })
+  // NOT gated on initiatorType === "css", which is what this filter used to
+  // say and why it reported 0kB font on all 108 route/surface pairs while a
+  // 118kB serif was being downloaded on every one of them. next/font's files
+  // are fetched from a PRELOAD hint, not from the stylesheet: Chrome reports
+  // initiatorType "link" for the head tags on an unsuspended route and for
+  // the HL[...] flight hints React emits on a suspended one. Match the
+  // extension and let the initiator be whatever it is.
+  // The character class is [.] and not a backslash-dot ON PURPOSE: this whole
+  // block is a TEMPLATE LITERAL, which eats a backslash before it ever reaches
+  // the page, so an escaped dot arrives as a wildcard and an escaped question
+  // mark arrives as an invalid group — which is exactly how the first cut of
+  // this line failed every route with "Invalid regular expression".
+  var fonts = resources.filter(function (r) { return /[.](woff2?|ttf|otf)/.test(r.name) })
   return {
     ttfb: Math.round(nav ? nav.responseStart : 0),
     stream: Math.round(nav ? nav.responseEnd - nav.responseStart : 0),
@@ -170,6 +195,23 @@ async function openContext(browser: Browser, surface: "desk" | "phone") {
   return context
 }
 
+/**
+ * One load in a context that has never seen this deploy, for the bytes.
+ *
+ * A fresh context per route costs ~100ms and buys the only measurement of
+ * what a first-time visitor actually downloads. The timings it returns are
+ * thrown away: they carry the server's module load and an unprimed query
+ * plan, which is what made this load a discarded warm-up in the first place.
+ */
+async function coldLoad(browser: Browser, surface: "desk" | "phone", route: string) {
+  const context = await openContext(browser, surface)
+  try {
+    return await measure(await context.newPage(), route)
+  } finally {
+    await context.close()
+  }
+}
+
 async function sweep(browser: Browser, surface: "desk" | "phone", routes: string[]) {
   const context = await openContext(browser, surface)
   const page = await context.newPage()
@@ -198,11 +240,22 @@ async function sweep(browser: Browser, surface: "desk" | "phone", routes: string
 
   for (const route of routes) {
     try {
-      await measure(page, route) // discarded: module load, cold query plan
+      // Warms the server (module load, cold query plan) exactly as before, and
+      // its byte counts are the only honest ones in the run — see the header.
+      const cold = await coldLoad(browser, surface, route)
       const a = await measure(page, route)
       const b = await measure(page, route)
       const best = a.ttfb + a.stream <= b.ttfb + b.stream ? a : b
-      samples.push({ route, surface, ...best })
+      samples.push({
+        route,
+        surface,
+        ...best,
+        bytes: cold.bytes,
+        jsBytes: cold.jsBytes,
+        cssBytes: cold.cssBytes,
+        fontBytes: cold.fontBytes,
+        requests: cold.requests,
+      })
       const total = best.ttfb + best.stream
       process.stdout.write(
         `${surface === "desk" ? "🖥 " : "📱"} ${String(total).padStart(6)}ms  ` +
@@ -244,7 +297,7 @@ async function main() {
         `js ${String(Math.round(s.jsBytes / 1024)).padStart(4)}kB  ${s.surface} ${s.route}\n`,
     )
   }
-  process.stdout.write(`\nHEAVIEST JAVASCRIPT\n`)
+  process.stdout.write(`\nHEAVIEST FIRST VISIT (cold cache — what a new reader downloads)\n`)
   for (const s of [...samples].sort((a, b) => b.jsBytes - a.jsBytes).slice(0, 10)) {
     process.stdout.write(
       `${String(Math.round(s.jsBytes / 1024)).padStart(5)}kB js  ` +

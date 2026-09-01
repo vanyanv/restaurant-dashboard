@@ -724,6 +724,18 @@ waits on — while **stream** is every Suspense boundary resolving as its
 is a fast shell over a slow loader, and nothing in the fidelity gate can see
 either number.
 
+**Timings and bytes come from different loads, on purpose.** `perf:sweep` loads
+each route three times: once in a fresh context, then twice in a shared one. The
+timings are the faster of the two warm loads, because a cold load carries the
+server's module loading and an unprimed query plan. The BYTES are the cold
+load's, because the warm ones are served from the memory cache and report
+`encodedBodySize` 0 for everything already fetched. Reading bytes off a warm
+load is how this sweep printed `0kB font` for all 108 route/surface pairs
+through an entire pass while every screen was downloading 234kB of it — and the
+font filter was also gated on `initiatorType === "css"`, which next/font's
+preload-fetched files never are. Both are fixed. The lesson is that a harness
+reporting a suspiciously round zero is reporting a bug in itself.
+
 `perf:queries` needs `PRISMA_TRACE=1` on the server (see `src/lib/prisma.ts`);
 it reads the round trips straight out of the server's own log. **Count is the
 number that survives the move to Vercel.** This machine talks to Neon over the
