@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test"
-import { PAGES } from "../fidelity/manifest"
+import { phoneRoutes } from "../fidelity/routes"
 
 /**
- * Every gated route, opened in order, with the browser console watched.
+ * Every route a reader can reach, opened in order, console watched.
  *
  * WHAT THIS CATCHES THAT THE FIDELITY GATE CANNOT. The fidelity harness reads
  * the DOM a page produced and compares it to the design. It never looks at
@@ -33,9 +33,9 @@ import { PAGES } from "../fidelity/manifest"
  * walk for as long as it existed, which is part of why the legacy-redirect
  * bug went unseen for so long.
  */
-const ROUTES = [...new Set(PAGES.map((p) => (p.mobileRoute ?? p.route) + (p.query ?? "")))]
+const ROUTES = phoneRoutes()
 
-test("no console errors across every gated route (phone)", async ({ page }) => {
+test("no console errors across every route (phone)", async ({ page }) => {
   test.setTimeout(600_000)
   const found: string[] = []
   /*

@@ -1,9 +1,8 @@
 import { test, expect } from "@playwright/test"
-import { PAGES } from "../fidelity/manifest"
+import { deskTargets } from "../fidelity/routes"
 
 /**
- * Four defects that are objectively true or false, swept over every gated
- * route.
+ * Four defects that are objectively true or false, swept over every route.
  *
  * NOT AN AUDIT, and deliberately not axe. A full ruleset on fifty pages
  * produces a list nobody reads and a dependency nobody asked for; these four
@@ -25,7 +24,6 @@ import { PAGES } from "../fidelity/manifest"
  * A control inside `[hidden]` or `[aria-hidden]` is skipped: it is not in the
  * tree a reader walks.
  */
-const ENTRIES = PAGES.filter((p) => p.status === "counter")
 
 test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids", async ({
   page,
@@ -33,9 +31,8 @@ test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids",
   test.setTimeout(900_000)
   const findings: string[] = []
 
-  for (const entry of ENTRIES) {
-    const route =
-      (entry.route) + (entry.query ?? "")
+  for (const entry of deskTargets()) {
+    const route = entry.route
     await page.goto(route, { waitUntil: "domcontentloaded" })
     await page.waitForTimeout(700)
 
@@ -88,7 +85,7 @@ test("no unnamed controls, unlabelled inputs, alt-less images or duplicate ids",
         seen.add(id)
       }
       return out
-    }, Boolean(entry.bare))
+    }, entry.bare)
 
     for (const f of found) findings.push(`${route} :: ${f}`)
   }

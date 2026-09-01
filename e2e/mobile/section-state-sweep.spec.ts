@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test"
-import { PAGES } from "../fidelity/manifest"
+import { phoneRoutes } from "../fidelity/routes"
 
 /**
- * No gated route may finish loading in a FAILED state, or still skeleton.
+ * No route may finish loading in a FAILED state, or still skeleton.
  *
  * This is the hole in the fidelity gate that a landmark count cannot see. A
  * section whose loader threw still renders `.sec`, `.sec__head` and
@@ -20,14 +20,12 @@ import { PAGES } from "../fidelity/manifest"
  * legitimately render it, and the P&L's two panels are named in its own
  * manifest entry. That is a product state, not a failure.
  */
-const ENTRIES = PAGES.filter((p) => p.status === "counter")
 
-test("no gated route renders a failed or unresolved section (phone)", async ({ page }) => {
+test("no route renders a failed or unresolved section (phone)", async ({ page }) => {
   test.setTimeout(900_000)
   const findings: string[] = []
 
-  for (const entry of ENTRIES) {
-    const route = (entry.mobileRoute ?? entry.route) + (entry.query ?? "")
+  for (const route of phoneRoutes()) {
     await page.goto(route, { waitUntil: "domcontentloaded" })
     // Long enough for every streamed section to resolve. The fidelity harness
     // waits on the content root; this waits on the sections beneath it.
