@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
+import { PHONE_MENU_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { MenuHubSections } from "@/lib/counter/adapters/menu-hub"
@@ -49,6 +50,11 @@ export function CounterPhoneMenuClient({
 
   return (
     <>
+      {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
+          where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
+          on `/m` paths. */}
+      <SubNav items={PHONE_MENU_TABS} label="Menu" />
+
       <div>
         <h2 className="mtitle">Menu</h2>
         <p className="msub">{windowLabel}</p>

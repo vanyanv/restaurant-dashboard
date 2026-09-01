@@ -255,6 +255,40 @@ export const PHONE_VENDOR_TABS = toPhone(VENDOR_TABS)
 export const PHONE_INVENTORY_TABS = toPhone(INVENTORY_TABS)
 export const PHONE_MENU_TABS = toPhone(MENU_TABS)
 
+/**
+ * `VIEWS`'s "One store" tab, which cannot be a constant.
+ *
+ * The prototype's own note says why: "A per-store page is the store switcher's
+ * destination, not a rail item: pick a store, then pick whether you want the
+ * group or that store." So the tab's href carries the SELECTED store, and
+ * until one is selected there is nothing for it to point at — it is absent
+ * rather than dead, which is the same call `Table` makes about a row with no
+ * destination.
+ *
+ * `store` is dropped from the carried query on both tabs and for opposite
+ * reasons: on the group link because "All stores" that is filtered to one is
+ * not all stores, and on the per-store link because the id is in the path and
+ * two sources for one fact is how they come to disagree. Everything else —
+ * the range, the comparison — travels, because the tab is a change of view
+ * and not a change of window.
+ */
+export function storeViewTabs(
+  base: string,
+  storeId: string | null,
+  search: string,
+  extra: readonly SubNavItem[] = [],
+): readonly SubNavItem[] {
+  const params = new URLSearchParams(search)
+  params.delete("store")
+  const qs = params.toString()
+  const q = qs ? `?${qs}` : ""
+  return [
+    { label: "All stores", href: `${base}${q}` },
+    ...extra.map((e) => ({ label: e.label, href: `${e.href}${q}` })),
+    ...(storeId ? [{ label: "One store", href: `${base}/${storeId}${q}` }] : []),
+  ]
+}
+
 export const PHONE_MONITORING_TABS: readonly SubNavItem[] = MONITORING_TABS.map(
   (t) => ({
     label: t.label,

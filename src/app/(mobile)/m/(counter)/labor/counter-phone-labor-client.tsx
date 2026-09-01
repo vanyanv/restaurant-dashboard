@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { useMemo } from "react"
-import { Chart, MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { Chart, MList, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { LaborSections } from "@/lib/counter/adapters/labor"
@@ -118,6 +119,10 @@ export function CounterPhoneLaborClient({
      * what goes INSIDE `.mscroll`, unchanged.
      */
     <>
+      {/* `VIEWS`'s group/store pair, first inside `.mscroll`. "One store"
+          appears only once a store is picked — the design's own sequence. */}
+      <SubNav items={storeViewTabs("/m/labor", counterParams.storeId, paramsString)} label="Labor" />
+
       <div>
         <h2 className="mtitle">Labor</h2>
         <p className="msub">{windowLabel}</p>

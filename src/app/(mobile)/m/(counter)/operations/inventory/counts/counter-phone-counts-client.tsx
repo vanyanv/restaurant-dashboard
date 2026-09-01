@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
+import { PHONE_INVENTORY_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StockCountsSections } from "@/lib/counter/adapters/stock-counts"
 
@@ -25,6 +26,11 @@ export function CounterPhoneCountsClient({
 
   return (
     <>
+      {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
+          where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
+          on `/m` paths. */}
+      <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+
       <Section bare title="Stock counts" data={sections.headline} pending={pending}>
         {(h) => (
           <div>

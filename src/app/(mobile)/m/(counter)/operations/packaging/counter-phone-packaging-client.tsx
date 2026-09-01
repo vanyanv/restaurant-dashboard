@@ -1,6 +1,7 @@
 "use client"
 
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
+import { PHONE_VENDOR_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PackagingSections } from "@/lib/counter/adapters/packaging"
 
@@ -22,6 +23,11 @@ export function CounterPhonePackagingClient({
 
   return (
     <>
+      {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
+          where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
+          on `/m` paths. */}
+      <SubNav items={PHONE_VENDOR_TABS} label="Vendors" />
+
       <Section bare title="Packaging" data={sections.headline} pending={pending}>
         {(h) => (
           <div>

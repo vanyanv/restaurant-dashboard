@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
-import { Chart, MStrip, Section } from "@/components/counter"
+import { Chart, MStrip, Section, SubNav } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { count, money, pct } from "@/lib/counter/format"
 import { dayCount, rangeLabel } from "@/lib/counter/date-range"
@@ -91,6 +92,10 @@ export function CounterPhoneAnalyticsClient({
      * rendered here is what goes INSIDE `.mscroll`, unchanged.
      */
     <>
+      {/* `VIEWS`'s group/store pair, first inside `.mscroll`. "One store"
+          appears only once a store is picked — the design's own sequence. */}
+      <SubNav items={storeViewTabs("/m/analytics", counterParams.storeId, paramsString)} label="Analytics" />
+
       {/*
         The page's NAME, and the window beneath it — `P.analytics.phone()`
         prints only the range here, with no day count, unlike the P&L's own

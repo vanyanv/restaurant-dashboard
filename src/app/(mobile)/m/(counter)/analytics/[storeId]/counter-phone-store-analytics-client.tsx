@@ -9,7 +9,9 @@ import {
   usePageChrome,
   type MListRow,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { DayBookRow, StoreAnalyticsSections } from "@/lib/counter/adapters/analytics"
@@ -102,6 +104,10 @@ export function CounterPhoneStoreAnalyticsClient({
      * rendered here is what goes INSIDE `.mscroll`, unchanged.
      */
     <>
+      {/* `VIEWS`'s group/store pair, first inside `.mscroll`. "One store"
+          appears only once a store is picked — the design's own sequence. */}
+      <SubNav items={storeViewTabs("/m/analytics", storeId, paramsString)} label="Analytics" />
+
       {/* The store's own name, not "Analytics" — the prototype's own
           `o.s.name` in `.mtitle`. The window is the line beneath, alone: no
           day count, matching the prototype's `CD.rangeLabel()` with no

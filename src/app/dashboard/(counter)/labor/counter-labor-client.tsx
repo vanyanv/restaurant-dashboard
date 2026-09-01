@@ -21,7 +21,9 @@ import {
   type QueueItem,
   type Row,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { pct } from "@/lib/counter/format"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
@@ -294,6 +296,10 @@ export function CounterLaborClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* `VIEWS`'s group/store pair — see `storeViewTabs`. "One store" appears
+          only once a store is picked, which is the design's own sequence. */}
+      <SubNav items={storeViewTabs("/dashboard/labor", counterParams.storeId, paramsString)} label="Labor" />
 
       {/* One figure and the verdict beside it — `.headline`, no `--duo`. Both
           halves read the same `headline` section, so a week that failed to load

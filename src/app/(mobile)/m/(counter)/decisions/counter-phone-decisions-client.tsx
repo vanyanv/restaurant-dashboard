@@ -9,7 +9,9 @@ import {
   Section,
   useCounterTransition,
   type WeekDay,
+  SubNav,
 } from "@/components/counter"
+import { PHONE_ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { weekLabel } from "@/lib/counter/week-window"
 import type { DecisionsSections } from "@/lib/counter/adapters/decisions"
@@ -107,6 +109,11 @@ export function CounterPhoneDecisionsClient({
      * what goes INSIDE `.mscroll`.
      */
     <>
+      {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
+          where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
+          on `/m` paths. */}
+      <SubNav items={PHONE_ALERT_TABS} label="Alerts" />
+
       {/* The store is not in this sub: `.mtop`'s `.st` is already showing it,
           one element up. */}
       <div>

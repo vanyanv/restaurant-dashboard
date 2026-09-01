@@ -7,7 +7,9 @@ import {
   Tag,
   useCounterTransition,
   type MListRow,
+  SubNav,
 } from "@/components/counter"
+import { PHONE_ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import type { AlertsSections, PhoneAlertRow } from "@/lib/counter/adapters/alerts"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -103,6 +105,11 @@ export function CounterPhoneAlertsClient({
      * what goes INSIDE `.mscroll`.
      */
     <>
+      {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
+          where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
+          on `/m` paths. */}
+      <SubNav items={PHONE_ALERT_TABS} label="Alerts" />
+
       {/* The store is not in this sub: `.mtop`'s `.st` is already showing it,
           one element up. What IS here is the pair of counts — see the file
           note on N-R2. */}
