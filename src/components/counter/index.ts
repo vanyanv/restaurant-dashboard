@@ -75,6 +75,7 @@ export { RouteFailed } from "./surface/route-failed"
 
 export { AppShell, EntryItem } from "./shell/app-shell"
 export { PhoneShell } from "./shell/phone-shell"
+export { DeskHandoff } from "./shell/desk-handoff"
 export { usePageChrome, type PageChrome } from "./shell/page-chrome"
 export { useCounterTransition, type CounterTransition } from "./shell/counter-transition"
 export { Rail, type RailUser } from "./shell/rail"

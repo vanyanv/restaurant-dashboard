@@ -106,8 +106,16 @@ export interface RecipeCost {
   bands: CostBand[]
   money: MoneyLine[]
   foot: string
-  /** Null when nothing is missing — the section is dropped entirely. */
-  gap: { lead: string; body: string } | null
+  /**
+   * Null when nothing is missing — the section says so instead.
+   *
+   * `href` is `P.recipe`'s "Match it now" and is set only on the branch that
+   * has somewhere to go: a line with no matched SKU points at that
+   * ingredient's own page, where the matching happens. The other branch — a
+   * recipe with no lines at all — has no ingredient to match, so it gets the
+   * sentence without the button rather than a button that opens nothing.
+   */
+  gap: { lead: string; body: string; href?: string } | null
   /** The packaging question, always stated. */
   note: string
 }
@@ -497,6 +505,7 @@ function costOf(d: Loaded): RecipeCost {
         : missing.length > 0
           ? {
               lead: `${count(missing.length)} of ${count(d.lines.length)}`,
+              href: `/dashboard/ingredients/${missing[0].refId}`,
               body:
                 `${missing.map((l) => titleCase(l.name)).join(", ")} could not be priced, so this ` +
                 `plate costs AT LEAST ${unitCost(d.totalCost)} rather than exactly. It does not ` +

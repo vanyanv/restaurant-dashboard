@@ -242,3 +242,34 @@ button.wkd {
 .login a.btn {
   font: inherit;
 }
+
+/*
+ * The pantry sheet's two controls.
+ *
+ * `P.recipe` draws `.pickrow` as a `<div>` with `cursor:pointer` and its
+ * search term as a `<span>`. Both are controls here — a row that adds a line
+ * and a box you type into — so both are the elements that behave like one,
+ * and these rules undo what the user agent would otherwise put on top of the
+ * ported class. The class still owns the grid, the padding and the rule
+ * between rows; `border:0` first is what stops a button's default frame from
+ * drawing over three sides of it.
+ */
+.pickersheet button.pickrow {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+.pickersheet button.pickrow:last-child { border-bottom: none; }
+.pickersheet .hd input {
+  font: inherit;
+  color: inherit;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+}

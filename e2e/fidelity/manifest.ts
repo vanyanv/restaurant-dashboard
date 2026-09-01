@@ -151,8 +151,16 @@ interface FidelityPageBase {
    *      there, so `USAGE_TABS` makes those two labels links to the pages that
    *      hold them — which the prototype's own `seg` could not do.
    *
-   * A reason that is neither means the landmark is missing because the page is
-   * unfinished, and this is the wrong place for it.
+   *   3. THE PRODUCT DELIBERATELY DOES NOT OFFER THE CONTROL. Almost always a
+   *      button: the prototype draws an action this product has decided not to
+   *      have, or not to have HERE. The entry names the decision and where the
+   *      reader does the thing instead — a decline with nowhere to go is an
+   *      unfinished page wearing a reason. `storecosts` declines nine buttons
+   *      this way; `recipe` declines three on the desk and one on the phone,
+   *      where a standing rule says the phone glances and the desk edits.
+   *
+   * A reason that is none of the three means the landmark is missing because
+   * the page is unfinished, and this is the wrong place for it.
    */
   absentLandmarks?: Array<{
     /** The landmark's full class list, sorted and dot-joined — `signature()`'s key. */
@@ -1045,28 +1053,80 @@ export const PAGES: FidelityPage[] = [
     // a red paragraph at the foot of "What it costs", and it is the reason the
     // figure above it is a floor rather than a price.
     //
-    // STILL EDITORIAL, for six: four buttons and the two landmarks of the
-    // "Add an ingredient" picker panel.
+    // THE PICKER IS BUILT, which is what this entry said was the only real
+    // work left: "`P.recipe` has both an `.addrow` inside the builder and a
+    // separate pickersheet section that it opens; ours has the adder and not
+    // the sheet. Building it means lifting the builder's line state out of its
+    // component so a sibling section can push into it." That is what happened.
+    // The draft now lives in the page and is keyed on the SERVER's line array
+    // by identity, which is also what makes `router.refresh()` after a save
+    // drop it — the same behaviour the local state had, stated rather than
+    // implied. The plain `<select>` is gone; the sheet searches the pantry and
+    // tags every match with what it is to THIS recipe, which is the thing only
+    // the draft can know.
     //
-    // The picker is the one that is WORK rather than a decision. `P.recipe`
-    // has both an `.addrow` inside the builder and a separate pickersheet
-    // section that it opens; ours has the adder and not the sheet. Building it
-    // means lifting the builder's line state out of its component so a sibling
-    // section can push into it — the adapter already ships `pantry` and
-    // `components` for exactly this. It is a refactor of a form that writes
-    // recipe lines, which is not a thing to do quickly.
+    // "MARK CONFIRMED" IS A BUTTON IN BOTH STATES now, and that closes the
+    // problem this entry called out as the blocker: "this recipe is already
+    // confirmed, so a `Tag` reading 'Confirmed' stands where the button
+    // would… an unconfirmed recipe renders five buttons and a gated count of
+    // four would fail on the next recipe anyone opens." A control that
+    // disappears when it has been used leaves a hole where the reader expects
+    // to act, and it made the count depend on the record. It is one button,
+    // disabled and wearing the word, on every recipe.
     //
-    // The four buttons: "Duplicate" (no action duplicates a recipe), "Match it
-    // now" (nothing in the product matches a SKU to an ingredient by hand —
-    // the matcher is a nightly ladder and its page is a read-only audit),
-    // "Link another item" (nothing links a POS name to a recipe by hand
-    // either), and "Mark confirmed", which IS built and renders — but this
-    // recipe is already confirmed, so a `Tag` reading "Confirmed" stands where
-    // the button would. That last one is data, not a gap, and it is the reason
-    // this page cannot simply declare its four and gate: an unconfirmed recipe
-    // renders five buttons and a gated count of four would fail on the next
-    // recipe anyone opens.
-    status: "editorial",
+    // THE PHONE gets `P.recipe.phone()`'s first `.mbtn` as a HANDOFF to the
+    // desk builder rather than a save button — the standing mobile rule is
+    // that a phone glances and the desk edits, and a recipe is the one screen
+    // where a mistyped quantity silently moves the food-cost line on four
+    // other pages. It is a `DeskHandoff` and not a `<Link>`, because the proxy
+    // sends a phone straight back off `/dashboard/**`: the phone store file's
+    // equivalent button was a link and landed where it started, which is fixed
+    // in the same change.
+    //
+    // "MATCH IT NOW" IS BUILT AND RENAMED. Nothing in this product matches a
+    // SKU to an ingredient by hand — the matcher is a nightly ladder and the
+    // ingredient page is a read-only audit of what it decided — so the button
+    // goes to that page and says "See what it is matched to". A button
+    // promising a fix it cannot perform would be worse than no button. It
+    // renders only when a line HAS no cost, and every line on this recipe is
+    // priced, which is why it is declared below rather than counted.
+    //
+    // TWO CONTROLS ARE DECLINED OUTRIGHT and both are the third reason:
+    // "Duplicate" (no action duplicates a recipe) and "Link another item"
+    // (nothing links a POS name to a recipe by hand — `sellsAsOf` reads the
+    // link, it does not write one).
+    status: "counter",
+    baseline: { desktop: 26, mobile: 9 },
+    absentLandmarks: [
+      {
+        landmark: "btn",
+        desktop: 3,
+        mobile: 0,
+        reason:
+          "Three of the design's six. TWO are controls this product does not " +
+          "have: \"Duplicate\", which no action performs, and \"Link " +
+          "another item\", which nothing does by hand — `sellsAsOf` reads a " +
+          "recipe's POS links, it never writes one. THE THIRD is \"Match it " +
+          "now\", which IS built: it renders whenever a line could not be " +
+          "priced, and every line on this recipe is priced, so the panel says " +
+          "that instead. The day this recipe loses a matched SKU the button " +
+          "lands and this line reports itself stale, which is the right " +
+          "prompt rather than a false alarm.",
+      },
+      {
+        landmark: "mbtn",
+        desktop: 0,
+        mobile: 1,
+        reason:
+          "`P.recipe.phone()` closes on \"Save recipe\" and \"Add line\". " +
+          "The first is built as a handoff to the desk builder; the second is " +
+          "declined under the standing rule that a phone is a glance-and-do " +
+          "tool and the desk edits. A recipe is the one screen in this " +
+          "product where a mistyped quantity silently moves the food-cost " +
+          "line on four other pages, and adding a line on a phone is neither " +
+          "a glance nor a do. The phone client's docblock argues it at length.",
+      },
+    ],
   },
   {
     protoId: "productmix",
