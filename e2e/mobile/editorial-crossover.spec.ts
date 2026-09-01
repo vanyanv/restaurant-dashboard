@@ -55,16 +55,43 @@ import { test, expect } from "@playwright/test"
  * Recorded because a wrong lead that has been paid for is worth more than a
  * blank: whoever picks this up should not spend the afternoon on caching.
  *
+ * ## Two more hypotheses, tested and WRONG
+ *
+ * THE SUSPENSE BOUNDARY. The note below used to point at
+ * `(mobile)/m/(counter)/layout.tsx` being async — it awaits
+ * `getOverviewStores()`, so a Counter route carries a boundary an editorial
+ * route does not, and the server/DOM diff begins at that boundary's
+ * `<template id="B:0">`. Made synchronous, with the stores stubbed to `[]` and
+ * rebuilt: identical failure, three of three. Then `src/app/(mobile)/m/
+ * loading.tsx` was DELETED outright rather than merely emptied, in case the
+ * boundary was the segment's rather than the layout's: identical failure
+ * again. Neither the layout nor the fallback is the cause.
+ *
+ * THE THEME SCRIPT. `themeNoFlashScript` writes `data-theme` and
+ * `style.colorScheme` onto `<html>` before hydration, which is the classic
+ * shape of a root-element mismatch. It never fires here: after a Counter page
+ * and after an editorial one, `localStorage` holds only next-auth's own key,
+ * `data-theme` is null and `colorScheme` is empty. Nothing writes
+ * `counter-theme` unless a reader picks a theme.
+ *
+ * Three dead ends are recorded now — warmth, the boundary, the theme — which
+ * is most of what an afternoon on this bought. They are here so the next
+ * person spends theirs somewhere else.
+ *
  * ## What is left to look at
  *
- * The structural difference between the two subtrees, given the one-way
- * asymmetry above. A Counter phone route has an extra async layout —
- * `(mobile)/m/(counter)/layout.tsx` awaits `getOverviewStores()` — so it
- * carries a Suspense boundary that an editorial route does not, and its
- * fallback is the segment-level `/m/loading.tsx` while `/m/chat` and
- * `/m/pnl/<id>` have `loading.tsx` files of their own. That boundary is where
- * the mismatch lands: the diff between the server stream and the hydrated DOM
- * begins at `<template id="B:0">` inside `main.m-shell__main`.
+ * What has NOT been ruled out is the Counter subtree's own client entry:
+ * `PhoneShell` calls `useSearchParams()`, which opts a route out of static
+ * rendering, and it is the one thing every failing destination has and no
+ * passing one does. Testing that means rendering the shell without it, which
+ * is a real change rather than a stub, and it is where the next hour should
+ * go.
+ *
+ * The measurement method matters too, and cost time: reading a streamed
+ * response body with a `page.on("response")` handler returns a PARTIAL
+ * document, so every diff taken that way appears to begin at the first
+ * Suspense boundary whether or not that is where the mismatch is. Use
+ * `page.request.get`, which buffers.
  *
  * The wider fix is the one this branch is already heading for. Counter phone
  * pages render INSIDE the editorial shell — `editorial-surface`, `.m-shell`,
