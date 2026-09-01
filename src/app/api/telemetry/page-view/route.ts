@@ -35,12 +35,24 @@ export async function POST(req: Request): Promise<NextResponse> {
      * navigation loop or a misbehaving client could inflate it between runs,
      * against a Neon plan whose storage is a tracked metric.
      *
-     * A 429 here is returned rather than swallowed into NO_CONTENT, because a
-     * client being told to slow down is the one thing this endpoint SHOULD
-     * say out loud — the beacon can then stop rather than keep hammering.
-     * Everything else stays silent, per the note above.
+     * A 429 here is returned rather than swallowed into NO_CONTENT, because
+     * 429 is what a limiter means and a silent 204 would make a throttled
+     * endpoint indistinguishable from a working one.
+     *
+     * It is NOT a signal anything can act on, and the tier below is chosen on
+     * that basis. This note used to say "the beacon can then stop rather than
+     * keep hammering"; it cannot. `navigator.sendBeacon` returns whether the
+     * browser queued the request and never what came back, so no code on the
+     * client sees this status — the only thing that happens is a console error
+     * on whatever page the reader is looking at.
+     *
+     * Which is why the tier is `beacon` and not `moderate`. At 30 a minute a
+     * person scanning the dashboard tripped it partway through and spent the
+     * rest of the session logging errors from the endpoint whose own docblock
+     * says it must never emit one. `beacon` is 240: still a hard stop for a
+     * navigation loop, never reachable by a reader.
      */
-    const limited = await rateLimit(req, RATE_LIMIT_TIERS.moderate)
+    const limited = await rateLimit(req, RATE_LIMIT_TIERS.beacon)
     if (limited) return limited
 
     const session = await getServerSession(authOptions)

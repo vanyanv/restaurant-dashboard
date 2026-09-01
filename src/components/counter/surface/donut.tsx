@@ -65,9 +65,23 @@ export function Donut({ slices, center }: DonutProps) {
       <svg viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}>
         {arcs.map((a) => (
           <path key={a.name} d={a.d} fill={a.color}>
-            <title>
-              {a.name} · {pct(a.value, { scaled: true })}
-            </title>
+            {/*
+              ONE STRING CHILD, not `{a.name} · {pct(…)}`.
+
+              React serialises adjacent expression children with `<!-- -->`
+              separators so it can find the text-node boundaries again on the
+              client. Inside an SVG `<title>` the parser does not give them
+              back as comment nodes, so the client saw different children than
+              the server wrote and threw a hydration mismatch — on /cogs,
+              /menu and /menu/catalog, every one of the three pages that draws
+              a ring. React then regenerates the whole tree on the client,
+              which is a flash and a lost render, not a cosmetic warning.
+
+              A template literal is one text node with no separators. It is
+              also what `components/mobile/daily-revenue-chart.tsx` already
+              does in its own two `<title>`s.
+            */}
+            <title>{`${a.name} · ${pct(a.value, { scaled: true })}`}</title>
           </path>
         ))}
         {center ? (
