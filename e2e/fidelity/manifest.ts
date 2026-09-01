@@ -404,9 +404,33 @@ export const PAGES: FidelityPage[] = [
      * rule, applied to itself: a baseline nobody can defend is not a baseline.
      *
      * What would make this gateable is a deterministic answer — a fixture mode
-     * that renders a canned `FiledReturn` without a model call. That is real
-     * work and it adds a test-only path to a product surface, so it belongs to
-     * whoever wants the gate, with this note as the argument for why.
+     * that renders a `FiledReturn` without a model call. That was left as "real
+     * work for whoever wants the gate"; the all-53 pass went looking for it and
+     * found two things worth writing down before anyone starts.
+     *
+     * FIRST, WHERE IT CANNOT GO. Not in the pages. `shutdown` and `signup` are
+     * both made measurable by a session-gated `?preview=1` in `page.tsx`, and
+     * the same move fails here: those pages ARE their own composition, and this
+     * one is a client island — the shell, the composer, the conversation rail
+     * and the strip all live in `counter-ask-client.tsx` and its phone twin. A
+     * page that rendered `AskAnswerBody` alone would be an answer with no page
+     * around it, which is not what `P.ask` draws. So the fixture goes in the
+     * clients, or in `useAsk` beneath both of them.
+     *
+     * SECOND, AND THIS IS THE HARDER ONE. A canned `FiledReturn` puts figures
+     * on a product route that nobody computed. That is ruling Scan-R1 —
+     * "never invent a target to close a gate" — pointed at a whole answer
+     * rather than one meter, and a label saying "sample" does not make an
+     * invented dollar figure safe to render next to real ones. The admissible
+     * version is a fixture whose figures are REAL (an adapter call, the same
+     * numbers the strip above it would print) and whose COUNT is fixed by us
+     * rather than by the model: three figures and three follow-ups, always,
+     * because that is what makes a baseline defensible. Nothing about the
+     * answer is then fabricated except the choice of which true things to
+     * show, which is what an answer is.
+     *
+     * That is the shape of the work. It is still real work, and it is still
+     * the reason this row is not gated.
      *
      * Until then `report: true` keeps `docs/counter/fidelity/ask.md`
      * regenerating, so the drift is visible even though nothing fails on it.
@@ -948,7 +972,9 @@ export const PAGES: FidelityPage[] = [
     // this class of route, because a store is a PARAM on one statement rather
     // than a second page with its own composition. The shim's own docblock
     // carries the full argument for keeping it alive — bookmarks, four inbound
-    // links and two `revalidatePath` calls.
+    // links and two `revalidatePath` calls — and ends "this URL is not coming
+    // back". Reviving it to close a landmark count would reverse a product
+    // decision to satisfy a fixture.
     //
     // The CONTENT is not lost and this is the part worth writing down.
     // `P.pnlstore`'s reason for existing is its fixed-cost section, "What this
@@ -957,9 +983,22 @@ export const PAGES: FidelityPage[] = [
     // what it is about. Its `.split` companion, "The other two", is the
     // by-store table there.
     //
-    // Measuring it would compare `P.pnlstore`'s three sections against the
-    // group page's eight and report five extras for a page that is doing more,
-    // not less. `analyticsstore`, `laborstore` and `cogsstore` went the other
+    // MEASURED ONCE, against `/dashboard/pnl?store=<hollywood>`, so this is a
+    // number rather than an estimate: `P.pnlstore` draws 24 landmarks and that
+    // page draws 50. Twenty-six extras, and they are not a fixture quirk — the
+    // group statement carries a waterfall, an eight-week table with its eight
+    // meters, a comparison table and two not-computed panels that
+    // `P.pnlstore` has no equivalent of. `extraLandmarks` exists now and is
+    // the wrong tool for this: forgiving twenty-six would leave a gate that
+    // checks a third of the page and reports nothing about the rest.
+    //
+    // The narrowing IS correct, which is the other thing the measurement
+    // settles. With a store selected the page says so in its own words — "By
+    // store · 3 stores, 2 stages … Every line above is Chris N Eddys -
+    // Hollywood" — so this is a superset page that knows it is one, not a
+    // group page ignoring the filter.
+    //
+    // `analyticsstore`, `laborstore` and `cogsstore` went the other
     // way and ARE gated as routes of their own — the prototype's own rule is
     // why: "three sections here are drawn for one store and have no
     // group-level equivalent, because a day book across three stores is three
@@ -2146,6 +2185,15 @@ export const PAGES: FidelityPage[] = [
     // of that reasoning. That is documentation about the navigation, not a
     // screen this product owes anyone, and measuring it would compare a second
     // composition against the same DOM and fail by construction.
+    //
+    // THE MODULE SAYS SO ITSELF, which is the part worth quoting rather than
+    // paraphrasing. `P.more`'s own note reads "The phone is the point here;
+    // the desktop column shows what it maps to" — the desk render is a table
+    // of ten phone destinations with a column explaining why each is not a
+    // tab. There is no desk screen to build from it. Every other row in this
+    // manifest names two compositions of one product surface; this one names
+    // one composition and a diagram of the navigation around it, and a gate
+    // needs a positive floor on both surfaces.
     status: "editorial",
   },
   {
