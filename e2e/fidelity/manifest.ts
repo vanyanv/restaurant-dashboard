@@ -2160,7 +2160,38 @@ export const PAGES: FidelityPage[] = [
   { protoId: "login", name: "Login", protoRoute: "/login", route: "/login", status: "editorial" },
   { protoId: "signup", name: "Accept invite", protoRoute: "/signup/[token]", route: "/signup/[token]", status: "editorial" },
   { protoId: "shutdown", name: "Shutdown", protoRoute: "/shutdown", route: "/shutdown", status: "editorial" },
-  { protoId: "notfound", name: "Not found", protoRoute: "/dashboard/not-found", route: "/dashboard/not-found", status: "editorial" },
+  {
+    protoId: "notfound",
+    name: "Not found",
+    protoRoute: "/dashboard/not-found",
+    route: "/dashboard/not-found",
+    mobileRoute: "/m/not-found",
+    report: true,
+    // MEASURED, and landmark for landmark on BOTH surfaces with no allowance:
+    // 5 of 5 on the desk, 1 of 1 on the phone, 0 extra, 0 rendering
+    // differences, 0 dark defects. `P.notfound` sets `nodate: true`.
+    //
+    // BUILT, not measured-into-place. This row had no `report` at all and the
+    // route it names served the editorial 404 — an `EditorialTopbar` and a
+    // "Vol. 01 · A page is missing" masthead. It is `P.notfound` now: an
+    // `.empty` and three buttons to the three places people usually meant.
+    //
+    // A REAL ROUTE as well as a convention file, because the design names this
+    // page `/dashboard/not-found` and a `not-found.tsx` alone is reachable
+    // only by failing to match something else — which is not a thing a test
+    // can ask for reliably inside a route group.
+    //
+    // The desk page writes `.empty` itself rather than reaching for
+    // `state/Empty`, and the client's docblock argues it: the barrel withholds
+    // that component because states live in the builders, and here the empty
+    // state is not a section's state but the whole page, with no `SectionData`
+    // behind it to resolve or fail. `Empty` would also be wrong on its merits
+    // — its three reasons are `pre_open`, `no_match` and `all_clear`, none of
+    // which is "this address has nothing at it", and it dropped its own button
+    // for having nowhere to go. This page's three have somewhere to go.
+    status: "counter",
+    baseline: { desktop: 5, mobile: 1 },
+  },
   { protoId: "forbidden", name: "No access", protoRoute: "403", route: "403", status: "editorial" },
 ]
 

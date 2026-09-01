@@ -90,6 +90,7 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // Settings folded into /m/more (profile + sign-out) — map straight there
   // instead of through /m/settings (which itself now just redirects to
   // /m/more) to avoid an unnecessary extra hop.
+  "/dashboard/not-found": "/m/not-found",
   "/dashboard/settings": "/m/more",
 }
 
