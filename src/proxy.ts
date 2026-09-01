@@ -184,6 +184,37 @@ function mobilePathFor(desktopPath: string): string | null {
 
 const shutdownAt = process.env.SERVICE_SHUTDOWN_AT
 
+
+/**
+ * The static half of the legacy map — one old path, one new one.
+ *
+ * `/dashboard/stores/<id>/edit` and `/dashboard/pnl/<id>` carry an id and are
+ * matched below rather than here.
+ */
+const LEGACY_PATHS: Record<string, string> = {
+  "/dashboard/chat": "/dashboard/ask",
+  "/dashboard/operations/costs": "/dashboard/menu-profit",
+  "/dashboard/operations/recipes": "/dashboard/recipes",
+  "/m/settings": "/m/more",
+}
+
+/** Where a legacy path goes, or null if it is not one. */
+function legacyTargetFor(path: string): string | null {
+  const flat = LEGACY_PATHS[path]
+  if (flat) return flat
+
+  // `/dashboard/stores/<id>/edit` -> the store file, which carries the form now.
+  const edit = /^\/dashboard\/stores\/([^/]+)\/edit$/.exec(path)
+  if (edit) return `/dashboard/stores/${edit[1]}`
+
+  // `/dashboard/pnl/<id>` -> `?store=<id>`. A store is a param on one
+  // statement, not a second page; see that route's own docblock.
+  const pnl = /^\/dashboard\/pnl\/([^/]+)$/.exec(path)
+  if (pnl) return `/dashboard/pnl?store=${encodeURIComponent(pnl[1])}`
+
+  return null
+}
+
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token
@@ -309,6 +340,47 @@ export default withAuth(
           new URL(target + req.nextUrl.search, req.url)
         )
       }
+    }
+
+    /*
+     * The legacy paths, redirected HERE rather than by the pages that bear
+     * their names — and this is a bug fix, not a tidy-up.
+     *
+     * Six routes exist only to forward an old bookmark: `/dashboard/chat`,
+     * `/dashboard/operations/costs`, `/dashboard/operations/recipes`,
+     * `/dashboard/stores/<id>/edit`, `/dashboard/pnl/<id>` and `/m/settings`.
+     * Each is a Server Component whose whole body is `redirect(...)`, which is
+     * the documented way to do this and which DOES NOT WORK from inside a
+     * streamed layout. By the time the page component runs, the `(editorial)`
+     * or `(counter)` layout above it has already flushed the shell, the
+     * response headers are gone, and Next falls back to what it can still do:
+     *
+     *     <meta id="__next-page-redirect" http-equiv="refresh" content="1;url=/dashboard/ask">
+     *
+     * A ONE-SECOND WAIT on a page that is not the page, and React hydrating a
+     * document it is about to throw away — measured against a production build,
+     * 15 of 18 loads threw a hydration mismatch (React #418). It is invisible
+     * in dev, where the same eighteen loads are clean, and invisible to every
+     * gate: the fidelity harness follows the redirect and measures the
+     * destination. `e2e/desktop/console-sweep.spec.ts` did not see it either,
+     * because it walks the fifty GATED routes and none of these six is one.
+     *
+     * Middleware runs before any rendering, so a redirect from here is a real
+     * 307 with no document, no wasted hydration and no second of waiting.
+     *
+     * The page files stay where they are. They are the fallback if this list
+     * and the tree ever disagree, and `/dashboard/pnl/<id>` in particular is
+     * still a route on purpose — two server actions call
+     * `revalidatePath("/dashboard/pnl/<id>")`, and a path no route serves
+     * revalidates nothing.
+     *
+     * AFTER the phone block above, deliberately: `/dashboard/chat` maps to
+     * `/m/chat` on a phone and that mapping still wins, because the phone's
+     * Counter Ask has no thread history and `/m/chat` does.
+     */
+    const legacy = legacyTargetFor(path)
+    if (legacy) {
+      return NextResponse.redirect(new URL(legacy + req.nextUrl.search, req.url))
     }
 
     return NextResponse.next()
