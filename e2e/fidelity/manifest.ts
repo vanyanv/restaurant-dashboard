@@ -403,34 +403,49 @@ export const PAGES: FidelityPage[] = [
      * whose number moves on its own is worse than no gate. The plan's own
      * rule, applied to itself: a baseline nobody can defend is not a baseline.
      *
-     * What would make this gateable is a deterministic answer — a fixture mode
-     * that renders a `FiledReturn` without a model call. That was left as "real
-     * work for whoever wants the gate"; the all-53 pass went looking for it and
-     * found two things worth writing down before anyone starts.
+     * A FIXTURE MODE WOULD NOT CLOSE THIS, and the all-53 pass went looking
+     * for one before establishing why. Three findings, in the order they
+     * arrived, because the third makes the first two moot.
      *
-     * FIRST, WHERE IT CANNOT GO. Not in the pages. `shutdown` and `signup` are
-     * both made measurable by a session-gated `?preview=1` in `page.tsx`, and
-     * the same move fails here: those pages ARE their own composition, and this
-     * one is a client island — the shell, the composer, the conversation rail
-     * and the strip all live in `counter-ask-client.tsx` and its phone twin. A
-     * page that rendered `AskAnswerBody` alone would be an answer with no page
-     * around it, which is not what `P.ask` draws. So the fixture goes in the
-     * clients, or in `useAsk` beneath both of them.
+     * ONE — WHERE A FIXTURE CANNOT GO. `shutdown` and `signup` are both made
+     * measurable by a session-gated `?preview=1` in `page.tsx`. That move
+     * fails here: those pages ARE their own composition, and this one is a
+     * client island — the shell, the composer, the conversation rail and the
+     * strip all live in `counter-ask-client.tsx` and its phone twin. A page
+     * rendering `AskAnswerBody` alone is an answer with no page around it.
      *
-     * SECOND, AND THIS IS THE HARDER ONE. A canned `FiledReturn` puts figures
-     * on a product route that nobody computed. That is ruling Scan-R1 —
-     * "never invent a target to close a gate" — pointed at a whole answer
-     * rather than one meter, and a label saying "sample" does not make an
-     * invented dollar figure safe to render next to real ones. The admissible
-     * version is a fixture whose figures are REAL (an adapter call, the same
-     * numbers the strip above it would print) and whose COUNT is fixed by us
-     * rather than by the model: three figures and three follow-ups, always,
-     * because that is what makes a baseline defensible. Nothing about the
-     * answer is then fabricated except the choice of which true things to
-     * show, which is what an answer is.
+     * TWO — WHAT A FIXTURE WOULD COST. A canned `FiledReturn` puts figures on
+     * a product route that nobody computed, which is ruling Scan-R1 aimed at a
+     * whole answer instead of one meter. The admissible version uses REAL
+     * figures with a count fixed by us rather than by the model.
      *
-     * That is the shape of the work. It is still real work, and it is still
-     * the reason this row is not gated.
+     * THREE — AND THIS IS THE ONE THAT SETTLES IT. `P.ask`'s answer is not a
+     * `FiledReturn` at all. Read what it draws: a `.gap` bar decomposing the
+     * food-cost overshoot into named causes, a stacked `.ch` of those same
+     * causes day by day, a `.tbl` of sources with a `.drill` through the
+     * arithmetic, and seven `.moneyline`s on the phone. That is the output of
+     * a CAUSE-ATTRIBUTION MODEL, and this product declares — on another page,
+     * in its own words — that it does not have one:
+     *
+     *     `getPnlSectionPromises`'s `foodCause` is `notComputed`, reading "a
+     *     cause-attribution model — points of the food gap per ingredient,
+     *     which needs each ingredient's share of spend over the range beside
+     *     its price move". The adapter's docblock adds why: "a bar whose only
+     *     segment is 'everything else' would add a picture of an explanation
+     *     to it and no explanation."
+     *
+     * So the nineteen missing landmarks here are the same absence the P&L
+     * already declares, rendered a second way. A fixture would not be a
+     * test-only path around a harness limitation; it would be the picture of
+     * an explanation that the adapter one directory over refuses to print,
+     * with the gate as the reason for printing it. `FiledReturn` could not
+     * even produce the right landmarks — it carries a verdict, three figures
+     * and three follow-ups, and there is no `.gap` or `.drill` anywhere in it.
+     *
+     * WHAT IS ALREADY HERE is everything that is not the answer: the composer,
+     * the conversation rail, and the three `.sug`s, which match. This row gates
+     * the day the cause-attribution model exists, and not before — the same day
+     * the P&L's `foodCause` stops being `not_computed`.
      *
      * Until then `report: true` keeps `docs/counter/fidelity/ask.md`
      * regenerating, so the drift is visible even though nothing fails on it.

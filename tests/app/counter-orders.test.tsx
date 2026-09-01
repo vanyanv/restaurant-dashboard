@@ -503,7 +503,10 @@ describe("the page furniture the adapter does not carry", () => {
     expect(tip.textContent).not.toContain("$")
 
     // And the same figures without the picture.
-    const rows = container.querySelectorAll("table.sr-only tbody tr")
+    const rows = // `.sr-only` moved from the table to a wrapper `<div>`: on a table the
+    // utility's `width: 1px` loses to min-content, and the invisible table was
+    // 777px wide and scrolling the phone sideways. See `Chart`.
+    container.querySelectorAll(".sr-only table tbody tr")
     expect(rows[2].textContent).toBe("12p22 orders")
   })
 
