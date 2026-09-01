@@ -23,18 +23,27 @@ test.describe("@smoke mobile", () => {
   test("mobile date sheet sits above its backdrop (m-sheet collision regression)", async ({
     page,
   }) => {
-    // `/m/operations`, not `/m/pnl` and no longer `/m/orders`. This regression
-    // belongs to the EDITORIAL date sheet (`.m-sheet`, opened by
-    // `CustomPillTrigger`); a Counter page's date control is `MDateSheet`, a
-    // different element in a different stacking context.
-    //
-    // This test moved here as the previous comment said it would — "the day
-    // that page is rebuilt too, this test goes with the last `MToolbar`".
-    // `/m/orders` became Counter, and `/m/operations` is now the last route
-    // mounting `MToolbar`. When THAT page is rebuilt, this test has nothing
-    // left to guard and should be deleted with the component, not repointed
-    // again at a route that never had the sheet.
-    await page.goto("/m/operations")
+    /*
+     * `/m/pnl/[storeId]`, and this is the third route this test has lived on.
+     *
+     * The regression belongs to the EDITORIAL date sheet (`.m-sheet`, opened
+     * by `CustomPillTrigger`); a Counter page's date control is `MDateSheet`,
+     * a different element in a different stacking context. So the test has to
+     * follow the last live mount of the editorial one, and on 2026-09-01
+     * `/m/operations` was rebuilt in Counter — the event the previous comment
+     * here said would retire this test.
+     *
+     * It is NOT retired, because the component it guards still ships.
+     * `MPnlToolbar` is the last thing importing `CustomPillTrigger`, and
+     * `src/app/(mobile)/m/pnl/[storeId]/page.tsx` is the last route mounting
+     * it — verified by loading that route on a Pixel 7 and finding the CUSTOM
+     * pill there. The previous comment's warning was against repointing at a
+     * route that never had the sheet; this one has it.
+     *
+     * When `/m/pnl/[storeId]` is rebuilt, there is no fourth route. Delete
+     * this test with `CustomPillTrigger`, not before.
+     */
+    await page.goto("/m/pnl/cmexd4zia0001jr04ljkdt9na")
     await page.waitForLoadState("networkidle")
 
     // The trigger is the CUSTOM pill (`CustomPillTrigger`). The previous
