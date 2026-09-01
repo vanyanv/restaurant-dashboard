@@ -26,17 +26,44 @@ import { PAGES } from "../fidelity/manifest"
  * property of a SESSION rather than of a request, and fifty parallel fresh
  * contexts would never reach one. The walk is the test.
  */
-const ROUTES = [
-  ...new Set(PAGES.filter((p) => p.status === "counter").map((p) => (p.mobileRoute ?? p.route) + (p.query ?? ""))),
-]
+/*
+ * EVERY manifest row, not only the gated ones. The three that are not gated —
+ * `ask`, `pnlstore`, `more` — are real routes a reader reaches, and a page
+ * being ungated says nothing about whether it throws. They were outside this
+ * walk for as long as it existed, which is part of why the legacy-redirect
+ * bug went unseen for so long.
+ */
+const ROUTES = [...new Set(PAGES.map((p) => (p.mobileRoute ?? p.route) + (p.query ?? "")))]
 
 test("no console errors across every gated route (phone)", async ({ page }) => {
   test.setTimeout(600_000)
   const found: string[] = []
+  /*
+   * Next's DEV-ONLY render instrumentation, filtered — and the one exception
+   * this file makes, so it is argued rather than assumed.
+   *
+   * A Server Component that calls `redirect()` aborts mid-render, so the
+   * `performance.measure` Next opened for it closes before it started and the
+   * browser refuses a negative duration. It is Next's own timing code, it names
+   * our component only because that is what it was timing, and it does not
+   * exist in a production build — verified by probing the same routes against
+   * `npm run start`, where it is gone.
+   *
+   * What IS real about those routes is checked properly, and elsewhere:
+   * `e2e/desktop/legacy-redirect.spec.ts` asserts each legacy path answers a
+   * 3xx from the middleware rather than a rendered document with a meta
+   * refresh in it. That is the defect this noise sat on top of.
+   */
+  const devRedirectNoise = /cannot have a negative time stamp/
   page.on("console", (m) => {
-    if (m.type() === "error") found.push(`${page.url()} :: ${m.text().slice(0, 160)}`)
+    if (m.type() !== "error") return
+    if (devRedirectNoise.test(m.text())) return
+    found.push(`${page.url()} :: ${m.text().slice(0, 160)}`)
   })
-  page.on("pageerror", (e) => found.push(`${page.url()} :: PAGEERROR ${e.message.slice(0, 160)}`))
+  page.on("pageerror", (e) => {
+    if (devRedirectNoise.test(e.message)) return
+    found.push(`${page.url()} :: PAGEERROR ${e.message.slice(0, 160)}`)
+  })
 
   for (const route of ROUTES) {
     await page.goto(route, { waitUntil: "domcontentloaded" })
