@@ -1,9 +1,13 @@
 import { test, expect } from "@playwright/test"
 import { PAGES } from "../fidelity/manifest"
-import { phoneRoutes } from "../fidelity/routes"
+import { deskRoutes } from "../fidelity/routes"
 
 /**
- * Every gated phone page is linked from somewhere.
+ * Every gated DESK page is linked from somewhere.
+ *
+ * The phone's twin found nine pages with no entrance. This asks the same of
+ * the desk, where the rail carries most of the navigation and a page missing
+ * from it is a page nobody opens.
  *
  * A page can be built, gated, landmark-perfect and reachable only by typing
  * its URL. That has happened twice on this branch and neither time did any
@@ -15,14 +19,6 @@ import { phoneRoutes } from "../fidelity/routes"
  * The link sweep asks whether a link RESOLVES. This asks the other question —
  * whether anything links there at all — and they fail in opposite directions.
  *
- * ## Desk hrefs count, because the proxy makes them work
- *
- * Phone list pages routinely link to `/dashboard/<x>/<id>` and let
- * `src/proxy.ts` redirect a phone onto `/m/<x>/<id>`. That is indirect but it
- * is not broken, and a check that ignored it would report two thirds of the
- * phone as unreachable — the first run of this file did exactly that. So a
- * collected desk href is folded onto its phone equivalent before comparing,
- * with the one rename the proxy also makes.
  *
  * ## Shapes, not strings
  *
@@ -31,18 +27,15 @@ import { phoneRoutes } from "../fidelity/routes"
  * shape first: any segment that looks like an id becomes `*`, and
  * `/m/orders/4551abf7-…` matches `/m/orders/abc123`.
  */
-/** A desk href as the proxy would serve it to a phone. */
-const asPhone = (href: string): string =>
-  href.startsWith("/dashboard/admin/monitoring")
-    ? href.replace("/dashboard/admin/monitoring", "/m/monitoring")
-    : "/m" + href.slice("/dashboard".length)
-
 /**
  * Pages you arrive at by being SENT, never by following a link — a sign-in
  * screen, a 404 and a refusal. Excluded rather than special-cased in the loop,
  * so the list is readable as what it is.
  */
-const NOT_LINKED_BY_DESIGN = new Set(["/m/login", "/m/not-found", "/m/forbidden"])
+const NOT_LINKED_BY_DESIGN = new Set([
+  "/dashboard/not-found",
+  "/dashboard/forbidden",
+])
 
 
 /**
@@ -62,24 +55,24 @@ const NOT_LINKED_BY_DESIGN = new Set(["/m/login", "/m/not-found", "/m/forbidden"
  * which is the router's knowledge and not worth duplicating for one row.
  */
 const KNOWN_ORPHANS: Record<string, string> = {
-  // SHAPE MISS — `/m/menu/catalog` links every item by slug, just not this one.
-  catalogitem: "reachable by slug from the catalogue; the id matcher cannot see a word",
+  // The Operations hub is OURS, not the design's — `GROUPS` has no such rail
+  // item and `VIEWS` has no such parent. Its four children are all reachable
+  // (Inventory and Vendors from the rail, Packaging and Counts from their
+  // view bars), so nothing is stranded behind it; the hub itself is the page
+  // with no entrance. Either the rail gains it or it goes.
+  operations: "our own hub; the design's rail has no such item and its four children are each reachable without it",
 
-  // REAL GAPS — a hub that does not link its own children.
-  usage: "the Operations hub does not link product usage",
-  packaging: "the Operations hub does not link packaging",
-  countnew: "the counts list does not offer starting one on the phone",
-  prices: "the Ingredients page does not link its price history",
-  storeedit: "nothing on the phone links the new-store form; the desk had the same defect until it was fixed",
-  analyticsstore: "the per-store analytics page has no entrance; the phone has no store switcher into it",
-  laborstore: "as analyticsstore, for labour",
-  cogsstore: "as analyticsstore, for COGS",
+  // `VIEWS` makes these the "One store" tab of their group page —
+  // "pick a store, then pick whether you want the group or that store." The
+  // tab's href therefore depends on the SELECTED store, so it is built in the
+  // client from `?store=` rather than listed in `nav.ts`, and it has no
+  // destination at all until a store is picked. That is the next piece of
+  // this work, not a different one.
+  analyticsstore: "the 'One store' view tab, whose href depends on the selected store",
+  laborstore: "as analyticsstore",
+  cogsstore: "as analyticsstore",
 }
 
-// The seven monitoring sub-pages used to be here, behind one missing bar. The
-// phone monitoring layout carries `PHONE_MONITORING_TABS` now, so they are
-// reachable and their lines are gone — which is what the stale check below
-// exists to make happen rather than leave to good intentions.
 
 const idish = /^[0-9a-f]{8,}$|^c[a-z0-9]{20,}$|^[0-9a-f-]{30,}$/i
 const shapeOf = (href: string): string =>
@@ -90,11 +83,11 @@ const shapeOf = (href: string): string =>
     .join("/")
     .replace(/\/$/, "")
 
-test("every gated phone page is linked from somewhere", async ({ page }) => {
+test("every gated desk page is linked from somewhere", async ({ page }) => {
   test.setTimeout(900_000)
 
   const linked = new Set<string>()
-  for (const route of phoneRoutes()) {
+  for (const route of deskRoutes()) {
     await page.goto(route, { waitUntil: "domcontentloaded" })
     await page.waitForTimeout(2500)
     const hrefs = await page.$$eval("a[href], [data-goto]", (els) =>
@@ -103,20 +96,20 @@ test("every gated phone page is linked from somewhere", async ({ page }) => {
     for (const h of hrefs) {
       if (!h.startsWith("/") || h.startsWith("/api/")) continue
       linked.add(shapeOf(h))
-      if (h.startsWith("/dashboard/")) linked.add(shapeOf(asPhone(h)))
     }
   }
 
   const orphans: string[] = []
   for (const p of PAGES) {
     if (p.status !== "counter") continue
-    const route = p.mobileRoute ?? p.route
-    if (!route.startsWith("/m")) continue
-    if (route === "/m") continue // the tab bar's Home, and the app's front door
+    const route = p.route
+    if (!route.startsWith("/dashboard")) continue
+    if (route === "/dashboard") continue // the rail's Overview, and the front door
     if (NOT_LINKED_BY_DESIGN.has(route)) continue
     if (!linked.has(shapeOf(route))) orphans.push(`${p.protoId}: ${route}`)
   }
 
+  for (const o of orphans) console.log(`ORPHAN>>> ${o}`)
   const unexplained = orphans.filter((o) => !(o.split(":")[0] in KNOWN_ORPHANS))
   expect(
     unexplained,

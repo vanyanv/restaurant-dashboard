@@ -17,7 +17,9 @@ import {
   type Column,
   type FigureProps,
   type Row,
+  SubNav,
 } from "@/components/counter"
+import { ALERT_TABS } from "@/lib/counter/nav"
 import { ALERT_SEGMENTS, type AlertSegment } from "@/lib/counter/alert-filters"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import type {
@@ -314,6 +316,11 @@ export function CounterAlertsClient({
           ))}
         </div>
       </PageHead>
+
+      {/* The design's `VIEWS` bar for this family — see `ALERT_TABS` in
+          `@/lib/counter/nav`. Without it these siblings are pages nothing
+          links to; `.seg` is not a fidelity landmark, so it changes no count. */}
+      <SubNav items={ALERT_TABS} label="Alerts" />
 
       <Section bare title="The figures" data={sections.strip} pending={pending}>
         {(cells) => <Strip cells={cells.map(figureOf)} />}

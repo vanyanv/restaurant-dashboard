@@ -9,7 +9,9 @@ import {
   useCounterTransition,
   usePageChrome,
   type Column,
+  SubNav,
 } from "@/components/counter"
+import { INGREDIENT_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { PriceSections } from "@/lib/counter/adapters/prices"
 
@@ -51,6 +53,11 @@ export function CounterPricesClient({ sections }: { sections: SectionSources<Pri
         title="Price monitor"
         sub="Every price that moved, ranked by what the move costs you"
       />
+
+      {/* The design's `VIEWS` bar for this family — see `INGREDIENT_TABS` in
+          `@/lib/counter/nav`. Without it these siblings are pages nothing
+          links to; `.seg` is not a fidelity landmark, so it changes no count. */}
+      <SubNav items={INGREDIENT_TABS} label="Ingredients" />
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}

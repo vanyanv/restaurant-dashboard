@@ -23,7 +23,9 @@ import {
   type QueueItem,
   type Row,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { weekDayLabel, weekLabel } from "@/lib/counter/week-window"
 import type { DecisionQueueItem, DecisionsSections, LedgerRow } from "@/lib/counter/adapters/decisions"
@@ -215,6 +217,11 @@ export function CounterDecisionsClient({
         title="The week ahead"
         sub={`${storeName} · ${window}`}
       />
+
+      {/* The design's `VIEWS` bar for this family — see `ALERT_TABS` in
+          `@/lib/counter/nav`. Without it these siblings are pages nothing
+          links to; `.seg` is not a fidelity landmark, so it changes no count. */}
+      <SubNav items={ALERT_TABS} label="Alerts" />
 
       {/* One figure and the verdict beside it — `.headline`, no `--duo`.
           Both halves read the same `head` section, so a week that failed to

@@ -16,7 +16,9 @@ import {
   usePageChrome,
   type Column,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { INVENTORY_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -116,6 +118,11 @@ export function CounterInventoryClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* The design's `VIEWS` bar for this family — see `INVENTORY_TABS` in
+          `@/lib/counter/nav`. Without it these siblings are pages nothing
+          links to; `.seg` is not a fidelity landmark, so it changes no count. */}
+      <SubNav items={INVENTORY_TABS} label="Inventory" />
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
