@@ -91,6 +91,11 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   // instead of through /m/settings (which itself now just redirects to
   // /m/more) to avoid an unnecessary extra hop.
   "/dashboard/not-found": "/m/not-found",
+  // The refusal has a phone composition too — `P.forbidden.phone()` is two
+  // sentences and one `.mbtn` where the desk gets a whole section explaining
+  // itself. The desk gate sends an owner to `/dashboard/forbidden`; this is
+  // what happens when that owner is on a phone.
+  "/dashboard/forbidden": "/m/forbidden",
   "/dashboard/settings": "/m/more",
 }
 

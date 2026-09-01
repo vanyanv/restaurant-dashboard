@@ -2465,7 +2465,46 @@ export const PAGES: FidelityPage[] = [
     status: "counter",
     baseline: { desktop: 5, mobile: 1 },
   },
-  { protoId: "forbidden", name: "No access", protoRoute: "403", route: "403", status: "editorial" },
+  {
+    protoId: "forbidden",
+    name: "No access",
+    // `403` is a STATUS, not an address. The design gives this page no URL, so
+    // it gets one that matches the 404 beside it.
+    protoRoute: "403",
+    route: "/dashboard/forbidden",
+    mobileRoute: "/m/forbidden",
+    report: true,
+    // MEASURED: 7 of 7 on the desk and 2 of 2 on the phone, landmark for
+    // landmark, 0 extra, 0 rendering differences.
+    //
+    // THE GATE WAS THE WORK, not the page. This row said `route: "403"` and
+    // sat editorial because nothing in this product 403s: `Role` holds only
+    // OWNER and DEVELOPER, and the monitoring page's own docblock argued that
+    // no gate could deliver the design's "Developer only · not visible to the
+    // owner" because `hasOwnerAccess` accepts both roles. That was half right.
+    // `hasOwnerAccess` is the wrong helper; a direct role comparison is not,
+    // and `/api/monitoring/summary` has been making it all along. The API was
+    // developer-only and the eight pages in front of it were not — a product
+    // that told owners a page was restricted and then served it to them.
+    //
+    // `src/app/dashboard/(counter)/admin/layout.tsx` and its phone twin at
+    // `/m/monitoring` now make that comparison, and an OWNER lands here. That
+    // is a REAL restriction on a real account, which is why it is written down
+    // in both layouts rather than only here.
+    //
+    // THE REDIRECT CARRIES NOTHING — no `?from=`, no return path, no page
+    // name. `P.forbidden` says in bold that the page never says what was on
+    // it, and a query string naming the refused route is exactly that leak.
+    // It also means this page renders identically to anyone who types the
+    // address, which is what makes it measurable.
+    //
+    // "Ask Vardan for access" is a `mailto:`, like the shutdown notice's two
+    // actions and for the same reason: there is no request-access record in
+    // this product, and a button that looks like it files one would be worse
+    // than a link that plainly opens mail.
+    status: "counter",
+    baseline: { desktop: 7, mobile: 2 },
+  },
 ]
 
 /** The absence budget for one surface, as `applyAbsenceAllowances` wants it. */
