@@ -16,6 +16,8 @@
     "shots": "tsx scripts/mobile-shots.ts",
     "shots:readme": "tsx scripts/readme-shots.ts",
     "perf:audit": "tsx scripts/perf-audit.ts",
+    "perf:sweep": "tsx scripts/perf-sweep.ts",
+    "perf:queries": "tsx scripts/perf-queries.ts",
     "perf:mobile-nav": "tsx scripts/mobile-transition-perf.ts",
     "eval:chat": "tsx -r ./scripts/lib/server-only-shim.cjs scripts/eval-chat/run.ts",
     "eval:llm": "DOTENV_CONFIG_PATH=.env.local tsx -r dotenv/config -r ./scripts/lib/server-only-shim.cjs scripts/eval-llm/run.ts",

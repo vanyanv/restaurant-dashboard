@@ -173,6 +173,27 @@ async function openContext(browser: Browser, surface: "desk" | "phone") {
 async function sweep(browser: Browser, surface: "desk" | "phone", routes: string[]) {
   const context = await openContext(browser, surface)
   const page = await context.newPage()
+
+  /*
+   * `PERF_CPU=4` runs the walk on a throttled main thread.
+   *
+   * Unthrottled, every route reported a total blocking time of ZERO — on a
+   * desktop CPU, which is not the machine this product is read on. A Pixel 7
+   * is roughly four times slower at JavaScript than this laptop, so hydrating
+   * 240kB of it costs something there and nothing here, and an unthrottled
+   * sweep will keep saying the client side is free no matter how much code a
+   * page ships. The number this is here to catch is the one a reader's thumb
+   * waits on.
+   *
+   * Off by default: the SERVER numbers (ttfb, stream) must be read on an
+   * unthrottled run, since throttling the browser also slows the parsing that
+   * ends the navigation.
+   */
+  const cpu = Number(process.env.PERF_CPU ?? 0)
+  if (cpu > 1) {
+    const cdp = await context.newCDPSession(page)
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu })
+  }
   const samples: Sample[] = []
 
   for (const route of routes) {

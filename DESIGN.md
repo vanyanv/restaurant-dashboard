@@ -703,3 +703,57 @@ absolute import — see `stripRouteGroups` and
 dynamic-route folder like `[id]` is valid pathspec glob syntax, and `git
 show <rev>:<path>` silently returns an empty, successful result for a
 non-existent bracketed path instead of failing).
+
+## Speed, and how it is measured
+
+Two instruments, both walking `e2e/fidelity/routes.ts` so a page cannot be
+rebuilt into existence without also being timed. Both want a PRODUCTION build
+(`npm run build && npx next start -p 3100`) — a development server answers a
+different question.
+
+```
+npm run perf:sweep                       # timings, bytes, CLS, blocking time
+PERF_CPU=4 npm run perf:sweep -- --phone # the same on a phone-class CPU
+npm run perf:queries                     # database round trips per page
+```
+
+`perf:sweep` splits the two halves of server time, and the split is the point:
+**ttfb** is the shell — the layouts above the page, and the first byte a reader
+waits on — while **stream** is every Suspense boundary resolving as its
+`get*SectionPromises` settle. A page whose ttfb is 10ms and whose stream is 4s
+is a fast shell over a slow loader, and nothing in the fidelity gate can see
+either number.
+
+`perf:queries` needs `PRISMA_TRACE=1` on the server (see `src/lib/prisma.ts`);
+it reads the round trips straight out of the server's own log. **Count is the
+number that survives the move to Vercel.** This machine talks to Neon over the
+open internet, so one query costs ~85ms here and ~2ms from the deployment
+beside it — a local millisecond total says almost nothing, while forty round
+trips are forty round trips anywhere.
+
+Three rules came out of the first pass, each measured rather than assumed:
+
+- **No network round trip in a layout body.** A layout's own `await` blocks its
+  PARENT's flush, so until it resolves the browser has not been handed the
+  `<head>` and cannot start fetching the stylesheet or the ~20 script preloads
+  it is about to need. The desk waited on Neon for the rail's store list (85ms
+  to first byte) and the phone waited on Upstash for a welcome flag (31ms);
+  both now flush in ~11ms, with the work inside a `<Suspense>` or below a
+  segment `loading.tsx`. Both fixes are ~15 lines and neither changed total
+  page time — only when the browser was allowed to start.
+- **One store query per request.** `cache()` memoises per FUNCTION, so forty
+  helpers each holding their own `store.findMany` are forty round trips for the
+  same three rows — `Store.findMany` ran between one and six times on every
+  page in the product, `/dashboard/forbidden` included. `@/lib/account-stores`
+  holds the one query; new code reads from it rather than asking again.
+- **Ask the smaller question.** The Orders strip's comparison ran all eight of
+  `getOrdersList`'s queries to read two numbers off the result. Before adding a
+  loader to a page, check what the section actually reads.
+
+What the same pass found and deliberately did NOT change, so it is not
+re-litigated: layout shift is ~0 product-wide (worst 0.034); total blocking
+time is 0 on every route at 4× CPU throttling except `/m/ask`, whose 32ms is
+the AI SDK it exists to run; the ~350kB desk bundle is react-dom, the App
+Router runtime, 68kB of Counter components and sonner, with recharts and the AI
+SDK correctly absent from Counter routes; and the 112kB core-js chunk in the
+HTML is served `noModule`, so no modern browser fetches it.
