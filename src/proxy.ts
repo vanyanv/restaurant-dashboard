@@ -245,6 +245,32 @@ export default withAuth(
       return NextResponse.redirect(new URL("/m/login" + req.nextUrl.search, req.url))
     }
 
+    /*
+     * Accepting an invite has a phone composition too, and like the phone
+     * shutdown notice it lives OUTSIDE `/m`: every route under that segment
+     * inherits the tab bar, and someone who does not have an account yet
+     * cannot be offered five tabs into the account.
+     *
+     * A rewrite rather than a redirect, so the link that arrived in the email
+     * is the link in the address bar. `?desk=1` is the escape hatch the phone
+     * page uses when the invite is dead — the four refusals are drawn once, on
+     * the desk route, and this guard is what stops that bouncing back here.
+     */
+    if (
+      isPhone &&
+      !preferDesktop &&
+      path.startsWith("/signup/") &&
+      !path.startsWith("/signup/phone/") &&
+      req.nextUrl.searchParams.get("desk") !== "1"
+    ) {
+      return NextResponse.rewrite(
+        new URL(
+          "/signup/phone" + path.slice("/signup".length) + req.nextUrl.search,
+          req.url,
+        ),
+      )
+    }
+
     if (
       path === "/" ||
       path === "/login" ||

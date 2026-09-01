@@ -202,6 +202,19 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   { file: "app/shutdown/counter-shutdown-client.tsx", token: "login" },
   { file: "app/shutdown/phone/counter-phone-shutdown-client.tsx", token: "ct-root" },
   { file: "app/shutdown/phone/counter-phone-shutdown-client.tsx", token: "ct-phone" },
+  // ACCEPTING AN INVITE, both surfaces. `P.signup` is `bare` for the third
+  // time and the same reason: it is read by someone who does not have an
+  // account yet, so there is no shell above it and nothing to put a tab bar
+  // into. The desk reuses the design's `.login` grid — an invite and a sign-in
+  // are the same shape with different words — and `page.tsx` emits it a second
+  // time for the four refusals, which are this product's own markup and not
+  // part of `P.signup`.
+  { file: "app/signup/[token]/counter-signup-client.tsx", token: "ct-root" },
+  { file: "app/signup/[token]/counter-signup-client.tsx", token: "login" },
+  { file: "app/signup/[token]/page.tsx", token: "ct-root" },
+  { file: "app/signup/[token]/page.tsx", token: "login" },
+  { file: "app/signup/phone/[token]/counter-phone-signup-client.tsx", token: "ct-root" },
+  { file: "app/signup/phone/[token]/counter-phone-signup-client.tsx", token: "ct-phone" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
@@ -269,13 +282,17 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // `src/app/(mobile)/m/(counter)/layout.tsx`; one shell in one layout is
     // both fewer mount sites and one that survives a tab change.
     //
-    // The four PUBLIC pages are the entries that are not shells: two sign-in
-    // screens and two shutdown notices. All four are `bare` in the prototype —
-    // nothing above any of them mounts the alias layer — so each mounts its
-    // own, and the two desk ones carry the design's `.login` grid on the same
-    // element. Twelve entries, seven files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(12)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(7)
+    // The six PUBLIC pages are the entries that are not shells: two sign-in
+    // screens, two shutdown notices and the two halves of accepting an invite.
+    // All six are `bare` in the prototype — nothing above any of them mounts
+    // the alias layer — so each mounts its own, and the desk ones carry the
+    // design's `.login` grid on the same element. The invite's `page.tsx` is
+    // an eighth file rather than a seventh entry: it draws the four refusals,
+    // which the design does not have, in the same grid.
+    //
+    // Eighteen entries, ten files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(18)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(10)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")
