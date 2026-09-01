@@ -883,6 +883,14 @@ export function lintCounter(
     roots.some((r) => isUnder(dir, r) || isUnder(r, dir)),
   )
   violations.push(...findRawForecastGenerationViolations(forecastScopeInScope))
+  // `no-preloaded-font` — NOT scoped to Counter either, and for a sharper
+  // reason than the forecast rule: the declaration this exists to catch is in
+  // `src/app/not-found.tsx`, a file no Counter root walks and no page imports,
+  // which Next nonetheless bundles into every route's entry.
+  const fontScopeInScope = FONT_SCOPE.filter((dir) =>
+    roots.some((r) => isUnder(dir, r) || isUnder(r, dir)),
+  )
+  violations.push(...findPreloadedFontViolations(fontScopeInScope))
   return violations
 }
 
@@ -966,6 +974,96 @@ export function findRawForecastGenerationViolations(
       text:
         "queries a forecast table that keeps every model generation and never " +
         "mentions generatedAt — a raw sum measured 12.7x on revenue and 13.17x on hourly orders",
+    })
+  }
+  return violations
+}
+
+/* ── no-preloaded-font ───────────────────────────────────────────────────
+
+   `next/font` emits a preload hint for every font in a route's ENTRY GRAPH,
+   and Next puts the root `not-found` in EVERY route's entry. So the Fraunces
+   declared in `src/app/not-found.tsx` — 118kB, three axes (SOFT, WONK, opsz),
+   larger than Bricolage, DM Sans and JetBrains Mono put together — was
+   preloaded on every screen in the product. A preload hint is not lazy the
+   way an unused `@font-face` is: the browser fetches the file whether or not
+   anything paints with it.
+
+   Measured cold, `/login`, `/dashboard/pnl`, `/dashboard/orders`, `/m`,
+   `/m/orders`, `/m/settings`, `/dashboard/stores` and `/dashboard/chat` each
+   downloaded it and each reported ZERO elements computing to Fraunces. Font
+   bytes per screen went from 234kB to 116kB when the four declarations took
+   `preload: false`.
+
+   `src/app/layout.tsx` is the one place a preloaded font is correct, and is
+   the rule's only exemption: it sits above every Suspense boundary, and the
+   three families it declares are the ones every Counter screen paints.
+
+   Nothing about this is visible in a warm sweep — `perf-sweep.ts` reported
+   `0kB font` on all 108 route/surface pairs while this was true, which is
+   why that script now measures bytes in a cold context. A rule that only a
+   cold measurement can catch is exactly the rule that has to be a build
+   failure rather than prose.
+
+   KNOWN HOLES, written down rather than patched over with more regex:
+     - one file, two font loaders, one `preload: false` between them passes.
+       The rule proves the author knew the option exists, not that every
+       declaration in the file carries it.
+     - a value computed at runtime (`preload: SHOULD_PRELOAD`) passes. Only
+       the literal `false` is matched.
+     - it reasons about FILES, not entry graphs. It catches the root
+       not-found because that file is in scope, not because it knows Next
+       bundles it everywhere.
+*/
+const FONT_LOADER = /from\s+["']next\/font\/(google|local)["']/
+const FONT_PRELOAD_OFF = /preload\s*:\s*false/
+
+/**
+ * Its own scope, and deliberately wider than `ROOTS` — the declaration that
+ * cost every screen 118kB lives in `src/app/not-found.tsx`, which no Counter
+ * root walks. Scoped the same way the route-group and forecast checks are, so
+ * `lintCounter([FIXTURES])` in a test never reaches the real tree.
+ */
+export const FONT_SCOPE = [
+  join(process.cwd(), "src", "app"),
+  join(process.cwd(), "src", "components"),
+]
+
+/** The one file whose fonts every screen paints, and which no boundary defers. */
+const ROOT_LAYOUT = join(process.cwd(), "src", "app", "layout.tsx")
+
+export function findPreloadedFontViolations(scope: string[] = FONT_SCOPE): Violation[] {
+  const violations: Violation[] = []
+  const files: string[] = []
+  for (const root of scope) {
+    try {
+      files.push(...walk(root))
+    } catch {
+      continue
+    }
+  }
+  for (const file of files) {
+    if (!file.endsWith(".ts") && !file.endsWith(".tsx")) continue
+    if (file === ROOT_LAYOUT) continue
+    let text: string
+    try {
+      // Comment-stripped, so a docblock EXPLAINING `preload: false` cannot
+      // satisfy the rule for a declaration that never sets it.
+      text = stripComments(readFileSync(file, "utf8"))
+    } catch {
+      continue
+    }
+    if (!FONT_LOADER.test(text)) continue
+    if (FONT_PRELOAD_OFF.test(text)) continue
+    const line = text.split("\n").findIndex((l) => FONT_LOADER.test(l)) + 1
+    violations.push({
+      file: relative(process.cwd(), file),
+      line: line || 1,
+      rule: "no-preloaded-font",
+      text:
+        "declares a next/font outside the root layout without preload: false — " +
+        "Next puts this file's fonts in every route's entry graph, and a preload " +
+        "hint downloads the file on screens that never paint with it",
     })
   }
   return violations

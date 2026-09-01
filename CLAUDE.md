@@ -28,6 +28,10 @@ outside `counter.css`, no generic Tailwind palette colour, no page branching
 on a `SectionData` status, no page importing Prisma or a server action
 directly, no page importing `framer-motion` directly, no page or page client
 importing or rendering `AppShell`/`PhoneShell` (they belong to a layout), no
+`next/font` declared outside the root layout without `preload: false` (Next
+puts the root `not-found` in every route's entry graph, so a font preloaded
+there is downloaded on every screen and painted on almost none — this rule
+walks `src/app/**` and `src/components/**`, wider than the roots above), no
 directory under a `(counter)` route group holding a `page.tsx` without a
 `loading.tsx` beside it, and no `page.tsx` under a `(counter)` route group
 `await`ing a `get*Sections(...)` loader instead of the not-awaited
