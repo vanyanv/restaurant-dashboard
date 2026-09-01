@@ -225,3 +225,20 @@ button.wkd {
   border-radius: var(--r-sm);
   background: var(--sunk);
 }
+
+/* `.login a.btn` is a button too.
+ *
+ * `counter-components.css:546` is `.login button{font:inherit}` — the login
+ * screen resets its controls to the body face, which is why `P.login`'s and
+ * `P.shutdown`'s buttons render at weight 400 while `.btn` itself declares
+ * 600. The selector names the ELEMENT, so an anchor styled as a button misses
+ * it and comes out 200 heavier than the design.
+ *
+ * Both of the shutdown notice's actions are `mailto:` links and belong in an
+ * `<a>` — a `<button>` that sets `location` loses right-click, copy-address
+ * and the keyboard behaviour a mail link has for free, which is the same trade
+ * `Queue`'s `.do` and `MList`'s rows already make. So the rule follows the
+ * anchors rather than the anchors following the rule. */
+.login a.btn {
+  font: inherit;
+}

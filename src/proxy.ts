@@ -192,6 +192,7 @@ export default withAuth(
         // a phone OWNER from /login to /m/login and then rewrites /m/login to
         // /shutdown — locking out the one account the gate exists to let in.
         path === "/m/login" ||
+        path === "/shutdown/phone" ||
         path.startsWith("/api/auth/")
       ) {
         return NextResponse.next()
@@ -202,7 +203,15 @@ export default withAuth(
           { status: 503 }
         )
       }
-      return NextResponse.rewrite(new URL("/shutdown", req.url))
+      // The phone has its own notice — `P.shutdown` is two compositions like
+      // every other page, and `.btn` is not `.mbtn`. It lives outside `/m` so
+      // it does not inherit the tab bar; see that route's own note.
+      const shutUa = req.headers.get("user-agent") ?? ""
+      const shutPhone =
+        PHONE_UA.test(shutUa) && req.cookies.get("prefer-desktop")?.value !== "1"
+      return NextResponse.rewrite(
+        new URL(shutPhone ? "/shutdown/phone" : "/shutdown", req.url),
+      )
     }
 
     // API routes were never subject to the auth/mobile logic below; the
@@ -248,6 +257,18 @@ export default withAuth(
 
     if (!token) {
       return NextResponse.redirect(new URL("/login", req.url))
+    }
+
+    /*
+     * The shutdown notice has a phone composition too, and it is reachable
+     * outside the gate: an owner previewing it, or anyone who kept the URL.
+     * The gate's own rewrite above picks the same page — this is the same rule
+     * for the case where the gate is not armed.
+     */
+    if (isPhone && !preferDesktop && path === "/shutdown") {
+      return NextResponse.rewrite(
+        new URL("/shutdown/phone" + req.nextUrl.search, req.url),
+      )
     }
 
     if (isPhone && !preferDesktop && path.startsWith("/dashboard")) {
