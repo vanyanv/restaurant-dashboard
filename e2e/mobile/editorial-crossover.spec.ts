@@ -80,18 +80,37 @@ import { test, expect } from "@playwright/test"
  *
  * ## What is left to look at
  *
- * What has NOT been ruled out is the Counter subtree's own client entry:
- * `PhoneShell` calls `useSearchParams()`, which opts a route out of static
- * rendering, and it is the one thing every failing destination has and no
- * passing one does. Testing that means rendering the shell without it, which
- * is a real change rather than a stub, and it is where the next hour should
- * go.
+ * `useSearchParams` — RULED OUT, and it was the last of the obvious four.
+ * `PhoneShell` calls it, it opts a route out of static rendering, and it is
+ * the one thing every failing destination has and no passing one does. Stubbed
+ * to null and rebuilt: identical failure, three of three.
  *
- * The measurement method matters too, and cost time: reading a streamed
- * response body with a `page.on("response")` handler returns a PARTIAL
- * document, so every diff taken that way appears to begin at the first
- * Suspense boundary whether or not that is where the mismatch is. Use
- * `page.request.get`, which buffers.
+ * So: warmth, the Suspense boundary, the theme script and `useSearchParams`
+ * are all eliminated by measurement. Whatever this is, it is not any of them.
+ *
+ * ## Two measurement traps, both paid for
+ *
+ * FIRST, a `page.on("response")` handler reading a streamed body returns a
+ * PARTIAL document, so every diff taken that way appears to begin at the first
+ * Suspense boundary whether or not that is where the mismatch is. That is what
+ * sent the boundary hypothesis up.
+ *
+ * SECOND — and this is why the obvious fix for the first does not work either
+ * — `page.request.get` buffers, but it is not a navigation: it sends none of
+ * the `Sec-Fetch-*` headers a document load does, and what comes back has
+ * `main.m-shell__main` holding nothing but `<template id="B:0">`. The page's
+ * content lives in the `__next_f` script payload, which any diff that strips
+ * scripts throws away. Comparing server HTML to the hydrated DOM cannot
+ * localise this defect at all; a fresh attempt needs React's own
+ * `onRecoverableError` with an unminified build, or a Next-side reproduction
+ * outside this app.
+ *
+ * ## Where the next hour should go
+ *
+ * Not here. The structural fix — Counter phone pages no longer rendering
+ * inside the editorial shell — is the tab-bar rebuild described below, and it
+ * removes the two subtrees this defect lives between. That is a design job
+ * with a known shape, which is worth more than a fifth hypothesis.
  *
  * The wider fix is the one this branch is already heading for. Counter phone
  * pages render INSIDE the editorial shell — `editorial-surface`, `.m-shell`,
