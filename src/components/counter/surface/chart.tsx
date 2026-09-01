@@ -425,8 +425,26 @@ export function Chart(props: ChartProps) {
         accessible surface, and a pointer is the only way to read a value off
         it. That is the one place this component departs from the design, and
         it departs in the direction the design's own notes argue for.
+
+        THE WRAPPER IS LOAD-BEARING. `sr-only` used to sit on the `<table>`
+        itself, and a table ignores `width: 1px`: its used width is at least
+        its min-content width, so this one measured 777px. Absolutely
+        positioned and 777px wide, it extended the scrollable area of the page
+        — `/m/ingredients` scrolled sideways to 820px in a 412px viewport, and
+        the fixed tab bar stretched to 820px with it. A table nobody can see
+        was the widest thing on the phone.
+
+        On a `<div>` the utility does what it says: 1×1 with `overflow:
+        hidden`, which clips the table and stops its overflow contributing to
+        any ancestor's scroll area. Screen readers read the DOM, so the wrapper
+        changes nothing they announce. Only /m/ingredients crossed 412px today
+        — the width depends on how many series a chart has and how long their
+        names are — so this is a general defect one page happened to expose.
+        `e2e/mobile/overflow-sweep.spec.ts` found it and is what keeps it
+        found.
       */}
-      <table aria-label={spec.alt ?? spec.series[0]?.name ?? ""} className="sr-only">
+      <div className="sr-only">
+      <table aria-label={spec.alt ?? spec.series[0]?.name ?? ""}>
         <thead>
           <tr>
             <th>Label</th>
@@ -448,6 +466,7 @@ export function Chart(props: ChartProps) {
           ))}
         </tbody>
       </table>
+      </div>
     </>
   )
 }
