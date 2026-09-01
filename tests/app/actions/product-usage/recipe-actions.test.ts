@@ -53,7 +53,7 @@ describe("getRecipes", () => {
     vi.mocked(getServerSession).mockResolvedValue({
       user: { accountId: "acct", id: "u1" },
     } as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.recipe.findMany).mockResolvedValue([
       {
         id: "r1",
@@ -154,7 +154,7 @@ describe("getMenuItemsForRecipeBuilder", () => {
     vi.mocked(getServerSession).mockResolvedValue({
       user: { accountId: "acct", id: "u1" },
     } as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.otterMenuItem.findMany).mockResolvedValue([
       { itemName: "A", category: "c", fpQuantitySold: 5, tpQuantitySold: 5 },
       { itemName: "B", category: "c", fpQuantitySold: 1, tpQuantitySold: 0 },

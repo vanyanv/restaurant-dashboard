@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
@@ -106,10 +107,7 @@ async function loadOperations(input: OperationsInput): Promise<OperationsData> {
   const { accountId, storeId, range, today } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
 
   const [

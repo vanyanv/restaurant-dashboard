@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
@@ -142,10 +143,7 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
   })
   if (!ing) return null
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
 
   const [lines, weekly, skuMatches, recipeUses, costs, onHand, allCounts, spend] =

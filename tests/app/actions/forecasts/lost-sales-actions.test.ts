@@ -47,11 +47,7 @@ describe("getLostSales", () => {
 
   it("rejects a cross-account store", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-OTHER",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     expect(await getLostSales({ storeId: "s1" })).toEqual({
       ok: false,
       error: "store_not_in_account",
@@ -60,11 +56,9 @@ describe("getLostSales", () => {
 
   it("flags a 3-day stock-out after a stable baseline and prices it from the baseline avg", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     // 14 days baseline at 10 qty/day @ $8 each, then 3 days of zero, then back.
     const baseline = Array.from({ length: 14 }, (_, i) => {
       const d = new Date("2026-04-15T00:00:00Z")
@@ -99,11 +93,9 @@ describe("getLostSales", () => {
 
   it("ignores items whose baseline is below minBaselineQty", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     // Long, slow, low-baseline item: 1 unit/day for 14 days, then 5 zero days.
     const baseline = Array.from({ length: 14 }, (_, i) => {
       const d = new Date("2026-04-15T00:00:00Z")
@@ -123,11 +115,9 @@ describe("getLostSales", () => {
 
   it("caps gap_days at maxGapDays so a delisted item doesn't book unbounded losses", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     // 14 days at qty=10, then NEVER comes back over a 60-day window.
     const baseline = Array.from({ length: 14 }, (_, i) => {
       const d = new Date("2026-03-01T00:00:00Z")
@@ -148,11 +138,9 @@ describe("getLostSales", () => {
 
   it("ignores leading zero runs at the very start of the window (no prior baseline)", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     // No data at all for the first 5 days, then strong sales.
     const after = Array.from({ length: 14 }, (_, i) => {
       const d = new Date("2026-04-20T00:00:00Z")

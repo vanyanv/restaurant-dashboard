@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { requireOwnerStore } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 
 export type HarriDailyRow = {
   date: string // YYYY-MM-DD
@@ -263,11 +264,10 @@ export async function getHarriStoresWeek(
   if (!hasOwnerAccess(session.user.role)) throw new Error("Forbidden")
 
   const [stores, brands, daily, alerts] = await Promise.all([
-    prisma.store.findMany({
-      where: { accountId: session.user.accountId, isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    // The one store query a request makes — `@/lib/account-stores`.
+    getAccountStoreRows(session.user.accountId).then((rows) =>
+      rows.filter((s) => s.isActive),
+    ),
     prisma.harriBrand.findMany({
       where: { active: true, store: { accountId: session.user.accountId } },
       select: { storeId: true, brandId: true },

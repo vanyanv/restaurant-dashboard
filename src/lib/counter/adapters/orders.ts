@@ -1327,6 +1327,12 @@ export function getOrdersSectionPromises(
             // One row is enough: every figure the comparison feeds comes off
             // `totals` and `totalCount`, which cover the whole matched range.
             limit: 1,
+            // And one QUERY is enough, which is what that sentence implies and
+            // what this asks for. `limit: 1` still bought a page of rows, the
+            // pending-details count, the platform list and three marketplace
+            // aggregates — eight round trips to read `totalCount` and
+            // `totals.netSales`. See `OrderListFilters.summaryOnly`.
+            summaryOnly: true,
           })
         : Promise.resolve(null),
     { retryAction: "retryComparison" },

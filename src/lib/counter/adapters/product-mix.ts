@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { count, pct } from "@/lib/counter/format"
 import { comparisonRange, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -164,10 +165,7 @@ async function loadWindow(
 
 async function loadMix(input: ProductMixInput): Promise<MixData> {
   const { range, storeId, accountId } = input
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) {
     return { now: { units: new Map(), totalQty: 0, orders: 0 }, prior: null, names: [] }

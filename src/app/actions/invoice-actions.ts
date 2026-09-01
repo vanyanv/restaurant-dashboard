@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { Prisma } from "@/generated/prisma/client"
 import { bustTags, cached, stableKey } from "@/lib/cache/cached"
@@ -337,10 +338,10 @@ export async function getInvoiceStoreBreakdown(options?: {
         where: baseWhere,
         _sum: { totalAmount: true },
       }),
-      prisma.store.findMany({
-        where: { accountId: session.user.accountId, isActive: true },
-        select: { id: true, name: true },
-      }),
+      // The one store query a request makes — `@/lib/account-stores`.
+      getAccountStoreRows(session.user.accountId).then((rows) =>
+        rows.filter((s) => s.isActive),
+      ),
     ])
 
   // Lookups

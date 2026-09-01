@@ -169,7 +169,7 @@ describe("getRecentActivity", () => {
 describe("getSyncsByStore", () => {
   it("keys cells by storeId|jobName, falls back to global rows, and flags threshold breaches", async () => {
     vi.mocked(prisma.store.findMany).mockResolvedValue([
-      { id: "s1", name: "Hollywood" },
+      { id: "s1", name: "Hollywood", isActive: true },
     ] as never)
     vi.mocked(prisma.jobRun.findFirst).mockImplementation((async (args: unknown) => {
       const where = (args as { where: { jobName: string; storeId: string | null } }).where
@@ -211,8 +211,8 @@ describe("getPendingOrderDetails", () => {
       .mockResolvedValueOnce([{ storeId: "s1", _count: { _all: 5 } }] as never) // today
       .mockResolvedValueOnce([{ storeId: "s1", _count: { _all: 3 } }] as never) // yesterday
     vi.mocked(prisma.store.findMany).mockResolvedValue([
-      { id: "s1", name: "Hollywood" },
-      { id: "s2", name: "Glendale" },
+      { id: "s1", name: "Hollywood", isActive: true },
+      { id: "s2", name: "Glendale", isActive: true },
     ] as never)
 
     expect(await getPendingOrderDetails()).toEqual([

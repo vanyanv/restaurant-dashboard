@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -333,14 +334,7 @@ export async function loadCogs(input: {
   const { range, storeId, accountId, sales } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true, targetCogsPct: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   // A storeId that is not on this account resolves to no stores, not to the
   // whole account (same rule as `loadChannelMix`/`loadLaborWeek`).
   if (stores.length === 0) {

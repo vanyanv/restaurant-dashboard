@@ -11,6 +11,7 @@
 
 import { getAuthScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { revalidatePath } from "next/cache"
 import { assertNoCycles } from "@/lib/recipe-cost"
 import {
@@ -86,10 +87,9 @@ export async function acceptMappingProposal(
   if (!proposal) return { ok: false, error: "not_found" }
   if (proposal.status !== "PENDING") return { ok: false, error: "not_pending" }
 
-  const stores = await prisma.store.findMany({
-    where: { accountId: scope.accountId },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores`. This caller
+  // counts inactive stores too, which is why the shared query does not filter.
+  const stores = await getAccountStoreRows(scope.accountId)
   const payload = proposal.payload as ProposalPayload
   const now = new Date()
 

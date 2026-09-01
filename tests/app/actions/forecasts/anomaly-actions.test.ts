@@ -9,7 +9,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    store: { findUnique: vi.fn() },
+    store: { findUnique: vi.fn(), findMany: vi.fn() },
     anomalyEvent: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -41,11 +41,7 @@ describe("getOpenAnomalies", () => {
 
   it("rejects a cross-account store", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-OTHER",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     expect(await getOpenAnomalies({ storeId: "s1" })).toEqual({
       ok: false,
       error: "store_not_in_account",
@@ -54,11 +50,9 @@ describe("getOpenAnomalies", () => {
 
   it("returns OPEN events sorted most-recent first", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.anomalyEvent.findMany).mockResolvedValue([
       {
         id: "a1",
@@ -93,11 +87,9 @@ describe("getOpenAnomalies", () => {
 
   it("only asks for anomalies inside the relevance horizon", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.anomalyEvent.findMany).mockResolvedValue([] as never)
 
     const before = Date.now()

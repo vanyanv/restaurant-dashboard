@@ -9,7 +9,7 @@ vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    store: { findUnique: vi.fn() },
+    store: { findUnique: vi.fn(), findMany: vi.fn() },
     forecastHourlyOrders: { findMany: vi.fn() },
     forecastDailyRevenue: { findMany: vi.fn() },
     otterHourlySummary: { findMany: vi.fn() },
@@ -53,11 +53,7 @@ describe("getLaborStaffingForecast", () => {
 
   it("rejects a cross-account store", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-OTHER",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     expect(await getLaborStaffingForecast({ storeId: "s1" })).toEqual({
       ok: false,
       error: "store_not_in_account",
@@ -66,11 +62,9 @@ describe("getLaborStaffingForecast", () => {
 
   it("returns insufficient_history when there's no hourly data", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     vi.mocked(prisma.forecastDailyRevenue.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.otterHourlySummary.findMany).mockResolvedValue([] as never)
     vi.mocked(prisma.otterDailySummary.groupBy).mockResolvedValue([] as never)
@@ -82,11 +76,9 @@ describe("getLaborStaffingForecast", () => {
 
   it("converts predicted revenue → orders → hourly share → staff with the floor honored", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
 
     // asOf is a Friday in UTC: 2026-05-08 is a Friday → weekday=5
     const asOf = new Date("2026-05-08T12:00:00Z")
@@ -145,11 +137,9 @@ describe("getLaborStaffingForecast", () => {
 
   it("respects the MIN_STAFF floor on light hours that historically had a few orders", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     const asOf = new Date("2026-05-08T12:00:00Z")
     const day0 = new Date("2026-05-08T00:00:00Z")
 
@@ -186,11 +176,9 @@ describe("getLaborStaffingForecast", () => {
 
   it("uses latest hourly ML rows when present", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     const asOf = new Date("2026-05-08T12:00:00Z")
     const day0 = new Date("2026-05-08T00:00:00Z")
 
@@ -244,11 +232,9 @@ describe("getLaborStaffingForecast", () => {
 
   it("surfaces weather and event demand drivers from stored signals", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "s1",
-      name: "S1",
-      accountId: "acct-A",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([
+      { id: "s1", name: "S1", accountId: "acct-A", isActive: true },
+    ] as never)
     const asOf = new Date("2026-05-08T12:00:00Z")
     const day0 = new Date("2026-05-08T00:00:00Z")
 

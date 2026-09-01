@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   // Default aggregate-mode store list; scoped tests override findUnique below.
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "store-A", name: "Store A" },
+    { id: "store-A", name: "Store A", isActive: true },
   ] as never)
   vi.mocked(prisma.inventoryAdjustment.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.canonicalIngredient.findMany).mockResolvedValue([] as never)

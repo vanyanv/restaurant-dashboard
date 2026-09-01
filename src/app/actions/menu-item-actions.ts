@@ -2,6 +2,7 @@
 
 import { getAuthScope as requireScope } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { Prisma } from "@/generated/prisma/client"
 import { revalidatePath } from "next/cache"
 import type { MenuItemForCatalog } from "@/types/recipe"
@@ -32,10 +33,9 @@ export async function getMenuItemsForCatalog(
   if (!scope) return []
   const { accountId } = scope
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores`. This caller
+  // counts inactive stores too, which is why the shared query does not filter.
+  const stores = await getAccountStoreRows(accountId)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return []
 
@@ -144,10 +144,9 @@ export async function mapOtterItemToRecipe(input: {
   if (!scope) throw new Error("Not authenticated")
   const { ownerId, accountId } = scope
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores`. This caller
+  // counts inactive stores too, which is why the shared query does not filter.
+  const stores = await getAccountStoreRows(accountId)
   const recipe = await prisma.recipe.findFirst({
     where: { id: input.recipeId, accountId },
     select: { id: true },
@@ -198,10 +197,9 @@ export async function mapOtterItemsBatch(
 
   if (pairs.length === 0) return { mapped: 0 }
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores`. This caller
+  // counts inactive stores too, which is why the shared query does not filter.
+  const stores = await getAccountStoreRows(accountId)
   if (stores.length === 0) return { mapped: 0 }
 
   const recipeIds = Array.from(new Set(pairs.map((p) => p.recipeId)))
@@ -267,10 +265,9 @@ export async function getOtterSubItemsForCatalog(
   if (!scope) return []
   const { accountId } = scope
 
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores`. This caller
+  // counts inactive stores too, which is why the shared query does not filter.
+  const stores = await getAccountStoreRows(accountId)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) return []
 

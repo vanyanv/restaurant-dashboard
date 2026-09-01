@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   // Default aggregate-mode store list; individual tests override for scoped cases.
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "store-A", name: "Store A" },
+    { id: "store-A", name: "Store A", isActive: true },
   ] as never)
 })
 

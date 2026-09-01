@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getServerSession).mockResolvedValue(session as never)
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "s1", name: "Hollywood" },
+    { id: "s1", name: "Hollywood", isActive: true },
   ] as never)
 })
 

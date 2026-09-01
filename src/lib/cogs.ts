@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getAccountStores } from "@/lib/account-stores"
 import { salesRowValues, type OtterSummaryRow } from "@/lib/pnl"
 import type { LifecycleStage } from "@/generated/prisma/client"
 
@@ -573,11 +574,7 @@ export async function getCogsStoreOverview(
   startDate: Date,
   endDate: Date
 ): Promise<CogsStoreOverviewRow[]> {
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: { id: true, name: true, targetCogsPct: true, lifecycleStage: true },
-    orderBy: { name: "asc" },
-  })
+  const stores = await getAccountStores(accountId)
 
   if (stores.length === 0) return []
 

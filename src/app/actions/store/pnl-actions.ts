@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import {
   buildPeriods,
   bucketSummariesByPeriod,
@@ -242,20 +243,10 @@ function computeMovers(
  * distinct arrays would otherwise miss each other and cache nothing.
  */
 const pnlStoresCached = cache(async (accountId: string) =>
-  prisma.store.findMany({
-    where: { accountId, isActive: true },
-    select: {
-      id: true,
-      name: true,
-      fixedMonthlyLabor: true,
-      fixedMonthlyRent: true,
-      fixedMonthlyTowels: true,
-      fixedMonthlyCleaning: true,
-      uberCommissionRate: true,
-      doordashCommissionRate: true,
-    },
-    orderBy: { name: "asc" },
-  }),
+  // Whole rows from the one store query a request makes — see
+  // `@/lib/account-stores`. The eight columns this used to select are all on
+  // them; the `isActive` filter and the `name asc` order are unchanged.
+  (await getAccountStoreRows(accountId)).filter((s) => s.isActive),
 )
 
 const pnlFixedExpensesCached = cache(async (storeIdsKey: string) =>

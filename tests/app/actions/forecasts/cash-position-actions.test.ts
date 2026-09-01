@@ -110,6 +110,7 @@ describe("getCashPositionForecast", () => {
         fixedMonthlyRent: 6000,
         fixedMonthlyTowels: 0,
         fixedMonthlyCleaning: 0,
+        isActive: true,
       },
       {
         id: "s2",
@@ -119,6 +120,7 @@ describe("getCashPositionForecast", () => {
         fixedMonthlyRent: 6000,
         fixedMonthlyTowels: 0,
         fixedMonthlyCleaning: 0,
+        isActive: true,
       },
     ] as never)
     const day = new Date("2026-05-09T00:00:00Z")

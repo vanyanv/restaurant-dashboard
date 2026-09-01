@@ -2,14 +2,14 @@
 
 import { getSessionUser as requireSession } from "@/lib/auth-scope"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { convertNativeToRecipeQty } from "@/lib/inventory/unit-conversion"
 import { applyCalibrationUpdatesForCount } from "@/lib/inventory/calibration-update"
 
 async function loadStoreIdsForAccount(accountId: string): Promise<string[]> {
-  const stores = await prisma.store.findMany({
-    where: { accountId },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores`. This caller
+  // counts inactive stores too, which is why the shared query does not filter.
+  const stores = await getAccountStoreRows(accountId)
   return stores.map((s) => s.id)
 }
 

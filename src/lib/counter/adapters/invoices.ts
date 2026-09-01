@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { isChargeRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
@@ -236,10 +237,7 @@ function reasonsOf(raw: unknown): ReviewReason[] {
 async function loadInvoices(input: InvoicesInput): Promise<InvoiceData> {
   const { accountId, storeId, range, today } = input
 
-  const stores = await prisma.store.findMany({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
 
   const rows = storeIds.length === 0

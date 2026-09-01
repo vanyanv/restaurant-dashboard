@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getAccountStoreRows } from "@/lib/account-stores"
 import { Prisma } from "@/generated/prisma/client"
 import { bucketShiftHours } from "@/lib/harri-schedule"
 import {
@@ -69,14 +70,11 @@ export async function getLaborProductivity(
   const session = await getServerSession(authOptions)
   if (!session || !hasOwnerAccess(session.user.role)) return null
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId: session.user.accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true },
-  })
+  // The one store query a request makes — `@/lib/account-stores` — with this
+  // caller's own `isActive` filter applied over it.
+  const stores = (await getAccountStoreRows(session.user.accountId)).filter(
+    (s) => s.isActive && (storeId ? s.id === storeId : true),
+  )
   if (stores.length === 0) return null
   const storeIds = stores.map((s) => s.id)
 

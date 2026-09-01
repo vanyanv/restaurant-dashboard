@@ -24,7 +24,7 @@ const sessionWith = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "s1", name: "Store 1" },
+    { id: "s1", name: "Store 1", isActive: true },
   ] as never)
 })
 
@@ -64,11 +64,7 @@ describe("getPromoRoi", () => {
 
   it("scopes to store_not_in_account when storeId belongs to another account", async () => {
     vi.mocked(getServerSession).mockResolvedValue(sessionWith() as never)
-    vi.mocked(prisma.store.findUnique).mockResolvedValue({
-      id: "stranger",
-      name: "Stranger",
-      accountId: "acct-OTHER",
-    } as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([] as never)
     expect(await getPromoRoi({ storeId: "stranger" })).toEqual({
       ok: false,
       error: "store_not_in_account",

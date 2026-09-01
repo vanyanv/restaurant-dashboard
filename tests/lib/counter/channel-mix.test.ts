@@ -38,7 +38,7 @@ function row(r: RowSpec) {
 }
 
 function store(id: string, uber = 0.21, dd = 0.25) {
-  return { id, uberCommissionRate: uber, doordashCommissionRate: dd }
+  return { id, uberCommissionRate: uber, doordashCommissionRate: dd, isActive: true }
 }
 
 const by = (rows: Awaited<ReturnType<typeof loadChannelMix>>, id: string) =>
@@ -206,8 +206,11 @@ describe("loadChannelMix", () => {
 
     await loadChannelMix({ range, storeId: "s1", accountId })
 
+    // See `@/lib/account-stores`: one store query per request, so `isActive`
+    // is applied in memory by each caller and only the account boundary — the
+    // one that must not be a JavaScript filter — remains in the predicate.
     expect(vi.mocked(prisma.store.findMany).mock.calls[0][0]).toMatchObject({
-      where: { accountId, isActive: true },
+      where: { accountId },
     })
 
     // The summary read is given s1 and only s1, though the account has two.

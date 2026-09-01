@@ -55,7 +55,7 @@ describe("startOrResumeStockCount", () => {
 
   it("rejects a store that isn't in the caller's account", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s2" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s2", isActive: true }] as never)
     const result = await startOrResumeStockCount({ storeId: "s1" })
     expect(result).toEqual({ ok: false, error: "store_not_in_account" })
     expect(prisma.stockCount.create).not.toHaveBeenCalled()
@@ -63,7 +63,7 @@ describe("startOrResumeStockCount", () => {
 
   it("returns the existing in-progress count when one exists", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.stockCount.findFirst).mockResolvedValue({ id: "c-existing" } as never)
 
     const result = await startOrResumeStockCount({ storeId: "s1" })
@@ -74,7 +74,7 @@ describe("startOrResumeStockCount", () => {
 
   it("creates a new IN_PROGRESS count when none exists", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session() as never)
-    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }] as never)
+    vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }] as never)
     vi.mocked(prisma.stockCount.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.stockCount.create).mockResolvedValue({ id: "c-new" } as never)
 

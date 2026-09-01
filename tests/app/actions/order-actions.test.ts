@@ -31,16 +31,23 @@ import { getOrdersList } from "@/app/actions/order-actions"
 
 const session = { user: { id: "u1", accountId: "acct-A" } }
 
-/** A single aggregate result shape, matching what `.aggregate` resolves to. */
-function sums(subtotal: number, discount: number, commission: number) {
-  return { _sum: { subtotal, discount, commission } }
+/**
+ * A single aggregate result shape, matching what `.aggregate` resolves to.
+ *
+ * `_count` rides on the aggregate now: the row count is the same predicate
+ * over the same scan, so asking for it with a separate `count()` was a second
+ * round trip for an answer already in flight. Both the overall and the
+ * marketplace aggregate carry one.
+ */
+function sums(subtotal: number, discount: number, commission: number, count = 0) {
+  return { _count: count, _sum: { subtotal, discount, commission } }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getServerSession).mockResolvedValue(session as never)
   vi.mocked(prisma.store.findMany).mockResolvedValue([
-    { id: "s1", name: "Hollywood" },
+    { id: "s1", name: "Hollywood", isActive: true },
   ] as never)
   vi.mocked(prisma.otterOrder.findMany).mockResolvedValue([] as never)
   vi.mocked(prisma.otterOrder.count).mockResolvedValue(0)
@@ -126,17 +133,20 @@ describe("getOrdersList — commission on the row", () => {
 
 describe("getOrdersList — undrainedCount", () => {
   it("counts orders in the same scope missing details, separately from totalCount", async () => {
-    vi.mocked(prisma.otterOrder.count).mockResolvedValueOnce(41).mockResolvedValueOnce(7)
+    // totalCount is the overall aggregate's own `_count`; undrainedCount is
+    // its own query, because `detailsFetchedAt: null` is a different predicate.
+    vi.mocked(prisma.otterOrder.aggregate).mockResolvedValueOnce(sums(0, 0, 0, 41) as never)
+    vi.mocked(prisma.otterOrder.count).mockResolvedValueOnce(7)
 
     const result = await getOrdersList()
     expect(result.totalCount).toBe(41)
     expect(result.undrainedCount).toBe(7)
 
-    // Second count call must scope detailsFetchedAt: null under the same where.
-    const secondCall = vi.mocked(prisma.otterOrder.count).mock.calls[1]?.[0] as {
+    // The first count call must scope detailsFetchedAt: null under the same where.
+    const firstCall = vi.mocked(prisma.otterOrder.count).mock.calls[0]?.[0] as {
       where?: { detailsFetchedAt?: unknown }
     }
-    expect(secondCall?.where?.detailsFetchedAt).toEqual(null)
+    expect(firstCall?.where?.detailsFetchedAt).toEqual(null)
   })
 })
 
@@ -171,16 +181,12 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
       // until 2026-08-26, a shape the database has zero rows of, and it is why
       // `Σsubtotal − Σdiscount` passed review while inflating every range's net
       // sales by twice the discounts given.
-      .mockResolvedValueOnce(sums(50000, -1200, -8000) as never) // overall
-      .mockResolvedValueOnce(sums(30000, -500, -8000) as never) // 3P-only
+      .mockResolvedValueOnce(sums(50000, -1200, -8000, 120) as never) // overall
+      .mockResolvedValueOnce(sums(30000, -500, -8000, 80) as never) // 3P-only
 
-    // count() is called four times: totalCount, undrainedCount, and the two
-    // halves of the fee-coverage ratio.
-    vi.mocked(prisma.otterOrder.count)
-      .mockResolvedValueOnce(120)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(80)
-      .mockResolvedValueOnce(36)
+    // count() is called twice now: undrainedCount, and the numerator of the
+    // fee-coverage ratio. Both totals' denominators ride on their aggregate.
+    vi.mocked(prisma.otterOrder.count).mockResolvedValueOnce(0).mockResolvedValueOnce(36)
 
     const result = await getOrdersList()
     expect(result.totals.netSales).toBe(48800)
@@ -197,15 +203,18 @@ describe("getOrdersList — totals is a range aggregate, not a page sum", () => 
   it("counts the fee coverage over MARKETPLACE orders, not over the whole range", async () => {
     await getOrdersList()
     const calls = vi.mocked(prisma.otterOrder.count).mock.calls
-    // totalCount, undrainedCount, 3P count, 3P-with-a-fee count.
-    expect(calls).toHaveLength(4)
+    // undrainedCount and the 3P-with-a-fee count. The ratio's DENOMINATOR is
+    // the marketplace aggregate's `_count`, so it is asserted on that call.
+    expect(calls).toHaveLength(2)
 
-    const third = calls[2][0]?.where as { AND?: Array<{ platform?: { notIn?: string[] } }> }
-    expect(third.AND?.[1]?.platform?.notIn).toEqual(
+    const marketplace = vi.mocked(prisma.otterOrder.aggregate).mock.calls[1][0]?.where as {
+      AND?: Array<{ platform?: { notIn?: string[] } }>
+    }
+    expect(marketplace.AND?.[1]?.platform?.notIn).toEqual(
       expect.arrayContaining(["css-pos", "bnm-web"]),
     )
 
-    const withFees = calls[3][0]?.where as {
+    const withFees = calls[1][0]?.where as {
       AND?: Array<{ commission?: unknown; AND?: unknown }>
     }
     // Narrowed by commission ON TOP of the same marketplace scope: a ratio

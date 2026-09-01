@@ -77,7 +77,7 @@ const suggestionItem = (
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAuthScope).mockResolvedValue(scope as never)
-  vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1" }, { id: "s2" }] as never)
+  vi.mocked(prisma.store.findMany).mockResolvedValue([{ id: "s1", isActive: true }, { id: "s2", isActive: true }] as never)
   vi.mocked(prisma.recipe.findMany).mockResolvedValue([
     { id: "r-slider", itemName: "Double Slider", category: "Sliders" },
     { id: "r-fries", itemName: "Fries", category: "Sides" },

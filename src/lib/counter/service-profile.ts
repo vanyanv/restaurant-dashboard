@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { getScopedStores } from "@/lib/account-stores"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -331,14 +332,7 @@ export async function loadServiceProfile(input: {
   const { range, storeId, accountId } = input
   const { startDate, endDate } = toQueryBounds(range)
 
-  const stores = await prisma.store.findMany({
-    where: {
-      accountId,
-      isActive: true,
-      ...(storeId ? { id: storeId } : {}),
-    },
-    select: { id: true },
-  })
+  const stores = await getScopedStores(accountId, storeId ?? null)
   if (stores.length === 0) return null
 
   const storeIds = stores.map((s) => s.id)
