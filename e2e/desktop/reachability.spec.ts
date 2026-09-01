@@ -61,17 +61,11 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // view bars), so nothing is stranded behind it; the hub itself is the page
   // with no entrance. Either the rail gains it or it goes.
   operations: "our own hub; the design's rail has no such item and its four children are each reachable without it",
-
-  // `VIEWS` makes these the "One store" tab of their group page —
-  // "pick a store, then pick whether you want the group or that store." The
-  // tab's href therefore depends on the SELECTED store, so it is built in the
-  // client from `?store=` rather than listed in `nav.ts`, and it has no
-  // destination at all until a store is picked. That is the next piece of
-  // this work, not a different one.
-  analyticsstore: "the 'One store' view tab, whose href depends on the selected store",
-  laborstore: "as analyticsstore",
-  cogsstore: "as analyticsstore",
 }
+
+// The three per-store pages used to be listed here. `storeViewTabs` builds
+// their "One store" tab in the client from `?store=`, so they are reachable
+// and their lines are gone — which the stale check below is what forces.
 
 
 const idish = /^[0-9a-f]{8,}$|^c[a-z0-9]{20,}$|^[0-9a-f-]{30,}$/i

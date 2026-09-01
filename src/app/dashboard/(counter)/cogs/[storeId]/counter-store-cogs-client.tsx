@@ -15,7 +15,9 @@ import {
   type Column,
   type Row,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { pct } from "@/lib/counter/format"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
@@ -164,6 +166,11 @@ export function CounterStoreCogsClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* The same `VIEWS` pair as the group page, so the bar works in both
+          directions. The store here is the PATH's, which is the one this page
+          is about. */}
+      <SubNav items={storeViewTabs("/dashboard/cogs", storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }])} label="COGS" />
 
       {/* The store note and the strip are ONE section, because the note is a
           statement about the figures beside it — a page that could show one

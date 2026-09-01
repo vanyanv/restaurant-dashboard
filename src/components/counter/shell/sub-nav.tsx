@@ -35,10 +35,15 @@ export function SubNav({ items, label }: { items: readonly SubNavItem[]; label: 
         <Link
           key={item.href}
           href={item.href}
-          // EXACT, unlike `isActive`. These are siblings under one prefix, and
-          // the first of them is that prefix: a `startsWith` match would light
-          // Bridge on all eight.
-          aria-current={pathname === item.href ? "page" : undefined}
+          // EXACT on the PATH, unlike `isActive`. These are siblings under one
+          // prefix, and the first of them is that prefix: a `startsWith` match
+          // would light Bridge on all eight.
+          //
+          // The query is split off because the store-view bars carry one —
+          // "All stores" and "One store" both have to keep the range they are
+          // read in, and comparing a pathname to an href with `?range=d30` on
+          // the end would never match, so no tab would ever look pressed.
+          aria-current={pathname === item.href.split("?")[0] ? "page" : undefined}
         >
           {item.label}
         </Link>

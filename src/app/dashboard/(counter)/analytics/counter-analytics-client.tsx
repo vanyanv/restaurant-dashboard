@@ -15,7 +15,9 @@ import {
   type Column,
   type Row,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { count, money, pct } from "@/lib/counter/format"
 import { dayCount, rangeSubtitle, stepRange, rangeLabel } from "@/lib/counter/date-range"
@@ -180,6 +182,10 @@ export function CounterAnalyticsClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* `VIEWS`'s group/store pair — see `storeViewTabs`. "One store" appears
+          only once a store is picked, which is the design's own sequence. */}
+      <SubNav items={storeViewTabs("/dashboard/analytics", counterParams.storeId, paramsString)} label="Analytics" />
 
       {/* Page level, above the first `.sec`, as `P.analytics.desk()` writes it.
           Three cells (A-R3). The second carries a quiet `Bullet` — `Figure`

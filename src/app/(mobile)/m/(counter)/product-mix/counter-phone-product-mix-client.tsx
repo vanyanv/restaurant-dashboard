@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
-import { Chart, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { Chart, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
+import { PHONE_MENU_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { ProductMixSections } from "@/lib/counter/adapters/product-mix"
@@ -41,6 +42,11 @@ export function CounterPhoneProductMixClient({
 
   return (
     <>
+      {/* The design's `VIEWS` bar, first inside `.mscroll` — which is exactly
+          where `phoneFor()` puts a `.seg`. Same destinations as the desk's,
+          on `/m` paths. */}
+      <SubNav items={PHONE_MENU_TABS} label="Menu" />
+
       <div>
         <h2 className="mtitle">Product mix</h2>
         <p className="msub">{windowLabel}</p>

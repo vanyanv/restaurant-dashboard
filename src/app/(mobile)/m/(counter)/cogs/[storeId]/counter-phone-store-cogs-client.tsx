@@ -8,7 +8,9 @@ import {
   useCounterTransition,
   usePageChrome,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { pct } from "@/lib/counter/format"
@@ -80,6 +82,10 @@ export function CounterPhoneStoreCogsClient({
 
   return (
     <>
+      {/* `VIEWS`'s group/store pair, first inside `.mscroll`. "One store"
+          appears only once a store is picked — the design's own sequence. */}
+      <SubNav items={storeViewTabs("/m/cogs", storeId, paramsString, [{ label: "Theoretical vs actual", href: "/m/operations/product-usage" }])} label="COGS" />
+
       <div>
         <h2 className="mtitle">{storeName}</h2>
         <p className="msub">{windowLabel}</p>

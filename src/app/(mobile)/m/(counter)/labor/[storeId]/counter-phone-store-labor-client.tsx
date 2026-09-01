@@ -9,7 +9,9 @@ import {
   useCounterTransition,
   usePageChrome,
   type SwitchableStore,
+  SubNav,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel } from "@/lib/counter/date-range"
 import type { StoreLaborSections } from "@/lib/counter/adapters/labor"
@@ -107,6 +109,10 @@ export function CounterPhoneStoreLaborClient({
      * what goes INSIDE `.mscroll`, unchanged.
      */
     <>
+      {/* `VIEWS`'s group/store pair, first inside `.mscroll`. "One store"
+          appears only once a store is picked — the design's own sequence. */}
+      <SubNav items={storeViewTabs("/m/labor", storeId, paramsString)} label="Labor" />
+
       {/* The store's own name, not "Labor" — the prototype's own store-page
           convention, matched by `counter-phone-store-analytics-client.tsx`.
           The window is the line beneath, alone. */}

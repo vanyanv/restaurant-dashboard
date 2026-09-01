@@ -65,16 +65,17 @@ const KNOWN_ORPHANS: Record<string, string> = {
   // SHAPE MISS — `/m/menu/catalog` links every item by slug, just not this one.
   catalogitem: "reachable by slug from the catalogue; the id matcher cannot see a word",
 
-  // REAL GAPS — a hub that does not link its own children.
-  usage: "the Operations hub does not link product usage",
-  packaging: "the Operations hub does not link packaging",
-  countnew: "the counts list does not offer starting one on the phone",
-  prices: "the Ingredients page does not link its price history",
-  storeedit: "nothing on the phone links the new-store form; the desk had the same defect until it was fixed",
-  analyticsstore: "the per-store analytics page has no entrance; the phone has no store switcher into it",
-  laborstore: "as analyticsstore, for labour",
-  cogsstore: "as analyticsstore, for COGS",
+  // REAL GAP — the phone's stores list closes on one `.mbtn` into a store
+  // file, where the desk's page carries an "Add a store" panel. `P.stores`'s
+  // phone composition is a masthead, a list and that one button, so the
+  // entrance has to come from somewhere the design does draw.
+  storeedit: "nothing on the phone links the new-store form; the desk had the same gap until its panel was built",
 }
+
+// Seven more used to be here — usage, packaging, countnew, prices and the
+// three per-store pages. They are `VIEWS` entries, and they became reachable
+// the moment their parents grew the `.seg` bar the design gives them. The
+// stale check below is what made those lines go rather than linger.
 
 // The seven monitoring sub-pages used to be here, behind one missing bar. The
 // phone monitoring layout carries `PHONE_MONITORING_TABS` now, so they are
