@@ -23,15 +23,16 @@ Structure: 0 missing, 0 extra, 5 matched. Rendering (light): 0 property differen
 
 ## fidelity-mobile — phone
 
-**The prototype renders 1 landmarks on this page. We render 1.**
+**The prototype renders 2 landmarks on this page. We render 2.**
 
 | landmark | prototype | ours |
 |---|---:|---:|
 | `.empty` | 1 | 1 |
+| `.mbtn` | 1 | 1 |
 
-Structure: 0 missing, 0 extra, 1 matched. Rendering (light): 0 property differences on the 1 landmarks present on both sides.
+Structure: 0 missing, 0 extra, 2 matched. Rendering (light): 0 property differences on the 2 landmarks present on both sides.
 
 ### Dark mode — asserted on its own terms, never against the prototype
 
-90 of 114 elements paint a colour of their own; 98 were swept (every element that paints or carries text, not only the 1 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 47 resolved `--ct-*` tokens. 0 defects.
+3 of 5 elements paint a colour of their own; 4 were swept (every element that paints or carries text, not only the 2 landmarks — see the "FIX ROUND 1" note in landmarks.ts). Checked against 47 resolved `--ct-*` tokens. 0 defects.
 

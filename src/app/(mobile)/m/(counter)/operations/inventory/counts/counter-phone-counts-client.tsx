@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StockCountsSections } from "@/lib/counter/adapters/stock-counts"
@@ -46,6 +48,22 @@ export function CounterPhoneCountsClient({
               {s.note}
             </p>
           </>
+        )}
+      </Section>
+
+      {/* `P.counts.phone()`'s closing `.mbtn`. It resumes the open count
+          rather than starting one — `progressOf` already decides which, and
+          the desk button reads the same field. With nothing open it links to
+          the wizard instead, because a phone that cannot start a count is a
+          phone that cannot count. */}
+      <Section bare title="Resume" data={sections.progress} pending={pending}>
+        {(p) => (
+          <Link
+            className="mbtn mbtn--primary"
+            href={p.href ?? "/m/operations/inventory/count/new"}
+          >
+            {p.href ? "Resume the count" : "Start a count"}
+          </Link>
         )}
       </Section>
     </>

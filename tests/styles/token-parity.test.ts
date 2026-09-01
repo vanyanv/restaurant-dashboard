@@ -80,9 +80,16 @@ function contrast(a: string, b: string): number {
  * `counter-components.css` styles `.ct-root`, `.frame`, `.pframe` and `.login`
  * with the Counter values of `--ink`, `--paper` and friends.
  *
- * `frame`, `pframe` and `login` are still carried by nothing in the app — the
- * login page uses `login-shell`, `login-headline` and so on, and the only
+ * `frame` and `pframe` are still carried by nothing in the app — the only
  * `frame` is `m-chart-frame`. They stay banned outright.
+ *
+ * `login` NO LONGER IS, and the sentence this replaces is why the ban existed:
+ * "the login page uses `login-shell`, `login-headline` and so on". It does not
+ * any more. `/login` is `P.login` rebuilt on Counter, and `.login` is the
+ * design's own two-column grid for it — the same narrowing `ct-root` got when
+ * `AppShell` arrived, for the same reason: the class is what switches the
+ * ported stylesheet on for that page, and banning it outright would ban the
+ * page. Exactly one file may emit it, and `COUNTER_ROOT_EXCEPTIONS` names it.
  *
  * `ct-root` NO LONGER IS. Task 3 of the Counter fidelity plan puts it on
  * `AppShell`'s outermost element, which is what switches the ported stylesheet
@@ -171,6 +178,14 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // `.ct-root.ct-phone`, and rebuilt the whole frame on every tab change.
   // They are one shell in one layout now, and the list is shorter for it.
   { file: "components/counter/shell/phone-shell.tsx", token: "ct-root" },
+  // The LOGIN page, which is its own root: `P.login` is `bare: true` in the
+  // prototype — no rail, no topbar, no tab bar — so there is no shell above it
+  // to mount the alias layer, and the page's own `<main>` carries both the
+  // Counter root and the design's `.login` grid. It is also the fidelity
+  // extraction root, which is why the two classes sit on one element rather
+  // than on a wrapper and a child.
+  { file: "app/login/counter-login-client.tsx", token: "ct-root" },
+  { file: "app/login/counter-login-client.tsx", token: "login" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
@@ -225,20 +240,25 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
 
   it("still bans the three root classes nothing carries", () => {
     // The exception list must never quietly grow into a blanket exemption.
-    // `frame`, `pframe` and `login` stay banned outright; the two Counter
-    // roots are named file by file.
+    // `frame` and `pframe` stay banned outright; the two Counter roots and
+    // `login` are named file by file.
     expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.token))).toEqual(
-      new Set(["ct-root", "ct-phone"]),
+      new Set(["ct-root", "ct-phone", "login"]),
     )
     // Pinned, so the list cannot grow a file without someone reading this
-    // note. THREE files now, down from six: the desk shell, the ⌘K palette,
-    // and the phone shell — which carries both classes. The four phone
+    // note. FOUR files: the desk shell, the ⌘K palette, the phone shell —
+    // which carries both root classes — and the login page. The four phone
     // islands (/m, /m/pnl, /m/orders, /m/orders/[id]) each opened with their
     // own `.ct-root.ct-phone` until the chrome moved into
     // `src/app/(mobile)/m/(counter)/layout.tsx`; one shell in one layout is
     // both fewer mount sites and one that survives a tab change.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(4)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(3)
+    //
+    // Login is the fourth and the only one that is not a shell. It is a `bare`
+    // page in the prototype — nothing above it mounts the alias layer — so it
+    // mounts its own, and carries the design's `.login` grid on the same
+    // element. Six entries, four files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(6)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(4)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")

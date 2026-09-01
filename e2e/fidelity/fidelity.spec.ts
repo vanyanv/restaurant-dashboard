@@ -60,7 +60,26 @@ const DATA_DIR = path.resolve(__dirname, "../../.fidelity")
  * prototype has landmarks, that reads as "every landmark missing", which is
  * loud, rather than as a pass.
  */
-const OUR_ROOT = "#ct-main, main.m-shell__main, main"
+/**
+ * Our content root, as a list tried IN ORDER — see `ExtractArgs.rootSelectors`
+ * for why order and not a comma-joined selector.
+ *
+ *   `#ct-main`            the desk. `AppShell`'s `<main class="screen">`, and
+ *                         the prototype's own `.screen` on the other side.
+ *   `.ct-phone .mscroll`  the phone. `PhoneShell`'s scroll region, and the
+ *                         prototype's own `.mscroll`. It sits INSIDE the
+ *                         editorial mobile layout's `main.m-shell__main`, so
+ *                         a joined selector picked the `<main>` and swept the
+ *                         phone's top chrome with it — `MTop`, its store
+ *                         switcher and its date sheet — none of which the
+ *                         prototype's root contains.
+ *   `main.m-shell__main`  a phone page still on the editorial shell.
+ *   `main`                anything else with a content root at all.
+ */
+const OUR_ROOT = ["#ct-main", ".ct-phone .mscroll", "main.m-shell__main", "main"] as const
+
+/** For a locator and for an error message, where a string is wanted. */
+const OUR_ROOT_SELECTOR = OUR_ROOT.join(", ")
 
 function surfaceOf(testInfo: TestInfo): Surface {
   return testInfo.project.name === "fidelity-mobile" ? "phone" : "desk"
@@ -78,7 +97,7 @@ function expectedPath(entry: FidelityPage, page: Page): string {
 
 async function extractOurs(page: Page): Promise<Landmark[]> {
   return page.evaluate(extractLandmarksInPage, {
-    rootSelector: OUR_ROOT,
+    rootSelectors: [...OUR_ROOT],
     landmarkClasses: [...LANDMARK_CLASSES],
     checkedProperties: [...CHECKED_PROPERTIES],
     comparedAttributes: [...COMPARED_ATTRIBUTES],
@@ -91,7 +110,7 @@ async function extractProto(
   entry: FidelityPage,
 ): Promise<Landmark[]> {
   return page.evaluate(extractLandmarksInPage, {
-    rootSelector: surfaceRoot(entry, surface),
+    rootSelectors: [surfaceRoot(entry, surface)],
     landmarkClasses: [...LANDMARK_CLASSES],
     checkedProperties: [...CHECKED_PROPERTIES],
     comparedAttributes: [...COMPARED_ATTRIBUTES],
@@ -182,12 +201,12 @@ async function openOurs(
   // server did settle, so this only ever showed up in the production run the
   // protocol insists on.
   await page
-    .locator(OUR_ROOT)
+    .locator(OUR_ROOT_SELECTOR)
     .first()
     .waitFor({ state: "attached", timeout: 15_000 })
   await expect(
-    page.locator(OUR_ROOT).first(),
-    `${entry.protoId}: our page has no content root (${OUR_ROOT})`,
+    page.locator(OUR_ROOT_SELECTOR).first(),
+    `${entry.protoId}: our page has no content root (${OUR_ROOT_SELECTOR})`,
   ).toHaveCount(1)
   // Then a best-effort settle, so sections that stream in are in the DOM
   // before they are counted. Bounded on purpose: a page that polls never goes
@@ -464,7 +483,7 @@ for (const entry of PAGES) {
     await openOurs(page, entry, "dark")
 
     const themed = await page.evaluate(extractThemedInPage, {
-      rootSelector: OUR_ROOT,
+      rootSelectors: [...OUR_ROOT],
       landmarkClasses: [...LANDMARK_CLASSES],
     })
 
