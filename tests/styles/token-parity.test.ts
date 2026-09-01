@@ -186,6 +186,13 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // than on a wrapper and a child.
   { file: "app/login/counter-login-client.tsx", token: "ct-root" },
   { file: "app/login/counter-login-client.tsx", token: "login" },
+  // The PHONE's sign-in page, which is a second route rather than a
+  // breakpoint: `.btn` and `.mbtn` are different classes and a class cannot
+  // change with a media query. It is `bare` for the same reason the desk's is
+  // — nothing above it mounts the alias layer — and it wears `ct-phone` too,
+  // because the phone's type scale is not the desk's.
+  { file: "app/(mobile)/m/login/counter-phone-login-client.tsx", token: "ct-root" },
+  { file: "app/(mobile)/m/login/counter-phone-login-client.tsx", token: "ct-phone" },
   // ...and the phone's own type scale, `.pframe`'s, worn WITH `ct-root` on
   // the same element. Listed separately because a file that emitted
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
@@ -253,12 +260,12 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // `src/app/(mobile)/m/(counter)/layout.tsx`; one shell in one layout is
     // both fewer mount sites and one that survives a tab change.
     //
-    // Login is the fourth and the only one that is not a shell. It is a `bare`
-    // page in the prototype — nothing above it mounts the alias layer — so it
-    // mounts its own, and carries the design's `.login` grid on the same
-    // element. Six entries, four files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(6)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(4)
+    // The two sign-in pages are the only entries that are not shells. Both are
+    // `bare` in the prototype — nothing above either mounts the alias layer —
+    // so each mounts its own, and the desk's carries the design's `.login`
+    // grid on the same element. Eight entries, five files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(8)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(5)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")

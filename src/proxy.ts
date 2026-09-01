@@ -188,6 +188,10 @@ export default withAuth(
       if (
         path === "/shutdown" ||
         path === "/login" ||
+        // The phone's own sign-in page. Without it a shut-down service sends
+        // a phone OWNER from /login to /m/login and then rewrites /m/login to
+        // /shutdown — locking out the one account the gate exists to let in.
+        path === "/m/login" ||
         path.startsWith("/api/auth/")
       ) {
         return NextResponse.next()
@@ -207,9 +211,35 @@ export default withAuth(
       return NextResponse.next()
     }
 
+    const ua = req.headers.get("user-agent") ?? ""
+    const isPhone = PHONE_UA.test(ua)
+    const preferDesktop = req.cookies.get("prefer-desktop")?.value === "1"
+
+    /*
+     * Sign-in has a phone composition of its own, and this is the ONE rewrite
+     * that happens before the public short-circuit below.
+     *
+     * `P.login` and `P.login.phone()` are two different screens, not one
+     * screen at two widths: the desk draws `.btn`s in a two-column grid beside
+     * an aside, the phone draws `.mbtn`s in a single column with none of it.
+     * A class cannot change with a media query, so one route cannot be both —
+     * which is the same reason every other page here is a `/dashboard` route
+     * and an `/m` one.
+     *
+     * `/m/login` is in the public list below and in the shutdown allowlist
+     * above, so this cannot loop: a phone asking for /login lands on /m/login,
+     * and /m/login is served rather than bounced back.
+     *
+     * The `prefer-desktop` cookie still wins, as it does everywhere else.
+     */
+    if (path === "/login" && isPhone && !preferDesktop) {
+      return NextResponse.redirect(new URL("/m/login" + req.nextUrl.search, req.url))
+    }
+
     if (
       path === "/" ||
       path === "/login" ||
+      path === "/m/login" ||
       path === "/register" ||
       path.startsWith("/signup/")
     ) {
@@ -219,10 +249,6 @@ export default withAuth(
     if (!token) {
       return NextResponse.redirect(new URL("/login", req.url))
     }
-
-    const ua = req.headers.get("user-agent") ?? ""
-    const isPhone = PHONE_UA.test(ua)
-    const preferDesktop = req.cookies.get("prefer-desktop")?.value === "1"
 
     if (isPhone && !preferDesktop && path.startsWith("/dashboard")) {
       const target = mobilePathFor(path)

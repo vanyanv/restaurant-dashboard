@@ -10,6 +10,7 @@ import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
 import "@/styles/editorial-tokens.css"
 import "@/styles/editorial-mobile.css"
 import "@/styles/welcome-marquee.css"
+import { BROWSER_CHROME_DARK, BROWSER_CHROME_LIGHT } from "@/lib/browser-chrome-colour"
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -40,7 +41,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#fbf6ee",
+  // See `@/lib/browser-chrome-colour` — a literal by necessity, named there.
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: BROWSER_CHROME_DARK },
+    { media: "(prefers-color-scheme: light)", color: BROWSER_CHROME_LIGHT },
+  ],
 }
 
 export default async function MobileLayout({
@@ -74,7 +79,12 @@ export default async function MobileLayout({
           ) : null}
           {children}
         </main>
-        <MobileTabBar tabs={tabs} />
+        {/* No tab bar without a session. Every tab it draws goes somewhere
+            that requires one, and `/m/login` now lives under this layout — a
+            sign-in screen offering five links to pages you cannot open is a
+            row of dead ends. The layout already reads the session for the
+            welcome marquee, so this costs no query. */}
+        {session ? <MobileTabBar tabs={tabs} /> : null}
       </div>
     </div>
   )
