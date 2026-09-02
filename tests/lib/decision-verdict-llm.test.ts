@@ -95,7 +95,15 @@ describe("parseVerdictLine — the anti-hallucination guard", () => {
   })
 
   it("accepts figures that are in the block, in any comma formatting", () => {
-    expect(parseVerdictLine("The week runs $56000 with SAT at $9,240.", facts())).not.toBeNull()
+    expect(parseVerdictLine("SAT runs $9240 against a $640 action.", facts())).not.toBeNull()
+  })
+
+  // The week total left the block on purpose — the decisions page sums the
+  // week once, in its own lead figure, over the seven cells its picker draws.
+  // A sentence quoting a total from the next-seven-days window put $52,158
+  // beside a figure reading $51,743. The guard is now what stops that.
+  it("rejects a week total, which the block no longer carries", () => {
+    expect(parseVerdictLine("The week runs $56,000 with SAT at $9,240.", facts())).toBeNull()
   })
 
   it("accepts a sentence carrying no figures at all", () => {

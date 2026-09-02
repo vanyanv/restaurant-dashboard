@@ -1,5 +1,5 @@
 {
-  "raw": "This week at Hollywood peaks on SAT with a $9,240 forecast, labor is level with 0 gap hours, and top action is drop the 20% DoorDash promo for $3,100 impact.",
+  "raw": "Hollywood’s peak day SAT forecasts $9,240 with labor level and zero gap hours; drop the 20% DoorDash promo to impact $3,100 this week.",
   "model": "gpt-4.1-mini",
   "pass": true,
   "failures": []

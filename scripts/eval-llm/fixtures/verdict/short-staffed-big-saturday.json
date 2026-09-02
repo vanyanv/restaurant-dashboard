@@ -1,5 +1,5 @@
 {
-  "raw": "Hollywood’s peak day SAT forecasts $9,240 with a labor gap short by 11 hours over 2 short days and top action to reprice the Double Slider.",
+  "raw": "Hollywood faces a short labor gap of 11 hours over 2 short days this week with a peak day forecast of $9,240 on SAT.",
   "model": "gpt-4.1-mini",
   "pass": true,
   "failures": []

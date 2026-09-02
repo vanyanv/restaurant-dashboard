@@ -1,5 +1,5 @@
 {
-  "raw": "This week peaks on FRI with a $15,800 forecast, has an 11-hour labor shortfall over 2 short days, and actions worth $2,140 including repricing the Double Slider.",
+  "raw": "This week All stores peak day is FRI with a forecast of $15,800, labor is short by 11 hours over 2 short days, and top action is to Reprice the Double Slider for $640.",
   "model": "gpt-4.1-mini",
   "pass": true,
   "failures": []
