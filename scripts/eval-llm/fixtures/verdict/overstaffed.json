@@ -1,5 +1,5 @@
 {
-  "raw": "This week at Hollywood peaks on SAT with a $9,240 forecast, $56,000 total, $49,000 low, $63,000 high, and 14 labor hours over.",
+  "raw": "Hollywood’s peak day SAT forecasts $9,240 with a 14-hour labor gap over budget; top action is Reprice the Double Slider worth $640.",
   "model": "gpt-4.1-mini",
   "pass": true,
   "failures": []

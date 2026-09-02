@@ -32,6 +32,7 @@ import {
 import { computeVitals, type Vitals } from "@/app/dashboard/(editorial)/decisions/lib/vitals"
 import { buildVerdictFacts, verdictSources } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
 import { getVerdictLine } from "@/app/actions/decisions/get-verdict"
+import { weekDayKeys } from "@/lib/counter/week-window"
 import {
   computeLaborLane,
   type LaborLane,
@@ -672,6 +673,9 @@ export async function getDecisionsView(input: {
     storeName,
     isAggregate,
     days,
+    // The seven days the decisions picker draws, so the sentence cannot call a
+    // day outside them "the week's biggest". See `buildVerdictFacts`.
+    weekKeys: weekDayKeys(new Date(`${todayKey}T00:00:00Z`)),
     vitals,
     actions,
     potUsdPerWeek,

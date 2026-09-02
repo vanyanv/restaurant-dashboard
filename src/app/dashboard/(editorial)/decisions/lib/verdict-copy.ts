@@ -58,7 +58,17 @@ const fmtHours = (n: number): string => {
 export function buildVerdictFacts(input: {
   storeName: string
   isAggregate: boolean
-  days: { weekdayShort: string; predictedRevenue: number }[]
+  days: { date: string; weekdayShort: string; predictedRevenue: number }[]
+  /**
+   * The Mon–Sun keys the page's picker actually draws.
+   *
+   * `days` is the NEXT SEVEN DAYS from today, which is not the week — on a
+   * Friday it runs to next Thursday. Reducing over it unscoped is how a
+   * sentence reading "the week's biggest day" came to be allowed to name a day
+   * the picker beside it does not contain. Empty means "don't scope", for a
+   * caller that has no week in view.
+   */
+  weekKeys?: string[]
   vitals: Vitals
   actions: { title: string; impactUsdPerWeek: number }[]
   potUsdPerWeek: number
@@ -66,9 +76,16 @@ export function buildVerdictFacts(input: {
 }): VerdictFacts {
   const { storeName, isAggregate, days, vitals, actions, potUsdPerWeek } = input
 
+  const inWeek =
+    input.weekKeys && input.weekKeys.length > 0
+      ? days.filter((d) => input.weekKeys!.includes(d.date))
+      : days
+  // `inWeek` can be empty only if every forward day fell outside the week,
+  // which cannot happen while `days[0]` is today — but an empty reduce throws,
+  // and a verdict is not worth a crash.
   const peakDay =
-    days.length > 0
-      ? days.reduce((best, d) => (d.predictedRevenue > best.predictedRevenue ? d : best))
+    inWeek.length > 0
+      ? inWeek.reduce((best, d) => (d.predictedRevenue > best.predictedRevenue ? d : best))
       : null
 
   return {
@@ -104,9 +121,35 @@ export function verdictFactBlock(f: VerdictFacts): Record<string, string> {
     store: f.storeName,
   }
 
-  if (f.weekTotal != null) block.week_forecast = fmtUsd(f.weekTotal)
-  if (f.weekP10 != null) block.week_low = fmtUsd(f.weekP10)
-  if (f.weekP90 != null) block.week_high = fmtUsd(f.weekP90)
+  /*
+   * NO WEEK TOTAL. This is the one figure the narrator may not quote, and the
+   * omission is the whole point of it.
+   *
+   * `vitals.weekForecast.total` is the sum of the NEXT SEVEN DAYS from today.
+   * The page that prints this sentence is `/dashboard/decisions`, whose
+   * masthead, day picker, strip and lead figure are all the Mon–Sun calendar
+   * week — a different seven days, and a different number. On 2026-09-02 the
+   * two were $52,158 and $51,743, and both were on screen at once: the lead
+   * figure said "THE CALL THIS WEEK $51,743" and the sentence four inches to
+   * its right said "total week forecast $52,158".
+   *
+   * The adapter already learned this once. `weekTotal` in
+   * `src/lib/counter/adapters/decisions.ts` carries ruling N-R17 and the note
+   * that reading `vitals.weekForecast.total` "is what put $51,338 above a
+   * picker summing $52,111" — the same drift, fixed for the figure and left
+   * standing in the sentence beside it.
+   *
+   * The right total is the sum of the seven cells the picker prints, it is
+   * taken once, and the lead figure is where it is taken. The narrator has no
+   * access to that sum here (it needs the settled half of the week, which this
+   * module never loads), so per this file's own rule — "a key absent from this
+   * block is a fact the page does not have" — it gets no key at all rather
+   * than a plausible number from the wrong window.
+   *
+   * `weekTotal` stays on `VerdictFacts`: `composeVerdict` uses it to decide
+   * whether there is a forecast to talk about, and `verdictSources` cites the
+   * forecast as a source it read. Neither prints it.
+   */
 
   if (f.peakDay) {
     block.peak_day = f.peakDay.weekdayShort

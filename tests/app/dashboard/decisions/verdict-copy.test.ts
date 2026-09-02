@@ -40,9 +40,9 @@ describe("buildVerdictFacts", () => {
       storeName: "Hollywood",
       isAggregate: false,
       days: [
-        { weekdayShort: "MON", predictedRevenue: 5000 },
-        { weekdayShort: "SAT", predictedRevenue: 9240 },
-        { weekdayShort: "SUN", predictedRevenue: 7100 },
+        { date: "2026-08-31", weekdayShort: "MON", predictedRevenue: 5000 },
+        { date: "2026-09-05", weekdayShort: "SAT", predictedRevenue: 9240 },
+        { date: "2026-09-06", weekdayShort: "SUN", predictedRevenue: 7100 },
       ],
       vitals: {
         weekForecast: { total: 21340, p10: null, p90: null, daysCounted: 3, vsPriorWeek: null },
@@ -93,7 +93,11 @@ describe("buildVerdictFacts", () => {
 describe("verdictFactBlock", () => {
   it("formats every figure the narration is allowed to quote", () => {
     const block = verdictFactBlock(facts())
-    expect(block.week_forecast).toBe("$56,000")
+    // Never a week total, in any state — the page's own lead figure is the
+    // only place a week is summed. See the block's own note.
+    expect(block.week_forecast).toBeUndefined()
+    expect(block.week_low).toBeUndefined()
+    expect(block.week_high).toBeUndefined()
     expect(block.peak_day).toBe("SAT")
     expect(block.peak_day_forecast).toBe("$9,240")
     expect(block.labor_gap_hours).toBe("11")
@@ -104,7 +108,6 @@ describe("verdictFactBlock", () => {
     const block = verdictFactBlock(
       facts({ weekTotal: null, peakDay: null, accuracyWape: null, accuracySample: 0 }),
     )
-    expect(block.week_forecast).toBeUndefined()
     expect(block.peak_day).toBeUndefined()
     expect(block.forecast_accuracy).toBeUndefined()
   })
@@ -209,8 +212,11 @@ describe("verdictInputsHash", () => {
   })
 
   it("moves when a displayed figure moves", () => {
+    // The peak day's forecast, not the week total: the hash is taken over the
+    // block, and the block deliberately no longer carries a week total. A
+    // figure the narrator cannot quote is not one the cache should re-cost on.
     expect(verdictInputsHash(facts())).not.toBe(
-      verdictInputsHash(facts({ weekTotal: 57000 })),
+      verdictInputsHash(facts({ peakDay: { weekdayShort: "SAT", predictedRevenue: 9999 } })),
     )
   })
 

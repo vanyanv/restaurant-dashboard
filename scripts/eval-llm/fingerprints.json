@@ -1,12 +1,12 @@
 {
   "verdict": {
-    "sha256": "e8bbbde8f11f0777",
+    "sha256": "d1a2614c2bfe87e1",
     "model": "gpt-4.1-mini",
-    "evaluatedAt": "2026-08-22",
+    "evaluatedAt": "2026-09-02",
     "cases": 8,
     "passed": 8,
     "passRate": 1,
-    "costUsd": 0.00148,
+    "costUsd": 0.00134,
     "floor": 0.85
   },
   "proposal": {
