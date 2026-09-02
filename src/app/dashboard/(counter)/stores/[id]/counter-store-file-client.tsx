@@ -4,21 +4,30 @@ import {
   DateControl,
   Kv,
   MathLines,
+  Note,
   PageHead,
   Section,
   Strip,
   Table,
   useCounterTransition,
   usePageChrome,
+  type Row,
 } from "@/components/counter"
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
-import { saveStoreFile } from "@/lib/counter/actions/store"
+import {
+  addFixedExpense,
+  deactivateStore,
+  editFixedExpense,
+  removeFixedExpense,
+  saveStoreFile,
+} from "@/lib/counter/actions/store"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   StoreFileEditable,
+  StoreExpenseLine,
   StoreFileRate,
   StoreFileSections,
 } from "@/lib/counter/adapters/stores"
@@ -51,7 +60,7 @@ function numberOf(raw: string): number | null {
 
 const MONEY_FIELDS = [
   { key: "rent" as const, label: "Monthly rent", hint: "Prorates into every P&L period" },
-  { key: "labor" as const, label: "Fixed monthly labour", hint: "Salaried cost the schedule never sees" },
+  { key: "labor" as const, label: "Fixed monthly labor", hint: "Salaried cost the schedule never sees" },
   { key: "cleaning" as const, label: "Monthly cleaning", hint: "Recurring deep-clean service" },
   { key: "towels" as const, label: "Monthly linen", hint: "Entered here as a month, billed weekly" },
 ]
@@ -65,7 +74,16 @@ const MONEY_FIELDS = [
  * `@/app/actions/store/crud-actions` does not accept `targetCogsPct`, so a
  * field for it would save nothing.
  */
-function StoreFileForm({ data }: { data: StoreFileEditable }) {
+function StoreFileForm({
+  data,
+  picked,
+  onPick,
+}: {
+  data: StoreFileEditable
+  picked: string | null
+  onPick: (id: string | null) => void
+}) {
+  const router = useRouter()
   const [form, setForm] = useState({
     rent: fieldOf(data.rent),
     labor: fieldOf(data.labor),
@@ -75,7 +93,8 @@ function StoreFileForm({ data }: { data: StoreFileEditable }) {
     doordash: String(Math.round(data.doordash * 1000) / 10),
   })
   const [saving, startSaving] = useTransition()
-  const [said, setSaid] = useState<string | null>(null)
+  // The outcome travels with the text — see the same note in Settings.
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
     setForm({
@@ -102,7 +121,25 @@ function StoreFileForm({ data }: { data: StoreFileEditable }) {
         uberCommissionRate: numberOf(form.uber) ?? data.uber * 100,
         doordashCommissionRate: numberOf(form.doordash) ?? data.doordash * 100,
       })
-      setSaid(result.ok ? "Saved." : `Could not save: ${result.error}.`)
+      setSaid({ ok: result.ok, text: result.ok ? "Saved." : `Could not save: ${result.error}.` })
+    })
+  }
+
+  /*
+   * Deactivating navigates AWAY rather than refreshing. The store-file loader
+   * reads `where: { isActive: true }`, so the moment this succeeds there is no
+   * file at this route to re-render — staying here would show the reader an
+   * error for a thing that worked.
+   */
+  const deactivate = () => {
+    setSaid(null)
+    startSaving(async () => {
+      const result = await deactivateStore(data.storeId)
+      if (!result.ok) {
+        setSaid({ ok: false, text: result.error })
+        return
+      }
+      router.push("/dashboard/stores")
     })
   }
 
@@ -164,19 +201,237 @@ function StoreFileForm({ data }: { data: StoreFileEditable }) {
         />
       </div>
 
+      <ExpenseEditor
+        storeId={data.storeId}
+        lines={data.expenseLines}
+        picked={picked}
+        onPick={onPick}
+      />
+
       <div className="btnrow" style={{ marginTop: 12 }}>
         <button className="btn btn--primary" type="button" disabled={saving} onClick={save}>
           {saving ? "Saving\u2026" : "Save the inputs"}
         </button>
+        {/* `P.storecosts` draws "Deactivate this store" and "Delete" side by
+            side and then explains underneath that "deleting a store does not
+            delete its history". In this codebase those are ONE operation:
+            `deleteStore` sets `isActive: false` and touches nothing else. So
+            one button, named for what actually happens. See
+            `deactivateStore`. */}
+        <button
+          className="btn"
+          type="button"
+          disabled={saving}
+          onClick={deactivate}
+        >
+          Deactivate this store
+        </button>
       </div>
 
-      <p className="mono" style={{ margin: "10px 0 0" }}>
-        {said ??
+      <Note live={said !== null} tone={said === null ? undefined : said.ok ? "good" : "bad"}>
+        {said?.text ??
           `Commissions are percentages \u2014 21 and 0.21 both mean 21%. The COGS target ` +
             `${data.cogsTarget === null ? "is not set" : `reads ${data.cogsTarget}%`} and is not ` +
             `editable here: the update action does not accept targetCogsPct, so a field for it ` +
             `would save nothing.`}
-      </p>
+      </Note>
+    </>
+  )
+}
+
+
+/**
+ * ADDING, EDITING AND REMOVING A FIXED EXPENSE.
+ *
+ * `P.storecosts` draws this as a `.setrow` in "Edit this file": "Add a fixed
+ * expense — name, amount and cadence, weekly, monthly or annual. It becomes
+ * its own P&L row", with an "Add a line" button beside it.
+ *
+ * `e2e/fidelity/manifest.ts` declared that button absent because "nothing
+ * writes `StoreFixedExpense`, `prisma.storeFixedExpense.create` appears
+ * nowhere outside the generated client". That was not true — it is checked
+ * again in the commit that adds this — and the allowance is corrected there.
+ * `src/app/actions/store/fixed-expense-actions.ts` has owner-gated create,
+ * update and delete, and the editorial store dossier called all three.
+ *
+ * **Each line becomes its own P&L row**, which is why the gap mattered more
+ * than its size: a rent nobody can enter is a P&L understated by the rent,
+ * every month, with nothing on screen to notice.
+ *
+ * ## ONE FORM, TWO JOBS
+ *
+ * Selecting a row in the table above loads it here and the primary becomes
+ * "Save this line"; with nothing selected it adds. That is one control set
+ * rather than a button per row — the table has as many rows as the owner has
+ * expenses, and a per-row pair is a landmark count that changes every time
+ * they add one, which is a count no fidelity allowance can name. The alert
+ * inbox reached the same shape from the same direction.
+ *
+ * "Remove this line" is a real delete rather than a deactivation, because
+ * `deleteStoreFixedExpense` is one, and it is disabled with nothing selected
+ * rather than hidden: the prototype ships a disabled `.btn` on the invoice
+ * page for the same reason, and a control that vanishes is one the reader has
+ * to rediscover.
+ */
+function ExpenseEditor({
+  storeId,
+  lines,
+  picked,
+  onPick,
+}: {
+  storeId: string
+  lines: StoreExpenseLine[]
+  picked: string | null
+  onPick: (id: string | null) => void
+}) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const selected = picked
+  const setSelected = onPick
+  const [label, setLabel] = useState("")
+  const [amount, setAmount] = useState("")
+  const [frequency, setFrequency] = useState<"WEEKLY" | "MONTHLY" | "YEARLY">("MONTHLY")
+  const [said, setSaid] = useState<string | null>(null)
+
+  /*
+   * The selection lives in the PARENT, because the table that sets it is
+   * rendered by the parent from a different section. This mirrors the picked
+   * line's own values down into the three fields whenever it changes, and
+   * clears them when it is dropped — so pressing a row in the table above
+   * fills the form, and saving (which clears the selection) empties it back to
+   * the add case.
+   */
+  const lastPicked = useRef<string | null>(null)
+  useEffect(() => {
+    if (lastPicked.current === picked) return
+    lastPicked.current = picked
+    const line = picked === null ? null : lines.find((l) => l.id === picked)
+    setLabel(line?.label ?? "")
+    setAmount(line === null || line === undefined ? "" : String(line.amount))
+    setFrequency(line?.frequency ?? "MONTHLY")
+    setSaid(null)
+  }, [picked, lines])
+
+  const clear = () => {
+    setSelected(null)
+    setLabel("")
+    setAmount("")
+    setFrequency("MONTHLY")
+  }
+
+  const submit = () => {
+    const value = Number(amount.trim())
+    if (label.trim() === "" || !Number.isFinite(value) || value < 0) {
+      setSaid("A line needs a name and an amount.")
+      return
+    }
+    setSaid(null)
+    startSaving(async () => {
+      const result = selected
+        ? await editFixedExpense({ id: selected, label: label.trim(), amount: value, frequency })
+        : await addFixedExpense({
+            storeId,
+            label: label.trim(),
+            amount: value,
+            frequency,
+          })
+      if (!result.ok) {
+        setSaid(result.error)
+        return
+      }
+      clear()
+      // The table above, the monthly total, and every P&L that reads fixed
+      // cost all move together.
+      router.refresh()
+    })
+  }
+
+  const remove = () => {
+    if (!selected) return
+    setSaid(null)
+    startSaving(async () => {
+      const result = await removeFixedExpense(selected)
+      if (!result.ok) {
+        setSaid(result.error)
+        return
+      }
+      clear()
+      router.refresh()
+    })
+  }
+
+  /* A FRAGMENT, NOT A `.sec__body`. `P.storecosts` wraps the whole of "Edit
+     this file" in ONE `.sec__body` — setrows, the button row and the callout
+     together — and this editor renders inside the form that already sits in
+     it. A second one is an extra landmark and, worse, a second inset around
+     content that is already inset. The gate caught it. */
+  return (
+    <>
+      <div className="setrow">
+        <div className="tx">
+          <b>{selected ? "Edit this fixed expense" : "Add a fixed expense"}</b>
+          <span>
+            Name, amount and cadence — weekly, monthly or yearly. It becomes its own
+            P&amp;L row. Press a line in the table above to edit it instead.
+          </span>
+        </div>
+        <button className="btn" type="button" disabled={saving} onClick={submit}>
+          {saving ? "Saving…" : selected ? "Save this line" : "Add a line"}
+        </button>
+      </div>
+
+      <div className="editrow" style={{ gridTemplateColumns: "1fr 120px 120px" }}>
+        <input
+          className="fld"
+          type="text"
+          value={label}
+          placeholder="Rent, fixed labor, towels…"
+          aria-label="Expense name"
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <input
+          className="fld"
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          placeholder="Amount"
+          aria-label="Expense amount"
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <select
+          className="fld"
+          value={frequency}
+          aria-label="Cadence"
+          onChange={(e) =>
+            setFrequency(e.target.value as "WEEKLY" | "MONTHLY" | "YEARLY")
+          }
+        >
+          <option value="WEEKLY">Weekly</option>
+          <option value="MONTHLY">Monthly</option>
+          <option value="YEARLY">Yearly</option>
+        </select>
+      </div>
+
+      <div className="setrow">
+        <div className="tx">
+          <b>Remove a fixed expense</b>
+          <span>
+            {selected
+              ? "This deletes the line. The P&L rows it produced in past periods are recomputed from the lines that remain."
+              : "Press a line in the table above to select it."}
+          </span>
+        </div>
+        <button
+          className="btn"
+          type="button"
+          disabled={saving || selected === null}
+          onClick={remove}
+        >
+          Remove this line
+        </button>
+      </div>
+
+      {said ? <Note tone="bad">{said}</Note> : null}
     </>
   )
 }
@@ -251,6 +506,11 @@ export function CounterStoreFileClient({
 
   const { pending, startTransition } = useCounterTransition()
 
+  // Which fixed-expense line the editor below is holding. Component state
+  // rather than the URL: unlike the alert inbox's selection this is a
+  // half-finished edit, not a thing worth linking someone to.
+  const [pickedExpense, setPickedExpense] = useState<string | null>(null)
+
   const push = useCallback(
     (next: Parameters<typeof writeCounterParams>[1]) => {
       const qs = writeCounterParams(params, next).toString()
@@ -283,9 +543,9 @@ export function CounterStoreFileClient({
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (
           <>
-            <p className="mono" style={{ margin: "0 0 11px" }}>
+            <Note lede>
               {h.sub}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}
@@ -300,9 +560,9 @@ export function CounterStoreFileClient({
         {(o) => (
           <>
             <EditRows rows={o.rows} />
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               {o.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -317,9 +577,9 @@ export function CounterStoreFileClient({
           {(m) => (
             <>
               <MathLines rows={m.rows} />
-              <p className="mono" style={{ margin: "10px 0 0" }}>
+              <Note>
                 {m.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -341,7 +601,27 @@ export function CounterStoreFileClient({
         pending={pending}
         pad={false}
       >
-        {(e) => <Table columns={e.columns} rows={e.rows} />}
+        {(e) => (
+          <Table
+            columns={e.columns}
+            // Pressable so one row can be loaded into the editor below. The
+            // rows carried no affordance at all before — see `ExpenseEditor`
+            // for why the controls are one set down there rather than a pair
+            // on every row.
+            rows={e.rows.map(
+              // Rebuilt rather than spread: `Row` forbids `href` and
+              // `onSelect` together, and a spread of the union carries a
+              // possible `href` that TypeScript cannot narrow away. Expense
+              // rows have no destination, so key and cells are all there is.
+              (r): Row => ({
+                key: r.key,
+                cells: r.cells,
+                onSelect: () => setPickedExpense(r.key),
+                selected: r.key === pickedExpense,
+              }),
+            )}
+          />
+        )}
       </Section>
 
       <div className="tri">
@@ -354,9 +634,9 @@ export function CounterStoreFileClient({
           {(c) => (
             <>
               <EditRows rows={c.rows} columns="1fr 86px" />
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {c.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -370,9 +650,9 @@ export function CounterStoreFileClient({
           {(t) => (
             <>
               <EditRows rows={t.rows} columns="1fr 86px" />
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {t.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -393,7 +673,9 @@ export function CounterStoreFileClient({
         data={sections.editable}
         pending={pending}
       >
-        {(e) => <StoreFileForm data={e} />}
+        {(e) => (
+          <StoreFileForm data={e} picked={pickedExpense} onPick={setPickedExpense} />
+        )}
       </Section>
     </>
   )
