@@ -16,6 +16,7 @@ import { logger } from "@/lib/logger"
 import {
   VERDICT_MAX_CHARS,
   composeVerdict,
+  fnv1a,
   verdictFactBlock,
   type VerdictFacts,
 } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
@@ -43,13 +44,45 @@ export { VERDICT_MAX_CHARS } from "@/app/dashboard/(editorial)/decisions/lib/ver
  */
 export const VERDICT_PROMPT_MAX_CHARS = 150
 
+/**
+ * ## The two rules about SHAPE, and what they are answering
+ *
+ * The fact block is an allowlist, and a model handed nine keys under a
+ * character budget spends the budget enumerating them. Measured on the live
+ * page, that produced:
+ *
+ *     This week peak day SUN forecasts $9,004 with 7 days with no schedule
+ *     and top action to drop price on Signature Double Patty & Cheese Slider
+ *     by $0.25.
+ *
+ * — three facts welded together on "with" and "and", missing the possessive
+ * that would make the first clause grammatical, and worse than what
+ * `composeVerdict` would have written from the same facts ("SUN is the week's
+ * biggest day at $9,004, and there is no schedule published to judge it
+ * against."). A narrator that loses to its own fallback is not earning the
+ * call.
+ *
+ * The rules say to CHOOSE and to speak, because neither was previously asked
+ * for: every other rule here is about which figures may appear, and none was
+ * about the sentence being one.
+ */
 export function buildVerdictPrompt(facts: VerdictFacts): string {
-  const block = verdictFactBlock(facts)
+  return verdictPromptTemplate(JSON.stringify(verdictFactBlock(facts), null, 2))
+}
+
+/**
+ * The prompt with the facts left as a parameter — everything the model is told
+ * EXCEPT what this week happens to be.
+ *
+ * Split out so `VERDICT_NARRATION_VERSION` can hash the instructions without a
+ * set of pretend facts to render them around.
+ */
+function verdictPromptTemplate(blockJson: string): string {
   return `You write the single opening sentence of a restaurant owner's weekly decisions page. The owner is closing books late and wants to know what this week asks of them.
 
 Here are the only facts you may use. They are already computed and already formatted:
 
-${JSON.stringify(block, null, 2)}
+${blockJson}
 
 Rules:
 - Write ONE sentence, at most ${VERDICT_PROMPT_MAX_CHARS} characters.
@@ -58,9 +91,38 @@ Rules:
 - Do not predict, promise, or speculate about outcomes. State what the week is.
 - Plain operator English. No greeting, no preamble, no markdown, no quotation marks, no emoji.
 - Lead with whatever a working owner would act on first — usually the biggest day, or the gap between what the week earns and what is scheduled for it.
+- Say ONE thing. You are given more facts than will fit; most of them are there so you can choose, not so you can include them. Two clauses at most, and the second only if it changes what the owner does.
+- It has to read as something a person would say out loud, with the articles and possessives that implies. Facts strung together on "with" and "and" are a list, not a sentence, and a list is a rejected answer.
 
 Return only the sentence.`
 }
+
+/**
+ * THE WORDS WE ASKED FOR, AND WHO WE ASKED — as a cache key component.
+ *
+ * `DecisionVerdict` keys a stored sentence on (scope, day) plus
+ * `verdictInputsHash`, which is taken over the FACTS. That is half a key. A
+ * completion is a function of the facts *and* the prompt *and* the model, and
+ * the other half was missing: rewriting these instructions changed nothing on
+ * screen, because every store kept serving the sentence the old prompt wrote
+ * until the date rolled over.
+ *
+ * That is not hypothetical. The rules below gained "say ONE thing" and "it has
+ * to read as something a person would say out loud" precisely because the page
+ * was printing "This week peak day SUN forecasts $9,004 with 7 days with no
+ * schedule and top action to drop price on ... by $0.25." The new prompt was
+ * measured at 8/8 on the golden set and the page went on printing the old
+ * sentence, because nothing in the key had moved.
+ *
+ * Hashing the TEMPLATE rather than a rendered prompt is the same choice
+ * `scripts/eval-llm/fingerprint.ts` makes and for the same reason: this
+ * component tracks the instructions, and the facts are already tracked by the
+ * component beside it. The model name is in it because a model swap
+ * invalidates a stored sentence exactly as thoroughly as a rewrite.
+ */
+export const VERDICT_NARRATION_VERSION = fnv1a(
+  `${VERDICT_MODEL}\n${verdictPromptTemplate("<facts>")}`,
+)
 
 /** Digit-runs, normalised so "$9,240" and "9240" compare equal. */
 function digitRuns(s: string): string[] {

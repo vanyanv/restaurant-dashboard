@@ -1,5 +1,5 @@
 {
-  "raw": "Hollywood has 7 days with no schedule this week requiring immediate attention as you close the books late.",
+  "raw": "This week at Hollywood has 7 days with no schedule, so focus on closing the books thoroughly.",
   "model": "gpt-4.1-mini",
   "pass": true,
   "failures": []

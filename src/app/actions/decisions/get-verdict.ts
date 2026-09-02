@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { generateVerdictLine } from "@/lib/decision-verdict-llm"
+import { VERDICT_NARRATION_VERSION, generateVerdictLine } from "@/lib/decision-verdict-llm"
 import {
   composeVerdict,
   verdictInputsHash,
@@ -34,7 +34,15 @@ export async function getVerdictLine(input: {
   // real column rather than a nullable storeId in the unique index.
   const scopeKey = storeId ?? "ALL"
   const asOfDate = new Date(`${asOf}T00:00:00Z`)
-  const inputsHash = verdictInputsHash(facts)
+  /*
+   * BOTH HALVES: the facts, and the words we asked for.
+   *
+   * A stored completion is a function of the facts, the prompt and the model.
+   * Keying on the facts alone meant a prompt rewrite reached nobody until the
+   * date rolled over — see `VERDICT_NARRATION_VERSION`, which is that other
+   * half and moves whenever the instructions or the model do.
+   */
+  const inputsHash = `${verdictInputsHash(facts)}.${VERDICT_NARRATION_VERSION}`
 
   try {
     const cached = await prisma.decisionVerdict.findUnique({

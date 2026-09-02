@@ -1,5 +1,5 @@
 {
-  "raw": "Glendale faces a labor gap of 11 hours short over 2 short days with a peak day SUN forecast of $820 and 41.0% forecast accuracy.",
+  "raw": "Glendale’s peak day is SUN with a forecast of $820, but labor is short by 11 hours this week.",
   "model": "gpt-4.1-mini",
   "pass": true,
   "failures": []
