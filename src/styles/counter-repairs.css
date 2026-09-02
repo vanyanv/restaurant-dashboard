@@ -911,3 +911,24 @@ button.wkd {
  * Nothing here needs a structural selector into the Section's own wrappers,
  * which is the kind of selector that breaks silently when that markup moves.
  */
+
+/*
+ * ============================================================================
+ * A `<select>` IN A ROWLINE FILLS ITS TRACK RATHER THAN DICTATING IT
+ * ============================================================================
+ *
+ * `.fld` carries no width, so a `<select>` takes its intrinsic one — the width
+ * of its longest `<option>`. The ingredients review inbox lists the whole
+ * catalogue in that dropdown, which made the control 506px wide inside a 476px
+ * column and collapsed the `minmax(0,1fr)` name beside it to zero. The grid
+ * track is capped where it is written (see `counter-ingredients-client.tsx`);
+ * this is the other half, without which the select simply overflows the cap it
+ * was given.
+ *
+ * `min-width:0` because a form control's default `min-width:auto` is its
+ * intrinsic width, which is the whole problem restated.
+ */
+.rowline select.fld {
+  width: 100%;
+  min-width: 0;
+}
