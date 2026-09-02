@@ -495,6 +495,8 @@ function ledgerOf(data: MenuEngineeringData): LedgerSection {
         h: 128,
         zero: true,
         labels: shortLabels(top.map((r) => r.itemName), LABEL_CHARS),
+        // The axis is cut; the tooltip and the screen-reader table are not.
+        fullLabels: top.map((r) => r.itemName),
         series: [
           {
             name: "Contribution",

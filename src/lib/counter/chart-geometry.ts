@@ -78,7 +78,26 @@ export interface ChartSpec {
    * names nothing a reader can act on.
    */
   type?: "bars" | "line"
+  /**
+   * The AXIS labels — short, because the axis is a flex row of 9px mono with
+   * no room to spare. `shortLabels` is what cuts them.
+   */
   labels: string[]
+  /**
+   * The same categories UNCUT, for the two readers that have room for them:
+   * the hover tooltip and the visually-hidden data table.
+   *
+   * `labels` is sized for the axis and was being spent everywhere. On Product
+   * mix that put "2 Slider Co…" in a tooltip the section head invites you to
+   * open ("747 units · hover a bar") — so the one affordance offered for
+   * telling "2 Slider Combo" from "1 Slider Combo" from "2 Sliders and Fries"
+   * showed the same cut string that raised the question. The screen-reader
+   * table had it worse: a truncated name and no hover to fall back on.
+   *
+   * Optional, and falls back to `labels`. A chart whose categories are dates
+   * or hours has nothing longer to give and should not pass this.
+   */
+  fullLabels?: string[]
   series: ChartSeries[]
   /** Plot height in CSS px; also the SVG's user-space height. */
   h?: number
