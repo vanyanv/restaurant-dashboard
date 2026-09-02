@@ -1,6 +1,6 @@
 "use client"
 
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 
 /**
  * The shutdown notice — `P.shutdown`.
@@ -29,7 +29,7 @@ export function CounterShutdownClient({
     <main className="ct-root login" style={{ gridTemplateColumns: "1fr" }}>
       <div className="login__form" style={{ maxWidth: 540 }}>
         <div className="login__logo">
-          <Wordmark />
+          <Logo />
           <span className="cap">Operations</span>
         </div>
 

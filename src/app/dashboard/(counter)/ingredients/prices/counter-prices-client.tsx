@@ -2,6 +2,7 @@
 
 import {
   Chart,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -73,9 +74,9 @@ export function CounterPricesClient({ sections }: { sections: SectionSources<Pri
         {(c) => (
           <>
             <Chart {...c.chart} fmt={(v) => `${v.toFixed(0)}`} />
-            <p className="mono" style={{ marginBottom: 0 }}>
+            <Note>
               {c.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -92,9 +93,9 @@ export function CounterPricesClient({ sections }: { sections: SectionSources<Pri
           <>
             <Table columns={MOVER_COLUMNS} rows={m.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {m.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -135,10 +136,10 @@ export function CounterUsageClient({
           <>
             <Table columns={VARIANCE_COLUMNS} rows={v.rows} />
             {/* No `.sec__body` — a table section emits the table alone, so the
-                note carries the body's own inset inline. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                note carries the body's own inset via `<Note flush>`. */}
+            <Note flush>
               {v.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -153,9 +154,9 @@ export function CounterUsageClient({
           {(t) => (
             <>
               <Chart {...t.chart} fmt={USD} />
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {t.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

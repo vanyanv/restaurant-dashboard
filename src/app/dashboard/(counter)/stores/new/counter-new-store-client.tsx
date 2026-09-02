@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 import {
+  Note,
   PageHead,
   Queue,
   Section,
@@ -30,7 +31,7 @@ const CHECK_COLUMNS: Column[] = [
   { key: "store", label: "Store" },
   { key: "stage", label: "Stage" },
   { key: "rent", label: "Rent", numeric: true },
-  { key: "labor", label: "Fixed labour", numeric: true },
+  { key: "labor", label: "Fixed labor", numeric: true },
   { key: "cogs", label: "COGS target", numeric: true },
   { key: "rates", label: "Commissions" },
   { key: "otter", label: "Otter" },
@@ -143,9 +144,9 @@ export function CounterNewStoreClient({
               </button>
             </div>
 
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note live tone={problem === null ? undefined : "bad"}>
               {problem === null ? f.lifecycleNote : `Could not create the store: ${problem}.`}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -171,9 +172,9 @@ export function CounterNewStoreClient({
           <>
             <Table columns={CHECK_COLUMNS} rows={c.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {c.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

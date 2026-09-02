@@ -5,7 +5,7 @@ import {
   Chart,
   MList,
   MStrip,
-  Section,
+  Section, useCounterTransition,
   usePageChrome,
   type MListRow,
   type SwitchableStore,
@@ -78,6 +78,17 @@ export function CounterPhoneStoreAnalyticsClient({
   sections: SectionSources<StoreAnalyticsSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
+  /*
+   * The SAME transition the phone shell's own store switcher and date
+   * sheet start. Threading `pending` into every Section below is what
+   * turns a range or store change into a stale banner over the last good
+   * figures instead of a blank `loading.tsx` — and it is what the desk
+   * Analytics has always done. This page was the only date-scoped phone
+   * route without it, so the same page blanked on a phone and held its
+   * figures on a desk.
+   */
+  const { pending } = useCounterTransition()
+
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   const store = stores.find((s) => s.id === storeId) ?? null
@@ -120,18 +131,18 @@ export function CounterPhoneStoreAnalyticsClient({
       {/* Two cells: Net sales · Food cost — `h.phoneCells`, never a slice of
           `h.cells` (which carries four: Net sales, Orders, Avg ticket, Food
           cost, and only when an order count exists at all). */}
-      <Section bare title="The figures" data={sections.headline}>
+      <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
 
       {/* Shorter, no axis — `s.phoneChart`, the adapter's own. */}
-      <Section title="Net sales" data={sections.sales}>
+      <Section title="Net sales" data={sections.sales} pending={pending}>
         {(s) => <Chart {...s.phoneChart} />}
       </Section>
 
       {/* Four days, newest first — `DayBook.phoneRows`, the adapter's own
           slice. See the file note above on why this page does not slice it. */}
-      <Section title="The day book" meta="newest first" data={sections.dayBook}>
+      <Section title="The day book" meta="newest first" data={sections.dayBook} pending={pending}>
         {(b) => <MList rows={b.phoneRows.map(toDayRow)} />}
       </Section>
     </>

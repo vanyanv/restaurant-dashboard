@@ -3,6 +3,8 @@
 import Link from "next/link"
 
 import {
+  Lede,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -84,9 +86,9 @@ export function CounterStoresClient({
           <>
             <Table columns={STORE_COLUMNS} rows={t.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {t.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -106,10 +108,10 @@ export function CounterStoresClient({
       <Section title="Add a store" meta="four fields to start" data={sections.table} pending={pending}>
         {() => (
           <>
-            <p style={{ margin: "0 0 12px", fontSize: "var(--ct-t-mid)", lineHeight: 1.5 }}>
+            <Lede>
               A store needs a <b>name</b>, an <b>address</b> for weather and event signals, a{" "}
               <b>rent</b> figure and a <b>COGS target</b>. Everything else can wait.
-            </p>
+            </Lede>
             <div className="btnrow">
               <Link className="btn btn--primary" href="/dashboard/stores/new">
                 New store

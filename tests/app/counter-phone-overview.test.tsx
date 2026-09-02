@@ -36,7 +36,7 @@ const STORES = [
 
 const sections: OverviewSections = {
   sales: ready({ grossSales: 7468, comparison: "▼ 37.2% vs the prior period", comparisonTone: "is-down" }),
-  splh: notComputed("sales per labour hour"),
+  splh: notComputed("sales per labor hour"),
   strip: ready([
     { label: "Orders", value: "1,024" },
     { label: "Avg ticket", value: "$25.66" },
@@ -50,7 +50,7 @@ const sections: OverviewSections = {
     { key: "a1", tone: "bad", lead: "3", unit: "days open", title: "Invoice lines", body: "Short of the header total." },
   ]),
   salesChart: ready({ labels: ["Mon"], series: [{ name: "Net sales", color: "var(--ink)", data: [7468] }] }),
-  splhChart: notComputed("sales per labour hour"),
+  splhChart: notComputed("sales per labor hour"),
   stores: ready([
     {
       kind: "trading",
@@ -70,7 +70,6 @@ const sections: OverviewSections = {
   comparison: notComputed("the comparison drill"),
   channels: notComputed("the channel mix"),
   invoices: notComputed("invoices"),
-  modelCall: notComputed("the model's call"),
   ratings: notComputed("guest ratings"),
 }
 

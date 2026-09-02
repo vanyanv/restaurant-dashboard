@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 
 /**
  * Accept an invite — `P.signup`.
@@ -73,7 +73,7 @@ export function CounterSignupClient({
     <main className="ct-root login">
       <div className="login__form">
         <div className="login__logo">
-          <Wordmark />
+          <Logo />
           <span className="cap">Operations</span>
         </div>
         <h1>{inviterName} invited you</h1>

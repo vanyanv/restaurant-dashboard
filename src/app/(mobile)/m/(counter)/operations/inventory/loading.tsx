@@ -16,7 +16,7 @@ export default function MobileInventoryLoading() {
       <Section title="What a count would settle" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="Go" data={loading()}>
+      <Section bare title="Next count" data={loading()}>
         {() => null}
       </Section>
     </>

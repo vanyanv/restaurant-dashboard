@@ -27,16 +27,23 @@ export function CounterPhoneRecipesClient({
 
   return (
     <>
-      <Section bare title="Recipes" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div>
-            <h2 className="mtitle">Recipes</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Recipes unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Recipes</h2>
+        <Section bare title="Recipes" data={sections.headline} pending={pending}>
+          {(h) => (
             <p className="msub">
               {h.cells[0].value} · {h.cells[1].value} confirmed
             </p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
@@ -46,7 +53,7 @@ export function CounterPhoneRecipesClient({
         {(r) => <MList rows={r.rows} />}
       </Section>
 
-      <Section bare title="Go" data={sections.work} pending={pending}>
+      <Section bare title="Needs confirming" data={sections.work} pending={pending}>
         {(w) => (
           <Link className="mbtn mbtn--primary" href={w.items[0]?.href ?? "/dashboard/recipes"}>
             {w.items[0] ? w.items[0].title : "The catalogue"}

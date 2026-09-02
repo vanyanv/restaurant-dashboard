@@ -333,7 +333,7 @@ describe("prime cost", () => {
     expect(must(s.weeks, "weeks").rows[0].primePct).toBeNull()
     expect(must(s.byStore, "byStore").find((x) => x.id === "holly")?.primePct).toBeNull()
     // And the reading says so rather than quietly dropping the sentence.
-    expect(reads(s)).toContain("no labour is posted")
+    expect(reads(s)).toContain("no labor is posted")
   })
 })
 
@@ -509,7 +509,7 @@ describe("the reading paragraph", () => {
 
   it("never claims labour is inside a target, because nothing publishes one", async () => {
     const s = await load()
-    expect(reads(s)).not.toContain("labour is")
+    expect(reads(s)).not.toContain("labor is")
   })
 })
 

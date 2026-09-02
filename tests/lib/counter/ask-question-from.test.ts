@@ -38,8 +38,8 @@ function questionFrom(stored: string): string {
 describe("questionFrom", () => {
   it("drops the scope sentence useAsk puts on the wire", () => {
     expect(
-      questionFrom("Answering about Overview · All stores · Yesterday.\nsales per labour hour"),
-    ).toBe("sales per labour hour")
+      questionFrom("Answering about Overview · All stores · Yesterday.\nsales per labor hour"),
+    ).toBe("sales per labor hour")
   })
 
   it("keeps a multi-line question whole", () => {

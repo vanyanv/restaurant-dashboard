@@ -7,6 +7,7 @@ import {
   Chart,
   DateControl,
   Filters,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -403,10 +404,10 @@ export function CounterOrdersClient({
             {/* The two pieces of page furniture the adapter does not carry,
                 because neither is a figure: the prototype's own closing
                 sentence and the way to the page it names (line 4874). */}
-            <p className="mono" style={{ margin: "12px 0 0" }}>
+            <Note>
               This is the list. The shape of it &mdash; which channel, which hour, which way it is
               moving &mdash; is one page over.
-            </p>
+            </Note>
             <div className="btnrow" style={{ marginTop: "10px" }}>
               <Link className="btn" href="/dashboard/analytics">
                 Open analytics

@@ -6,6 +6,7 @@ import {
   Chart,
   DateControl,
   Donut,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -258,12 +259,12 @@ export function CounterCogsClient({
                 published — a line filled from a plan invented here would be the
                 page grading itself. */}
             <Chart {...p.chart} fmt={PCT} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {p.sentence}
-            </p>
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            </Note>
+            <Note>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -290,12 +291,8 @@ export function CounterCogsClient({
                   table alone. They carry the body's own inset
                   (`.sec__body{padding:13px 15px}`) inline rather than opening a
                   second landmark to get it. */}
-              <p className="mono" style={{ margin: 0, padding: "13px 15px 0" }}>
-                {m.sentence}
-              </p>
-              <p className="mono" style={{ margin: 0, padding: "9px 15px 13px" }}>
-                {m.note}
-              </p>
+              <Note flush>{m.sentence}</Note>
+              <Note flush>{m.note}</Note>
             </>
           )}
         </Section>
@@ -313,12 +310,12 @@ export function CounterCogsClient({
                   so this section keeps its `.sec__body` — unlike the two tables
                   either side of it. */}
               <Donut slices={c.slices} center={c.center} />
-              <p className="mono" style={{ margin: "10px 0 0" }}>
+              <Note>
                 {c.sentence}
-              </p>
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              </Note>
+              <Note>
                 {c.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -338,9 +335,9 @@ export function CounterCogsClient({
             {/* Unwrapped, for the reason the moved notes above are unwrapped.
                 Why these rows do not sum to the headline: a different
                 denominator, said out loud rather than left to be discovered. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {i.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

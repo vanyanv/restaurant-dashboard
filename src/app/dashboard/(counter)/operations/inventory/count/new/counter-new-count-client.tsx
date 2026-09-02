@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 import {
+  Note,
   PageHead,
   Section,
   Table,
@@ -123,9 +124,9 @@ export function CounterNewCountClient({
                 </div>
               )
             })}
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               {g.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -140,9 +141,9 @@ export function CounterNewCountClient({
         {(s) => (
           <>
             <Table columns={SHEET_COLUMNS} rows={s.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -167,9 +168,9 @@ export function CounterNewCountClient({
                 {busy ? "Opening…" : o.resumes ? "Resume the open count" : "Start on this device"}
               </button>
             </div>
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note live tone={problem === null ? undefined : "bad"}>
               {problem === null ? o.note : `Could not open a count: ${problem}.`}
-            </p>
+            </Note>
           </>
         )}
       </Section>

@@ -2,6 +2,7 @@
 
 import {
   Kv,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -93,9 +94,9 @@ export function CounterInfraClient({ sections }: { sections: SectionSources<Infr
           <>
             <Table columns={JOB_COLUMNS} rows={j.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {j.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -104,9 +105,9 @@ export function CounterInfraClient({ sections }: { sections: SectionSources<Infr
         {(f) => (
           <>
             <Kv rows={f.rows} />
-            <p className="mono" style={{ marginBottom: 0 }}>
+            <Note>
               {f.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -122,9 +123,9 @@ export function CounterInfraClient({ sections }: { sections: SectionSources<Infr
         {(s) => (
           <>
             <Table columns={TABLE_COLUMNS} rows={s.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -134,9 +135,9 @@ export function CounterInfraClient({ sections }: { sections: SectionSources<Infr
           Section renders one without becoming a panel. See `InfraGaps`. */}
       <Section bare title="What this page cannot tell you" data={sections.gaps} pending={pending}>
         {(g) => (
-          <p className="mono" style={{ margin: "2px 0 0" }}>
+          <Note tight>
             {g.note}
-          </p>
+          </Note>
         )}
       </Section>
     </>

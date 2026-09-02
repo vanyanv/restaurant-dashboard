@@ -4,6 +4,7 @@ import {
   MList,
   MoneyLines,
   MStrip,
+  Note,
   Section,
   usePageChrome,
   type KvRow,
@@ -147,12 +148,7 @@ export function CounterPhoneOrderClient({
           else on the page: it was never the restaurant's money, so stating it
           inside the statement would invite subtracting it twice. */}
       {note ? (
-        <p
-          className="mono"
-          style={{ margin: "8px 0 0", fontSize: "11px", color: "var(--ink-3)" }}
-        >
-          {note}
-        </p>
+        <Note>{note}</Note>
       ) : null}
     </>
   )

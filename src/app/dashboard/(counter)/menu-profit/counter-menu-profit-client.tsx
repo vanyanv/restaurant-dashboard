@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
   Matrix,
+  Note,
   PageHead,
   Queue,
   RankBars,
@@ -187,9 +188,9 @@ export function CounterMenuProfitClient({
                 }}
                 axisLabel={m.axisLabel}
               />
-              <p className="mono" style={{ margin: "10px 0 0" }}>
+              <Note>
                 {m.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -227,10 +228,10 @@ export function CounterMenuProfitClient({
             <Table columns={LEDGER_COLUMNS} rows={l.rows} />
             {/* No `.sec__body` wrapper — it is a landmark and the prototype's
                 `sec(..., tbl(...))` emits the table alone. The note carries the
-                body's own inset inline. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                body's own inset via `<Note flush>`. */}
+            <Note flush>
               {l.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

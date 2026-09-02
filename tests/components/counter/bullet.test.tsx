@@ -12,7 +12,7 @@ import { Bullet } from "@/components/counter/surface/bullet"
 import type { Reference } from "@/lib/counter/bullet-state"
 
 const inBand: Reference = { v: 150, lo: 100, hi: 200, better: "high", label: "Orders, in band" }
-const overCeiling: Reference = { v: 300, lo: 100, hi: 200, better: "low", label: "Labour, over" }
+const overCeiling: Reference = { v: 300, lo: 100, hi: 200, better: "low", label: "Labor, over" }
 const onTarget: Reference = { v: 1500, target: 1000, better: "high", label: "SPLH above its floor" }
 
 function classesOf(el: Element): string[] {

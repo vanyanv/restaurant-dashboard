@@ -28,7 +28,7 @@ export default function DashboardLoading() {
       <Section bare title="Net sales" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="Sales per labour hour" data={loading()}>
+      <Section bare title="Sales per labor hour" data={loading()}>
         {() => null}
       </Section>
       <Section bare title="The verdict" data={loading()}>

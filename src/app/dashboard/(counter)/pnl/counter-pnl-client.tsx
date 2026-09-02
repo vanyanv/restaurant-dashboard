@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Cascade,
   DateControl,
+  Lede,
+  Note,
   PageHead,
   MoneyLines,
   Section,
@@ -351,11 +353,11 @@ export function CounterPnlClient({
             {/* The prototype states its own emphasis rule under the table, and
                 it has to: three of these nine numbers are painted and nothing
                 else on the page says why. */}
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               Change is in points of sales, and <b>Worth</b> is what that many points is in dollars
               at this range&rsquo;s volume. A line is called out when it moves more than the trade
-              acts on: one point on food, two on labour, three on prime.
-            </p>
+              acts on: one point on food, two on labor, three on prime.
+            </Note>
           </>
         )}
       </Section>
@@ -381,9 +383,9 @@ export function CounterPnlClient({
               <Table columns={FIXED_COLUMNS} rows={f.rows} />
               <div className="sec__body">
                 <MoneyLines rows={f.money} />
-                <p className="mono" style={{ margin: "11px 0 0" }}>
+                <Note>
                   {f.note}
-                </p>
+                </Note>
               </div>
             </>
           )}
@@ -487,7 +489,7 @@ function ByStore({ lines }: { lines: PnlStoreLine[] }) {
   return (
     <>
       <div className="sec__body">
-        <p style={{ margin: "0 0 12px", fontSize: "var(--t-mid)", lineHeight: 1.55 }}>
+        <Lede>
           {trading.length === 0 ? (
             <>
               No store took anything in this range, so the statement above has nothing to
@@ -509,7 +511,7 @@ function ByStore({ lines }: { lines: PnlStoreLine[] }) {
               ) : null}
             </>
           )}
-        </p>
+        </Lede>
       </div>
 
       <Table columns={BY_STORE_COLUMNS} rows={rows} />

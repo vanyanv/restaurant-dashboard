@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
-import { MList, Section, useCounterTransition } from "@/components/counter"
+import { MList, Note, Section, useCounterTransition } from "@/components/counter"
 import { createStoreRecord } from "@/lib/counter/actions/store"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { NewStoreSections } from "@/lib/counter/adapters/new-store"
@@ -54,14 +54,15 @@ export function CounterPhoneNewStoreClient({
 
   return (
     <>
-      <Section bare title="New store" data={sections.form} pending={pending}>
-        {() => (
-          <div>
-            <h2 className="mtitle">New store</h2>
-            <p className="msub">Two fields to start · the rest can wait</p>
-          </div>
-        )}
-      </Section>
+      {/* NOT a Section. Every word in this head is a constant — the
+          callback took no argument at all — so there was nothing here for
+          a `SectionData` to be about, and gating it on form
+          meant a failed query erased the page's own name. A section that
+          reads none of its data is a Suspense boundary bought for nothing. */}
+      <div>
+        <h2 className="mtitle">New store</h2>
+        <p className="msub">Two fields to start · the rest can wait</p>
+      </div>
 
       <Section bare title="The store" data={sections.form} pending={pending}>
         {(f) => (
@@ -88,9 +89,9 @@ export function CounterPhoneNewStoreClient({
                 onChange={(e) => setAddress(e.target.value)}
               />
             </div>
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note live tone={problem === null ? undefined : "bad"}>
               {problem === null ? f.lifecycleNote : `Could not create the store: ${problem}.`}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -104,9 +105,9 @@ export function CounterPhoneNewStoreClient({
         {(c) => (
           <>
             <MList rows={c.phoneRows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {c.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

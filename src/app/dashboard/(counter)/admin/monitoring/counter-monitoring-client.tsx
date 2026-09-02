@@ -3,6 +3,7 @@
 import {
   Chart,
   MList,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -96,9 +97,9 @@ export function CounterMonitoringClient({
           <>
             <Table columns={SUBSYSTEM_COLUMNS} rows={s.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -114,9 +115,9 @@ export function CounterMonitoringClient({
         {(d) => (
           <>
             <Chart {...d.chart} fmt={SECONDS} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {d.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -131,9 +132,9 @@ export function CounterMonitoringClient({
         {(e) => (
           <>
             <MList rows={e.rows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {e.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

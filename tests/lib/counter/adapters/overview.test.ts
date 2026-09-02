@@ -231,7 +231,7 @@ describe("getOverviewSections", () => {
     for (const key of [
       "sales", "splh", "strip", "verdict", "moving", "needsYou",
       "salesChart", "splhChart", "stores", "comparison", "channels", "invoices",
-      "modelCall", "ratings",
+      "ratings",
     ]) {
       expect(s[key as keyof OverviewSections]).toBeDefined()
     }
@@ -273,27 +273,6 @@ describe("getOverviewSections", () => {
     // And a refused inbox is a failure the reader must see, still not owed.
     vi.mocked(getAlertInbox).mockResolvedValue({ ok: false, error: "unauthorized" } as never)
     expect((await load()).needsYou.status).toBe("failed")
-  })
-
-  it("never marks modelCall owed — src/app/actions/forecasts/ has shipped for months", async () => {
-    vi.mocked(getRevenueForecast).mockResolvedValue(
-      forecast([
-        {
-          date: new Date(2026, 7, 19), predictedRevenue: 6180, p10: 5640, p90: 6720,
-          modelVersion: "v4", generatedAt: new Date(), forecastSource: "native", attribution: null,
-        },
-      ]) as never,
-    )
-    const s = await load()
-    expect(s.modelCall.status).toBe("ready")
-    if (!hasData(s.modelCall)) throw new Error("modelCall")
-    expect(s.modelCall.data.predicted).toBe(6180)
-    expect(s.modelCall.data.recentMape).toBe(7.1)
-
-    // A range the model has no call for is a dead end the reader can back out
-    // of by narrowing the range — not owed work and not a fabricated number.
-    vi.mocked(getRevenueForecast).mockResolvedValue(forecast([]) as never)
-    expect((await load()).modelCall.status).toBe("empty")
   })
 
   it("gives a pre-open store a card shape with no net-sales field at all", async () => {

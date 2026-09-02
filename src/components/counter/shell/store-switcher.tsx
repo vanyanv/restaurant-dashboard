@@ -123,9 +123,21 @@ export function StoreSwitcher({
   }, [open, onOpenChange])
 
   const selected = selectedId === null ? null : (stores.find((s) => s.id === selectedId) ?? null)
-  // The prototype's `mt` line, derived rather than authored: "1 of 3 stores"
-  // when one is picked, the count of locations when they are aggregated.
-  const meta = selected ? `1 of ${stores.length} stores` : `${stores.length} locations`
+  /*
+   * The prototype's `mt` line, derived rather than authored: "1 of 3 stores"
+   * when one is picked, the count of locations when they are aggregated.
+   *
+   * Both nouns agree with the count. This account has three stores, so the
+   * plural was always right here and the singular was never seen — but the
+   * list is `getOverviewStores()`, not a constant, and an account with one
+   * store read "1 locations" in the rail on every page in the product. The
+   * two other places that count things this way (`Filters`' toggle labels and
+   * the new-count category rows) both already branch on 1.
+   */
+  const n = stores.length
+  const meta = selected
+    ? `1 of ${n} ${n === 1 ? "store" : "stores"}`
+    : `${n} ${n === 1 ? "location" : "locations"}`
 
   const choose = (id: string | null) => {
     onSelect(id)

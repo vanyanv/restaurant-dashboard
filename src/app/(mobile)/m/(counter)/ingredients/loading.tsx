@@ -19,7 +19,7 @@ export default function MobileIngredientsLoading() {
       <Section title="Moving most" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="Go" data={loading()}>
+      <Section bare title="Needs review" data={loading()}>
         {() => null}
       </Section>
     </>

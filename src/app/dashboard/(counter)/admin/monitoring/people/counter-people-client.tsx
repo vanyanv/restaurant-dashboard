@@ -2,6 +2,8 @@
 
 import {
   Chart,
+  Lede,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -75,9 +77,9 @@ export function CounterPeopleClient({
         {(r) => (
           <>
             <Chart {...r.chart} fmt={READINGS} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {r.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -93,9 +95,9 @@ export function CounterPeopleClient({
         {(p) => (
           <>
             <Table columns={PAGE_COLUMNS} rows={p.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -106,12 +108,12 @@ export function CounterPeopleClient({
       <Section title="What this tells you" data={sections.verdict} pending={pending}>
         {(v) => (
           <>
-            <p style={{ margin: "0 0 10px", fontSize: "var(--t-mid)", lineHeight: 1.55 }}>
+            <Lede>
               {v.lead}
-            </p>
-            <p className="mono" style={{ margin: 0 }}>
+            </Lede>
+            <Note bare>
               {v.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

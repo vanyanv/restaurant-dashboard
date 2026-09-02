@@ -37,6 +37,14 @@ export function CounterPhoneInventoryClient({
           on `/m` paths. */}
       <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
 
+      {/* THE TITLE IS STILL GATED HERE, deliberately, unlike the 21 other
+          phone pages this was hoisted out of. Its sub-line is `{n.meta}` —
+          genuinely data — so the `<div>` cannot leave the section wholesale,
+          and every way to lift just the `<h2>` costs more than it buys: put
+          the h2 in its own div and `.mscroll` (a grid) gains an item and an
+          11px gap on this page alone; split the msub and the `MHead` into two
+          Sections over one promise and a failure paints two cards instead of
+          one. Left as it is until the head earns a shape of its own. */}
       <Section bare title="Inventory" data={sections.nextCount} pending={pending}>
         {(n) => (
           <>
@@ -71,7 +79,7 @@ export function CounterPhoneInventoryClient({
         {(s) => <MoneyLines rows={s.money} />}
       </Section>
 
-      <Section bare title="Go" data={sections.nextCount} pending={pending}>
+      <Section bare title="Next count" data={sections.nextCount} pending={pending}>
         {() => (
           <Link className="mbtn mbtn--primary" href="/m/count">
             Start the count

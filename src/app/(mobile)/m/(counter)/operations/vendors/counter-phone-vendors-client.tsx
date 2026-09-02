@@ -36,16 +36,23 @@ export function CounterPhoneVendorsClient({
           on `/m` paths. */}
       <SubNav items={PHONE_VENDOR_TABS} label="Vendors" />
 
-      <Section bare title="Vendors" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div>
-            <h2 className="mtitle">Vendors</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Vendors unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Vendors</h2>
+        <Section bare title="Vendors" data={sections.headline} pending={pending}>
+          {(h) => (
             <p className="msub">
               {h.cells[0].value} · {h.cells[0].delta}
             </p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}

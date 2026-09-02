@@ -7,6 +7,7 @@ import {
   DateControl,
   HeadBlock,
   LeadFigure,
+  Note,
   PageHead,
   Queue,
   Say,
@@ -347,9 +348,9 @@ export function CounterLaborClient({
         {(w) => (
           <>
             <WeekStrip days={w.days} />
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               {w.sentence}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -364,9 +365,9 @@ export function CounterLaborClient({
         {(s) => (
           <>
             <Chart {...s.chart} fmt={HOURS} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {s.sentence}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -381,9 +382,9 @@ export function CounterLaborClient({
         {(c) => (
           <>
             <Chart {...c.chart} fmt={PEAK_SHARE} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {c.sentence}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -412,9 +413,9 @@ export function CounterLaborClient({
                   `sec__body` (`counter-prototype.html:5327`); this one does not.
                   Only when there is something to say. */}
               {r.note ? (
-                <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                <Note flush>
                   {r.note}
-                </p>
+                </Note>
               ) : null}
             </>
           )}
@@ -432,9 +433,9 @@ export function CounterLaborClient({
             <>
               <Table columns={LEAK_COLUMNS} rows={leakRows(l)} />
               {/* Unwrapped, for the reason the role note above is unwrapped. */}
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              <Note flush>
                 {l.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -453,9 +454,9 @@ export function CounterLaborClient({
                 (L-R8): publishing a schedule for it is a single action, and
                 `.qitem` is a landmark the prototype writes exactly one of. */}
             <Queue items={queueItems(d.items)} />
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               {d.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -473,9 +474,9 @@ export function CounterLaborClient({
                 band it invented, and a line drawn here would be one this page
                 then graded twelve weeks against. */}
             <Chart {...t.chart} fmt={SHARE} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {t.sentence} {t.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

@@ -144,7 +144,7 @@ describe("HeadBlock", () => {
             key="d2"
             label="Sales per labor hour"
             value="$71.40"
-            detail="14 day readings with labour posted"
+            detail="14 day readings with labor posted"
             detailTone="is-flat"
           />,
         ]}

@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -123,10 +124,10 @@ export function CounterOperationsClient({
             <>
               <Table columns={AREA_COLUMNS} rows={a.rows} />
               {/* No `.sec__body` — a table section emits the table alone, so
-                  the note carries the body's own inset inline. */}
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                  the note carries the body's own inset via `<Note flush>`. */}
+              <Note flush>
                 {a.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

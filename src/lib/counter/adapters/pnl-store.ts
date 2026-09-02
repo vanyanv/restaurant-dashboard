@@ -61,7 +61,7 @@ import type { MoneyLine, Row } from "@/components/counter"
 /** The four fixed-cost columns, in the order an owner reads them. */
 const FIXED_FIELDS = [
   { key: "rent", label: "Rent", lands: "Occupancy" },
-  { key: "labor", label: "Labour budget", lands: "Labor" },
+  { key: "labor", label: "Labor budget", lands: "Labor" },
   { key: "cleaning", label: "Cleaning", lands: "Other operating" },
   { key: "towels", label: "Towels", lands: "Other operating" },
 ] as const

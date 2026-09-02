@@ -16,7 +16,7 @@ export default function MobileRecipesLoading() {
       <Section title="Worst first" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="Go" data={loading()}>
+      <Section bare title="Needs confirming" data={loading()}>
         {() => null}
       </Section>
     </>

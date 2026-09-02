@@ -15,6 +15,9 @@ const row = (id: string, title: string | null) => ({
   createdAt: new Date("2026-08-18T00:00:00Z"),
   updatedAt: new Date("2026-08-19T00:00:00Z"),
   _count: { messages: 4 },
+  // The ASSISTANT messages, ids only — what `answerCount` is counted from.
+  // Four messages, two of them answers: two turns, which is what the rail says.
+  messages: [{ id: "m2" }, { id: "m4" }],
 })
 
 beforeEach(() => {
@@ -59,6 +62,17 @@ describe("searchConversations", () => {
     expect(or[0].title.contains).toBe("produce")
   })
 
+  it("counts answers, not messages — a turn is a question AND its answer", async () => {
+    await searchConversations(prisma, "acct-1", "produce")
+    // The select is the feature: the count comes back filtered to assistant
+    // rows rather than being derived from `messageCount`, which counts both
+    // sides and so reads "2 turns" for every single exchange.
+    expect(findMany.mock.calls[0][0].select.messages).toEqual({
+      where: { role: "assistant" },
+      select: { id: true },
+    })
+  })
+
   it("caps the result set", async () => {
     await searchConversations(prisma, "acct-1", "produce", 25)
     expect(findMany.mock.calls[0][0].take).toBe(25)
@@ -73,6 +87,7 @@ describe("searchConversations", () => {
         createdAt: new Date("2026-08-18T00:00:00Z"),
         updatedAt: new Date("2026-08-19T00:00:00Z"),
         messageCount: 4,
+        answerCount: 2,
       },
     ])
   })

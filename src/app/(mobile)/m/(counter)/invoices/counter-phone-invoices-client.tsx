@@ -28,14 +28,21 @@ export function CounterPhoneInvoicesClient({
 
   return (
     <>
-      <Section bare title="Invoices" data={sections.phoneQueues} pending={pending}>
-        {(q) => (
-          <div>
-            <h2 className="mtitle">Invoices</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Invoices unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Invoices</h2>
+        <Section bare title="Invoices" data={sections.phoneQueues} pending={pending}>
+          {(q) => (
             <p className="msub">{q.sub}</p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
@@ -53,7 +60,7 @@ export function CounterPhoneInvoicesClient({
           to the worst OPEN item rather than a hardcoded number — the whole
           argument for the phone surface is that the thing to look at is one
           tap away. */}
-      <Section bare title="Go" data={sections.phoneQueues} pending={pending}>
+      <Section bare title="Invoices that need you" data={sections.phoneQueues} pending={pending}>
         {(q) => (
           <Link className="mbtn mbtn--primary" href={q.firstHref}>
             Open the one that costs the most

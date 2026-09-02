@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePageChrome } from "@/components/counter"
+import { Lede, usePageChrome } from "@/components/counter"
 
 /**
  * No access — `P.forbidden`.
@@ -58,11 +58,11 @@ export function CounterForbiddenClient({ email, roleLabel }: { email: string; ro
           <span className="k">and not a blank page</span>
         </div>
         <div className="sec__body">
-          <p style={{ margin: 0, fontSize: "var(--t-mid)", lineHeight: 1.55 }}>
+          <Lede last>
             Signing in returns you to whatever you were trying to reach. That is the
             right behaviour — and it means a link shared into the wrong hands lands here
             rather than nowhere. <b>The page never says what was on it.</b>
-          </p>
+          </Lede>
         </div>
       </div>
     </>

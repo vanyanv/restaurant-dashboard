@@ -2,6 +2,7 @@
 
 import {
   Chart,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -84,9 +85,9 @@ export function CounterActivityClient({
         {(e) => (
           <>
             <Chart {...e.chart} fmt={ERRORS} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {e.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -116,9 +117,9 @@ export function CounterActivityClient({
         {(s) => (
           <>
             <Table columns={STORE_COLUMNS} rows={s.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -148,9 +149,9 @@ export function CounterActivityClient({
                 </div>
               ))}
             </div>
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {f.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

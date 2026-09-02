@@ -1,15 +1,17 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
+import { signOut } from "next-auth/react"
 import {
   Kv,
+  Note,
   PageHead,
   Section,
   Table,
   toneStyle,
   useCounterTransition,
   usePageChrome,
-  Wordmark,
+  Logo,
   type Column,
 } from "@/components/counter"
 import {
@@ -69,7 +71,10 @@ function AccountControls({ data }: { data: SettingsAccount }) {
   const editable = data.editable
   const [zone, setZone] = useState(editable?.timezone ?? "")
   const [saving, startSaving] = useTransition()
-  const [zoneSaid, setZoneSaid] = useState<string | null>(null)
+  // The OUTCOME travels with the text. Held as a string alone, "Saved." and
+  // "Could not save: …" landed in the same neutral note and a reader could not
+  // tell which had happened.
+  const [zoneSaid, setZoneSaid] = useState<{ ok: boolean; text: string } | null>(null)
 
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState("")
@@ -88,7 +93,7 @@ function AccountControls({ data }: { data: SettingsAccount }) {
     setZoneSaid(null)
     startSaving(async () => {
       const result = await saveTimezone({ name: editable!.name, timezone: value })
-      setZoneSaid(result.ok ? "Saved." : `Could not save: ${result.error}.`)
+      setZoneSaid({ ok: result.ok, text: result.ok ? "Saved." : `Could not save: ${result.error}.` })
       if (!result.ok) setZone(editable!.timezone)
     })
   }
@@ -188,9 +193,9 @@ function AccountControls({ data }: { data: SettingsAccount }) {
       ) : null}
 
       {zoneSaid !== null ? (
-        <p className="mono" style={{ margin: "10px 0 0" }}>
-          {zoneSaid}
-        </p>
+        <Note live tone={zoneSaid.ok ? "good" : "bad"}>
+          {zoneSaid.text}
+        </Note>
       ) : null}
     </>
   )
@@ -244,9 +249,9 @@ function Notifications({ data }: { data: SettingsNotifications }) {
           </button>
         </div>
       ))}
-      <p className="mono" style={{ margin: "10px 0 0" }}>
+      <Note live tone={problem === null ? undefined : "bad"}>
         {problem === null ? data.note : `Could not save: ${problem}.`}
-      </p>
+      </Note>
     </>
   )
 }
@@ -285,9 +290,9 @@ export function CounterSettingsClient({
             ))}
             <AccountControls data={a} />
             {a.clockWarning !== null ? (
-              <p className="mono" style={{ marginBottom: 0 }}>
+              <Note>
                 {a.clockWarning}
-              </p>
+              </Note>
             ) : null}
           </>
         )}
@@ -323,9 +328,30 @@ export function CounterSettingsClient({
                 <span className="mono">{r.value}</span>
               </div>
             ))}
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            {/* `P.settings`' Sessions panel closes with a `.btnrow` holding
+                "Sign out everywhere", then its note — this is that row, in
+                that position, holding the one of the two the product can
+                honour.
+
+                NOT "Sign out everywhere". Auth is `strategy: "jwt"` with no
+                session table, so there is no way to revoke a token this
+                browser is not holding, and a button that claimed to would be
+                lying about a security control — the same reason the manifest
+                declares "End" absent on every row above. Signing out HERE is
+                a cookie and needs none of that. The manifest's absence entry
+                is narrowed by one rather than deleted. */}
+            <div className="btnrow" style={{ marginTop: 12 }}>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+              >
+                Sign out
+              </button>
+            </div>
+            <Note>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -339,9 +365,9 @@ export function CounterSettingsClient({
         {(p) => (
           <>
             <Kv rows={p.rows} />
-            <p className="mono" style={{ marginBottom: 0 }}>
+            <Note>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -353,7 +379,14 @@ export function CounterSettingsClient({
       <Section title="Brand" meta={() => "used on login and in the rail"} data={sections.brand} pending={pending}>
         {(b) => (
           <div style={{ display: "grid", gap: 12, justifyItems: "start" }}>
-            <Wordmark />
+            {/* The mark, not the name set in type. This panel's own meta line
+                says "used on login and in the rail", and login draws
+                `Logo` now — but the better reason is note 15's: "the wordmark
+                is the palette's alibi". Beside an Accent and a Signal swatch,
+                the artwork that IS that red and that yellow demonstrates the
+                claim; a line of Bricolage only asserts it. The rail still
+                draws the type, which is why the meta line still says both. */}
+            <Logo width={180} />
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {b.swatches.map((sw) => (
                 <span
@@ -367,9 +400,7 @@ export function CounterSettingsClient({
                 </span>
               ))}
             </div>
-            <p className="mono" style={{ margin: 0, maxWidth: "56ch" }}>
-              {b.note}
-            </p>
+            <Note bare measure>{b.note}</Note>
           </div>
         )}
       </Section>
@@ -389,9 +420,9 @@ export function CounterSettingsClient({
                 table — it holds the invite buttons there, and the note. We
                 have the note; the buttons are declared in the manifest. */}
             <div className="sec__body">
-              <p className="mono" style={{ margin: 0 }}>
+              <Note bare>
                 {t.note}
-              </p>
+              </Note>
             </div>
           </>
         )}

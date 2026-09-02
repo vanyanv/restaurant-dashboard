@@ -273,3 +273,597 @@ button.wkd {
   background: none;
   outline: none;
 }
+
+/*
+ * The phone's two chrome controls are tapped, and neither was thumb-sized.
+ *
+ * This sheet already knows the rule and states it twice: `.mtab` declares
+ * `min-height:44px` and `.mbtn` declares `min-height:46px`. The two controls
+ * that sit in the phone's CHROME rather than its content were never held to
+ * it, and they are the two a reader touches most:
+ *
+ *   .mdate  padding 5px + 11.5px type + 1px border, both sides -> under 30px
+ *           tall at any line-height this sheet sets. It is the only way to
+ *           change the range on a phone; every figure on the screen is a claim
+ *           about the window it opens.
+ *   .mback  padding 2px/2px + 12.5px type -> under 25px. It is the phone's
+ *           back trail, on every screen below the top level.
+ *
+ * Both clear WCAG 2.5.8's 24px minimum on width and neither clears it on
+ * height with any margin, and neither comes near the 44px this design already
+ * asks of its own buttons.
+ *
+ * REPAIRED WITHOUT MOVING A PIXEL. Growing the padding would resize a chip the
+ * prototype draws at a fixed size and push `.mtop`'s row taller on every
+ * screen. An `::after` overlay extends the TOUCH area to 44px while the box
+ * the reader sees keeps its drawn size — the overlay is a child of the button,
+ * so a tap on it is a tap on the button. It grows vertically only, into
+ * `.mtop`/`.pagehead` padding that holds nothing else; both controls are
+ * already wider than 44px at their shortest real label, so there is no
+ * horizontal case to answer.
+ *
+ * NOT extended to `.mdot` (11px, `cursor:pointer`): the chart's dots sit
+ * closer together than 44px on a dense series, so a 44px pad would make
+ * neighbouring readings ambiguous rather than reachable. A dot is reached by
+ * the reading beside it, not by the dot.
+ */
+.mdate,
+.mback { position: relative }
+
+.mdate::after,
+.mback::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 44px;
+}
+
+/*
+ * The mono note under a section has no rule, in the prototype or here.
+ *
+ * A DELIBERATE DEVIATION FROM THE PROTOTYPE, not a repair of a porting bug.
+ * Read this before assuming the old values were ours to fix.
+ *
+ * `.mono` sets family, size, colour and letter-spacing and says NOTHING about
+ * margin, so a `<p class="mono">` falls back to the user agent's `1em 0`. The
+ * prototype answers that per instance rather than with a rule: it writes an
+ * inline `style` on 34 of its 63 `p.mono`s, at 9px (13 of them), 10px (9),
+ * 11px (4), 2px (5) and single uses of 6, 8 and 12px. Our pages ported that
+ * faithfully and multiplied it — the same note after the same `<Chart>` ended
+ * up at 9px, 10px, 11px AND 12px in different files, and the flush variant
+ * re-typed `.sec__body`'s own `13px 15px` thirty-nine times. 157 call sites,
+ * eighteen distinct spacing values, one element in one position.
+ *
+ * So the drift is INHERITED, not introduced, and the gate cannot rule on it
+ * either way: margin is not one of the fidelity suite's checked properties and
+ * `.mono` is not a landmark class. That makes this a design judgment, and the
+ * judgment is that one element in one position gets one spacing value. Note 15
+ * of the design's own log ("a rail item is a decision, not an inventory") is
+ * the same argument applied to navigation.
+ *
+ * 11px is that value because it is what a `.mono` paragraph with NO inline
+ * style already gets: `--t-cap` is 11.5px, so the user agent's `1em` computes
+ * to 11.5px, and the 29 of our sites that never set a margin were rendering at
+ * it. It is also the plurality of the explicit values in OUR tree (31 of 81).
+ * The prototype's own plurality is 9px; the 2px difference on a caption was
+ * judged not worth splitting the value over.
+ *
+ * The variants are the distinctions that were real, kept:
+ *
+ *   --tight  the note IS a bare Section's content rather than a footnote
+ *            after it, so it sits under the heading instead of after a body.
+ *   --flush  the section is `pad={false}`, so the note supplies the padding
+ *            `.sec__body` would have. Derived from that rule, not retyped.
+ *   --lede   the note comes BEFORE the content it introduces.
+ *   --bare   the note is already inside something that spaces it.
+ *   --bad    the one note that carries a failure. It needs a rule rather than
+ *            a `text-ct-bad` utility because counter-components.css is
+ *            unlayered and Tailwind's utilities are not, so `.mono`'s own
+ *            colour beats any utility regardless of source order. Declared
+ *            here, which is imported after it.
+ */
+.ct-note        { margin: 11px 0 0 }
+.ct-note--tight { margin: 2px 0 0 }
+.ct-note--flush { margin: 0; padding: 13px 15px }
+.ct-note--lede  { margin: 0 0 11px }
+.ct-note--bare  { margin: 0 }
+.ct-note--bad   { color: var(--bad) }
+.ct-note--good  { color: var(--good) }
+/* A readable line length on a note that runs to prose. */
+.ct-note--measure { max-width: 56ch }
+
+/* Two flush notes in a row are ONE flush block with a paragraph break, not two
+   blocks stacked. Left to the plain rule they would put 13px of their own
+   padding on either side of the break and read as 26px of dead air; the pages
+   that hit this first (the two COGS "moved" panels) hand-wrote `13px 15px 0`
+   and `9px 15px 13px` to get 13 / 9 / 13 instead. That is the rule, stated
+   once, so the next stacked pair gets it without retyping four numbers. */
+.ct-note--flush:has(+ .ct-note--flush) { padding-bottom: 0 }
+.ct-note--flush + .ct-note--flush      { padding-top: 9px }
+
+/*
+ * The prose lede a section sets above its content, and the same missing rule.
+ *
+ * The same deviation, for the same reason, on the section lede.
+ *
+ * Eight sections open with a sans paragraph introducing what follows —
+ * `/dashboard/pnl`, `/dashboard/stores`, `/dashboard/forbidden`, the monitoring
+ * pages. The prototype writes this one inline too, and disagrees with itself
+ * the same way: `margin:0 0 12px` with `line-height:1.5` five times and with
+ * `1.55` three times, plus `margin:0` and `margin:0 0 10px` once each. Our
+ * pages inherited both, and added a third axis of their own — the size token
+ * spelled BOTH `var(--t-mid)` (the ported alias) and `var(--ct-t-mid)` (the
+ * real token) in adjacent files, which is the one part of this that the port
+ * did introduce.
+ *
+ * 1.55 rather than 1.5 because the prototype already sets exactly this pairing
+ * once as a RULE rather than inline: `.ans__lead` is `--t-mid` at 1.55. Where
+ * the design has stated the same thing twice, once carelessly and once as a
+ * rule, the rule is the one to keep.
+ */
+.ct-lede       { margin: 0 0 12px; font-size: var(--t-mid); line-height: 1.55 }
+.ct-lede--last { margin-bottom: 0 }
+
+/*
+ * `.login` and `.plogin` are the prototype's login CARDS, and this application
+ * has no documentation page to float them on.
+ *
+ * `AppShell` already made this call once, for `.frame`: it restates the
+ * design's typography, ink and ground and DROPS the prototype's demo-card
+ * decoration — a border, a 12px radius, a shadow and a `min-height` — because
+ * in the prototype that frame is a card on a page, and here it IS the page.
+ * `.login` never got the same treatment. It is applied straight to the route's
+ * own `<main>`, so on a 1440x900 viewport the live app drew a 1440x620
+ * bordered card glued to top:0 with 280px of `<body>` showing underneath it.
+ *
+ * That strip is both defects the owner reported, from one cause:
+ *
+ *   - The form sits above centre, because the card is 620px tall in a 900px
+ *     viewport and `align-content:center` only centres within the card.
+ *   - The screen reads as two different off-whites, because `<body>`'s ground
+ *     is `hsl(var(--background))` in `globals.css` — `#FFFBF8`, the
+ *     pre-Counter cream — while the card paints `--ct-paper`,
+ *     `oklch(96.2% 0.006 60)`. Both values measured on the live app, not
+ *     inferred: `main` 1440x620 at top 0, body `rgb(255, 251, 249)`, main
+ *     `oklch(0.962 0.006 60)`.
+ *
+ * Filling the viewport fixes the second by leaving no `<body>` to see, which
+ * is why this is one repair and not two. It is NOT a colour change: every
+ * `ct-` token still matches the prototype exactly (the one documented
+ * exception, `--ct-ink-3`, is in `counter.css`'s own header).
+ *
+ * `100dvh`, not `100vh`: `/m/login` is a phone screen and the browser's URL
+ * bar is part of the viewport `vh` lies about.
+ *
+ * Scope is every screen carrying `.login` — `/login`, `/signup/<token>` and
+ * `/shutdown` — because all three are full-page bare routes with the same
+ * card-as-page mistake, and fixing one of three would leave the odd ones out.
+ */
+.login {
+  min-height: 100dvh;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* The aside is a column of prose, and prose does not want a 1100px measure.
+   The form column already caps itself (`.login__form` is `max-width:460px`);
+   this is the same courtesy for the half the prototype never had to size,
+   because its card was never wider than the page it sat on. */
+.login__aside > * { max-width: 34rem }
+
+/*
+ * `.plogin` fills its shell, which until now it only asked to.
+ *
+ * The prototype's rule ends `flex:1`, and that has been inert since the day it
+ * was ported: `/m/login` lives under `src/app/(mobile)/m/layout.tsx`, whose
+ * `main.m-shell__main` is a plain block. So the phone drew a content-height
+ * card inside a 480px-capped, 16px-padded main with
+ * `calc(var(--m-tabbar-height) + ...)` reserved at the bottom for a tab bar
+ * that this layout deliberately does NOT render without a session — roughly
+ * 420px of pre-Counter cream under a sign-in form on a 390x844 screen.
+ *
+ * Selected with `:has()` rather than a class on the layout because that layout
+ * is shared with a dozen editorial `/m` pages whose padding and 480px measure
+ * are correct; only the screen that wants the whole viewport opts out, and it
+ * opts out by being the screen that wants it. `.ct-note--flush:has(...)` above
+ * establishes `:has()` in this sheet.
+ */
+.m-shell .m-shell__main:has(> .plogin) {
+  max-width: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* `/signup/phone/<token>` and `/shutdown/phone` carry `.plogin` too, and they
+   are NOT under the mobile layout — their `<main>` is a child of `<body>`, so
+   the block above never reaches them and `flex:1` has nothing to be one of.
+   `min-height` states the intent that `flex:1` could only ask for. Inside the
+   shell it is a no-op: that main is already exactly 100dvh. */
+.plogin { min-height: 100dvh }
+
+/* And the tab-bar reserve again, one level down.
+ *
+ * `editorial-mobile.css` also carries a bare-element rule —
+ * `.editorial-surface--mobile main { padding-bottom: calc(tab bar + safe area
+ * + 12px) }` — and `.plogin` IS a `<main>`, so the sign-in screen was still
+ * padded 76px at the foot against 26px at the head after the block above
+ * unpadded its container. `align-content:center` centres inside the content
+ * box, so 50px of asymmetry is 25px of off-centre: measured 26px top / 76px
+ * bottom, content centred at y=397 in an 844px viewport whose centre is 422.
+ *
+ * The reserve is right for every other phone screen — they render the tab bar
+ * — and wrong only here, where the layout drops it for want of a session.
+ * Restated as the prototype's own symmetric 26px rather than zeroed, so the
+ * form keeps its breathing room at the bottom of a short viewport. */
+.editorial-surface--mobile main.plogin { padding-bottom: 26px }
+
+/*
+ * The rail gains a sign-out row, and the four properties a `<button>` needs to
+ * be a `.navbtn`.
+ *
+ * `.navbtn` is written for the rail's seventeen `<Link>`s. Signing out is not a
+ * destination, so this one is a `<button>` — and a button does not inherit the
+ * anchor's box: it needs the full width the flow gives an anchor, the left
+ * alignment, a transparent ground, and `cursor:pointer`, which Tailwind v4's
+ * preflight sets to `default` on buttons (the same reason `.sw`, `.wkd` and
+ * `.rail__store` each state it). Everything else — the 7px/9px padding, the
+ * 9px gap, the `--ink-2` ink, the `--sunk` hover — is `.navbtn`'s, deliberately
+ * unrepeated: a rail control that lights up differently from the rows above it
+ * reads as belonging to something else.
+ *
+ * Hidden below 900px with the rest of the foot. `counter-components.css:345`
+ * turns the rail into a horizontal strip there and hides `.rail__cap`,
+ * `.rail__store` and `.rail__foot`; a sign-out row left behind would be the
+ * only thing in that strip that is not a destination.
+ *
+ * See `shell/rail.tsx` for why the row exists at all.
+ */
+.rail__signout {
+  width: 100%;
+  text-align: left;
+  background: none;
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .rail__signout { display: none }
+}
+
+/*
+ * ============================================================================
+ * ASK IS A CHAT, AND A CHAT DOES NOT SCROLL ITS COMPOSER OFF THE PAGE
+ * ============================================================================
+ *
+ * `.askpage` is `align-items:start`, so both of its columns are content-height
+ * and the taller one sets the page. The prototype shows FOUR past threads. The
+ * live database holds thirty-nine, and `Conversations` renders all of them.
+ *
+ * Measured on the live app, 1440x900, signed in:
+ *
+ *     document      2931px      (viewport 900)
+ *     .convs        2740px      <- sets the page height, on its own
+ *     .chat          125px      <- the answer, the thing the page is for
+ *     .composer      top 2880   <- 1980px below the fold
+ *
+ * So a page called "Ask" opened with no way to ask: the input was two
+ * thousand pixels under thirty-nine rows of history. `/m/ask` was the same
+ * defect worse — 3033px, the composer under all thirty-nine on a 390px screen.
+ *
+ * The fix is to make the page what it already claims to be. `.askpage` is
+ * given the viewport's height rather than its content's, both columns scroll
+ * inside it, and the composer sticks to the bottom. Nothing is hidden and no
+ * row is dropped: the history is all still there, one scroll gesture away, in
+ * the column it belongs to instead of in the page.
+ *
+ * `210px` is measured, not guessed: `.askpage` starts at y=126 (topbar and
+ * `.pagehead` above it), the composer is 51px, `.screen`'s grid gap is 14px
+ * twice. 126 + 14 + 51 + 14 = 205, rounded up to clear a scrollbar.
+ *
+ * `dvh` rather than `vh` because `/m/ask` shares this rule and a phone's URL
+ * bar is exactly what `vh` lies about.
+ */
+.askpage {
+  align-items: stretch;
+  max-height: calc(100dvh - 210px);
+}
+/* `min-height:0` is what lets a grid child actually be shorter than its
+   content — without it `overflow-y` has nothing to overflow, because the
+   default `min-height:auto` sizes the track to the content anyway. */
+.askpage > * { min-height: 0 }
+.convs {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+/* The rail's own header stays put while its thirty-nine rows move under it.
+   It already paints `--paper`, so nothing shows through. */
+.convs__h {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+/*
+ * `.chat` scrolls, and its rows keep their own height.
+ *
+ * `.chat` is `display:grid`, so the moment it was given the column's full
+ * height its single child stretched to fill it — `.ansfail`'s three rows
+ * spread 690px apart, and `.sug`'s `border-radius:999px` pills, stretched
+ * vertically inside a `.sugs` flex row, drew as 200px ellipses. `start` is
+ * also the right default for the answered state: turns stack downward from
+ * the top of a chat, they do not distribute themselves down a column.
+ *
+ * The empty state is the one thing that should sit in the middle of the space
+ * rather than at the top of it — it is not a turn, it is the page saying what
+ * it is for while it waits. `:has()` asks the question the state already
+ * answers, so nothing has to pass a flag down for it.
+ */
+.chat {
+  overflow-y: auto;
+  align-content: start;
+}
+.chat:has(> .ansfail) { align-content: center }
+
+/*
+ * The composer, pinned.
+ *
+ * `sticky` rather than `fixed`: it keeps its place in the grid, so it cannot
+ * cover the last line of an answer the way a fixed bar does, and it needs no
+ * matching bottom padding anywhere to compensate. The ground is painted
+ * because content scrolls behind it.
+ *
+ * `.screen`'s 14px grid gap is what the negative margin and the padding
+ * reproduce — the bar has to reach the bottom of the scroll container to sit
+ * flush, and it has to keep 14px of air above it while it does.
+ */
+.screen > .composer {
+  position: sticky;
+  bottom: 0;
+  margin-bottom: -14px;
+  padding-bottom: 11px;
+  background: var(--surface);
+  z-index: 2;
+}
+
+/*
+ * The phone has no room for a rail, so `Section`-of-history is where its
+ * thirty-nine rows land — in the page, above the composer.
+ *
+ * `.mscroll` is `flex:1;overflow-y:auto`, which needs a bounded flex parent
+ * to be a scroll container; under `main.m-shell__main` it has none, so the
+ * WINDOW scrolls and a composer at the end of the flow is at the end of 3033
+ * pixels. Sticky against the window scroll is what puts it back on screen,
+ * clear of the tab bar the shell draws over the same corner.
+ *
+ * The row cap that keeps this list from being most of the page is in
+ * `counter-phone-ask-client.tsx`, where it can say how many it is not
+ * showing — a number CSS cannot state.
+ *
+ * `fixed`, not `sticky`, and this was measured rather than assumed. Sticky
+ * was tried first and does nothing here: it stops an element scrolling AWAY
+ * once reached, it never pulls one INTO view. With the page at 1068px and the
+ * composer last in the flow, a reader at scroll 0 still saw no input — the
+ * whole defect, just 1900px less of it. Fixed is also what the tab bar six
+ * pixels below it already does, so the two agree about the corner they share:
+ * `--m-tabbar-height` plus the safe area is the tab bar's own height
+ * expression, read from the same custom property rather than restated as a
+ * number that could drift from it. `z-index:30` sits under the bar's 40.
+ */
+.mscroll > .composer {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  width: auto;
+  bottom: calc(var(--m-tabbar-height) + env(safe-area-inset-bottom, 0px) + 8px);
+  background: var(--surface);
+  z-index: 30;
+}
+/* The space the fixed bar no longer occupies in the flow, given back so the
+   last history row is not permanently under it. `.mscroll`'s own 12px, plus
+   the bar (51px) and the gap above it. */
+.mscroll:has(> .composer) {
+  padding-bottom: calc(12px + 51px + 11px);
+}
+
+/*
+ * ============================================================================
+ * THE SURFACES THAT SNAP
+ * ============================================================================
+ *
+ * The ported sheet is careful about motion where it thought about it at all —
+ * `.navbtn`, `.btn`, `.sug`, `.qbtn`, `.askmini`, `.seg button` and `.tbl
+ * tbody tr` each carry the same declaration, `background-color`,
+ * `border-color` and `color` over .16s at `--ease`. That is the design's own
+ * idiom, stated seven times.
+ *
+ * It is not stated on everything that changes. Parsing both Counter sheets for
+ * rules that define a `:hover`, `:active`, `:focus-visible`, `[aria-pressed]`
+ * or `[aria-current]` appearance whose BASE rule declares no `transition`
+ * turns up twenty-seven classes. They are not a category — they are the ones
+ * nobody got to: the conversation rail, the store picker's options, the date
+ * popover's day cells and its nav arrows, the ⌘K rows, the shortage sheet's
+ * rows, the phone's list rows, the password reveal, the composer's own focus
+ * border. Every one of them jumps between two states with no time in between,
+ * next to a `.navbtn` two inches away that does not.
+ *
+ * So this is one declaration applied to the list, not a new motion vocabulary:
+ * the same three properties, the same duration, the same easing. All three are
+ * paint-only — no layout, no compositing surprise, nothing on the main thread
+ * that was not already going to repaint that element anyway.
+ */
+.cv,
+.storeopt,
+.pickrow,
+.cmdk__row,
+.sh__r,
+.addrow,
+.rowline .del,
+.askbar__in .ph,
+.reveal,
+.drnav,
+.drd,
+.dr__today,
+.drcmp,
+.mpresets button,
+.statebar button,
+.turnfoot button,
+.mtab--ask,
+.padk,
+.wkt,
+.mli.is-link,
+.composer {
+  transition:
+    background-color .16s var(--ease),
+    border-color .16s var(--ease),
+    color .16s var(--ease);
+}
+
+/*
+ * Press, which nothing in the application had.
+ *
+ * Every button in Counter has a hover and a focus state and none of them
+ * acknowledge the click itself. On a phone that is the whole feedback loop —
+ * there is no hover on a touch screen, so `.mbtn` had no state between "at
+ * rest" and "the next screen arrived", and a tap on a slow route looked
+ * exactly like a tap that missed.
+ *
+ * One pixel, and `transform` on purpose: it is the only property here the
+ * compositor can run without the main thread, and unlike a box-shadow or a
+ * padding change it cannot reflow the row the button sits in. The transition
+ * is asymmetric on purpose too — instant down, .16s back up — because the
+ * press should feel like it happened when the finger landed, not 160ms later.
+ *
+ * At rest these elements declare NO transform at all, which matters more here
+ * than it looks: a filling `transform: none` makes an element a containing
+ * block for `position: fixed` descendants, which is the exact defect the entry
+ * animation at the top of this file was repaired for. A transform that exists
+ * only during `:active` never creates one.
+ */
+.btn,
+.mbtn,
+.sug,
+.qbtn,
+.askbtn,
+.sendbtn,
+.navbtn,
+.rail__signout {
+  transition-property: background-color, border-color, color, transform;
+  transition-duration: .16s;
+  transition-timing-function: var(--ease);
+}
+.btn:active:not([disabled]),
+.mbtn:active:not([disabled]),
+.sug:active,
+.qbtn:active,
+.askbtn:active,
+.sendbtn:active:not([disabled]),
+.navbtn:active,
+.rail__signout:active {
+  transform: translateY(1px);
+  transition-duration: 0s;
+}
+
+/*
+ * A TURN ARRIVING.
+ *
+ * `.screen > *` and `.mscroll > *` give every top-level block on a page its
+ * staggered entry, and a chat turn is not one of those — it is a child of
+ * `.chat` or `.mchat`, so an answer that took nine seconds to load appeared
+ * with no more ceremony than a repaint. (Nine is measured: opening a stored
+ * thread from the rail, the `Section` skeleton held for ~9s before the turns
+ * landed.) This is the one place in the product where something genuinely
+ * ARRIVES rather than being drawn with the page, and it was the one place
+ * with no entry.
+ *
+ * `cnter` is the sheet's own keyframe — the same 9px rise every section uses —
+ * so a turn arrives the way the page it is on arrived. The question is offset
+ * ahead of the answer by the same 36ms `useEntry` staggers sections by, which
+ * is the reading order: you asked, then it answered.
+ *
+ * `backwards`, not `both`, for the reason written at the top of this file: a
+ * filling `to` state of `transform: none` traps `position: fixed` children,
+ * and the phone's composer is fixed.
+ */
+.chat > .youmsg,
+.chat > .ans,
+.mchat > .youmsg,
+.mchat > .manswer {
+  animation: cnter .3s var(--ease) backwards;
+}
+.chat > .ans,
+.mchat > .manswer {
+  animation-delay: 36ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * The same list, silenced. Colour still changes — a hover that stops
+   * telling you it is a hover is a usability regression, not an
+   * accessibility win — but it changes instantly, and nothing moves.
+   */
+  .cv, .storeopt, .pickrow, .cmdk__row, .sh__r, .addrow, .rowline .del,
+  .askbar__in .ph, .reveal, .drnav, .drd, .dr__today, .drcmp,
+  .mpresets button, .statebar button, .turnfoot button, .mtab--ask, .padk,
+  .wkt, .mli.is-link, .composer,
+  .btn, .mbtn, .sug, .qbtn, .askbtn, .sendbtn, .navbtn, .rail__signout {
+    transition-duration: 0s !important;
+  }
+  .btn:active, .mbtn:active, .sug:active, .qbtn:active, .askbtn:active,
+  .sendbtn:active, .navbtn:active, .rail__signout:active {
+    transform: none !important;
+  }
+  .chat > .youmsg, .chat > .ans, .mchat > .youmsg, .mchat > .manswer {
+    animation: none !important;
+  }
+}
+
+/*
+ * `.convs__q` — the conversation rail's search field.
+ *
+ * An ADDITION, not a repair, and the only one in this file: the prototype's
+ * `.convs` rail is four hand-written threads and has no search, while ours is
+ * however many the account has asked — 47 by the time this was written, all
+ * with auto-generated titles. `searchConversations` matches turn text as well
+ * as titles, which is what makes the field worth having; the rail simply had
+ * no box to type into.
+ *
+ * It cannot live in `counter-components.css`: that file is generated from the
+ * prototype by `scripts/extract-prototype-css.ts` and asserted byte-exact
+ * against the generator by `tests/styles/counter-components.test.ts`. This is
+ * the file that is allowed to have opinions.
+ *
+ * Every value is borrowed rather than invented — `.convs__h`'s own padding and
+ * divider, `.search`'s glyph size and gap, `.cv span`'s caption scale — so the
+ * field reads as the row it sits above. `.search` itself is not reused: its
+ * `min-width:214px` overflows a 206px rail.
+ */
+.convs__q{display:flex;align-items:center;gap:7px;padding:7px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+.convs__q:focus-within{background:var(--paper)}
+.convs__q svg{width:12px;height:12px;color:var(--ink-3);flex:none}
+.convs__q input{flex:1;min-width:0;border:none;outline:none;background:none;font:inherit;font-size:var(--t-cap);color:var(--ink)}
+.convs__q input::placeholder{color:var(--ink-3)}
+
+/*
+ * `.convhead` — the open thread's name and its two actions.
+ *
+ * An ADDITION, like `.convs__q` above: the prototype's Ask page never shows
+ * which stored thread is on screen, because its rail is four hand-written
+ * threads that open nothing. Ours opens real ones, and until this row existed
+ * the heading over someone's own conversation read "Ask".
+ *
+ * Built from `.convs__h`'s own vocabulary — the same mono caption for the
+ * controls, the same divider — so the row reads as part of the same furniture
+ * rather than a second design. The name itself is body copy, not a caption:
+ * it is content, and it is the one thing on the row a reader is looking for.
+ */
+.convhead{display:flex;align-items:baseline;gap:10px;padding:0 0 9px;margin-bottom:13px;border-bottom:1px solid var(--line)}
+.convhead b{font-size:var(--t-mid);font-weight:600;color:var(--ink);line-height:1.3;margin-right:auto}
+.convhead__f{margin-right:auto;flex:1;min-width:0}
+.convhead__f input{width:100%;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--surface);padding:4px 8px;font:inherit;font-size:var(--t-mid);font-weight:600;color:var(--ink)}
+.convhead__f input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+.convhead .rk{margin-left:auto}
+.convhead button{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);border:0;background:none;padding:0;flex:none}
+.convhead button:disabled{color:var(--ink-3)}

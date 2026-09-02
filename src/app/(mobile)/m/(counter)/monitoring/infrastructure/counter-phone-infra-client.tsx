@@ -1,6 +1,6 @@
 "use client"
 
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Note, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { InfraSections } from "@/lib/counter/adapters/monitoring-infra"
 
@@ -30,14 +30,21 @@ export function CounterPhoneInfraClient({
 
   return (
     <>
-      <Section bare title="Infrastructure" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div>
-            <h2 className="mtitle">Infrastructure</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Infrastructure unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Infrastructure</h2>
+        <Section bare title="Infrastructure" data={sections.headline} pending={pending}>
+          {(h) => (
             <p className="msub">{h.cells[0].value} of database</p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
@@ -47,9 +54,9 @@ export function CounterPhoneInfraClient({
         {(j) => (
           <>
             <MList rows={j.phoneRows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {j.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -63,9 +70,9 @@ export function CounterPhoneInfraClient({
         {(s) => (
           <>
             <MList rows={s.phoneRows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

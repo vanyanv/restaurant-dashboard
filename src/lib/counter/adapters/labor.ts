@@ -702,7 +702,7 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
       say(" That is ")
       strong(`${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}`)
       say(` the ${hoursText(scheduled)} published`)
-      say(rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labour.`)
+      say(rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labor.`)
     }
   }
 
@@ -982,7 +982,7 @@ function buildWeekTable(
     note:
       "The verdict reads each day against the shifts this store published for it — its own " +
       "plan, priced at the range's blended rate. Nothing here is measured against a " +
-      "sales-per-labour-hour floor: this schema publishes none, and a floor invented for the " +
+      "sales-per-labor-hour floor: this schema publishes none, and a floor invented for the " +
       "page would be the page judging itself. Sales and Labor % are the statement's Total " +
       "Sales; SPLH divides net sales instead, which is what the figure has always meant " +
       "elsewhere in the product — so SPLH times hours will not equal the Sales column, and " +
@@ -1100,7 +1100,7 @@ function buildSchedule(
       ? `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — the schedule held.`
       : `${hoursText(scheduled)} published, ${hoursText(week.actualHours)} worked — ` +
         `${hoursText(Math.abs(gap))} ${gap > 0 ? "over" : "under"}` +
-        (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labour.`)
+        (rate === null ? "." : `, about ${money(Math.abs(gap) * rate)} of labor.`)
   }
 
   return {
@@ -1382,7 +1382,7 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
       (w) =>
         `${money(w.cost)} · ${hoursText(w.hours, 0)}${w.isPartial ? " · part week" : ""}`,
     ),
-    alt: "Labour as a share of Total Sales, twelve weeks",
+    alt: "Labor as a share of Total Sales, twelve weeks",
   }
 
   const full = weeks.filter((w) => !w.isPartial && w.laborPct !== null)
@@ -1391,14 +1391,14 @@ function buildTrend(weeks: LaborTrendWeek[]): TrendSection {
 
   let sentence: string
   if (newest === null || oldest === null) {
-    sentence = "No full week in this window carries both labour and sales, so there is no trend to read."
+    sentence = "No full week in this window carries both labor and sales, so there is no trend to read."
   } else if (newest.key === oldest.key) {
     sentence =
       `One full week in this window has a reading: ${newest.label}, at ` +
       `${pct(newest.laborPct, { scaled: true })} of Total Sales. Twelve of them is what makes a trend.`
   } else {
     sentence =
-      `Labour ran ${pct(newest.laborPct, { scaled: true })} of Total Sales in the week of ` +
+      `Labor ran ${pct(newest.laborPct, { scaled: true })} of Total Sales in the week of ` +
       `${newest.label}, against ${pct(oldest.laborPct, { scaled: true })} in the week of ` +
       `${oldest.label} — ${points((newest.laborPct as number) - (oldest.laborPct as number))} ` +
       "across the window."
@@ -1630,7 +1630,7 @@ function trendSection(sd: SectionData<LaborTrendWeek[]>): SectionData<TrendSecti
   return mapReadyTo(sd, (weeks) =>
     weeks.length === 0 || weeks.every((w) => w.cost === 0 && w.hours === 0)
       ? notComputed<TrendSection>(
-          `${TREND_WEEKS} weeks of labour history — HarriPositionDaily carries no row in any ` +
+          `${TREND_WEEKS} weeks of labor history — HarriPositionDaily carries no row in any ` +
             "of them, so there is no trend to draw",
         )
       : ready(buildTrend(weeks)),
