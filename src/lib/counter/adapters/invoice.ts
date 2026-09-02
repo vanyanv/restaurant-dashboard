@@ -59,12 +59,6 @@ export interface InvoiceReasons {
   rows: Array<{ key: string; kind: string; message: string; lines: string | null }>
   meta: string
   note: string
-  /** The row this section can act on — the decision writes back to it. */
-  invoiceId: string
-  /** `Invoice.status`. REVIEW is the only value that offers a decision. */
-  status: string
-  /** Whether the document is already recorded as a credit rather than a bill. */
-  isReturn: boolean
 }
 
 export interface InvoiceLines {
@@ -78,6 +72,21 @@ export interface InvoiceLines {
   phoneEmpty: string
   /** True when the goods tie to the printed subtotal. */
   reconciles: boolean
+  /**
+   * The row the decision writes back to, and where it currently stands.
+   *
+   * On THIS section rather than on `reasons`, because that is where
+   * `P.invoice` puts the control: the `.btnrow` sits inside "What was
+   * extracted", under the money lines, and its note reads "Approve unlocks
+   * when the gap is zero". The verdict belongs beside the arithmetic it is a
+   * verdict on — `reconciles` above is the gate, and both have to arrive in
+   * the same section for the page to be able to honour it.
+   */
+  invoiceId: string
+  /** `Invoice.status` — PENDING, MATCHED, REVIEW, APPROVED or REJECTED. */
+  status: string
+  /** Whether the document is already recorded as a credit rather than a bill. */
+  isReturn: boolean
 }
 
 export interface InvoicePanels {
@@ -542,13 +551,6 @@ function countsNote(d: Loaded): string {
  */
 function reasonsOf(d: Loaded): InvoiceReasons {
   return {
-    // The section that explains a hold is the section that lifts it. The
-    // status and the id travel with the reasons so the panel can offer the
-    // decision beside the argument for it, rather than sending the reader to
-    // a queue screen to act on something they are already looking at.
-    invoiceId: d.id,
-    status: d.status,
-    isReturn: d.isReturn,
     rows: d.reasons.map((r, i) => ({
       key: `${r.kind}:${i}`,
       kind: REASON_LABEL[r.kind] ?? titleCase(r.kind.replace(/_/g, " ")),
@@ -638,6 +640,9 @@ function linesOf(d: Loaded): InvoiceLines {
     meta: `${count(d.lines.length)} · ${count(shown.length)} shown`,
     phoneMeta: `${count(d.lines.length)} extracted`,
     reconciles: d.gap === null,
+    invoiceId: d.id,
+    status: d.status,
+    isReturn: d.isReturn,
     note:
       (d.gap === null
         ? `The goods lines tie to the printed subtotal, so nothing on this document is missing ` +

@@ -1401,34 +1401,37 @@ export const PAGES: FidelityPage[] = [
           "third, \"Open the PDF\", IS rendered — the route serves the file " +
           "inline, so a phone opens it in the viewer it already has.",
       },
-      {
-        landmark: "btn",
-        desktop: 3,
-        mobile: 0,
-        reason:
-          "\"Approve and post\", \"Add the missing line\" and \"Send back " +
-          "to vendor\". Two have nothing behind them at all: no code path " +
-          "creates an `InvoiceLineItem` by hand (`invoiceLineItem.create` " +
-          "appears only in the generated client), and nothing in this product " +
-          "sends anything to a vendor — the mail integration reads an inbox, " +
-          "it does not reply to one. " +
-          "THE THIRD IS DIFFERENT AND THE ENTRY SHOULD SAY SO: " +
-          "`PATCH /api/invoices/[id]` already accepts `status: \"APPROVED\"` " +
-          "and stamps `matchedAt`, so approving is one call away. It is not " +
-          "wired because approving posts an invoice to COGS, and adding a " +
-          "consequential write to a page while matching its landmark count is " +
-          "the wrong order to make that decision in. Whoever wants it has the " +
-          "shortest path written down here. " +
-          "The phone has no `.btn` on either side.",
-      },
-      {
-        landmark: "btnrow",
-        desktop: 1,
-        mobile: 0,
-        reason:
-          "The row that holds those three. Drawn empty it is furniture, so it " +
-          "arrives with them. The phone has no `.btnrow` on either side.",
-      },
+      /*
+       * THE DESK'S `.btn` AND `.btnrow` ALLOWANCES ARE GONE — the page renders
+       * them now.
+       *
+       * They read: "`PATCH /api/invoices/[id]` already accepts
+       * `status: \"APPROVED\"` and stamps `matchedAt`, so approving is one call
+       * away. It is not wired because approving posts an invoice to COGS, and
+       * adding a consequential write to a page while matching its landmark
+       * count is the wrong order to make that decision in. Whoever wants it
+       * has the shortest path written down here."
+       *
+       * The owner wanted it: an invoice routed to REVIEW could be read and
+       * never answered, so the queue only ever grew. `ReviewDecision` fills
+       * the fixture's three slots with the three verbs this product actually
+       * has — approve, mark as a credit, reject — keeping the prototype's
+       * `.btnrow`/`.btn--primary`/`.btn`/`.btn--quiet` shape exactly, in the
+       * fixture's own position: inside "What was extracted", under the money
+       * lines, NOT beside the review reasons where a first draft put it. The
+       * gate ran that draft down — same landmarks, wrong order — and it was
+       * right twice, because the fixture disables its primary and notes
+       * "Approve unlocks when the gap is zero". That rule needs `reconciles`,
+       * which lives on the lines section, so the control has to be there too.
+       *
+       * Two of the fixture's LABELS are not reproduced, and could not be:
+       * nothing creates an `InvoiceLineItem` by hand, and the mail
+       * integration reads an inbox rather than replying to one. The component
+       * says so.
+       *
+       * The phone's `mbtn` entry above stands. That surface has no decision
+       * yet.
+       */
     ],
   },
   {
@@ -1716,6 +1719,70 @@ export const PAGES: FidelityPage[] = [
     // the invented pair; the shapes agree because the finding is the same one.
     status: "counter",
     baseline: { desktop: 12, mobile: 9 },
+    extraLandmarks: [
+      {
+        landmark: "sec",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"What this costs\" — a section the prototype does not draw, on a " +
+          "page the prototype makes read-only. `P.ingredient` is \"price " +
+          "history, the SKUs that match it, and everything it touches\" and " +
+          "carries no control at all.\n" +
+          "It is here because `costPerRecipeUnit` is DERIVED from vendor pack " +
+          "metadata, that parse fails often enough to have its own guard " +
+          "(`selectNonSpikeCostIndex`), and when it fails it multiplies " +
+          "$/unit by ten to two hundred — into every recipe, then COGS, then " +
+          "the P&L. One week of this account read $193k that way. The guard " +
+          "keeps the spike out of the FIGURES and has never been able to fix " +
+          "the STORED value; the editorial ingredient sheet had the form that " +
+          "could, and the rebuild dropped it, so the only person who knows " +
+          "what a case really costs had no way to say so. A reading surface " +
+          "over a number this product gets wrong is the one place a control " +
+          "earns a departure from the fixture.\n" +
+          "The phone has no copy of it yet, which is why this is declared on " +
+          "the desk alone.",
+      },
+      {
+        landmark: "sec__head",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "That section's own head. It falls with the section above and is " +
+          "counted separately because the gate counts landmarks, not reasons.",
+      },
+      {
+        landmark: "sec__body",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The same section's body — the form itself, the two inputs and the " +
+          "note under them. It falls with the section for the reason argued " +
+          "in the `sec` entry above, and is counted on its own because the " +
+          "gate counts landmarks rather than reasons.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The row holding the form's two buttons. An exact count, and a " +
+          "stable one: the form renders the same two controls on every " +
+          "ingredient in every state, which is a property the component keeps " +
+          "deliberately — see its note on why the invoice page's controls " +
+          "stopped appearing and disappearing.",
+      },
+      {
+        landmark: "btn",
+        desktop: 2,
+        mobile: 0,
+        reason:
+          "\"Save this price\" and the lock toggle. The lock SAVES in the " +
+          "same call rather than acting alone, so an owner cannot type a " +
+          "correction, press lock, and lose the correction — which is why " +
+          "there are two buttons here and not three.",
+      },
+    ],
   },
   {
     protoId: "prices",
@@ -2116,10 +2183,14 @@ export const PAGES: FidelityPage[] = [
     route: "/dashboard/settings",
     mobileRoute: "/m/more",
     report: true,
-    // MEASURED: 21 of the prototype's 28 on the desk, 8 of 8 on the phone, 0
-    // extra, 0 rendering differences, 0 dark defects. The seven missing
-    // landmarks are five buttons and the two rows that would hold them, and
-    // they are declared below in two groups.
+    // MEASURED: 23 of the prototype's 28 on the desk, 8 of 8 on the phone, 0
+    // extra, 0 rendering differences, 0 dark defects. The five missing
+    // landmarks are four buttons and the one row that would hold three of
+    // them, and they are declared below in two groups.
+    //
+    // WAS 21 of 28. The two that landed are the Sessions panel's `.btnrow`
+    // and a `.btn` in it, and they are a capability arriving rather than a
+    // fixture filling: there was no sign-out on any Counter desk page.
     //
     // The PHONE was 0 of 8 — no landmark in common, the one shape the harness
     // refuses to score. `/m/more` was still the editorial page. It is
@@ -2141,39 +2212,52 @@ export const PAGES: FidelityPage[] = [
     // Team also gained the real `.sec__body` the design closes it with, which
     // is where its note belongs — it is body content, not a table row.
     status: "counter",
-    baseline: { desktop: 21, mobile: 8 },
+    baseline: { desktop: 23, mobile: 8 },
     absentLandmarks: [
       {
         landmark: "btn",
-        desktop: 5,
+        desktop: 4,
         mobile: 0,
         reason:
-          "Five of the prototype's six, in two groups. THREE are the Team " +
+          "Four of the prototype's six, in two groups. THREE are the Team " +
           "panel's \"Invite someone\", \"Resend the invite\" and " +
           "\"Revoke\": `P.settings`' own comment beside them reads \"there " +
           "is an invite record, a signup page and a route that redeems a " +
           "token - and nowhere that issues one\", and that is still true — " +
           "the `Invite` model carries `expiresAt`, `usedAt` and `revokedAt`, " +
-          "and no action writes a row. TWO are the Sessions panel's \"End\" " +
-          "and \"Sign out everywhere\": auth is `strategy: \"jwt\"` with no " +
-          "session table, so there is nothing to enumerate and nothing to " +
-          "end — `signinsOf`'s note says so with the numbers (every session " +
-          "ever recorded still reads as live, because there have been far " +
-          "more sign-ins than sign-outs). The sixth button, \"Change\" on " +
-          "the password row, IS rendered and works. " +
+          "and no action writes a row. ONE is the Sessions panel's " +
+          "\"End\": auth is `strategy: \"jwt\"` with no session table, so " +
+          "there is nothing to enumerate and nothing to end on a device " +
+          "this browser is not — `signinsOf`'s note says so with the " +
+          "numbers (every session ever recorded still reads as live, " +
+          "because there have been far more sign-ins than sign-outs). " +
+          "WAS FIVE. \"Sign out everywhere\" was forgiven under the same " +
+          "JWT argument, and that was one button too wide: it is true of " +
+          "revoking a token this browser is not holding and false of " +
+          "signing out of this one, which is a cookie. The Sessions panel " +
+          "renders \"Sign out\" in that slot now, and until it did there " +
+          "was no way to sign out of a Counter desk page at all — 48 of " +
+          "the 52 desk routes, since `app-sidebar.tsx` only reaches the " +
+          "four left in `(editorial)`. It is deliberately NOT the " +
+          "prototype's wording: a button labelled \"everywhere\" that " +
+          "ends one cookie would be lying about a security control, which " +
+          "is the same reason \"End\" above is still absent. The sixth " +
+          "button, \"Change\" on the password row, IS rendered and works. " +
           "THIS ENTRY IS A CAPABILITY, NOT A FIGURE, and it goes the day " +
           "either is built rather than the day a table fills up. The phone " +
           "has no `.btn` on either side.",
       },
       {
         landmark: "btnrow",
-        desktop: 2,
+        desktop: 1,
         mobile: 0,
         reason:
-          "The two rows that hold the five buttons above — one in Sessions, " +
-          "one in Team. A `.btnrow` with nothing in it is furniture, so " +
-          "neither is rendered rather than drawn empty. Both arrive with " +
-          "their buttons. The phone has no `.btnrow` on either side.",
+          "The Team panel's row, the one that would hold its three absent " +
+          "buttons. A `.btnrow` with nothing in it is furniture, so it is " +
+          "not rendered rather than drawn empty; it arrives with them. " +
+          "WAS TWO. The Sessions row is rendered now, because it finally " +
+          "has something to hold — see the \"Sign out\" half of the `btn` " +
+          "entry above. The phone has no `.btnrow` on either side.",
       },
     ],
   },
