@@ -113,7 +113,21 @@ function PhoneAlertDecision({
   const close = (how: "acknowledge" | "dismiss") => {
     setFailed(false)
     startSaving(async () => {
-      const result = await closeAlert(alert.id, how)
+      /*
+       * Every alert this row stands for, not just its newest — the row is one
+       * CONDITION now (see `buildRows`), and closing one of fourteen behind a
+       * folded row would let the queue refill under a reader who thinks they
+       * cleared it. Serial, so a failure stops with the rest untouched.
+       */
+      let ok = true
+      for (const id of alert.ids) {
+        const r = await closeAlert(id, how)
+        if (!r.ok) {
+          ok = false
+          break
+        }
+      }
+      const result = { ok }
       if (!result.ok) {
         setFailed(true)
         return
@@ -133,7 +147,16 @@ function PhoneAlertDecision({
         disabled={saving}
         onClick={() => close("acknowledge")}
       >
-        {saving ? "Saving…" : "Acknowledge"}
+        {/*
+          * The COUNT, exactly as the desk puts it there. A row reading
+          * "14 times since Aug 17" closes fourteen alerts, and the button that
+          * does it says so before it is pressed rather than after.
+          */}
+        {saving
+          ? "Saving…"
+          : alert.ids.length > 1
+            ? `Acknowledge all ${alert.ids.length}`
+            : "Acknowledge"}
       </button>
       <button
         className="mbtn"
@@ -141,7 +164,7 @@ function PhoneAlertDecision({
         disabled={saving}
         onClick={() => close("dismiss")}
       >
-        Dismiss
+        {alert.ids.length > 1 ? `Dismiss all ${alert.ids.length}` : "Dismiss"}
       </button>
       {failed ? <p className="msub">That did not save.</p> : null}
     </div>
