@@ -123,11 +123,18 @@ export interface CatalogCategories {
  * whole time, and the editorial `proposal-review-launcher.tsx` called all
  * three. The queue is empty because nothing has ever asked it to fill.
  *
- * `unmapped` is what it would fill FROM — 95 of 155 sold item names have no
- * recipe, and the generator's candidates come from exactly that list. Printing
- * it is what makes an empty queue legible: "nothing is waiting" and "there is
- * nothing to propose" are very different states and this section must not read
- * as the second when it is the first.
+ * `unmapped` is what it would fill FROM. Printing it is what makes an empty
+ * queue legible: "nothing is waiting" and "there is nothing to propose" are
+ * very different states and this section must not read as the second when it
+ * is the first.
+ *
+ * IT COUNTS THE CATALOGUE'S OWN WINDOW, WHICH IS NOT THE GENERATOR'S. This
+ * page's list is scoped to the range in the URL; `computeRecipeSuggestions`
+ * always looks back 30 days. On this account that is 7 unmapped names out of
+ * 62 sold, against 97 of 155 all-time — and the all-time figure is mostly
+ * names that stopped selling. The two can legitimately disagree, so the note
+ * says what a generate run would actually work on rather than implying this
+ * count is it.
  */
 export interface CatalogProposals {
   pending: Array<{
