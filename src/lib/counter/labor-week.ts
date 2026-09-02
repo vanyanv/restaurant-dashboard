@@ -140,6 +140,25 @@ export interface LaborDay {
   splh: number | null
   /** This day's labour over this day's Total Sales, 0..100. `null` with no sales. */
   laborPct: number | null
+  /**
+   * The Total Sales this day's `laborPct` was taken on, kept rather than
+   * recoverable.
+   *
+   * `laborWeek` used to rebuild the week's denominator by INVERTING each day's
+   * percentage — `cost / (laborPct / 100)` — and that is exact only while
+   * every day has labour on it. A day that sold and had nobody clocked in has
+   * `cost` 0, so its `laborPct` is 0 rather than null; it survives the
+   * `!== null` filter, `0 / (0 / 100)` is NaN, and one such day turns the
+   * whole week's percentage into NaN, which `pct()` renders as an em dash.
+   * That is every current day, all day, until the first clock-in syncs — and
+   * it is what put "Hourly labor —" on the live page directly above a caption
+   * reading "$7,258 of $41,006 Total Sales".
+   *
+   * Carrying the number is also simply the truthful thing: it is an input, and
+   * reconstructing an input from an output it was rounded into is a way to be
+   * wrong for free.
+   */
+  totalSales: number | null
 }
 
 export interface LaborWeek {
@@ -260,6 +279,7 @@ export function laborDay(input: {
     cost: input.cost,
     splh,
     laborPct,
+    totalSales: input.totalSales,
   }
 }
 
@@ -300,10 +320,19 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
   const platformSales = sum(splhKnown.map((d) => (d.splh as number) * d.actualHours))
   const splh = splhHours > 0 ? platformSales / splhHours : null
 
-  const pctKnown = days.filter((d) => d.laborPct !== null)
-  const totalSales = sum(
-    pctKnown.map((d) => d.cost / ((d.laborPct as number) / 100)),
-  )
+  /*
+   * SUMMED, not reconstructed. See `LaborDay.totalSales` for what inverting
+   * each day's percentage cost: a single day with sales and no labour made the
+   * week's figure NaN and the page printed an em dash where 17.7% belonged.
+   *
+   * Days with no sales figure at all are still excluded — a null denominator
+   * is not a zero one — but a day that sold and had nobody clocked in now
+   * contributes its sales, which is exactly what the P&L's own denominator
+   * does with it.
+   */
+  const salesKnown = days.filter((d) => d.totalSales !== null)
+  const totalSales =
+    salesKnown.length === 0 ? null : sum(salesKnown.map((d) => d.totalSales as number))
   const laborPct = pctOfSales(cost, totalSales)
 
   return { days, actualHours, scheduledHours, cost, blendedRate, splh, laborPct, overtimeCost }
