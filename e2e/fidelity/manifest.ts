@@ -1519,6 +1519,73 @@ export const PAGES: FidelityPage[] = [
           "the line colour. One role difference, three properties.",
       },
     ],
+    extraLandmarks: [
+      {
+        landmark: "sec",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"Adjust on hand\" — which `P.inventory` DOES draw, as its last " +
+          "section, and which this page did not have. The fixture's own " +
+          "callout is the argument: \"an unexplained variance goes to food " +
+          "cost and makes the plate look expensive; an explained one goes to " +
+          "shrink and makes the waste visible\".\n" +
+          "It reads as an EXTRA rather than closing an absence because the " +
+          "alignment already pairs the fixture's adjust section with our " +
+          "\"What a count would settle\", which sits in that position and " +
+          "carries the same shape. So the surplus is genuinely a sixth " +
+          "section, not a late arrival of the fifth.\n" +
+          "`InventoryAdjustment` had zero rows and nothing in the product " +
+          "could write one, while FIVE things read it: the on-hand integral " +
+          "in `running-on-hand.ts`, `waste-cluster-actions.ts`, " +
+          "`store-inventory-context.ts`, the chat's " +
+          "`getRecentInventoryAdjustments`, and the COGS adapter, which drops " +
+          "its waste line entirely and says so in its own docblock. Every " +
+          "pound thrown away on this account has been landing in food cost " +
+          "with no cause attached. The phone has no copy yet.",
+      },
+      {
+        landmark: "sec__head",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "That section's head, which names the store the adjustment will be " +
+          "written against. It falls with the section argued in the `sec` " +
+          "entry above and is counted separately because the gate counts " +
+          "landmarks rather than reasons.",
+      },
+      {
+        landmark: "sec__body",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The body holding the form: what was adjusted, how much, why, and " +
+          "the free-text note that is the part anyone reads later. Same " +
+          "section, same argument as the `sec` entry above.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The row holding the single save control. An exact and stable " +
+          "count: the section renders the same one button whether or not the " +
+          "account has an active store, changing only its label, for the " +
+          "reason the invoice page's controls stopped appearing and " +
+          "disappearing.",
+      },
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"Save adjustment\". The fixture pairs it with \"Recount " +
+          "instead\", which this page does not draw: recounting is starting " +
+          "a stock count, the two buttons for that already exist in \"Next " +
+          "count\" directly above, and a third route to the same action " +
+          "would be a second write path to one thing.",
+      },
+    ],
   },
   {
     protoId: "countnew",

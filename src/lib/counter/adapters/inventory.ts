@@ -91,6 +91,40 @@ export interface InventorySettle {
   actions: InventoryAction[]
 }
 
+/**
+ * LOGGING WHAT LEFT THE SHELF WITHOUT BEING SOLD.
+ *
+ * `P.inventory`'s last section is "Adjust on hand — when the count was right
+ * and the number was not", and its callout is the argument for the whole
+ * feature: "An unexplained variance goes to food cost and makes the plate look
+ * expensive; an explained one goes to shrink and makes the waste visible,
+ * which is the number you can actually do something about."
+ *
+ * `InventoryAdjustment` has zero rows in the whole table, and nothing in the
+ * product could write one. That is not a table waiting for a use — FIVE
+ * things already read it and every one of them is starved:
+ *
+ *   - `running-on-hand.ts` subtracts adjustments from the on-hand integral;
+ *   - `waste-cluster-actions.ts` builds the waste root-cause forecast;
+ *   - `store-inventory-context.ts` feeds the model its per-store picture;
+ *   - the chat's `getRecentInventoryAdjustments` returns [] every time;
+ *   - and the COGS adapter DROPS its waste line entirely, saying so in its
+ *     own docblock, because the table is empty.
+ *
+ * So every pound thrown away on this account has been landing in food cost,
+ * where it makes the plate look expensive and names no cause.
+ */
+export interface InventoryAdjust {
+  /** Null when the account has no active store — the form says so instead. */
+  storeId: string | null
+  storeName: string
+  /** The catalogue, for the picker. Same list the roster is built from. */
+  candidates: Array<{ id: string; name: string; unit: string }>
+  reasons: Array<{ id: string; label: string }>
+  meta: string
+  callout: string
+}
+
 export interface InventorySections {
   headline: SectionData<InventoryHeadline>
   roster: SectionData<InventoryRoster>
@@ -98,6 +132,40 @@ export interface InventorySections {
   delivered: SectionData<InventoryDelivered>
   nextCount: SectionData<InventoryNextCount>
   settle: SectionData<InventorySettle>
+  adjust: SectionData<InventoryAdjust>
+}
+
+/** `P.inventory`'s "Adjust on hand". See `InventoryAdjust` for why it exists. */
+function adjustOf(d: InventoryData): InventoryAdjust {
+  return {
+    storeId: d.storeId,
+    storeName: d.storeName,
+    candidates: d.ingredients.map((i) => ({
+      id: i.id,
+      name: titleCase(i.name.toLowerCase()),
+      unit: i.recipeUnit ?? "each",
+    })),
+    // `InventoryAdjustmentReason` in the schema. The labels are the words an
+    // operator uses; SUPPLIER_RETURN is "sent back" because nobody standing in
+    // a walk-in calls it a supplier return.
+    reasons: [
+      { id: "EXPIRY", label: "Expired" },
+      { id: "DAMAGE", label: "Damaged" },
+      { id: "THEFT", label: "Theft" },
+      { id: "SUPPLIER_RETURN", label: "Sent back" },
+      { id: "OTHER", label: "Other" },
+    ],
+    meta:
+      d.storeId === null
+        ? "no store"
+        : `writes against ${d.storeName}`,
+    callout:
+      `Every adjustment is written with a reason and a name against it. ` +
+      `An unexplained variance goes to food cost and makes the plate look expensive; an ` +
+      `explained one goes to shrink and makes the waste visible, which is the number you can ` +
+      `actually do something about. This table is empty, so all of it has been going to food ` +
+      `cost.`,
+  }
 }
 
 export interface InventoryInput {
@@ -164,6 +232,8 @@ interface InventoryData {
   /** Weekly $ of costed ingredient delivered, oldest first. */
   weekly: Array<{ week: Date; value: number }>
   storeName: string
+  /** The store the page resolved to — what an adjustment is written against. */
+  storeId: string | null
 }
 
 async function loadInventory(input: InventoryInput): Promise<InventoryData> {
@@ -177,7 +247,7 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
   if (!store) {
     return {
       ingredients: [], attempts: [], anchoredAt: null, windowFrom: null, today,
-      delivered: 0, used: 0, weekly: [], storeName: "No store",
+      delivered: 0, used: 0, weekly: [], storeName: "No store", storeId: null,
     }
   }
 
@@ -280,6 +350,7 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
     used: usedAgg._sum.lineCost ?? 0,
     weekly: weeklyRows.map((r) => ({ week: r.w, value: r.v })),
     storeName: store.name,
+    storeId: store.id,
   }
 }
 
@@ -563,6 +634,7 @@ export function getInventorySectionPromises(
     delivered: s(deliveredOf),
     nextCount: s(nextCountOf),
     settle: s(settleOf),
+    adjust: s(adjustOf),
   }
 }
 

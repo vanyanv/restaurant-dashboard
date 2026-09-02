@@ -1,13 +1,15 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState, useTransition} from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   CostBar,
   DateControl,
+  Lede,
   MoneyLines,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -22,7 +24,12 @@ import { INVENTORY_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { InventoryAction, InventorySections } from "@/lib/counter/adapters/inventory"
+import { recordInventoryAdjustment } from "@/lib/counter/actions/inventory"
+import type {
+  InventoryAction,
+  InventoryAdjust,
+  InventorySections,
+} from "@/lib/counter/adapters/inventory"
 
 /** The prototype's three button weights, chosen by the adapter, never here. */
 const btnClass = (a: InventoryAction) =>
@@ -68,6 +75,149 @@ const ASK_SUGGESTIONS = [
   "How much has been delivered since the last count?",
   "Why is there no on-hand figure?",
 ]
+
+
+/**
+ * "ADJUST ON HAND" — the section the prototype ends on, and the one this page
+ * never had.
+ *
+ * `P.inventory`'s last section is "Adjust on hand — when the count was right
+ * and the number was not", and its callout carries the argument: an
+ * unexplained variance goes to food cost and makes the plate look expensive;
+ * an explained one goes to shrink and makes the waste visible.
+ *
+ * `InventoryAdjustment` has zero rows and nothing could write one, while FIVE
+ * consumers read it — the on-hand integral, the waste root-cause forecast, the
+ * per-store model context, the chat's `getRecentInventoryAdjustments`, and the
+ * COGS adapter, which drops its waste line entirely and says so. Every pound
+ * thrown away here has been landing in food cost with no cause on it.
+ *
+ * The quantity is positive and the reason carries the meaning. An adjustment
+ * is "this much left the shelf without being sold"; stock APPEARING is a
+ * delivery and belongs on an invoice, which is why the underlying action
+ * rejects anything at or below zero rather than treating a negative as a
+ * receipt.
+ *
+ * With no active store there is nothing to write against, so the button says
+ * that rather than failing on press.
+ */
+function AdjustOnHand({ data }: { data: InventoryAdjust }) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const [ingredientId, setIngredientId] = useState("")
+  const [qty, setQty] = useState("")
+  const [reason, setReason] = useState("EXPIRY")
+  const [note, setNote] = useState("")
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const unit =
+    data.candidates.find((c) => c.id === ingredientId)?.unit ?? ""
+
+  const save = () => {
+    const value = Number(qty.trim())
+    if (data.storeId === null) return
+    if (ingredientId === "") {
+      setSaid({ ok: false, text: "Pick what was adjusted." })
+      return
+    }
+    if (!Number.isFinite(value) || value <= 0) {
+      setSaid({ ok: false, text: "How much left the shelf? It has to be more than zero." })
+      return
+    }
+    setSaid(null)
+    startSaving(async () => {
+      const result = await recordInventoryAdjustment({
+        storeId: data.storeId as string,
+        ingredientId,
+        qty: value,
+        reason: reason as "THEFT" | "EXPIRY" | "SUPPLIER_RETURN" | "DAMAGE" | "OTHER",
+        note: note.trim() === "" ? null : note.trim(),
+      })
+      if (!result.ok) {
+        setSaid({ ok: false, text: `Not written: ${result.error}.` })
+        return
+      }
+      setQty("")
+      setNote("")
+      setSaid({ ok: true, text: "Written to shrink." })
+      // The on-hand model, the waste forecast and the COGS waste line all read
+      // the row that was just written.
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="sec__body">
+      <div className="editrow" style={{ gridTemplateColumns: "1fr 110px 130px" }}>
+        <select
+          className="fld"
+          value={ingredientId}
+          aria-label="Ingredient adjusted"
+          onChange={(e) => setIngredientId(e.target.value)}
+        >
+          <option value="">What was adjusted…</option>
+          {data.candidates.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <input
+          className="fld"
+          type="text"
+          inputMode="decimal"
+          value={qty}
+          placeholder={unit === "" ? "How much" : unit}
+          aria-label="Quantity adjusted"
+          onChange={(e) => setQty(e.target.value)}
+        />
+        <select
+          className="fld"
+          value={reason}
+          aria-label="Reason"
+          onChange={(e) => setReason(e.target.value)}
+        >
+          {data.reasons.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <input
+        className="fld"
+        type="text"
+        value={note}
+        placeholder="What happened? (optional, but it is the part you read later)"
+        aria-label="Note"
+        style={{ marginTop: 7, width: "100%" }}
+        onChange={(e) => setNote(e.target.value)}
+      />
+
+      <p className="callout" style={{ marginTop: 11 }}>
+        {data.callout}
+      </p>
+
+      <div className="btnrow" style={{ marginTop: 11 }}>
+        <button
+          className="btn btn--primary"
+          type="button"
+          disabled={saving || data.storeId === null}
+          onClick={save}
+        >
+          {data.storeId === null
+            ? "No active store to adjust"
+            : saving
+              ? "Writing…"
+              : "Save adjustment"}
+        </button>
+      </div>
+
+      {said ? <Note tone={said.ok ? "good" : "bad"}>{said.text}</Note> : null}
+    </div>
+  )
+}
 
 export function CounterInventoryClient({
   params: paramsString,
@@ -140,10 +290,10 @@ export function CounterInventoryClient({
           <>
             <Table columns={ROSTER_COLUMNS} rows={r.rows} />
             {/* No `.sec__body` — `sec(..., tbl(...))` emits the table alone, so
-                the note carries the body's own inset inline. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                the note carries the body's own inset via `<Note flush>`. */}
+            <Note flush>
               {r.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -157,9 +307,9 @@ export function CounterInventoryClient({
         {(c) => (
           <>
             <CostBar bands={c.bands} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {c.note}
-            </p>
+            </Note>
             <div className="btnrow" style={{ marginTop: 12 }}>
               {c.actions.map((a) => (
                 <Link key={a.href} className={btnClass(a)} href={a.href}>
@@ -189,9 +339,9 @@ export function CounterInventoryClient({
         >
           {(n) => (
             <>
-              <p style={{ margin: "0 0 12px", fontSize: "var(--t-mid)", lineHeight: 1.5 }}>
+              <Lede>
                 {n.lead}
-              </p>
+              </Lede>
               <div className="btnrow">
                 {n.actions.map((a) => (
                   <Link key={a.href} className={btnClass(a)} href={a.href}>
@@ -226,6 +376,17 @@ export function CounterInventoryClient({
             </div>
           </>
         )}
+      </Section>
+
+      {/* `P.inventory`'s own last section. See `AdjustOnHand`. */}
+      <Section
+        title="Adjust on hand"
+        meta={(a) => a.meta}
+        data={sections.adjust}
+        pending={pending}
+        pad={false}
+      >
+        {(a) => <AdjustOnHand data={a} />}
       </Section>
     </>
   )
