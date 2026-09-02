@@ -2208,8 +2208,18 @@ export const PAGES: FidelityPage[] = [
           "\"History\" (see the `btnrow` entry); \"Edit rates\" — the form " +
           "below already edits both commission rates inline, so a button " +
           "opening a second editor for them is a second write path to one " +
-          "field; \"Change target\" — `updateStoreSchema` does not accept " +
-          "`targetCogsPct`, which the form's own copy already states; " +
+          "field; \"Change target\" — the form now carries the food-cost " +
+          "target as an inline field rather than a button, so the fixture's " +
+          "slot stays empty while the capability does not. THIS ENTRY USED TO " +
+          "SAY THE CAPABILITY WAS MISSING (\"`updateStoreSchema` does not " +
+          "accept `targetCogsPct`, which the form's own copy already " +
+          "states\") and that was the third wrong claim in this list: true of " +
+          "`updateStore`, and wrong about the product, because " +
+          "`setStoreTargetCogsPct` in `@/app/actions/cogs-actions` is its own " +
+          "owner-gated action and the editorial COGS page called it. Of this " +
+          "account's three stores only Hollywood had a target, so the other " +
+          "two had no plan line on any food-cost chart and no way to get " +
+          "one; " +
           "\"Change stage\" — `lifecycleStage` is moved by the ML " +
           "pipeline's `should_promote_to_ready`, not by hand; and \"Delete\" " +
           "— there is no hard delete in this codebase. `deleteStore` IS the " +

@@ -1,6 +1,7 @@
 "use server"
 
 import { createStore, deleteStore, updateStore } from "@/app/actions/store-actions"
+import { setStoreTargetCogsPct } from "@/app/actions/cogs-actions"
 import {
   createStoreFixedExpense,
   deleteStoreFixedExpense,
@@ -152,5 +153,39 @@ export async function deactivateStore(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await deleteStore(storeId)
   if ("error" in result && result.error) return { ok: false, error: result.error }
+  return { ok: true }
+}
+
+
+/**
+ * THE FOOD-COST TARGET — the line every food-cost chart is drawn against.
+ *
+ * The store file's own copy has been telling readers this cannot be set here:
+ * "The COGS target reads 30% and is not editable here: the update action does
+ * not accept targetCogsPct, so a field for it would save nothing." The
+ * fidelity manifest says the same thing about `P.storecosts`' "Change target"
+ * button.
+ *
+ * Both are true about `updateStore` and both are wrong about the product.
+ * `setStoreTargetCogsPct` is its own owner-gated action, it has existed the
+ * whole time, it clamps to 0–100 and rounds to a tenth, and the editorial
+ * `target-chip.tsx` called it from the COGS page. Nothing in the Counter
+ * rebuild calls it.
+ *
+ * What that costs, measured: of this account's three stores, only Hollywood
+ * has a target at all. Glendale and Van Nuys are both null, so every
+ * food-cost chart for them is drawn against nothing — no plan line, and no
+ * "over plan" for a page to state — and there has been no way to give them
+ * one.
+ *
+ * Null clears it, which is how an owner says "no plan for this store" rather
+ * than "a plan of zero", and the two are very different things to draw.
+ */
+export async function saveTargetCogsPct(
+  storeId: string,
+  targetCogsPct: number | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await setStoreTargetCogsPct({ storeId, targetCogsPct })
+  if ("error" in result) return { ok: false, error: result.error }
   return { ok: true }
 }
