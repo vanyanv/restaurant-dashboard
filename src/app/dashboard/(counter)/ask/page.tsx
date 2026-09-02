@@ -13,27 +13,34 @@ import { counterToday } from "@/lib/counter/today"
  * the rail was built and no such route has ever existed: clicking Ask 404'd.
  * This is that route.
  *
- * ## THE QUESTION IS IN THE URL, AND THAT IS THE WHOLE POINT
+ * ## THE CONVERSATION IS IN THE URL, AND THAT IS THE WHOLE POINT
  *
- * `?q=how+were+sales+last+week` is what makes this a PAGE rather than a second
- * ⌘K palette. An answer at a URL is a link an owner can send to a manager, or
- * paste back to themselves next Monday, and the window and the store travel in
- * the same query string, so the link re-reads the same numbers rather than
- * whatever "yesterday" means on the day it is opened. `askHref()`
- * (`src/lib/counter/ask-context.ts`) builds it, and the palette's "Open in
- * Ask" now uses it too — one shape, from both directions.
+ * Three query keys, each doing one job:
  *
- * ## ONE TURN, HONESTLY (K-R4)
+ *   - `?q=how+were+sales+last+week` seeds a NEW thread. It is what an inbound
+ *     link carries — the ⌘K palette's "Open in Ask", a `[data-askabout]` chip
+ *     — and `askHref()` (`src/lib/counter/ask-context.ts`) builds it, carrying
+ *     the store and the window so a link opened next week re-reads the window
+ *     it was asked about rather than whatever "yesterday" means on the day it
+ *     is opened.
+ *   - `?c=` IS the thread, once one exists. The client replaces the address
+ *     with it the moment `POST /api/chat` names the conversation, so what an
+ *     owner sends a manager is the whole exchange and not its first line.
+ *   - `?cq=` is what the conversation rail is SEARCHED for — read here, passed
+ *     to the adapter, and deliberately not `q`: one is a question for the
+ *     model, the other a string to find among threads already answered.
  *
- * The prototype's Ask page holds a conversation: a `.convs` rail of four
- * threads, a prior-question banner, a second turn still streaming, a
- * `.turnfoot` with what the turn cost. None of that is here, and none of it is
- * faked. A conversation needs history — a thread, a conversation id, turns
- * persisted and re-read — and that is the next sub-project. A page that
- * answers ONE question from a URL is the honest first version of it: asking a
- * follow-up navigates to a new `?q=`, so every answer this page has ever shown
- * is still a link, and nothing on screen claims a memory the backend is not
- * yet keeping.
+ * ## IT HOLDS A CONVERSATION (K-R4 belongs to the palette, not to this page)
+ *
+ * The prototype's Ask page holds a conversation: a `.convs` rail of threads, a
+ * prior question above the current one, a second turn still streaming. This
+ * page shipped without any of it and said why — there was no thread store. The
+ * reason expired quietly: `POST /api/chat` has taken a `conversationId` and
+ * written a `Conversation` on every Ask since it was built, and by the time
+ * anyone checked, 40 of the account's 47 stored threads held exactly one
+ * question and one answer because nothing ever sent the id back. It does now.
+ * The ⌘K palette still answers exactly one question — that is K-R4, and it is
+ * a rule about the palette.
  *
  * ## Route shape
  *
@@ -42,12 +49,16 @@ import { counterToday } from "@/lib/counter/today"
  * imports no Prisma and no server action, and branches on no `SectionData`
  * status — `npm run tokens` fails the build on either.
  *
- * There is no `get*SectionPromises` call and so no per-section Suspense. That
- * is not a lapse from the streaming standard: this page has no server-rendered
- * sections at all. Its one payload is an answer that is streamed from
- * `POST /api/chat` to the CLIENT, by `useAsk`, after the page has painted —
- * the reader sees the shell, the head and their own question first, exactly
- * what a Suspense boundary would be there to give them.
+ * ## Two payloads, not one
+ *
+ * The LIVE answer is streamed from `POST /api/chat` to the CLIENT, by
+ * `useAsk`, after the page has painted, and needs no Suspense boundary: what
+ * one would buy — the shell, the head and the reader's own question first — is
+ * what already happens.
+ *
+ * HISTORY is different and is server-rendered, through `getAskSectionPromises`
+ * and so through per-section Suspense like every other Counter page: the rail
+ * of past threads, and the stored turns of the one named by `?c=`.
  */
 export default async function AskPage({
   searchParams,
@@ -87,6 +98,12 @@ export default async function AskPage({
   const sections = getAskSectionPromises({
     accountId: session.user.accountId,
     conversationId: params.get("c"),
+    // `?cq=` — what the rail is filtered to. A SECOND query key beside `?q=`,
+    // rather than reusing it, because they are two different things typed into
+    // two different boxes: `q` is a question for the model, `cq` is a string
+    // to find among threads already answered. One key doing both would make a
+    // rail search re-ask the model.
+    query: params.get("cq"),
   })
 
   return (

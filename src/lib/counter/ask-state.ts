@@ -101,6 +101,23 @@ export interface AskStep {
   state: "reading" | "read"
 }
 
+/**
+ * ONE turn on a surface that holds a conversation: what was asked, and the
+ * state of the answer to it.
+ *
+ * A list of these is what the Ask page renders. It exists so that the page
+ * never inspects `AskState.status` to decide what to draw — the same reason
+ * every other accessor in this file exists — and so that the desk and the
+ * phone iterate the same shape.
+ */
+export interface AskTurnView {
+  /** Stable across a turn's whole life; the turn's position in the thread. */
+  id: string
+  /** The question as the reader typed it — unscoped, unprefixed. */
+  question: string
+  state: AskState
+}
+
 export type AskState =
   | { status: "idle" }
   | {
@@ -253,4 +270,64 @@ export function askSteps(parts: readonly ReturnPart[]): AskStep[] {
   }
 
   return order.map((tool) => ({ tool, state: reached.get(tool) ?? "reading" }))
+}
+
+/**
+ * The turns to RENDER for a surface whose question can also arrive from the
+ * URL — `/dashboard/ask?q=…`.
+ *
+ * `ask()` can only run in an effect, so the server render and the tick before
+ * it fires both have an empty turn list with a question already in the address
+ * bar. Drawing the empty state there flashes "nothing asked yet" over a
+ * question the reader can read in their own URL, so a question with no turn
+ * yet IS a turn being asked — the same judgement `askStateFor` makes for the
+ * single-answer surfaces, made once, here, rather than in two page clients.
+ */
+export function askTurnsFor(turns: AskTurnView[], question: string): AskTurnView[] {
+  if (turns.length > 0) return turns
+  if (!question) return []
+  return [{ id: "0", question, state: { status: "asking", question, steps: [] } }]
+}
+
+/**
+ * A STORED turn, as the state that renders it — so a thread being read again
+ * goes through `AskAnswerBody` exactly as a live one does.
+ *
+ * The alternative, and what both Ask clients used to do, was hand-written
+ * `.ans` / `.manswer` markup per surface for restored turns: a paragraph and a
+ * "Read" row, with no verdict tone, no figure strip and no follow-ups. Two
+ * renderers for one answer is how the thing you re-open stops looking like the
+ * thing you read — and here it was also how the figures went missing, because
+ * the second renderer had no idea a strip existed. `AskAnswerBody`'s own note
+ * makes the rule: "a second renderer is how two surfaces come to disagree
+ * about what an answer looks like."
+ *
+ * `body` is put through `splitProvenance` for the same reason the live path
+ * does: the model's "From getDailySales · …" footer is what the "Read" row
+ * already says, and printing both reads as two different claims about one set
+ * of sources.
+ *
+ * `filed` is null for an answer written before `fileReturn` existed, or one
+ * the model chose not to file. That lands on `form: "empty"`, which is what a
+ * live turn in the same position produces — prose in the callout, its sources
+ * beneath — rather than a special case for history.
+ */
+export function restoredAskState(turn: {
+  question: string
+  /** The assistant's stored prose. */
+  text: string
+  /** Tool names, `fileReturn` already excluded by the adapter. */
+  read: string[]
+  filed: FiledReturn | null
+}): AskState {
+  return {
+    status: "answered",
+    answer: {
+      question: turn.question,
+      filed: turn.filed,
+      body: splitProvenance(turn.text).body.trim(),
+      read: turn.read,
+      form: turn.filed ? returnForm(turn.filed) : "empty",
+    },
+  }
 }

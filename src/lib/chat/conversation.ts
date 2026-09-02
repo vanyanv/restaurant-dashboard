@@ -36,6 +36,20 @@ export interface ConversationSummary {
   createdAt: Date
   updatedAt: Date
   messageCount: number
+  /**
+   * Assistant messages — i.e. TURNS ANSWERED, which is not `messageCount`.
+   *
+   * A thread of one question and one answer holds two messages and is one
+   * turn. The Counter Ask rail was printing `messageCount` under the word
+   * "turns" and so said "2 turns" for every single-exchange thread — which,
+   * measured against the live database, was 40 of 47 of them.
+   *
+   * It also separates a thread from a thread-shaped hole: six of those 47 hold
+   * a question and NO answer, because the turn failed before one was written.
+   * `answerCount === 0` is how a surface tells the two apart without a second
+   * query.
+   */
+  answerCount: number
 }
 
 export interface ConversationDetail extends ConversationSummary {
@@ -52,6 +66,27 @@ export interface ConversationDetail extends ConversationSummary {
       durationMs: number
     }>
   }>
+}
+
+/**
+ * The one rule about what a conversation may be called.
+ *
+ * Here rather than in the PATCH route because two doors now write a title —
+ * that route (the editorial chat drawer's rename) and `renameAskThread` (the
+ * Counter Ask rail's) — and a bound that lives in one of them is a bound the
+ * other is free to disagree with. Returns the trimmed title, or `null` when it
+ * is not one.
+ *
+ * 80 characters is the rail's own limit: `.cv b` wraps, and a title longer
+ * than about two lines pushes the thread's date and turn count out of view.
+ */
+export const MAX_CONVERSATION_TITLE = 80
+
+export function normalizeConversationTitle(raw: unknown): string | null {
+  if (typeof raw !== "string") return null
+  const title = raw.trim()
+  if (title.length < 1 || title.length > MAX_CONVERSATION_TITLE) return null
+  return title
 }
 
 export async function createConversation(
@@ -162,6 +197,20 @@ export async function searchConversations(
       createdAt: true,
       updatedAt: true,
       _count: { select: { messages: true } },
+      /*
+       * The ANSWERS, as ids only, in the same round trip.
+       *
+       * Prisma's filtered relation count is keyed by the relation's own name,
+       * so one `_count` cannot ask for "all messages" and "assistant messages"
+       * at once — and a second `groupBy` would be a second query for a number
+       * this one can carry. Ids are the smallest column that can be counted,
+       * so nothing of an answer's text is loaded to find out that it exists.
+       *
+       * A thread with no assistant row comes back with an empty array, which
+       * is the answer and not a gap: those are the threads whose turn failed
+       * before an answer was written.
+       */
+      messages: { where: { role: "assistant" }, select: { id: true } },
     },
   })
   return rows.map((r) => ({
@@ -170,6 +219,7 @@ export async function searchConversations(
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     messageCount: r._count.messages,
+    answerCount: r.messages.length,
   }))
 }
 
@@ -189,6 +239,20 @@ export async function listConversations(
       createdAt: true,
       updatedAt: true,
       _count: { select: { messages: true } },
+      /*
+       * The ANSWERS, as ids only, in the same round trip.
+       *
+       * Prisma's filtered relation count is keyed by the relation's own name,
+       * so one `_count` cannot ask for "all messages" and "assistant messages"
+       * at once — and a second `groupBy` would be a second query for a number
+       * this one can carry. Ids are the smallest column that can be counted,
+       * so nothing of an answer's text is loaded to find out that it exists.
+       *
+       * A thread with no assistant row comes back with an empty array, which
+       * is the answer and not a gap: those are the threads whose turn failed
+       * before an answer was written.
+       */
+      messages: { where: { role: "assistant" }, select: { id: true } },
     },
   })
   return rows.map((r) => ({
@@ -197,6 +261,7 @@ export async function listConversations(
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     messageCount: r._count.messages,
+    answerCount: r.messages.length,
   }))
 }
 
@@ -251,6 +316,9 @@ export async function getConversation(
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
     messageCount: c._count.messages,
+    // Counted from the rows already loaded — a detail read has every message
+    // in hand, so it needs no second query to say how many are answers.
+    answerCount: c.messages.filter((m) => m.role === "assistant").length,
     messages: c.messages,
   }
 }

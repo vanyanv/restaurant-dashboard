@@ -4,8 +4,10 @@ import { authOptions } from "@/lib/auth"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import {
   ConversationAccessError,
+  MAX_CONVERSATION_TITLE,
   deleteConversation,
   getConversation,
+  normalizeConversationTitle,
   setConversationTitle,
 } from "@/lib/chat/conversation"
 
@@ -49,10 +51,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const raw = typeof body.title === "string" ? body.title.trim() : ""
-  if (raw.length < 1 || raw.length > 80) {
+  // ONE rule, shared with the Counter Ask rail's rename — see the helper.
+  const raw = normalizeConversationTitle(body.title)
+  if (raw === null) {
     return NextResponse.json(
-      { error: "title must be 1-80 characters" },
+      { error: `title must be 1-${MAX_CONVERSATION_TITLE} characters` },
       { status: 400 },
     )
   }

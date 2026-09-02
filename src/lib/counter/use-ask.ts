@@ -1,16 +1,16 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { returnForm, selectFiledReturn, type FiledReturn } from "@/lib/chat/return"
+import { returnForm, selectFiledReturn } from "@/lib/chat/return"
 import type { AskContext } from "./ask-context"
 import {
-  askStateFor,
   askSteps,
   proseFrom,
   toolNamesFrom,
   type AskState,
+  type AskTurnView,
 } from "./ask-state"
 import type { ReturnPart } from "@/lib/chat/return"
 
@@ -25,100 +25,233 @@ import type { ReturnPart } from "@/lib/chat/return"
  * when the pure half lived here too.
  *
  * Anything that only needs to READ an `AskState` imports `./ask-state`.
+ *
+ * ---------------------------------------------------------------------------
+ * IT HOLDS A CONVERSATION NOW, AND THE MEASUREMENT THAT SAYS WHY
+ * ---------------------------------------------------------------------------
+ *
+ * `POST /api/chat` has taken a `conversationId` since it was written, and this
+ * hook never sent one: `ask()` cleared the message list before every send, so
+ * each question opened a fresh thread and the model was handed no history.
+ *
+ * That is measurable in the live database rather than a matter of taste. Of 47
+ * stored conversations, **40 hold exactly two messages** — one question and
+ * one answer — six hold one (a turn that failed before the answer was
+ * written), and exactly ONE holds nine. That ninth is not from here; it is
+ * from `/m/chat`, the pre-Counter surface, which has always sent the id.
+ *
+ * So the Ask page drew a rail titled "Conversations" in which every row was a
+ * single question, and the model's own follow-up chips — "Which day was
+ * weakest?" — were asked COLD, with no idea which week "weakest" referred to.
+ * The follow-up is the whole reason to have a chat instead of a report.
+ *
+ * `follow()` is the fix, and it is a second method rather than a change to
+ * `ask()` because the ⌘K palette answers exactly one question (K-R4) and must
+ * keep doing so. `ask()` starts a thread; `follow()` adds a turn to it.
+ *
+ * ---------------------------------------------------------------------------
+ * ONLY THE NEW TURN GOES UP THE WIRE
+ * ---------------------------------------------------------------------------
+ *
+ * `prepareSendMessagesRequest` sends `messages.slice(-1)` and the conversation
+ * id. The route reads that one-message shape as "you already have the rest"
+ * and replays the stored thread itself. The alternative — posting the whole
+ * accumulated list — would make the client the authority on what was said,
+ * which it is not: the reader can land on `?c=` from the rail with a thread on
+ * screen that this hook never saw.
  */
-export function useAsk(): {
+export function useAsk(
+  /**
+   * The thread this surface is standing in, from `?c=`, or null for a fresh
+   * one. Changing it (opening another thread from the rail) drops the live
+   * turns — they belong to the thread being left.
+   */
+  initialConversationId: string | null = null,
+): {
+  /** Every turn asked in THIS session, oldest first. */
+  turns: AskTurnView[]
+  /** The most recent turn's state — the palette's whole surface, and the page's headline. */
   state: AskState
+  /** The thread these turns belong to, once the route has named it. */
+  conversationId: string | null
+  /** Start a thread: clears what is on screen and asks with no history. */
   ask: (question: string, context: AskContext) => void
+  /** Add a turn to the thread on screen. */
+  follow: (question: string, context: AskContext) => void
   reset: () => void
 } {
-  // The question as TYPED. The message on the wire carries the scope sentence
-  // in front of it; the surface must never show the reader that plumbing back.
-  const [question, setQuestion] = useState<string | null>(null)
+  /*
+   * The questions as TYPED, in order. The messages on the wire carry the scope
+   * sentence in front of them and the surface must never show the reader that
+   * plumbing back, so the typed text is kept here rather than parsed back out
+   * of what was sent.
+   */
+  const [questions, setQuestions] = useState<string[]>([])
 
-  const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), [])
+  const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
+  /*
+   * THE REF IS THE AUTHORITY, and it is deliberately NOT mirrored from state
+   * on every render. The transport is built once and reads the id at send
+   * time, so it needs a ref; but the id most often arrives inside a `fetch`
+   * callback, which sets the ref and defers the `setState` a tick. A
+   * render-time `ref.current = conversationId` in between would put the STALE
+   * value back, and a follow-up sent in that window would open a second
+   * thread. Every place that changes the id writes both, in that order.
+   */
+  const conversationIdRef = useRef<string | null>(initialConversationId)
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest: ({ messages }) => ({
+          body: {
+            // The new turn only — see the docblock.
+            messages: messages.slice(-1),
+            conversationId: conversationIdRef.current,
+          },
+        }),
+        fetch: (input, init) =>
+          fetch(input as RequestInfo, init).then((res) => {
+            /*
+             * A thread that is gone — deleted, or on another account. Dropping
+             * the id here means the NEXT send takes the route's create branch
+             * and starts a fresh thread, rather than 404ing forever against an
+             * id the reader cannot see or clear.
+             */
+            if (res.status === 404 || res.status === 403) {
+              conversationIdRef.current = null
+              setTimeout(() => setConversationId(null), 0)
+              return res
+            }
+            const id = res.headers.get("x-conversation-id")
+            if (id && id !== conversationIdRef.current) {
+              conversationIdRef.current = id
+              // Next tick: this runs inside the fetch that a render started,
+              // and setting state during it would be a render-phase update.
+              setTimeout(() => setConversationId(id), 0)
+            }
+            return res
+          }),
+      }),
+    [],
+  )
+
   const { messages, sendMessage, setMessages, status, error } = useChat({ transport })
 
-  const ask = useCallback(
-    (raw: string, context: AskContext) => {
+  /*
+   * A DIFFERENT THREAD ARRIVED IN THE URL.
+   *
+   * Only when it disagrees with the id this hook is already holding: the
+   * common case is the page writing `?c=` from the id we just captured, and
+   * treating that as a thread switch would wipe the answer that produced it.
+   */
+  useEffect(() => {
+    if (initialConversationId === conversationIdRef.current) return
+    conversationIdRef.current = initialConversationId
+    setConversationId(initialConversationId)
+    setQuestions([])
+    setMessages([])
+  }, [initialConversationId, setMessages])
+
+  const send = useCallback(
+    (raw: string, context: AskContext, fresh: boolean) => {
       const trimmed = raw.trim()
       if (!trimmed) return
-      // Synchronous on the SDK's own store, so the send below starts from an
-      // empty list rather than appending to the previous question's turn.
-      setMessages([])
-      setQuestion(trimmed)
+      if (fresh) {
+        // Synchronous on the SDK's own store, so the send below starts from an
+        // empty list rather than appending to the previous question's turn.
+        setMessages([])
+        conversationIdRef.current = null
+        setConversationId(null)
+        setQuestions([trimmed])
+      } else {
+        setQuestions((q) => [...q, trimmed])
+      }
       void sendMessage({ text: `${context.sentence}.\n${trimmed}` })
     },
     [sendMessage, setMessages],
   )
 
+  const ask = useCallback(
+    (raw: string, context: AskContext) => send(raw, context, true),
+    [send],
+  )
+  const follow = useCallback(
+    (raw: string, context: AskContext) => send(raw, context, false),
+    [send],
+  )
+
   const reset = useCallback(() => {
-    setQuestion(null)
+    setQuestions([])
     setMessages([])
+    conversationIdRef.current = null
+    setConversationId(null)
   }, [setMessages])
 
-  const state = useMemo<AskState>(() => {
-    if (question === null) return { status: "idle" }
-
-    if (status === "error") {
-      const message = error?.message?.trim()
-      return {
-        status: "failed",
-        question,
-        message: message && message.length > 0 ? message : "The answer never arrived.",
-      }
-    }
-
-    // The in-flight turn, found BEFORE the streaming check rather than after.
-    // It is the same message either way — the SDK appends parts to it as they
-    // arrive — and reading it while streaming is the entire point: those parts
-    // are the reading log the answer's loading state draws.
-    let last: (typeof messages)[number] | undefined
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.role === "assistant") {
-        last = messages[i]
-        break
-      }
-    }
-    const parts = (last?.parts ?? []) as unknown as ReturnPart[]
-
+  const turns = useMemo<AskTurnView[]>(() => {
     /*
-     * WHY THIS CARRIES STEPS NOW.
-     *
-     * It used to return `{ status: "asking", question }` and nothing else, so
-     * `AskAnswerBody` had one static line — "Reading the numbers…" — to show
-     * for the whole turn. Measured end to end in a browser, that line sat
-     * unchanged for 32.8 of 33.8 seconds: the surface knew the model had
-     * called `getDailySales`, got its answer, and moved on to file the return,
-     * and said none of it.
-     *
-     * The prototype had already designed the alternative and the CSS was
-     * already ported — `.thinking` and `.tstep` in counter-components.css,
-     * under the comment "the loading state of an answer is the reading" —
-     * with no component emitting either. See `Thinking`.
+     * The nth assistant message answers the nth question. `useChat` appends
+     * one assistant message per turn and parts accumulate onto it, so this
+     * pairing holds while a turn is still streaming — which is the point: the
+     * turn in flight is the one being watched.
      */
-    if (status === "submitted" || status === "streaming") {
-      return { status: "asking", question, steps: askSteps(parts) }
-    }
+    const answers = messages.filter((m) => m.role === "assistant")
 
-    // `ready` with no assistant turn yet is the tick between `ask()` setting
-    // the question and the SDK moving to `submitted`.
-    if (!last) return { status: "asking", question, steps: [] }
+    return questions.map((question, i) => {
+      const last = i === questions.length - 1
+      const parts = (answers[i]?.parts ?? []) as unknown as ReturnPart[]
 
-    const filed = selectFiledReturn(parts)
+      if (last && status === "error") {
+        const message = error?.message?.trim()
+        return {
+          id: `${i}`,
+          question,
+          state: {
+            status: "failed",
+            question,
+            message: message && message.length > 0 ? message : "The answer never arrived.",
+          },
+        }
+      }
 
-    return {
-      status: "answered",
-      answer: {
+      /*
+       * The in-flight turn reads its parts WHILE streaming rather than after:
+       * those parts are the reading log the loading state draws. Only the last
+       * turn can be in flight — an earlier one has an assistant message that
+       * has already settled.
+       */
+      if (last && (status === "submitted" || status === "streaming")) {
+        return { id: `${i}`, question, state: { status: "asking", question, steps: askSteps(parts) } }
+      }
+
+      // `ready` with no assistant turn yet is the tick between the send and
+      // the SDK moving to `submitted`.
+      if (!answers[i]) {
+        return { id: `${i}`, question, state: { status: "asking", question, steps: [] } }
+      }
+
+      const filed = selectFiledReturn(parts)
+      return {
+        id: `${i}`,
         question,
-        filed,
-        body: proseFrom(parts),
-        read: toolNamesFrom(parts),
-        // Nothing filed means nothing to lay out — the empty form is prose and
-        // its sources, which is exactly what there is.
-        form: filed ? returnForm(filed) : "empty",
-      },
-    }
-  }, [question, status, error, messages])
+        state: {
+          status: "answered",
+          answer: {
+            question,
+            filed,
+            body: proseFrom(parts),
+            read: toolNamesFrom(parts),
+            // Nothing filed means nothing to lay out — the empty form is prose
+            // and its sources, which is exactly what there is.
+            form: filed ? returnForm(filed) : "empty",
+          },
+        },
+      }
+    })
+  }, [questions, status, error, messages])
 
-  return { state, ask, reset }
+  const state = turns.length > 0 ? turns[turns.length - 1].state : { status: "idle" as const }
+
+  return { turns, state, conversationId, ask, follow, reset }
 }

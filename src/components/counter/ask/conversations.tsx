@@ -1,5 +1,7 @@
 "use client"
 
+import type { ReactNode } from "react"
+import { SearchGlyph } from "@/components/counter/surface/search-glyph"
 import type { AskConversation } from "@/lib/counter/adapters/ask"
 
 /**
@@ -40,17 +42,28 @@ import type { AskConversation } from "@/lib/counter/adapters/ask"
  * the style hook and the correct assistive announcement — one attribute doing
  * the job it is actually for.
  */
-export function Conversations({
-  items,
-  currentId,
-  onOpen,
+/**
+ * THE SHELL — the box, its header, "New", and the search field.
+ *
+ * Separate from the rows because the rows live inside a `<Section>`, and a
+ * `Section` whose data is empty renders `Empty` INSTEAD of its children. With
+ * the search field inside them, searching for something that matches nothing
+ * would take the search field off screen along with the rows, and the reader
+ * would have no way back except the browser's own history. The control that
+ * caused a state has to survive that state.
+ */
+export function ConversationsRail({
+  query,
+  onQuery,
   onNew,
+  children,
 }: {
-  items: AskConversation[]
-  /** The thread being read, if any — marks the row and paints its border. */
-  currentId: string | null
-  onOpen: (id: string) => void
+  /** What is being searched for, from `?cq=`. */
+  query: string
+  onQuery: (next: string) => void
   onNew: () => void
+  /** The `<Section>` holding the rows. */
+  children: ReactNode
 }) {
   return (
     <div className="convs">
@@ -60,6 +73,44 @@ export function Conversations({
           New
         </button>
       </div>
+      {/*
+        * `.convs__q` — the one thing on this rail the prototype does not have,
+        * because the prototype's rail is four hand-written threads and this
+        * one is however many the account has asked. `searchConversations`
+        * matches TITLES AND TURN TEXT, so a thread the reader remembers by a
+        * number in its answer is reachable; a rail of auto-generated titles
+        * alone is not.
+        */}
+      <label className="convs__q">
+        <SearchGlyph />
+        <input
+          type="search"
+          value={query}
+          placeholder="Search threads"
+          aria-label="Search conversations"
+          onChange={(e) => onQuery(e.target.value)}
+        />
+      </label>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The rows themselves — one `.cv` per thread.
+ */
+export function Conversations({
+  items,
+  currentId,
+  onOpen,
+}: {
+  items: AskConversation[]
+  /** The thread being read, if any — marks the row and paints its border. */
+  currentId: string | null
+  onOpen: (id: string) => void
+}) {
+  return (
+    <>
       {items.map((c) => (
         <button
           key={c.id}
@@ -79,11 +130,12 @@ export function Conversations({
           <span>{metaFor(c)}</span>
         </button>
       ))}
-    </div>
+    </>
   )
 }
 
-/** `Aug 21 · 2 turns` — the prototype's own second line. */
+/** `Aug 21 · 2 turns` — the prototype's own second line, and `turns` is now
+ *  answers rather than messages, so a single exchange reads "1 turn". */
 function metaFor(c: AskConversation): string {
   const when = new Date(c.updatedAt).toLocaleDateString("en-US", {
     month: "short",

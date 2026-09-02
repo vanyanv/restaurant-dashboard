@@ -5,20 +5,21 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   MList,
   Section,
-  useCounterTransition,
   type SwitchableStore,
 } from "@/components/counter"
 import {
   AskAnswerBody,
   AskComposer,
 } from "@/components/counter/ask"
-import { ASK_PHONE_ROUTE, ASK_STARTERS, askHref, describeAskContext } from "@/lib/counter/ask-context"
+// BY PATH, not through the ask barrel: it reaches a `"use server"` module and
+// the barrel is shared with the overview clients. See that barrel's own note.
+import { ThreadActions } from "@/components/counter/ask/thread-actions"
+import { ASK_PHONE_ROUTE, ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { readCounterParams } from "@/lib/counter/url-state"
-import { askAnswer, askPending, askStateFor } from "@/lib/counter/ask-state"
+import { askPending, askTurnsFor, restoredAskState } from "@/lib/counter/ask-state"
 import { useAsk } from "@/lib/counter/use-ask"
-import { labelFor } from "@/components/chat/tool-labels"
-import type { AskSections } from "@/lib/counter/adapters/ask"
+import type { AskSections, AskThread, AskTurn } from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
@@ -33,45 +34,38 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * The desk's one distinctive decision — the page TITLE is the verdict — has
  * nothing to sit in here. `.mtop` is the phone's whole chrome and it holds the
  * store and the range; the prototype's phone Ask emits no page head at all,
- * only `.mchat`. So `verdictShownAbove` is false and the verdict leads the
- * answer as its first paragraph, which is what the prototype's phone does and
- * what a reader holding a 316px column reads first anyway. Nothing is printed
- * twice on either surface: exactly one of the two places says it.
+ * only `.mchat`. So `verdictShownAbove` is false on every turn and the verdict
+ * leads each answer as its first paragraph, which is what the prototype's
+ * phone does and what a reader holding a 316px column reads first anyway.
+ * Nothing is printed twice on either surface.
  *
  * ---------------------------------------------------------------------------
- * THE QUESTION LIVES IN THE URL, AS IT DOES ON THE DESK
+ * IT HOLDS A CONVERSATION, AND THE ADDRESS IS THE THREAD
  * ---------------------------------------------------------------------------
  *
- * `?q=` is read here and nowhere else; asking is a NAVIGATION, through the
- * same `askHref` the desk and `PhoneShell`'s `[data-askabout]` delegation use,
- * with `route: ASK_PHONE_ROUTE` so a question asked on the phone stays on the
- * phone rather than bouncing through the middleware. Three consequences the
- * phone needs more than the desk does: the BACK BUTTON walks the reader's
- * questions backwards (there is no palette to close and no Escape key), the
- * answer is a link that can be sent from the device it was read on, and a
- * link opened next week re-reads the window it was asked about.
+ * Same change as the desk, same reason, and the phone needed it more: `?q=`
+ * seeds a thread, `?c=` IS the thread, and a follow-up appends a turn instead
+ * of replacing the question in the URL. Measured against the live database
+ * before this, **40 of 47 stored conversations held one question and one
+ * answer** — the follow-up chips under every answer were asked cold.
  *
- * ---------------------------------------------------------------------------
- * ONE TURN (K-R4)
- * ---------------------------------------------------------------------------
+ * Three consequences the phone gets from putting the thread in the address:
+ * the whole exchange survives a refresh and a backgrounded tab, it is a link
+ * that can be sent from the device it was read on, and a link opened next week
+ * re-reads the window it was asked about. What it costs: the back button no
+ * longer walks the reader's questions backwards — it leaves the thread, which
+ * is now the thing that persists.
  *
- * No thread, no history, no `.convs`. That was written when neither surface
- * had a thread store; the desk has one now — `/dashboard/ask` renders 39
- * stored conversations and reads a thread from `?c=` — and this surface has
- * not caught up. A follow-up here still replaces the question in the URL
- * rather than appending a turn, and the composer's placeholder names the
- * scope rather than implying a memory it does not keep.
- *
- * Two consequences worth writing down where the next person will look:
- *
- * 1. The phone is BEHIND the desk on this, not deliberately simpler than it.
- * 2. `/m/chat` — the pre-Counter phone chat — keeps conversation history
- *    (`listConversations`, 30 of them) and therefore stays. `src/proxy.ts`
- *    still maps `/dashboard/chat` to it for phones on purpose. Retiring it is
- *    the reward for giving this surface the rail and the thread, and not
- *    before: redirecting it today would take history away from the phone to
- *    tidy a route.
+ * `/m/chat` — the pre-Counter phone chat — still exists and `src/proxy.ts`
+ * still maps `/dashboard/chat` to it for phones. Retiring it is a separate
+ * decision from this one.
  */
+/**
+ * How many past threads the phone draws. See the `meta` note on the section
+ * that uses it for why there is a number here at all and why it is small.
+ */
+const PHONE_CONVERSATION_ROWS = 8
+
 export function CounterPhoneAskClient({
   params: paramsString,
   sections,
@@ -89,12 +83,9 @@ export function CounterPhoneAskClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
-  // The date sheet and the store picker are `PhoneShell`'s; this island shares
-  // its one transition so a question and a range change cannot each start
-  // their own.
-  const { startTransition } = useCounterTransition()
-
   const question = (params.get("q") ?? "").trim()
+  /** `?c=` names the thread. Null on a fresh, unnamed Ask. */
+  const urlConversationId = params.get("c")
 
   const selectedStore = stores.find((s) => s.id === counterParams.storeId) ?? null
   const storeName = selectedStore?.name ?? null
@@ -115,13 +106,16 @@ export function CounterPhoneAskClient({
     origin: params.get("asked"),
   })
 
-  const { state, ask, reset } = useAsk()
+  const { turns, state, conversationId, ask, follow, reset } = useAsk(urlConversationId)
 
   /*
    * ASK WHAT THE URL SAYS — the desk client's effect, unchanged, and for the
-   * same reasons: keyed on the question AND the scope sentence so changing
-   * the store or the range re-asks, and made idempotent by a ref so React's
-   * development double-invoke cannot spend a second request.
+   * same reasons: keyed on the question AND the scope sentence so a `?q=` link
+   * moved to another window is re-read, made idempotent by a ref so React's
+   * development double-invoke cannot spend a second request, and skipped
+   * entirely once the thread has an id. Inside a thread the settled turns are
+   * a transcript and stay as they were read; the scope the NEXT turn carries
+   * is the one the composer's placeholder is naming. See the desk client.
    */
   const askedRef = useRef<string | null>(null)
   const contextRef = useRef(context)
@@ -129,6 +123,7 @@ export function CounterPhoneAskClient({
   const key = `${question} · ${context.sentence}`
 
   useEffect(() => {
+    if (urlConversationId) return
     if (!question) {
       if (askedRef.current !== null) {
         askedRef.current = null
@@ -139,36 +134,82 @@ export function CounterPhoneAskClient({
     if (askedRef.current === key) return
     askedRef.current = key
     ask(question, contextRef.current)
-  }, [question, key, ask, reset])
+  }, [urlConversationId, question, key, ask, reset])
 
-  /** Asking is a navigation — see the docblock. */
-  const push = useCallback(
-    (next: string) => {
-      startTransition(() => {
-        router.push(
-          askHref({ question: next, params, route: ASK_PHONE_ROUTE }),
-          { scroll: false },
-        )
-      })
+  /*
+   * THE THREAD TAKES THE ADDRESS — `replace`, not `push`, because the reader
+   * did not navigate. `?q=` goes with it: the question is on screen and in the
+   * thread, and a second address for one conversation is one too many.
+   */
+  useEffect(() => {
+    if (!conversationId || conversationId === urlConversationId) return
+    const next = new URLSearchParams(params)
+    next.set("c", conversationId)
+    next.delete("q")
+    router.replace(`${ASK_PHONE_ROUTE}?${next.toString()}`, { scroll: false })
+  }, [conversationId, urlConversationId, params, router])
+
+  /*
+   * THE STORED HALF OF THE THREAD, FROZEN AT THE MOMENT IT WAS OPENED.
+   *
+   * `sections.thread` is re-read on every navigation, so after a follow-up it
+   * comes back holding the turn that is ALSO on screen live — and after a
+   * fresh `?q=` it comes back holding the only turn there is. Rendering it
+   * unconditionally prints turns twice; rendering it only while there are no
+   * live turns makes a restored thread's history vanish the moment the reader
+   * asks anything in it.
+   *
+   * The discriminator is whose turns the live list holds: a stored thread is
+   * HISTORY unless it is the thread this session has been answering into. That
+   * is decided once, when the section first resolves for a given thread, and
+   * kept — `conversationId` becomes this thread's id as soon as a follow-up is
+   * sent, and the answer to "was this history when I opened it" must not
+   * change underneath that.
+   */
+  const frozenThread = useRef<{ id: string; turns: AskTurn[] } | null>(null)
+  const storedTurns = useCallback(
+    (t: AskThread) => {
+      if (frozenThread.current?.id !== t.id) {
+        frozenThread.current = { id: t.id, turns: t.id === conversationId ? [] : t.turns }
+      }
+      return frozenThread.current.turns
     },
-    [params, router, startTransition],
+    [conversationId],
   )
+
+  /** A follow-up is a TURN, not a navigation. */
+  const submit = useCallback(
+    (next: string) => follow(next, contextRef.current),
+    [follow],
+  )
+
+  /**
+   * The thread the reader was in has been deleted — back to an empty Ask,
+   * keeping the store and the window they were looking at.
+   */
+  const closeThread = useCallback(() => {
+    const next = new URLSearchParams(params)
+    next.delete("q")
+    next.delete("c")
+    const qs = next.toString()
+    reset()
+    askedRef.current = null
+    router.push(qs ? `${ASK_PHONE_ROUTE}?${qs}` : ASK_PHONE_ROUTE, { scroll: false })
+  }, [params, router, reset])
 
   const windowLabel = rangeLabel(counterParams.range, "custom")
 
   /*
    * The server render, and the tick before `useChat` reaches `submitted`,
-   * both sit at `idle` with a question in the URL. Showing the empty state
+   * both have no turns with a question in the URL. Showing the empty state
    * there would flash "nothing asked yet" over a question the reader can read
-   * in their own address bar, so a question with no state yet IS asking.
+   * in their own address bar, so a question with no turn yet IS asking.
    */
-  const shown = askStateFor(state, question)
-  const answered = askAnswer(shown)
+  const shown = askTurnsFor(turns, urlConversationId ? "" : question)
 
-  // `?c=` names a stored thread. Opening one is a NAVIGATION, like asking is,
-  // so the back button walks out of a thread the same way it walks back
-  // through questions — the phone has no palette to close and no Escape key.
-  const conversationId = params.get("c")
+  // Opening a thread is a NAVIGATION, so the back button walks out of a thread
+  // the same way it leaves any other screen — the phone has no palette to
+  // close and no Escape key.
   const threadHref = (id: string) => {
     const next = new URLSearchParams(paramsString)
     next.set("c", id)
@@ -180,63 +221,79 @@ export function CounterPhoneAskClient({
     /* A FRAGMENT: `.ct-root.ct-phone`, `.mtop` and `.mscroll` belong to
        `(mobile)/m/(counter)/layout.tsx`. */
     <>
-      {conversationId ? (
-        /*
-         * A STORED THREAD, read-only, in its own `Section` so a restore gets
-         * the same six states everything else does rather than a blank
-         * screen. Its figures are not here and are not rebuilt: `ChatMessage`
-         * keeps the prose and the tool names, never the `FiledReturn` the
-         * strip was drawn from. See the adapter.
-         */
+      {/*
+        * THE STORED HALF OF THE THREAD, read-only, in its own `Section` so a
+        * restore gets the same six states everything else does rather than a
+        * blank screen. Which turns count as stored is decided by
+        * `storedTurns` — a thread opened from the rail shows all of it, a
+        * thread this session started shows none, because its turns are
+        * already on screen live below.
+        *
+        * Its figures are not here and are not rebuilt: `ChatMessage` keeps the
+        * prose and the tool names, never the `FiledReturn` the strip was drawn
+        * from. See the adapter.
+        */}
+      {urlConversationId ? (
         <Section bare title="This conversation" data={sections.thread}>
           {(t) =>
             t === null ? null : (
               <div className="mchat">
-                {t.turns.map((turn) =>
+                {/* Who you are reading, and the two things you can do to it. */}
+                <ThreadActions id={t.id} title={t.title} onDeleted={closeThread} />
+                {storedTurns(t).map((turn) =>
                   turn.role === "user" ? (
                     <div className="youmsg" key={turn.id}>
                       {turn.text}
                     </div>
                   ) : (
-                    <div className="manswer" key={turn.id}>
-                      <p>{turn.text}</p>
-                      {turn.read.length > 0 ? (
-                        <div className="srcs">
-                          <span className="src">Read</span>
-                          {turn.read.map((name) => (
-                            <span className="src" key={name}>
-                              <b>{labelFor(name).short}</b>
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
+                    /*
+                     * THE SAME RENDERER A LIVE ANSWER GETS, in the phone's own
+                     * box and with the phone's own strip. A restored turn
+                     * carries its filed return now, so re-opening a thread on
+                     * the phone shows the figures it showed the first time.
+                     * Its follow-ups append to this thread.
+                     */
+                    <AskAnswerBody
+                      key={turn.id}
+                      state={restoredAskState(turn)}
+                      className="manswer"
+                      figures="mstrip"
+                      onFollowUp={submit}
+                    />
                   ),
                 )}
               </div>
             )
           }
         </Section>
-      ) : question ? (
+      ) : null}
+
+      {shown.length > 0 ? (
         <div className="mchat">
-          {/* The question as the reader asked it. `useAsk` sends the scope
-              sentence in front of it on the wire; that plumbing is never
-              shown back to the reader. */}
-          <div className="youmsg">{question}</div>
-          <AskAnswerBody
-            state={shown}
-            className="manswer"
-            // `.strip`'s track count is `data-n`; at 316px those tracks are
-            // ~50px wide. `.mstrip` is the phone's own two-column grid and
-            // what every other figure on a `/m` page is drawn with.
-            figures="mstrip"
-            // A follow-up is a navigation here too. Without this the chip
-            // would carry `data-askabout`, and `PhoneShell`'s delegation
-            // would push the same address one step less directly.
-            onFollowUp={push}
-          />
+          {shown.map((turn) => (
+            <div key={turn.id}>
+              {/* The question as the reader asked it. `useAsk` sends the scope
+                  sentence in front of it on the wire; that plumbing is never
+                  shown back to the reader. */}
+              <div className="youmsg">{turn.question}</div>
+              <AskAnswerBody
+                state={turn.state}
+                className="manswer"
+                // `.strip`'s track count is `data-n`; at 316px those tracks are
+                // ~50px wide. `.mstrip` is the phone's own two-column grid and
+                // what every other figure on a `/m` page is drawn with.
+                figures="mstrip"
+                // A follow-up appends a turn here. Without this the chip would
+                // carry `data-askabout`, and `PhoneShell`'s delegation would
+                // navigate away into a new thread instead.
+                onFollowUp={submit}
+              />
+            </div>
+          ))}
         </div>
-      ) : (
+      ) : null}
+
+      {shown.length === 0 && !urlConversationId ? (
         /*
          * NOTHING ASKED YET.
          *
@@ -252,17 +309,18 @@ export function CounterPhoneAskClient({
           <span className="rk">Nothing asked yet</span>
           <p>
             Ask about <b>{context.store}</b>, reading {windowLabel}. Every answer names the sources
-            it read, and its address carries the question — so the answer is a link you can send.
+            it read, follow-ups keep the thread, and its address carries the conversation — so what
+            you send is the whole exchange.
           </p>
           <div className="sugs">
             {ASK_STARTERS.map((q) => (
-              <button className="sug" type="button" key={q} onClick={() => push(q)}>
+              <button className="sug" type="button" key={q} onClick={() => submit(q)}>
                 {q}
               </button>
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/*
         * PAST QUESTIONS, and only in the state where nothing is being read.
@@ -271,13 +329,40 @@ export function CounterPhoneAskClient({
         * phone has no room for one and the prototype's own narrow query hides
         * it (`.askpage .convs{display:none}`). So history is what the phone
         * shows when there is nothing else to show, which is also when a
-        * reader wants it — after an answer they are reading the answer.
+        * reader wants it — inside a thread they are reading the thread.
         */}
-      {conversationId === null && question === null ? (
-        <Section title="What you have asked" data={sections.conversations} pad={false}>
+      {!urlConversationId && shown.length === 0 ? (
+        <Section
+          title="What you have asked"
+          data={sections.conversations}
+          pad={false}
+          /*
+           * The count, and the fact that it is not all of it.
+           *
+           * The list is rendered UNCAPPED on the desk, where it has a 206px
+           * rail that scrolls on its own. Here it is in the page, above the
+           * composer, and the page is what scrolls — measured at 3033px with
+           * thirty-nine rows on a 390x844 screen, which put the input for a
+           * screen called "Ask" under two and a half screens of history.
+           *
+           * Capped rather than made to scroll inside itself: a scrolling box
+           * inside a scrolling page is the one phone pattern that reliably
+           * traps a thumb. And capped rather than paginated, because the
+           * standing direction for this surface is a lean glance-and-do tool
+           * — the recent few is what a phone reader is after, and the desk is
+           * where the archive lives.
+           *
+           * The meta line says the part CSS cannot: how many are not drawn.
+           */
+          meta={(items) =>
+            items.length > PHONE_CONVERSATION_ROWS
+              ? `${PHONE_CONVERSATION_ROWS} most recent of ${items.length}`
+              : `${items.length} ${items.length === 1 ? "thread" : "threads"}`
+          }
+        >
           {(items) => (
             <MList
-              rows={items.map((c) => ({
+              rows={items.slice(0, PHONE_CONVERSATION_ROWS).map((c) => ({
                 key: c.id,
                 title: c.title ?? "Untitled",
                 detail: `${c.turns} ${c.turns === 1 ? "turn" : "turns"}`,
@@ -290,13 +375,16 @@ export function CounterPhoneAskClient({
       ) : null}
 
       <AskComposer
-        // Named scope rather than the prototype's "Ask a follow-up about this
-        // range…", which would promise a thread neither surface keeps.
+        // Honest now that a follow-up is a follow-up. Before the thread exists
+        // it names the scope instead, which is what a first question is asked
+        // under.
         placeholder={
-          answered ? `Ask again about ${context.store}…` : `Ask about ${context.store}…`
+          shown.length > 0 || urlConversationId
+            ? `Ask a follow-up about ${context.store}…`
+            : `Ask about ${context.store}…`
         }
-        onSubmit={push}
-        disabled={askPending(shown)}
+        onSubmit={submit}
+        disabled={askPending(state)}
       />
     </>
   )

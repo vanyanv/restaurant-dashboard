@@ -5,6 +5,7 @@ import {
   stepCountIs,
   streamText,
   tool,
+  type ModelMessage,
   type ToolSet,
   type UIMessage,
 } from "ai"
@@ -20,6 +21,7 @@ import {
   appendMessage,
   assertConversationAccess,
   createConversation,
+  getConversation,
   setConversationTitle,
 } from "@/lib/chat/conversation"
 import { buildSystemPrompt } from "@/lib/chat/system-prompt"
@@ -36,6 +38,14 @@ import { generateConversationTitle } from "@/lib/chat/auto-title"
  * instead of no answer at all.
  */
 export const maxDuration = 300
+
+/**
+ * How many stored messages are replayed when a client delegates its history
+ * (see the rebuild below). Twenty is ten turns — past anything an owner is
+ * still holding in their head, and well inside the prompt budget that makes
+ * `CHAT_REASONING_EFFORT` worth tuning at all.
+ */
+const HISTORY_MESSAGES = 20
 
 interface ChatRequestBody {
   messages: UIMessage[]
@@ -94,9 +104,43 @@ export async function POST(req: Request) {
   // Resolve or create the conversation. `getConversation` throws on
   // NOT_OWNED, which we surface as 403.
   let conversationId = body.conversationId
+
+  /*
+   * HISTORY THE SERVER OWNS, FOR A CLIENT THAT SENDS ONLY THE NEW TURN.
+   *
+   * A caller that names a conversation and posts exactly ONE message is
+   * saying: you already have the rest. The Counter Ask surface is that
+   * caller — it renders a thread from `Message` rows the server wrote and has
+   * no reason to ship them back up the wire on every follow-up.
+   *
+   * Deliberately narrow. The chat drawer and `/m/chat` post the whole
+   * `messages` array, tool parts included, and those parts carry outputs no
+   * `Message` row keeps; rebuilding their history from the database would
+   * hand the model LESS than it has today. So the rebuild fires only on the
+   * one-message shape, and every existing caller keeps its current path.
+   */
+  let priorMessages: ModelMessage[] = []
+  const historyDelegated = Boolean(conversationId) && body.messages.length === 1
+
   if (conversationId) {
     try {
-      await assertConversationAccess(chatPrisma, accountId, conversationId)
+      if (historyDelegated) {
+        const detail = await getConversation(chatPrisma, accountId, conversationId)
+        priorMessages = detail.messages
+          // `system` and `tool` rows are plumbing; the two roles a turn is
+          // made of are the two the model is replayed.
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim())
+          // The last N turns, not the thread's whole life. Every message here
+          // is billed input on every follow-up, and a thread long enough to
+          // matter is a thread whose opening is no longer what it is about.
+          .slice(-HISTORY_MESSAGES)
+          .map((m) => ({
+            role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+            content: m.content,
+          }))
+      } else {
+        await assertConversationAccess(chatPrisma, accountId, conversationId)
+      }
     } catch (err) {
       const code = (err as { code?: string }).code
       const status = code === "NOT_OWNED" ? 403 : 404
@@ -163,7 +207,7 @@ export async function POST(req: Request) {
   const stepStartTimes = new Map<string, number>()
   const turnStartMs = Date.now()
 
-  const modelMessages = await convertToModelMessages(body.messages)
+  const modelMessages = [...priorMessages, ...(await convertToModelMessages(body.messages))]
 
   let result: ReturnType<typeof streamText>
   try {

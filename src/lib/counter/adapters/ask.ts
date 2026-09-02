@@ -1,6 +1,7 @@
 import { cache } from "react"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { getConversation, searchConversations } from "@/lib/chat/conversation"
+import { selectFiledReturn, type FiledReturn } from "@/lib/chat/return"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
 import type { SectionData } from "@/lib/counter/section-data"
 
@@ -41,7 +42,15 @@ export interface AskConversation {
    * the title that lands a moment later.
    */
   title: string | null
-  /** Turns in the thread — the rail's "· 2 turns". */
+  /**
+   * Turns ANSWERED — the rail's "· 2 turns".
+   *
+   * `answerCount`, not `messageCount`. A thread of one question and one answer
+   * is two messages and ONE turn, and this rail printed the message count
+   * under the word "turns" on both surfaces: measured against the live
+   * database, 40 of 47 threads are exactly that shape, so almost every row in
+   * the rail has been claiming twice the conversation it holds.
+   */
   turns: number
   /** Last activity, which is what the rail orders and dates by. */
   updatedAt: Date
@@ -54,6 +63,21 @@ export interface AskTurn {
   text: string
   /** Tool names, for the "Read" row. Empty on a user turn. */
   read: string[]
+  /**
+   * The question this answer answers, so a restored turn can be handed to the
+   * same `AskAnswerBody` a live one is. Empty on a user turn, and on an answer
+   * with no question before it — a thread whose opening message failed to
+   * persist.
+   */
+  question: string
+  /**
+   * THE STRIP THIS ANSWER SHOWED WHEN IT WAS LIVE — verdict, figures, deltas,
+   * follow-ups — recovered rather than reconstructed. Null on a user turn, and
+   * on an answer the model wrote without filing a return.
+   *
+   * See `filedFrom`. This is not a guess and costs no model call.
+   */
+  filed: FiledReturn | null
 }
 
 export interface AskThread {
@@ -77,30 +101,104 @@ export interface AskSections {
  * other caller in one request should ask once. See `@/lib/account-stores`.
  */
 const loadConversations = cache(
-  async (accountId: string): Promise<AskConversation[]> => {
-    // `searchConversations` with an empty query is the plain list, newest
-    // first — the same call `GET /api/chat/conversations` makes, so the rail
-    // and the API cannot disagree about what a conversation is.
-    const rows = await searchConversations(chatPrisma, accountId, "", 40)
-    return rows.map((c) => ({
-      id: c.id,
-      title: c.title,
-      turns: c.messageCount,
-      updatedAt: c.updatedAt,
-    }))
+  async (accountId: string, query: string): Promise<AskConversation[]> => {
+    /*
+     * `searchConversations` is the same call `GET /api/chat/conversations`
+     * makes, so the rail and the API cannot disagree about what a conversation
+     * is — and its `q` searches TITLES AND THE TEXT OF EVERY TURN, which is
+     * the whole reason it was written that way:
+     *
+     *   > Titles are auto-generated, so a thread the owner remembers by a
+     *   > number in the answer ("the one where produce came out at twelve
+     *   > thousand") is unreachable by title alone.
+     *
+     * The rail passed `""` and nothing else ever called it with a query, so
+     * that capability has been sitting unreached behind a list of forty-odd
+     * auto-generated titles. A blank query still degrades to the plain listing
+     * — one code path, searched or not.
+     */
+    const rows = await searchConversations(chatPrisma, accountId, query, 40)
+    return (
+      rows
+        /*
+         * A QUESTION WITH NO ANSWER IS NOT A CONVERSATION.
+         *
+         * Six of the account's 47 threads hold one message and nothing else:
+         * `POST /api/chat` writes the user's turn BEFORE it calls the model,
+         * so a turn that fails leaves the question behind with no answer to
+         * go with it. Those rows drew as "Untitled · 1 turn" and opened onto a
+         * question the page could say nothing about.
+         *
+         * The cost, stated: a thread is invisible in the rail for the seconds
+         * between the question being written and the answer landing. The rail
+         * is server-rendered on navigation and the live turn is on screen
+         * anyway, so the only reader who could notice is one watching their
+         * own answer arrive — and they are watching the answer.
+         */
+        .filter((c) => c.answerCount > 0)
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          turns: c.answerCount,
+          updatedAt: c.updatedAt,
+        }))
+    )
   },
 )
 
 /**
+ * THE FILED RETURN, RECOVERED FROM WHAT WAS ALREADY STORED.
+ *
+ * This adapter used to say, in its own words:
+ *
+ *   > `ChatMessage` persists the prose and the tool names; the `FiledReturn`
+ *   > — the verdict and the figures the strip was built from — is not stored
+ *   > anywhere.
+ *
+ * That was wrong, and wrong in the direction that costs the reader something:
+ * `fileReturn` is a TOOL, every tool call is persisted with its arguments and
+ * its result, and the result of `fileReturn` IS the `FiledReturn`. Counted in
+ * the live database: 88 tool-call rows, **39 of them `fileReturn`** — one per
+ * answered thread — each carrying the verdict, the figures with their deltas
+ * and directions, and the follow-ups. The loader was reading those rows to
+ * take `toolName` off them and discarding the rest.
+ *
+ * So re-opening your own thread showed prose with the numbers stripped out of
+ * it, and a link sent to a manager was an answer with its figures missing.
+ * Nothing is re-run and nothing is re-asked: the strip is the one that was
+ * filed, read back.
+ *
+ * ONE PARSER, NOT TWO. `selectFiledReturn` already normalises this shape off a
+ * live message part — it caps figures at three, drops a figure missing a value
+ * or a label, and takes the LAST filing when the model corrected itself. A
+ * stored row is handed to it as a settled part rather than parsed again here,
+ * so a restored answer and a live one cannot disagree about what was filed.
+ * `result` before `args`: `output` is what the live path reads, and `args` is
+ * the fallback for a row written before the two were the same object.
+ */
+function filedFrom(
+  calls: ReadonlyArray<{ toolName: string; args: unknown; result: unknown }>,
+): FiledReturn | null {
+  return selectFiledReturn(
+    calls
+      .filter((c) => c.toolName === "fileReturn")
+      .map((c) => ({
+        type: "tool-fileReturn",
+        toolName: "fileReturn",
+        state: "output-available",
+        output: c.result ?? c.args,
+      })),
+  )
+}
+
+/**
  * A stored thread, rendered read-only.
  *
- * WHAT IS NOT HERE, AND WILL NOT BE. `ChatMessage` persists the prose and the
- * tool names; the `FiledReturn` — the verdict and the figures the strip was
- * built from — is not stored anywhere. So a restored turn shows the question,
- * the paragraph and what it read, and shows NO figures. Reconstructing a strip
- * by re-running the tools would be a different answer wearing an old
- * question's clothes, and re-asking the model would be a bill for something
- * the reader already read.
+ * It now carries everything a live turn does — the question, the prose, the
+ * sources AND the filed strip — so both surfaces render a restored turn
+ * through the same `AskAnswerBody` as a fresh one. A second renderer for
+ * "an answer you are reading again" is how two views of one answer come to
+ * disagree about it.
  */
 const loadThread = cache(
   async (accountId: string, conversationId: string): Promise<AskThread | null> => {
@@ -112,17 +210,35 @@ const loadThread = cache(
         // Only the two roles a reader recognises. A `system` or `tool` row is
         // plumbing and has never been shown on any surface.
         .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({
-          id: m.id,
-          role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-          text: m.role === "user" ? questionFrom(m.content) : m.content,
-          read: m.toolCalls
-            .map((t) => t.toolName)
-            // `fileReturn` reads nothing — the same exclusion the live "Read"
-            // row makes in `toolNamesFrom`, so a restored turn and a fresh one
-            // name the same sources.
-            .filter((name) => name !== "fileReturn"),
-        })),
+        .map((m, i, rows) => {
+          const isUser = m.role === "user"
+          // The question an answer answers is the user row before it. Walked
+          // backwards rather than assumed to be `i - 1`, so a thread with two
+          // answers in a row (a retry that persisted twice) still attributes
+          // each of them to a question the reader actually asked.
+          let question = ""
+          if (!isUser) {
+            for (let j = i - 1; j >= 0; j--) {
+              if (rows[j].role === "user") {
+                question = questionFrom(rows[j].content)
+                break
+              }
+            }
+          }
+          return {
+            id: m.id,
+            role: isUser ? ("user" as const) : ("assistant" as const),
+            text: isUser ? questionFrom(m.content) : m.content,
+            question,
+            filed: isUser ? null : filedFrom(m.toolCalls),
+            read: m.toolCalls
+              .map((t) => t.toolName)
+              // `fileReturn` reads nothing — the same exclusion the live "Read"
+              // row makes in `toolNamesFrom`, so a restored turn and a fresh one
+              // name the same sources.
+              .filter((name) => name !== "fileReturn"),
+          }
+        }),
     }
   },
 )
@@ -157,17 +273,22 @@ export function getAskSectionPromises(input: {
   accountId: string
   /** From `?c=` — the thread the reader opened, if any. */
   conversationId?: string | null
+  /**
+   * From `?cq=` — what the reader is looking for in the rail. Searched against
+   * titles AND turn text; blank is the plain listing.
+   */
+  query?: string | null
 }): StreamedSections<AskSections> {
   return {
     conversations: guardSection(
-      classify(() => loadConversations(input.accountId), {
+      classify(() => loadConversations(input.accountId, (input.query ?? "").trim()), {
         retryAction: "retryConversations",
         isEmpty: (rows) => rows.length === 0,
         // `no_match` rather than `pre_open` or `all_clear`: an account with no
-        // history has asked nothing, which is the same shape as a filter that
+        // history has asked nothing, which is the same shape as a search that
         // matched nothing — not a store that has not opened, and certainly not
         // "all clear", which would read as reassurance about a question nobody
-        // asked.
+        // asked. With `?cq=` live it is now literally the second of those, too.
         emptyReason: "no_match",
       }),
       "retryConversations",
