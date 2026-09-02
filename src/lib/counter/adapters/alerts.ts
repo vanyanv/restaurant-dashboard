@@ -12,7 +12,8 @@ import {
   alertSourceLabel,
   type AlertSegment,
 } from "@/lib/counter/alert-filters"
-import { isoDay, rangeTitle } from "@/lib/counter/date-range"
+import { isoDay, monthDay, rangeTitle } from "@/lib/counter/date-range"
+import { plural } from "@/lib/counter/format"
 import { classify } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import type { ChartSeries } from "@/lib/counter/chart-geometry"
@@ -128,6 +129,20 @@ export interface AlertsFilters {
 export interface AlertsRow {
   key: string
   /**
+   * Every alert this row stands for, newest first — one id for a one-off, and
+   * fourteen for a condition that has fired every day since Aug 17.
+   *
+   * The page closes ALL of them. See `buildRows`: a row that collapses the
+   * display without closing what it collapsed would let the queue silently
+   * refill behind the reader.
+   */
+  ids: string[]
+  /**
+   * `14 times since Aug 17` — how long this condition has been repeating, or
+   * null when it has fired once and there is nothing to say.
+   */
+  run: string | null
+  /**
    * `Alert.id` — the same value as `key`, named separately because the page
    * now WRITES to this row and a write should not be addressed by something
    * whose contract is "unique within this render".
@@ -177,6 +192,15 @@ export interface PhoneAlertRow {
   key: string
   /** `Alert.id` — what `?alert=` carries, and what the decision writes to. */
   id: string
+  /**
+   * Every alert this row stands for. See `AlertsRow.ids` — the phone folds
+   * repeats exactly as the desk does, and its six-row cap makes that fold
+   * matter more here, not less: six conditions is a glance, six instances of
+   * one condition is not. Empty on the stated row, which is not an alert.
+   */
+  ids: string[]
+  /** `14 times since Aug 17`, or null. See `AlertsRow.run`. */
+  run: string | null
   /** Whether this row still has a decision in it. See `AlertsRow.closable`. */
   closable: boolean
   title: string
@@ -483,6 +507,8 @@ function buildFilters(
   query: Required<Pick<AlertsQuery, "severities" | "sources" | "search">>,
   shown: number,
   total: number,
+  /** Rows the table will actually draw, once repeats are folded. */
+  conditions: number | null,
 ): AlertsFilters {
   const bySeverity = countBySeverity(data.alerts)
 
@@ -508,7 +534,19 @@ function buildFilters(
       count: data.bySource[s.id],
       disabled: data.bySource[s.id] === 0,
     })),
-    count: `${shown} of ${total}`,
+    /*
+     * ALERTS, and — when the table has folded them — how many CONDITIONS those
+     * alerts turned out to be.
+     *
+     * The table shows one row per condition now (see `buildRows`), so a line
+     * reading "134 of 134" over sixteen rows would be the third different
+     * total on one screen. Saying both is the fix: the count of things to
+     * decide, and the count of alerts behind them.
+     */
+    count:
+      conditions !== null && conditions < shown
+        ? `${plural(conditions, "condition")} · ${shown} of ${total} alerts`
+        : `${shown} of ${total}`,
     filtering:
       query.severities.length > 0 || query.sources.length > 0 || query.search !== "",
   }
@@ -520,26 +558,113 @@ function countBySeverity(alerts: InboxAlert[]): Record<AlertSeverity, number> {
   return out
 }
 
+/**
+ * THE SAME CONDITION, FIRING AGAIN, IS ONE ROW.
+ *
+ * ## What the queue actually held
+ *
+ * Counted against the live database on 2026-09-02, the inbox held **134 open
+ * alerts. They were 16 conditions.** Nine of those sixteen had fired between
+ * eleven and fourteen times each, one a day, every day from 2026-08-17 to
+ * 2026-09-02:
+ *
+ *     14x  2 Slider Combo — units below forecast          Aug 17 → Sep 2
+ *     14x  Extra Chris N Eddy's Sauce — below forecast    Aug 17 → Sep 2
+ *     13x  Soda · Signature Slider Fries · Double Patty · Side of Yellow Chilies
+ *     12x  1 Slider Combo · Straight-Cut Fries
+ *     11x  Loaded Fries
+ *
+ * So the page opened on "134 · 63 need a decision" and a screen of rows that
+ * differ only in the number inside them — the same six menu items under the
+ * same forecast, once per day for a fortnight. That is not 134 things needing
+ * a person. It is a handful of standing conditions, and one of them repeating
+ * for seventeen days is a fact about the FORECAST rather than a fresh incident
+ * every morning.
+ *
+ * The strip beside it said the rest: `ACKNOWLEDGED 0 · none yet` and
+ * `MEDIAN TIME TO CLOSE — · nothing closed yet`. A queue nobody has ever
+ * worked, which is what a queue of 134 identical criticals earns.
+ *
+ * ## The key, and why a null `targetId` folds nothing
+ *
+ * `(storeId, status, source, target, targetId)` is "the same condition on the
+ * same thing". Status is in it so an open run and a dismissed one never merge
+ * into a row whose button would mean two things at once.
+ *
+ * An alert with NO `targetId` is not folded at all. It is tempting to fall
+ * back to `target`, and that is wrong: `target` is a KIND ("a menu item"), not
+ * a thing, so ten dismissed menu-item alerts with no id would collapse into
+ * one row claiming to be ten instances of a single condition when they are ten
+ * different products. There is no evidence in an untargeted alert that it is
+ * the same condition as another, and inventing that evidence would hide rows a
+ * reader needs. Measured against the live inbox this costs almost nothing:
+ * every MENU_ITEM alert carries its id, so the nine daily-repeating conditions
+ * — 129 of the 134 open alerts — still fold, and the five untargeted REVENUE
+ * alerts stay five rows, which is what they are.
+ *
+ * ## The row still closes everything it stands for
+ *
+ * `ids` carries every alert in the run, newest first, and the page closes all
+ * of them — with the count on the button, so a reader pressing Dismiss on a
+ * row that says "14 times since Aug 17" is told they are dismissing fourteen.
+ * A row that collapsed the display and then closed one of fourteen would be a
+ * worse page than the one this replaces, because the queue would silently
+ * refill.
+ */
 function buildRows(alerts: InboxAlert[], today: Date): AlertsRow[] {
-  return [...alerts]
+  const groups = new Map<string, InboxAlert[]>()
+  for (const a of alerts) {
+    // `a.id` when there is no target: a key unique to this alert, so it forms
+    // a group of one and folds with nothing. See the docblock.
+    const key =
+      a.targetId === null
+        ? `alert:${a.id}`
+        : `${a.storeId}|${a.status}|${a.source}|${a.target}|${a.targetId}`
+    const run = groups.get(key)
+    if (run) run.push(a)
+    else groups.set(key, [a])
+  }
+
+  return [...groups.values()]
+    .map((run) => {
+      // Newest first WITHIN the run, so `run[0]` is what the condition looks
+      // like today and `ids` closes from the top down.
+      const sorted = [...run].sort((x, y) => y.detectedAt.getTime() - x.detectedAt.getTime())
+      const newest = sorted[0]
+      // The worst severity anything in the run reached — a condition that was
+      // critical on Monday is not a WATCH because today's instance was milder.
+      const severity = sorted.reduce(
+        (worst, a) => (SEVERITY_RANK[a.severity] < SEVERITY_RANK[worst] ? a.severity : worst),
+        newest.severity,
+      )
+      const oldest = sorted[sorted.length - 1]
+      return { sorted, newest, severity, oldest }
+    })
     .sort(
       (a, b) =>
         SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-        b.detectedAt.getTime() - a.detectedAt.getTime(),
+        b.newest.detectedAt.getTime() - a.newest.detectedAt.getTime(),
     )
-    .map((a) => {
-      const words = STATUS_WORDS[a.status]
+    .map(({ sorted, newest, severity, oldest }) => {
+      const words = STATUS_WORDS[newest.status]
       return {
-        key: a.id,
-        id: a.id,
-        severity: a.severity,
-        title: a.title,
-        body: a.body,
-        source: a.source,
-        sourceLabel: alertSourceLabel(a.source),
-        opened: agoWords(a.detectedAt, today),
-        status: a.status,
-        closable: a.status === "OPEN",
+        key: newest.id,
+        id: newest.id,
+        ids: sorted.map((a) => a.id),
+        severity,
+        title: newest.title,
+        body: newest.body,
+        source: newest.source,
+        sourceLabel: alertSourceLabel(newest.source),
+        opened: agoWords(newest.detectedAt, today),
+        // Null for a one-off, so a queue of genuinely distinct alerts carries
+        // no extra line at all.
+        run:
+          sorted.length > 1
+            ? `${plural(sorted.length, "time")} since ${monthDay(oldest.occurredOn)}`
+            : null,
+        status: newest.status,
+        closable: newest.status === "OPEN",
         statusLabel: words.label,
         statusTone: words.tone,
       }
@@ -575,9 +700,30 @@ const NOTHING_CLOSED: PhoneAlertRow = {
   // Not an alert, so it carries no id and offers no decision — the same
   // reasoning that gives it no `.mtag`.
   id: "",
+  ids: [],
+  run: null,
   closable: false,
   title: `Nothing closed in the last ${ANOMALY_RELEVANCE_DAYS} days`,
   detail: "",
+}
+
+/**
+ * What a phone list's head says now that its rows are conditions.
+ *
+ * Two different reductions happen between the alerts and the rows, and a
+ * single "N of M" cannot tell them apart:
+ *
+ *   - the FOLD — 134 alerts are 16 conditions (see `buildRows`)
+ *   - the CAP  — `PHONE_ROWS` draws six of them
+ *
+ * Before this, a fold read as a cap: ten dismissals of one condition became
+ * one row under the words "1 of 10", which says "nine are hidden" when in
+ * fact nothing is hidden and the nine are the same thing said again. So the
+ * fold and the cap are named separately, and the cap only when it bit.
+ */
+function phoneListMeta(shownRows: number, conditions: number, alerts: number): string {
+  const capped = shownRows < conditions ? `${shownRows} of ${conditions}` : String(conditions)
+  return conditions < alerts ? `${capped} · ${plural(alerts, "alert")}` : capped
 }
 
 function buildPhoneRows(alerts: InboxAlert[], today: Date): PhoneAlertRow[] {
@@ -586,9 +732,21 @@ function buildPhoneRows(alerts: InboxAlert[], today: Date): PhoneAlertRow[] {
     .map((r) => ({
       key: r.key,
       id: r.id,
+      ids: r.ids,
+      run: r.run,
       closable: r.closable,
       title: r.title,
-      detail: `${r.sourceLabel} · ${r.opened}`,
+      /*
+       * The run is IN the detail line, not appended by the client, because the
+       * phone has one line under a title and this is the fact that decides
+       * whether the button below closes one alert or fourteen. The desk shows
+       * the same words in its own row (see `alertRows`); a reader who is told
+       * on one screen and not the other is being asked to trust two different
+       * pages about the same queue.
+       */
+      detail: r.run
+        ? `${r.sourceLabel} · ${r.opened} · ${r.run}`
+        : `${r.sourceLabel} · ${r.opened}`,
       severity: r.severity,
       severityLabel:
         r.severity === "CRITICAL" ? "Critical" : r.severity === "WATCH" ? "Warning" : "Info",
@@ -667,7 +825,14 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
   return {
     strip: mapReady(view, (v) => buildStrip(v.inbox)),
     filters: mapReady(view, (v) =>
-      buildFilters(v.inbox, query, v.rows.length, v.inSegment.length),
+      buildFilters(
+        v.inbox,
+        query,
+        v.rows.length,
+        v.inSegment.length,
+        // The same fold the table does, counted rather than re-derived by eye.
+        buildRows(v.rows, today).length,
+      ),
     ),
     /*
      * READY WITH ZERO ROWS, in every segment — never `empty` (N-R4/N-R5).
@@ -693,7 +858,7 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
       const rows = buildPhoneRows(open, today)
       return {
         rows,
-        meta: rows.length < open.length ? `${rows.length} of ${open.length}` : String(open.length),
+        meta: phoneListMeta(rows.length, buildRows(open, today).length, open.length),
       }
     }),
     /*
@@ -749,11 +914,12 @@ export async function getAlertsSections(input: AlertsQuery = {}): Promise<Alerts
       const rows = buildPhoneRows(closed, today)
       const { one, many } = timeToClose(d.alerts).population
       if (rows.length === 0) return { rows: [NOTHING_CLOSED], meta: "none yet" }
+      const conditions = buildRows(closed, today).length
       return {
         rows,
         meta:
-          rows.length < closed.length
-            ? `${rows.length} of ${closed.length}`
+          conditions < closed.length || rows.length < conditions
+            ? phoneListMeta(rows.length, conditions, closed.length)
             : `${closed.length} ${closed.length === 1 ? one : many}`,
       }
     }),

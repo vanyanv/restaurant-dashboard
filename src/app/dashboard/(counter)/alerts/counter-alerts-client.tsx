@@ -174,10 +174,37 @@ function AlertDecision({
   const [why, setWhy] = useState("")
   const [failed, setFailed] = useState(false)
 
+  /*
+   * CLOSES THE WHOLE RUN, because the row stands for the whole run.
+   *
+   * `AlertsRow` is now one CONDITION rather than one alert — the inbox held
+   * 134 open alerts that were 16 conditions, nine of them firing once a day
+   * for a fortnight (see `buildRows`). Closing the newest of fourteen and
+   * leaving thirteen behind would collapse the display and let the queue
+   * silently refill under the reader, which is a worse page than the one that
+   * at least showed all fourteen.
+   *
+   * Sequential rather than `Promise.all`: these are writes against one row
+   * each, the runs are tens of ids and not thousands, and a serial loop stops
+   * at the first failure with the rest untouched — which is the behaviour a
+   * reader can reason about when the note below says it did not save.
+   *
+   * The reason is recorded against every alert in the run. It is one
+   * decision about one condition, and splitting it would leave thirteen
+   * acknowledgements with no explanation beside one that has it.
+   */
   const close = (how: "acknowledge" | "dismiss") => {
     setFailed(false)
     startSaving(async () => {
-      const result = await closeAlert(alert.id, how, how === "acknowledge" ? why : undefined)
+      let ok = true
+      for (const id of alert.ids) {
+        const r = await closeAlert(id, how, how === "acknowledge" ? why : undefined)
+        if (!r.ok) {
+          ok = false
+          break
+        }
+      }
+      const result = { ok }
       if (!result.ok) {
         setFailed(true)
         return
@@ -198,6 +225,9 @@ function AlertDecision({
       <p style={{ margin: 0, fontWeight: 600 }}>{alert.title}</p>
       <Note tight>
         {alert.sourceLabel} · opened {alert.opened} · {alert.statusLabel}
+        {/* "14 times since Aug 17" — the fact that turns a screen of rows into
+            a handful of standing conditions. Absent on a one-off. */}
+        {alert.run ? ` · ${alert.run}` : ""}
       </Note>
       {alert.body ? <Note>{alert.body}</Note> : null}
 
@@ -219,7 +249,14 @@ function AlertDecision({
               disabled={saving}
               onClick={() => close("acknowledge")}
             >
-              {saving ? "Saving…" : why.trim() ? "Acknowledge with this reason" : "Acknowledge"}
+              {saving
+                ? "Saving…"
+                : // The COUNT is on the button, so nobody presses Dismiss on a
+                  // row reading "14 times since Aug 17" without being told that
+                  // is fourteen alerts.
+                  `${why.trim() ? "Acknowledge with this reason" : "Acknowledge"}${
+                    alert.ids.length > 1 ? ` (${alert.ids.length})` : ""
+                  }`}
             </button>
             <button
               className="btn"
@@ -227,7 +264,7 @@ function AlertDecision({
               disabled={saving}
               onClick={() => close("dismiss")}
             >
-              Dismiss
+              {alert.ids.length > 1 ? `Dismiss all ${alert.ids.length}` : "Dismiss"}
             </button>
           </div>
         </>
@@ -259,13 +296,22 @@ function alertRows(
       severity: <StatusPill severity={r.severity} />,
       // `body` is null on every live row, and an absent second line is the
       // honest rendering of that — never an empty `<span>`.
-      alert: r.body ? (
+      /*
+       * The title, and — when this row is a condition that keeps firing — how
+       * long it has been doing so.
+       *
+       * "14 times since Aug 17" is the whole reason this page is readable now:
+       * it is what tells an owner that the screen in front of them is a
+       * handful of standing problems and not a hundred and thirty-four
+       * separate mornings. `body` is null on every live row, so an absent
+       * second line is the honest rendering of that and never an empty span.
+       */
+      alert: (
         <>
           <b>{r.title}</b>
-          <span> {r.body}</span>
+          {r.body ? <span> {r.body}</span> : null}
+          {r.run ? <span className="k"> · {r.run}</span> : null}
         </>
-      ) : (
-        r.title
       ),
       source: r.sourceLabel,
       opened: r.opened,
