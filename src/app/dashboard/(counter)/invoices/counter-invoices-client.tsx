@@ -122,6 +122,8 @@ export function CounterInvoicesClient({
 
   const [search, setSearch] = useState("")
   const [hidden, setHidden] = useState<ReadonlySet<InvoiceStatusId>>(new Set())
+  /** Scoped to what does not tie out, across every date. See `InvoiceRows`. */
+  const [onlyGaps, setOnlyGaps] = useState(false)
   const query = useDeferredValue(search)
 
   const { range, presetId, comparisonId } = counterParams
@@ -157,6 +159,8 @@ export function CounterInvoicesClient({
               query={query}
               onSearch={setSearch}
               hidden={hidden}
+              onlyGaps={onlyGaps}
+              onOnlyGaps={setOnlyGaps}
               onToggle={(id) =>
                 setHidden((prev) => {
                   const next = new Set(prev)
@@ -275,6 +279,8 @@ function InvoiceTable({
   onSearch,
   hidden,
   onToggle,
+  onlyGaps,
+  onOnlyGaps,
   onClear,
 }: {
   list: InvoiceList
@@ -283,25 +289,55 @@ function InvoiceTable({
   onSearch: (next: string) => void
   hidden: ReadonlySet<InvoiceStatusId>
   onToggle: (id: InvoiceStatusId) => void
+  /** Whether the list is scoped to what does not reconcile. See `matched`. */
+  onlyGaps: boolean
+  onOnlyGaps: (next: boolean) => void
   onClear?: () => void
 }) {
   const needle = query.trim().toLowerCase()
 
+  /*
+   * TWO AXES, NOT ONE.
+   *
+   * The three status chips answer "how are the last thirty days made up".
+   * "Does not reconcile" answers something else — it is the strip's own
+   * figure, counted over EVERY invoice on the account, and until it existed
+   * the page named seven broken invoices worth $3,974 and offered no way to
+   * open one. So it is its own piece of state rather than a fourth member of
+   * `hidden`: pressing it is not hiding a status, it is changing which
+   * invoices the page is about.
+   *
+   * Off, the list is what it says it is — the window. On, it is every
+   * non-reconciling invoice whatever its date, which is the only view in which
+   * the strip's figure and the rows agree.
+   */
   const matched = useMemo(
     () =>
       list.rows.filter(
-        (r) => !hidden.has(r.status) && (needle === "" || r.search.includes(needle)),
+        (r) =>
+          (onlyGaps ? r.gap !== null : r.inWindow) &&
+          !hidden.has(r.status) &&
+          (needle === "" || r.search.includes(needle)),
       ),
-    [list.rows, hidden, needle],
+    [list.rows, hidden, needle, onlyGaps],
   )
 
-  const toggles: FilterToggle[] = list.statuses.map((s) => ({
-    id: s.id,
-    label: s.label,
-    count: s.count,
-    pressed: !hidden.has(s.id),
-    disabled: s.count === 0,
-  }))
+  const toggles: FilterToggle[] = [
+    ...list.statuses.map((s) => ({
+      id: s.id,
+      label: s.label,
+      count: s.count,
+      pressed: !hidden.has(s.id),
+      disabled: s.count === 0,
+    })),
+    {
+      id: GAP_FILTER,
+      label: "Does not reconcile",
+      count: list.gapCount,
+      pressed: onlyGaps,
+      disabled: list.gapCount === 0,
+    },
+  ]
 
   const shown = matched.slice(0, MAX_ROWS)
 
@@ -331,11 +367,13 @@ function InvoiceTable({
         searchLabel="Search invoices"
         onSearch={onSearch}
         toggles={toggles}
-        onToggle={(id) => onToggle(id as InvoiceStatusId)}
+        onToggle={(id) =>
+          id === GAP_FILTER ? onOnlyGaps(!onlyGaps) : onToggle(id as InvoiceStatusId)
+        }
         onClear={onClear}
         count={
           shown.length === matched.length
-            ? `${matched.length} of ${list.rows.length}`
+            ? `${matched.length} of ${onlyGaps ? list.gapCount : list.rows.filter((r) => r.inWindow).length}`
             : `${shown.length} of ${matched.length} shown`
         }
       />
@@ -345,6 +383,12 @@ function InvoiceTable({
 }
 
 /** The pill's word. Its CLASS is the status; its label is a word, not a shout. */
+/**
+ * The reconcile chip's id. A literal that cannot collide with an
+ * `InvoiceStatusId`, because it is not one — see `matched`.
+ */
+const GAP_FILTER = "GAP"
+
 const STATUS_WORD: Record<InvoiceStatusId, string> = {
   REVIEW: "Review",
   APPROVED: "Approved",
