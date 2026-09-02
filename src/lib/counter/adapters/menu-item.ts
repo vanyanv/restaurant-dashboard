@@ -104,6 +104,40 @@ export interface ItemBehind {
   rows: ItemBehindRow[]
   actions: { label: string; href: string; primary?: boolean }[]
   meta: string
+  /**
+   * WHAT THIS SECTION CAN NOW DO, AND WHY IT MATTERS MORE THAN ITS SIZE.
+   *
+   * A recipe mapped to an Otter item is what makes a plate cost, a margin and
+   * a COGS attribution possible for it. Measured on this account: **60 of 155
+   * distinct sold item names are mapped — 39%.** The other 95 sell every day
+   * and cost nothing the product can see, so they are absent from margin, from
+   * menu engineering, and from the food-cost figures that are drawn against
+   * the target.
+   *
+   * `mapOtterItemToRecipe` has always existed and the editorial recipe canvas
+   * called it. The Counter rebuild's only control here was a button reading
+   * "Map N of these modifiers" that navigated to `/dashboard/recipes` and
+   * mapped nothing.
+   *
+   * The mapping is written for EVERY store on the account, which is the
+   * action's own behaviour and the right one: an item name is the POS's, not a
+   * location's, and a recipe mapped at Hollywood and not at Glendale would
+   * make the same burger costed in one place and free in the other.
+   */
+  otterItemName: string
+  /** Whether a recipe is already mapped — the button says map or change. */
+  mapped: boolean
+  /** Every recipe on the account, for the picker. */
+  recipes: Array<{ id: string; name: string }>
+  /**
+   * How many modifiers sold with this item have no recipe.
+   *
+   * Stated, not offered. `mapOtterSubItemToRecipe` needs a `skuId` that this
+   * page does not carry, so a control here would be a button that could not
+   * complete — the thing this codebase does not ship. The note says the number
+   * so the gap is visible rather than silent.
+   */
+  unmappedModifiers: number
 }
 
 export interface MenuItemSections {
@@ -152,6 +186,8 @@ interface ItemData {
   namesOnBoth: number
   /** How many item names the order feed carries at all, in this window. */
   namesTotal: number
+  /** Every recipe on the account, for the mapping picker. */
+  recipes: Array<{ id: string; name: string }>
 }
 
 async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
@@ -196,7 +232,8 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     daily.set(key, (daily.get(key) ?? 0) + q)
   }
 
-  const [cost, mapping, channelRows, modifierRows, feeCount, nameSpread] = await Promise.all([
+  const [cost, mapping, channelRows, modifierRows, feeCount, nameSpread, recipeList] =
+    await Promise.all([
     prisma.dailyCogsItem.aggregate({
       where: { ...where, itemName: name },
       _sum: { lineCost: true, salesRevenue: true, qtySold: true },
@@ -248,6 +285,14 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
       WHERE o."storeId" = ANY(${storeIds})
         AND o."referenceTimeLocal" BETWEEN ${startDate} AND ${endDate}
       GROUP BY i."name"`,
+    // The picker's options. Every recipe on the account, not only the sellable
+    // ones: an item can legitimately map to a component recipe, and hiding
+    // those would make some mappings impossible to express here.
+    prisma.recipe.findMany({
+      where: { accountId },
+      select: { id: true, itemName: true },
+      orderBy: { itemName: "asc" },
+    }),
   ])
 
   const mappedModifiers = new Set(
@@ -301,6 +346,7 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
     feesRecorded: feeCount > 0,
     namesOnBoth: nameSpread.filter((r) => r.house && r.market).length,
     namesTotal: nameSpread.length,
+    recipes: recipeList.map((r) => ({ id: r.id, name: r.itemName })),
   }
 }
 
@@ -466,16 +512,20 @@ function behindOf(d: ItemData): ItemBehind {
   const unmapped = d.modifiers.filter((m) => !m.mapped)
   return {
     rows,
-    actions: [
-      unmapped.length > 0
-        ? {
-            label: `Map ${count(unmapped.length)} of these modifiers`,
-            href: "/dashboard/recipes",
-            primary: true,
-          }
-        : { label: "Open the recipe", href: "/dashboard/recipes", primary: true },
-      { label: "Back to the catalog", href: "/dashboard/menu/catalog" },
-    ],
+    otterItemName: d.name,
+    mapped: d.mapped,
+    recipes: d.recipes,
+    /*
+     * ONE LINK, NOT TWO. The primary used to read "Map N of these modifiers"
+     * or "Open the recipe" and both went to `/dashboard/recipes`, mapping
+     * nothing. The primary slot is now a real control that writes the mapping
+     * (see the client's `BehindMapper`), so the only action left to link is
+     * the way back. `unmapped` is still counted, because the note says how
+     * many modifiers are unmapped even though mapping one needs a SKU this
+     * page does not carry.
+     */
+    actions: [{ label: "Back to the catalog", href: "/dashboard/menu/catalog" }],
+    unmappedModifiers: unmapped.length,
     meta:
       d.modifiers.length === 0
         ? "the recipe · no modifiers sold with it"
