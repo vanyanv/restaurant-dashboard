@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useTransition } from "react"
 import {
   MList,
   Section,
@@ -13,6 +13,8 @@ import { PHONE_ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import type { AlertsSections, PhoneAlertRow } from "@/lib/counter/adapters/alerts"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { useRouter } from "next/navigation"
+import { closeAlert } from "@/lib/counter/actions/alert"
 
 /**
  * Counter Needs-you — "Open right now", the phone (`P.alerts.phone`,
@@ -73,6 +75,79 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * pressed on a desk and opened on a phone must be the same segment and the
  * same filter, and the adapter applies them either way.
  */
+
+/**
+ * ANSWERING AN ALERT FROM THE PHONE.
+ *
+ * The desk inbox got acknowledge and dismiss; this is the same decision on the
+ * surface an owner actually has in their hand when a number moves. The mobile
+ * direction for this product is a lean glance-and-do tool, and an inbox you can
+ * only glance at is half of that.
+ *
+ * SAME URL CONTRACT AS THE DESK. `?alert=<id>` selects, and the row is a link
+ * rather than a button — which is also what `P.alerts.phone()` does, giving
+ * every open row a `go:` destination while ours have been inert since the page
+ * was built. So this makes the list MORE like the fixture, not less, and the
+ * two surfaces can hand each other a link that means the same thing.
+ *
+ * Nothing renders until a row is picked, so the page's default composition is
+ * untouched and the fidelity baseline holds.
+ *
+ * `.mbtn`, not `.btn`: this is the phone's button and the only class
+ * `counter-components.css` styles in this position. The explanation field the
+ * desk offers is deliberately absent — a walk-in is not where anyone types a
+ * paragraph, and `acknowledgeAlert` without text is a complete decision
+ * (ACKNOWLEDGED rather than EXPLAINED), not a degraded one.
+ */
+function PhoneAlertDecision({
+  alert,
+  onDone,
+}: {
+  alert: PhoneAlertRow
+  onDone: () => void
+}) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const [failed, setFailed] = useState(false)
+
+  const close = (how: "acknowledge" | "dismiss") => {
+    setFailed(false)
+    startSaving(async () => {
+      const result = await closeAlert(alert.id, how)
+      if (!result.ok) {
+        setFailed(true)
+        return
+      }
+      onDone()
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="msec__body">
+      <p className="mlede">{alert.title}</p>
+      <p className="msub">{alert.detail}</p>
+      <button
+        className="mbtn mbtn--primary"
+        type="button"
+        disabled={saving}
+        onClick={() => close("acknowledge")}
+      >
+        {saving ? "Saving…" : "Acknowledge"}
+      </button>
+      <button
+        className="mbtn"
+        type="button"
+        disabled={saving}
+        onClick={() => close("dismiss")}
+      >
+        Dismiss
+      </button>
+      {failed ? <p className="msub">That did not save.</p> : null}
+    </div>
+  )
+}
+
 export function CounterPhoneAlertsClient({
   params: paramsString,
   today,
@@ -97,6 +172,10 @@ export function CounterPhoneAlertsClient({
    * change reads as `stale` rather than a blank `loading.tsx`.
    */
   const { pending } = useCounterTransition()
+
+  // The same key the desk inbox uses. See `listRow`.
+  const selectedAlert = params.get("alert")
+  const router = useRouter()
 
   return (
     /*
@@ -123,7 +202,20 @@ export function CounterPhoneAlertsClient({
       </Section>
 
       <Section title="Open" meta={(l) => l.meta} data={sections.phoneOpen} pending={pending}>
-        {(l) => <MList rows={l.rows.map(listRow)} />}
+        {(l) => (
+          <>
+            <MList rows={l.rows.map(listRow)} />
+            {(() => {
+              const picked = l.rows.find((r) => r.closable && r.id === selectedAlert)
+              return picked ? (
+                <PhoneAlertDecision
+                  alert={picked}
+                  onDone={() => router.push("/m/alerts", { scroll: false })}
+                />
+              ) : null
+            })()}
+          </>
+        )}
       </Section>
 
       {/* What is no longer open, never a blank panel. See the file note. */}
@@ -163,5 +255,16 @@ function listRow(r: PhoneAlertRow): MListRow {
     title: r.title,
     detail: r.detail,
     value: r.severityLabel ? <Tag tone={r.severityTone}>{r.severityLabel}</Tag> : null,
+    /*
+     * A DESTINATION ON THE ROWS THAT CAN BE ANSWERED.
+     *
+     * `P.alerts.phone()` gives every open row a `go:`; ours have been inert
+     * since the page was built, because the prototype's destination was a
+     * page this product did not have. `?alert=` is one it does have — the
+     * same key the desk inbox selects with — so the row now opens the
+     * decision below it, and a link copied from either surface means the
+     * same thing on the other.
+     */
+    href: r.closable ? `/m/alerts?alert=${encodeURIComponent(r.id)}` : undefined,
   }
 }

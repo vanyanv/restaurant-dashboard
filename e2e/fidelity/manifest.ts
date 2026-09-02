@@ -1456,16 +1456,21 @@ export const PAGES: FidelityPage[] = [
       {
         landmark: "mbtn",
         desktop: 0,
-        mobile: 2,
+        mobile: 1,
         reason:
-          "\"Approve\" and \"Add the line\", which are the phone's copies of " +
-          "two of the three `.btn` this page already declares on the desk — " +
-          "same capabilities, same absence, counted again because the phone " +
-          "draws them in its own class. Nothing creates an `InvoiceLineItem` " +
-          "by hand, and approving posts an invoice to COGS through an API " +
-          "that exists but is deliberately not wired to a button yet. The " +
-          "third, \"Open the PDF\", IS rendered — the route serves the file " +
-          "inline, so a phone opens it in the viewer it already has.",
+          "\"Add the line\". WAS TWO — the other was \"Approve\", and this " +
+          "entry used to explain it away as an API \"that exists but is " +
+          "deliberately not wired to a button yet\". It is wired now, on the " +
+          "desk and here, so the phone renders one `.mbtn` and only the " +
+          "line-adding one is still absent: nothing in this codebase creates " +
+          "an `InvoiceLineItem` by hand.\n" +
+          "The phone gets ONE control where the desk gets three. That is the " +
+          "fixture's own shape and the right one: this surface is for the " +
+          "single decision someone takes while looking at a document on their " +
+          "phone, and credit-or-bill and reject are desk work. Approve is " +
+          "gated on the same `reconciles` the desk gates it on.\n" +
+          "\"Open the PDF\" IS rendered — the route serves the file inline, " +
+          "so a phone opens it in the viewer it already has.",
       },
       /*
        * THE DESK'S `.btn` AND `.btnrow` ALLOWANCES ARE GONE — the page renders
