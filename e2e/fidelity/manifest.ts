@@ -2189,28 +2189,48 @@ export const PAGES: FidelityPage[] = [
       },
       {
         landmark: "btn",
-        desktop: 8,
+        desktop: 5,
         mobile: 0,
         reason:
-          "Eight controls the prototype draws and this product has no action " +
-          "behind. Checked one at a time against the codebase, not assumed: " +
-          "\"Save inputs\" and \"History\" (above); \"Add a line\" — nothing " +
-          "writes `StoreFixedExpense`, `prisma.storeFixedExpense.create` " +
-          "appears nowhere outside the generated client; \"Edit rates\" — the " +
-          "form below already edits both commission rates inline, so a button " +
+          "Five controls the prototype draws and this product has no action " +
+          "behind. WAS EIGHT, and two of those eight were wrong — the entry " +
+          "claimed \"'Add a line' — nothing writes `StoreFixedExpense`, " +
+          "`prisma.storeFixedExpense.create` appears nowhere outside the " +
+          "generated client\" and \"'Deactivate this store' and 'Delete' — " +
+          "no action exists for either\". Both were re-checked against the " +
+          "codebase and both are false: " +
+          "`src/app/actions/store/fixed-expense-actions.ts` has owner-gated " +
+          "create, update AND delete, all three writing " +
+          "`prisma.storeFixedExpense`, and `deleteStore` in " +
+          "`@/app/actions/store/crud-actions` sets `isActive: false`. The " +
+          "editorial store dossier called all four. Both controls now render.\n" +
+          "The six that remain, checked one at a time: \"Save inputs\" and " +
+          "\"History\" (see the `btnrow` entry); \"Edit rates\" — the form " +
+          "below already edits both commission rates inline, so a button " +
           "opening a second editor for them is a second write path to one " +
-          "field; \"Change target\" — `updateStoreSchema` in " +
-          "`@/app/actions/store/crud-actions` does not accept " +
+          "field; \"Change target\" — `updateStoreSchema` does not accept " +
           "`targetCogsPct`, which the form's own copy already states; " +
-          "\"Change stage\" — `lifecycleStage` is moved by the ML pipeline's " +
-          "`should_promote_to_ready`, not by hand; \"Deactivate this store\" " +
-          "and \"Delete\" — no action exists for either, and both are " +
-          "destructive enough that a button which silently does nothing is " +
-          "worse than no button. " +
+          "\"Change stage\" — `lifecycleStage` is moved by the ML " +
+          "pipeline's `should_promote_to_ready`, not by hand; and \"Delete\" " +
+          "— there is no hard delete in this codebase. `deleteStore` IS the " +
+          "deactivation, so the fixture's two buttons are one behaviour " +
+          "under two names, which its own callout concedes when it says " +
+          "\"deleting a store does not delete its history\". Shipping both " +
+          "would be two controls for one effect.\n" +
+          "FIVE RATHER THAN SIX, and the sixth is not forgiven — it is " +
+          "FILLED. The editor renders a third button the fixture does not " +
+          "draw, \"Remove this line\", and since every one of these shares " +
+          "the bare `btn` signature the alignment pairs it with one of the " +
+          "fixture's own. That is the honest count: this page renders three " +
+          "controls against the fixture's eight, so five are missing and none " +
+          "is surplus. Removing a fixed expense has to be reachable — a line " +
+          "an owner can add and never take off the P&L is a trap — and the " +
+          "fixture has no slot for it because the fixture has no working " +
+          "editor.\n" +
           "This is note 46 and the same subtraction `Empty` and `Owed` make " +
           "when they drop the prototype's buttons: this codebase does not " +
           "ship a control that advertises a capability it does not have. " +
-          "Closing these nine by markup would satisfy the gate by breaking " +
+          "Closing these by markup would satisfy the gate by breaking " +
           "the rule the gate exists to protect.",
       },
     ],

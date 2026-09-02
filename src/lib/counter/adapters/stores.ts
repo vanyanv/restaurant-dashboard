@@ -137,7 +137,7 @@ export interface StoreExpenseLine {
   label: string
   /** As the owner entered it, in `frequency`. */
   amount: number
-  frequency: "WEEKLY" | "MONTHLY" | "ANNUAL"
+  frequency: "WEEKLY" | "MONTHLY" | "YEARLY"
   monthly: number
 }
 
@@ -157,16 +157,33 @@ interface StoreFileRow extends StoreRow {
  * rule between them is exactly how a page comes to print two different
  * monthlies for one expense.
  */
+/*
+ * `YEARLY`, NOT `ANNUAL`, AND THE DIFFERENCE WAS A 12x ERROR WAITING TO HAPPEN.
+ *
+ * `ExpenseFrequency` in the schema is `WEEKLY | MONTHLY | YEARLY`. This table
+ * was keyed `WEEKLY | MONTHLY | ANNUAL`, so `ANNUAL` was a key nothing could
+ * ever produce and `YEARLY` was a value with no entry. The guard below reads
+ * `e.frequency in MONTHLY_FROM ? e.frequency : "MONTHLY"`, so a yearly expense
+ * fell through to the MONTHLY factor of 1: its full annual amount would have
+ * been charged to the P&L every month, twelve times over, with the cadence
+ * column calmly printing "Monthly" beside it.
+ *
+ * It never fired because `StoreFixedExpense` has zero rows — nothing in the
+ * product could write one, which is the gap the "Add a line" control in this
+ * same commit closes. Shipping that control against this table is what would
+ * have made a latent typo into a live money bug, on the first yearly expense
+ * anyone entered.
+ */
 const MONTHLY_FROM: Record<StoreExpenseLine["frequency"], number> = {
   WEEKLY: 52 / 12,
   MONTHLY: 1,
-  ANNUAL: 1 / 12,
+  YEARLY: 1 / 12,
 }
 
 const CADENCE_LABEL: Record<StoreExpenseLine["frequency"], string> = {
   WEEKLY: "Weekly",
   MONTHLY: "Monthly",
-  ANNUAL: "Annual",
+  YEARLY: "Yearly",
 }
 
 const SELECT = {
@@ -299,7 +316,7 @@ const missingInputs = (s: StoreRow): string[] => {
   const gaps: string[] = []
   if (s.rent === null) gaps.push("rent")
   if (s.cogsTarget === null) gaps.push("COGS target")
-  if (s.labor === 0) gaps.push("a labour budget above zero")
+  if (s.labor === 0) gaps.push("a labor budget above zero")
   return gaps
 }
 
@@ -458,14 +475,14 @@ function workOf(d: Data): StoresWork {
 
   if (zeroLabour.length > 0) {
     items.push({
-      key: "labour",
+      key: "labor",
       tone: "warn",
       lead: count(zeroLabour.length),
       unit: zeroLabour.length === 1 ? "store" : "stores",
-      title: "A labour budget of zero reads as configured",
+      title: "A labor budget of zero reads as configured",
       body:
         `${zeroLabour.map((s) => shortName(s.name)).join(" and ")} ` +
-        `${zeroLabour.length === 1 ? "carries" : "carry"} a labour budget of exactly $0 while ` +
+        `${zeroLabour.length === 1 ? "carries" : "carry"} a labor budget of exactly $0 while ` +
         `paying wages every week. The flag the rest of the product reads to decide whether a ` +
         `store's costs are on file tests for null, and zero is not null, so it passes.`,
       act: "Open the store file",
@@ -532,6 +549,22 @@ export interface StoreFileEditable {
   doordash: number
   /** Stated, not offered: `updateStoreSchema` does not accept it. */
   cogsTarget: number | null
+  /**
+   * The store's fixed-expense lines, carried on the EDIT section rather than
+   * on `expenses` beside the table that displays them.
+   *
+   * That looks like the wrong home for them and is the right one. `P.storecosts`
+   * puts "Add a fixed expense" in "Edit this file", after the tri and
+   * immediately before the final button row — not under the Fixed expenses
+   * table, which the fixture draws with no control on it at all. The fidelity
+   * gate aligns landmarks by document ORDER, so an editor rendered under the
+   * table reads as two extra buttons in the wrong place and two missing ones
+   * further down. The invoice page learned this the same way.
+   *
+   * One `Section` renders one data source, so the lines travel with the
+   * section that is rendered where the fixture puts the control.
+   */
+  expenseLines: StoreExpenseLine[]
 }
 
 /**
@@ -647,6 +680,7 @@ export function getStoreFileSectionPromises(
       uber: store.uber ?? DEFAULT_UBER,
       doordash: store.doordash ?? DEFAULT_DOORDASH,
       cogsTarget: store.cogsTarget,
+      expenseLines: store.expenses,
     })),
     head: s((store) => {
       const monthly = fixedMonthly(store)
@@ -700,7 +734,7 @@ export function getStoreFileSectionPromises(
     inputs: s((store) => ({
       fixed: [
         { label: "Rent", value: store.rent === null ? "not set" : money(store.rent), ...(store.rent === null ? { tone: "bad" as const } : {}) },
-        { label: "Labour budget", value: store.labor === null ? "not set" : money(store.labor), ...(store.labor === null || store.labor === 0 ? { tone: "bad" as const } : {}) },
+        { label: "Labor budget", value: store.labor === null ? "not set" : money(store.labor), ...(store.labor === null || store.labor === 0 ? { tone: "bad" as const } : {}) },
         { label: "Cleaning", value: store.cleaning === null ? "not set" : money(store.cleaning) },
         { label: "Towels", value: store.towels === null ? "not set" : money(store.towels) },
         { label: "Monthly total", value: money(fixedMonthly(store)) },
