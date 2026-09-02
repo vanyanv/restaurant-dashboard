@@ -3,7 +3,7 @@ import { getScopedStores } from "@/lib/account-stores"
 import { isNonIngredientRow } from "@/lib/invoice-charges"
 import { splitReach, type ReachSplit } from "@/lib/counter/ingredient-reach"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
+import { count, money, pct, plural, titleCase, unitCost } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { shortLabels } from "@/lib/counter/short-labels"
 import {
@@ -817,7 +817,7 @@ function workOf(d: IngredientData): IngredientWork {
     },
   ]
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 function pantryOf(d: IngredientData): IngredientPantry {

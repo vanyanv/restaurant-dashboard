@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { monthlyCostForDays } from "@/lib/pnl"
-import { count, money, pct, titleCase } from "@/lib/counter/format"
+import { count, money, pct, plural, titleCase } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -490,7 +490,7 @@ function workOf(d: Data): StoresWork {
     })
   }
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 /* -- assembly --------------------------------------------------------- */

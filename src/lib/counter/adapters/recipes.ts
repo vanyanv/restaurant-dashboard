@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
-import { count, money, pct, unitCost } from "@/lib/counter/format"
+import { count, money, pct, plural, unitCost } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
   awaitSections,
@@ -458,7 +458,7 @@ function workOf(d: RecipeData): RecipeWork {
     })
   }
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 /**
