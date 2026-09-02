@@ -19,7 +19,7 @@ import {
 } from "@/components/counter"
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural } from "@/lib/counter/format"
 import { dayCount, rangeSubtitle, stepRange, rangeLabel } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { AnalyticsSections, MixDrill } from "@/lib/counter/adapters/analytics"
@@ -232,7 +232,20 @@ export function CounterAnalyticsClient({
         <Section
           title="By day of week"
           pending={pending}
-          meta={`${windowLabel} · ${count(days)} days, averaged by weekday`}
+          /*
+           * "AVERAGED BY WEEKDAY" IS A CLAIM, AND AT THIS PAGE'S TWO COMMONEST
+           * RANGES IT WAS FALSE.
+           *
+           * A range of a week or less puts exactly one day in each weekday
+           * bucket, so the bars are readings. The card already said so in its
+           * own caveat — while this heading, three lines above it, said the
+           * opposite. `WeekdaySection.averaged` is the one fact both now read.
+           */
+          meta={(w) =>
+            `${windowLabel} · ${plural(days, "day")}, ${
+              w.averaged ? "averaged by weekday" : "one reading per weekday"
+            }`
+          }
           data={sections.weekday}
           askAbout="which day of the week sells best"
         >
