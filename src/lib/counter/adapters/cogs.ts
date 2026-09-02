@@ -22,7 +22,7 @@ import {
   type CogsWindow,
   type UnpostedInvoices,
 } from "@/lib/counter/cogs"
-import { count, delta, deltaSign, money, moneyCompact, pct, points } from "@/lib/counter/format"
+import { count, delta, deltaSign, money, moneyCompact, pct, plural, points } from "@/lib/counter/format"
 import {
   dayCount,
   isoDay,
@@ -929,7 +929,7 @@ function buildPlan(
         ? ""
         : over === 0
           ? " Not one bucket finished above the plan."
-          : ` ${count(over)} of ${count(readable.length)} buckets finished above it.`
+          : ` ${count(over)} of ${plural(readable.length, "bucket")} finished above it.`
 
     sentence = `${head}${spread}${overClause}`
   }
@@ -938,9 +938,22 @@ function buildPlan(
     chart,
     phoneChart: { ...chart, h: 116, ticks: false },
     sentence,
+    /*
+     * WHAT IS DRAWN, which at one bucket is a reading and not a series.
+     *
+     * `Chart` has a documented single-reading branch — below two labels it
+     * draws the figure and its comparison as cells rather than a line, because
+     * one point is not a shape. At this page's one-day default that left
+     * "daily buckets" captioning a single cell. Same defect the Overview's two
+     * chart panels carried, fixed the same way: the caption is derived from
+     * the labels the chart was actually built with.
+     */
     meta:
-      `${rangeLabel(range, "custom")} · ${GRAIN_WORD[granularity]} buckets · ` +
-      "cost from DailyCogsItem over the statement's Total Sales",
+      `${rangeLabel(range, "custom")} · ` +
+      (readable.length < 2
+        ? "one reading"
+        : plural(readable.length, `${GRAIN_WORD[granularity]} bucket`)) +
+      " · cost from DailyCogsItem over the statement's Total Sales",
     // C-R4, published to the reader rather than left as a silent gap.
     note:
       "One line. DailyCogsItem.lineCost already IS the theoretical cost — recipes valued at " +
@@ -1070,14 +1083,29 @@ function buildMoved(rows: IngredientPriceMonitorRow[]): MovedSection {
         (top.row.recipeUsageCount > 0
           ? `, and it is in ${recipeText(top.row.recipeUsageCount)}.`
           : ", and no recipe carries it yet.") +
-        ` ${count(risers)} of ${count(all.length)} moved ingredients got dearer.`
+        /*
+         * "Of the 30 that moved, 5 got dearer" — NOT "5 of 30 moved
+         * ingredients got dearer".
+         *
+         * The meta four lines above this reads "5 of 30 moved", and it means
+         * something else entirely: five rows SHOWN of the thirty that moved.
+         * Two `N of M` phrases over the same M, on one card, meaning different
+         * things — and on the live range the two numbers happened to be the
+         * same five, so the card read "5 of 30" twice and invited exactly the
+         * wrong conclusion. Rewritten so the shapes cannot be confused even
+         * when the figures collide.
+         */
+        ` Of the ${count(all.length)} that moved, ${count(risers)} got dearer.`
 
   return {
     rows: view,
     phoneRows,
     sentence,
     meta:
-      `${count(shown.length)} of ${count(all.length)} moved · ${count(MOVED_DAYS)} days · ` +
+      // "5 of 30 shown", not "5 of 30 moved" — the card is titled "What moved"
+      // already, and the word was doing double duty against the sentence
+      // below. See there.
+      `${count(shown.length)} of ${count(all.length)} shown · ${count(MOVED_DAYS)} days · ` +
       "normalized price per recipe unit",
     note:
       `A movement compares the newest normalized invoice price against the last one on or ` +
