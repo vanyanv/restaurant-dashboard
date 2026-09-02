@@ -243,6 +243,19 @@ export function writeCounterParams(
   > & {
     presetId?: PresetId
     /**
+     * WHICH ALERT THE INBOX HAS OPEN, or null to close it.
+     *
+     * Not on `CounterParams`, and deliberately: that interface is the shape
+     * every Counter page reads through `readCounterParams`, and one page's
+     * selection is not a window, a store or a filter. The alerts client reads
+     * this key straight off the `URLSearchParams` it already holds.
+     *
+     * It is in the URL rather than in component state for the reason every
+     * other control on that page is: a selection that survives a reload and
+     * travels in a link. "This is the one I mean" is a sendable sentence.
+     */
+    alert?: string | null
+    /**
      * An arbitrary window — a pressed week (note 53) or a stepped period.
      * Setting it clears `range`; passing null clears `from`/`to` and leaves
      * whatever named range was there. The two are mutually exclusive in the
@@ -312,6 +325,12 @@ export function writeCounterParams(
   if (next.day !== undefined) {
     if (next.day === null) out.delete("day")
     else out.set("day", next.day)
+  }
+  // Dropped when nothing is selected, so a link to the queue is a link to the
+  // queue rather than to whichever row someone last looked at.
+  if (next.alert !== undefined) {
+    if (next.alert === null) out.delete("alert")
+    else out.set("alert", next.alert)
   }
   /*
    * The alert inbox's three keys, all dropped at their default so a shared

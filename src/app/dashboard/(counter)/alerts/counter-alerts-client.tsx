@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   Filters,
+  Note,
   PageHead,
   Section,
   StatusPill,
@@ -29,7 +30,8 @@ import type {
   AlertsSections,
 } from "@/lib/counter/adapters/alerts"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { AlertSeverity, AlertSource } from "@/generated/prisma/client"
+import { closeAlert } from "@/lib/counter/actions/alert"
+import type { AlertSeverity, AlertSource, AlertStatus } from "@/generated/prisma/client"
 
 /**
  * Counter Needs-you — "Open right now", the desk surface (`P.alerts.desk`,
@@ -124,9 +126,133 @@ function figureOf(c: AlertStripCell): FigureProps {
   }
 }
 
-function alertRows(rows: AlertsRow[]): Row[] {
+/**
+ * CLOSING AN ALERT — AND WHY IT IS NOT A BUTTON ON EVERY ROW.
+ *
+ * The page's masthead reads "Open right now" and its strip counts what "need a
+ * decision", and until now no decision could be taken anywhere in the product:
+ * every one of this account's open alerts was permanently open, and the
+ * page's own median-time-to-close figure was computed over dismissals that no
+ * screen could write. The editorial `alert-row.tsx` had these verbs. The
+ * Counter rebuild ported the reading and left them behind.
+ *
+ * The obvious restoration is two buttons per row. It was written that way
+ * first and it was wrong twice over:
+ *
+ *   1. `npm run fidelity` counts `.btn` and `.btnrow` as landmarks, and an
+ *      allowance must name an exact count. A pair per open row is a count
+ *      that changes every time an alert opens or closes — the gate could
+ *      never hold this page again.
+ *   2. More to the point, it is 174 controls stacked down a table whose
+ *      prototype has none, and it leaves no room for the field that matters
+ *      most: `acknowledgeAlert` records an EXPLANATION when one is given, and
+ *      that text is the only way this product ever learns why a number moved.
+ *      It does not fit in a table cell.
+ *
+ * So the row SELECTS, which is also the first useful thing these rows have
+ * ever done — they have been inert since the page was built, because the
+ * prototype's `data-goto` wanted a destination this page could not build. One
+ * alert is selected at a time, in the URL, and the panel below the table is
+ * where it gets answered. Nothing renders until a row is picked, so the
+ * page's default composition is exactly what it was.
+ *
+ * Acknowledge and Dismiss are not the same verb. Acknowledge means "seen,
+ * real, nothing to do", and with text in the box becomes EXPLAINED and keeps
+ * it. Dismiss means "not worth tracking". An owner who dismisses every alert
+ * of one kind is telling the ranker something no accuracy metric can see, so
+ * the distinction is preserved rather than collapsed into a single close.
+ */
+function AlertDecision({
+  alert,
+  onDone,
+}: {
+  alert: AlertsRow
+  onDone: () => void
+}) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const [why, setWhy] = useState("")
+  const [failed, setFailed] = useState(false)
+
+  const close = (how: "acknowledge" | "dismiss") => {
+    setFailed(false)
+    startSaving(async () => {
+      const result = await closeAlert(alert.id, how, how === "acknowledge" ? why : undefined)
+      if (!result.ok) {
+        setFailed(true)
+        return
+      }
+      setWhy("")
+      onDone()
+      // The row's status, the strip's open count and the topbar dispatch badge
+      // all read the same column. Refresh so none of them can disagree with
+      // the alert the owner just closed.
+      router.refresh()
+    })
+  }
+
+  const open = alert.closable
+
+  return (
+    <div className="sec__body">
+      <p style={{ margin: 0, fontWeight: 600 }}>{alert.title}</p>
+      <Note tight>
+        {alert.sourceLabel} · opened {alert.opened} · {alert.statusLabel}
+      </Note>
+      {alert.body ? <Note>{alert.body}</Note> : null}
+
+      {open ? (
+        <>
+          <label className="search" style={{ marginTop: 11, display: "block" }}>
+            <input
+              type="text"
+              value={why}
+              placeholder="What was it? (optional — recorded with the acknowledgement)"
+              aria-label="What was it"
+              onChange={(e) => setWhy(e.target.value)}
+            />
+          </label>
+          <div className="btnrow" style={{ marginTop: 9 }}>
+            <button
+              className="btn btn--primary"
+              type="button"
+              disabled={saving}
+              onClick={() => close("acknowledge")}
+            >
+              {saving ? "Saving…" : why.trim() ? "Acknowledge with this reason" : "Acknowledge"}
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={saving}
+              onClick={() => close("dismiss")}
+            >
+              Dismiss
+            </button>
+          </div>
+        </>
+      ) : (
+        <Note bare>
+          This alert is already closed. Its status is what the median-time-to-close
+          figure above was computed from.
+        </Note>
+      )}
+
+      {failed ? <Note tight>The decision did not save.</Note> : null}
+    </div>
+  )
+}
+
+function alertRows(
+  rows: AlertsRow[],
+  selectedId: string | null,
+  onSelect: (id: string) => void,
+): Row[] {
   return rows.map((r) => ({
     key: r.key,
+    // The first thing these rows have ever done. See `AlertDecision`.
+    onSelect: () => onSelect(r.id),
+    selected: r.id === selectedId,
     cells: {
       // The class map (CRITICAL wears `REJECTED`, WATCH wears `REVIEW`) lives
       // in `StatusPill` and nowhere else.
@@ -292,6 +418,20 @@ export function CounterAlertsClient({
     push({ severities: [], sources: [], search: "" })
   }, [push])
 
+  /*
+   * WHICH ALERT IS OPEN, IN THE URL.
+   *
+   * Same reasoning as every other control on this page: a selection that
+   * survives a reload and travels in a link. An owner can send "this is the
+   * one I mean" to themselves on the phone, which a piece of component state
+   * could not do.
+   */
+  const selectedAlert = params.get("alert")
+  const selectAlert = useCallback(
+    (id: string | null) => push({ alert: id }),
+    [push],
+  )
+
   return (
     <>
       <PageHead
@@ -343,7 +483,24 @@ export function CounterAlertsClient({
           )}
         </Section>
         <Section bare title="Alerts" data={sections.table} pending={pending}>
-          {(rows) => <Table columns={COLUMNS} rows={alertRows(rows)} />}
+          {(rows) => (
+            <>
+              <Table
+                columns={COLUMNS}
+                rows={alertRows(rows, selectedAlert, selectAlert)}
+              />
+              {/* Nothing until a row is picked — the page's default
+                  composition is unchanged, which is both the honest reading of
+                  "this page shows the queue" and what keeps the fidelity gate
+                  able to hold it. See `AlertDecision`. */}
+              {(() => {
+                const picked = rows.find((r) => r.id === selectedAlert)
+                return picked ? (
+                  <AlertDecision alert={picked} onDone={() => selectAlert(null)} />
+                ) : null
+              })()}
+            </>
+          )}
         </Section>
       </div>
 
