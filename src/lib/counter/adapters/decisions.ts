@@ -268,6 +268,15 @@ export interface DecisionQueue {
 export interface PhoneQueue {
   items: MListRow[]
   meta: string
+  /**
+   * The top-ranked item, for the phone's one button.
+   *
+   * `P.decisions.phone()` ends on a single `<button class="mbtn mbtn--primary">
+   * Commit the first one</button>`, and this is what it commits. Null when the
+   * queue is empty, which is how the page knows not to draw a control over
+   * nothing.
+   */
+  first: { title: string; ref: DecisionQueueItem["ref"] } | null
 }
 
 export interface DecisionsSections {
@@ -1173,8 +1182,10 @@ export function buildQueueSection(view: DecisionsView): DecisionQueue {
  * item you lose by waiting, not every item with a date.
  */
 export function buildPhoneQueue(queue: DecisionQueue): PhoneQueue {
+  const top = queue.items[0]
   return {
     meta: queue.meta,
+    first: top ? { title: top.title, ref: top.ref } : null,
     items: queue.items.map((i) => ({
       key: i.key,
       title: i.title,

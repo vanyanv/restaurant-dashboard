@@ -1,7 +1,6 @@
 "use client"
 
-import Link from "next/link"
-import { useMemo } from "react"
+import { useMemo, useState, useTransition } from "react"
 import {
   Chart,
   MList,
@@ -14,7 +13,9 @@ import {
 import { PHONE_ALERT_TABS } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { weekLabel } from "@/lib/counter/week-window"
-import type { DecisionsSections } from "@/lib/counter/adapters/decisions"
+import type { DecisionsSections, PhoneQueue } from "@/lib/counter/adapters/decisions"
+import { useRouter } from "next/navigation"
+import { recordDecision } from "@/lib/counter/actions/decision"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
@@ -60,17 +61,89 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * page: a link from a desk lands on the right day even though nothing here
  * changes it.
  *
- * ## The primary button goes somewhere
+ * ## The primary button COMMITS now, which is what its label always said
  *
  * `P.decisions.phone()` ends with `<button class="mbtn mbtn--primary">Commit
- * the first one</button>`, wired to a global delegate we do not have. A button
- * that does nothing is worse than no button (the rule `QueueItem`'s own type
- * enforces), so it is a `<Link>` to the first queued item's destination —
- * `.mbtn` is class-keyed and styles an `<a>` unchanged, the same trade `.mli`,
- * `.do` and `.linkact` all make. It renders only when there is an item to
- * open, inside a `Section bare` on the queue it reads, so a queue that failed
- * to load does not leave a button pointing at nothing.
+ * the first one</button>`. This note used to explain that the fixture wires it
+ * to a global delegate we do not have, so it was a `<Link>` reading "Open the
+ * first one" — "a button that does nothing is worse than no button".
+ *
+ * Correct then, and no longer the situation: `commitDecision` is wired, the
+ * desk queue calls it, and `PhoneCommitFirst` calls it here. Nothing is lost
+ * by giving up the link, because every row in the list above is already an
+ * `.mli.is-link` to the same destination — the way to go look at the item is
+ * one row up, on the item itself.
+ *
+ * It still renders only when the queue has an item, inside a `Section bare` on
+ * the queue it reads, so a queue that failed to load leaves no control over
+ * nothing.
  */
+
+/**
+ * COMMITTING THE WEEK'S FIRST CALL, FROM THE PHONE.
+ *
+ * `P.decisions.phone()` ends on one `<button class="mbtn mbtn--primary">Commit
+ * the first one</button>`. This page drew it as a LINK reading "Open the first
+ * one", and the file note above said why: the fixture wires it to a global
+ * delegate we do not have, and "a button that does nothing is worse than no
+ * button".
+ *
+ * That was right, and it is no longer the situation. `commitDecision` is wired
+ * — the desk queue's "I did this" calls it — so the control can carry the
+ * fixture's own label and do the fixture's own job.
+ *
+ * Nothing is lost by giving up the link: every row in the list above is
+ * already an `.mli.is-link` to the same destination, so the way to go look at
+ * the item is still there, one row up, where the item itself is.
+ *
+ * One button, matching the fixture exactly. Committing freezes the forecast
+ * alongside the row (see `recordDecision`), which is the whole point of
+ * recording it from wherever the owner happens to be standing rather than
+ * waiting until they are back at a desk.
+ */
+function PhoneCommitFirst({ first }: { first: NonNullable<PhoneQueue["first"]> }) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const [said, setSaid] = useState<string | null>(null)
+
+  const commit = () => {
+    setSaid(null)
+    startSaving(async () => {
+      const result = await recordDecision(
+        {
+          storeId: first.ref.storeId,
+          opportunityType: first.ref.type,
+          opportunityTitle: first.ref.title,
+          opportunityAsOf: first.ref.asOf,
+          predictedImpactUsdPerWeek: first.ref.impactUsdPerWeek,
+          predictedImpactP10: first.ref.p10,
+          predictedImpactP90: first.ref.p90,
+        },
+        "commit",
+      )
+      if (!result.ok) {
+        setSaid("That did not save.")
+        return
+      }
+      router.refresh()
+    })
+  }
+
+  return (
+    <>
+      <button
+        className="mbtn mbtn--primary"
+        type="button"
+        disabled={saving}
+        onClick={commit}
+      >
+        {saving ? "Saving…" : "Commit the first one"}
+      </button>
+      {said ? <p className="msub">{said}</p> : null}
+    </>
+  )
+}
+
 export function CounterPhoneDecisionsClient({
   params: paramsString,
   today,
@@ -153,13 +226,7 @@ export function CounterPhoneDecisionsClient({
       {/* Page level, below the last `.sec`, exactly where the prototype puts
           it — and pointed at somewhere real. See the file note. */}
       <Section bare title="Commit the first one" data={sections.phoneQueue} pending={pending}>
-        {(q) =>
-          q.items.length === 0 || !q.items[0].href ? null : (
-            <Link className="mbtn mbtn--primary" href={q.items[0].href}>
-              Open the first one
-            </Link>
-          )
-        }
+        {(q) => (q.first === null ? null : <PhoneCommitFirst first={q.first} />)}
       </Section>
     </>
   )
