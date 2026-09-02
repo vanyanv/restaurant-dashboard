@@ -107,6 +107,9 @@ const list = (over: Partial<OrdersList> = {}): OrdersList => ({
   toggles: toggles(),
   search: "",
   count: "2 of 187",
+  // Every fixture row carries a recorded fee, so the column heading stays
+  // the plain "Fees" and the per-row marker is the thing under test.
+  feesUnrecorded: false,
   nextCursor: null,
   rows: ROWS,
   ...over,

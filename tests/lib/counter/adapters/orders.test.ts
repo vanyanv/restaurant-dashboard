@@ -73,6 +73,15 @@ const DASH = "—"
  */
 const PLACED = new Date(Date.UTC(2026, 7, 21, 21, 32, 4))
 
+/**
+ * A one-day window, which is what these fixtures' rows are all inside.
+ *
+ * `buildOrdersList` reads the range for one decision only: whether the time
+ * column carries a date in front of the clock. At one day it does not, which
+ * is what every assertion below about `row.time` expects.
+ */
+const ONE_DAY = { start: new Date("2026-08-21T00:00:00Z"), end: new Date("2026-08-21T00:00:00Z") }
+
 function listRow(over: Partial<OrderListResponse["rows"][number]> = {}) {
   return {
     id: "o1",
@@ -267,7 +276,7 @@ describe("buildOrdersList", () => {
           listRow({ id: "d1", platform: "doordash", commission: -3.55, subtotal: 14.2 }),
         ],
       }),
-      { search: "", channels: [] },
+      { search: "", channels: [], range: ONE_DAY },
     )
 
     expect(list.rows[0].fees).toBe(DASH)
@@ -277,7 +286,7 @@ describe("buildOrdersList", () => {
   })
 
   it("reads the clock off the store's own wall time, not the server's", () => {
-    const list = buildOrdersList(listResponse(), { search: "", channels: [] })
+    const list = buildOrdersList(listResponse(), { search: "", channels: [], range: ONE_DAY })
     expect(list.rows[0].time).toBe("9:32pm")
     expect(list.rows[0].id).toBe("#4821")
     expect(list.rows[0].href).toBe("/dashboard/orders/o1")
@@ -286,7 +295,7 @@ describe("buildOrdersList", () => {
   it("counts what is shown of what matched, and offers one toggle per CHANNEL", () => {
     // Per channel, not per raw slug: `css-pos` and `bnm-web` are both the
     // house channel, so "In-house" cannot be said with a slug toggle at all.
-    const list = buildOrdersList(listResponse(), { search: "", channels: ["house"] })
+    const list = buildOrdersList(listResponse(), { search: "", channels: ["house"], range: ONE_DAY })
     expect(list.count).toBe("1 of 187")
     expect(list.toggles.map((t) => t.id)).toEqual([
       "house",
@@ -783,7 +792,7 @@ describe("one order, one ticket", () => {
     const res = listResponse({
       rows: [listRow({ subtotal: over.subtotal, discount: over.discount, commission: over.commission })],
     })
-    return buildOrdersList(res, { channels: [], search: "" }).rows[0].ticket
+    return buildOrdersList(res, { channels: [], search: "", range: ONE_DAY }).rows[0].ticket
   }
 
   it("prints the same ticket on the list and on the order's own page", () => {
@@ -992,7 +1001,7 @@ describe("money that moves the right way", () => {
   it("nets a marketplace order DOWN, never up", () => {
     const list = buildOrdersList(
       listResponse({ rows: [listRow({ platform: "doordash", ...REAL })] }),
-      { search: "", channels: [] },
+      { search: "", channels: [], range: ONE_DAY },
     )
     expect(list.rows[0].ticket).toBe("$37.47")
     expect(list.rows[0].fees).toBe("$9.37")
@@ -1118,7 +1127,7 @@ describe("fees nobody recorded", () => {
  */
 describe("an em dash that means two different things", () => {
   const rowFor = (over: Parameters<typeof listRow>[0]) =>
-    buildOrdersList(listResponse({ rows: [listRow(over)] }), { search: "", channels: [] }).rows[0]
+    buildOrdersList(listResponse({ rows: [listRow(over)] }), { search: "", channels: [], range: ONE_DAY }).rows[0]
 
   it("marks a marketplace order with no commission on file as NOT recorded", () => {
     const row = rowFor({ platform: "doordash", commission: 0 })
