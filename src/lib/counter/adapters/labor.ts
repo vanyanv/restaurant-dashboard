@@ -19,7 +19,7 @@ import {
 } from "@/lib/counter/labor-week"
 import { loadLeakLedger, type LeakLedger } from "@/lib/counter/labor-leaks"
 import { loadScheduleGap, loadStaffingCurve, type StaffingCurve } from "@/lib/counter/staffing-curve"
-import { count, money, pct, points } from "@/lib/counter/format"
+import { count, money, pct, plural, points } from "@/lib/counter/format"
 import {
   dayCount,
   isoDay,
@@ -688,9 +688,12 @@ function buildVerdict(week: LaborWeek, ledger: LeakLedger | null): LaborVerdict 
     tone = "warn"
     headline = "No published schedule"
     say(
+      // "this schema carries" was the database talking. The owner's fact is
+      // that the one plan hours are ever judged against is the store's own
+      // published schedule, and there wasn't one.
       " No shift is published for this range, so the hours above are not read against a plan — " +
-        "the only plan this schema carries is the schedule the store publishes for itself, and " +
-        "none was published here.",
+        "the only plan there is to read them against is the schedule the store publishes for " +
+        "itself, and none was published here.",
     )
   } else {
     const gap = week.actualHours - scheduled
@@ -746,11 +749,21 @@ function buildStrip(
     },
     {
       label: "Hours",
-      value: hoursText(week.actualHours, 0),
+      /*
+       * ONE DECIMAL, like every other reading of this figure on the page.
+       *
+       * `hoursText` defaults to one and nineteen of its twenty-one call sites
+       * take the default; these two passed `0`. So the strip printed "50 h"
+       * while the sentence above it, the day-by-day cell and the
+       * scheduled-against-actual panel all printed "49.6 h" — four readings of
+       * one quantity within four hundred pixels, one of them disagreeing, and
+       * nothing to tell a reader they were the same hours.
+       */
+      value: hoursText(week.actualHours),
       delta:
         week.scheduledHours === null
           ? "no schedule published"
-          : `${hoursText(week.scheduledHours, 0)} published`,
+          : `${hoursText(week.scheduledHours)} published`,
       deltaTone: "is-flat",
     },
     {
@@ -768,7 +781,10 @@ function buildStrip(
       // "3.5 h · one person" cannot be answered, so the cell prints dollars
       // and its qualifier says what it is.
       value: money(week.overtimeCost),
-      delta: "premium pay · no hours column exists",
+      // "no hours column exists" was the schema talking to the owner. The fact
+      // an owner needs is that the hours behind this money were never
+      // reported — which column is missing is our problem, not theirs.
+      delta: "premium pay · hours not reported",
       deltaTone: week.overtimeCost > 0 ? "is-down" : "is-flat",
     },
   ]
@@ -922,7 +938,7 @@ function buildWeekStrip(days: LaborDay[], range: DateRange, today: Date): LaborW
     // Says what the bar is scaled to, which is the whole of L-R13: a scale is
     // not a verdict, and a reader must not read the longest bar as a pass.
     meta:
-      `${count(cells.length)} days · ` +
+      `${plural(cells.length, "day")} · ` +
       (days.length > cells.length ? `the last ${count(cells.length)} of ${rangeLabel(range, "custom")} · ` : "") +
       "each bar is that day's sales an hour against the range's own best, not against a floor",
   }
@@ -978,11 +994,11 @@ function buildWeekTable(
 
   return {
     rows,
-    meta: `${count(rows.length)} days · newest first`,
+    meta: `${plural(rows.length, "day")} · newest first`,
     note:
       "The verdict reads each day against the shifts this store published for it — its own " +
       "plan, priced at the range's blended rate. Nothing here is measured against a " +
-      "sales-per-labor-hour floor: this schema publishes none, and a floor invented for the " +
+      "sales-per-labor-hour floor: nobody has set one, and a floor invented for the " +
       "page would be the page judging itself. Sales and Labor % are the statement's Total " +
       "Sales; SPLH divides net sales instead, which is what the figure has always meant " +
       "elsewhere in the product — so SPLH times hours will not equal the Sales column, and " +
