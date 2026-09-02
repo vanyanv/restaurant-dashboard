@@ -75,6 +75,50 @@ function buildWeek(): LaborDay[] {
   )
 }
 
+describe("laborWeek — a day with sales and no labour", () => {
+  /*
+   * WHAT THE LIVE PAGE SHOWED. /dashboard/labor over Aug 27 – Sep 2 printed
+   * "Hourly labor —" in the head block AND in the strip, while the strip's own
+   * caption underneath it read "$7,258 of $41,006 Total Sales". Both operands
+   * on screen, and an em dash where 17.7% belongs.
+   *
+   * The cause is the week's Total Sales being RECONSTRUCTED by inverting each
+   * day's own percentage — `cost / (laborPct / 100)`. Wednesday Sep 2 was
+   * today: sales were arriving and no labour had posted yet, so its cost was
+   * 0 and its `laborPct` was `pctOfSales(0, sales)` = 0 — which is not null,
+   * so it survived the `!== null` filter, and `0 / (0 / 100)` is NaN. One day
+   * poisons the sum, `pctOfSales` passes NaN through both its guards
+   * (`NaN === null` is false and `NaN <= 0` is false), and `pct()` renders any
+   * non-finite number as an em dash.
+   */
+  const withIdleToday = (): LaborDay[] => [
+    ...buildWeek().slice(0, 6),
+    laborDay({
+      key: "2026-08-27",
+      label: "2026-08-27",
+      actualSeconds: 0,
+      scheduledMinutes: 0,
+      cost: 0,
+      platformSales: 0,
+      // Sales are posting; labour is not. This is every current day, all day,
+      // until the first clock-in syncs.
+      totalSales: 6000,
+    }),
+  ]
+
+  it("still states a percentage when a day sold and nobody clocked in", () => {
+    const week = laborWeek(withIdleToday(), 51.08)
+    expect(Number.isFinite(week.laborPct as number)).toBe(true)
+  })
+
+  it("counts that day's sales in the denominator rather than dropping them", () => {
+    const week = laborWeek(withIdleToday(), 51.08)
+    // Six days of TOTAL_SALES plus the idle day's 6000.
+    const sales = TOTAL_SALES.slice(0, 6).reduce((a, b) => a + b, 0) + 6000
+    expect(week.laborPct as number).toBeCloseTo((week.cost / sales) * 100, 4)
+  })
+})
+
 describe("laborWeek — the measured window", () => {
   it("sums actual hours, scheduled hours and cost", () => {
     const week = laborWeek(buildWeek(), 51.08)
