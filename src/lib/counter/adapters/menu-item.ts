@@ -108,11 +108,13 @@ export interface ItemBehind {
    * WHAT THIS SECTION CAN NOW DO, AND WHY IT MATTERS MORE THAN ITS SIZE.
    *
    * A recipe mapped to an Otter item is what makes a plate cost, a margin and
-   * a COGS attribution possible for it. Measured on this account: **60 of 155
-   * distinct sold item names are mapped — 39%.** The other 95 sell every day
-   * and cost nothing the product can see, so they are absent from margin, from
-   * menu engineering, and from the food-cost figures that are drawn against
-   * the target.
+   * a COGS attribution possible for it. Measured, and the window matters: of
+   * the 62 item names sold in the LAST 30 DAYS, 7 have no recipe. Over 90 days
+   * it is 20 of 75; all-time it is 97 of 155, but that figure is mostly names
+   * that stopped selling and describes the archive rather than the job.
+   *
+   * An unmapped item that is still selling is absent from margin, from menu
+   * engineering, and from the food-cost figures drawn against the target.
    *
    * `mapOtterItemToRecipe` has always existed and the editorial recipe canvas
    * called it. The Counter rebuild's only control here was a button reading

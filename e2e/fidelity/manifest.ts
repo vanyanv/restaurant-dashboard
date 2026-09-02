@@ -1088,9 +1088,13 @@ export const PAGES: FidelityPage[] = [
         mobile: 0,
         reason:
           "That section's head, which counts what is waiting and, when " +
-          "nothing is, how many sold item names still carry no recipe — 95 of " +
-          "155. \"Nothing is waiting\" and \"nothing to do\" are different " +
-          "states and the head is where they are told apart.",
+          "nothing is, how many sold item names still carry no recipe. " +
+          "\"Nothing is waiting\" and \"nothing to do\" are different states " +
+          "and the head is where they are told apart. The figure is scoped to " +
+          "the page's own range: 7 of the 62 names sold in the last 30 days, " +
+          "against 97 of 155 all-time — and the all-time count is mostly " +
+          "names that stopped selling, so it is the archive rather than the " +
+          "job.",
       },
       {
         landmark: "sec__body",

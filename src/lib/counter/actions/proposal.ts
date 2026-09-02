@@ -19,8 +19,9 @@ import {
  * whole time and the editorial `proposal-review-launcher.tsx` called all three.
  *
  * So the queue is empty because nothing has asked it to fill, not because it
- * cannot. 95 of 155 sold item names have no recipe; the generator's own
- * candidates come from exactly that list.
+ * cannot. The generator's candidates are the items sold in the last 30 days
+ * with no recipe — 7 of the 62 names currently selling, not the 97 of 155 that
+ * an all-time count reports and that mostly stopped selling long ago.
  *
  * ## GENERATING COSTS MONEY AND THE PAGE SAYS SO
  *
