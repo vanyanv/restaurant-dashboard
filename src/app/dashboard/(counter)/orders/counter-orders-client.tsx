@@ -113,15 +113,32 @@ export type CounterOrdersSections = SectionSources<OrdersSections>
  */
 const SEARCH_SETTLE_MS = 300
 
-const COLUMNS: Column[] = [
-  { key: "order", label: "Order" },
-  { key: "time", label: "Time" },
-  { key: "channel", label: "Channel" },
-  { key: "items", label: "Items", numeric: true },
-  { key: "ticket", label: "Ticket", numeric: true },
-  { key: "fees", label: "Fees", numeric: true },
-  { key: "net", label: "Net", numeric: true },
-]
+/**
+ * The table's columns — and the ONE of them whose heading depends on the data.
+ *
+ * When not a single order in the matched range carries a marketplace fee, the
+ * Fees column says so once, at its head, and its rows go quiet. It used to say
+ * it once per row: `adjusted_commission`'s coverage was 0 of 6,360 marketplace
+ * orders in August 2026, so about two rows in three printed "not recorded" in
+ * `--warn` and the loudest thing on the page was a column of absences. A
+ * marker true of every row separates no rows.
+ *
+ * A PARTLY covered range keeps the per-row marker, because there it is doing
+ * the job it was written for: telling a reader which of two identical-looking
+ * em dashes is "this channel takes nothing" and which is "the figure never
+ * arrived".
+ */
+function columnsFor(list: OrdersList): Column[] {
+  return [
+    { key: "order", label: "Order" },
+    { key: "time", label: "Time" },
+    { key: "channel", label: "Channel" },
+    { key: "items", label: "Items", numeric: true },
+    { key: "ticket", label: "Ticket", numeric: true },
+    { key: "fees", label: list.feesUnrecorded ? "Fees · none recorded" : "Fees", numeric: true },
+    { key: "net", label: "Net", numeric: true },
+  ]
+}
 
 /** The prototype's `v + ' orders'` (line 4871). Counts, not currency. */
 const orderCount = (v: number) => `${v} order${v === 1 ? "" : "s"}`
@@ -147,7 +164,7 @@ function NotRecorded() {
   return <span style={{ color: "var(--warn)" }}>not recorded</span>
 }
 
-function orderRows(rows: OrdersRow[]): Row[] {
+function orderRows(rows: OrdersRow[], feesUnrecorded: boolean): Row[] {
   return rows.map((r) => ({
     key: r.key,
     href: r.href,
@@ -171,7 +188,10 @@ function orderRows(rows: OrdersRow[]): Row[] {
       // — so the second one says so in words. The phone has read
       // `feesRecorded` since the repair that discovered this; the desk, which
       // shows fifty rows to the phone's six, never did.
-      fees: r.feesRecorded ? r.fees : <NotRecorded />,
+      // …unless the column heading has already said it for the whole range, in
+      // which case the em dash `OrdersRow.fees` already carries is enough and
+      // repeating the words fifty times is not.
+      fees: r.feesRecorded || feesUnrecorded ? r.fees : <NotRecorded />,
       // The prototype paints every Net cell `hot`. It is not a verdict on the
       // row — `.tbl tbody tr[data-goto]:hover td.hot` is the only rule that
       // fires — it is the column the reader is following, lit on the row their
@@ -450,7 +470,7 @@ function OrdersTable({
         onClear={onClear}
         count={list.count}
       />
-      <Table columns={COLUMNS} rows={orderRows(list.rows)} />
+      <Table columns={columnsFor(list)} rows={orderRows(list.rows, list.feesUnrecorded)} />
     </>
   )
 }

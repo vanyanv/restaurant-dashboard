@@ -160,6 +160,24 @@ export interface OrdersList {
   /** The prototype's `8 of 187` — shown of matched. */
   count: string
   rows: OrdersRow[]
+  /**
+   * NOT ONE ORDER in the whole matched range carries a marketplace fee, and
+   * there were marketplace sales to carry one.
+   *
+   * The same condition the strip states as "not recorded for this range" — the
+   * list is built from the same `getOrdersList` response, so the two cannot
+   * disagree about it. It exists because the table was drawing that fact once
+   * per ROW: `adjusted_commission`'s coverage was 0 of 6,360 marketplace
+   * orders in August 2026, so two rows in three printed the words "not
+   * recorded" in `--warn`, and the loudest thing on a page about orders was
+   * the absence of a number. A marker that is true of every row separates no
+   * rows; said once at the head of the column, it is information.
+   *
+   * False on a PARTLY covered range, where the per-row marker earns its place
+   * again: there, some rows have a fee and some do not, and which is which is
+   * the reader's question.
+   */
+  feesUnrecorded: boolean
   /** `OrderListResponse.nextCursor`, so a page can ask for the next screenful. */
   nextCursor: string | null
 }
@@ -394,6 +412,30 @@ function clockTime(d: Date): string {
   return `${((h + 11) % 12) + 1}:${m}${h < 12 ? "am" : "pm"}`
 }
 
+/**
+ * The same clock reading, with the DAY in front of it when the range covers
+ * more than one.
+ *
+ * The table's only time column printed `12:58am` and nothing else. At the
+ * default one-day range that is right — every row is the same day and a
+ * repeated date is a column of noise. At seven days it put 2,093 rows across
+ * seven dates under one unlabelled clock, and because the list is newest-first
+ * by instant, the rows read `10:34am · 12:58am · 11:59pm` down the screen:
+ * three consecutive rows, three different days, and nothing on screen saying
+ * so. A reader can only conclude the sort is broken. It is not; the date was
+ * simply missing.
+ *
+ * `Sep 1` rather than a weekday: the range is already named in the sub-line by
+ * its ends ("Aug 27 – Sep 2"), and a date is what places a row inside it.
+ */
+function stampTime(d: Date, withDay: boolean): string {
+  if (!withDay) return clockTime(d)
+  // `getUTC*` for the same reason `clockTime` uses it — see there. The day and
+  // the hour have to be read off the SAME clock, or an order at 12:58am gets
+  // yesterday's date beside this morning's hour.
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()} · ${clockTime(d)}`
+}
+
 /** `Aug 21`, on the same clock and for the same reason. */
 function clockDate(d: Date): string {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
@@ -606,12 +648,19 @@ export function platformsForChannels(ids: ChannelId[]): string[] {
 
 export function buildOrdersList(
   res: OrderListResponse,
-  opts: { search: string; channels: ChannelId[] },
+  opts: { search: string; channels: ChannelId[]; range: DateRange },
 ): OrdersList {
+  // One day in the window means every row is that day, and a date in front of
+  // every clock reading would be a column repeating itself.
+  const withDay = dayCount(opts.range) > 1
   return {
     toggles: buildToggles(opts.channels),
     search: opts.search,
     count: `${count(res.rows.length)} of ${count(res.totalCount)}`,
+    // Read off the SAME response the strip reads, so "not recorded for this
+    // range" up there and a blank fee column down here are one fact.
+    feesUnrecorded:
+      res.totals.thirdPartyWithFees === 0 && res.totals.thirdPartyNetSales > 0,
     nextCursor: res.nextCursor,
     rows: res.rows.map((r) => {
       const channel = channelOf(r.platform)
@@ -620,7 +669,7 @@ export function buildOrdersList(
         key: r.id,
         href: `/dashboard/orders/${r.id}`,
         id: `#${r.externalDisplayId ?? r.otterOrderId}`,
-        time: clockTime(r.referenceTimeLocal),
+        time: stampTime(r.referenceTimeLocal, withDay),
         channel: {
           label: PLATFORM_LABEL[r.platform] ?? r.platform,
           // The chip's `--pc`, which the prototype writes as `var(--ch-dd)`.
@@ -1382,7 +1431,7 @@ export function getOrdersSectionPromises(
     ),
 
     list: guardSection(
-      listP.then((listSd) => mapReady(listSd, (res) => buildOrdersList(res, { search, channels }))),
+      listP.then((listSd) => mapReady(listSd, (res) => buildOrdersList(res, { search, channels, range }))),
       "retryOrders",
     ),
 
