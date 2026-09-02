@@ -175,6 +175,10 @@ export interface AlertsChart {
 /** One `.mli` on the phone, before the severity tag becomes a `Tag`. */
 export interface PhoneAlertRow {
   key: string
+  /** `Alert.id` — what `?alert=` carries, and what the decision writes to. */
+  id: string
+  /** Whether this row still has a decision in it. See `AlertsRow.closable`. */
+  closable: boolean
   title: string
   /** "Anomalies · 1d ago". Empty on the stated row — see `NOTHING_CLOSED`. */
   detail: string
@@ -568,6 +572,10 @@ const PHONE_ROWS = 6
  */
 const NOTHING_CLOSED: PhoneAlertRow = {
   key: "nothing-closed",
+  // Not an alert, so it carries no id and offers no decision — the same
+  // reasoning that gives it no `.mtag`.
+  id: "",
+  closable: false,
   title: `Nothing closed in the last ${ANOMALY_RELEVANCE_DAYS} days`,
   detail: "",
 }
@@ -577,6 +585,8 @@ function buildPhoneRows(alerts: InboxAlert[], today: Date): PhoneAlertRow[] {
     .slice(0, PHONE_ROWS)
     .map((r) => ({
       key: r.key,
+      id: r.id,
+      closable: r.closable,
       title: r.title,
       detail: `${r.sourceLabel} · ${r.opened}`,
       severity: r.severity,
