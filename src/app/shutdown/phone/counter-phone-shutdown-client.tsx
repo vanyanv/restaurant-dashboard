@@ -1,6 +1,6 @@
 "use client"
 
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 
 /**
  * The shutdown notice, on a phone — `P.shutdown.phone()`.
@@ -19,7 +19,7 @@ export function CounterPhoneShutdownClient({
   return (
     <main className="ct-root ct-phone plogin">
       <div className="login__logo" style={{ marginBottom: 8 }}>
-        <Wordmark />
+        <Logo width={190} />
       </div>
       <h2 className="mtitle" style={{ textAlign: "center" }}>
         {preview ? "Shutdown notice" : "Service shut down"}

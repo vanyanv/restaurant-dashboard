@@ -1,6 +1,6 @@
 "use client"
 
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Note, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { CountSessionSections } from "@/lib/counter/adapters/stock-counts"
 
@@ -44,9 +44,9 @@ export function CounterPhoneCountSessionClient({
         {(l) => (
           <>
             <MList rows={l.phoneRows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {l.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

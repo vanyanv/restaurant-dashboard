@@ -2,6 +2,7 @@
 
 import {
   Chart,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -65,9 +66,9 @@ export function CounterCostsClient({
         {(s) => (
           <>
             <Chart {...s.chart} fmt={USD} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -82,9 +83,9 @@ export function CounterCostsClient({
         {(f) => (
           <>
             <Table columns={COLUMNS} rows={f.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {f.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -103,9 +104,9 @@ export function CounterCostsClient({
         {(f) => (
           <>
             <Table columns={FAILURE_COLUMNS} rows={f.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {f.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

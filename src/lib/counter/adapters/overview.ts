@@ -3,7 +3,6 @@ import { getStores } from "@/app/actions/store/crud-actions"
 import { getInvoiceSummary } from "@/app/actions/invoice-actions"
 import { getSplhSeries } from "@/app/actions/splh-actions"
 import { getAlertInbox } from "@/app/actions/alerts/inbox-actions"
-import { getRevenueForecast } from "@/app/actions/forecasts/revenue-forecast-actions"
 import { getRatingsSummary } from "@/app/actions/ratings/ratings-actions"
 import type { InvoiceKpis } from "@/types/invoice"
 import type { LifecycleStage } from "@/generated/prisma/enums"
@@ -285,21 +284,18 @@ export interface RatingsTile {
    * there is no null for a caller to render.
    */
   average: string
+  /**
+   * The same mean, unformatted, for the star fill. `average` is a string
+   * because a page never formats a number; `Stars` needs the value to clip its
+   * fill against, and deriving it back out of the string on the page would be
+   * the page doing arithmetic on a figure. Both come off one `r.average`, so
+   * the printed mean and the drawn mean cannot disagree.
+   */
+  averageValue: number
   count: number
   windowDays: number
   /** Reviews at 1–2 stars — the ones an owner has to answer. */
   lowCount: number
-}
-
-/** The model's forecast for one day. */
-export interface ModelCall {
-  date: Date
-  predicted: number
-  p10: number | null
-  p90: number | null
-  /** MAPE on the last reconciled window. Null until the pipeline has run. */
-  recentMape: number | null
-  source: "native" | "transfer"
 }
 
 export interface OverviewSectionsInput {
@@ -373,8 +369,6 @@ export interface OverviewSections {
   channels: SectionData<ChannelReading[]>
   /** Money lines, not figures: received, in review, posted. */
   invoices: SectionData<MoneyLine[]>
-  /** From `src/app/actions/forecasts/`. Also never owed. */
-  modelCall: SectionData<ModelCall>
   /** The prototype's second tile beside Invoices, from `getRatingsSummary`. */
   ratings: SectionData<RatingsTile>
 }
@@ -936,17 +930,6 @@ export function getOverviewSectionPromises(
     { retryAction: "retryNeedsYou", isEmpty: (d) => d.alerts.length === 0 },
   )
 
-  // Also not owed — `src/app/actions/forecasts/` has shipped for months.
-  const forecastP = classify(
-    async () => {
-      const result = await getRevenueForecast({ storeId: storeId ?? undefined })
-      if (result === null) throw new Error("Not signed in")
-      if (!result.ok) throw new Error("That store is not on this account")
-      return result.data
-    },
-    { retryAction: "retryModelCall" },
-  )
-
   const ratingsP = classify(
     async () => {
       const summary = await getRatingsSummary({ storeId })
@@ -1140,28 +1123,6 @@ export function getOverviewSectionPromises(
       "retryInvoices",
     ),
 
-    modelCall: guardSection(
-      forecastP.then((forecastSd) =>
-        mapReadyTo(forecastSd, (d) => {
-          const wanted = isoDate(range.end)
-          const day = d.days.find((x) => isoDate(x.date) === wanted)
-          // The model writes calls forward, not backward: a range that ended
-          // before today has no call to show, and narrowing to a day it does
-          // have one for is the way back out.
-          if (!day) return empty("no_match")
-          return ready({
-            date: day.date,
-            predicted: day.predictedRevenue,
-            p10: day.p10,
-            p90: day.p90,
-            recentMape: d.recentMape,
-            source: day.forecastSource,
-          })
-        }),
-      ),
-      "retryModelCall",
-    ),
-
     ratings: guardSection(
       ratingsP.then((ratingsSd) =>
         mapReadyTo(ratingsSd, (r) => {
@@ -1170,6 +1131,7 @@ export function getOverviewSectionPromises(
           if (r.average === null) return empty<RatingsTile>("no_match")
           return ready({
             average: r.average.toFixed(1),
+            averageValue: r.average,
             count: r.count,
             windowDays: r.windowDays,
             lowCount: r.lowCount,
@@ -1238,7 +1200,7 @@ function buildSplhChart(points: SplhPoint[]): ChartData {
     type: "line",
     h: 150,
     labels: points.map((p) => p.label),
-    alt: "Sales per labour hour",
+    alt: "Sales per labor hour",
     series: [{ name: "SPLH", color: "var(--ink)", data: points.map((p) => p.splh), fill: true }],
   }
 }
@@ -1336,7 +1298,7 @@ function buildStoreCards(input: {
 function missingFromFile(f: StoreFile): string[] {
   const missing: string[] = []
   if (f.fixedMonthlyRent == null) missing.push("Rent")
-  if (f.fixedMonthlyLabor == null) missing.push("Labour budget")
+  if (f.fixedMonthlyLabor == null) missing.push("Labor budget")
   if (f.targetCogsPct == null) missing.push("Food-cost target")
   if (f.openedAt == null) missing.push("Opening date")
   return missing

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -180,9 +181,9 @@ export function CounterStoreCogsClient({
         {(h) => (
           <>
             {h.note ? (
-              <p className="mono" style={{ margin: "0 0 13px" }}>
+              <Note lede>
                 {h.note}
-              </p>
+              </Note>
             ) : null}
             <Strip cells={h.cells} />
           </>
@@ -199,12 +200,12 @@ export function CounterStoreCogsClient({
         {(p) => (
           <>
             <Chart {...p.chart} fmt={PCT} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {p.sentence}
-            </p>
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            </Note>
+            <Note>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -223,14 +224,10 @@ export function CounterStoreCogsClient({
               <Table columns={MOVED_COLUMNS} rows={movedRows(m)} />
               {/* No `.sec__body` wrapper: it is a landmark class and the
                   prototype's `sec(..., tbl(...))` emits the table alone. The
-                  note carries the body's own inset inline instead of opening a
+                  note carries the body's own inset via `<Note flush>` instead of opening a
                   second landmark to get it. */}
-              <p className="mono" style={{ margin: 0, padding: "13px 15px 0" }}>
-                {m.sentence}
-              </p>
-              <p className="mono" style={{ margin: 0, padding: "9px 15px 13px" }}>
-                {m.note}
-              </p>
+              <Note flush>{m.sentence}</Note>
+              <Note flush>{m.note}</Note>
             </>
           )}
         </Section>
@@ -246,9 +243,9 @@ export function CounterStoreCogsClient({
           {(w) => (
             <>
               <Table columns={WORST_COLUMNS} rows={worstRows(w)} />
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              <Note flush>
                 {w.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

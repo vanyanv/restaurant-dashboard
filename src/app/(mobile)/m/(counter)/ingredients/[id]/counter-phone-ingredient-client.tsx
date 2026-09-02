@@ -1,6 +1,6 @@
 "use client"
 
-import { Chart, MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { Chart, MList, MStrip, Note, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { IngredientSections } from "@/lib/counter/adapters/ingredient"
 
@@ -50,9 +50,9 @@ export function CounterPhoneIngredientClient({
       <Section title="Used in" meta={(u) => u.meta} data={sections.usedIn} pending={pending}>
         {(u) =>
           u.phoneRows.length === 0 ? (
-            <p className="mono" style={{ margin: 0 }}>
+            <Note bare>
               {u.note}
-            </p>
+            </Note>
           ) : (
             <MList rows={u.phoneRows} />
           )

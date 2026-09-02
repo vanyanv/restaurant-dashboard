@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -128,9 +129,9 @@ export function CounterPackagingClient({
           <>
             <Table columns={LEDGER_COLUMNS} rows={l.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {l.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

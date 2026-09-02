@@ -6,6 +6,7 @@ import {
   Chart,
   DateControl,
   MoneyLines,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -167,7 +168,7 @@ function categoryRows(categories: CategoryTable): Row[] {
 /** The ⌘K palette's "Ask about Analytics" group — this page's own three questions. */
 const ASK_SUGGESTIONS = [
   "Which day in this range ran the highest prime cost?",
-  "What is this store keeping after food, labour and fees?",
+  "What is this store keeping after food, labor and fees?",
   "Which categories carry this store?",
 ]
 
@@ -259,9 +260,9 @@ export function CounterStoreAnalyticsClient({
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => (
           <>
-            <p className="mono" style={{ margin: "0 0 12px" }}>
+            <Note lede>
               {h.note}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}

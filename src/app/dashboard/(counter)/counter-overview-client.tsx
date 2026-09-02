@@ -18,6 +18,7 @@ import {
   Queue,
   Say,
   Section,
+  Stars,
   StoreCards,
   Strip,
   Table,
@@ -342,7 +343,7 @@ export function CounterOverviewClient({
       <Dispatch items={dispatchItems(stores, selectedStore)} />
 
       {/* Note 30, as two figures and a verdict: net sales says whether the day
-          happened, sales per labour hour says whether it was worth having.
+          happened, sales per labor hour says whether it was worth having.
           Three sections, one block — they come from three rollups that fail
           independently, so each figure carries its own state and the block
           holds whichever of them arrived. */}
@@ -362,12 +363,12 @@ export function CounterOverviewClient({
               />
             )}
           </Section>,
-          <Section bare key="splh" title="Sales per labour hour" data={sections.splh} pending={pending}>
+          <Section bare key="splh" title="Sales per labor hour" data={sections.splh} pending={pending}>
             {(d) => (
               <LeadFigure
                 label="Sales per labor hour"
                 value={money(d.value, { cents: true })}
-                detail={`${count(d.series.length)} ${buckets} readings with labour posted`}
+                detail={`${count(d.series.length)} ${buckets} readings with labor posted`}
                 // A statement of fact about the window, not a movement. Left
                 // unclassed it paints `var(--good)`, which says "good news"
                 // about a reading count.
@@ -444,7 +445,7 @@ export function CounterOverviewClient({
           meta={`${buckets} readings`}
           data={sections.splhChart}
           pending={pending}
-          askAbout="sales per labour hour"
+          askAbout="sales per labor hour"
         >
           {(spec) => (
             <>
@@ -454,7 +455,7 @@ export function CounterOverviewClient({
                   rule — and this says so, rather than leaving a reader to
                   wonder whether the line simply failed to draw. */}
               <p className="mono">
-                Every hour of labour posted in this range returned this much in sales. No floor is
+                Every hour of labor posted in this range returned this much in sales. No floor is
                 published for {storeName}, so nothing is drawn against one.
               </p>
             </>
@@ -541,8 +542,12 @@ export function CounterOverviewClient({
           {(r) => (
             <>
               <div className="stars">
-                <span className="n">{r.average}</span>
-                <span className="s">★★★★★</span>
+                <span className="n tabular-nums lining-nums">{r.average}</span>
+                {/* The scale a sighted reader reads off five glyphs, in the
+                    one form a screen reader gets it: the glyphs themselves are
+                    `aria-hidden` inside `Stars`. */}
+                <span className="sr-only">out of 5</span>
+                <Stars value={r.averageValue} />
               </div>
               <p className="mono">
                 {count(r.count)} reviews in {count(r.windowDays)} days

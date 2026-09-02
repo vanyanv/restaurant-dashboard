@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 
 /**
  * Sign in — `P.login`.
@@ -28,11 +28,17 @@ import { Wordmark } from "@/components/counter"
  * product can stand behind, and the second button is declared absent in the
  * fidelity manifest rather than drawn as a shape.
  *
- * ## Why the wordmark rather than the logo image
+ * ## `Logo`, not `Wordmark`
  *
- * `Wordmark` is what the rail and Settings already use, and note 15 is why:
- * "the wordmark is the palette's alibi". The prototype loads a PNG here; one
- * typeface across all three placements is the same decision made once.
+ * This drew `Wordmark` — the name set in the display face — on the reasoning
+ * that one typeface across all three placements was the same decision made
+ * once. The reasoning was sound and the premise was wrong: it rested on
+ * `Rail`'s note that "we have no logo asset", and `public/logo.png` has been
+ * in the tree the whole time. The rest of the argument, and what the file
+ * costs, is in `shell/logo.tsx`; the fidelity manifest's own row for this page
+ * is unaffected, because an image is not a landmark.
+ *
+ * `Rail` and the phone chrome's logo slot still draw the type. They are next.
  */
 export function CounterLoginClient() {
   const [email, setEmail] = useState("")
@@ -73,7 +79,7 @@ export function CounterLoginClient() {
     <main className="ct-root login">
       <div className="login__form">
         <div className="login__logo">
-          <Wordmark />
+          <Logo />
           <span className="cap">Operations</span>
         </div>
         <h1>Sign in</h1>

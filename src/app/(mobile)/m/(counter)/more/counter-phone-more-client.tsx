@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import { useEffect, useState, useTransition } from "react"
-import { MHead, MList, Section, Wordmark, useCounterTransition } from "@/components/counter"
+import { MHead, MList, Note, Section, Wordmark, useCounterTransition } from "@/components/counter"
 import { saveNotificationPreferences } from "@/lib/counter/actions/settings"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SettingsNotifications, SettingsSections } from "@/lib/counter/adapters/settings"
@@ -89,9 +89,9 @@ function Switches({ data }: { data: SettingsNotifications }) {
           </button>
         </div>
       ))}
-      <p className="mono" style={{ margin: "10px 0 0" }}>
+      <Note live tone={problem === null ? undefined : "bad"}>
         {problem === null ? data.note : `Could not save: ${problem}.`}
-      </p>
+      </Note>
     </>
   )
 }

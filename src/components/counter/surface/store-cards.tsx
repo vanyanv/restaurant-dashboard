@@ -270,7 +270,7 @@ function PreOpenBody({ store }: { store: PreOpenStore }) {
     <>
       <span className="k">Opens</span>
       <span className="v">{store.opensOn ? shortDate(store.opensOn) : "No date set"}</span>
-      <span className="d">No sales, no labour and no invoices yet</span>
+      <span className="d">No sales, no labor and no invoices yet</span>
       <p className="stnote">
         {missing.length === 0 ? (
           <>Its store file is complete, so its P&amp;L is ready the day it opens.</>

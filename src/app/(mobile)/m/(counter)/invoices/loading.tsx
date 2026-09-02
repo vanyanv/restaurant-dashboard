@@ -19,7 +19,7 @@ export default function MobileInvoicesLoading() {
       <Section title="Settled" data={loading()}>
         {() => null}
       </Section>
-      <Section bare title="Go" data={loading()}>
+      <Section bare title="Invoices that need you" data={loading()}>
         {() => null}
       </Section>
     </>

@@ -2,6 +2,8 @@
 
 import { Fragment, useState } from "react"
 import Link, { useLinkStatus } from "next/link"
+import { signOut } from "next-auth/react"
+import { LogOut } from "lucide-react"
 import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
 import { NAV_ICONS } from "./nav-icons"
 import { Wordmark } from "./wordmark"
@@ -31,9 +33,16 @@ import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
  *     destination in `src/lib/counter/nav.ts` has a count behind it yet, and a
  *     badge that is always absent is dead markup; a badge that is invented is
  *     worse. It comes back with the data.
- *   - `.rail__logo`'s `<img class="logo">`. We have no logo asset; `Wordmark`
- *     is the same thing set in type (note 15: "the wordmark is the palette's
- *     alibi"). `.rail__logo`'s own padding still applies.
+ *   - `.rail__logo`'s `<img class="logo">`. `Wordmark` draws the name in type
+ *     instead, and the reason given here — "we have no logo asset" — was
+ *     never true: `public/logo.png` has been in the tree since the first
+ *     commit, and the auth screens now draw it through `shell/logo.tsx`. The
+ *     rail is the last slot still set in type, and swapping it is a change to
+ *     the chrome of every desk page rather than one screen, so it is being
+ *     left for a deliberate pass rather than carried in on the back of the
+ *     sign-in fix. Note 15 ("the wordmark is the palette's alibi") argues FOR
+ *     the mark here, not against it. `.rail__logo`'s own padding applies
+ *     either way.
  *   - `<nav>` in place of the prototype's unclassed wrapper `<div>` around the
  *     groups. A `<nav>` computes identically to a `<div>` and is what makes the
  *     five groups a navigation landmark; the rail as a whole is now more than
@@ -151,15 +160,61 @@ export function Rail({
       </nav>
 
       {user && settings ? (
-        <Link className="rail__foot" href={settings.href}>
-          <span className="avatar" aria-hidden="true">
-            {user.name.trim().charAt(0).toUpperCase()}
-          </span>
-          <span>
-            <span className="nm">{user.name}</span>
-            <span className="rl">{user.role} · settings</span>
-          </span>
-        </Link>
+        /*
+         * The account row EXACTLY as the prototype draws it (`rail()`, line
+         * 8259: avatar, `.nm`, and an `.rl` reading "Owner · settings"), and
+         * then the thing the prototype has nowhere on the desk.
+         *
+         * There was no way to sign out of a Counter desk page. Not here, not
+         * on Settings, not anywhere: `signOut` was called from exactly two
+         * places in `src/` — the phone's More tab and `app-sidebar.tsx`, which
+         * renders only on the four routes still left in `(editorial)`. That is
+         * 48 of the 52 desk pages with no exit.
+         *
+         * It went missing by inheritance rather than by decision. The
+         * prototype's desk puts its only two sign-out controls in `P.settings`'
+         * Sessions panel — "End" and "Sign out everywhere" — and the fidelity
+         * manifest declares both absent, correctly: auth is `strategy: "jwt"`
+         * with no session table, so there is nothing to enumerate and nothing
+         * to revoke on a device this browser is not. What that argument does
+         * NOT cover is signing out of THIS browser, which is a cookie and no
+         * session table at all — which is exactly why the phone's button has
+         * always worked. The absence was one button too wide, and the desk had
+         * no others.
+         *
+         * A LABELLED ROW OF ITS OWN, not an icon in the account row and not a
+         * menu behind it. Both of those were tried. An icon beside the name
+         * takes ~35px out of a 194px row and wraps the design's own
+         * "DEVELOPER · SETTINGS" onto two lines; a menu hides the control
+         * whose absence is the bug being fixed. `.navbtn` is the rail's
+         * existing row idiom, seventeen of them are already stacked above it,
+         * and a reader looking for "Sign out" finds the words.
+         *
+         * `next-auth/react` is a client import and this shell is on all 48
+         * routes, so it costs bytes there. It is the same call the phone's More
+         * tab and `app-sidebar.tsx` already make, and the alternative — posting
+         * to `/api/auth/signout` by hand — means re-deriving the CSRF token and
+         * the environment-dependent cookie name that next-auth already knows.
+         */
+        <>
+          <Link className="rail__foot" href={settings.href}>
+            <span className="avatar" aria-hidden="true">
+              {user.name.trim().charAt(0).toUpperCase()}
+            </span>
+            <span>
+              <span className="nm">{user.name}</span>
+              <span className="rl">{user.role} · settings</span>
+            </span>
+          </Link>
+          <button
+            className="navbtn rail__signout"
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+          >
+            <LogOut aria-hidden="true" />
+            Sign out
+          </button>
+        </>
       ) : null}
     </aside>
   )

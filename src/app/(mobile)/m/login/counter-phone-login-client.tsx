@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 
 /**
  * Sign in, on a phone — `P.login.phone()`.
@@ -16,6 +16,10 @@ import { Wordmark } from "@/components/counter"
  * It lands on `/m` after signing in rather than `/dashboard`: the reader is on
  * a phone, and the redirect that would follow is one the proxy would have to
  * do anyway.
+ *
+ * `Logo` rather than `Wordmark`, for the reason written out in
+ * `shell/logo.tsx` — the prototype draws the mark here too, at 190px rather
+ * than the desk's 236px, which is the one number this copy carries of its own.
  */
 export function CounterPhoneLoginClient() {
   const [email, setEmail] = useState("")
@@ -51,7 +55,7 @@ export function CounterPhoneLoginClient() {
   return (
     <main className="ct-root ct-phone plogin">
       <div className="login__logo" style={{ marginBottom: 8 }}>
-        <Wordmark />
+        <Logo width={190} />
         <span className="cap">Operations</span>
       </div>
 

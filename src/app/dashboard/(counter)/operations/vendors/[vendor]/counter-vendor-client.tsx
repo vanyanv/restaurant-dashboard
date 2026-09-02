@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -105,9 +106,9 @@ export function CounterVendorClient({
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (
           <>
-            <p className="mono" style={{ margin: "0 0 11px" }}>
+            <Note lede>
               {h.sub}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}
@@ -117,9 +118,9 @@ export function CounterVendorClient({
         {(s) => (
           <>
             <Chart {...s.chart} fmt={USD} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -136,9 +137,9 @@ export function CounterVendorClient({
             <>
               <Table columns={INVOICE_COLUMNS} rows={i.rows} />
               {/* No `.sec__body` — a table section emits the table alone. */}
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              <Note flush>
                 {i.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -154,9 +155,9 @@ export function CounterVendorClient({
           {(b) => (
             <>
               <Table columns={BASKET_COLUMNS} rows={b.rows} />
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              <Note flush>
                 {b.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

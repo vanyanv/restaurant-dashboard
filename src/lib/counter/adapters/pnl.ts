@@ -636,7 +636,7 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
   if (prime?.primePct == null || prime.roomPp == null) {
     // No labour posted against these sales: prime cost has no reading, and the
     // strip has no prime cell either. Saying so is the point.
-    say(" Prime cost has no reading for this range, because no labour is posted against these sales.")
+    say(" Prime cost has no reading for this range, because no labor is posted against these sales.")
     return out
   }
 
@@ -667,7 +667,7 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
     const edge = laborPlan.kind === "band" ? laborPlan.hi : laborPlan.value
     if (prime.laborPct > edge) {
       overs.push({
-        name: "labour",
+        name: "labor",
         over: prime.laborPct - edge,
         against: laborPlan.kind === "band" ? "the top of its band" : "its target",
       })
@@ -677,7 +677,7 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
   if (overs.length === 0) {
     say(
       judged === 0
-        ? " Neither half of it is judged here: this schema publishes a food-cost target per store and nothing at all for labour."
+        ? " Neither half of it is judged here: this schema publishes a food-cost target per store and nothing at all for labor."
         : " Every half of it with a published number is inside it.",
     )
     return out
@@ -1197,7 +1197,7 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
     // Half an answer drawn as a whole panel is exactly what note 44 is about.
     trust: Promise.resolve(
       notComputed<never>(
-        "a per-line provenance model (which days of labour are clocked and which are prorated) " +
+        "a per-line provenance model (which days of labor are clocked and which are prorated) " +
           "and an unposted-food-inside-this-range query — neither exists",
       ),
     ),

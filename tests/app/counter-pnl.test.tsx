@@ -316,7 +316,7 @@ describe("Counter P&L", () => {
     expect(hot[0].textContent).toBe("▲ 1.3 pts")
     // And the page states the rule the paint follows.
     expect(
-      screen.getByText(/one point on food, two on labour, three on prime/),
+      screen.getByText(/one point on food, two on labor, three on prime/),
     ).toBeTruthy()
   })
 

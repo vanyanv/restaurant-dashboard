@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  Note,
   PageHead,
   Section,
   Strip,
@@ -92,9 +93,9 @@ export function CounterIngredientAuditClient({
           <>
             <Table columns={CANONICAL_COLUMNS} rows={c.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {c.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -110,9 +111,9 @@ export function CounterIngredientAuditClient({
         {(d) => (
           <>
             <Table columns={DECISION_COLUMNS} rows={d.rows} />
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {d.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -123,9 +124,9 @@ export function CounterIngredientAuditClient({
           the sentence reads the same at the foot as it did at the head. */}
       <Section bare title="Verdict" data={sections.headline} pending={pending}>
         {(h) => (
-          <p className="mono" style={{ margin: "2px 0 0" }}>
+          <Note tight>
             {h.verdict}
-          </p>
+          </Note>
         )}
       </Section>
     </>

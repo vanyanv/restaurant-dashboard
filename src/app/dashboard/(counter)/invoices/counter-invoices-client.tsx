@@ -7,7 +7,9 @@ import {
   Chart,
   DateControl,
   Filters,
+  Lede,
   MoneyLines,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -186,9 +188,9 @@ export function CounterInvoicesClient({
         {(s) => (
           <>
             <Chart {...s.chart} />
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -197,9 +199,9 @@ export function CounterInvoicesClient({
         <Section title="What we hold" meta={(d) => d.meta} data={sections.documents} pending={pending}>
           {(d) => (
             <>
-              <p style={{ margin: "0 0 12px", fontSize: "var(--t-mid)", lineHeight: 1.55 }}>
+              <Lede>
                 {d.lead}
-              </p>
+              </Lede>
               <Table columns={HOLD_COLUMNS} rows={d.rows} />
               <div className="btnrow" style={{ marginTop: 12 }}>
                 {d.actions.map((a) => (
@@ -225,9 +227,9 @@ export function CounterInvoicesClient({
               <div style={{ marginTop: 14 }}>
                 <MoneyLines rows={r.money} />
               </div>
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {r.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -245,10 +247,10 @@ export function CounterInvoicesClient({
           <>
             <Table columns={PRODUCT_COLUMNS} rows={p.rows.map(productRow)} />
             {/* No `.sec__body` — `sec(..., tbl(...))` emits the table alone,
-                so the note carries the body's own inset inline. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                so the note carries the body's own inset via `<Note flush>`. */}
+            <Note flush>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

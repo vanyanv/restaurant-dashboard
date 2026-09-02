@@ -6,6 +6,8 @@ import { useCallback, useMemo } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
+  Lede,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -118,9 +120,9 @@ export function CounterCountsClient({
           <>
             <Table columns={SESSION_COLUMNS} rows={s.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {s.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -142,12 +144,12 @@ export function CounterCountsClient({
             <p className="ans__lead" style={{ margin: "0 0 14px" }}>
               {v.lead}
             </p>
-            <p style={{ margin: "0 0 12px", fontSize: "var(--ct-t-mid)", lineHeight: 1.5 }}>
+            <Lede>
               {v.absences}
-            </p>
-            <p className="mono" style={{ margin: 0 }}>
+            </Lede>
+            <Note bare>
               {v.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -162,9 +164,9 @@ export function CounterCountsClient({
       >
         {(p) => (
           <>
-            <p style={{ margin: "0 0 12px", fontSize: "var(--ct-t-mid)", lineHeight: 1.5 }}>
+            <Lede>
               {p.lead}
-            </p>
+            </Lede>
             {p.href ? (
               <div className="btnrow">
                 <Link className="btn btn--primary" href={p.href}>
@@ -172,9 +174,9 @@ export function CounterCountsClient({
                 </Link>
               </div>
             ) : null}
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

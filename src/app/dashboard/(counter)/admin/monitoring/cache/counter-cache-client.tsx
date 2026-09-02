@@ -2,6 +2,7 @@
 
 import {
   Kv,
+  Note,
   PageHead,
   RankBars,
   Section,
@@ -72,9 +73,9 @@ export function CounterCacheClient({
           <>
             <Table columns={COLUMNS} rows={p.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -93,9 +94,9 @@ export function CounterCacheClient({
         {(l) => (
           <>
             <Kv rows={l.rows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {l.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -113,9 +114,9 @@ export function CounterCacheClient({
         {(m) => (
           <>
             <RankBars rows={m.rows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {m.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

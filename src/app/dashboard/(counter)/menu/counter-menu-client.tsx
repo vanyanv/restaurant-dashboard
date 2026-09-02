@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
   Donut,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -125,9 +126,9 @@ export function CounterMenuClient({
           {(c) => (
             <>
               <Donut slices={c.slices} center={c.center} />
-              <p className="mono" style={{ margin: "11px 0 0" }}>
+              <Note>
                 {c.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

@@ -229,7 +229,7 @@ function checklistOf(d: NewStoreData): NewStoreChecklist {
   const unsetOf = (s: NewStoreData["stores"][number]) =>
     [
       s.rent === null ? "rent" : null,
-      s.labor === null ? "fixed labour" : null,
+      s.labor === null ? "fixed labor" : null,
       s.cogsTarget === null ? "COGS target" : null,
       s.ratesConfirmed ? null : "commission rates",
       s.otterLinked ? null : "Otter",
@@ -255,7 +255,7 @@ function checklistOf(d: NewStoreData): NewStoreChecklist {
       `The prototype puts a checklist of six invented rows here. These are the stores that ` +
       `exist, and two of them are opening, so this is the same list with real answers. ` +
       (zeroLabor.length > 0
-        ? `${zeroLabor.map((s) => s.name).join(" and ")} reads zero fixed labour rather than ` +
+        ? `${zeroLabor.map((s) => s.name).join(" and ")} reads zero fixed labor rather than ` +
           `unset — someone saved a zero, which the P&L takes at its word. `
         : "") +
       `A store on default commission rates is not necessarily wrong; nothing in the product ` +

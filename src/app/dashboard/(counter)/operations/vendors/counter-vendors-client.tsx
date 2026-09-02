@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -119,10 +120,10 @@ export function CounterVendorsClient({
           <>
             <Table columns={VENDOR_COLUMNS} rows={t.rows} />
             {/* No `.sec__body` — a table section emits the table alone, so the
-                note carries the body's own inset inline. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                note carries the body's own inset via `<Note flush>`. */}
+            <Note flush>
               {t.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -138,9 +139,9 @@ export function CounterVendorsClient({
           {(t) => (
             <>
               <Chart {...t.chart} fmt={INDEX} />
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {t.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

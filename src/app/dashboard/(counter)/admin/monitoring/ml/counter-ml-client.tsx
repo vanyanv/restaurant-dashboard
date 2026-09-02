@@ -2,6 +2,7 @@
 
 import {
   Chart,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -73,9 +74,9 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
         {(a) => (
           <>
             <Chart {...a.chart} fmt={(v) => money(v)} />
-            <p className="mono" style={{ marginBottom: 0 }}>
+            <Note>
               {a.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -92,9 +93,9 @@ export function CounterMlClient({ sections }: { sections: SectionSources<MlSecti
           <>
             <Table columns={GATE_COLUMNS} rows={g.rows} />
             {/* No `.sec__body` — a table section emits the table alone. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {g.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

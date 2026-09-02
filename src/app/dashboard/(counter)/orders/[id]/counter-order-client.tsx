@@ -4,6 +4,7 @@ import { type ReactNode } from "react"
 import {
   Kv,
   MathLines,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -169,9 +170,9 @@ export function CounterOrderClient({
               <MathLines rows={keep.rows} />
               {keep.note ? (
                 // The prototype's own inline margin on this paragraph.
-                <p className="mono" style={{ margin: "10px 0 0" }}>
+                <Note>
                   {keep.note}
-                </p>
+                </Note>
               ) : null}
             </>
           )}

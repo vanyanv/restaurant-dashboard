@@ -8,6 +8,7 @@ import {
   CostBar,
   DateControl,
   MoneyLines,
+  Note,
   PageHead,
   RowLine,
   SearchGlyph,
@@ -164,9 +165,9 @@ export function CounterRecipeClient({
                 title and cannot go there: the masthead renders before the
                 loader resolves, and a sentence that appears a beat late reads
                 as a layout shift rather than as information. */}
-            <p className="mono" style={{ margin: "0 0 11px" }}>
+            <Note lede>
               {h.sub}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}
@@ -225,12 +226,12 @@ export function CounterRecipeClient({
               >
                 <MoneyLines rows={c.money} />
               </div>
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {c.foot}
-              </p>
-              <p className="mono" style={{ margin: "11px 0 0" }}>
+              </Note>
+              <Note>
                 {c.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -298,9 +299,9 @@ export function CounterRecipeClient({
                   </Tag>
                 </div>
               ))}
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {s.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -315,9 +316,9 @@ export function CounterRecipeClient({
         {(t) => (
           <>
             <Chart {...t.chart} fmt={COST} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {t.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -387,7 +388,8 @@ function Picker({
   // Unsearched, the sheet shows the head of the pantry rather than all four
   // hundred: a panel that is a page-long list before you have typed is not a
   // picker. The count in the head says what is behind it.
-  const shown = (q ? all.filter((o) => o.name.toLowerCase().includes(q)) : all).slice(0, PICK_ROWS)
+  const matched = q ? all.filter((o) => o.name.toLowerCase().includes(q)) : all
+  const shown = matched.slice(0, PICK_ROWS)
 
   return (
     <div className="pickersheet">
@@ -400,8 +402,14 @@ function Picker({
           placeholder="Search the pantry"
           aria-label="Search the pantry"
         />
+        {/* What is BEHIND the sheet, which is what the comment above promises.
+            `shown` is `matched` sliced to PICK_ROWS, so a search matching
+            thirty of four hundred read "8 of 400" — the cap, reported as the
+            match. Same form `/dashboard/invoices` uses. */}
         <span className="mono" style={{ marginLeft: "auto" }}>
-          {shown.length} of {all.length}
+          {shown.length === matched.length
+            ? `${matched.length} of ${all.length}`
+            : `${shown.length} of ${matched.length} shown`}
         </span>
       </div>
 
@@ -461,7 +469,8 @@ function Builder({
 }) {
   const router = useRouter()
   const setLines = onLines
-  const [note, setNote] = useState<string | null>(null)
+  // The outcome travels with the text — see the same note in Settings.
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [saving, start] = useTransition()
 
   const dirty =
@@ -483,7 +492,7 @@ function Builder({
           unit: l.unit,
         })),
       })
-      setNote(result.ok ? "Saved." : result.error)
+      setNote({ ok: result.ok, text: result.ok ? "Saved." : result.error ?? "Could not save." })
       if (result.ok) router.refresh()
     })
   }
@@ -492,7 +501,7 @@ function Builder({
     setNote(null)
     start(async () => {
       const result = await markRecipeConfirmed(builder.recipeId)
-      setNote(result.ok ? "Confirmed." : result.error)
+      setNote({ ok: result.ok, text: result.ok ? "Confirmed." : result.error ?? "Could not confirm." })
       if (result.ok) router.refresh()
     })
   }
@@ -511,10 +520,10 @@ function Builder({
       </div>
 
       {lines.length === 0 ? (
-        <p className="mono" style={{ margin: "0 0 12px" }}>
+        <Note lede>
           No lines. Nothing about this plate has been costed — add one below and its cost stops
           being whatever the override says.
-        </p>
+        </Note>
       ) : null}
 
       {lines.map((l, i) => (
@@ -552,9 +561,9 @@ function Builder({
       ))}
 
       {builder.notes ? (
-        <p className="mono" style={{ margin: "12px 0 0" }}>
+        <Note>
           {builder.notes}
-        </p>
+        </Note>
       ) : null}
 
       <div className="btnrow" style={{ marginTop: 12 }}>
@@ -583,9 +592,9 @@ function Builder({
       </div>
 
       {note ? (
-        <p className="mono" style={{ margin: "9px 0 0" }}>
-          {note}
-        </p>
+        <Note live tone={note.ok ? "good" : "bad"}>
+          {note.text}
+        </Note>
       ) : null}
     </>
   )

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { DeskHandoff, MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { DeskHandoff, MList, MStrip, Note, Section, useCounterTransition } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StoreFileSections } from "@/lib/counter/adapters/stores"
 
@@ -31,14 +31,21 @@ export function CounterPhoneStoreFileClient({
 
   return (
     <>
-      <Section bare title="Store file" data={sections.head} pending={pending}>
-        {(h) => (
-          <div>
-            <h2 className="mtitle">Store file</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Store file unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Store file</h2>
+        <Section bare title="Store file" data={sections.head} pending={pending}>
+          {(h) => (
             <p className="msub">{h.sub}</p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
@@ -60,9 +67,9 @@ export function CounterPhoneStoreFileClient({
                 value: r.unitLeads ? `${r.unit}${r.value}` : `${r.value}${r.unit}`,
               }))}
             />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {o.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

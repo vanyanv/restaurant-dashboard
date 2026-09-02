@@ -120,8 +120,7 @@ const sections: OverviewSections = {
     { label: "In review", value: "6 · $2,140", tone: "warn" },
     { label: "Posted to COGS", value: "28 · $61,063", total: true },
   ]),
-  modelCall: notComputed("the model's call for this day"),
-  ratings: ready({ average: "4.6", count: 142, windowDays: 30, lowCount: 1 }),
+  ratings: ready({ average: "4.6", averageValue: 4.6, count: 142, windowDays: 30, lowCount: 1 }),
 }
 
 /** Every landmark class the fidelity gate reads, in DOM order. */

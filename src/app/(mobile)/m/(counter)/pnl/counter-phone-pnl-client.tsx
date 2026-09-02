@@ -6,6 +6,7 @@ import {
   MList,
   MStrip,
   MoneyLines,
+  Note,
   Section,
   useCounterTransition,
   type MListRow,
@@ -178,10 +179,10 @@ export function CounterPhonePnlClient({
               note. The desk's statement footnote sits in the same place for
               the same reason.
             */}
-            <p className="mono" style={{ margin: "8px 0 0" }}>
+            <Note>
               Rent and the other monthly lines are charged at {s.fixedInRange} for these {days}{" "}
               {days === 1 ? "day" : "days"}, not a whole month.
-            </p>
+            </Note>
           </>
         )}
       </Section>

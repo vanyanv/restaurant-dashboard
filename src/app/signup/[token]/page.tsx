@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 import { checkInvite, type InviteCheck } from "../invite"
 import { CounterSignupClient } from "./counter-signup-client"
 
@@ -105,7 +105,7 @@ export default async function SignupTokenPage(props: {
     <main className="ct-root login" style={{ gridTemplateColumns: "1fr" }}>
       <div className="login__form" style={{ maxWidth: 460 }}>
         <div className="login__logo">
-          <Wordmark />
+          <Logo />
           <span className="cap">Operations</span>
         </div>
         <h1>{copy.headline}</h1>

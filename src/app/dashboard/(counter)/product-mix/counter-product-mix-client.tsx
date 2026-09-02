@@ -6,6 +6,7 @@ import {
   Chart,
   DateControl,
   MathLines,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -150,9 +151,9 @@ export function CounterProductMixClient({
           {(b) => (
             <>
               <MathLines rows={b.rows} />
-              <p className="mono" style={{ margin: "10px 0 0" }}>
+              <Note>
                 {b.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>

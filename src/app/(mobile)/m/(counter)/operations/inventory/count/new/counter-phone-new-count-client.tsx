@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
-import { MList, Section, useCounterTransition } from "@/components/counter"
+import { MList, Note, Section, useCounterTransition } from "@/components/counter"
 import { beginStockCount } from "@/lib/counter/actions/stock-count"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { NewCountSections } from "@/lib/counter/adapters/new-count"
@@ -51,22 +51,29 @@ export function CounterPhoneNewCountClient({
 
   return (
     <>
-      <Section bare title="Start a count" data={sections.sheet} pending={pending}>
-        {(s) => (
-          <div>
-            <h2 className="mtitle">Start a count</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Start a count unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Start a count</h2>
+        <Section bare title="Start a count" data={sections.sheet} pending={pending}>
+          {(s) => (
             <p className="msub">{s.meta}</p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
       <Section title="Areas" meta={(g) => g.meta} data={sections.groups} pending={pending}>
         {(g) => (
           <>
             <MList rows={g.phoneRows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {g.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -82,9 +89,9 @@ export function CounterPhoneNewCountClient({
             >
               {busy ? "Opening…" : o.resumes ? "Resume the open count" : "Begin the count"}
             </button>
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note live tone={problem === null ? undefined : "bad"}>
               {problem === null ? o.note : `Could not open a count: ${problem}.`}
-            </p>
+            </Note>
           </>
         )}
       </Section>

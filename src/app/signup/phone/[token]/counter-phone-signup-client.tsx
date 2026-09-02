@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Wordmark } from "@/components/counter"
+import { Logo } from "@/components/counter"
 
 /**
  * Accept an invite, on a phone — `P.signup.phone()`.
@@ -60,7 +60,7 @@ export function CounterPhoneSignupClient({
   return (
     <main className="ct-root ct-phone plogin">
       <div className="login__logo" style={{ marginBottom: 6 }}>
-        <Wordmark />
+        <Logo width={190} />
       </div>
       <h2 className="mtitle" style={{ textAlign: "center" }}>
         {inviterName} invited you

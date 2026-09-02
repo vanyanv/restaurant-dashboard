@@ -26,16 +26,23 @@ export function CounterPhoneOperationsClient({
 
   return (
     <>
-      <Section bare title="Operations" data={sections.headline} pending={pending}>
-        {(h) => (
-          <div>
-            <h2 className="mtitle">Operations</h2>
+      {/* The page's own NAME is a constant, so it is drawn in every state.
+          Inside the section it was not: a failed headline left this phone
+          page with no title at all, showing "Operations unavailable" where
+          its name belongs. Only the sub-line needs the data. Same rule the
+          desk states on /dashboard/decisions — "the head is drawn in every
+          state, including before that data exists". `Section bare` emits no
+          DOM of its own, so the ready-state markup is unchanged. */}
+      <div>
+        <h2 className="mtitle">Operations</h2>
+        <Section bare title="Operations" data={sections.headline} pending={pending}>
+          {(h) => (
             <p className="msub">
               {h.cells[0].value} open · {h.cells[1].value} areas moving
             </p>
-          </div>
-        )}
-      </Section>
+          )}
+        </Section>
+      </div>
 
 
       <Section title="Areas" meta={(a) => a.meta} data={sections.areas} pending={pending}>

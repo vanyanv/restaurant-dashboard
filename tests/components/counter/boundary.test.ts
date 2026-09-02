@@ -53,7 +53,20 @@ describe("the Counter public surface", () => {
     const askBarrel = readFileSync(join(ASK, "index.ts"), "utf8")
     for (const f of readdirSync(ASK).filter((f) => f.endsWith(".tsx"))) {
       const name = f.replace(/\.tsx$/, "")
-      if (name === "ask-mount") continue
+      // Two exemptions, both of the same kind: a file whose import graph must
+      // not become every barrel consumer's import graph.
+      //
+      // `ask-mount` is the lazy wrapper AppShell loads via next/dynamic;
+      // exporting it would let something import it eagerly and undo that.
+      //
+      // `thread-actions` calls the `"use server"` module
+      // `@/lib/counter/actions/conversation`, whose graph runs through
+      // `@/lib/auth` to `@/lib/prisma`. This barrel is imported by the two
+      // OVERVIEW clients as well as the two Ask ones, and exporting it here
+      // failed `tests/app/counter-overview.test.tsx` and its phone twin with
+      // "DATABASE_URL is required" — raised on import alone, before any test
+      // body ran. The two Ask clients import it by path.
+      if (name === "ask-mount" || name === "thread-actions") continue
       expect(askBarrel).toMatch(new RegExp(`from "\\./${name}"`))
     }
   })

@@ -5,6 +5,7 @@ import {
   DeskHandoff,
   MList,
   MStrip,
+  Note,
   Section,
   useCounterTransition,
 } from "@/components/counter"
@@ -58,13 +59,13 @@ export function CounterPhoneRecipeClient({
           <>
             {/* CostBar draws its own legend — see the desk client. */}
             <CostBar bands={c.bands} />
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               {c.foot}
-            </p>
+            </Note>
             {c.gap ? (
-              <p className="mono" style={{ margin: "9px 0 0", color: "var(--bad)" }}>
+              <Note tone="bad">
                 {c.gap.body}
-              </p>
+              </Note>
             ) : null}
           </>
         )}

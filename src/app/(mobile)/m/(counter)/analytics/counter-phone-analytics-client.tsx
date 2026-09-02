@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Chart, MStrip, Section, SubNav } from "@/components/counter"
+import { Chart, MStrip, Section, useCounterTransition, SubNav } from "@/components/counter"
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { count, money, pct } from "@/lib/counter/format"
@@ -72,6 +72,17 @@ export function CounterPhoneAnalyticsClient({
   sections: SectionSources<AnalyticsSections>
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
+  /*
+   * The SAME transition the phone shell's own store switcher and date
+   * sheet start. Threading `pending` into every Section below is what
+   * turns a range or store change into a stale banner over the last good
+   * figures instead of a blank `loading.tsx` — and it is what the desk
+   * Analytics has always done. This page was the only date-scoped phone
+   * route without it, so the same page blanked on a phone and held its
+   * figures on a desk.
+   */
+  const { pending } = useCounterTransition()
+
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   const { range } = counterParams
@@ -110,14 +121,14 @@ export function CounterPhoneAnalyticsClient({
       {/* Four cells: Net sales, Marketplaces, Commission (in dollars, captioned
           with the percentage), Best day. `h.phoneCells`, never a slice of
           `h.cells` — see the file note above. */}
-      <Section bare title="The figures" data={sections.headline}>
+      <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <MStrip cells={h.phoneCells} />}
       </Section>
 
       {/* The legend is ON and direct labels are OFF: at 340px a label written
           on a 20px band is a label nobody can read. That is the prototype's
           own choice (`m.phoneChart`), not a reshaping done here. */}
-      <Section title="Channel mix" meta={(m) => m.subtitle} data={sections.mix}>
+      <Section title="Channel mix" meta={(m) => m.subtitle} data={sections.mix} pending={pending}>
         {(m) => (
           <>
             <Chart {...m.phoneChart} fmt={share} />
@@ -133,7 +144,7 @@ export function CounterPhoneAnalyticsClient({
       <Section
         title="By day of week"
         meta={`${count(days)} ${days === 1 ? "day" : "days"}`}
-        data={sections.weekday}
+        data={sections.weekday} pending={pending}
       >
         {(w) => <Chart {...w.phoneChart} fmt={(v) => money(v)} />}
       </Section>

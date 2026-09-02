@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -294,9 +295,9 @@ export function CounterStoreLaborClient({
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => (
           <>
-            <p className="mono" style={{ margin: "0 0 12px" }}>
+            <Note lede>
               {h.note}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}
@@ -312,9 +313,9 @@ export function CounterStoreLaborClient({
         {(s) => (
           <>
             <Chart {...s.chart} fmt={HOURS} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {s.sentence}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -340,9 +341,9 @@ export function CounterStoreLaborClient({
                   (`.sec__body{padding:13px 15px}`) inline instead, and only
                   when there is something to say. */}
               {r.note ? (
-                <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                <Note flush>
                   {r.note}
-                </p>
+                </Note>
               ) : null}
             </>
           )}
@@ -362,9 +363,7 @@ export function CounterStoreLaborClient({
                   `.queue` at all — the note below is then the whole reading,
                   and it is the sentence that explains why. */}
               {l.items.length > 0 ? <Queue items={queueItems(l.items)} /> : null}
-              <p className="mono" style={{ margin: l.items.length > 0 ? "10px 0 0" : 0 }}>
-                {l.note}
-              </p>
+              <Note bare={l.items.length === 0}>{l.note}</Note>
             </>
           )}
         </Section>
@@ -385,9 +384,9 @@ export function CounterStoreLaborClient({
             {/* Unwrapped, for the reason the role note above is unwrapped. This
                 is the note that says the last column is read against this
                 store's own published shifts and against no floor (L-R1). */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {w.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -405,9 +404,9 @@ export function CounterStoreLaborClient({
                 band it invented, and a line drawn here would be one this page
                 then graded twelve weeks against. */}
             <Chart {...t.chart} fmt={SHARE} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {t.sentence} {t.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>

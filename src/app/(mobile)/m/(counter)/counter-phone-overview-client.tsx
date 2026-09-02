@@ -148,11 +148,21 @@ export function CounterPhoneOverviewClient({
    * `ReactNode` cannot cross the RSC boundary. Every figure inside it came from
    * the adapter already.
    *
-   * The two destinations are the phone's, not the desk's. `/m/pnl/{id}` is a
-   * real mobile page; the store file has none — mobile's stores route was
-   * deleted in the bloat cull — so it links to the desktop one, which this app
-   * genuinely serves. A link to a real page a phone renders wide beats no link,
-   * and beats a link to a 404.
+   * BOTH destinations are the phone's. `/m/pnl/{id}` always was; the store
+   * file is one now. This comment used to say mobile had no store file —
+   * "deleted in the bloat cull" — and justified sending a phone reader to
+   * `/dashboard/stores/{id}` on the grounds that a desktop page a phone
+   * renders wide beats a 404. That was true when it was written and stopped
+   * being true when `/m/stores/[id]` landed: that page's own docblock says
+   * "until now that button pointed at /dashboard/stores/<id> because there was
+   * nowhere else for it to go". The phone Stores LIST was moved over then;
+   * these two buttons on the Overview were missed.
+   *
+   * The distinction matters because this codebase has a component for the
+   * other case. `DeskHandoff` is what `/m/recipes/[id]` and `/m/stores/[id]`
+   * use to say "this one opens on the desk" — a labelled, deliberate
+   * crossing. These were bare `.btn`s wearing no such label, so a reader
+   * tapping "Open the store file" on a phone got a desk page with no warning.
    */
   const toRow = (c: OverviewStoreCard): StoreCard => {
     if (c.kind === "pre_open") {
@@ -168,7 +178,7 @@ export function CounterPhoneOverviewClient({
                 : `Its store file is still missing ${c.missingFromFile.join(", ").toLowerCase()}.`
             }
             actions={
-              <Link className="btn" href={`/dashboard/stores/${c.id}`}>
+              <Link className="btn" href={`/m/stores/${c.id}`}>
                 Open the store file
               </Link>
             }
@@ -192,7 +202,7 @@ export function CounterPhoneOverviewClient({
             <Link className="btn" href={`/m/pnl/${c.id}`}>
               Open this store&rsquo;s P&amp;L
             </Link>
-            <Link className="btn" href={`/dashboard/stores/${c.id}`}>
+            <Link className="btn" href={`/m/stores/${c.id}`}>
               Open the store file
             </Link>
           </>
@@ -300,7 +310,7 @@ return (
         pending={pending}
         meta={windowLabel}
         data={sections.splhChart}
-        askAbout="sales per labour hour"
+        askAbout="sales per labor hour"
       >
         {(spec) => (
           <Chart {...spec} h={104} ticks={false} fmt={(v) => money(v, { cents: true })} />
