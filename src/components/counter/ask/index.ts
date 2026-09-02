@@ -46,4 +46,22 @@ export { AskComposer } from "./ask-composer"
 export { Thinking } from "./thinking"
 /* The `.convs` rail of past conversations — the prototype's Ask page is a
    two-column `.askpage` and this is its left column. */
-export { Conversations } from "./conversations"
+export { Conversations, ConversationsRail } from "./conversations"
+/*
+ * `thread-actions.tsx` is DELIBERATELY NOT EXPORTED HERE, for the same kind of
+ * reason `ask-mount.tsx` is not: what it reaches must not reach everything
+ * that imports this barrel.
+ *
+ * It calls `renameAskThread`/`deleteAskThread` in
+ * `@/lib/counter/actions/conversation`, a `"use server"` module whose graph
+ * runs through `@/lib/auth` to `@/lib/prisma`. This barrel is imported by the
+ * two OVERVIEW clients as well as the two Ask ones — they take `AskBar` and
+ * `AskSheet` from it — and an overview page has no business carrying a
+ * reference to Prisma-backed actions it never calls. It is not theoretical:
+ * exporting it here failed `tests/app/counter-overview.test.tsx` and its phone
+ * twin outright, both with "DATABASE_URL is required", raised while merely
+ * importing the module.
+ *
+ * The two Ask clients import it by path. `tests/components/counter/boundary.test.ts`
+ * exempts it by name, beside `ask-mount`, with this reason.
+ */
