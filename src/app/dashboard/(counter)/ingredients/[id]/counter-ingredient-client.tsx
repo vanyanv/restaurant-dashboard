@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   DateControl,
+  Note,
   PageHead,
   Section,
   Strip,
@@ -17,7 +18,8 @@ import {
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { stepRange } from "@/lib/counter/date-range"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { IngredientSections } from "@/lib/counter/adapters/ingredient"
+import type { IngredientCost, IngredientSections } from "@/lib/counter/adapters/ingredient"
+import { saveIngredientCost } from "@/lib/counter/actions/ingredient"
 
 /**
  * One ingredient, composed from `P.ingredient.desk()`
@@ -32,6 +34,118 @@ import type { IngredientSections } from "@/lib/counter/adapters/ingredient"
  * expensive, where this one got cheaper.
  */
 export type CounterIngredientSections = SectionSources<IngredientSections>
+
+/**
+ * CORRECTING THE PRICE — the one figure on this page the owner can be right
+ * about and we can be wrong.
+ *
+ * `P.ingredient` has no button on it: the prototype's ingredient sheet is
+ * "price history, the SKUs that match it, and everything it touches", a
+ * reading surface end to end. This section is a deliberate addition to it, and
+ * `e2e/fidelity/manifest.ts` carries the allowance that says so.
+ *
+ * The reason is in `costOf`, and it is the most expensive bug this codebase
+ * has: `costPerRecipeUnit` is derived from vendor pack metadata, the parse
+ * fails often enough to have its own guard, and when it fails it multiplies
+ * $/unit by ten to two hundred. That number is what every recipe on the
+ * account multiplies, so it lands in COGS and in the P&L — one week of this
+ * account once read $193k because of it. `selectNonSpikeCostIndex` keeps the
+ * spike out of the figures; nothing has ever fixed the stored value, and the
+ * editorial ingredient sheet's form for doing it was dropped in the rebuild.
+ * The person who knows what a case actually costs had no way to say so.
+ *
+ * The price and the unit are one control because they are one fact. Half of
+ * all bad costs are a good number against the wrong unit — a case price stored
+ * per ounce is the same disaster as a misread price — and a form that let the
+ * owner fix one without seeing the other would keep producing the bug it
+ * exists to remove.
+ *
+ * The lock is here rather than in an admin screen because the owner who has
+ * just typed the right number is exactly the person who needs to stop the next
+ * sync from putting the wrong one back.
+ */
+function CostForm({ cost }: { cost: IngredientCost }) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const [price, setPrice] = useState(cost.costNow === null ? "" : String(cost.costNow))
+  const [unit, setUnit] = useState(cost.recipeUnit ?? "")
+  const [locked, setLocked] = useState(cost.costLocked)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = (nextLocked: boolean) => {
+    setError(null)
+    const trimmed = price.trim()
+    const parsed = trimmed === "" ? null : Number(trimmed)
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
+      setError("That is not a price.")
+      return
+    }
+    startSaving(async () => {
+      const result = await saveIngredientCost({
+        ingredientId: cost.ingredientId,
+        costPerRecipeUnit: parsed,
+        recipeUnit: unit.trim() === "" ? null : unit.trim(),
+        costLocked: nextLocked,
+      })
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      setLocked(nextLocked)
+      // Every recipe using this ingredient re-costs off the value just
+      // written, and the strip at the top of this page prints it.
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="sec__body">
+      <label className="search" style={{ display: "block", marginBottom: 7 }}>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={price}
+          placeholder="Price per recipe unit"
+          aria-label="Price per recipe unit"
+          onChange={(e) => setPrice(e.target.value)}
+        />
+      </label>
+      <label className="search" style={{ display: "block" }}>
+        <input
+          type="text"
+          value={unit}
+          placeholder="Recipe unit — lb, oz, each"
+          aria-label="Recipe unit"
+          onChange={(e) => setUnit(e.target.value)}
+        />
+      </label>
+
+      <div className="btnrow" style={{ marginTop: 11 }}>
+        <button
+          className="btn btn--primary"
+          type="button"
+          disabled={saving}
+          onClick={() => save(locked)}
+        >
+          {saving ? "Saving…" : "Save this price"}
+        </button>
+        {/* Saves in the same call, so the owner never types a correction and
+            then loses it to a sync because they forgot a second button. */}
+        <button
+          className="btn btn--quiet"
+          type="button"
+          disabled={saving}
+          onClick={() => save(!locked)}
+        >
+          {locked ? "Unlock — let invoices set it" : "Save and lock against invoices"}
+        </button>
+      </div>
+
+      <Note>{error ?? cost.note}</Note>
+    </div>
+  )
+}
+
 
 const SKU_COLUMNS: Column[] = [
   { key: "vendor", label: "Vendor" },
@@ -114,9 +228,9 @@ export function CounterIngredientClient({
             {/* Recipe unit and category. These belong under the title and
                 cannot go there: the masthead renders before the loader
                 resolves. */}
-            <p className="mono" style={{ margin: "0 0 11px" }}>
+            <Note lede>
               {h.sub}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}
@@ -132,9 +246,9 @@ export function CounterIngredientClient({
         {(p) => (
           <>
             <Chart {...p.chart} fmt={PRICE} />
-            <p className="mono" style={{ margin: "9px 0 0" }}>
+            <Note>
               {p.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -151,10 +265,10 @@ export function CounterIngredientClient({
             <>
               <Table columns={SKU_COLUMNS} rows={s.rows} />
               {/* No `.sec__body` — a table section emits the table alone, so
-                  the note carries the body's own inset inline. */}
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+                  the note carries the body's own inset via `<Note flush>`. */}
+              <Note flush>
                 {s.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
@@ -170,13 +284,23 @@ export function CounterIngredientClient({
           {(u) => (
             <>
               <Table columns={USED_COLUMNS} rows={u.rows} />
-              <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+              <Note flush>
                 {u.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
       </div>
+
+      <Section
+        title="What this costs"
+        meta={(c) => c.meta}
+        data={sections.cost}
+        pending={pending}
+        pad={false}
+      >
+        {(c) => <CostForm cost={c} />}
+      </Section>
     </>
   )
 }

@@ -65,11 +65,30 @@ export interface IngredientUsedIn {
   note: string
 }
 
+/**
+ * What the page can CHANGE about this ingredient, as opposed to what it
+ * reports. See `costOf` for why an owner needs it.
+ */
+export interface IngredientCost {
+  ingredientId: string
+  /** `costPerRecipeUnit` — the number every recipe on the account multiplies. */
+  costNow: number | null
+  /** "invoice" / "manual" / null. Named in the note so the owner knows whose figure they are overwriting. */
+  costSource: string | null
+  /** The unit `costNow` is per. Editable: half of all bad costs are a good number against the wrong unit. */
+  recipeUnit: string | null
+  /** When true, invoice sync stops overwriting this cost. */
+  costLocked: boolean
+  meta: string
+  note: string
+}
+
 export interface IngredientSections {
   head: SectionData<IngredientHead>
   prices: SectionData<IngredientPrices>
   skus: SectionData<IngredientSkus>
   usedIn: SectionData<IngredientUsedIn>
+  cost: SectionData<IngredientCost>
 }
 
 export interface IngredientInput {
@@ -114,6 +133,7 @@ interface Loaded {
   category: string | null
   costNow: number | null
   costSource: string | null
+  costLocked: boolean
   vendors: number
   spendRange: number
   spendShare: number | null
@@ -139,6 +159,7 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
       category: true,
       costPerRecipeUnit: true,
       costSource: true,
+      costLocked: true,
     },
   })
   if (!ing) return null
@@ -259,6 +280,7 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
     category: ing.category,
     costNow: ing.costPerRecipeUnit,
     costSource: ing.costSource,
+    costLocked: ing.costLocked,
     vendors: new Set(lines.map((l) => normalizeVendorName(l.vendor))).size,
     spendRange: spend[0]?.mine ?? 0,
     spendShare:
@@ -707,6 +729,63 @@ export function getIngredientSectionPromises(
     prices: s(pricesOf),
     skus: s(skusOf),
     usedIn: s(usedInOf),
+    cost: s(costOf),
+  }
+}
+
+/**
+ * THE ONE FIGURE ON THIS PAGE THE OWNER CAN BE RIGHT ABOUT AND WE CAN BE WRONG.
+ *
+ * `costPerRecipeUnit` is derived from invoice lines, and the derivation reads
+ * pack metadata that vendors write inconsistently. When it mis-parses, the
+ * error is not small: a case price read as a unit price inflates $/unit by ten
+ * to two hundred times, it propagates into every recipe that uses the
+ * ingredient, and from there into COGS and the P&L. That failure is why
+ * `selectNonSpikeCostIndex` exists, and it is why one week of this account
+ * once read $193k.
+ *
+ * The guard suppresses the spike in the figures. It does not fix the stored
+ * cost, and until now nothing could: the editorial ingredient sheet had this
+ * form, the Counter rebuild dropped it, and the owner — the only person who
+ * knows what a case of anything actually costs — had no way to say so.
+ *
+ * Three fields, because a wrong cost is wrong in three different ways:
+ *
+ *   - **the number** is misread from the invoice,
+ *   - **the unit** is right on the invoice and wrong in the recipe (a good
+ *     price per case stored as a price per ounce is the same disaster as a bad
+ *     price, and is the more common of the two),
+ *   - **the source** keeps winning: the next sync re-derives and overwrites
+ *     the correction. `costLocked` is the answer to that, and it is on this
+ *     panel rather than hidden in an admin screen because the owner who just
+ *     typed the right number is the person who needs it.
+ *
+ * Writing any of this flags the row `costSource = "manual"`, which is
+ * deliberate and visible: the note names the current source so nobody
+ * overwrites an invoice-derived figure without knowing that is what they are
+ * doing.
+ */
+function costOf(d: Loaded): IngredientCost {
+  return {
+    ingredientId: d.id,
+    costNow: d.costNow,
+    costSource: d.costSource,
+    recipeUnit: d.recipeUnit,
+    costLocked: d.costLocked,
+    meta: d.costLocked ? "locked" : (d.costSource ?? "not set"),
+    note:
+      d.costSource === "manual"
+        ? `This cost was typed, not derived. ${
+            d.costLocked
+              ? "It is locked, so invoice sync will not overwrite it."
+              : "It is not locked, so the next invoice that prices this ingredient will replace it."
+          }`
+        : d.costNow === null
+          ? `No cost is stored, so every recipe using this ingredient is costed as incomplete. ` +
+            `A price here fixes all of them at once.`
+          : `Derived from invoice lines. Correct it here when the pack size was misread — ` +
+            `a case price stored as a unit price multiplies straight through into COGS. ` +
+            `Lock it to stop the next sync from putting the bad figure back.`,
   }
 }
 
