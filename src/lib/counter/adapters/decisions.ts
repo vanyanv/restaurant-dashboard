@@ -26,6 +26,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import type { ReadingSegment, StripCell } from "@/lib/counter/adapters/pnl"
+import type { OpportunityType } from "@/generated/prisma/client"
 import {
   dataOf,
   mapReady,
@@ -208,6 +209,23 @@ export interface LedgerRow {
 export type DecisionQueueItem = QueueItem & {
   dots: number
   note: string
+  /**
+   * Everything `recordDecision` needs to write this item's outcome.
+   *
+   * `title` on this same object is jargon-stripped for display; `ref.title` is
+   * the generator's own string, which is what `DecisionLog`'s unique key is
+   * built from. They are different fields on purpose — see the note on
+   * `DecisionAction.rawTitle`, and the one on `recordDecision`.
+   */
+  ref: {
+    storeId: string
+    type: OpportunityType
+    title: string
+    asOf: string
+    impactUsdPerWeek: number
+    p10: number | null
+    p90: number | null
+  }
   /**
    * The claim, on its own — the first half of `body`.
    *
@@ -823,7 +841,7 @@ export function buildSettledDayDetail(day: SettledDay): DayDetail {
           : `${money(day.p10)} – ${money(day.p90)}`,
     },
     { key: "hours", label: "Hours planned", op: true, value: count(null) },
-    { key: "splh", label: "Implied sales per labour hour", op: true, value: money(null) },
+    { key: "splh", label: "Implied sales per labor hour", op: true, value: money(null) },
     { key: "moves", label: "How it landed", strong: true, rule: true, value: "" },
   ]
 
@@ -894,7 +912,7 @@ export function buildDayDetail(view: DecisionsView, day: DecisionDay): DayDetail
     },
     {
       key: "splh",
-      label: "Implied sales per labour hour",
+      label: "Implied sales per labor hour",
       op: true,
       value: money(impliedSplh, { cents: true }),
     },
@@ -1098,7 +1116,10 @@ function outcomeTone(r: DecisionRecord): Tone {
  * slow-moving combo before the loader was fixed. The unit string says "/wk"
  * because the number IS weekly, not to relabel one that is not.
  */
-export function buildDecisionQueue(actions: DecisionAction[]): DecisionQueueItem[] {
+export function buildDecisionQueue(
+  actions: DecisionAction[],
+  asOf: string,
+): DecisionQueueItem[] {
   return actions.slice(0, QUEUE_SHOWN).map((a) => {
     const note = deadlineWords(a)
     const confidence = confidenceWords(a)
@@ -1115,6 +1136,17 @@ export function buildDecisionQueue(actions: DecisionAction[]): DecisionQueueItem
       note,
       why: a.why,
       confidence,
+      ref: {
+        storeId: a.storeId,
+        type: a.type,
+        // The GENERATOR's title. `a.title` above is the stripped one the
+        // reader sees; keying on it would write a row that never matches.
+        title: a.rawTitle,
+        asOf,
+        impactUsdPerWeek: a.impactUsdPerWeek,
+        p10: a.impactRangeUsdPerWeek?.low ?? null,
+        p90: a.impactRangeUsdPerWeek?.high ?? null,
+      },
     }
   })
 }
@@ -1122,7 +1154,7 @@ export function buildDecisionQueue(actions: DecisionAction[]): DecisionQueueItem
 /** The queue section: the three shown items, and the cap said out loud. */
 export function buildQueueSection(view: DecisionsView): DecisionQueue {
   return {
-    items: buildDecisionQueue(view.actions),
+    items: buildDecisionQueue(view.actions, view.asOf),
     meta: `${Math.min(QUEUE_SHOWN, view.actions.length)} of ${view.actions.length}`,
   }
 }

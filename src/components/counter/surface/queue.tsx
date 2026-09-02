@@ -34,7 +34,23 @@ export type QueueItem = {
      */
   { act: string; href: string; onAct?: never }
   | { act?: undefined; onAct?: undefined; href?: never }
-)
+) & {
+  /**
+   * What the reader can DECIDE about this item, rendered beside the `.do`
+   * button that takes them to it.
+   *
+   * `act`/`href` is a DESTINATION — "Open Pricing" sends you to the page where
+   * the work happens. That is a different thing from recording that the work
+   * was done, or that you are passing, and the Needs-you queue needs both:
+   * `DecisionLog` is empty in production precisely because the queue could
+   * only ever point at things and never hear back about them.
+   *
+   * A slot rather than a second act/href arm, because whoever fills it owns a
+   * write with its own pending and failure states, and `Queue` is a pure
+   * presentational component that should not learn about either.
+   */
+  decide?: ReactNode
+}
 
 /**
  * The "what needs you" list. Ported from `queue()` at line 3074 of
@@ -83,6 +99,7 @@ export function Queue({ items }: { items: QueueItem[] }) {
                 {i.act}
               </button>
             ) : null}
+            {i.decide}
           </div>
         </div>
       ))}

@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useMemo } from "react"
+import { Fragment, useCallback, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Briefing,
@@ -8,6 +8,7 @@ import {
   HeadBlock,
   LeadFigure,
   MathLines,
+  Note,
   PageHead,
   Queue,
   Record,
@@ -30,6 +31,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { weekDayLabel, weekLabel } from "@/lib/counter/week-window"
 import type { DecisionQueueItem, DecisionsSections, LedgerRow } from "@/lib/counter/adapters/decisions"
 import type { SectionSources } from "@/lib/counter/adapters/types"
+import { recordDecision } from "@/lib/counter/actions/decision"
 import type { ReadingSegment } from "@/lib/counter/adapters/pnl"
 
 /**
@@ -124,6 +126,97 @@ function ledgerRows(rows: LedgerRow[]): Row[] {
  * screen reader. The adapter carries all four pieces (`why`, `dots`,
  * `confidence`, `note`); this function is only their arrangement.
  */
+/**
+ * DID YOU DO IT — the half of this page that has never existed.
+ *
+ * Every item in the queue already carries a `.do` button, and every one of
+ * them NAVIGATES: "Open Pricing", "Open Menu mix". The page points at work and
+ * then never hears back about it. That is why `DecisionLog` holds zero rows in
+ * production, and why the accuracy panel three sections up this same page —
+ * built to score committed calls against a frozen counterfactual — has never
+ * had a single call to score. It is not that the owner decides nothing. It is
+ * that nothing has ever asked.
+ *
+ * Two verbs, and like the alert inbox's pair they are not interchangeable:
+ *
+ *   - **I did this** commits, and freezes the forecast alongside the row,
+ *     because the counterfactual worth measuring is the one from the moment
+ *     the owner acted, not the one from whenever someone next looks.
+ *   - **Skip** dismisses and freezes nothing, because there is no effect to
+ *     measure. It still records, which matters: an owner who skips every
+ *     menu-engineering card for two months is telling the ranker something no
+ *     accuracy metric can see.
+ *
+ * The write keys on `ref.title`, the generator's own string, never the
+ * jargon-stripped one the reader sees above it. See `DecisionQueueItem.ref`.
+ */
+function QueueDecision({ item }: { item: DecisionQueueItem }) {
+  const router = useRouter()
+  const [saving, startSaving] = useTransition()
+  const [failed, setFailed] = useState(false)
+
+  const record = (outcome: "commit" | "dismiss") => {
+    setFailed(false)
+    startSaving(async () => {
+      const result = await recordDecision(
+        {
+          storeId: item.ref.storeId,
+          opportunityType: item.ref.type,
+          opportunityTitle: item.ref.title,
+          opportunityAsOf: item.ref.asOf,
+          predictedImpactUsdPerWeek: item.ref.impactUsdPerWeek,
+          predictedImpactP10: item.ref.p10,
+          predictedImpactP90: item.ref.p90,
+        },
+        outcome,
+      )
+      if (!result.ok) {
+        setFailed(true)
+        return
+      }
+      // The ledger, the accuracy panel and this queue all read `DecisionLog`.
+      // Refresh so the row the owner just wrote appears in all three.
+      router.refresh()
+    })
+  }
+
+  /*
+   * `.do`, not `.btn`.
+   *
+   * `.do` is the class the prototype gives a queue item's action — `act:
+   * 'Commit'` on all three of `P.decisions`' items — and `.qitem .do` is the
+   * only rule in `counter-components.css` written for a control in this
+   * position. `.btn` is the page-level button, it draws a bordered chip that
+   * does not belong inside a `.qitem`, and it is a landmark the fidelity gate
+   * counts: two of them per item would put a data-dependent count on a page
+   * whose allowances have to name an exact one. Both reasons point the same
+   * way, which is usually the sign the design was right the first time.
+   */
+  return (
+    <>
+      <button
+        className="do"
+        type="button"
+        style={{ marginLeft: 13 }}
+        disabled={saving}
+        onClick={() => record("commit")}
+      >
+        {saving ? "…" : "I did this"}
+      </button>
+      <button
+        className="do"
+        type="button"
+        style={{ marginLeft: 13 }}
+        disabled={saving}
+        onClick={() => record("dismiss")}
+      >
+        Skip
+      </button>
+      {failed ? <span className="k"> did not save</span> : null}
+    </>
+  )
+}
+
 function queueItems(items: DecisionQueueItem[]): QueueItem[] {
   return items.map((i) => ({
     key: i.key,
@@ -138,6 +231,7 @@ function queueItems(items: DecisionQueueItem[]): QueueItem[] {
     ),
     act: i.act,
     href: i.href,
+    decide: <QueueDecision item={i} />,
   })) as QueueItem[]
 }
 
@@ -286,10 +380,10 @@ export function CounterDecisionsClient({
                 what the marks mean, which nothing else on the page does: a
                 cell is a hit at 97% of the call, and a day still ahead is
                 neither. */}
-            <p className="mono" style={{ margin: "10px 0 0" }}>
+            <Note>
               A day is marked once it has closed and reconciled &mdash; inside 3% of the call is a
               hit. A day still ahead carries its forecast and no mark.
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -326,9 +420,9 @@ export function CounterDecisionsClient({
               <div style={{ marginTop: "10px" }}>
                 <Record marks={a.record} />
               </div>
-              <p className="mono" style={{ margin: "9px 0 0" }}>
+              <Note>
                 {a.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
