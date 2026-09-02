@@ -647,7 +647,24 @@ function buildStrip(
       // drift is the down tone. The arrow and the judgement disagree on
       // purpose — `comparisonPhrase` is written for figures where they agree,
       // and this is not one of them.
-      delta: market.enough ? `${points(market.points)} across the range` : undefined,
+      /*
+       * NEVER BARE. Below three buckets there is no first third and no last
+       * third (A-R10), so there is no drift to state — but the cell either
+       * side of this one says what it is in that state and this one said
+       * nothing at all, which reads on a one-day range as a figure whose
+       * caption failed to load rather than a range too short to hold a
+       * comparison. "of channel sales" is the denominator, which is true at
+       * every range, and it is the same words the phone's cell already falls
+       * back to.
+       *
+       * The DELTA slot rather than the caption, for the reason spelled out
+       * over `buildStoreStrip`: `reference` is undefined here when `enough` is
+       * false, and `Figure` opens a `.band` on `caption || reference`, so a
+       * caption in this branch would add a landmark the prototype has not got.
+       */
+      delta: market.enough
+        ? `${points(market.points)} across the range`
+        : "of channel sales",
       deltaTone: market.enough && market.points > 0 ? "is-down" : undefined,
       caption: market.enough
         ? `started at ${pct(market.was, { scaled: true })}`
