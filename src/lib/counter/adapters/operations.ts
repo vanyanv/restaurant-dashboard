@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
   awaitSections,
@@ -287,6 +287,25 @@ const isStale = (a: Area, today: Date): boolean => {
 /* -- sections --------------------------------------------------------- */
 
 /**
+ * "recipes and stock counts" · "recipes, stock counts and inventory" ·
+ * "recipes, stock counts and 2 more".
+ *
+ * The old form printed two names and then " and more" from three onwards, so
+ * on this account — which has exactly three stale areas — a strip cell read
+ * "recipes, stock counts and more" while the note under the table beside it
+ * listed all three by name. "and more" is eight characters spent hiding one
+ * word: "inventory" is shorter than the phrase concealing it.
+ *
+ * Past three it does abbreviate, but says HOW MANY, because "and more" does
+ * not distinguish one from nine.
+ */
+function staleWords(names: string[]): string {
+  if (names.length <= 2) return names.join(" and ")
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]}`
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`
+}
+
+/**
  * The strip, and the two cells the prototype cannot fill here.
  *
  * `On-hand value · $9,840 · 34 items` and `Theoretical vs actual · 7.6% over`
@@ -319,7 +338,7 @@ function headlineOf(d: OperationsData): OperationsHeadline {
     delta:
       stale.length === 0
         ? `every area touched in ${count(STALE_DAYS)} days`
-        : `${stale.map((a) => a.name.toLowerCase()).slice(0, 2).join(", ")}${stale.length > 2 ? " and more" : ""} stopped`,
+        : `${staleWords(stale.map((a) => a.name.toLowerCase()))} stopped`,
     deltaTone: stale.length > 0 ? "is-down" : "is-flat",
   }
 
@@ -435,7 +454,7 @@ function workOf(d: OperationsData): OperationsWork {
     })
   }
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 /** The areas, and the column that explains the rest of the table. */

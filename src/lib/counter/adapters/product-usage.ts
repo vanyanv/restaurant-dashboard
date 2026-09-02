@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
-import { count, money, pct, titleCase } from "@/lib/counter/format"
+import { count, money, pct, plural, titleCase } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -497,7 +497,7 @@ function workOf(d: UsageData): UsageWork {
     })
   }
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 /* -- assembly --------------------------------------------------------- */

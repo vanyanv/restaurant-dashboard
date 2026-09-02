@@ -1,5 +1,5 @@
 import { getPackagingCostData } from "@/lib/packaging-costs"
-import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
+import { count, money, pct, plural, titleCase, unitCost } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
   awaitSections,
@@ -298,7 +298,7 @@ function workOf({ d, rangeLabel: label }: Data): PackagingWork {
     })
   }
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 /* -- assembly --------------------------------------------------------- */

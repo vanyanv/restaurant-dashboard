@@ -8,7 +8,7 @@ import {
 } from "@/lib/counter/vendor-basket"
 import { isChargeRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { shortLabels } from "@/lib/counter/short-labels"
@@ -474,7 +474,7 @@ function workOf(d: VendorData): VendorWork {
     })
   }
 
-  return { items, meta: `${count(items.length)} things to do` }
+  return { items, meta: `${plural(items.length, "thing")} to do` }
 }
 
 /** The phone's list: biggest spend first. */
