@@ -42,7 +42,7 @@ import {
   comparisonPhrase,
   type ComparisonContext,
 } from "@/lib/counter/comparison"
-import { count, delta, money, pct, points } from "@/lib/counter/format"
+import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   comparisonRange,
   dayCount,
@@ -225,6 +225,17 @@ export interface WeekdaySection {
    * to caveat.
    */
   note: string | null
+  /**
+   * Whether ANY weekday bucket holds more than one day — that is, whether the
+   * bars are averages at all.
+   *
+   * Published rather than left inside the builder because the SECTION's meta
+   * is composed by the page ("7 days, averaged by weekday") and was making the
+   * claim this card's own caveat spends two lines withdrawing. One fact, read
+   * by the heading, the sentence, the legend and the caveat, so the four
+   * cannot disagree.
+   */
+  averaged: boolean
   /** What the phone's fourth strip cell prints. Null when the range holds no day at all. */
   best: { name: string; short: string; average: number } | null
 }
@@ -627,7 +638,7 @@ function buildStrip(
       value: money(p.grossSales),
       delta: sales.text,
       deltaTone: sales.tone,
-      caption: `${count(p.days)} days · ${GRAIN_WORD[granularity]} buckets`,
+      caption: `${plural(p.days, "day")} · ${GRAIN_WORD[granularity]} buckets`,
     },
     {
       label: "Through marketplaces",
@@ -874,40 +885,66 @@ function buildMix(
  */
 function buildWeekday(week: DayOfWeekProfile, days: number): WeekdaySection {
   const data = week.readings.map((r) => r.average)
+  /** See the block below `chart` — every string on this card reads from it. */
+  const held = week.readings.filter((r) => r.days > 0)
+  const averaged = held.length > 0 && held.some((r) => r.days > 1)
 
   const chart: ChartData = {
     type: "bars",
     h: 150,
     zero: true,
     labels: WEEKDAY_SHORT,
-    series: [{ name: "Average net", color: "var(--ink)", data }],
+    // Named for what it holds — see `averaged` above. Calling seven single
+    // readings "Average net" in the legend is the same claim the sentence
+    // stopped making.
+    series: [{ name: averaged ? "Average net" : "Net sales", color: "var(--ink)", data }],
     alt: "Net sales by day of week",
   }
 
+  /*
+   * WHETHER THESE ARE AVERAGES AT ALL — decided once, and then obeyed by every
+   * string on the card.
+   *
+   * Over a range of a week or less every weekday bucket holds exactly one day,
+   * so what the bars show is seven readings, not seven averages. The card knew
+   * that: it has printed the caveat below since it was built. What it did not
+   * do was tell the two lines ABOVE the caveat, so at the two ranges anybody
+   * actually opens this page at, one card said all three of these at once:
+   *
+   *     7 days, averaged by weekday          (the section meta)
+   *     Saturday is the best day at $8,247 on average
+   *     Each weekday in this 7-day range is a single day's reading,
+   *     not an average.
+   *
+   * A reader cannot act on a card that contradicts itself twice in four lines,
+   * and the one they will believe is the confident one at the top. So the
+   * qualifier is computed here and the whole card reads from it.
+   */
   const best = week.best === null ? null : week.readings[week.best]
   const sentence =
     best === null || best.average === null
       ? "No day in this range has a reading yet."
-      : `${best.name} is the best day at ${money(best.average)} on average, ` +
+      : `${best.name} is the best day at ${money(best.average)}` +
+        `${averaged ? " on average" : ""}, ` +
         `${delta((best.average - week.mean) / (week.mean || 1))} against the ` +
         `${money(week.mean)} mean across the range.`
 
-  // Over a week-long range every weekday is a single day, so the "average"
-  // above is one number and the shape is not a shape. The prototype prints
-  // this caveat and so do we, rather than quietly presenting one reading as a
-  // trend.
-  const held = week.readings.filter((r) => r.days > 0)
-  const note =
-    held.length > 0 && held.every((r) => r.days <= 1)
-      ? `Each weekday in this ${count(days)}-day range is a single day's reading, ` +
-        "not an average. Widen the range to read a shape."
-      : null
+  // The prototype prints this caveat and so do we, rather than quietly
+  // presenting one reading as a trend.
+  const note = averaged
+    ? null
+    : // An ATTRIBUTIVE "7-day range", which is already invariant — the noun in
+      // front of "range" does not take a plural, so `plural` would be wrong
+      // here in the opposite direction ("this 7 days range").
+      `Each weekday in this ${count(days)}-day range is a single day's reading, ` +
+      "not an average. Widen the range to read a shape."
 
   return {
     chart,
     phoneChart: { ...chart, h: 116, labels: WEEKDAY_LETTER, ticks: true },
     sentence,
     note,
+    averaged,
     best:
       best === null || best.average === null
         ? null
@@ -1117,7 +1154,7 @@ function buildDayBook(
   return {
     rows,
     phoneRows: rows.slice(0, PHONE_DAYS),
-    meta: `${count(rows.length)} days · newest first`,
+    meta: `${plural(rows.length, "day")} · newest first`,
   }
 }
 
@@ -1150,7 +1187,7 @@ function buildStoreStatement(p: Statement): StoreStatementLines {
     meta:
       margin === null
         ? `${count(p.days)} days`
-        : `${count(p.days)} days · ${pct(margin, { scaled: true })} margin`,
+        : `${plural(p.days, "day")} · ${pct(margin, { scaled: true })} margin`,
   }
 }
 
