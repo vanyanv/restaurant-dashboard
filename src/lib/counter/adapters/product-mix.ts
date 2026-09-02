@@ -104,6 +104,22 @@ const TABLE_ROWS = 8
 const PHONE_ROWS = 5
 /** Bar labels are cut to this; see `shortLabels`. */
 const LABEL_CHARS = 10
+/**
+ * The DESK axis budget, which is not `LABEL_CHARS + 2`.
+ *
+ * `.axis` is a `space-between` flex row of 9px mono. Across the desk chart's
+ * ~1160px, eight labels at the old twelve characters drew ~570px of text and
+ * ~590px of gap — half the row spent on nothing, while the names were cut
+ * hard enough that "2 Slider Combo", "1 Slider Combo" and "2 Sliders and
+ * Fries" all arrived as "…Co…"/"…a…" strings differing by a character or two.
+ * `shortLabels` could not repair that: it groups on a PREFIX, and those three
+ * differ at the front and agree after it, which is the one shape a prefix
+ * group can never catch.
+ *
+ * Eighteen draws ~850px and leaves ~44px between labels. Four of the eight
+ * names stop being cut at all.
+ */
+const DESK_LABEL_CHARS = 18
 
 interface Unit {
   cost: number
@@ -278,13 +294,14 @@ function unitsOf(d: MixData): MixUnits {
       h: n === DESK_BARS ? 158 : 124,
       zero: true,
       labels: shortLabels(top.map(([name]) => name), budget),
+      fullLabels: top.map(([name]) => name),
       series: [{ name: "Units", color: "var(--ink)", data: top.map(([, u]) => u.qty) }],
       alt: "Units by item",
     }
   }
 
   return {
-    chart: build(DESK_BARS, LABEL_CHARS + 2),
+    chart: build(DESK_BARS, DESK_LABEL_CHARS),
     phoneChart: build(PHONE_BARS, LABEL_CHARS - 1),
     meta: `${count(d.now.totalQty)} units · hover a bar`,
   }

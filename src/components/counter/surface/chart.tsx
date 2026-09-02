@@ -379,7 +379,8 @@ export function Chart(props: ChartProps) {
         <div ref={tipRef} className="ch-tip" style={{ left: tipLeft, top: reading?.tipTop ?? 0 }}>
           {reading ? (
             <>
-              <span className="lb">{spec.labels[reading.i]}</span>
+              {/* The uncut name where there is room for one. See `fullLabels`. */}
+              <span className="lb">{spec.fullLabels?.[reading.i] ?? spec.labels[reading.i]}</span>
               {reading.rows.map((r) => (
                 <span key={r.name} className="rw">
                   <i style={{ background: r.color }} />
@@ -458,7 +459,9 @@ export function Chart(props: ChartProps) {
             // Index, not the label: labels repeat (repeated hours, repeated
             // channel names) and a duplicate key produces a React warning.
             <tr key={i}>
-              <td>{label}</td>
+              {/* A screen reader has no axis to be cramped by, and no hover to
+                  recover a cut name with. It gets the whole one. */}
+              <td>{spec.fullLabels?.[i] ?? label}</td>
               {spec.series.map((s) => (
                 <td key={s.name}>{s.data[i] == null ? "—" : fmt(s.data[i] as number)}</td>
               ))}
