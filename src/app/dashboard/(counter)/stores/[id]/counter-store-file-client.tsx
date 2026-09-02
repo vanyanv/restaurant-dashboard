@@ -20,6 +20,7 @@ import { stepRange } from "@/lib/counter/date-range"
 import {
   addFixedExpense,
   deactivateStore,
+  saveTargetCogsPct,
   editFixedExpense,
   removeFixedExpense,
   saveStoreFile,
@@ -70,9 +71,18 @@ const MONEY_FIELDS = [
  * rates. The editorial build had these on a separate `/edit` route the
  * prototype never had; `P.storefile` is one page, and it is this one.
  *
- * The COGS target is shown and not editable: `updateStoreSchema` in
- * `@/app/actions/store/crud-actions` does not accept `targetCogsPct`, so a
- * field for it would save nothing.
+ * THE COGS TARGET IS EDITABLE NOW, AND THIS COMMENT USED TO SAY IT COULD NOT
+ * BE. It read: "shown and not editable: `updateStoreSchema` does not accept
+ * `targetCogsPct`, so a field for it would save nothing." True about
+ * `updateStore`, and wrong about the product — `setStoreTargetCogsPct` is its
+ * own owner-gated action, has existed the whole time, and the editorial COGS
+ * page called it. Saving therefore makes TWO writes behind one press, because
+ * there are genuinely two actions; see `save`.
+ *
+ * It matters more than a field: the target is the line every food-cost chart
+ * is drawn against, and of this account's three stores only Hollywood had one.
+ * Glendale and Van Nuys were both null, so their charts had no plan to be over
+ * or under and no screen could give them one.
  */
 function StoreFileForm({
   data,
@@ -92,6 +102,10 @@ function StoreFileForm({
     uber: String(Math.round(data.uber * 1000) / 10),
     doordash: String(Math.round(data.doordash * 1000) / 10),
   })
+  // Its own field, because it has its own action. See `saveTargetCogsPct`.
+  const [target, setTarget] = useState(
+    data.cogsTarget === null ? "" : String(data.cogsTarget),
+  )
   const [saving, startSaving] = useTransition()
   // The outcome travels with the text — see the same note in Settings.
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
@@ -107,6 +121,10 @@ function StoreFileForm({
     })
   }, [data.rent, data.labor, data.cleaning, data.towels, data.uber, data.doordash])
 
+  useEffect(() => {
+    setTarget(data.cogsTarget === null ? "" : String(data.cogsTarget))
+  }, [data.cogsTarget])
+
   function save() {
     setSaid(null)
     startSaving(async () => {
@@ -121,7 +139,33 @@ function StoreFileForm({
         uberCommissionRate: numberOf(form.uber) ?? data.uber * 100,
         doordashCommissionRate: numberOf(form.doordash) ?? data.doordash * 100,
       })
-      setSaid({ ok: result.ok, text: result.ok ? "Saved." : `Could not save: ${result.error}.` })
+      if (!result.ok) {
+        setSaid({ ok: false, text: `Could not save: ${result.error}.` })
+        return
+      }
+      /*
+       * The target is a SECOND write, because it is a second action —
+       * `updateStore` genuinely does not accept `targetCogsPct` and
+       * `setStoreTargetCogsPct` genuinely does. One press, so the reader never
+       * has to know there are two; a blank box clears the target rather than
+       * setting it to zero, which are different things to draw a chart
+       * against.
+       */
+      const trimmed = target.trim()
+      const wanted = trimmed === "" ? null : Number(trimmed)
+      if (wanted !== null && (!Number.isFinite(wanted) || wanted < 0 || wanted > 100)) {
+        setSaid({ ok: false, text: "The food-cost target must be a percent between 0 and 100." })
+        return
+      }
+      if (wanted !== data.cogsTarget) {
+        const t = await saveTargetCogsPct(data.storeId, wanted)
+        if (!t.ok) {
+          setSaid({ ok: false, text: `Inputs saved, but the target did not: ${t.error}.` })
+          return
+        }
+      }
+      setSaid({ ok: true, text: "Saved." })
+      router.refresh()
     })
   }
 
@@ -201,6 +245,24 @@ function StoreFileForm({
         />
       </div>
 
+      <div className="editrow" style={{ gridTemplateColumns: "1fr 86px" }}>
+        <span className="nm">
+          Food-cost target
+          <em>The plan line on every food-cost chart for this store</em>
+        </span>
+        <input
+          className="fld"
+          type="number"
+          min="0"
+          max="100"
+          step="0.1"
+          inputMode="decimal"
+          aria-label="Food cost target percent"
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+        />
+      </div>
+
       <ExpenseEditor
         storeId={data.storeId}
         lines={data.expenseLines}
@@ -230,10 +292,9 @@ function StoreFileForm({
 
       <Note live={said !== null} tone={said === null ? undefined : said.ok ? "good" : "bad"}>
         {said?.text ??
-          `Commissions are percentages \u2014 21 and 0.21 both mean 21%. The COGS target ` +
-            `${data.cogsTarget === null ? "is not set" : `reads ${data.cogsTarget}%`} and is not ` +
-            `editable here: the update action does not accept targetCogsPct, so a field for it ` +
-            `would save nothing.`}
+          `Commissions are percentages \u2014 21 and 0.21 both mean 21%. The food-cost target is ` +
+            `the line every food-cost chart for this store is drawn against; leave it blank for ` +
+            `no plan, which is not the same as a plan of zero.`}
       </Note>
     </>
   )
