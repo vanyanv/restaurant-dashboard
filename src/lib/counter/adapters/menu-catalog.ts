@@ -1,3 +1,4 @@
+import { listMappingProposals } from "@/app/actions/mapping-proposal-actions"
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { count, money, pct } from "@/lib/counter/format"
@@ -8,7 +9,8 @@ import {
   guardSection,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
-import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import {
+  dataOf, mapReady, type SectionData } from "@/lib/counter/section-data"
 import type { DonutSlice, FigureProps, MListRow, QueueItem } from "@/components/counter"
 
 /**
@@ -110,11 +112,44 @@ export interface CatalogCategories {
   note: string
 }
 
+/**
+ * THE AI-PROPOSAL CARD, WHICH NOW HAS A COUNTERPART.
+ *
+ * Note 4 above says `RecipeMappingProposal` holds seven rejected and three
+ * accepted and nothing pending, so the prototype's "Five AI mapping proposals
+ * are waiting" had nothing behind it. That is still true of the DATA and was
+ * never true of the CAPABILITY: `generateMappingProposals`,
+ * `acceptMappingProposal` and `rejectMappingProposal` have all existed the
+ * whole time, and the editorial `proposal-review-launcher.tsx` called all
+ * three. The queue is empty because nothing has ever asked it to fill.
+ *
+ * `unmapped` is what it would fill FROM — 95 of 155 sold item names have no
+ * recipe, and the generator's candidates come from exactly that list. Printing
+ * it is what makes an empty queue legible: "nothing is waiting" and "there is
+ * nothing to propose" are very different states and this section must not read
+ * as the second when it is the first.
+ */
+export interface CatalogProposals {
+  pending: Array<{
+    id: string
+    item: string
+    proposed: string | null
+    kind: string
+    confidence: number | null
+    reasoning: string
+  }>
+  /** Sold item names with no recipe — what a generate run would work on. */
+  unmapped: number
+  meta: string
+  note: string
+}
+
 export interface MenuCatalogSections {
   headline: SectionData<CatalogHeadline>
   list: SectionData<CatalogList>
   gaps: SectionData<CatalogGaps>
   categories: SectionData<CatalogCategories>
+  proposals: SectionData<CatalogProposals>
 }
 
 export interface MenuCatalogInput {
@@ -575,6 +610,64 @@ export function getMenuCatalogSectionPromises(
       dataP.then((sd) => mapReady(sd, categoriesOf)),
       "retryMenuCatalog",
     ),
+    /*
+     * Its own read, not `dataP`'s: the proposal queue is a different table
+     * from the sales window this page is scoped to, and a proposal is not
+     * dated into a range. A failure to list proposals should cost this page
+     * its review panel, not its catalogue.
+     */
+    proposals: guardSection(
+      Promise.all([
+        classify(() => listMappingProposals(), { retryAction: "retryMenuCatalog" }),
+        dataP,
+      ]).then(([pd, sd]) =>
+        mapReady(pd, (rows) => proposalsOf(rows, unmappedItemCount(sd))),
+      ),
+      "retryMenuCatalog",
+    ),
+  }
+}
+
+/**
+ * How many sold item names carry no recipe — the pool a generate run draws
+ * from. Read off the list section rather than re-queried, so the number here
+ * and the number in the catalogue's own toggles cannot disagree.
+ */
+function unmappedItemCount(sd: SectionData<CatalogData>): number {
+  const d = dataOf(sd)
+  if (!d) return 0
+  return listOf(d).unmappedItems
+}
+
+/** See `CatalogProposals` for why an empty queue still gets a panel. */
+function proposalsOf(
+  rows: Awaited<ReturnType<typeof listMappingProposals>>,
+  unmapped: number,
+): CatalogProposals {
+  const pending = rows.map((r) => ({
+    id: r.id,
+    item: r.otterItemName,
+    proposed: r.proposedRecipeName ?? r.payload?.suggestedName ?? null,
+    kind: r.kind,
+    confidence: r.confidence,
+    reasoning: r.payload?.reasoning ?? "",
+  }))
+  return {
+    pending,
+    unmapped,
+    meta:
+      pending.length === 0
+        ? `none waiting · ${count(unmapped)} unmapped`
+        : `${count(pending.length)} waiting`,
+    note:
+      pending.length === 0
+        ? `Nothing is waiting on a decision. That is not the same as nothing to do: ` +
+          `${count(unmapped)} sold item names still carry no recipe, and proposing matches for ` +
+          `them is what fills this queue. A normalised exact-name match costs nothing; the rest ` +
+          `go to the model, one billed call each, so this page never generates on its own.`
+        : `Each one names the item, the recipe it would map to and why. Accepting writes the ` +
+          `mapping for every store; rejecting records the no, and the generator will not ask ` +
+          `about that item again.`,
   }
 }
 

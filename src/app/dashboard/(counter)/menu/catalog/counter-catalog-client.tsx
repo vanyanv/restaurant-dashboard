@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useDeferredValue, useMemo, useState } from "react"
+import { useCallback, useDeferredValue, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DateControl,
   Donut,
   Filters,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -23,8 +24,10 @@ import {
 import { MENU_TABS } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
+import { decideProposal, proposeMatches } from "@/lib/counter/actions/proposal"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { CatalogList, MenuCatalogSections } from "@/lib/counter/adapters/menu-catalog"
+import type {
+  CatalogProposals, CatalogList, MenuCatalogSections } from "@/lib/counter/adapters/menu-catalog"
 
 /**
  * The menu catalog, composed from `P.catalog.desk()`
@@ -70,6 +73,144 @@ const ASK_SUGGESTIONS = [
 
 /** Rows drawn before the table stops. The count line says what was left out. */
 const MAX_ROWS = 40
+
+
+const PROPOSAL_COLUMNS: Column[] = [
+  { key: "item", label: "Sold as" },
+  { key: "proposed", label: "Would map to" },
+  { key: "why", label: "Why" },
+  { key: "conf", label: "Confidence", numeric: true },
+]
+
+/**
+ * REVIEWING THE AI'S MAPPING PROPOSALS.
+ *
+ * The prototype's card reads "Five AI mapping proposals are waiting". This
+ * page's adapter note explained that `RecipeMappingProposal` holds seven
+ * rejected, three accepted and nothing pending, so there was nothing behind
+ * it. True of the DATA, and never true of the CAPABILITY:
+ * `generateMappingProposals`, `acceptMappingProposal` and
+ * `rejectMappingProposal` have all existed the whole time and the editorial
+ * `proposal-review-launcher.tsx` called all three. The queue was empty because
+ * nothing had ever asked it to fill.
+ *
+ * ## AN EMPTY QUEUE IS NOT AN EMPTY JOB
+ *
+ * With nothing pending the panel prints how many sold item names still carry
+ * no recipe — 95 of 155 — because "nothing is waiting" and "there is nothing
+ * to do" are different states and this section must not read as the second
+ * when it is the first.
+ *
+ * ## GENERATING IS BILLED, SO THE BUTTON SAYS SO
+ *
+ * `generateMappingProposalsCore` resolves a normalised exact-name match for
+ * free and sends only the fuzzy remainder to the model, one billed call each.
+ * Nothing on this page generates on its own, and the control names the cost
+ * rather than hiding it behind a verb.
+ *
+ * ## THREE CONTROLS, ALWAYS
+ *
+ * A row selects; the decision is taken once, below. Accept and Reject are
+ * disabled with nothing selected rather than hidden, and Propose is always
+ * live. That is a fixed landmark count on a section whose row count is
+ * whatever the model last produced — the same reasoning the alert inbox and
+ * the store's expense editor reached.
+ */
+function Proposals({ data }: { data: CatalogProposals }) {
+  const router = useRouter()
+  const [busy, startBusy] = useTransition()
+  const [picked, setPicked] = useState<string | null>(null)
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const decide = (outcome: "accept" | "reject") => {
+    if (picked === null) return
+    setSaid(null)
+    startBusy(async () => {
+      const result = await decideProposal(picked, outcome)
+      if (!result.ok) {
+        setSaid({ ok: false, text: `Not saved: ${result.error}.` })
+        return
+      }
+      setPicked(null)
+      // Accepting writes an OtterItemMapping, which the catalogue's mapped
+      // column and every margin on the page read.
+      router.refresh()
+    })
+  }
+
+  const propose = () => {
+    setSaid(null)
+    startBusy(async () => {
+      const result = await proposeMatches()
+      if (!result.ok) {
+        setSaid({ ok: false, text: `Could not propose: ${result.error}.` })
+        return
+      }
+      setSaid({
+        ok: true,
+        text:
+          result.created === 0
+            ? `Nothing new to propose${result.skipped > 0 ? ` — ${result.skipped} already pending or previously rejected` : ""}.`
+            : `${result.created} proposed${result.skipped > 0 ? `, ${result.skipped} skipped as already seen` : ""}.`,
+      })
+      router.refresh()
+    })
+  }
+
+  const rows: Row[] = data.pending.map((p) => ({
+    key: p.id,
+    onSelect: () => setPicked(p.id),
+    selected: p.id === picked,
+    cells: {
+      item: p.item,
+      proposed: p.proposed ?? { v: "a new recipe", cls: "hot" },
+      why: p.reasoning,
+      conf:
+        p.confidence === null
+          ? { v: "exact name", cls: "hot" }
+          : `${Math.round(p.confidence * 100)}%`,
+    },
+  }))
+
+  return (
+    <>
+      {data.pending.length > 0 ? (
+        <Table columns={PROPOSAL_COLUMNS} rows={rows} />
+      ) : null}
+      <div className="sec__body">
+        <div className="btnrow">
+          <button
+            className="btn btn--primary"
+            type="button"
+            disabled={busy || picked === null}
+            onClick={() => decide("accept")}
+          >
+            {busy ? "Saving…" : "Accept this mapping"}
+          </button>
+          <button
+            className="btn"
+            type="button"
+            disabled={busy || picked === null}
+            onClick={() => decide("reject")}
+          >
+            Reject
+          </button>
+          <button
+            className="btn btn--quiet"
+            type="button"
+            disabled={busy}
+            onClick={propose}
+          >
+            Propose matches for the unmapped
+          </button>
+        </div>
+        <Note tone={said && !said.ok ? "bad" : said?.ok ? "good" : undefined}>
+          {said?.text ?? data.note}
+        </Note>
+      </div>
+    </>
+  )
+}
 
 export function CounterCatalogClient({
   params: paramsString,
@@ -189,13 +330,25 @@ export function CounterCatalogClient({
           {(c) => (
             <>
               <Donut slices={c.slices} center={c.centre} />
-              <p className="mono" style={{ margin: "10px 0 0" }}>
+              <Note>
                 {c.note}
-              </p>
+              </Note>
             </>
           )}
         </Section>
       </div>
+
+      {/* `P.menucatalog`'s AI-proposal card, with the actions behind it. See
+          `Proposals`. */}
+      <Section
+        title="Mapping proposals"
+        meta={(p) => p.meta}
+        data={sections.proposals}
+        pending={pending}
+        pad={false}
+      >
+        {(p) => <Proposals data={p} />}
+      </Section>
     </>
   )
 }
@@ -271,7 +424,18 @@ function CatalogTable({
         toggles={toggles}
         onToggle={onToggle}
         onClear={onClear}
-        count={`${shown.length} of ${total}`}
+        /*
+         * Both numbers, whenever the cap bites. `shown` is `matching` sliced to
+         * MAX_ROWS, so `${shown.length} of ${total}` told a reader who filtered
+         * 500 items down to 200 that their filter had matched 40 — the cap
+         * reported as the result. This is the form `/dashboard/invoices`
+         * already uses for the same list-with-a-cap problem.
+         */
+        count={
+          shown.length === matching.length
+            ? `${matching.length} of ${total}`
+            : `${shown.length} of ${matching.length} shown`
+        }
       />
       <Table columns={COLUMNS} rows={rows} />
     </>

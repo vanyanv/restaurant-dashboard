@@ -1061,6 +1061,72 @@ export const PAGES: FidelityPage[] = [
     // docs/counter/measurements/2026-08-28-catalog.md.
     status: "counter",
     baseline: { desktop: 13, mobile: 9 },
+    extraLandmarks: [
+      {
+        landmark: "sec",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"Mapping proposals\" — the counterpart to `P.menucatalog`'s \"Five " +
+          "AI mapping proposals are waiting\" card. This entry's own note 4 " +
+          "said that card had nothing behind it because " +
+          "`RecipeMappingProposal` holds seven rejected, three accepted and " +
+          "nothing pending. True of the DATA, and never true of the " +
+          "CAPABILITY: `generateMappingProposals`, `acceptMappingProposal` " +
+          "and `rejectMappingProposal` have all existed the whole time and " +
+          "the editorial `proposal-review-launcher.tsx` called all three. The " +
+          "queue was empty because nothing had ever asked it to fill.\n" +
+          "It renders as an EXTRA rather than closing an absence because the " +
+          "alignment already pairs the fixture's proposal card with the " +
+          "queue's second slot, which carries the unmapped ITEMS. Both are " +
+          "wanted: the queue names the gap, this panel is where it is worked. " +
+          "The phone has no copy yet.",
+      },
+      {
+        landmark: "sec__head",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "That section's head, which counts what is waiting and, when " +
+          "nothing is, how many sold item names still carry no recipe — 95 of " +
+          "155. \"Nothing is waiting\" and \"nothing to do\" are different " +
+          "states and the head is where they are told apart.",
+      },
+      {
+        landmark: "sec__body",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The body under the proposal table, holding the decision row and " +
+          "the note. Same section, same argument as the `sec` entry above.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The row holding the three controls. An exact and stable count: the " +
+          "section renders the same three whether the queue holds nothing or " +
+          "twenty, changing only whether two of them are disabled.",
+      },
+      {
+        landmark: "btn",
+        desktop: 3,
+        mobile: 0,
+        reason:
+          "\"Accept this mapping\", \"Reject\" and \"Propose matches for the " +
+          "unmapped\". The first two act on the selected row and are disabled " +
+          "with nothing selected rather than hidden — a control that vanishes " +
+          "is one the reader has to rediscover, and the fixture ships a " +
+          "disabled `.btn` on the invoice page for the same reason. A pair " +
+          "per row would instead be a count that changes with whatever the " +
+          "model last produced, which no allowance can name.\n" +
+          "Propose is deliberately its own explicit press: the generator " +
+          "resolves a normalised exact-name match for free and sends the " +
+          "fuzzy remainder to the model at one billed call each, so nothing " +
+          "on this page generates on its own and the label names the cost.",
+      },
+    ],
   },
   {
     protoId: "catalogitem",
