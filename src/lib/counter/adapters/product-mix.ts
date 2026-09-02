@@ -339,10 +339,28 @@ function tableOf(d: MixData): MixTable {
       title: r.name,
       detail: r.was === null ? "no prior window" : `was ${pct(r.was, { scaled: true })}`,
       value: pct(r.share, { scaled: true }),
-      note: r.change === null ? undefined : pts(r.change).replace(" pts", ""),
+      // KEEPS ITS UNIT, unlike the desk's column. A phone row has no header
+      // above it to carry the word, so a bare "+1.20" beside a value reading
+      // "34.3%" is a number with no stated kind — and points of share against
+      // per-cent of share is exactly the confusion `points()` exists to stop.
+      note: r.change === null ? undefined : pts(r.change),
       noteTone: r.change !== null && r.change < 0 ? "down" : "up",
     })),
-    meta: `${count(shown.length)} of ${count(now.units.size)} · share of units`,
+    /*
+     * THE UNIT OF THE CHANGE COLUMN LIVES HERE.
+     *
+     * `pts()` writes "+1.20 pts" and both table call sites strip the word to
+     * hold the column narrow, which left "+1.20" sitting between "34.3%" and
+     * "33.1%" with nothing on the page saying it is POINTS of share rather
+     * than per cent of it. Those read as +1.2 points and +3.6 per cent of the
+     * same movement, and only one of them is what the column holds.
+     *
+     * The head is where it goes rather than the header cell: the column stays
+     * the width the figures need, and this is the same place the reader
+     * already looks to be told the section is share of units. `/dashboard/pnl`
+     * states the identical rule under its cascade for the identical reason.
+     */
+    meta: `${count(shown.length)} of ${count(now.units.size)} · share of units · change in pts`,
   }
 }
 

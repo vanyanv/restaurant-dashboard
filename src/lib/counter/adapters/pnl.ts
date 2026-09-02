@@ -621,6 +621,20 @@ function buildPhoneStrip(p: Statement): StripCell[] {
  * says a figure is inside a target that does not exist: with nothing published
  * for either half, it says exactly that instead.
  */
+/** `["food"]` → `food`; `["food", "labor"]` → `food and labor`. Two halves, so no serial comma is ever needed. */
+const sentenceList = (n: string[]): string => (n.length === 2 ? `${n[0]} and ${n[1]}` : n[0] ?? "")
+
+/** "is" for one half, "are" for both — the list above decides which. */
+const verb = (n: string[]): string => (n.length === 1 ? "is" : "are")
+
+/** The other verb the sentence needs: a half HAS a target, it is not one. */
+const hasVerb = (n: string[]): string => (n.length === 1 ? "has" : "have")
+
+/** "its target" against one half, "their targets" against both. */
+const possessive = (n: string[]): string => (n.length === 1 ? "its target" : "their targets")
+
+const capitalise = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1)
+
 function buildReading(p: Statement, targets: StripTargets | null): ReadingSegment[] {
   const out: ReadingSegment[] = []
   const say = (text: string) => out.push({ text })
@@ -650,10 +664,25 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
   const foodPlan = targets?.foodCost ?? null
   const laborPlan = targets?.labor ?? null
   const overs: Array<{ name: string; over: number; against: string }> = []
+  /*
+   * WHICH halves are judged, not how many.
+   *
+   * These are the two halves of prime cost, and the sentence below has to name
+   * them. It used to count them and say "Every half of it with a published
+   * number is inside it" — a universal quantifier over a set that, in this
+   * schema, never holds more than one member (`loadStripTargets` returns
+   * `labor: null` unconditionally; `Store.targetCogsPct` is the only published
+   * reference there is). Worse, its "it" landed on the 60% ceiling named in
+   * the sentence before, so the one claim a reader could extract was the wrong
+   * one: food is inside its OWN target, not inside prime's ceiling.
+   */
+  const judgedNames: string[] = []
+  const unjudgedNames: string[] = []
   let judged = 0
 
   if (foodPlan?.kind === "target" && prime.cogsPct != null) {
     judged += 1
+    judgedNames.push("food")
     if (prime.cogsPct > foodPlan.value) {
       overs.push({
         name: "food",
@@ -662,8 +691,11 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
       })
     }
   }
+  else if (prime.cogsPct != null) unjudgedNames.push("food")
+
   if (laborPlan !== null && prime.laborPct != null) {
     judged += 1
+    judgedNames.push("labor")
     const edge = laborPlan.kind === "band" ? laborPlan.hi : laborPlan.value
     if (prime.laborPct > edge) {
       overs.push({
@@ -674,12 +706,25 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
     }
   }
 
+  else if (prime.laborPct != null) unjudgedNames.push("labor")
+
   if (overs.length === 0) {
-    say(
-      judged === 0
-        ? " Neither half of it is judged here: this schema publishes a food-cost target per store and nothing at all for labor."
-        : " Every half of it with a published number is inside it.",
-    )
+    // `overs` is empty, so everything judged came in under — naming the halves
+    // is the whole sentence. The unjudged half is named too: "labor has no
+    // target" is the reader's cue that half of prime cost went unchecked, and
+    // for food it is a target they can go and set.
+    const inside = sentenceList(judgedNames)
+    const missing = sentenceList(unjudgedNames)
+    if (judgedNames.length === 0) {
+      say(` Neither half of it is judged: ${missing} ${hasVerb(unjudgedNames)} no target to judge against.`)
+    } else if (unjudgedNames.length === 0) {
+      say(` ${capitalise(inside)} ${verb(judgedNames)} inside ${possessive(judgedNames)}.`)
+    } else {
+      say(
+        ` ${capitalise(inside)} ${verb(judgedNames)} inside ${possessive(judgedNames)}, and ` +
+          `${missing} ${hasVerb(unjudgedNames)} no target to judge against.`,
+      )
+    }
     return out
   }
 

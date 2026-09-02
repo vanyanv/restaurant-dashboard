@@ -88,7 +88,9 @@ describe("WeekTable — the eight pressable weeks", () => {
 
     const heads = [...container.querySelectorAll(".wkt thead th")]
     expect(heads.map((h) => h.textContent)).toEqual([
-      "Week of", "Sales", "Gross", "Food", "Labor",
+      // Not the prototype's "Sales": the bar and the number beside it are one
+      // measure, and two revenue words on a P&L read as two figures.
+      "Week of", "Gross vs best", "Gross", "Food", "Labor",
       `Prime vs ${PRIME_CEILING_PCT}%`, "Prime", "Kept", "Margin",
     ])
     // `th.num` is the sheet's right-alignment, and it is on the six figure
