@@ -101,6 +101,17 @@ export interface IngredientCatalogue {
 
 export interface InboxCluster {
   key: string
+  /**
+   * One `InvoiceLineItem.id` per SPELLING in this cluster.
+   *
+   * `confirmSkuMatch` learns an alias from one line's (vendor, sku,
+   * productName) and backfills every line that matches THAT spelling — so a
+   * cluster of eight spellings of one can liner needs eight confirmations,
+   * not one. Accepting the cluster runs them in order and reports what it
+   * backfilled; that is the whole reason the inbox groups by product rather
+   * than listing 24 lines.
+   */
+  lineIds: string[]
   /** The spelling that reads best — the longest one. */
   name: string
   /** "8 spellings · $493 · Individual FoodService". */
@@ -114,6 +125,15 @@ export interface IngredientInbox {
   clusters: InboxCluster[]
   meta: string
   note: string
+  /**
+   * Every canonical ingredient on the account, for the picker beside each
+   * cluster. The whole catalogue rather than a suggestion: auto-match runs in
+   * SHADOW mode and is right about 55% of the time on genuinely new products,
+   * which is exactly why the prototype's section head says "nothing is
+   * written until you decide" — a single suggested answer would be wrong
+   * about half the time and would still look like the confident one.
+   */
+  candidates: Array<{ id: string; name: string }>
 }
 
 export interface IngredientModifiers {
@@ -183,6 +203,8 @@ interface UnmatchedRow {
   sku: string | null
   n: number
   spend: number
+  /** One `InvoiceLineItem.id` from this spelling — what a match is confirmed against. */
+  sampleLineId: string
 }
 
 interface ModRow {
@@ -305,10 +327,23 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
         AND i."invoiceDate" >= DATE_TRUNC('week', ${today}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
       GROUP BY 1, 2 ORDER BY 2`,
     prisma.$queryRaw<
-      Array<{ product: string; vendor: string; sku: string | null; n: number; spend: number }>
+      Array<{
+        product: string
+        vendor: string
+        sku: string | null
+        n: number
+        spend: number
+        sample: string
+      }>
     >`
       SELECT li."productName" AS product, i."vendorName" AS vendor, li.sku AS sku,
-             COUNT(*)::int AS n, SUM(li."extendedPrice")::float AS spend
+             COUNT(*)::int AS n, SUM(li."extendedPrice")::float AS spend,
+             -- ONE line id per group, so the inbox can act on the cluster.
+             -- confirmSkuMatch takes a single lineItemId, reads its
+             -- (vendor, sku, productName) and BACKFILLS every other line that
+             -- matches, so one id per spelling is all a cluster needs; the
+             -- newest is the one whose wording the alias should learn.
+             (ARRAY_AGG(li.id ORDER BY i."invoiceDate" DESC NULLS LAST))[1] AS sample
       FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
       WHERE i."accountId" = ${accountId} AND li."canonicalIngredientId" IS NULL
       GROUP BY 1, 2, 3 ORDER BY 5 DESC`,
@@ -408,6 +443,7 @@ async function loadIngredients(input: IngredientsInput): Promise<IngredientData>
       sku: u.sku,
       n: u.n,
       spend: u.spend,
+      sampleLineId: u.sample,
     })),
     modifiers: modifiers.map((m) => ({
       name: m.name,
@@ -658,6 +694,7 @@ function inboxOf(d: IngredientData): IngredientInbox {
         .productName
       return {
         key,
+        lineIds: rows.map((r) => r.sampleLineId),
         name: titleCase(name.toLowerCase()),
         // The figure FIRST. In the prototype's own three-column split this
         // line ellipsises at about thirty characters, and the money is what
@@ -694,6 +731,12 @@ function inboxOf(d: IngredientData): IngredientInbox {
 
   return {
     clusters: clusters.slice(0, INBOX_ROWS),
+    // The catalogue is already loaded for the pantry table; the picker reads
+    // the same list rather than a second query, so a name here and a name
+    // there cannot disagree.
+    candidates: d.catalogue
+      .map((c) => ({ id: c.id, name: titleCase(c.name.toLowerCase()) }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     meta: `${count(clusters.length)} products · ${count(d.unmatched.reduce((t, u) => t + u.n, 0))} lines`,
     // The prototype's inbox is a list of AI-proposed matches waiting on a
     // decision. Every one of this account's ten proposals is already decided,
