@@ -59,6 +59,12 @@ const EPSILON = 0.02
 export type InvoiceStatusId = "REVIEW" | "APPROVED" | "MATCHED"
 
 export interface InvoiceListRow {
+  /**
+   * Whether this invoice is inside the trailing `RECEIVED_DAYS` window the
+   * list is captioned with. `false` on a row pulled in only because it does
+   * not reconcile — hidden until the reader filters for exactly those.
+   */
+  inWindow: boolean
   id: string
   number: string
   vendor: string
@@ -85,8 +91,15 @@ export interface InvoiceHeadline {
 
 export interface InvoiceList {
   rows: InvoiceListRow[]
-  /** Toggle counts, in the order the filters draw them. */
+  /** Toggle counts, in the order the filters draw them. Over the window only. */
   statuses: Array<{ id: InvoiceStatusId; label: string; count: number }>
+  /**
+   * Every invoice in `rows` whose goods do not tie to what it prints — the
+   * strip's "Does not reconcile" figure, made reachable. See `listOf`.
+   */
+  gapCount: number
+  /** How many of those fall outside the window, and so are hidden by default. */
+  gapOutsideWindow: number
   windowLabel: string
 }
 
@@ -431,10 +444,37 @@ const STATUS_LABEL: Record<InvoiceStatusId, string> = {
   MATCHED: "Matched",
 }
 
+/**
+ * THE LIST, AND THE SEVEN INVOICES IT USED TO HAVE NO ROUTE TO.
+ *
+ * The strip's "Does not reconcile" cell counts `d.all` — every invoice on the
+ * account, with no date bound. This table was built from `d.received`, the
+ * trailing thirty days. So the page could say "7 · $3,974 short in all" and
+ * then offer no way to open any of them: not one filter chip (the three are
+ * REVIEW/APPROVED/MATCHED, a different axis entirely), and not the table,
+ * which cannot show an invoice older than its window. Measured on the live
+ * account, the Reconciles column read ✓ on all thirty-five rows under a strip
+ * cell naming seven that do not.
+ *
+ * A figure that names a problem has to be reachable, so the rows a reader can
+ * filter to now include every non-reconciling invoice, whatever its date. They
+ * are marked `inWindow: false` and stay hidden until the reader asks for them,
+ * because a list captioned "last 30 days" must not quietly grow a March
+ * invoice into its default view.
+ */
 function listOf(d: InvoiceData): InvoiceList {
-  const rows: InvoiceListRow[] = d.received.map((i) => {
+  const receivedIds = new Set(d.received.map((i) => i.id))
+  const strays = d.all.filter((i) => !reconciles(i) && !receivedIds.has(i.id))
+
+  const source: ReadonlyArray<{ i: LoadedInvoice; inWindow: boolean }> = [
+    ...d.received.map((i) => ({ i, inWindow: true })),
+    ...strays.map((i) => ({ i, inWindow: false })),
+  ]
+
+  const rows: InvoiceListRow[] = source.map(({ i, inWindow }) => {
     const gap = reconciles(i) ? null : gapOf(i)
     return {
+      inWindow,
       id: i.id,
       number: i.number,
       vendor: i.vendor,
@@ -455,13 +495,29 @@ function listOf(d: InvoiceData): InvoiceList {
     }
   })
 
+  // Newest first across both sources — concatenating would park every stray
+  // at the bottom in date order of its own, which is not an order.
+  rows.sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+
   const statuses = (["REVIEW", "APPROVED", "MATCHED"] as const).map((id) => ({
     id,
+    // Counted over the WINDOW, like the chips have always been: these three
+    // say how the last thirty days are made up, and a stray from March is not
+    // part of that answer.
     label: STATUS_LABEL[id],
-    count: rows.filter((r) => r.status === id).length,
+    count: rows.filter((r) => r.inWindow && r.status === id).length,
   }))
 
-  return { rows, statuses, windowLabel: `last ${RECEIVED_DAYS} days` }
+  return {
+    rows,
+    statuses,
+    // The strip's own figure, and the part of it this window cannot show —
+    // which is what makes the chip worth pressing rather than a duplicate of
+    // the Reconciles column.
+    gapCount: rows.filter((r) => r.gap !== null).length,
+    gapOutsideWindow: strays.length,
+    windowLabel: `last ${RECEIVED_DAYS} days`,
+  }
 }
 
 function spendOf(d: InvoiceData): InvoiceSpend {
