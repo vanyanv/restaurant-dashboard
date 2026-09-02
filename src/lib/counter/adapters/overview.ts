@@ -19,7 +19,7 @@ import { loadStripTargets, type StripTargets, type Target } from "@/lib/counter/
 import { granularityFor, loadStatement, rowValues, type Statement } from "@/lib/counter/statement"
 import type { Reference } from "@/lib/counter/bullet-state"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
-import { count, delta, money, pct, points } from "@/lib/counter/format"
+import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   bucketFor,
   comparisonRange,
@@ -660,8 +660,11 @@ function buildMoving(
   const cells: MovingCell[] = [
     {
       label: "Range",
-      value: `${dayCount(range)} days`,
-      note: `${p.periods.length} ${BUCKET_WORD[bucket]} buckets · ${cmp.on ? `vs ${cmp.label}` : "no comparison"}`,
+      // `plural`, not a typed-in "s": this page's OWN DEFAULT is a one-day
+      // range, so "1 days" over "1 daily buckets" was the first thing an owner
+      // read on the first screen. See `plural` in `@/lib/counter/format`.
+      value: plural(dayCount(range), "day"),
+      note: `${plural(p.periods.length, `${BUCKET_WORD[bucket]} bucket`)} · ${cmp.on ? `vs ${cmp.label}` : "no comparison"}`,
     },
   ]
 
@@ -672,7 +675,7 @@ function buildMoving(
       note:
         invoices.pendingReviewCount === 0
           ? "Everything received has posted to COGS"
-          : `${count(invoices.pendingReviewCount)} invoices in review · COGS understated by this much`,
+          : `${plural(invoices.pendingReviewCount, "invoice")} in review · COGS understated by this much`,
     })
   }
 
@@ -680,7 +683,7 @@ function buildMoving(
     cells.push({
       label: "Labor posted",
       value: money(p.laborValue),
-      note: hours != null ? `${count(Math.round(hours))} hours bought` : "hours not posted",
+      note: hours != null ? `${plural(Math.round(hours), "hour")} bought` : "hours not posted",
     })
   }
 

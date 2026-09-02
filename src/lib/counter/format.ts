@@ -165,6 +165,45 @@ export function count(v: number | null): string {
 }
 
 /**
+ * A count and the thing it counts, agreeing about number.
+ *
+ * ## Why this exists
+ *
+ * Counter pages build their captions as `${count(n)} days`, and the "s" is
+ * typed into the template. That is correct for the constants (a 90-day window
+ * is always 90 days) and wrong the moment the number comes from the data. The
+ * Overview at its OWN DEFAULT RANGE — one day, which is what the rail's
+ * "Today" group opens to — printed three of them on one screen:
+ *
+ *     RANGE   1 days
+ *             1 daily buckets · vs the prior period
+ *     SALES PER LABOR HOUR
+ *             1 daily readings with labor posted
+ *
+ * On a product whose entire claim is that its numbers are careful, "1 days"
+ * on the first screen is not a typo the reader forgives; it is the first
+ * evidence they have about how much attention the figures got.
+ *
+ * ## The plural is passed in, never derived
+ *
+ * No "add an s" rule. English does not have one that survives contact with
+ * this product's nouns, and a helper that silently produced "1 boxs" or
+ * "2 companys" would be a worse bug than the one it replaced — harder to see,
+ * because it would look deliberate. The caller writes both forms when they
+ * differ and one form when they do not.
+ *
+ * `plural(1, "day")` → `1 day` · `plural(7, "day")` → `7 days`
+ * `plural(1, "box", "boxes")` → `1 box`
+ *
+ * A null count keeps `count`'s em dash and takes the plural, which is the
+ * form that reads as a placeholder rather than as an assertion about one
+ * thing: "— days".
+ */
+export function plural(v: number | null, one: string, many = `${one}s`): string {
+  return `${count(v)} ${v === 1 ? one : many}`
+}
+
+/**
  * A size in bytes, at the scale this product operates at.
  *
  * One function because the figure appears on two pages: the monitoring bridge

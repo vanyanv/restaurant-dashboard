@@ -43,7 +43,7 @@ import {
   type ComparisonId,
   type DateRange,
 } from "@/lib/counter/date-range"
-import { count, money } from "@/lib/counter/format"
+import { count, money, plural } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   OverviewSections,
@@ -368,7 +368,9 @@ export function CounterOverviewClient({
               <LeadFigure
                 label="Sales per labor hour"
                 value={money(d.value, { cents: true })}
-                detail={`${count(d.series.length)} ${buckets} readings with labor posted`}
+                // "1 daily readings" was on the first screen at this page's own
+                // default range. `plural` agrees the noun with the number.
+                detail={`${plural(d.series.length, `${buckets} reading`)} with labor posted`}
                 // A statement of fact about the window, not a movement. Left
                 // unclassed it paints `var(--good)`, which says "good news"
                 // about a reading count.
@@ -420,10 +422,29 @@ export function CounterOverviewClient({
         <Section
           title={`Net sales · ${windowLabel}`}
           pending={pending}
-          meta={
-            comparing
-              ? `dashed line: ${cmpName} · ${buckets} buckets`
-              : `hover for the reading · ${buckets} buckets`
+          /*
+           * WHAT IS ACTUALLY DRAWN, which at a one-bucket range is not a line.
+           *
+           * `Chart` has a documented single-reading branch: below two labels
+           * it draws the reading and its comparison as two cells rather than
+           * a bar and a dashed prior, because one bar is not a shape. This
+           * caption did not know that, so the page's DEFAULT range — one day —
+           * captioned two read-out boxes "dashed line: the prior period ·
+           * 1 daily buckets", promising a line that was never coming and
+           * getting the plural wrong on the way.
+           *
+           * A function of the data rather than of `range`, so the caption is
+           * derived from the same array the chart is drawn from and the two
+           * cannot disagree about how many buckets there turned out to be.
+           */
+          meta={(spec) =>
+            spec.labels.length < 2
+              ? comparing
+                ? `one reading · ${cmpName} beside it`
+                : "one reading · no line to draw"
+              : comparing
+                ? `dashed line: ${cmpName} · ${plural(spec.labels.length, `${buckets} bucket`)}`
+                : `hover for the reading · ${plural(spec.labels.length, `${buckets} bucket`)}`
           }
           data={sections.salesChart}
           askAbout="net sales over this range"
@@ -442,7 +463,9 @@ export function CounterOverviewClient({
 
         <Section
           title="Sales per labor hour"
-          meta={`${buckets} readings`}
+          // Same as the panel beside it: at one bucket `Chart` draws a reading,
+          // not a series, and this said "daily readings" over it.
+          meta={(spec) => plural(spec.labels.length, `${buckets} reading`)}
           data={sections.splhChart}
           pending={pending}
           askAbout="sales per labor hour"
