@@ -21,7 +21,7 @@ import { test, expect } from "../fixtures/test"
  * not guessed:
  *
  *   - the per-item ledger moved from a `menu-profit-table` on the profit page
- *     to its own view, `/dashboard/menu/catalog` (`MENU_TABS`' "Items" tab).
+ *     to its own view, `/dashboard/menu/catalog` (`MENU_TABS`' "Catalog" tab).
  *   - "Profit matrix" is now the `Volume against margin` section, and the
  *     coverage strip is `What these figures did not see`.
  *   - the lookback is `?range=d30`, driven by `DateControl`: its trigger
@@ -119,7 +119,7 @@ test.describe("menu profit", () => {
     await expect(main.locator("tbody tr").first()).toBeVisible({
       timeout: 20_000,
     })
-    await expect(main.locator('[aria-current="page"]')).toHaveText(/items/i)
+    await expect(main.locator('[aria-current="page"]')).toHaveText(/catalog/i)
   })
 
   test("a lookback preset re-renders the window", async ({ page }) => {
