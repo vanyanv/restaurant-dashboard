@@ -204,6 +204,37 @@ export function plural(v: number | null, one: string, many = `${one}s`): string 
 }
 
 /**
+ * The WORD only, agreeing with a count printed somewhere else — or with no
+ * count printed at all.
+ *
+ * `plural` above and this are two different jobs, and keeping them apart
+ * matters more than usual because they nearly collided. The P&L page had its
+ * own local `const plural = (n, one, many) => n === 1 ? one : many` and used
+ * it as `${count(stores.length)} ${plural(stores.length, "store", "stores")}`
+ * — correct there, and silently "3 3 stores" the moment anyone imported the
+ * count-carrying `plural` into that file instead. Two functions, one name, two
+ * behaviours, in one codebase: this project's notes call that defect class by
+ * name, and it was one import away.
+ *
+ * So the count-carrying one is `plural` and the word-only one is
+ * `pluralWord`, and the name says which you get.
+ *
+ * This one earns its place on prose the other cannot write at all — the P&L's
+ * "…so `it carries` / `they carry` no line above", where the subject is a list
+ * whose length is never printed:
+ *
+ *   pluralWord(1, "it carries", "they carry")  → "it carries"
+ *   pluralWord(3, "has", "have")               → "have"
+ *
+ * Both forms are required. There is no default, because a word-only helper has
+ * no stem to append to and guessing one is how "it carries" becomes
+ * "it carriess".
+ */
+export function pluralWord(v: number | null, one: string, many: string): string {
+  return v === 1 ? one : many
+}
+
+/**
  * A size in bytes, at the scale this product operates at.
  *
  * One function because the figure appears on two pages: the monitoring bridge

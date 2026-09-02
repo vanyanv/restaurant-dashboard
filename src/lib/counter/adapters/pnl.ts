@@ -16,7 +16,7 @@ import {
   type ComparisonContext,
 } from "@/lib/counter/comparison"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
-import { count, delta, money, pct, points } from "@/lib/counter/format"
+import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   comparisonRange,
   trailingWeeks,
@@ -628,7 +628,7 @@ function buildReading(p: Statement, targets: StripTargets | null): ReadingSegmen
 
   const kept = p.bottomLine >= 0
   strong(`You ${kept ? "kept" : "lost"} ${money(Math.abs(p.bottomLine))}`)
-  say(` of ${money(p.grossSales)} over ${p.days} day${p.days === 1 ? "" : "s"} — a margin of `)
+  say(` of ${money(p.grossSales)} over ${plural(p.days, "day")} — a margin of `)
   strong(pct(marginPoints(p), { scaled: true }))
   say(".")
 
@@ -720,7 +720,7 @@ function buildCascade(
   return {
     start: {
       name: "Gross sales",
-      sub: orders === null ? undefined : `${count(orders)} orders`,
+      sub: orders === null ? undefined : plural(orders, "order"),
       amount: p.grossSales,
     },
     cuts: [
@@ -761,7 +761,7 @@ function buildCascade(
       },
       {
         name: "Occupancy",
-        sub: `rent, prorated across ${p.days} day${p.days === 1 ? "" : "s"}`,
+        sub: `rent, prorated across ${plural(p.days, "day")}`,
         amount: p.occupancy,
       },
       {
@@ -844,7 +844,7 @@ function buildStatement(
     {
       key: "gross",
       name: "Gross sales",
-      sub: orders === null ? undefined : `${count(orders)} orders`,
+      sub: orders === null ? undefined : plural(orders, "order"),
       strong: true,
       amount: money(p.grossSales),
       // The denominator of every other row, so it is 100% by definition.
