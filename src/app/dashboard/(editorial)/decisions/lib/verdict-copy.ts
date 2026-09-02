@@ -303,11 +303,22 @@ export function verdictInputsHash(f: VerdictFacts): string {
     .map((k) => `${k}=${block[k]}`)
     .join("|")
 
-  // FNV-1a. This keys a cache; it is not a security boundary, and keeping it
-  // dependency-free keeps this module importable without node:crypto.
+  return fnv1a(stable)
+}
+
+/**
+ * FNV-1a, hex. These key a cache; they are not a security boundary, and
+ * keeping this dependency-free keeps the module importable without
+ * `node:crypto` — which matters, because it is imported by client-reachable
+ * code.
+ *
+ * Exported so `decision-verdict-llm` can hash the PROMPT with the same
+ * function. See `VERDICT_NARRATION_VERSION`.
+ */
+export function fnv1a(s: string): string {
   let h = 0x811c9dc5
-  for (let i = 0; i < stable.length; i++) {
-    h ^= stable.charCodeAt(i)
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
     h = Math.imul(h, 0x01000193) >>> 0
   }
   return h.toString(16).padStart(8, "0")

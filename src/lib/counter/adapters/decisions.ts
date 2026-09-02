@@ -559,10 +559,23 @@ export function buildDecisionsStrip(view: DecisionsView, week: WeekDay[]): Strip
     {
       label: "Sales / labor hour",
       value: splh.actual === null ? count(null) : money(splh.actual, { cents: true }),
+      /*
+       * WHY THERE IS NO RATE, when there is no rate — never the floor it is
+       * not being measured against.
+       *
+       * `splh.actual` is the week's forecast divided by its SCHEDULED hours,
+       * so a week with no schedule published has no rate at all. The cell then
+       * rendered an em dash under the words "against $116.95", which reads as
+       * a measurement that came out level, and sat immediately beside a Labor
+       * gap cell already saying "no schedule to judge" — one cause, two cells,
+       * and only one of them admitting it.
+       */
       delta:
-        splh.target === null
-          ? "no floor on file"
-          : `against ${money(splh.target, { cents: true })}`,
+        splh.actual === null
+          ? "no schedule to divide by"
+          : splh.target === null
+            ? "no floor on file"
+            : `against ${money(splh.target, { cents: true })}`,
       deltaTone: splh.status === "below" ? "is-down" : splh.status === "above" ? undefined : "is-flat",
     },
   ]
