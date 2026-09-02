@@ -19,6 +19,7 @@ import { rangeLabel } from "@/lib/counter/date-range"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { askPending, askTurnsFor, restoredAskState } from "@/lib/counter/ask-state"
 import { useAsk } from "@/lib/counter/use-ask"
+import { threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
 import type { AskSections, AskThread, AskTurn } from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 
@@ -166,16 +167,23 @@ export function CounterPhoneAskClient({
    * sent, and the answer to "was this history when I opened it" must not
    * change underneath that.
    */
+  /*
+   * The discriminator is whether THIS SESSION has turns on screen — not
+   * whether the ids match. `useAsk` seeds its `conversationId` from the very
+   * `?c=` this section was loaded for, so an id comparison was true of every
+   * thread opened from history and froze it to `[]`: the phone opened a stored
+   * thread to its name, a Rename/Delete row, and nothing else. Same defect as
+   * the desk's, fixed the same way — see `counter-ask-client.tsx`.
+   */
   const frozenThread = useRef<{ id: string; turns: AskTurn[] } | null>(null)
-  const storedTurns = useCallback(
-    (t: AskThread) => {
-      if (frozenThread.current?.id !== t.id) {
-        frozenThread.current = { id: t.id, turns: t.id === conversationId ? [] : t.turns }
-      }
-      return frozenThread.current.turns
-    },
-    [conversationId],
-  )
+  const liveTurnCount = useRef(0)
+  liveTurnCount.current = turns.length
+  const storedTurns = useCallback((t: AskThread) => {
+    if (frozenThread.current?.id !== t.id) {
+      frozenThread.current = { id: t.id, turns: liveTurnCount.current > 0 ? [] : t.turns }
+    }
+    return frozenThread.current.turns
+  }, [])
 
   /** A follow-up is a TURN, not a navigation. */
   const submit = useCallback(
@@ -365,7 +373,19 @@ export function CounterPhoneAskClient({
               rows={items.slice(0, PHONE_CONVERSATION_ROWS).map((c) => ({
                 key: c.id,
                 title: c.title ?? "Untitled",
-                detail: `${c.turns} ${c.turns === 1 ? "turn" : "turns"}`,
+                /*
+                 * WHEN, and how many turns only when that is more than one.
+                 *
+                 * This read `1 turn` on every row — 40 of the account's 47
+                 * threads hold exactly one exchange — so the phone's history
+                 * was six identical captions with no date on any of them. The
+                 * day is the thing a reader is actually scanning for, and
+                 * `today` is the page's one resolved day, not the handset's
+                 * clock. See `@/lib/counter/thread-groups`.
+                 */
+                detail: [threadDayLabel(c.updatedAt, today), threadTurnLabel(c.turns)]
+                  .filter(Boolean)
+                  .join(" · "),
                 value: "",
                 href: threadHref(c.id),
               }))}

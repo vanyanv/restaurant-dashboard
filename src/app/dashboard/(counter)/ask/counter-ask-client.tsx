@@ -260,23 +260,34 @@ export function CounterAskClient({
    * live turns makes a restored thread's history vanish the moment the reader
    * asks anything in it.
    *
-   * The discriminator is whose turns the live list holds: a stored thread is
-   * HISTORY unless it is the thread this session has been answering into. That
-   * is decided once, when the section first resolves for a given thread, and
-   * kept — `conversationId` becomes this thread's id as soon as a follow-up is
-   * sent, and the answer to "was this history when I opened it" must not
-   * change underneath that.
+   * The discriminator is whether THIS SESSION has turns on screen — not
+   * whether the ids match.
+   *
+   * The id comparison this used to make (`t.id === conversationId`) was true
+   * of every thread opened from the rail, because `useAsk` seeds its
+   * `conversationId` from the very `?c=` the section was loaded for. So the
+   * freeze resolved to `[]` on the first render of every restored thread and
+   * the whole of Ask's history rendered as a title, a Rename/Delete row, and
+   * a blank column. All 47 stored threads. The rail could find a conversation
+   * and could not show one.
+   *
+   * `turns.length` is the fact the comparison was reaching for. A thread this
+   * session started already has its turns on screen live, so its stored copy
+   * is a duplicate and is dropped; a thread opened cold has none, so its
+   * stored copy IS the page. Read through a ref so `storedTurns` keeps a
+   * stable identity — the freeze must be decided once per thread, at the
+   * moment its section first resolves, and a follow-up sent into a restored
+   * thread must not re-decide it and erase the history underneath the answer.
    */
   const frozenThread = useRef<{ id: string; turns: AskTurn[] } | null>(null)
-  const storedTurns = useCallback(
-    (t: AskThread) => {
-      if (frozenThread.current?.id !== t.id) {
-        frozenThread.current = { id: t.id, turns: t.id === conversationId ? [] : t.turns }
-      }
-      return frozenThread.current.turns
-    },
-    [conversationId],
-  )
+  const liveTurnCount = useRef(0)
+  liveTurnCount.current = turns.length
+  const storedTurns = useCallback((t: AskThread) => {
+    if (frozenThread.current?.id !== t.id) {
+      frozenThread.current = { id: t.id, turns: liveTurnCount.current > 0 ? [] : t.turns }
+    }
+    return frozenThread.current.turns
+  }, [])
 
   /** The date control and the store switcher write scope, not questions. */
   const pushParams = useCallback(
@@ -445,7 +456,14 @@ export function CounterAskClient({
             pending={pending}
           >
             {(items) => (
-              <Conversations items={items} currentId={urlConversationId} onOpen={openThread} />
+              <Conversations
+                items={items}
+                currentId={urlConversationId}
+                // The page's one resolved `today`, so "Today" is decided on
+                // the server rather than by the reader's own clock.
+                today={today}
+                onOpen={openThread}
+              />
             )}
           </Section>
         </ConversationsRail>
