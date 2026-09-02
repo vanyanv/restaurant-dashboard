@@ -1659,6 +1659,80 @@ export const PAGES: FidelityPage[] = [
     // time since it shipped two live 404s.
     status: "counter",
     baseline: { desktop: 13, mobile: 5 },
+    extraLandmarks: [
+      {
+        landmark: "sec",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"Entering the count\" — the input this page never had. " +
+          "`P.countsession` draws a count that has ALREADY happened, so it " +
+          "carries no entry surface, and ours faithfully carried none " +
+          "either. But `beginStockCount` is wired on the inventory pages and " +
+          "pushes the owner straight to this route: you could START a count " +
+          "and then have nowhere to type a number. That is worse than a " +
+          "missing feature because it looks like a working one, and this " +
+          "account's three attempts — all in May, the fullest of them ten " +
+          "lines of soda syrup — are what a flow that dead-ends leaves " +
+          "behind. `StockCount.status` has never once been COMPLETED here, " +
+          "and the on-hand model calibrates on COMPLETED counts, so every " +
+          "count ever taken on this account has been invisible to the thing " +
+          "it exists to feed. The phone has no copy yet; declared on the " +
+          "desk alone.",
+      },
+      {
+        landmark: "sec__head",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "That section's own head, carrying its `n of m` progress. It falls " +
+          "with the section argued in the `sec` entry above and is counted " +
+          "separately because the gate counts landmarks, not reasons.",
+      },
+      {
+        landmark: "sec__body",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The body under the entry table, holding the close button and the " +
+          "note that explains per-box saving and the frozen estimate. Same " +
+          "section, same argument as the `sec` entry above.",
+      },
+      {
+        landmark: "tbl",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The entry table itself: one row per canonical ingredient, its " +
+          "category, and a box for what is on the shelf. It carries no " +
+          "expected-on-hand column, which was measured rather than chosen — " +
+          "computing the model's expectation for all 76 ingredients took the " +
+          "route over three minutes to respond (180.0s, twice, against a " +
+          "production build; 0.7s without it). See `loadCountEntry`.",
+      },
+      {
+        landmark: "btnrow",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "The row holding the close button. An exact count and a stable " +
+          "one: the section renders the same single control whether the " +
+          "count is open or closed, changing only its label, for the reason " +
+          "the invoice page's controls stopped appearing and disappearing.",
+      },
+      {
+        landmark: "btn",
+        desktop: 1,
+        mobile: 0,
+        reason:
+          "\"Finish this count\". There is no Save button beside it and " +
+          "that is deliberate: `saveStockCountLine` upserts on (count, " +
+          "ingredient), so every box saves when it is left and re-entering a " +
+          "number corrects it rather than doubling it. Someone walking a " +
+          "walk-in must not lose twenty lines to a reload before they reach " +
+          "a Save at the bottom of seventy-six ingredients.",
+      },
+    ],
   },
   {
     protoId: "ingredients",

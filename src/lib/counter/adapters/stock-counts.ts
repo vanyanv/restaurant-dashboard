@@ -629,11 +629,53 @@ export interface CountSessionWork {
   meta: string
 }
 
+/**
+ * THE COUNT ITSELF — the section that turns this page from a receipt into a
+ * clipboard.
+ *
+ * `beginStockCount` has been wired since the Counter inventory pages were
+ * built and it sends the owner here, to a page that had no input on it. You
+ * could START a count and then not count anything. That is worse than a
+ * missing feature, because it looks like a working one, and this account's
+ * three attempts — all in May, the fullest of them ten lines of soda syrup —
+ * are what a flow that dead-ends leaves behind. `StockCount.status` has never
+ * once been COMPLETED here, and the inventory model calibrates on COMPLETED
+ * counts, so every count ever taken on this account has been invisible to the
+ * thing it exists to feed.
+ *
+ * `estimate` is the model's frozen guess from the moment the count opened,
+ * and it is shown beside the box on purpose: a counter who can see what the
+ * system expected catches their own miskey, and the gap between the two is
+ * the training signal. It is FROZEN rather than recomputed at save time —
+ * scoring the model against a number it produced after seeing the answer
+ * would not be scoring it at all.
+ */
+export interface CountSessionEntryRow {
+  ingredientId: string
+  name: string
+  category: string
+  /** The unit the number is in. "each" when the ingredient has no recipe unit. */
+  unit: string
+  estimate: number | null
+  /** What is already recorded for this ingredient on this count. */
+  entered: number | null
+}
+
+export interface CountSessionEntry {
+  countId: string
+  /** Only an IN_PROGRESS count takes entries. */
+  open: boolean
+  rows: CountSessionEntryRow[]
+  meta: string
+  note: string
+}
+
 export interface CountSessionSections {
   head: SectionData<CountSessionHead>
   lines: SectionData<CountSessionLines>
   variance: SectionData<CountsVariance>
   work: SectionData<CountSessionWork>
+  entry: SectionData<CountSessionEntry>
 }
 
 export interface CountSessionInput {
@@ -772,6 +814,111 @@ export function getCountSessionSectionPromises(
     })),
     variance: s(({ data }) => varianceOf(data)),
     work: s(({ session, lines }) => sessionWorkOf(session, lines)),
+    /*
+     * NOT built off `loadSession` — it needs the whole catalogue, not the
+     * lines this count already has, and the frozen model estimate per
+     * ingredient that `getCountEntryData` is the only thing that assembles.
+     * Its own `guardSection` for the same reason: a catalogue that fails to
+     * load should cost the page its entry form, not its receipt.
+     */
+    entry: guardSection(
+      classify(() => loadCountEntry(input.countId), {
+        retryAction: "retryCountSession",
+        isEmpty: (e) => e === null,
+        emptyReason: "no_match",
+      }).then((sd) => mapReady(sd, (e) => e as CountSessionEntry)),
+      "retryCountSession",
+    ),
+  }
+}
+
+/**
+ * The catalogue and what has been entered against it so far.
+ *
+ * ## WHY THIS DOES NOT CALL `getCountEntryData`
+ *
+ * It did, for one draft, because that action assembles exactly this shape and
+ * the editorial count form used it. **The page then took over three minutes
+ * to load.** Measured against the running production build, twice:
+ * `180.0s`, `180.0s` — both hitting curl's timeout rather than finishing.
+ *
+ * The cost is one line of it. `getCountEntryData` recomputes
+ * `computeRunningOnHand` for EVERY canonical ingredient on the account — 76
+ * here — on every single render, inside a `Promise.all` that fires all 76 at
+ * a connection pool sized for a handful. It does this to "freeze the model's
+ * estimate at session-open time", but nothing about that value is actually
+ * frozen: it is recomputed from scratch each time anyone opens the page, and
+ * only becomes fixed once a line is written and carries
+ * `estimatedQtyAtCount` with it.
+ *
+ * So the entry form reads the catalogue, the lines already on this count, and
+ * nothing else — four cheap indexed queries.
+ *
+ * ## WHAT THAT COSTS, SAID PLAINLY
+ *
+ * The expected-on-hand column is not shown, and `estimatedQtyAtCount` is
+ * therefore not written on lines entered from this page. That is a real loss:
+ * the (estimate, actual) pair is the training signal for the on-hand model,
+ * and seeing the expectation beside the box is what catches a 4 typed where
+ * 40 belongs.
+ *
+ * It is the right trade anyway, and not a close call. A count page that takes
+ * three minutes to open is a count page nobody counts on — this account's
+ * three abandoned attempts are the evidence — so the choice was never
+ * "estimate or no estimate", it was "a usable clipboard with no estimate, or
+ * neither". The signal is only worth collecting from a form people can use.
+ *
+ * The real fix is to write the estimates ONCE, when
+ * `startOrResumeStockCount` opens the count, and read them back here as a
+ * column. That is a change to the open path and to `StockCount`, it wants its
+ * own migration, and it does not belong inside a UI restoration.
+ */
+async function loadCountEntry(countId: string): Promise<CountSessionEntry | null> {
+  const countRow = await prisma.stockCount.findUnique({
+    where: { id: countId },
+    select: { id: true, status: true, store: { select: { accountId: true } } },
+  })
+  if (!countRow) return null
+
+  const [ingredients, lines] = await Promise.all([
+    prisma.canonicalIngredient.findMany({
+      where: { accountId: countRow.store.accountId },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, category: true, recipeUnit: true },
+    }),
+    prisma.stockCountLine.findMany({
+      where: { stockCountId: countId },
+      select: { canonicalIngredientId: true, nativeQty: true },
+    }),
+  ])
+
+  const enteredById = new Map(lines.map((l) => [l.canonicalIngredientId, l.nativeQty]))
+
+  const rows: CountSessionEntryRow[] = ingredients.map((i) => ({
+    ingredientId: i.id,
+    name: titleCase(i.name),
+    category: i.category ?? "Uncategorized",
+    // The unit the number is IN. An ingredient with no recipe unit is counted
+    // in whatever "each" means for it, which the box says rather than leaving
+    // the reader to guess.
+    unit: i.recipeUnit ?? "each",
+    estimate: null,
+    entered: enteredById.get(i.id) ?? null,
+  }))
+
+  const done = rows.filter((r) => r.entered !== null).length
+  const open = countRow.status === "IN_PROGRESS"
+  return {
+    countId,
+    open,
+    rows,
+    meta: `${count(done)} of ${count(rows.length)}`,
+    note: open
+      ? `Enter what is on the shelf, in the unit the shelf uses. Each box saves when you ` +
+        `leave it, and re-entering a number corrects it rather than adding to it. ` +
+        `Closing the count is what makes it count: the on-hand model calibrates on ` +
+        `completed counts, and no count on this account has ever been closed.`
+      : `This count is closed, so its lines can no longer be edited.`,
   }
 }
 

@@ -1,7 +1,11 @@
 "use client"
 
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+
 import {
   Kv,
+  Note,
   PageHead,
   Queue,
   Section,
@@ -10,9 +14,15 @@ import {
   useCounterTransition,
   usePageChrome,
   type Column,
+  type Row,
 } from "@/components/counter"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import type { CountSessionSections } from "@/lib/counter/adapters/stock-counts"
+import type {
+  CountSessionEntry,
+  CountSessionEntryRow,
+  CountSessionSections,
+} from "@/lib/counter/adapters/stock-counts"
+import { finishStockCount, recordCountLine } from "@/lib/counter/actions/stock-count"
 
 /**
  * One count session — `P.countsession`.
@@ -30,6 +40,145 @@ const LINE_COLUMNS: Column[] = [
   { key: "cost", label: "Unit cost", numeric: true },
   { key: "value", label: "Value", numeric: true },
 ]
+
+
+const ENTRY_COLUMNS: Column[] = [
+  { key: "ingredient", label: "Ingredient" },
+  { key: "category", label: "Where" },
+  // NO "Expected" column. `loadCountEntry`'s docblock has the measurement:
+  // computing the model's expectation for all 76 ingredients took the page
+  // over three minutes to load, and a count page nobody can open is not a
+  // trade worth making for a column.
+  { key: "counted", label: "On the shelf", numeric: true },
+]
+
+/**
+ * ENTERING THE COUNT — the input this page never had.
+ *
+ * `beginStockCount` has been wired since the Counter inventory pages were
+ * built, and it pushes the owner straight here. This page rendered the lines
+ * of a count, its value, its variance and a worklist, and carried nowhere to
+ * type a number: you could START a count and then not count anything. That is
+ * worse than a missing feature because it looks like a working one, and this
+ * account's three attempts — all in May, the fullest ten lines of soda syrup —
+ * are what a flow that dead-ends leaves behind.
+ *
+ * ## SAVING ON BLUR, NOT ON A BUTTON
+ *
+ * `saveStockCountLine` upserts on (count, ingredient), so re-entering a number
+ * corrects it instead of doubling it. That is what makes per-box saving safe,
+ * and per-box saving is what a count actually needs: someone walking a
+ * walk-in with a phone or a laptop should never lose twenty lines because the
+ * page reloaded before they reached a Save button at the bottom of seventy-six
+ * ingredients.
+ *
+ * ## NO EXPECTED COLUMN, AND THAT IS A MEASURED CHOICE
+ *
+ * The model's expected on-hand belongs beside the box — it catches a 4 typed
+ * where 40 belongs, and the gap between the two is the training signal for
+ * the on-hand model. It is not here because computing it costs the page more
+ * than three minutes to open. `loadCountEntry`'s docblock carries the
+ * measurement and the real fix, which is to freeze the estimates once when
+ * the count is OPENED rather than recompute all 76 on every render.
+ *
+ * ## CLOSING IS WHAT MAKES IT COUNT
+ *
+ * `StockCount.status` has never once been COMPLETED on this account, and the
+ * on-hand model calibrates on COMPLETED counts. Every count ever taken here
+ * has therefore been invisible to the thing it exists to feed. The button is
+ * the point of the section, not an afterthought at the end of it.
+ */
+function CountEntry({ entry }: { entry: CountSessionEntry }) {
+  const router = useRouter()
+  const [finishing, startFinishing] = useTransition()
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      entry.rows.map((r) => [r.ingredientId, r.entered === null ? "" : String(r.entered)]),
+    ),
+  )
+  const [saved, setSaved] = useState<Record<string, "saving" | "ok" | "failed">>({})
+
+  const commit = (row: CountSessionEntryRow) => {
+    const raw = (values[row.ingredientId] ?? "").trim()
+    if (raw === "") return
+    const qty = Number(raw)
+    if (!Number.isFinite(qty) || qty < 0) {
+      setSaved((s) => ({ ...s, [row.ingredientId]: "failed" }))
+      return
+    }
+    // Unchanged from what the server already holds — saving would be a write
+    // that says nothing.
+    if (row.entered !== null && qty === row.entered) return
+    setSaved((s) => ({ ...s, [row.ingredientId]: "saving" }))
+    void recordCountLine({
+      stockCountId: entry.countId,
+      ingredientId: row.ingredientId,
+      qty,
+      unit: row.unit,
+      estimate: row.estimate,
+    }).then((result) => {
+      setSaved((s) => ({ ...s, [row.ingredientId]: result.ok ? "ok" : "failed" }))
+    })
+  }
+
+  const finish = () => {
+    startFinishing(async () => {
+      const result = await finishStockCount(entry.countId)
+      if (!result.ok) return
+      // The lines, the value, the status cell and the inventory pages that
+      // read completed counts all change at once.
+      router.refresh()
+    })
+  }
+
+  const rows: Row[] = entry.rows.map((r) => ({
+    key: r.ingredientId,
+    cells: {
+      ingredient: r.name,
+      category: r.category,
+      counted: (
+        <label className="search">
+          <input
+            type="text"
+            inputMode="decimal"
+            disabled={!entry.open}
+            value={values[r.ingredientId] ?? ""}
+            aria-label={`${r.name} counted, in ${r.unit}`}
+            placeholder={r.unit}
+            onChange={(e) =>
+              setValues((v) => ({ ...v, [r.ingredientId]: e.target.value }))
+            }
+            onBlur={() => commit(r)}
+          />
+          {saved[r.ingredientId] === "failed" ? <span className="k"> not saved</span> : null}
+        </label>
+      ),
+    },
+  }))
+
+  return (
+    <>
+      <Table columns={ENTRY_COLUMNS} rows={rows} />
+      <div className="sec__body">
+        <div className="btnrow">
+          <button
+            className="btn btn--primary"
+            type="button"
+            disabled={!entry.open || finishing}
+            onClick={finish}
+          >
+            {!entry.open
+              ? "This count is closed"
+              : finishing
+                ? "Closing…"
+                : "Finish this count"}
+          </button>
+        </div>
+        <Note>{entry.note}</Note>
+      </div>
+    </>
+  )
+}
 
 const ASK_SUGGESTIONS = [
   "What was counted in this session?",
@@ -54,9 +203,9 @@ export function CounterCountSessionClient({
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (
           <>
-            <p className="mono" style={{ margin: "0 0 11px" }}>
+            <Note lede>
               {h.sub}
-            </p>
+            </Note>
             <Strip cells={h.cells} />
           </>
         )}
@@ -76,9 +225,9 @@ export function CounterCountSessionClient({
             {/* No `.sec__body` — `P.countsession`'s Lines section is a table
                 and nothing else, and the counted-stock total this used to
                 repeat here is the strip's second cell. */}
-            <p className="mono" style={{ margin: 0, padding: "13px 15px" }}>
+            <Note flush>
               {l.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -93,9 +242,9 @@ export function CounterCountSessionClient({
               {v.lead}
             </p>
             <Kv rows={v.rows} />
-            <p className="mono" style={{ margin: "11px 0 0" }}>
+            <Note>
               {v.note}
-            </p>
+            </Note>
           </>
         )}
       </Section>
@@ -105,6 +254,19 @@ export function CounterCountSessionClient({
           session itself. See `CountSessionWork`. */}
       <Section title="What to do" meta={(w) => w.meta} data={sections.work} pending={pending}>
         {(w) => <Queue items={w.items} />}
+      </Section>
+
+      {/* The clipboard. `P.countsession` has no such section — it draws a
+          count that has already happened — and the manifest carries the
+          allowance arguing why this one does. See `CountEntry`. */}
+      <Section
+        title="Entering the count"
+        meta={(e) => e.meta}
+        data={sections.entry}
+        pending={pending}
+        pad={false}
+      >
+        {(e) => <CountEntry entry={e} />}
       </Section>
     </>
   )
