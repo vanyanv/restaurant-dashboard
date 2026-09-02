@@ -867,3 +867,47 @@ button.wkd {
 .convhead .rk{margin-left:auto}
 .convhead button{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);border:0;background:none;padding:0;flex:none}
 .convhead button:disabled{color:var(--ink-3)}
+
+/*
+ * ============================================================================
+ * `.cvgrp` — THE CONVERSATION RAIL'S DAY HEADING
+ * ============================================================================
+ *
+ * An ADDITION, like `.convs__q` above, and for the same reason: the
+ * prototype's rail is four hand-written threads, so it needs no way to find
+ * one. Ours is however many the account has asked — 47 at the time of writing
+ * — and it was printing its date on every single row. Six consecutive rows
+ * reading `Sep 1` under six titles that all begin "weekly sales" is a date
+ * used as decoration; the same date said once over the run of rows it covers
+ * is a date used for finding things. `groupThreadsByDay` does the dividing
+ * (`src/lib/counter/thread-groups.ts`); this draws the divider.
+ *
+ * Every value is borrowed rather than invented — this is `.convs__h span`'s
+ * own caption (the mono 9px uppercase the rail already speaks in), on the
+ * rail's own `--paper`, with `.cv`'s own 12px gutter and `--line` divider. It
+ * reads as a quieter repeat of the rail's header, which is what it is.
+ *
+ * NOT sticky. `.convs__h` already is, and a second sticky band under it would
+ * eat a third of a 206px rail's visible height on a laptop for a word the
+ * reader has just scrolled past.
+ */
+.cvgrp {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 8px 12px 5px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+/*
+ * The rows sit inside one wrapper per day now, so `.cv:last-child` (from
+ * `counter-components.css`) fires at the foot of EVERY group rather than only
+ * at the foot of the rail. That is left exactly as it is: the last row of a
+ * day is followed by the next day's heading, which paints `--paper` where the
+ * row painted `--surface`, so the two are already separated by a tonal step
+ * and a rule between them would be a second separator doing the same job.
+ * Nothing here needs a structural selector into the Section's own wrappers,
+ * which is the kind of selector that breaks silently when that markup moves.
+ */
