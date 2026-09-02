@@ -42,19 +42,61 @@ import { confirmSkuMatch } from "@/app/actions/ingredient-match-actions"
  * reject, so the second control stays a link to the invoice the line came
  * from, which is where someone goes to decide what the thing actually is.
  */
+/**
+ * ## THE PRODUCT MIGHT NOT BE IN THE CATALOGUE AT ALL
+ *
+ * The first version of this took a `canonicalIngredientId` and nothing else,
+ * so the inbox could only match a product to something already in the
+ * catalogue. That is the wrong half of the problem: an unmatched invoice line
+ * is unmatched precisely BECAUSE nothing recognised it, and the auto-matcher's
+ * own measured accuracy on genuinely new products is about 55%. An owner
+ * looking at a product this account has never bought before had a picker with
+ * nothing right in it.
+ *
+ * `confirmSkuMatch` has always had the other branch: pass `newCanonical` and
+ * it creates the ingredient, embeds it for future fuzzy matching, and then
+ * writes the alias exactly as it would have. So "this is something new" is one
+ * field, not a separate screen.
+ *
+ * The new canonical is created ONCE, on the first spelling, and every
+ * remaining spelling in the cluster is then matched to that id — otherwise a
+ * can liner under seven wordings would create seven ingredients, which is the
+ * exact duplication the inbox exists to prevent.
+ */
 export async function acceptClusterMatch(input: {
   lineIds: string[]
-  canonicalIngredientId: string
+  /** An existing ingredient, or null when `newName` names a new one. */
+  canonicalIngredientId: string | null
+  /** Create-and-match. Ignored when `canonicalIngredientId` is given. */
+  newName?: string | null
+  /** The unit the new ingredient is counted and costed in. */
+  newUnit?: string | null
 }): Promise<{ ok: true; backfilled: number } | { ok: false; error: string }> {
   if (input.lineIds.length === 0) return { ok: false, error: "nothing to match" }
+  const wantsNew = !input.canonicalIngredientId && (input.newName ?? "").trim() !== ""
+  if (!input.canonicalIngredientId && !wantsNew) {
+    return { ok: false, error: "pick an ingredient, or name a new one" }
+  }
+
   let backfilled = 0
+  // Resolved after the first confirm when creating, so the rest of the cluster
+  // joins the SAME new ingredient rather than making one each.
+  let targetId = input.canonicalIngredientId
   try {
     for (const lineItemId of input.lineIds) {
-      const result = await confirmSkuMatch({
-        lineItemId,
-        canonicalIngredientId: input.canonicalIngredientId,
-      })
+      const result = await confirmSkuMatch(
+        targetId
+          ? { lineItemId, canonicalIngredientId: targetId }
+          : {
+              lineItemId,
+              newCanonical: {
+                name: (input.newName ?? "").trim(),
+                defaultUnit: (input.newUnit ?? "").trim() || "each",
+              },
+            },
+      )
       backfilled += result.backfilled
+      targetId = result.canonicalIngredientId
     }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "match failed" }

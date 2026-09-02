@@ -106,6 +106,13 @@ const ASK_SUGGESTIONS = [
  * what the thing is: the invoice the line came from. It is labelled for what
  * it does. Both buttons are the design's; only their labels are ours.
  */
+/**
+ * The sentinel `<option>` value for "this product is not in the catalogue".
+ * A reserved string rather than a nullable choice, because `<select>` carries
+ * strings and an empty value already means "nothing picked".
+ */
+const NEW_INGREDIENT = "__new__"
+
 function InboxRow({
   cluster,
   candidates,
@@ -115,19 +122,33 @@ function InboxRow({
 }) {
   const router = useRouter()
   const [saving, startSaving] = useTransition()
+  /** An existing ingredient's id, or the sentinel below for "something new". */
   const [choice, setChoice] = useState("")
+  /** The name typed when `choice` is NEW — see `acceptClusterMatch`. */
+  const [newName, setNewName] = useState("")
   const [said, setSaid] = useState<string | null>(null)
 
   const accept = () => {
     if (choice === "") {
-      setSaid("Pick the ingredient this is.")
+      setSaid("Pick the ingredient this is, or add it as new.")
+      return
+    }
+    if (choice === NEW_INGREDIENT && newName.trim() === "") {
+      setSaid("Name the new ingredient.")
       return
     }
     setSaid(null)
     startSaving(async () => {
       const result = await acceptClusterMatch({
         lineIds: cluster.lineIds,
-        canonicalIngredientId: choice,
+        canonicalIngredientId: choice === NEW_INGREDIENT ? null : choice,
+        newName: choice === NEW_INGREDIENT ? newName : null,
+        // The catalogue's own default. A cluster's lines carry a vendor unit
+        // ("CS", "LB") that is not necessarily what a recipe measures in, and
+        // guessing wrong here is the pack-shape bug the ingredient page exists
+        // to correct — so the ingredient starts "each" and its own page is
+        // where the real unit and price get set.
+        newUnit: "each",
       })
       if (!result.ok) {
         setSaid(result.error)
@@ -156,12 +177,27 @@ function InboxRow({
           onChange={(e) => setChoice(e.target.value)}
         >
           <option value="">Match to…</option>
+          {/* FIRST, not last. An unmatched line is unmatched because nothing
+              recognised it, so "this is new" is the likely answer rather than
+              the exotic one — the auto-matcher is right about 55% of the time
+              on genuinely new products, which is why they end up here. */}
+          <option value={NEW_INGREDIENT}>+ Add as a new ingredient</option>
           {candidates.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
         </select>
+        {choice === NEW_INGREDIENT ? (
+          <input
+            className="fld"
+            type="text"
+            value={newName}
+            placeholder="Name it"
+            aria-label="New ingredient name"
+            onChange={(e) => setNewName(e.target.value)}
+          />
+        ) : null}
         <button
           className="btn"
           type="button"
