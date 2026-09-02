@@ -14,6 +14,10 @@ import { isoDay, monthDay, type DateRange, type WeekWindow } from "@/lib/counter
  * ```
  * <div class="tblscroll"><table class="wkt">
  *   <thead><tr><th>Week of</th><th>Sales</th><th class="num">Gross</th>…</tr></thead>
+ * ```
+ *
+ * (The first `Sales` is headed "Gross vs best" here — see the `<th>` below.)
+ * ```
  *   <tbody>
  *     <tr class="is-here" tabindex="0" role="button">
  *       <td>Aug 17 <span class="pt">4 of 7 days</span></td>
@@ -182,7 +186,22 @@ export function WeekTable({
           <thead>
             <tr>
               <th scope="col">Week of</th>
-              <th scope="col">Sales</th>
+              {/*
+                * "Gross vs best", not the prototype's "Sales".
+                *
+                * This bar and the column to its right are ONE measure: the bar
+                * is `grossSales` against the biggest week on the table, and
+                * the number is `grossSales`. Heading them "Sales" and "Gross"
+                * put two revenue words side by side on a profit-and-loss
+                * table, where gross-versus-net is a distinction that carries
+                * money — so the pair read as two different figures.
+                *
+                * The row already has the right pattern two columns along:
+                * "Prime vs 60%" heads a meter and "Prime" heads its number.
+                * This says the same thing about the same relationship, and
+                * names the domain the comment below sets.
+                */}
+              <th scope="col">Gross vs best</th>
               <th scope="col" className="num">Gross</th>
               <th scope="col" className="num">Food</th>
               <th scope="col" className="num">Labor</th>

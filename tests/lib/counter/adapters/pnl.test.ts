@@ -387,7 +387,9 @@ describe("absences", () => {
     expect(cellOf(s, "Food")?.caption).toBeUndefined()
     expect(must(s.weeks, "weeks").foodTargetPct).toBeNull()
     // And it does not claim either half is inside anything.
-    expect(reads(s)).toContain("Neither half of it is judged here")
+    expect(reads(s)).toContain(
+      "Neither half of it is judged: food and labor have no target to judge against",
+    )
   })
 
   /* ── The sparklines ─────────────────────────────────────────────────── */
