@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { count, pct } from "@/lib/counter/format"
+import { menuTab, navById, type SubNavItem } from "@/lib/counter/nav"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
   awaitSections,
@@ -275,34 +276,38 @@ function headline(c: MenuCounts): MenuHubHeadline {
 }
 
 /**
- * The three places the menu is worked on. Derived from `nav.ts`'s own
- * destinations rather than hardcoded here, so a renamed route cannot leave
- * this page pointing at a page that moved.
+ * The three places the menu is worked on.
+ *
+ * The name and the destination come from `nav.ts` — really, this time. This
+ * block used to carry the sentence "Derived from nav.ts's own destinations
+ * rather than hardcoded here, so a renamed route cannot leave this page
+ * pointing at a page that moved" directly above three hardcoded href
+ * literals: a comment asserting the exact property the code did not have, and
+ * the kind that stops the next reader checking.
+ *
+ * Only the BODY is written here. That is copy about what a reader will find,
+ * which is this page's to say; the name of the page and the way there are
+ * not.
  */
-const WORK: ReadonlyArray<{ key: string; lead: string; title: string; body: string; act: string; href: string }> = [
+const WORK: ReadonlyArray<{ key: string; lead: string; body: string; tab: SubNavItem }> = [
   {
     key: "catalog",
     lead: "A",
-    title: "Catalog",
     body: "Everything the POS sells, with the recipe behind each item and what it is worth.",
-    act: "Open catalog",
-    href: "/dashboard/menu/catalog",
+    tab: menuTab("Catalog"),
   },
   {
     key: "recipes",
     lead: "B",
-    title: "Recipes",
     body: "What each plate is made of, what it costs, and which are still unconfirmed.",
-    act: "Open recipes",
-    href: "/dashboard/recipes",
+    // Not a Menu tab — Recipes is its own rail item, so it comes from there.
+    tab: navById("recipes"),
   },
   {
     key: "menu-profit",
     lead: "C",
-    title: "Menu profit",
     body: "Volume against margin, and the groups worth acting on.",
-    act: "Open menu profit",
-    href: "/dashboard/menu-profit",
+    tab: menuTab("Profit"),
   },
 ]
 
@@ -315,14 +320,17 @@ function work(): MenuWorkSection {
       // navigation card coloured like a warning reads as a problem.
       tone: "good" as const,
       lead: w.lead,
-      title: w.title,
+      title: w.tab.label,
       body: w.body,
-      act: w.act,
-      href: w.href,
+      // "Open catalog", "Open recipes", "Open profit" — built from the tab's
+      // own label so the button cannot promise a page by a name the bar it
+      // lands under does not use.
+      act: `Open ${w.tab.label.toLowerCase()}`,
+      href: w.tab.href,
     })),
     phoneRows: WORK.map((w) => ({
       key: w.key,
-      title: w.title,
+      title: w.tab.label,
       // The first clause only. The desk's full sentence is three lines at
       // 340px, and `.mlist`'s second line is one.
       detail: w.body.split(",")[0],
@@ -330,7 +338,7 @@ function work(): MenuWorkSection {
       // is required, so it carries the chevron's own affordance and nothing
       // else — an empty string rather than a zero, which would read as one.
       value: "",
-      href: w.href,
+      href: w.tab.href,
     })),
   }
 }

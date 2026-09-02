@@ -238,12 +238,45 @@ export const INVENTORY_TABS: readonly SubNavItem[] = [
   { label: "Start a count", href: "/dashboard/operations/inventory/count/new" },
 ] as const
 
+/**
+ * The Menu family's four views.
+ *
+ * Every label here is its destination's own name, shortened by dropping the
+ * word "Menu" that the section already supplies: "Menu profit" → Profit,
+ * "Product mix" → Mix, "Menu catalog" → Catalog.
+ *
+ * "Catalog" used to read "Items", which was not a shortening of anything — it
+ * was a different noun for the same page. The Overview beneath this bar offers
+ * a card titled "Catalog" pointing at the same route, and the route's own
+ * `PageHead` says "Menu catalog", so one screen carried the tab, the card and
+ * the heading calling one page three things, and clicking "Open catalog"
+ * landed a reader on a page whose current tab had renamed itself.
+ */
 export const MENU_TABS: readonly SubNavItem[] = [
   { label: "Overview", href: "/dashboard/menu" },
-  { label: "Items", href: "/dashboard/menu/catalog" },
+  { label: "Catalog", href: "/dashboard/menu/catalog" },
   { label: "Profit", href: "/dashboard/menu-profit" },
   { label: "Mix", href: "/dashboard/product-mix" },
 ] as const
+
+/**
+ * The Menu hub's three destination cards read their name and their href from
+ * here, so a card cannot point somewhere the tab bar does not go, or call it
+ * something the tab bar does not call it.
+ *
+ * `menu-hub.ts` used to hold its own copies with a docblock claiming they were
+ * "derived from nav.ts's own destinations rather than hardcoded here, so a
+ * renamed route cannot leave this page pointing at a page that moved" — while
+ * the hrefs directly under it were string literals. A comment asserting the
+ * exact safety property the code did not have.
+ */
+export function menuTab(label: "Catalog" | "Profit" | "Mix"): SubNavItem {
+  const found = MENU_TABS.find((t) => t.label === label)
+  // Unreachable while the array above holds all three; typed as a total
+  // function so callers do not each invent a fallback destination.
+  if (!found) throw new Error(`MENU_TABS has no "${label}" tab`)
+  return found
+}
 
 /** The same five bars on the phone. Derived, for the reason below. */
 const toPhone = (items: readonly SubNavItem[]): readonly SubNavItem[] =>
