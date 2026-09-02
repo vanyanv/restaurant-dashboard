@@ -51,120 +51,136 @@ const ASK_SUGGESTIONS = [
 ]
 
 /**
- * THE DECISION, BESIDE THE ARGUMENT FOR IT.
+ * THE DECISION THE PROTOTYPE ASKED FOR, IN THE PLACE IT ASKED FOR IT.
  *
- * The prototype's invoice page is a record and nothing else, and this page
- * was a faithful port of it: it rendered `reviewReasons` beautifully and
- * offered the reader no way to answer them. An owner who agreed with the
- * flag, or disagreed with it, closed the tab either way, and the REVIEW
- * queue only ever grew. `Invoice.status` has had APPROVED and REJECTED the
- * whole time; no screen has ever written them.
+ * `P.invoice` draws one `.btnrow` inside "What was extracted", under the money
+ * lines: "Approve and post", "Add the missing line", "Send back to vendor",
+ * with the primary DISABLED and a note reading "Approve unlocks when the gap
+ * is zero". The invoices list that leads here is noted "a list that ends in a
+ * decision, and a review that will not let you approve a gap". None of it was
+ * built — the page rendered `reviewReasons` beautifully and offered the reader
+ * no way to answer them, so an owner who agreed with a flag and one who
+ * disagreed both closed the tab, and the REVIEW queue only grew.
  *
- * It lives inside "Why this is in review" rather than on the masthead
- * because the two belong to each other. The reasons are the case; these
- * are the verdict. Putting the buttons anywhere else would ask the reader
- * to hold the argument in their head while they walk to the control.
+ * `e2e/fidelity/manifest.ts` had declared those four landmarks absent and left
+ * the route: "`PATCH /api/invoices/[id]` already accepts `status: "APPROVED"`
+ * and stamps `matchedAt`, so approving is one call away… Whoever wants it has
+ * the shortest path written down here." Those allowances are deleted in the
+ * same commit as this component.
  *
- * Three states, and the section renders exactly one:
+ * ## THE GATE IS THE POINT, NOT THE BUTTONS
  *
- *   - **REVIEW** — the decision is open. Approve and Reject.
- *   - **APPROVED / REJECTED** — the decision is made and named, with a way
- *     back. Reopening is a first-class action, not a hidden one: a wrong
- *     approval that cannot be undone is worse than no approval button.
- *   - **anything else** (PENDING, MATCHED) — no verdict is being asked for,
- *     so none is offered.
+ * Approving posts an invoice to COGS. An invoice whose extracted lines do not
+ * sum to its own printed total is one where a line went missing, and posting
+ * it puts a number into COGS that the document itself contradicts. So the
+ * primary is disabled exactly while `reconciles` is false, which is the
+ * adapter's `gap === null`, and the note says why rather than leaving a dead
+ * control to look broken. That is the whole meaning of "a review that will not
+ * let you approve a gap", and it is the reason this control belongs under the
+ * arithmetic instead of up beside the review reasons where a first draft put
+ * it: the gate and the figure it reads have to be in the same section.
  *
- * The return toggle sits here too because it is the other thing an owner
- * decides about a whole document, and because "the totals look wrong" is
- * very often "this is a credit memo, not a bill" — the answer to the flag
- * rather than an override of it.
+ * Rejecting and marking a credit stay available on a gapped invoice. Both are
+ * ways of saying the document is wrong, and refusing them would leave an
+ * owner looking at a bad invoice with nothing they are allowed to do.
+ *
+ * ## THREE SLOTS, FILLED WITH VERBS WE ACTUALLY HAVE
+ *
+ * The shape is the fixture's — one `.btnrow`, a `.btn--primary`, a `.btn`, a
+ * `.btn--quiet`. Two of its three labels are not reproduced, because two of
+ * its verbs do not exist here and inventing them is what this codebase
+ * refuses to do: nothing creates an `InvoiceLineItem` by hand, so the middle
+ * slot takes the credit/return toggle (very often the true answer when the
+ * totals look wrong), and the mail integration reads an inbox rather than
+ * replying to one, so the quiet slot records Reject where we can keep it.
+ *
+ * ## THE SHAPE DOES NOT CHANGE WITH THE STATUS
+ *
+ * A first draft showed Approve/Reject only on a REVIEW invoice and Reopen only
+ * on a decided one. `npm run fidelity` refused it, for a better reason than
+ * the one it prints: an allowance names an EXACT count, so a control set that
+ * changes shape with the row's status is one the gate can never hold again.
+ * Fixed slots with labels carrying the state is also the better design —
+ * every status offers a way forward and a way back, and an owner who changes
+ * their mind reaches for the control they used the first time.
  */
 function ReviewDecision({
   invoiceId,
   status,
   isReturn,
+  reconciles,
 }: {
   invoiceId: string
   status: string
   isReturn: boolean
+  reconciles: boolean
 }) {
   const router = useRouter()
   const [saving, startSaving] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  const decide = (decision: "APPROVED" | "REJECTED" | "REVIEW") => {
+  const run = (work: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
     setError(null)
     startSaving(async () => {
-      const result = await resolveInvoiceReview(invoiceId, decision)
+      const result = await work()
       if (!result.ok) {
         setError(result.error)
         return
       }
-      // The status is read by the section that just wrote it, and by the
-      // review count on Invoices and Operations. Refresh rather than patch
-      // local state so every one of them re-reads the same row.
+      // The status is read by the section that just wrote it, and by the review
+      // counts on Invoices and Operations. Refresh rather than patch local
+      // state so none of them can disagree with the row just decided.
       router.refresh()
     })
   }
 
-  const toggleReturn = () => {
-    setError(null)
-    startSaving(async () => {
-      const result = await markInvoiceReturn(invoiceId, !isReturn)
-      if (!result.ok) {
-        setError(result.error)
-        return
-      }
-      router.refresh()
-    })
-  }
+  const decide = (to: "APPROVED" | "REJECTED" | "REVIEW") =>
+    run(() => resolveInvoiceReview(invoiceId, to))
 
-  const decided = status === "APPROVED" || status === "REJECTED"
+  /** The affirmative move available from where this invoice stands. */
+  const primary =
+    status === "APPROVED"
+      ? { label: "Reopen the review", to: "REVIEW" as const, gated: false }
+      : { label: "Approve and post", to: "APPROVED" as const, gated: true }
+
+  /** Its opposite — never the same target as the primary. */
+  const quiet =
+    status === "REJECTED"
+      ? { label: "Reopen the review", to: "REVIEW" as const }
+      : status === "REVIEW" || status === "APPROVED"
+        ? { label: "Reject", to: "REJECTED" as const }
+        : // PENDING / MATCHED: nothing has asked for a verdict, but an owner
+          // who distrusts the document can still put it in the queue.
+          { label: "Send to review", to: "REVIEW" as const }
+
+  const blocked = primary.gated && !reconciles
 
   return (
-    <div style={{ marginTop: 13 }}>
-      {status === "REVIEW" ? (
-        <div className="btnrow">
-          <button
-            className="btn btn--primary"
-            type="button"
-            disabled={saving}
-            onClick={() => decide("APPROVED")}
-          >
-            {saving ? "Saving…" : "Approve this invoice"}
-          </button>
-          <button
-            className="btn"
-            type="button"
-            disabled={saving}
-            onClick={() => decide("REJECTED")}
-          >
-            Reject
-          </button>
-        </div>
-      ) : null}
-
-      {decided ? (
-        <div className="btnrow">
-          <button
-            className="btn btn--quiet"
-            type="button"
-            disabled={saving}
-            onClick={() => decide("REVIEW")}
-          >
-            {saving ? "Saving…" : "Reopen the review"}
-          </button>
-        </div>
-      ) : null}
-
-      <div className="btnrow" style={{ marginTop: 8 }}>
+    <>
+      <div className="btnrow" style={{ marginTop: 12 }}>
+        <button
+          className="btn btn--primary"
+          type="button"
+          disabled={saving || blocked}
+          onClick={() => decide(primary.to)}
+        >
+          {saving ? "Saving…" : primary.label}
+        </button>
+        <button
+          className="btn"
+          type="button"
+          disabled={saving}
+          onClick={() => run(() => markInvoiceReturn(invoiceId, !isReturn))}
+        >
+          {isReturn ? "This is a bill, not a credit" : "Record as a credit"}
+        </button>
         <button
           className="btn btn--quiet"
           type="button"
           disabled={saving}
-          onClick={toggleReturn}
+          onClick={() => decide(quiet.to)}
         >
-          {isReturn ? "This is a bill, not a credit" : "Record this as a credit / return"}
+          {quiet.label}
         </button>
       </div>
 
@@ -174,8 +190,15 @@ function ReviewDecision({
             ? "This account cannot change an invoice's status."
             : `The decision did not save (${error}).`}
         </Note>
+      ) : blocked ? (
+        <Note tight>
+          Approve unlocks when the gap is zero. These lines do not sum to the
+          total the document prints, so posting them would put a figure into
+          COGS that the invoice itself contradicts. Reject it, or record it as a
+          credit, if that is what it is.
+        </Note>
       ) : null}
-    </div>
+    </>
   )
 }
 
@@ -272,11 +295,6 @@ export function CounterInvoiceClient({
               <Note bare>
                 {r.note}
               </Note>
-              <ReviewDecision
-                invoiceId={r.invoiceId}
-                status={r.status}
-                isReturn={r.isReturn}
-              />
             </>
           )}
         </Section>
@@ -299,6 +317,12 @@ export function CounterInvoiceClient({
                 whose design puts the table inside a body. */}
             <div className="sec__body">
               <MoneyLines rows={l.money} />
+              <ReviewDecision
+                invoiceId={l.invoiceId}
+                status={l.status}
+                isReturn={l.isReturn}
+                reconciles={l.reconciles}
+              />
               <Note>
                 {l.note}
               </Note>
