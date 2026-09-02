@@ -127,6 +127,12 @@ export interface AlertsFilters {
 
 export interface AlertsRow {
   key: string
+  /**
+   * `Alert.id` — the same value as `key`, named separately because the page
+   * now WRITES to this row and a write should not be addressed by something
+   * whose contract is "unique within this render".
+   */
+  id: string
   severity: PillSeverity
   title: string
   /**
@@ -141,6 +147,18 @@ export interface AlertsRow {
   opened: string
   status: AlertStatus
   statusLabel: string
+  /**
+   * Whether this row still has a decision in it.
+   *
+   * A boolean rather than leaving the page to read `status === "OPEN"`: the
+   * page asks its own question ("can I close this?") instead of matching a
+   * database enum, which is the same separation `statusLabel` and `statusTone`
+   * already make for the words and the colour. `npm run tokens` also refuses
+   * a `.status` comparison in a page, and it is right to — a surface that
+   * branches on a stored enum is one that has to change every time the enum
+   * grows a member.
+   */
+  closable: boolean
   /** `undefined` is the neutral grey `.mtag`; only OPEN is toned. */
   statusTone?: TagTone
 }
@@ -509,6 +527,7 @@ function buildRows(alerts: InboxAlert[], today: Date): AlertsRow[] {
       const words = STATUS_WORDS[a.status]
       return {
         key: a.id,
+        id: a.id,
         severity: a.severity,
         title: a.title,
         body: a.body,
@@ -516,6 +535,7 @@ function buildRows(alerts: InboxAlert[], today: Date): AlertsRow[] {
         sourceLabel: alertSourceLabel(a.source),
         opened: agoWords(a.detectedAt, today),
         status: a.status,
+        closable: a.status === "OPEN",
         statusLabel: words.label,
         statusTone: words.tone,
       }
