@@ -347,12 +347,32 @@ function catalogueOf(d: RecipeData): RecipeCatalogue {
           // An em-dash, never a zero. A recipe with no observed sale in the
           // range has no price — printing $0.00 would read as "given away".
           price: r.price === null ? "—" : unitCost(r.price),
+          /*
+           * A COST NOBODY COMPUTED YIELDS NO MARGIN.
+           *
+           * `costsNothing` means the recipe has no ingredient lines at all, so
+           * the $0.00 in the cost cell beside this one is a recipe-level
+           * OVERRIDE standing in for a figure that was never worked out. A
+           * margin taken against it is arithmetic on a placeholder: "The
+           * Reverse Bun" sold three plates for $24 and this column called that
+           * 100.0%, at the top of the table, in the same type as the eighty-two
+           * per cent beside it that is measured.
+           *
+           * The recipe's own page already refuses to do this and says why —
+           * "not a plate cost that happens to be low" — and the note under
+           * this very table states the principle for the price column: "a
+           * plate nobody bought has no margin rather than a margin of
+           * nothing". Same rule, the other column.
+           *
+           * Nothing is hidden by the em dash: the cost cell still shows $0.00
+           * in the accent, the State column still reads "No lines", and the
+           * strip above still counts the plate. What goes is only the figure
+           * that cannot be derived.
+           */
           margin:
-            margin === null
+            margin === null || zero
               ? "—"
-              : zero
-                ? { v: pct(margin, { scaled: true }), cls: "hot" }
-                : pct(margin, { scaled: true }),
+              : pct(margin, { scaled: true }),
           state: zero
             ? { v: "No lines", cls: "hot" }
             : r.confirmed
@@ -366,7 +386,9 @@ function catalogueOf(d: RecipeData): RecipeCatalogue {
       `Sorted by what is wrong with it, then by what it sold. ` +
       `${count(priced)} of ${count(sellable.length)} carry an observed price over ${d.rangeLabel}; ` +
       `the rest show an em-dash rather than a zero, because a plate nobody bought has no margin ` +
-      `rather than a margin of nothing. No yield column: every recipe in this account yields 1.`,
+      `rather than a margin of nothing. A plate with no lines shows one too: its $0.00 is an ` +
+      `override standing in for a cost nobody computed, and a margin against that is arithmetic ` +
+      `on a placeholder. No yield column: every recipe in this account yields 1.`,
   }
 }
 
