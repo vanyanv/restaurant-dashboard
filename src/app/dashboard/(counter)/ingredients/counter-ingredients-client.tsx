@@ -162,7 +162,31 @@ function InboxRow({
 
   return (
     <RowLine
-      columns="minmax(0,1fr) 96px auto auto"
+      /*
+       * THE SELECT'S TRACK IS BOUNDED, OR IT EATS THE NAME.
+       *
+       * A `<select>`'s intrinsic width is its longest OPTION, and this one
+       * lists the whole catalogue — seventy-six ingredients, the longest being
+       * "Bag T-Shirt White 12X7X22 17Mic With Warning". Under `auto` that made
+       * its track wider than the row it sits in. Measured on the live page in
+       * this section's 476px column, the tracks resolved to
+       * `0px 96px 506px 49px`: the select claimed 506, and `minmax(0,1fr)` did
+       * exactly what it promises and collapsed the NAME to zero.
+       *
+       * So every row of the review inbox showed a tag and "Match to…" with
+       * nothing to say what was being matched — a queue asking an owner to
+       * name a product they cannot see — and the wrapped name pushed each row
+       * to 145px, which is why five of them filled the column.
+       *
+       * The caps are sized against what this section actually gets: it sits in
+       * the right half of a `.split`, 476px on a 1440 screen. A fixed 96px for
+       * a tag reading "7 ways" and 200px for the select left the name 79px,
+       * which is visible but not readable. `auto` on the tag takes what the
+       * words need, and 160px is enough select to read the current choice —
+       * the dropdown opens at its own width, so no option becomes harder to
+       * read for it.
+       */
+      columns="minmax(0,1fr) auto minmax(0,160px) auto"
       name={cluster.name}
       sub={said ?? cluster.sub}
     >
