@@ -30,7 +30,7 @@ import {
   stepRange,
   type ComparisonId,
 } from "@/lib/counter/date-range"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural, pluralWord } from "@/lib/counter/format"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   PnlSections,
@@ -109,7 +109,6 @@ function comparisonName(id: ComparisonId): string {
   return (COMPARISONS.find((c) => c.id === id)?.label ?? "with no comparison").replace(/^vs /, "")
 }
 
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many)
 
 /** "Hollywood", "Hollywood and Glendale", "Hollywood, Glendale and Van Nuys". */
 function names(lines: PnlStoreLine[]): string {
@@ -330,7 +329,7 @@ export function CounterPnlClient({
         pending={pending}
         meta={
           comparing
-            ? `against ${cmpName} · same ${days} ${plural(days, "day", "days")}, so the change column is readable`
+            ? `against ${cmpName} · same ${plural(days, "day")}, so the change column is readable`
             : `${windowLabel} · no comparison set, so there is no change column to read`
         }
         data={sections.statement}
@@ -422,7 +421,7 @@ export function CounterPnlClient({
         // The prototype's "3 stores, 3 stages". Counted off the switcher's own
         // list, which is page state — the section's rows are the same set, but
         // a `meta` is drawn beside the title whatever the body turned out to be.
-        meta={`${count(stores.length)} ${plural(stores.length, "store", "stores")}, ${count(stageCount)} ${plural(stageCount, "stage", "stages")}`}
+        meta={`${plural(stores.length, "store")}, ${plural(stageCount, "stage")}`}
         data={sections.byStore}
         pad={false}
         askAbout="how the stores compare"
@@ -493,20 +492,20 @@ function ByStore({ lines }: { lines: PnlStoreLine[] }) {
           {trading.length === 0 ? (
             <>
               No store took anything in this range, so the statement above has nothing to
-              subtract from. The table is what is known about {plural(lines.length, "it", "them")}{" "}
+              subtract from. The table is what is known about {pluralWord(lines.length, "it", "them")}{" "}
               meanwhile.
             </>
           ) : (
             <>
               Every line above is {names(trading)}, because{" "}
-              {plural(trading.length, "it is the only store", "they are the only stores")} with
+              {pluralWord(trading.length, "it is the only store", "they are the only stores")} with
               sales in this range.
               {silent.length > 0 ? (
                 <>
                   {" "}
-                  {names(silent)} {plural(silent.length, "has", "have")} none, so{" "}
-                  {plural(silent.length, "it carries", "they carry")} no line above. The table is
-                  what is known about {plural(silent.length, "it", "them")} meanwhile.
+                  {names(silent)} {pluralWord(silent.length, "has", "have")} none, so{" "}
+                  {pluralWord(silent.length, "it carries", "they carry")} no line above. The table is
+                  what is known about {pluralWord(silent.length, "it", "them")} meanwhile.
                 </>
               ) : null}
             </>
@@ -520,10 +519,10 @@ function ByStore({ lines }: { lines: PnlStoreLine[] }) {
         {noRent.length > 0 ? (
           <p className="callout">
             {count(noRent.length)} of {count(lines.length)}{" "}
-            {plural(noRent.length, "carries", "carry")} no rent on file, which is the single field
-            that would let {plural(noRent.length, "it", "them")} join the statement above.{" "}
+            {pluralWord(noRent.length, "carries", "carry")} no rent on file, which is the single field
+            that would let {pluralWord(noRent.length, "it", "them")} join the statement above.{" "}
             <b>
-              Until it is filled in, folding {plural(noRent.length, "it", "them")} in would make the
+              Until it is filled in, folding {pluralWord(noRent.length, "it", "them")} in would make the
               group look more profitable than it is.
             </b>
           </p>
