@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { goodsSum, isChargeRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
+import { count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -421,7 +421,8 @@ function headOf(d: Loaded): InvoiceHead {
               d.lines.length === 0
                 ? `The document prints ${money(d.subtotal ?? d.total, { cents: true })} of goods ` +
                   `and we hold none of it. Every ingredient and price on this delivery is absent.`
-                : `The ${count(d.lines.filter((l) => !l.isCharge).length)} goods lines come to ` +
+                : `The ${plural(d.lines.filter((l) => !l.isCharge).length, "goods line")} ` +
+                  `${pluralWord(d.lines.filter((l) => !l.isCharge).length, "comes", "come")} to ` +
                   `${money(d.goods, { cents: true })} against a printed ` +
                   `${money(d.subtotal ?? d.total, { cents: true })}.`,
           },

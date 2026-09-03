@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural } from "@/lib/counter/format"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import { CHANNEL_FOR_PLATFORM, HOUSE_PLATFORMS } from "@/lib/counter/channel-mix"
 import { channelById, type ChannelId } from "@/lib/counter/channels"
@@ -355,9 +355,6 @@ async function loadItem(input: MenuItemInput): Promise<ItemData | null> {
 /** The Orders page's own words for the same gap, in one place. */
 const FEES_ABSENT = "not recorded for this range"
 
-const plural = (n: number, one: string, many: string) =>
-  `${count(n)} ${n === 1 ? one : many}`
-
 function headlineOf(d: ItemData): ItemHeadline {
   const soldCell: FigureProps = {
     label: "Sold",
@@ -374,7 +371,7 @@ function headlineOf(d: ItemData): ItemHeadline {
 
   return {
     title: d.name,
-    sub: `${d.categories.join(" · ")} · ${plural(d.byChannel.length, "channel", "channels")}`,
+    sub: `${d.categories.join(" · ")} · ${plural(d.byChannel.length, "channel")}`,
     cells: [
       soldCell,
       { label: "Charged", value: money(d.revenue), delta: "before commission", deltaTone: "is-flat" },
@@ -409,7 +406,7 @@ function seriesOf(d: ItemData): ItemSeries {
       series: [{ name: "Units", color: "var(--ink)", data: d.daily.map((r) => r.qty) }],
       alt: `${d.name} units sold`,
     },
-    meta: `${count(d.qty)} over ${count(d.daily.length)} days`,
+    meta: `${count(d.qty)} over ${plural(d.daily.length, "day")}`,
   }
 }
 
@@ -451,7 +448,7 @@ function channelsOf(d: ItemData): ItemChannels {
         note: "each",
       }
     }),
-    meta: `${plural(d.byChannel.length, "channel", "channels")} · by units`,
+    meta: `${plural(d.byChannel.length, "channel")} · by units`,
     note:
       // Two counts of the same item, both labelled Sold, one on top of the
       // other. `feedQty` is the ORDER feed; the strip is the POS's daily
@@ -531,7 +528,7 @@ function behindOf(d: ItemData): ItemBehind {
     meta:
       d.modifiers.length === 0
         ? "the recipe · no modifiers sold with it"
-        : `recipe and ${plural(d.modifiers.length, "modifier", "modifiers")}`,
+        : `recipe and ${plural(d.modifiers.length, "modifier")}`,
   }
 }
 
