@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { bytes, count } from "@/lib/counter/format"
+import { bytes, count, plural } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -285,7 +285,7 @@ function storageOf(d: InfraData): InfraStorage {
     phoneRows: d.tables.slice(0, PHONE_ROWS).map((t) => ({
       key: t.table,
       title: t.table,
-      detail: `${count(t.rows)} rows`,
+      detail: plural(t.rows, "row"),
       value: bytes(t.bytes),
       note: total > 0 ? `${((100 * t.bytes) / total).toFixed(0)}%` : "—",
     })),
@@ -334,7 +334,7 @@ function jobsOf(d: InfraData): InfraJobs {
         job: j.job,
         runs: count(j.runs),
         failures: j.verdictJob
-          ? { v: `${count(j.failures)} verdicts`, cls: "hot" }
+          ? { v: plural(j.failures, "verdict"), cls: "hot" }
           : j.failures > 0
             ? { v: count(j.failures), cls: "hot" }
             : "none",
@@ -353,7 +353,7 @@ function jobsOf(d: InfraData): InfraJobs {
       .map((j) => ({
         key: j.job,
         title: j.job,
-        detail: `${count(j.runs)} runs · ${duration(j.meanMs)}`,
+        detail: `${plural(j.runs, "run")} · ${duration(j.meanMs)}`,
         value: j.failures === 0 ? "clean" : count(j.failures),
         note: j.verdictJob ? "verdicts" : j.failures > 0 ? "failed" : "ok",
         noteTone: (j.verdictJob ? undefined : j.failures > 0 ? "down" : "up") as

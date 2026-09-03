@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
   awaitSections,
@@ -190,7 +190,7 @@ function cacheHeadlineOf(d: CacheData): CacheHeadline {
   const missCell: FigureProps = {
     label: "Most misses",
     value: worstByMiss ? worstByMiss.prefix : "—",
-    delta: worstByMiss ? `${count(worstByMiss.misses)} misses` : "no traffic",
+    delta: worstByMiss ? plural(worstByMiss.misses, "miss", "misses") : "no traffic",
     deltaTone: "is-down",
   }
 
@@ -210,7 +210,7 @@ function cacheHeadlineOf(d: CacheData): CacheHeadline {
         // The whole point of the page in one delta: the worst rate and the
         // most misses are different prefixes, and only one of them is work.
         delta: worstByRate
-          ? `${pct(rateOf(worstByRate) ?? 0, { scaled: true })} · but only ${count(worstByRate.misses)} misses`
+          ? `${pct(rateOf(worstByRate) ?? 0, { scaled: true })} · but only ${plural(worstByRate.misses, "miss", "misses")}`
           : "no traffic",
         deltaTone: "is-flat",
       },
@@ -254,7 +254,7 @@ function cachePrefixesOf(d: CacheData): CachePrefixes {
     phoneRows: d.prefixes.slice(0, PHONE_ROWS).map((p) => ({
       key: p.prefix,
       title: p.prefix,
-      detail: `${count(p.hits)} hits · ${count(p.misses)} misses`,
+      detail: `${plural(p.hits, "hit")} · ${plural(p.misses, "miss", "misses")}`,
       value: rateOf(p) === null ? "—" : pct(rateOf(p) ?? 0, { scaled: true }),
       note: (rateOf(p) ?? 100) >= WARM_PCT ? "warm" : "cold",
       noteTone: (rateOf(p) ?? 100) >= WARM_PCT ? "up" : "down",
@@ -265,7 +265,7 @@ function cachePrefixesOf(d: CacheData): CachePrefixes {
       : "") +
       (disagree
       ? `Sorted by MISSES, not by rate. ${worstByRate.prefix} has the worst rate at ` +
-        `${pct(rateOf(worstByRate) ?? 0, { scaled: true })} and ${count(worstByRate.misses)} misses; ` +
+        `${pct(rateOf(worstByRate) ?? 0, { scaled: true })} and ${plural(worstByRate.misses, "miss", "misses")}; ` +
         `${worstByMiss.prefix} has the best-looking rate on this page at ` +
         `${pct(rateOf(worstByMiss) ?? 0, { scaled: true })} and ${count(worstByMiss.misses)} — ` +
         `${(worstByMiss.misses / Math.max(1, worstByRate.misses)).toFixed(0)} times more work. ` +
@@ -339,7 +339,7 @@ function cacheLiveOf(d: CacheData): CacheLive {
     meta: "summed across every prefix",
     note:
       (unwritten > 0
-        ? `${count(unwritten)} of ${count(misses)} misses did not become a write. A miss is ` +
+        ? `${count(unwritten)} of ${plural(misses, "miss", "misses")} did not become a write. A miss is ` +
           `supposed to populate the key it just failed to find, so those are reads that ` +
           `will miss again.`
         : `Every miss became a write, which is the read-through path working.`) +
@@ -587,7 +587,7 @@ function costsSpendOf(d: CostsData): CostsSpend {
       ],
       alt: "AI spend by day",
     },
-    meta: `${count(d.days.length)} days with a call`,
+    meta: `${plural(d.days.length, "day")} with a call`,
     note:
       zeroDays.length === 0
         ? `Every call in the window recorded a cost.`
@@ -672,7 +672,7 @@ function costsFailuresOf(d: CostsData): CostsFailures {
     note:
       newest === undefined || days === null
         ? "No turn in this account has ever been recorded as anything but OK."
-        : `The most recent was ${count(days)} days ago. This panel is not windowed to the ` +
+        : `The most recent was ${plural(days, "day")} ago. This panel is not windowed to the ` +
           `fourteen days above it: scoped that way it would be empty, which reads as ` +
           `"nothing has failed" rather than "nothing has failed lately".`,
   }
