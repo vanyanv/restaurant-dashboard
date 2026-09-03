@@ -130,14 +130,23 @@ export function CounterStoresClient({
         * the store's own file afterwards, which is where this page's own
         * "Needs you" sends people. Saying so is better than dropping them:
         * the reader learns the shape of the whole job, not just the form.
+        *
+        * The three are NOT equally required, and an earlier pass got this
+        * wrong by listing them flat. Driven in a browser: "Create the store"
+        * is disabled on an empty form and on a whitespace-only name, and
+        * enabled the moment a real name is typed — so the name is the only
+        * field enforced. The form marks the other two itself, "Recorded now,
+        * geocoded later" and "Optional", and this sentence now matches those
+        * words rather than outranking them.
         */}
       <Section title="Add a store" meta="three fields to start" data={sections.table} pending={pending}>
         {() => (
           <>
             <Lede>
-              A store needs a <b>name</b>, an <b>address</b> for weather and event signals, and a{" "}
-              <b>phone</b> number. Its <b>rent</b> and <b>COGS target</b> are set on the store&rsquo;s
-              own file once it exists.
+              A store needs a <b>name</b> — it is the only field the form will not let you skip. An{" "}
+              <b>address</b> is what turns on weather and event signals once it is geocoded, and a{" "}
+              <b>phone</b> number is optional. Its <b>rent</b> and <b>COGS target</b> are set on the
+              store&rsquo;s own file, which is where creating one takes you.
             </Lede>
             <div className="btnrow">
               <Link className="btn btn--primary" href="/dashboard/stores/new">
