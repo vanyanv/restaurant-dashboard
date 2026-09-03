@@ -46,10 +46,28 @@ export function Failed({
     <div className="failed" role="alert">
       <span className="fi">!</span>
       <div>
-        <b>{title} unavailable</b>
+        {/*
+          * "{title} did not load", not the prototype's "{title} unavailable".
+          *
+          * Its titles are short nouns; ours are clauses, and the join produced
+          * "The figures unavailable" and "What the spend was on unavailable".
+          * A verb fixes every one of them at once.
+          */}
+        <b>{title} did not load</b>
         <p>
-          This section failed to load. Everything else on the page is unaffected, and the figures you
-          can see are still good.
+          {/*
+            * This SECTION only. It said "Everything else on the page is
+            * unaffected, and the figures you can see are still good" — a claim
+            * about the other sections that this component cannot see and, on
+            * 2026-09-02, could not have made: every section on Invoices failed
+            * at once, so the page asserted six times over that everything else
+            * was fine while nothing was. The reassurance is worth keeping,
+            * because a reader who distrusts the whole page abandons it; it is
+            * now phrased so it stays true whether one section failed or all of
+            * them did.
+            */}
+          Any figure still showing on this page loaded normally and is good. This section is
+          missing, not stale.
         </p>
         <span className="acts">
           {onRetry ? (

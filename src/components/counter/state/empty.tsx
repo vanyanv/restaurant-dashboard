@@ -27,6 +27,12 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
       "Invoices arrive every few days, so a short window is often empty — nothing is " +
       "missing. Widen the range to see what was bought.",
   },
+  nothing_received: {
+    head: "No invoices received",
+    body:
+      "Nothing has arrived in the window this page watches. New invoices appear here as " +
+      "they are received.",
+  },
   all_clear: {
     head: "Nothing needs you",
     body: "Every line here is accounted for. This section fills up when something needs a decision.",

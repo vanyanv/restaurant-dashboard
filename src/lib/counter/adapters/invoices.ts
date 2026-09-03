@@ -912,7 +912,11 @@ export function getInvoicesSectionPromises(
   const dataP = classify(() => loadInvoices(input), {
     retryAction: "retryInvoices",
     isEmpty: (d) => d.all.length === 0,
-    emptyReason: "no_match",
+    // `d.all` is the fixed trailing `RECEIVED_DAYS`, not the reader's range, so
+    // "widen the filters and date range" was advice that could not change this
+    // page — and this page has no filters to widen either. See the reason's
+    // note in `section-data.ts`.
+    emptyReason: "nothing_received",
   })
 
   const s = <T,>(f: (d: InvoiceData) => T) =>
