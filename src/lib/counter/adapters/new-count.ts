@@ -329,7 +329,10 @@ export function getNewCountSectionPromises(
   const dataP = classify(() => loadNewCount(input), {
     retryAction: "retryNewCount",
     isEmpty: (d) => d.totalLines === 0,
-    emptyReason: "no_match",
+    // `totalLines` is the ingredient catalogue, and this page has neither a
+    // filter row nor a date control — so "widen either" named two things that
+    // are not on it. See the reason's note in `section-data.ts`.
+    emptyReason: "nothing_to_count",
   })
   const s = <T,>(f: (d: NewCountData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryNewCount")
