@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { monthlyCostForDays } from "@/lib/pnl"
-import { count, money, pct, plural, titleCase } from "@/lib/counter/format"
+import { count, money, pct, plural, pluralWord, titleCase } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -366,7 +366,7 @@ function headlineOf(d: Data): StoresHeadline {
       {
         label: "Missing inputs",
         value: count(d.stores.reduce((t, s) => t + missingInputs(s).length, 0)),
-        delta: `across ${count(d.stores.filter((s) => missingInputs(s).length > 0).length)} stores`,
+        delta: `across ${plural(d.stores.filter((s) => missingInputs(s).length > 0).length, "store")}`,
         deltaTone: "is-down",
       },
     ],
@@ -421,7 +421,8 @@ function tableOf(d: Data): StoresTable {
     meta: `${count(d.stores.length)} · standing inputs, not a period`,
     note:
       onDefaults > 0
-        ? `${count(onDefaults)} of ${count(d.stores.length)} stores carry Uber at ` +
+        ? `${count(onDefaults)} of ${plural(d.stores.length, "store")} ` +
+          `${pluralWord(onDefaults, "carries", "carry")} Uber at ` +
           `${pct(DEFAULT_UBER * 100, { scaled: true })} and DoorDash at ` +
           `${pct(DEFAULT_DOORDASH * 100, { scaled: true })} — the platform defaults, to the ` +
           `digit. Either three contracts happen to match or nobody has entered a signed rate. ` +

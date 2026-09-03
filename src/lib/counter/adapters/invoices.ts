@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { isChargeRow } from "@/lib/invoice-charges"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
+import { count, money, pct, plural, pluralWord, titleCase, unitCost } from "@/lib/counter/format"
 import { comparisonRange, rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -395,7 +395,7 @@ function headlineOf(d: InvoiceData): InvoiceHeadline {
   const receivedCell: FigureProps = {
     label: `Received, ${RECEIVED_DAYS}d`,
     value: money(sum(received)),
-    delta: `${count(received.length)} invoices`,
+    delta: plural(received.length, "invoice"),
     deltaTone: "is-flat",
   }
 
@@ -657,7 +657,8 @@ function reviewOf(d: InvoiceData): InvoiceReview {
                 `${money(goodsOf(i), { cents: true })} together — against a printed ` +
                 `${money(printedOf(i), { cents: true })}. One return, extracted twice: anything reading lines ` +
                 `rather than the total sees double the credit.`
-              : `${count(i.lines.length)} lines come to ${money(goodsOf(i), { cents: true })} against a printed ` +
+              : `${plural(i.lines.length, "line")} ${pluralWord(i.lines.length, "comes", "come")} to ` +
+                `${money(goodsOf(i), { cents: true })} against a printed ` +
                 `${money(printedOf(i), { cents: true })}. Delivery charges are already excluded.`,
         act: "Open the document",
         href: `/dashboard/invoices/${i.id}`,
@@ -809,7 +810,7 @@ function productsOf(d: InvoiceData): InvoiceProducts {
       vendor:
         r.a.vendors.size === 1
           ? [...r.a.vendors][0]
-          : `${count(r.a.vendors.size)} vendors`,
+          : plural(r.a.vendors.size, "vendor"),
       qty: `${count(Math.round(r.a.qty))}${r.a.unit ? ` ${r.a.unit.toLowerCase()}` : ""}`,
       spend: money(r.a.spend),
       price: r.up === null ? "—" : `${unitCost(r.up)}${r.a.unit ? ` / ${r.a.unit.toLowerCase()}` : ""}`,
@@ -839,7 +840,8 @@ function productsOf(d: InvoiceData): InvoiceProducts {
       `alone arrives under four spellings. ` +
       (uncosted.length === 0
         ? `Every line in this range is costed.`
-        : `${count(uncosted.length)} rows worth ${money(uncostedSpend)} carry no costed ingredient ` +
+        : `${plural(uncosted.length, "row")} worth ${money(uncostedSpend)} ` +
+          `${pluralWord(uncosted.length, "carries", "carry")} no costed ingredient ` +
           `and are listed under the supplier's own name: can liners, gloves and paper, which are ` +
           `real spend and not food cost.`),
   }

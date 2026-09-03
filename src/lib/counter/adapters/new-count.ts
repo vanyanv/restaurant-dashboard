@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { count } from "@/lib/counter/format"
+import { count, plural, pluralWord } from "@/lib/counter/format"
 import {
   awaitSections,
   classify,
@@ -194,7 +194,7 @@ function daysAgo(at: Date | null): string {
   const days = Math.round((Date.now() - at.getTime()) / 86_400_000)
   if (days === 0) return "today"
   if (days === 1) return "yesterday"
-  if (days < 60) return `${count(days)} days ago`
+  if (days < 60) return `${plural(days, "day")} ago`
   return `${count(Math.round(days / 30))} months ago`
 }
 
@@ -220,7 +220,7 @@ function groupsOf(d: NewCountData): NewCountGroups {
       note: g.everCounted === 0 ? "never counted" : `${count(g.everCounted)} counted before`,
       noteTone: (g.everCounted === 0 ? "down" : "up") as "up" | "down",
     })),
-    meta: `${count(d.groups.length)} categories · ${count(d.totalLines)} lines`,
+    meta: `${plural(d.groups.length, "category", "categories")} · ${plural(d.totalLines, "line")}`,
     note:
       `The prototype groups this by room — walk-in, dry store, line, freezer — and no room ` +
       `exists in this data. What an ingredient carries is a supplier category, so that is ` +
@@ -259,7 +259,7 @@ function sheetOf(d: NewCountData): NewCountSheet {
     note:
       `Ordered by category and then alphabetically, because there is no walk order to order ` +
       `by. "Never" in the last column is ${count(d.totalLines - d.everCounted)} of the ` +
-      `${count(d.totalLines)} rows: for those the count has nothing to compare against, so ` +
+      `${plural(d.totalLines, "row")}: for those the count has nothing to compare against, so ` +
       `the first count is a baseline rather than a check.`,
   }
 }
@@ -294,8 +294,10 @@ function openOf(d: NewCountData): NewCountOpen {
     resumes: d.targetOpen !== null,
     note:
       (d.completedCounts === 0
-        ? `${count(d.startedCounts)} counts have been started here and none finished. `
-        : `${count(d.completedCounts)} of ${count(d.startedCounts)} counts have been finished. `) +
+        ? `${plural(d.startedCounts, "count")} ${pluralWord(d.startedCounts, "has", "have")} been ` +
+          `started here and none finished. `
+        : `${count(d.completedCounts)} of ${plural(d.startedCounts, "count")} ` +
+          `${pluralWord(d.completedCounts, "has", "have")} been finished. `) +
       (d.open.length === 0
         ? `No count is open, so this opens a new session. `
         : d.targetOpen
@@ -303,7 +305,7 @@ function openOf(d: NewCountData): NewCountOpen {
             `${daysAgo(d.targetOpen.startedAt)} with ${
               d.targetOpen.lines === 0
                 ? "nothing entered"
-                : `${count(d.targetOpen.lines)} lines entered`
+                : `${plural(d.targetOpen.lines, "line")} entered`
             } — startOrResumeStockCount returns the existing session rather than creating a ` +
             `second. That is right behaviour, and invisible, which is why it is said here ` +
             `rather than left to be discovered. `
