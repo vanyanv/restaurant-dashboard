@@ -12,6 +12,7 @@ import {
   useCounterTransition,
   usePageChrome,
   type Row,
+  SubNav,
 } from "@/components/counter"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -25,6 +26,7 @@ import {
   removeFixedExpense,
   saveStoreFile,
 } from "@/lib/counter/actions/store"
+import { storesViewTabs } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type {
   StoreFileEditable,
@@ -245,13 +247,27 @@ function StoreFileForm({
         />
       </div>
 
-      <div className="editrow" style={{ gridTemplateColumns: "1fr 86px" }}>
-        <span className="nm">
-          Food-cost target
-          <em>The plan line on every food-cost chart for this store</em>
-        </span>
+      {/*
+        * `.setrow`, like the five fields above it — not `.editrow`.
+        *
+        * `.editrow` is the expense table's row: a four-column grid
+        * (`1fr 118px 96px auto`) for a name, an amount, a cadence and a
+        * button. Borrowed here it had to be overridden inline to two columns,
+        * its `.nm > em` description renders INLINE where `.setrow span` is
+        * `display:block`, and `.fld` carries no border where `.inp` does. So
+        * the one row on this form that sets the food-cost target read
+        * "Food-cost targetThe plan line on every food-cost chart for this
+        * store" on a single line, in italic, over a bare unboxed number —
+        * beside five siblings with a bold label, a grey line under it and a
+        * bordered field.
+        */}
+      <div className="setrow">
+        <div className="tx">
+          <b>Food-cost target</b>
+          <span>The plan line on every food-cost chart for this store</span>
+        </div>
         <input
-          className="fld"
+          className="inp"
           type="number"
           min="0"
           max="100"
@@ -542,11 +558,16 @@ function EditRows({ rows, columns }: { rows: StoreFileRate[]; columns?: string }
  */
 export function CounterStoreFileClient({
   title,
+  storeId,
   params: paramsString,
   today,
   sections,
 }: {
   title: string
+  /* The ROUTE's id, not `data.storeId`: the bar is drawn before the sections
+     resolve, and a tab that appears a beat late is a tab that moves under the
+     pointer. */
+  storeId: string
   params: string
   today: Date
   sections: SectionSources<StoreFileSections>
@@ -600,6 +621,13 @@ export function CounterStoreFileClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. The phone grew this
+          bar first; the desk had a "New store" button on the list page and
+          nothing at all on the other two, so the create form and the store file
+          each sat with no way back to their siblings. Same three tabs, same
+          order, one helper. */}
+      <SubNav items={storesViewTabs("/dashboard/stores", storeId)} label="Stores" />
 
       <Section bare title="The figures" data={sections.head} pending={pending}>
         {(h) => (
