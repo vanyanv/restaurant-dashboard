@@ -101,15 +101,40 @@ export const authOptions: NextAuthOptions = {
           /*
            * A thrown error here is NOT a wrong password — `authorize` already
            * returned null for that above. This is the database being
-           * unreachable, or bcrypt failing. Returning null still refuses the
-           * sign-in (correct), but swallowing it silently made an outage
-           * indistinguishable from a typo for whoever was reading the logs.
+           * unreachable, or bcrypt failing.
+           *
+           * ## Why this throws instead of returning null
+           *
+           * Returning null refused the sign-in, which is correct, but it
+           * refused it through the SAME channel a wrong password uses, so the
+           * login page could only offer one sentence for both and chose
+           * "Email or password is wrong". Measured against a real outage on
+           * 2026-09-02, when Neon suspended this project for exceeding its
+           * data-transfer quota: every query failed, and an owner typing the
+           * right password was told it was wrong. They would retype it, then
+           * conclude they had been locked out — the one reading of the screen
+           * that leads nowhere useful.
+           *
+           * The note above already said this fault out loud and fixed only
+           * half of it: "swallowing it silently made an outage
+           * indistinguishable from a typo for whoever was reading the LOGS."
+           * It stayed indistinguishable for the person signing in, which is
+           * the half that matters.
+           *
+           * next-auth v4 routes the two apart, verified in its own source
+           * (`core/routes/callback.js`): a null authorize redirects with
+           * `error=CredentialsSignin`, a THROWN one with
+           * `error=<message>`, and `react/index.js` hands that param back as
+           * `result.error` under `redirect: false`. So the message below is a
+           * protocol token the login page reads — not prose, and deliberately
+           * not the caught error, which would put the database host and the
+           * quota text in a URL.
            */
           logger.error("[auth] credentials authorize failed", {
             emailTried: email,
             message: error instanceof Error ? error.message : String(error),
           })
-          return null
+          throw new Error("auth_unavailable")
         }
         /*
          * NO `$disconnect()` HERE, and no `$connect()` above.
