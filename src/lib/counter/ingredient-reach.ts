@@ -118,7 +118,11 @@ export function splitReach(rows: ReachRow[]): ReachSplit {
  * spend of a return and no recipe will ever contain it, so counting it as
  * food would net $2,691 OFF the understatement and make the gap look smaller
  * than it is.
+ *
+ * Exported because the Inventory catalogue asks the same question for a
+ * different reason: a "Return/Cancelled Order" row is not something anyone
+ * counts on a shelf, so it does not belong in a queue of things to define.
  */
-function isCreditArtifact(name: string): boolean {
+export function isCreditArtifact(name: string): boolean {
   return /\b(return|cancelled|canceled|credit\s+memo)\b/i.test(name)
 }
