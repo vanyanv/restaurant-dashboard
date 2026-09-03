@@ -110,8 +110,26 @@ function durationOf(d: Data): MonitoringDuration {
       type: "bars",
       h: 142,
       zero: true,
+      /*
+       * `timeZone: "UTC"`, and the axis is wrong without it.
+       *
+       * `day` comes from `SELECT DATE("startedAt")`, which Postgres returns as
+       * a `date` and Prisma hands back as a JS Date at UTC MIDNIGHT. Formatted
+       * with no zone, `toLocaleDateString` uses whatever zone the server
+       * happens to run in — and on this account's own Pacific offset, UTC
+       * midnight of Sep 3 renders as "Sep 2". Every bar was labelled the day
+       * before the day it measured.
+       *
+       * The same value is already formatted this way two files over
+       * (`monitoring-people.ts`) and by `D()` inside `monitoring-tabs.ts`.
+       * This chart was the one that had not been told.
+       */
       labels: d.durations.map((r) =>
-        new Date(r.day).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        new Date(r.day).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }),
       ),
       series: [{ name: "Median run", color: "var(--ink)", data: secs }],
       alt: "Median job duration by day, in seconds",
