@@ -501,7 +501,11 @@ export function getVendorsSectionPromises(
   const dataP = classify(() => loadVendors(input), {
     retryAction: "retryVendors",
     isEmpty: (d) => d.vendors.length === 0,
-    emptyReason: "no_match",
+    // These three pages are about what was BOUGHT, and buying happens every few
+    // days — this page's own strip prints "delivers every 2.0d". Empty here is
+    // a window shorter than the delivery cadence, not a filter that matched
+    // nothing, and this page has no filters to widen. See `EmptyReason`.
+    emptyReason: "no_delivery",
   })
 
   const s = <T,>(f: (d: VendorData) => T) =>

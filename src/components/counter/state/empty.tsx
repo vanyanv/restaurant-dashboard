@@ -1,12 +1,16 @@
 import type { EmptyReason } from "@/lib/counter/section-data"
 
 /**
- * Three reasons, three different next steps (note 23). A pre-open store has no
+ * Four reasons, four different next steps (note 23). A pre-open store has no
  * sales because it has no customers — nothing is broken and there is nothing to
  * fix. A filter that matched nothing is a dead end the reader backs out of. An
  * `all_clear` worklist is empty because the work is done. Rendering them all as
  * "No data" would hide which situation the reader is in — and rendering the
- * third as the second actively misleads, which is why it exists.
+ * third as the second actively misleads, which is why it exists. `no_delivery`
+ * is the fourth and was added for the same reason: an invoice page at a
+ * one-day window is not a dead end a reader should back out of, it is a window
+ * shorter than the thing it is watching. Telling them to widen "filters" a
+ * purchasing page does not have was advice they could not take.
  */
 const COPY: Record<EmptyReason, { head: string; body: string }> = {
   pre_open: {
@@ -16,6 +20,12 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   no_match: {
     head: "Nothing matched",
     body: "No rows fall inside the current filters and date range. Widen either to see figures.",
+  },
+  no_delivery: {
+    head: "No delivery in this window",
+    body:
+      "Invoices arrive every few days, so a short window is often empty — nothing is " +
+      "missing. Widen the range to see what was bought.",
   },
   all_clear: {
     head: "Nothing needs you",
