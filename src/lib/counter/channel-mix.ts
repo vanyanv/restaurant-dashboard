@@ -94,9 +94,25 @@ export const CHANNEL_FOR_PLATFORM: Record<string, ChannelId> = {
 /**
  * Raw Otter platform slugs whose channel is `house` — i.e. the money arrived
  * without a marketplace in between. Derived from `CHANNEL_FOR_PLATFORM` so
- * there is one place that decides "in-house", not a second `"css-pos"`
- * string literal wherever something needs to exclude the house channel
- * (e.g. a third-party-only aggregate).
+ * that inside the Counter layer there is one place that decides "in-house",
+ * not a second `"css-pos"` string literal wherever something needs to exclude
+ * the house channel (e.g. a third-party-only aggregate).
+ *
+ * ## IT IS NOT THE ONLY PLACE IN THE REPOSITORY, and this used to say it was
+ *
+ * The same set is defined independently, as its own literal, in four more:
+ *
+ *   src/lib/pnl.ts                              FP_PLATFORMS
+ *   src/lib/dashboard/channel-fold.ts           FP_PLATFORMS
+ *   src/lib/otter-analytics-aggregation.ts      FP_PLATFORMS
+ *   src/lib/otter-metrics-sync.ts               inline `=== "css-pos" || …`
+ *
+ * plus three inline copies inside
+ * `src/app/actions/store/dashboard-analytics-actions.ts`. Those belong to the
+ * sync layer and the pre-Counter editorial stack rather than to this one, so
+ * they are not wrong to exist yet — but a claim that this is THE one place
+ * would send the next person who adds a first-party slug home after changing
+ * one of five. Say where to look instead.
  */
 export const HOUSE_PLATFORMS: readonly string[] = Object.entries(
   CHANNEL_FOR_PLATFORM

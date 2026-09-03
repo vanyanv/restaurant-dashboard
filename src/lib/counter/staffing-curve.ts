@@ -34,9 +34,18 @@ import { newestGenerationPerHour } from "@/lib/counter/forecast-generation"
  * generatedAt)` and keeps every model generation. Summed raw over the
  * labour window that is 35,020 orders against a deduped 2,658 — 13.17x.
  * `newestGenerationPerHour`, beside `newestGenerationPerDay` in
- * `forecast-generation.ts`, is the one place that dedupe happens; both
- * loaders here go through it rather than summing `ForecastHourlyOrders`
- * directly.
+ * `forecast-generation.ts`, is where the Counter layer dedupes; both loaders
+ * here go through it rather than summing `ForecastHourlyOrders` directly.
+ *
+ * It is NOT the only implementation in the repository, which this used to
+ * claim. `ForecastDailyRevenue` is deduped by a hand-rolled
+ * latest-per-(store, date) map in both
+ * `src/app/actions/forecasts/food-cost-forecast-actions.ts` and
+ * `src/app/actions/forecasts/labor-staffing-actions.ts`. Both are CORRECT —
+ * audited 2026-09-03, they keep the newest `generatedAt` exactly as the
+ * helper does — so there is no bug to chase, only three copies of one idea.
+ * The sentence mattered because "the one place" is what stops someone
+ * checking, and a future change to the helper would leave those two behind.
  *
  * ## Scoping
  *
