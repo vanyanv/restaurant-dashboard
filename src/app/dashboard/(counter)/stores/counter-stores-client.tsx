@@ -9,11 +9,13 @@ import {
   Queue,
   Section,
   Strip,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { storesViewTabs } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StoresSections } from "@/lib/counter/adapters/stores"
 
@@ -57,8 +59,10 @@ const ASK_SUGGESTIONS = [
 
 export function CounterStoresClient({
   sections,
+  storeId,
 }: {
   sections: CounterStoresSections
+  storeId: string | null
 }) {
   usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
   const { pending } = useCounterTransition()
@@ -69,6 +73,13 @@ export function CounterStoresClient({
         title="Stores"
         sub="Each store carries its own operating inputs, commission rates and COGS target"
       />
+
+      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. The phone grew this
+          bar first; the desk had a "New store" button on the list page and
+          nothing at all on the other two, so the create form and the store file
+          each sat with no way back to their siblings. Same three tabs, same
+          order, one helper. */}
+      <SubNav items={storesViewTabs("/dashboard/stores", storeId)} label="Stores" />
 
       <Section bare title="The figures" data={sections.headline} pending={pending}>
         {(h) => <Strip cells={h.cells} />}
@@ -103,14 +114,30 @@ export function CounterStoresClient({
         {(w) => <Queue items={w.items} />}
       </Section>
 
-      {/* `P.stores`' "Add a store", and the four fields it names are the four
-          the form actually asks for. */}
-      <Section title="Add a store" meta="four fields to start" data={sections.table} pending={pending}>
+      {/*
+        * `P.stores`' "Add a store", naming the fields the form ACTUALLY asks
+        * for.
+        *
+        * This said "four fields to start" and named name, address, rent and a
+        * COGS target, under a comment asserting those were "the four the form
+        * actually asks for". The form asks for three — name, address, phone —
+        * and `/dashboard/stores/new` says so in its own head, so the two pages
+        * of one flow disagreed about what starting a store takes. An owner
+        * arrived expecting to enter a rent figure and a COGS target, found
+        * neither, and was asked for a phone number nobody had mentioned.
+        *
+        * Rent and the COGS target are real and still needed — they are set on
+        * the store's own file afterwards, which is where this page's own
+        * "Needs you" sends people. Saying so is better than dropping them:
+        * the reader learns the shape of the whole job, not just the form.
+        */}
+      <Section title="Add a store" meta="three fields to start" data={sections.table} pending={pending}>
         {() => (
           <>
             <Lede>
-              A store needs a <b>name</b>, an <b>address</b> for weather and event signals, a{" "}
-              <b>rent</b> figure and a <b>COGS target</b>. Everything else can wait.
+              A store needs a <b>name</b>, an <b>address</b> for weather and event signals, and a{" "}
+              <b>phone</b> number. Its <b>rent</b> and <b>COGS target</b> are set on the store&rsquo;s
+              own file once it exists.
             </Lede>
             <div className="btnrow">
               <Link className="btn btn--primary" href="/dashboard/stores/new">
