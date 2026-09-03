@@ -39,14 +39,17 @@ describe("Failed", () => {
     expect(failed.children[0].className).toBe("fi")
     expect(failed.children[0].textContent).toBe("!")
     const rest = failed.children[1]
-    expect(rest.querySelector("b")!.textContent).toBe("Net sales unavailable")
+    // A VERB, because the titles this joins are clauses as often as nouns.
+    // "Net sales unavailable" reads; "What the spend was on unavailable" and
+    // "The figures unavailable" do not, and both are real section titles.
+    expect(rest.querySelector("b")!.textContent).toBe("Net sales did not load")
     expect(rest.querySelector("p")).toBeTruthy()
     expect(rest.querySelector(".acts .mono")!.textContent).toBe("timed out after 8s")
   })
 
   it("names the section that failed, because a reader is looking at six of them", () => {
     render(<Failed title="Invoices" error="x" retryAction="y" />)
-    expect(screen.getByText("Invoices unavailable")).toBeTruthy()
+    expect(screen.getByText("Invoices did not load")).toBeTruthy()
   })
 
   it("offers a retry that calls back with the action name", () => {

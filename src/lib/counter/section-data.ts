@@ -44,7 +44,27 @@ export type SectionData<T> =
  * whose order is perfectly fine to go looking for something they cannot find.
  * An empty worklist is GOOD NEWS and has to read as good news.
  */
-export type EmptyReason = "pre_open" | "no_match" | "all_clear" | "no_delivery"
+export type EmptyReason =
+  | "pre_open"
+  | "no_match"
+  | "all_clear"
+  | "no_delivery"
+  | "nothing_received"
+
+/*
+ * `nothing_received` is the fifth, and it exists because `no_delivery`'s advice
+ * does not reach the Invoices page.
+ *
+ * That page's strip and list are built from a FIXED trailing 30 days rather
+ * than the reader's range — deliberately, and the module says why: "a
+ * range-bound invoice page would open empty most mornings". So its `isEmpty`
+ * asks whether thirty days held anything, and "Widen the range to see what was
+ * bought" moves a control that does not govern the answer. That is the same
+ * fault `no_delivery` was added to fix, one step further in: advice the reader
+ * can follow and still not change what they see.
+ *
+ * It therefore states the window's result and instructs nothing.
+ */
 
 export const ready = <T>(data: T): Extract<SectionData<T>, { status: "ready" }> => ({
   status: "ready",

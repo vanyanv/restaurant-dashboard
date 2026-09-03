@@ -69,7 +69,7 @@ describe("Section", () => {
     )
     const failedBody = container.querySelector(".sec__body > .failed")!
     expect(failedBody.querySelector(".fi")!.textContent).toBe("!")
-    expect(failedBody.querySelector("b")!.textContent).toBe("Net sales unavailable")
+    expect(failedBody.querySelector("b")!.textContent).toBe("Net sales did not load")
     expect(failedBody.querySelector(".acts .mono")!.textContent).toBe("timed out after 8s")
     expect(screen.getByRole("alert")).toBeTruthy()
     expect(screen.queryByText(/value/)).toBeNull()

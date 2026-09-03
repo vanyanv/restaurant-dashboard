@@ -35,6 +35,34 @@ export interface ClassifyOptions<T> {
  * figure that did load. A page that 500s because one query timed out throws
  * away good numbers the reader could have used.
  */
+/**
+ * Raw database noise, which a reader must never be shown.
+ *
+ * `Failed` prints this string under the section, and it used to print
+ * `err.message` whole. During the 2026-09-02 outage that put
+ * "Invalid `prisma.store.findMany()` invocation: Server has closed the
+ * connection." on an owner's Invoices page six times over — the ORM's name,
+ * its method, and a fact about a connection pool, in front of someone who
+ * runs a restaurant.
+ */
+const DB_NOISE =
+  /Invalid `prisma\.|Can't reach database server|Server has closed the connection|Connection terminated|ECONNREFUSED|ETIMEDOUT|too many connections|Timed out fetching a new connection/i
+
+/**
+ * What the reader is told a failure was.
+ *
+ * A message an ADAPTER wrote — "Otter sync timed out" — is written for this
+ * slot and passes through, which is the whole reason the slot carries a real
+ * error rather than the prototype's hardcoded "timed out after 8s". A message
+ * the DATABASE wrote was written for a log, so it stays in the log: Prisma is
+ * already configured to print it there, and what reaches the page is the one
+ * fact a reader can act on.
+ */
+function readerReason(err: unknown): string {
+  if (!(err instanceof Error)) return "Something went wrong loading this section"
+  return DB_NOISE.test(err.message) ? "The database did not answer" : err.message
+}
+
 export async function classify<T>(
   load: () => T | Promise<T>,
   opts: ClassifyOptions<T>,
@@ -50,10 +78,7 @@ export async function classify<T>(
     if (opts.staleSince) return stale(value, opts.staleSince)
     return ready(value)
   } catch (err) {
-    return failed<T>(
-      err instanceof Error ? err.message : "Something went wrong loading this section",
-      opts.retryAction,
-    )
+    return failed<T>(readerReason(err), opts.retryAction)
   }
 }
 
