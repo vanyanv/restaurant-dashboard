@@ -508,7 +508,10 @@ export function getStoresSectionPromises(
   const dataP = classify(() => loadStores(input), {
     retryAction: "retryStores",
     isEmpty: (d) => d.stores.length === 0,
-    emptyReason: "no_match",
+    // No filter row and no date control on this page — see the reason's note
+    // in `section-data.ts`. An account with no stores is the state this page
+    // exists to end, not a search that matched nothing.
+    emptyReason: "no_stores",
   })
 
   const s = <T,>(f: (d: Data) => T) =>
