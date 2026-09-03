@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
-import { count, pct } from "@/lib/counter/format"
+import { count, pct, plural } from "@/lib/counter/format"
 import { menuTab, navById, type SubNavItem } from "@/lib/counter/nav"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import {
@@ -394,13 +394,19 @@ function categories(c: MenuCounts, rangeLabel: string): MenuCategoriesSection {
     note:
       `${lead ? `${lead.category} is the largest at ${count(lead.items)} of ${count(c.items)} items. ` : ""}` +
       (uncategorized
-        ? `${count(uncategorized.items)} rows carry no category, but only ` +
-          `${count(c.onlyUncategorized)} items are uncategorized everywhere — the POS emits ` +
+        ? `${plural(uncategorized.items, "row")} ${uncategorized.items === 1 ? "carries" : "carry"} ` +
+          `no category, but only ` +
+          `${plural(c.onlyUncategorized, "item")} ${c.onlyUncategorized === 1 ? "is" : "are"} ` +
+          `uncategorized everywhere — the POS emits ` +
           `some items with a category and sometimes without, so the rest appear twice. ` +
           `They are drawn as their own slice rather than folded into "Other": a ring that ` +
           `hides the menu's biggest data gap behind a neutral wedge is decoration. `
         : "") +
-      `${count(c.multiCategory)} items carry more than one category, so the slices total ` +
+      // "1 items carry" was on screen at this account: one item is multi-category
+      // right now, and the sentence said so twice wrongly — the noun and the
+      // verb both have to agree with a number that comes from the data.
+      `${plural(c.multiCategory, "item")} ${c.multiCategory === 1 ? "carries" : "carry"} ` +
+      `more than one category, so the slices total ` +
       `${count(placements)} placements across ${count(c.items)} items and each share is of ` +
       `placements, not of items. This ring counts ITEMS, not money: a category with many ` +
       `cheap items is a wide slice here and a narrow one on the cost page.`,

@@ -553,7 +553,21 @@ function headlineOf(d: IngredientData): IngredientHeadline {
           d.addedRecently === 0
             ? "none added in 30 days"
             : `${d.addedRecently} added in 30 days`,
-        deltaTone: d.addedRecently === 0 ? "is-down" : "is-flat",
+        /*
+         * FLAT EITHER WAY — a catalogue that did not grow is not a fault.
+         *
+         * Nothing adds canonicals automatically: auto-create was dropped and
+         * the shadow matcher only proposes against products that already
+         * exist. So "none added in 30 days" is the state this product was
+         * built to be in, and painting it red said a working system was
+         * broken. It also spent the accent: three of this strip's four
+         * captions carried the down tone, and the other two are real money —
+         * $16,346 of food in no recipe, $875 of unmatched lines. DESIGN.md is
+         * explicit that the accent marks state and not rest, and that more
+         * than one at rest on a screen means something is wrong. Adding items
+         * was already flat; not adding them is the same kind of fact.
+         */
+        deltaTone: "is-flat",
       },
       {
         label: "Auto-matched",
