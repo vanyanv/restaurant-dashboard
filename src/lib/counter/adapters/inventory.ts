@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+import { isNonIngredientRow } from "@/lib/invoice-charges"
+import { isCreditArtifact } from "@/lib/counter/ingredient-reach"
 import { count, money, titleCase, unitCost } from "@/lib/counter/format"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -330,10 +332,38 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
     }
   }
 
-  const ingredients: Ing[] = rawIngredients.map((i) => ({
-    ...i,
-    lastCountedAt: lastCounted.get(i.id) ?? null,
-  }))
+  /*
+   * A FEE IS NOT SOMETHING YOU COUNT ON A SHELF.
+   *
+   * `CanonicalIngredient` holds rows the extractor made from invoice lines
+   * that are charges, not goods — "Fuel Surcharge", "Miscellaneous Charges
+   * Fuel Surcharge". `isNonIngredientRow` exists for exactly this question
+   * ("is this a thing you can put on a plate"), and its own note names this
+   * symptom: a delivery fee carrying $1,389 of "purchases" inside the
+   * ingredient catalogue.
+   *
+   * The Ingredients page, the vendor detail, the reach split and the
+   * monitoring audit all filter with it. This page did not, so its queue of
+   * things to define led with three fees — a work list whose first rows are
+   * work nobody can do — and counted them in both "76 ingredients tracked" and
+   * "59 ready to count".
+   *
+   * NOT `isChargeRow`: that asks whether a line sits inside its invoice's
+   * printed subtotal, which is vendor-specific arithmetic, and its own module
+   * note measures what widening it costs. Sysco's fuel surcharge answers yes
+   * to that and no to this one.
+   *
+   * `isCreditArtifact` goes with it, for the same reason and from the same
+   * pair the reach split already uses: "Ground Beef Fine Grnd 73/27 Creekstone
+   * Return/Cancelled Order" is a negative invoice line, not stock, and it was
+   * sitting in the not-defined queue where it can never be defined.
+   */
+  const ingredients: Ing[] = rawIngredients
+    .filter((i) => !isNonIngredientRow(i.name) && !isCreditArtifact(i.name))
+    .map((i) => ({
+      ...i,
+      lastCountedAt: lastCounted.get(i.id) ?? null,
+    }))
 
   return {
     ingredients,
