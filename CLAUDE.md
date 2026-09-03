@@ -4,6 +4,15 @@ Multi-store restaurant analytics dashboard. Next.js 16 (App Router, Turbopack), 
 
 Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. The whole-project gate is `npm test && npm run tokens && npx tsc --noEmit && npm run build`.
 
+**That gate cannot see a page that renders the wrong thing** — run
+`npm run fidelity` as well whenever you change what a Counter page RENDERS.
+`scripts/counter-lint.ts`'s own note says why: tokens "checks colour literals
+and status branching. It has no opinion about whether a page matches its
+design, which is how a Counter Overview shipped with six bordered cards where
+the prototype has sixteen structural elements, and how that survived seven
+plans against a permanently green gate." The fidelity suite is the thing that
+can see it, and it needs the dev server on :3000 and a working database.
+
 ---
 
 ## Before touching any dashboard or mobile UI, read this
@@ -15,9 +24,15 @@ labels, `oklch()` `ct-` tokens in `src/styles/counter.css` as the only colour
 source, 8px/5px radii, both a light and a dark theme asserted by test. The old
 pre-Counter design system (a serif italic display face, cream-toned hex
 colours, hairline-bordered panels, a red hover-bar row pattern) is being
-deleted page by page as each route is rebuilt — it still runs a majority of
-`src/app/dashboard/**` and the mobile shell today, so don't mistake its
-presence in the tree for it still being the target. Generic Tailwind/shadcn
+deleted page by page as each route is rebuilt, and it is nearly gone: measured
+2026-09-03, **48 of the 53 `page.tsx` under `src/app/dashboard/` are under
+`(counter)`**. The five that are not are `pnl/[storeId]` and four under
+`(editorial)` — chat, operations/recipes, operations/costs, stores/[id]/edit.
+The phone shell is Counter too now; `src/app/(mobile)/m/layout.tsx` renders
+`MTabs` from `@/components/counter`. So the default assumption for anything
+you open is Counter, not legacy — this paragraph said the opposite ("a
+majority of `src/app/dashboard/**` and the mobile shell") until the rebuild
+overtook it. Generic Tailwind/shadcn
 output is wrong on a Counter page, and so is output copying the old serif
 system — neither is what a rebuilt page should look like.
 
