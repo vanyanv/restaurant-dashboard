@@ -144,16 +144,31 @@
  *     loader called inside a `Promise.all` never produces. The desk menu-item
  *     route does exactly this and is legitimately exempt anyway, so the hole
  *     has not yet hidden a real violation — but it would.
- *   - Routes are exempted BY NAME, not by pattern:
- *     `src/app/dashboard/(counter)/orders/[id]/page.tsx` and
- *     `src/app/(mobile)/m/(counter)/orders/[id]/page.tsx`. Ruling S-R5: all
- *     seven of their sections come from one `getOrderDetail` load, so seven
- *     promises resolving in the same tick would be a picture of streaming
- *     rather than streaming, and the page must resolve `head` before
- *     rendering at all, to decide its 404. Naming the two exact paths (rather
- *     than, say, excusing any `page.tsx` under an `[id]` segment) means the
- *     exemption cannot silently widen to cover a THIRD route someone adds
- *     later without deciding, again, that it deserves the same exception.
+ *   - Routes are exempted BY NAME, not by pattern. Ruling S-R5 covers the
+ *     first pair: all seven of the order-detail sections come from one
+ *     `getOrderDetail` load, so seven promises resolving in the same tick
+ *     would be a picture of streaming rather than streaming, and the page
+ *     must resolve `head` before rendering at all, to decide its 404. Naming
+ *     exact paths (rather than, say, excusing any `page.tsx` under an `[id]`
+ *     segment) means the exemption cannot silently widen to cover a route
+ *     someone adds later without deciding, again, that it deserves it.
+ *
+ *     THERE ARE SIX, and this paragraph said two until 2026-09-03. The
+ *     mechanism did its job — every addition is a named path in
+ *     `AWAITED_SECTIONS_ALLOWED` — but the prose beside it did not keep up,
+ *     and a rule whose whole argument is "you must decide again" is worth
+ *     little if the list of previous decisions is out of date. All six, and
+ *     why:
+ *
+ *       orders/[id]        desk + phone — ruling S-R5, above.
+ *       alerts             desk + phone — `getAlertsSections` is `async` and
+ *                          derives EVERY section from a single
+ *                          `getAlertInbox` load, so they all resolve in one
+ *                          tick. Same shape as S-R5, and the only one of the
+ *                          three pairs whose reason was never written down.
+ *       menu/catalog/[item] desk + phone — the page's own TITLE is the
+ *                          record's name, so the headline must resolve before
+ *                          anything renders; see the note on the constant.
  *
  * --- Known holes, left as regex-over-text limitations (not fixed) ---
  *

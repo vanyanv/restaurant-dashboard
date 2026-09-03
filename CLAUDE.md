@@ -35,8 +35,10 @@ walks `src/app/**` and `src/components/**`, wider than the roots above), no
 directory under a `(counter)` route group holding a `page.tsx` without a
 `loading.tsx` beside it, and no `page.tsx` under a `(counter)` route group
 `await`ing a `get*Sections(...)` loader instead of the not-awaited
-`get*SectionPromises(...)` streaming shape (the two order-detail routes are
-exempted by name — see DESIGN.md). It has documented holes (regex, not an AST) — see
+`get*SectionPromises(...)` streaming shape (six routes are exempted by name —
+the order-detail, alerts and menu-item pairs, each because all of its sections
+come from a single load; the list and the reason for each are in
+`scripts/counter-lint.ts`). It has documented holes (regex, not an AST) — see
 `DESIGN.md` and the module comment in `scripts/counter-lint.ts`.
 
 Two things the linter cannot check, because they need judgment:
