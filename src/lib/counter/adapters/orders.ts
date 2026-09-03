@@ -650,9 +650,26 @@ export function buildOrdersList(
   res: OrderListResponse,
   opts: { search: string; channels: ChannelId[]; range: DateRange },
 ): OrdersList {
-  // One day in the window means every row is that day, and a date in front of
-  // every clock reading would be a column repeating itself.
-  const withDay = dayCount(opts.range) > 1
+  /*
+   * FROM THE ROWS, not from the range — a one-day range is not one date.
+   *
+   * The rule this replaces was `dayCount(opts.range) > 1`, on the reasoning
+   * that one day in the window means every row is that day. A restaurant's day
+   * does not end at midnight: at the DEFAULT one-day range this account's list
+   * runs `12:58am · 12:02am · 11:59pm` down the screen, newest-first by
+   * instant, with 12:xx belonging to the following calendar date. That is the
+   * precise symptom the day stamp was added to cure — a column that looks like
+   * a broken sort — and the range proxy switched it off in the one view every
+   * reader opens on.
+   *
+   * Asking the rows is also strictly more correct at every other range: seven
+   * days that happen to hold one trading date get no repeated column, and one
+   * day that crosses midnight gets the stamp it needs. `clockDate` reads the
+   * same `getUTC*` clock `stampTime` prints, so the question asked here is
+   * exactly the one the column answers.
+   */
+  const withDay =
+    new Set(res.rows.map((r) => clockDate(r.referenceTimeLocal))).size > 1
   return {
     toggles: buildToggles(opts.channels),
     search: opts.search,

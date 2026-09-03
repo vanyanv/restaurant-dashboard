@@ -278,7 +278,15 @@ function headlineOf(d: RecipeData): RecipeHeadline {
     delta:
       zeroCost.length === 0
         ? "every plate is costed"
-        : `${money(zeroCost.reduce((t, r) => t + r.revenue, 0))} sold at 100% margin`,
+        : /*
+           * NOT "at 100% margin". The catalogue below deliberately prints an
+           * em dash in the margin column for exactly these plates, and its own
+           * note says why: the $0.00 is a recipe-level override standing in for
+           * a cost nobody computed, so a margin against it is arithmetic on a
+           * placeholder. This cell was stating as fact the one number the table
+           * four inches under it refuses to state.
+           */
+          `${money(zeroCost.reduce((t, r) => t + r.revenue, 0))} sold with no cost behind it`,
     deltaTone: zeroCost.length > 0 ? "is-down" : "is-flat",
   }
 
@@ -292,7 +300,12 @@ function headlineOf(d: RecipeData): RecipeHeadline {
         // the same reason and about the same fortnight in early May.
         delta:
           d.addedRecently === 0 ? "none added in 30 days" : `${d.addedRecently} added in 30 days`,
-        deltaTone: d.addedRecently === 0 ? "is-down" : "is-flat",
+        // Flat either way, and for the reason the Ingredients strip carries in
+        // full: nothing adds recipes on its own, so a book that did not grow
+        // is the state this product is built to be in, not a fault. The two
+        // cells that follow — unconfirmed revenue and plates costing nothing —
+        // are the ones on this strip that earned the accent.
+        deltaTone: "is-flat",
       },
       {
         label: "Confirmed",
@@ -422,8 +435,9 @@ function workOf(d: RecipeData): RecipeWork {
         `"${worst.name}" has no ingredient lines at all, so nothing was ever costed and its ` +
         `recipe-level override stands in as the answer: ${unitCost(worst.cost ?? 0)} a serving. ` +
         (worst.soldQty > 0
-          ? `It sold ${count(worst.soldQty)} for ${money(worst.revenue)} over ${d.rangeLabel}, at a ` +
-            `margin the page has to print as 100%. `
+          ? `It sold ${count(worst.soldQty)} for ${money(worst.revenue)} over ${d.rangeLabel}, ` +
+            `against a cost nobody computed — which is why the margin column shows an em dash ` +
+            `rather than the 100% that arithmetic would give. `
           : "") +
         (worst.partialDays > 0
           ? `The cost walk has flagged it as an understatement on ${count(worst.partialDays)} ` +
