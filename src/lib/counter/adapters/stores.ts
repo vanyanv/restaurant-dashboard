@@ -425,7 +425,13 @@ function tableOf(d: Data): StoresTable {
           `${pluralWord(onDefaults, "carries", "carry")} Uber at ` +
           `${pct(DEFAULT_UBER * 100, { scaled: true })} and DoorDash at ` +
           `${pct(DEFAULT_DOORDASH * 100, { scaled: true })} — the platform defaults, to the ` +
-          `digit. Either three contracts happen to match or nobody has entered a signed rate. ` +
+          // "three" was the one literal left in a sentence whose every other
+          // number is derived — it is the count of stores ON THE DEFAULTS, and
+          // on a two-store account it read "2 of 2 stores carry Uber at 21.0%
+          // … Either three contracts happen to match".
+          `digit. Either ${plural(onDefaults, "contract")} ` +
+          `${pluralWord(onDefaults, "happens", "happen")} to match or nobody has entered a ` +
+          `signed rate. ` +
           `Commissions are the second largest line on the P&L, so this is the biggest standing ` +
           `assumption in the product and it is invisible everywhere else.`
         : `Every store's commission rates were entered by hand.`,
