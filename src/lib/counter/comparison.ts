@@ -78,7 +78,21 @@ export function comparisonPhrase(
 ): ComparisonReading {
   if (!cmp.on || base === null) return { text: "no comparison set", tone: "is-flat" }
   const previous = base / cmp.divisor
-  if (previous === 0) return { text: `no ${cmp.label} to compare`, tone: "is-flat" }
+  /*
+   * "NOTHING IN the prior period", not "no the prior period".
+   *
+   * `cmp.label` is written to follow the word "vs" and carries its own
+   * article for that job — "the prior period", "the same 4 weekdays", "the
+   * same days last year". Slotting it after "no" produced "no the prior
+   * period to compare" on every one of the three, which is what a brand-new
+   * account sees under its first Net sales figure. "nothing in" takes the
+   * article the label already has.
+   *
+   * It is also the accurate reading: `previous === 0` means the comparison
+   * window HAD a figure and it was zero, not that the window is missing —
+   * that case is the `cmp.on` branch above.
+   */
+  if (previous === 0) return { text: `nothing in ${cmp.label} to compare`, tone: "is-flat" }
   const change = (now - previous) / previous
   const sign = deltaSign(change)
   return {

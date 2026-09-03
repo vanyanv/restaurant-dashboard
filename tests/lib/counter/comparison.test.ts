@@ -64,7 +64,23 @@ describe("comparisonPhrase", () => {
 
   it("says there is nothing to compare rather than dividing by zero", () => {
     const r = comparisonPhrase(1000, comparisonContext("prev", scope), 0)
-    expect(r.text).toBe("no the prior period to compare")
+    expect(r.text).toBe("nothing in the prior period to compare")
     expect(r.tone).toBe("is-flat")
+  })
+
+  /*
+   * The article belongs to the LABEL, and the sentence has to take it.
+   *
+   * This previously asserted "no the prior period to compare" — the string the
+   * code emitted rather than the sentence it meant — so the fault was pinned
+   * instead of caught. All three labels are checked here because every one of
+   * them carries "the": they are written to follow the word "vs".
+   */
+  it("reads as English against every comparison the picker offers", () => {
+    const of = (id: Parameters<typeof comparisonContext>[0]) =>
+      comparisonPhrase(1000, comparisonContext(id, scope), 0).text
+    expect(of("prev")).toBe("nothing in the prior period to compare")
+    expect(of("weekday")).toBe("nothing in the same 4 weekdays to compare")
+    expect(of("year")).toBe("nothing in the same days last year to compare")
   })
 })

@@ -5,7 +5,18 @@ import bcrypt from 'bcryptjs'
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) throw new Error('DATABASE_URL is required')
 
-const adapter = new PrismaPg({ connectionString: databaseUrl, ssl: true })
+// SSL for a real host, never for localhost — a local Postgres does not speak
+// TLS. Same rule `src/lib/prisma.ts` states in full; kept in step by hand
+// because a seed script must not import the app's singleton client.
+const localHost = (raw: string): boolean => {
+  try {
+    const h = new URL(raw).hostname
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]'
+  } catch {
+    return false
+  }
+}
+const adapter = new PrismaPg({ connectionString: databaseUrl, ssl: !localHost(databaseUrl) })
 const prisma = new PrismaClient({ adapter })
 
 async function main() {
