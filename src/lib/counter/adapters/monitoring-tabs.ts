@@ -655,9 +655,23 @@ function costsFailuresOf(d: CostsData): CostsFailures {
       return {
         key: f.id,
         cells: {
+          /*
+           * UTC, like `D()` at the top of this file.
+           *
+           * Without a zone this renders in whatever zone the server runs in,
+           * so the same row could read "Sep 2" or "Sep 3" depending on where
+           * it was deployed — and one file was already answering the question
+           * two ways, since `D()` pins UTC for the cost rows a few sections up.
+           *
+           * The store's own zone would be better than either, and is what the
+           * orders clock uses. This adapter does not load a store, so it is
+           * not available here; UTC at least makes the label deterministic and
+           * agrees with the rest of the page.
+           */
           when: new Date(f.occurredAt).toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
+            timeZone: "UTC",
           }),
           feature: f.feature ?? "—",
           outcome: {
