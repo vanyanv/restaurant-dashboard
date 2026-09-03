@@ -8,7 +8,7 @@ import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { CHANNEL_FOR_PLATFORM } from "@/lib/counter/channel-mix"
 import { CHANNELS, channelById, markVarFor, type Channel, type ChannelId } from "@/lib/counter/channels"
 import { ticketOf, feeAmount, netOf } from "@/lib/counter/order-signs"
-import { count, money, pct } from "@/lib/counter/format"
+import { count, money, pct, plural } from "@/lib/counter/format"
 import {
   comparisonContext,
   comparisonPhrase,
@@ -489,8 +489,6 @@ function marginFigure(keep: number, cost: number | null): string {
   if (cost === null || keep <= 0) return DASH
   return pct(((keep - cost) / keep) * 100, { scaled: true })
 }
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
 
 /* ── The orders list ──────────────────────────────────────────────────── */
 

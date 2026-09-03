@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
-import { count, money, pct, titleCase, unitCost } from "@/lib/counter/format"
+import { count, money, pct, plural, titleCase, unitCost } from "@/lib/counter/format"
 import { rangeLabel, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import {
@@ -470,7 +470,7 @@ function headOf(d: Loaded): IngredientHead {
       d.onHandLines === 0
         ? d.accountCountLines === 0
           ? "nothing has been counted"
-          : `never counted · ${count(d.accountCountLines)} lines in the account`
+          : `never counted · ${plural(d.accountCountLines, "line")} in the account`
         : "count lines",
     deltaTone: "is-down",
   }
@@ -547,7 +547,7 @@ function pricesOf(d: Loaded): IngredientPrices {
     meta:
       weeks.length === 0
         ? "no priced delivery in eight weeks"
-        : `${count(weeks.length)} weeks · ${count(ranked.length)} ${ranked.length === 1 ? "vendor" : "vendors"}`,
+        : `${plural(weeks.length, "week")} · ${plural(ranked.length, "vendor")}`,
     note:
       weeks.length === 0
         ? `No priced delivery in the last ${count(WEEKS)} weeks, so there is no history to ` +
