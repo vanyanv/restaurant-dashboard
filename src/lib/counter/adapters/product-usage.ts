@@ -389,10 +389,25 @@ function varianceOf(d: UsageData): UsageVariance {
       `in RECIPE units, and reconciling those needs the pack conversion — the number this ` +
       `product already guards its cost paths against, because a mis-parsed pack moves a $/unit ` +
       `by 10 to 200 times. Both sides are money already, and money needs no conversion. ` +
+      /*
+       * NOT the Ingredients page's figure, which is what this used to claim.
+       *
+       * This counts every row bought that no recipe uses — food, packaging,
+       * cleaning and the extractor's fee artifacts alike. The Ingredients
+       * page's "Food in no recipe" is `splitReach`'s FOOD bucket only: that
+       * module exists precisely to keep the three apart, and its own note says
+       * supplies are "correctly outside plate cost" while artifacts "should
+       * not be in the catalogue" at all. Live the two read 26 and 17, and the
+       * sentence asserted they were one number seen two ways.
+       *
+       * So it says what it is, and points at the split rather than claiming to
+       * be it. A reader who wants the food-only figure is told where it lives.
+       */
       (boughtNotUsed > 0
-        ? `${count(boughtNotUsed)} ${boughtNotUsed === 1 ? "ingredient was" : "ingredients were"} ` +
-          `bought and used in no recipe at all, which is the Ingredients page's own gap seen per ` +
-          `item.`
+        ? `${count(boughtNotUsed)} ${boughtNotUsed === 1 ? "line was" : "lines were"} ` +
+          `bought over this range and used in no recipe — food, packaging and cleaning ` +
+          `together. The Ingredients page splits those three, because only the food half ` +
+          `understates plate cost.`
         : ""),
   }
 }
