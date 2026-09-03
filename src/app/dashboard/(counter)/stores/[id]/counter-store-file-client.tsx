@@ -398,8 +398,25 @@ function ExpenseEditor({
 
   const submit = () => {
     const value = Number(amount.trim())
-    if (label.trim() === "" || !Number.isFinite(value) || value < 0) {
-      setSaid("A line needs a name and an amount.")
+    /*
+     * THREE FAILURES, THREE SENTENCES.
+     *
+     * All three used to answer "A line needs a name and an amount." — which is
+     * true of the first two and false of the third: a line entered as
+     * "Insurance / -50" HAS a name and HAS an amount, and the reader was told
+     * to supply what they had just supplied. The one thing wrong with it, the
+     * minus sign, was the one thing not mentioned.
+     */
+    if (label.trim() === "") {
+      setSaid("A line needs a name.")
+      return
+    }
+    if (amount.trim() === "" || !Number.isFinite(value)) {
+      setSaid("A line needs an amount, as a number.")
+      return
+    }
+    if (value < 0) {
+      setSaid("An amount cannot be negative — this is a cost, and the P&L subtracts it.")
       return
     }
     setSaid(null)
