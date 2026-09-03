@@ -21,11 +21,21 @@ export type SectionData<T> =
   | { status: "not_computed"; owed: string }
 
 /**
- * Three reasons, because they need different next steps (note 23).
+ * Four reasons, because they need different next steps (note 23).
  *
  * A pre-open store has no sales because it has no customers — nothing is wrong
  * and there is nothing to do. A filter that matched nothing is a dead end the
  * reader can back out of.
+ *
+ * `no_delivery` is the fourth, and it is the one the invoice-driven pages
+ * needed. Vendors, Packaging and the vendor detail are all about what was
+ * BOUGHT, and buying happens every few days — Vendors' own strip prints
+ * "delivers every 2.0d". Their default window is one day, so most days they
+ * render nothing, and what they rendered was `no_match`: four identical panels
+ * reading "No rows fall inside the current filters and date range. Widen
+ * either to see figures." on a page that HAS NO FILTERS. Half the advice was
+ * unfollowable and the true cause — the window is shorter than the delivery
+ * cadence — was never stated.
  *
  * `all_clear` is the third, and it was added because "Needs you" on an order
  * with nothing wrong rendered `no_match`'s copy: *"No rows fall inside the
@@ -34,7 +44,7 @@ export type SectionData<T> =
  * whose order is perfectly fine to go looking for something they cannot find.
  * An empty worklist is GOOD NEWS and has to read as good news.
  */
-export type EmptyReason = "pre_open" | "no_match" | "all_clear"
+export type EmptyReason = "pre_open" | "no_match" | "all_clear" | "no_delivery"
 
 export const ready = <T>(data: T): Extract<SectionData<T>, { status: "ready" }> => ({
   status: "ready",
