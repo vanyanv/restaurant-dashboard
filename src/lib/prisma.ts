@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // Strip sslmode from the connection string. SSL is configured explicitly via
-// `ssl: true` below, and leaving `sslmode=` in the URL makes pg-connection-string
+// `needsSsl` below, and leaving `sslmode=` in the URL makes pg-connection-string
 // emit a deprecation warning on every boot.
 const stripSslMode = (raw: string): string => {
   try {
@@ -18,12 +18,38 @@ const stripSslMode = (raw: string): string => {
   }
 }
 
+/**
+ * SSL for every real host, and never for a local one.
+ *
+ * This was a bare `ssl: true`, which is right for Neon and makes a database on
+ * localhost unreachable — a local Postgres does not speak TLS, so the
+ * connection fails before it can be refused. That left the app with exactly
+ * one database it could ever talk to: the production one. When Neon suspended
+ * this project on 2026-09-02 for exceeding its data-transfer quota, there was
+ * no way to run the product at all, and no way to develop against anything
+ * else.
+ *
+ * Host-based rather than an env flag, because it is a fact about where the
+ * database is rather than a preference someone has to remember to set — and a
+ * flag that must be set correctly to avoid sending credentials in the clear is
+ * a flag that will one day be set wrong. A hostname that will not parse falls
+ * through to SSL, which is the safe direction.
+ */
+const needsSsl = (raw: string): boolean => {
+  try {
+    const host = new URL(raw).hostname
+    return !(host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]')
+  } catch {
+    return true
+  }
+}
+
 const createPrismaClient = () => {
   const databaseUrl = process.env.DATABASE_URL
   if (!databaseUrl) throw new Error('DATABASE_URL is required')
   const adapter = new PrismaPg({
     connectionString: stripSslMode(databaseUrl),
-    ssl: true,
+    ssl: needsSsl(databaseUrl),
   })
 
   return new PrismaClient({
