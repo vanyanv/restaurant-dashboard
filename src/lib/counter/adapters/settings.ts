@@ -394,12 +394,28 @@ function notificationsOf(d: SettingsData): SettingsNotifications {
     weekly: d.notify.weekly,
     anomaly: d.notify.anomaly,
     meta: "three that write",
+    /*
+     * WHAT THE OWNER NEEDS, not why the build went this way.
+     *
+     * This said: "The prototype offers a fourth — a daily digest at 7am — and
+     * nothing stores it. AlertPreference, the table built for per-store
+     * notification routing, holds 0 rows; what these three write is three
+     * booleans on your own user record. A toggle that saves nowhere is worse
+     * than one that is absent, so the digest is not drawn."
+     *
+     * Every clause of that is addressed to whoever built it. The reader has
+     * never seen the prototype, does not know what AlertPreference is, and is
+     * being handed a table name, a row count and a design principle — five
+     * lines of it, in mono, on a phone, under the standing rule that the
+     * mobile surface is a lean glance-and-do tool.
+     *
+     * Two facts survive that a reader can use: the scope of the three switches
+     * above, and that there is no digest. The rationale stays here, where the
+     * next person to wonder about the missing fourth toggle will look.
+     */
     note:
-      `The prototype offers a fourth — a daily digest at 7am — and nothing stores it. ` +
-      `AlertPreference, the table built for per-store notification routing, holds ` +
-      `${count(d.alertPreferences)} rows; what these three write is three booleans on your ` +
-      `own user record. A toggle that saves nowhere is worse than one that is absent, so ` +
-      `the digest is not drawn.`,
+      `These three apply to the whole account rather than to one store. ` +
+      `There is no daily digest yet.`,
   }
 }
 
