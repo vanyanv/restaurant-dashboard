@@ -15,6 +15,7 @@ import {
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { ready } from "@/lib/counter/section-data"
 import { storesViewTabs } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StoresSections } from "@/lib/counter/adapters/stores"
@@ -139,7 +140,18 @@ export function CounterStoresClient({
         * geocoded later" and "Optional", and this sentence now matches those
         * words rather than outranking them.
         */}
-      <Section title="Add a store" meta="three fields to start" data={sections.table} pending={pending}>
+      {/*
+        * ALWAYS READY. This block uses none of `sections.table` — its child
+        * ignores the argument — and binding it to that section meant the one
+        * account that needs it most never saw it: with no stores the table is
+        * `empty`, so `Section` replaced the sentence explaining what a store
+        * needs, and the primary button under it, with an empty state. The way
+        * out survived only as the "New store" tab in the sub-nav.
+        *
+        * `ready(null)` rather than a `bare` Section, which would drop the
+        * panel and its heading along with the gating.
+        */}
+      <Section title="Add a store" meta="three fields to start" data={ready(null)} pending={pending}>
         {() => (
           <>
             <Lede>

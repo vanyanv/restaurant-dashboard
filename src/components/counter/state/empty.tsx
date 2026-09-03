@@ -38,6 +38,10 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
     body:
       "A count sheet is built from the ingredient catalogue, and there is nothing in it yet.",
   },
+  no_stores: {
+    head: "No stores yet",
+    body: "Every figure in this product belongs to a store. Add the first one to begin.",
+  },
   all_clear: {
     head: "Nothing needs you",
     body: "Every line here is accounted for. This section fills up when something needs a decision.",

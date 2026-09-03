@@ -51,6 +51,7 @@ export type EmptyReason =
   | "no_delivery"
   | "nothing_received"
   | "nothing_to_count"
+  | "no_stores"
 
 /*
  * `nothing_received` is the fifth, and it exists because `no_delivery`'s advice
@@ -73,6 +74,13 @@ export type EmptyReason =
  * range. Widen either to see figures." named two things the page does not
  * have, on all three of its sections at once, when the real answer is that
  * there is nothing in the catalogue to put on a sheet.
+ *
+ * `no_stores` is the seventh, on the same page family and for the same reason:
+ * `/dashboard/stores` has no filter row and no date control either — it is in
+ * `route-shape`'s own NO_WINDOW list, "a LIST OF THINGS THAT ARE, not a period
+ * of trading". An account that has not added its first store is the one state
+ * that page exists to get someone out of, and it met them with "Widen either
+ * to see figures."
  */
 
 export const ready = <T>(data: T): Extract<SectionData<T>, { status: "ready" }> => ({
