@@ -33,6 +33,11 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
       "Nothing has arrived in the window this page watches. New invoices appear here as " +
       "they are received.",
   },
+  nothing_to_count: {
+    head: "Nothing to count yet",
+    body:
+      "A count sheet is built from the ingredient catalogue, and there is nothing in it yet.",
+  },
   all_clear: {
     head: "Nothing needs you",
     body: "Every line here is accounted for. This section fills up when something needs a decision.",

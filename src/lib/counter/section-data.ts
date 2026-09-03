@@ -50,6 +50,7 @@ export type EmptyReason =
   | "all_clear"
   | "no_delivery"
   | "nothing_received"
+  | "nothing_to_count"
 
 /*
  * `nothing_received` is the fifth, and it exists because `no_delivery`'s advice
@@ -64,6 +65,14 @@ export type EmptyReason =
  * can follow and still not change what they see.
  *
  * It therefore states the window's result and instructs nothing.
+ *
+ * `nothing_to_count` is the sixth, and it is the same fault a third time.
+ * "Start a count" builds its sheet from the ingredient catalogue — its
+ * `isEmpty` is `canonicals.length === 0` — and it carries NO filter row and no
+ * date control at all. So "No rows fall inside the current filters and date
+ * range. Widen either to see figures." named two things the page does not
+ * have, on all three of its sections at once, when the real answer is that
+ * there is nothing in the catalogue to put on a sheet.
  */
 
 export const ready = <T>(data: T): Extract<SectionData<T>, { status: "ready" }> => ({
