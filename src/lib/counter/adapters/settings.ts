@@ -78,7 +78,17 @@ interface SettingsData {
   you: Person | null
   people: Person[]
   storeNames: string[]
+  /**
+   * The zone every store on this account sits in.
+   *
+   * A LITERAL, because nothing in this schema publishes a store's IANA zone —
+   * `User.timezone` is a person's. All three stores are in Los Angeles, so
+   * today this is true; the day one opens elsewhere it becomes a guess, and
+   * the column it is standing in for is the fix rather than a longer list here.
+   */
   storeTimezoneHint: string
+  /** When the clock gap is measured — see `clockGap`, which is date-dependent. */
+  now: Date
   notify: { invoices: boolean; weekly: boolean; anomaly: boolean }
   alertPreferences: number
   signins: SigninRow[]
@@ -170,6 +180,7 @@ async function loadSettings(input: SettingsInput): Promise<SettingsData> {
     people,
     storeNames: stores.filter((s) => s.isActive).map((s) => s.name),
     storeTimezoneHint: "America/Los_Angeles",
+    now: new Date(now),
     notify: {
       invoices: you?.notifyInvoices ?? false,
       weekly: you?.notifyWeeklyReport ?? false,
@@ -234,6 +245,99 @@ export interface SettingsAccount {
   meta: string
 }
 
+/**
+ * How far the reader's clock sits from their restaurant's — MEASURED, not
+ * written down.
+ *
+ * The warning below used to end "puts you three hours ahead of your own
+ * restaurant". That is true for `America/New_York`, which is the zone this
+ * account is actually on, and false for two of the other three zones the
+ * control right beside it offers: Denver is one hour from Los Angeles and
+ * Chicago is two. So the page invited a reader to pick a zone and then told
+ * them a specific wrong number about it.
+ *
+ * Null when the two zones keep the SAME offset — `America/Phoenix` and
+ * `America/Los_Angeles` are different zones that agree all summer, and
+ * "0 hours ahead" is not a sentence. The caller drops the clause.
+ *
+ * Measured at `at` rather than in the abstract, because the gap is a function
+ * of the date: New York and Los Angeles are three hours apart all year, but
+ * a zone that does not observe DST drifts against one that does.
+ */
+function clockGap(userZone: string, storeZone: string, at: Date): string | null {
+  const offset = (zone: string): number | null => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        hour12: false,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).formatToParts(at)
+      const p = Object.fromEntries(parts.map((x) => [x.type, x.value]))
+      // `hour` comes back as "24" at midnight in some ICU builds.
+      const hour = Number(p.hour) % 24
+      const asUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), hour, Number(p.minute))
+      // Floor to the minute on BOTH sides rather than `at.setSeconds(0, 0)`,
+      // which would mutate the caller's date.
+      return (asUtc - Math.floor(at.getTime() / 60_000) * 60_000) / 3_600_000
+    } catch {
+      // An unparseable zone is a fact we do not have, not a reason to guess.
+      return null
+    }
+  }
+
+  const mine = offset(userZone)
+  const theirs = offset(storeZone)
+  if (mine === null || theirs === null) return null
+
+  const diff = mine - theirs
+  if (diff === 0) return null
+
+  const n = Math.abs(diff)
+  const word = Number.isInteger(n) ? (HOUR_WORDS[n] ?? `${n}`) : n.toFixed(1)
+  const unit = n === 1 ? "hour" : "hours"
+  return `${word} ${unit} ${diff > 0 ? "ahead of" : "behind"}`
+}
+
+/** The prose voice this page already used — "three hours", not "3 hours". */
+const HOUR_WORDS: Record<number, string> = {
+  1: "an",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+  9: "nine",
+  10: "ten",
+  11: "eleven",
+  12: "twelve",
+}
+
+/**
+ * The clock sentence, with the gap stated only when it can be measured.
+ *
+ * The offset clause is dropped rather than guessed when the two zones agree
+ * or one of them will not parse — a warning that names the wrong number is
+ * worse than one that names none, and the first half ("your clock is X, every
+ * store is Y") is the actionable part either way.
+ */
+function clockWarningFor(userZone: string, storeZone: string, at: Date): string {
+  const gap = clockGap(userZone, storeZone, at)
+  return (
+    `Your clock is set to ${userZone} and every store is in ${storeZone}. ` +
+    `That is the schema default rather than a choice` +
+    (gap === null
+      ? ", and the two zones keep the same offset today — but a date bucketed by " +
+        "your timezone is still being bucketed by the wrong one."
+      : `, and anything that buckets a date by your timezone puts you ${gap} your own restaurant.`)
+  )
+}
+
 function accountOf(d: SettingsData): SettingsAccount {
   const you = d.you
   const wrongClock =
@@ -271,12 +375,7 @@ function accountOf(d: SettingsData): SettingsAccount {
       "America/Chicago",
       "America/New_York",
     ],
-    clockWarning: wrongClock
-      ? `Your clock is set to ${wrongClock} and every store is in ` +
-        `${d.storeTimezoneHint}. That is the schema default rather than a choice, and ` +
-        `anything that buckets a date by your timezone puts you three hours ahead of your ` +
-        `own restaurant.`
-      : null,
+    clockWarning: wrongClock ? clockWarningFor(wrongClock, d.storeTimezoneHint, d.now) : null,
     meta: "this account",
   }
 }
