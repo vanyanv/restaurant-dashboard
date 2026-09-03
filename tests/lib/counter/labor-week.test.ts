@@ -75,6 +75,51 @@ function buildWeek(): LaborDay[] {
   )
 }
 
+describe("pctOfSales — the guard that let NaN through", () => {
+  /*
+   * `laborWeek` used to hand this function a NaN denominator (it rebuilt the
+   * week's Total Sales by inverting each day's percentage, and a day with
+   * sales and no labour made that `0 / 0`). The guard read
+   * `sales === null || sales <= 0` — and `NaN === null` is false, `NaN <= 0`
+   * is false — so NaN went straight through the division and out to `pct()`,
+   * which renders any non-finite number as an em dash. The page printed a
+   * dash where 17.7% belonged and nothing anywhere said why.
+   *
+   * The caller was fixed to sum the real figure instead of inverting. This
+   * pins the OTHER half: the shared guard now refuses a non-finite input, so
+   * the next caller to hand it one gets `null` — "no reading" — rather than a
+   * silent dash three surfaces deep.
+   *
+   * Exercised through `laborWeek`, because `pctOfSales` is private to the
+   * module and the behaviour that matters is what the week reports.
+   */
+  const dayWith = (over: Partial<Record<string, unknown>>): LaborDay =>
+    laborDay({
+      key: "2026-08-20",
+      label: "2026-08-20",
+      actualSeconds: 8 * 3600,
+      scheduledMinutes: 8 * 60,
+      cost: 200,
+      platformSales: 1000,
+      totalSales: 1000,
+      ...over,
+    } as never)
+
+  it("reports no percentage rather than a dash when a day's sales are not a number", () => {
+    const week = laborWeek([dayWith({ totalSales: Number.NaN })], 0)
+    // Not NaN — which `pct()` would render as an em dash indistinguishable
+    // from "no sales at all".
+    expect(week.laborPct === null || Number.isFinite(week.laborPct)).toBe(true)
+  })
+
+  it("ignores a non-finite day and still states the rest of the week", () => {
+    const week = laborWeek([dayWith({}), dayWith({ totalSales: Number.NaN })], 0)
+    expect(Number.isFinite(week.laborPct as number)).toBe(true)
+    // One good day: $400 of labour on $1,000 of sales.
+    expect(week.laborPct as number).toBeCloseTo(40, 4)
+  })
+})
+
 describe("laborWeek — a day with sales and no labour", () => {
   /*
    * WHAT THE LIVE PAGE SHOWED. /dashboard/labor over Aug 27 – Sep 2 printed

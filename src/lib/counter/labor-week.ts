@@ -217,8 +217,27 @@ function sum(values: number[]): number {
  * for, and `<= 0` (not `=== 0`) keeps a range of pure refunds from reading as
  * a triumph, the same guard `statement.ts`'s `marginPct` uses.
  */
+/**
+ * Labour over sales, or `null` when there is no reading to state.
+ *
+ * THE GUARD REFUSES NON-FINITE INPUTS, and that is the whole point of this
+ * docblock. It used to read `sales === null || sales <= 0`, which is exactly
+ * the shape that let a NaN through: `NaN === null` is false and `NaN <= 0` is
+ * false, so a not-a-number denominator sailed past both tests, divided, and
+ * came out the other side as NaN. `pct()` renders any non-finite number as an
+ * em dash, so the Labor page printed a dash where 17.7% belonged and no
+ * surface in between said anything was wrong.
+ *
+ * The caller that produced the NaN has been fixed — `laborWeek` sums the real
+ * Total Sales now instead of reconstructing it by inverting each day's own
+ * percentage. This is the other half: null means "no reading", and a caller
+ * that hands this arithmetic it cannot do should be told that rather than
+ * having it rendered as absence three surfaces away.
+ */
 function pctOfSales(cost: number, sales: number | null): number | null {
-  return sales === null || sales <= 0 ? null : (cost / sales) * 100
+  if (sales === null || !Number.isFinite(sales) || sales <= 0) return null
+  if (!Number.isFinite(cost)) return null
+  return (cost / sales) * 100
 }
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -330,7 +349,12 @@ export function laborWeek(days: LaborDay[], overtimeCost: number): LaborWeek {
    * contributes its sales, which is exactly what the P&L's own denominator
    * does with it.
    */
-  const salesKnown = days.filter((d) => d.totalSales !== null)
+  // A day whose sales figure is not a number contributes nothing rather than
+  // making the week's denominator NaN — one bad row must not take the other
+  // six with it, which is the failure this whole block exists to prevent.
+  const salesKnown = days.filter(
+    (d) => d.totalSales !== null && Number.isFinite(d.totalSales),
+  )
   const totalSales =
     salesKnown.length === 0 ? null : sum(salesKnown.map((d) => d.totalSales as number))
   const laborPct = pctOfSales(cost, totalSales)
