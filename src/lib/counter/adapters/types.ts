@@ -23,8 +23,17 @@ export interface ClassifyOptions<T> {
   /** When set, the loader is never called and the section reports owed work. */
   owed?: string
   isEmpty?: (value: T) => boolean
-  /** Which empty. A pre-open store is not a filter that matched nothing. */
-  emptyReason?: EmptyReason
+  /**
+   * Which empty. A pre-open store is not a filter that matched nothing.
+   *
+   * A FUNCTION where one page's empty has more than one cause and they want
+   * different words. The price monitor is the case that asked for it: with no
+   * ingredients in the catalogue the answer is that no invoice has been read
+   * in, and with a catalogue but no priced lines in its trailing window the
+   * answer is about the window. One static reason would be wrong half the
+   * time, and being wrong about WHY is the failure this union exists to stop.
+   */
+  emptyReason?: EmptyReason | ((value: T) => EmptyReason)
   /** When the last successful sync ran, if the current one failed. */
   staleSince?: Date
 }
@@ -74,7 +83,10 @@ export async function classify<T>(
   try {
     const value = await load()
 
-    if (opts.isEmpty?.(value)) return empty<T>(opts.emptyReason ?? "no_match")
+    if (opts.isEmpty?.(value)) {
+      const reason = opts.emptyReason
+      return empty<T>(typeof reason === "function" ? reason(value) : (reason ?? "no_match"))
+    }
     if (opts.staleSince) return stale(value, opts.staleSince)
     return ready(value)
   } catch (err) {

@@ -430,7 +430,19 @@ export function getPriceSectionPromises(): StreamedSections<PriceSections> {
   const dataP = classify(() => loadPrices(), {
     retryAction: "retryPrices",
     isEmpty: (d) => d.movers.length === 0 && d.held.length === 0,
-    emptyReason: "no_match",
+    /*
+     * Two causes, two answers — and `no_match` was neither.
+     *
+     * `loadPrices()` takes no argument at all: not the reader's range, not the
+     * store scope. Its window is a fixed `HISTORY_DAYS` trailing one. So
+     * "Widen either to see figures" pointed at two controls that cannot reach
+     * this section, on the page whose whole subject is what things cost.
+     *
+     * With no catalogue there is nothing to price and the answer is about
+     * invoices. With a catalogue but nothing priced, the catalogue is fine and
+     * the answer is about the window.
+     */
+    emptyReason: (d) => (d.totalCanonicals === 0 ? "no_ingredients" : "nothing_received"),
   })
   const s = <T,>(f: (d: PriceData) => T) =>
     guardSection(dataP.then((sd) => mapReady(sd, f)), "retryPrices")

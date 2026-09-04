@@ -21,7 +21,8 @@ export type SectionData<T> =
   | { status: "not_computed"; owed: string }
 
 /**
- * Four reasons, because they need different next steps (note 23).
+ * One reason per next step (note 23) — nine of them now, not the four this
+ * comment counted until 2026-09-04.
  *
  * A pre-open store has no sales because it has no customers — nothing is wrong
  * and there is nothing to do. A filter that matched nothing is a dead end the
@@ -52,6 +53,8 @@ export type EmptyReason =
   | "nothing_received"
   | "nothing_to_count"
   | "no_stores"
+  | "no_ingredients"
+  | "no_recipes"
 
 /*
  * `nothing_received` is the fifth, and it exists because `no_delivery`'s advice
@@ -81,6 +84,22 @@ export type EmptyReason =
  * of trading". An account that has not added its first store is the one state
  * that page exists to get someone out of, and it met them with "Widen either
  * to see figures."
+ *
+ * `no_ingredients` and `no_recipes` are the eighth and ninth, and they are the
+ * sharpest version of the same fault, because on these two pages the advice is
+ * not merely unfollowable — it is provably false. Both adapters decide
+ * emptiness on a count that NO control on the page can move:
+ * `loadIngredients` asks `COUNT(*) FROM "CanonicalIngredient" WHERE
+ * "accountId" = …` and `loadRecipes` asks `recipe.findMany({ where: {
+ * accountId } })`. Neither takes the range or the store scope. So a reader who
+ * did as they were told — widen the date range, widen the store filter — would
+ * watch seven panels on Ingredients and four on Recipes say exactly the same
+ * thing again, and reasonably conclude the product is broken.
+ *
+ * They are two reasons rather than one because the next step differs, which is
+ * this union's whole test. The catalogue fills from invoice lines, so the
+ * ingredient answer is that no invoice has been read yet. A recipe is built
+ * against a menu item, so the recipe answer points at the menu.
  */
 
 export const ready = <T>(data: T): Extract<SectionData<T>, { status: "ready" }> => ({

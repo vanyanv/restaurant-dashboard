@@ -571,7 +571,13 @@ export function getRecipesSectionPromises(
   const dataP = classify(() => loadRecipes(input), {
     retryAction: "retryRecipes",
     isEmpty: (d) => d.rows.length === 0,
-    emptyReason: "no_match",
+    /*
+     * `no_recipes`, not `no_match`: `d.rows` comes from
+     * `recipe.findMany({ where: { accountId } })`, which is unfiltered by
+     * range and by store. The recipe book is empty account-wide or it is not,
+     * and widening anything cannot make it otherwise.
+     */
+    emptyReason: "no_recipes",
   })
 
   const s = <T,>(f: (d: RecipeData) => T) =>

@@ -651,7 +651,17 @@ export function getInventorySectionPromises(
   const dataP = classify(() => loadInventory(input), {
     retryAction: "retryInventory",
     isEmpty: (d) => d.ingredients.length === 0,
-    emptyReason: "no_match",
+    /*
+     * Two causes, and `no_match` named neither.
+     *
+     * `d.ingredients` is `canonicalIngredient.findMany({ where: { accountId }
+     * })` — no range, no store — so the reader could widen both controls this
+     * page draws and watch all seven of its panels repeat themselves. The
+     * other cause is the `!store` branch at the top of `loadInventory`, which
+     * returns the same empty list for a quite different reason and is the one
+     * `no_stores` exists for.
+     */
+    emptyReason: (d) => (d.storeId === null ? "no_stores" : "no_ingredients"),
   })
 
   const s = <T,>(f: (d: InventoryData) => T) =>
