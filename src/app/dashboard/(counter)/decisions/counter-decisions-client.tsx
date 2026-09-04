@@ -268,7 +268,11 @@ export function CounterDecisionsClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
-  usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
+  // `leaf` explicitly, the same reason Product mix passes one: this page has no
+  // rail entry of its own, so `owningDestination` finds nothing and the trail
+  // rendered as the store followed by a bare separator and no page name. The
+  // label is the `PageHead` title below, so the crumb and the heading agree.
+  usePageChrome({ leaf: "The week ahead", askSuggestions: ASK_SUGGESTIONS })
 
   /*
    * The ONE transition shared with `AppShell`'s own store switcher — see

@@ -87,9 +87,11 @@ function mean(values: number[]): number | null {
 }
 
 /**
- * Never throws — a failure yields null and the caller omits the section rather
- * than rendering a fake zero, matching the contract used by the invoice-count
- * and labor-glance readers.
+ * Never throws. `null` means the reader COULD NOT ANSWER — there is no
+ * session, or the query threw — and the caller is entitled to treat that as a
+ * failure. It does NOT mean "no reviews": an account with an empty
+ * `OtterRating` table gets a zero-count summary, so the difference between a
+ * dead sync and a restaurant nobody has reviewed yet survives the return.
  */
 export async function getRatingsSummary(input?: {
   storeId?: string | null
@@ -149,7 +151,36 @@ export async function getRatingsSummary(input?: {
         orderBy: { reviewedAt: "desc" },
         take: 60,
       })
-      if (fallback.length === 0) return null
+      /*
+       * NO REVIEWS AT ALL is not a failure, and returning `null` for it made
+       * the product say it was.
+       *
+       * `null` from this reader means "I could not answer" — no session, or a
+       * thrown query — and the Overview is right to treat that as a failed
+       * section. It used to mean an account with an empty `OtterRating` table
+       * as well, so a restaurant nobody had reviewed yet opened its dashboard
+       * to a red `!` and "Guest ratings did not load" on every single load.
+       * The alarm was for a fact, and a page that cries wolf daily is a page
+       * whose alarms stop being read.
+       *
+       * A zero-count summary says the same thing without the alarm, and the
+       * Overview's `isEmpty: (r) => r.count === 0` — written for exactly this
+       * and unreachable while the early return stood — now fires.
+       */
+      if (fallback.length === 0) {
+        return {
+          windowDays,
+          stale: false,
+          latestReviewAt: null,
+          count: 0,
+          average: null,
+          lowCount: 0,
+          distribution: [0, 0, 0, 0, 0],
+          deltaVsPrior: null,
+          byPlatform: [],
+          recent: [],
+        }
+      }
       current = fallback
       prior = []
       stale = true

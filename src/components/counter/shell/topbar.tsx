@@ -80,12 +80,25 @@ export function Topbar({
           computes identically (the class sets `display:flex`) and it is what
           makes the trail a breadcrumb landmark. */}
       <nav aria-label="Breadcrumb" className="crumbs">
+        {/*
+          * The store's separator is drawn only when something FOLLOWS it.
+          *
+          * `leafText` is empty whenever a page neither passes a `leaf` nor is
+          * owned by a rail destination, and eleven `(counter)` routes have no
+          * rail owner. Two of them — Menu profit and The week ahead — shipped
+          * that way, and both rendered "All stores /" with nothing after the
+          * slash: a trail promising a page name it does not have. Passing the
+          * leaf is the real fix and both now do; this stops the next page
+          * that forgets from printing a dangling separator.
+          */}
         {storeName ? (
           <>
             {storeName}
-            <span className="sep" aria-hidden="true">
-              /
-            </span>
+            {crumb || leafText ? (
+              <span className="sep" aria-hidden="true">
+                /
+              </span>
+            ) : null}
           </>
         ) : null}
         {crumb ? (
