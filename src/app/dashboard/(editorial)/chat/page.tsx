@@ -7,10 +7,11 @@ import { redirect } from "next/navigation"
 // serving the pre-Counter chat to anyone with the old link — two Ask surfaces,
 // one of them stale.
 //
-// `src/proxy.ts` still maps `/dashboard/chat` to `/m/chat` for phones, which is
-// deliberate: the phone's Counter ask has no thread history and `/m/chat` does,
-// so retiring the mobile one needs its own comparison rather than a redirect
-// tacked onto this.
+// The phone half is done too, as of 2026-09-04: `/m/chat` is a shim onto
+// `/m/ask` and `src/proxy.ts` maps `/dashboard/chat` there. This comment used
+// to say the mobile one had to stay because the phone's Counter Ask had no
+// thread history — it grew one, and the comparison that comment asked for is
+// the measurement in `/m/chat`'s own page file.
 export default function ChatPage() {
   redirect("/dashboard/ask")
 }

@@ -19,7 +19,9 @@ const DESKTOP_TO_MOBILE: Record<string, string> = {
   "/dashboard/alerts": "/m/alerts",
   "/dashboard/analytics": "/m/analytics",
   "/dashboard/ask": "/m/ask",
-  "/dashboard/chat": "/m/chat",
+  // `/m/ask`, not `/m/chat`: that route is now a shim onto this one. See its
+  // page file for the measurement that retired it.
+  "/dashboard/chat": "/m/ask",
   "/dashboard/cogs": "/m/cogs",
   "/dashboard/decisions": "/m/decisions",
   "/dashboard/ingredients": "/m/ingredients",
@@ -374,9 +376,10 @@ export default withAuth(
      * `revalidatePath("/dashboard/pnl/<id>")`, and a path no route serves
      * revalidates nothing.
      *
-     * AFTER the phone block above, deliberately: `/dashboard/chat` maps to
-     * `/m/chat` on a phone and that mapping still wins, because the phone's
-     * Counter Ask has no thread history and `/m/chat` does.
+     * AFTER the phone block above, deliberately: `/dashboard/chat` maps to a
+     * phone route and that mapping still wins. It maps to `/m/ask` now —
+     * `/m/chat` was retired once the phone's Counter Ask grew the thread
+     * history that was the whole reason for keeping it.
      */
     const legacy = legacyTargetFor(path)
     if (legacy) {

@@ -57,9 +57,11 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  * longer walks the reader's questions backwards — it leaves the thread, which
  * is now the thing that persists.
  *
- * `/m/chat` — the pre-Counter phone chat — still exists and `src/proxy.ts`
- * still maps `/dashboard/chat` to it for phones. Retiring it is a separate
- * decision from this one.
+ * `/m/chat` — the pre-Counter phone chat — was retired on 2026-09-04 and is
+ * now a shim onto this route, which `src/proxy.ts` maps `/dashboard/chat` to
+ * as well. It survived this long on the claim that this surface had no thread
+ * history; the section below is that history, and `urlConversationId` opens
+ * one from `?c=`.
  */
 /**
  * How many past threads the phone draws. See the `meta` note on the section
