@@ -53,14 +53,6 @@ export function MTabs() {
   const qs = searchParams?.toString() ?? ""
 
   /*
-   * The editorial chat draws its own full-height shell (`.m-chat-shell`,
-   * `position:fixed`, its own composer against the bottom edge) and the bar it
-   * replaced hid itself there for that reason. Kept, unchanged: this is not
-   * the surface to change while replacing the bar under it.
-   */
-  if (pathname === "/m/chat" || pathname.startsWith("/m/chat/")) return null
-
-  /*
    * THE TOKEN ROOT TRAVELS WITH THE BAR, and that is not decoration.
    *
    * `.mtabs` reads `--chrome`, `--line` and `--accent`, which the alias layer
