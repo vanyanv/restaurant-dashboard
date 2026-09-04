@@ -81,7 +81,7 @@ export function CounterPhoneInventoryClient({
 
       <Section bare title="Next count" data={sections.nextCount} pending={pending}>
         {() => (
-          <Link className="mbtn mbtn--primary" href="/m/count">
+          <Link className="mbtn mbtn--primary" href="/m/operations/inventory/count/new">
             Start the count
           </Link>
         )}

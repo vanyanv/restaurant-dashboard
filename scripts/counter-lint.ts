@@ -369,14 +369,26 @@ const LEGACY_BASELINE_COMMIT = "aecadf0f90c87bb7d0dc9c3ccb05f7bade67466b"
  * suppressing at least one real violation" check. The tree is now linted for
  * real, so a colour literal added to any of those five files fails the gate.
  */
+/*
+ * `src/app/(mobile)/m` is GONE from this list too, on 2026-09-04, and by the
+ * same mechanism that removed `src/app/dashboard`: the test above failed
+ * because the entry had stopped suppressing anything.
+ *
+ * Its reason string named the subtrees to narrow to as each was rebuilt —
+ * "chat, count, invoices, labor, menu, operations, orders, pnl, product-mix,
+ * recipes, ingredients, more, settings, monitoring". Every one of them is
+ * Counter now. `/m/chat` and `/m/count`, the last two, became redirect shims
+ * onto `/m/ask` and `/m/operations/inventory/count/new`, and the editorial
+ * components they were the last readers of went with them.
+ *
+ * What is left under `/m` that is not a Counter page is `error.tsx` and
+ * `not-found.tsx`, the two outer boundaries, plus the `page-head` and `panel`
+ * they draw with. They break none of these rules — the editorial design keeps
+ * its colours in `src/styles/editorial-*.css`, which is why the entry below
+ * is still load-bearing and this one stopped being. The phone tree is linted
+ * for real from here, so a colour literal added anywhere under it fails.
+ */
 export const LEGACY: Array<{ path: string; reason: string }> = [
-  {
-    path: "src/app/(mobile)/m",
-    reason:
-      "Pre-Counter editorial mobile shell, deleted page by page as mobile is rebuilt on Counter (see project_mobile_direction.md). The rebuild HAS started: /m itself is " +
-      "Counter Overview's phone surface as of Phase C task 4, and is fully linted already — the exemption is content-based, so a rewritten file forfeits it automatically. " +
-      "Narrow this to the remaining editorial subtrees (chat, count, invoices, labor, menu, operations, orders, pnl, product-mix, recipes, ingredients, more, settings, monitoring) as each is rebuilt.",
-  },
   {
     path: "src/styles",
     reason:
