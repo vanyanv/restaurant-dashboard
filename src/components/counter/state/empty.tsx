@@ -71,6 +71,12 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
       "Ingredients are read off the lines of your invoices, so the catalogue fills as " +
       "invoices arrive. Nothing has been read in yet.",
   },
+  verdict_carried_it: {
+    head: "It is all in the verdict",
+    body:
+      "The one thing this week turns on is the sentence at the top of this page. Nothing " +
+      "else came up worth a second line.",
+  },
   no_reviews: {
     head: "No reviews yet",
     body:

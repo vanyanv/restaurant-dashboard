@@ -29,9 +29,12 @@ import type { ReadingSegment, StripCell } from "@/lib/counter/adapters/pnl"
 import type { OpportunityType } from "@/generated/prisma/client"
 import {
   dataOf,
+  empty,
   mapReady,
+  mapReadyTo,
   notComputed,
   ready,
+  type EmptyReason,
   type SectionData,
 } from "@/lib/counter/section-data"
 import type { DeltaTone } from "@/components/counter/surface/figure"
@@ -486,12 +489,29 @@ export function buildDecisionsHead(view: DecisionsView, week: WeekDay[]): Decisi
   }
 }
 
-/** The `.state` pill above the verdict sentence. */
+/**
+ * The `.state` pill above the verdict sentence.
+ *
+ * It used to read `actions` and the labor gap and nothing else, so it could
+ * say "Nothing needs you this week" while the sentence DIRECTLY BELOW IT
+ * narrated the briefing's most urgent line. Measured on 2026-09-04 at
+ * `/dashboard/decisions`:
+ *
+ *   NOTHING NEEDS YOU THIS WEEK
+ *   This week All stores require your focus on closing the books late …
+ *
+ * Two adjacent lines, one contradicting the other. The briefing is not an
+ * action — nothing about it is a decision with a deadline — but it is
+ * unambiguously something that needs the reader, which is the only question
+ * this pill answers. So it is consulted, and the pill says how much is here
+ * rather than claiming nothing is.
+ */
 function headlineFor(view: DecisionsView): string {
   const first = view.actions[0]
   if (first && first.deadline.kind === "decays") return "One decision cannot wait"
   if (view.vitals.laborGap.status === "short") return "The week is short on cover"
   if (first) return "One decision to make"
+  if (view.verdict.fromBriefing) return "One thing to look at"
   return "Nothing needs you this week"
 }
 
@@ -1274,9 +1294,19 @@ export function getDecisionsSectionPromises(
       "retryDecisions",
     )
 
-  const simple = <T,>(f: (view: DecisionsView) => T): Promise<SectionData<T>> =>
+  const simple = <T,>(
+    f: (view: DecisionsView) => T,
+    /** Which empty, when the built value is one — or null when it is not. */
+    emptyReason?: (view: DecisionsView, value: T) => EmptyReason | null,
+  ): Promise<SectionData<T>> =>
     guardSection(
-      viewP.then((sd) => mapReady(sd, f)),
+      viewP.then((sd) =>
+        mapReadyTo(sd, (view) => {
+          const value = f(view)
+          const reason = emptyReason?.(view, value) ?? null
+          return reason === null ? ready(value) : empty<T>(reason)
+        }),
+      ),
       "retryDecisions",
     )
 
@@ -1338,7 +1368,20 @@ export function getDecisionsSectionPromises(
   return {
     head: withWeekDays((view, week) => ready(buildDecisionsHead(view, week))),
     strip: withWeekDays((view, week) => ready(buildDecisionsStrip(view, week))),
-    briefing: simple(buildDecisionsBriefing),
+    /*
+     * The briefing, and the two ways it can be empty.
+     *
+     * `view.briefing` is `slice(1)` — the verdict absorbs the most urgent line
+     * so the page never says the same thing twice — so a briefing holding
+     * exactly one line leaves this section an empty array. Measured on
+     * 2026-09-04 that rendered as a heading, a meta and an Ask button over
+     * nothing at all, which is the blank-panel defect this codebase names
+     * everywhere else. Whether there WAS a line is the same fact the headline
+     * now needs, and `fromBriefing` carries it.
+     */
+    briefing: simple((view) => buildDecisionsBriefing(view), (view, lines) =>
+      lines.length > 0 ? null : view.verdict.fromBriefing ? "verdict_carried_it" : "all_clear",
+    ),
 
     // Monday to Sunday, forecast against actual — not the forward window.
     // The same series the headline and the strip sum, one function above.

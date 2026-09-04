@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger"
 import { VERDICT_NARRATION_VERSION, generateVerdictLine } from "@/lib/decision-verdict-llm"
 import {
   composeVerdict,
+  isNarratable,
   verdictInputsHash,
   type VerdictFacts,
 } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
@@ -29,6 +30,18 @@ export async function getVerdictLine(input: {
   userId?: string | null
 }): Promise<{ line: string; model: string | null }> {
   const { facts, storeId, asOf, userId } = input
+
+  /*
+   * Nothing to narrate, so nothing is asked. See `isNarratable`: a week with
+   * no forecast, no action and no briefing gave the model an empty block and
+   * it invented a sentence about closing the books late. Returning the
+   * composer's line here is both the honest answer and one completion not
+   * bought — and it deliberately precedes the cache read, so a hallucination
+   * already stored under today's key is not served either.
+   */
+  if (!isNarratable(facts)) {
+    return { line: composeVerdict(facts), model: null }
+  }
 
   // The portfolio view has no store; see the migration note on why this is a
   // real column rather than a nullable storeId in the unique index.

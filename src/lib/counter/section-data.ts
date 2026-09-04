@@ -56,6 +56,7 @@ export type EmptyReason =
   | "no_ingredients"
   | "no_recipes"
   | "no_reviews"
+  | "verdict_carried_it"
 
 /*
  * `nothing_received` is the fifth, and it exists because `no_delivery`'s advice

@@ -181,9 +181,45 @@ export function verdictFactBlock(f: VerdictFacts): Record<string, string> {
   return block
 }
 
+/**
+ * Whether these facts are worth paying a model to narrate.
+ *
+ * Measured on 2026-09-04 against an account with two pre-open stores: no
+ * forecast row, no action, no briefing line, no schedule. `buildVerdictFacts`
+ * therefore produced a block whose every optional field was absent, the model
+ * was asked for one sentence about it anyway, and it returned
+ *
+ *   "This week All stores require your focus on closing the books late to
+ *    ensure accurate financial tracking."
+ *
+ * Nothing in the block says anything about books, or about closing them late.
+ * The page printed that verbatim, directly beneath its own headline reading
+ * "Nothing needs you this week" — and it was cached for the day, so the
+ * contradiction was stable rather than a flicker.
+ *
+ * A narrator given nothing narrates something. The fix is not a better prompt:
+ * it is not asking. `composeVerdict` already has the right sentence for this
+ * state ("No forecast for X this week yet."), and skipping the call also stops
+ * buying a completion for a week that has no figures in it.
+ *
+ * The test mirrors the composer's own first two branches: a briefing line is
+ * something to say, and so is a week with a total and a peak day. Neither, and
+ * there is nothing for a sentence to be about.
+ */
+export function isNarratable(f: VerdictFacts): boolean {
+  if (f.topBriefing) return true
+  return f.weekTotal != null && f.peakDay != null
+}
+
 /** The deterministic reading. Also the fallback whenever narration is rejected. */
 export function composeVerdict(f: VerdictFacts): string {
-  const where = f.isAggregate ? "across all stores" : f.storeName
+  /*
+   * "for any store", not "across all stores" — this reads inside "No forecast
+   * for ___ this week yet.", and the adverbial produced "No forecast for
+   * across all stores this week yet." It is used in that one sentence and
+   * nowhere else, so it is written to fit it.
+   */
+  const where = f.isAggregate ? "any store" : f.storeName
 
   // The page drops this line from the list below on the assumption the verdict
   // carries it. That assumption has to hold when there is no narrator, so the
