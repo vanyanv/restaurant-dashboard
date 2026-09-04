@@ -15,10 +15,31 @@ describe("Rail", () => {
     expect(screen.getByRole("navigation", { name: /sections/i })).toBeTruthy()
   })
 
-  it("renders all seventeen destinations", () => {
-    render(<Rail pathname="/dashboard" />)
+  /*
+   * Seventeen is the DEVELOPER's rail. `/dashboard/admin/**` redirects anyone
+   * who is not one to `/dashboard/forbidden`, so Monitoring is drawn for a
+   * developer and for nobody else — this used to assert seventeen for every
+   * reader, which is the rail an owner was actually shown while the gate
+   * behind it refused them.
+   */
+  it("renders all seventeen destinations for a developer", () => {
+    render(<Rail pathname="/dashboard" user={{ name: "Vardan", role: "Developer", isDeveloper: true }} />)
     const nav = screen.getByRole("navigation", { name: /sections/i })
     expect(within(nav).getAllByRole("link")).toHaveLength(17)
+    expect(within(nav).getByText("Monitoring")).toBeTruthy()
+  })
+
+  it("hides Monitoring from an owner, whose only destination there is a wall", () => {
+    render(<Rail pathname="/dashboard" user={{ name: "Chris Karimian", role: "Owner" }} />)
+    const nav = screen.getByRole("navigation", { name: /sections/i })
+    expect(within(nav).getAllByRole("link")).toHaveLength(16)
+    expect(within(nav).queryByText("Monitoring")).toBeNull()
+  })
+
+  it("hides it when it does not know who is reading, rather than guessing yes", () => {
+    render(<Rail pathname="/dashboard" />)
+    const nav = screen.getByRole("navigation", { name: /sections/i })
+    expect(within(nav).getAllByRole("link")).toHaveLength(16)
   })
 
   it("renders the five group captions", () => {

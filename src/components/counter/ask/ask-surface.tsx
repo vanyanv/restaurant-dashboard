@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import Link from "next/link"
 import { Calendar, Store as StoreGlyph } from "lucide-react"
 import { askHref, describeAskContext, type AskContext } from "@/lib/counter/ask-context"
-import { NAV_GROUPS } from "@/lib/counter/nav"
+import { visibleNavGroups } from "@/lib/counter/nav-access"
 import { PRESETS, type PresetId, type RangeId } from "@/lib/counter/date-range"
 import { NAV_ICONS } from "@/components/counter/shell/nav-icons"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
@@ -101,8 +101,11 @@ import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
  * ROWS COME FROM REAL DATA
  * ---------------------------------------------------------------------------
  *
- * "Go to" is `NAV_GROUPS` (`src/lib/counter/nav.ts`) — the same seventeen
- * destinations the rail draws, under the same icons (`NAV_ICONS`). "Switch
+ * "Go to" is `visibleNavGroups` (`src/lib/counter/nav-access.ts`) — the same
+ * destinations the rail draws, from the same helper, under the same icons
+ * (`NAV_ICONS`). Seventeen for a developer and sixteen for everyone else,
+ * because `/dashboard/admin/**` refuses anyone who is not one and a row that
+ * only ever reaches `/dashboard/forbidden` is worse than an absent one. "Switch
  * store" is the same `stores` array the rail's switcher gets. "Change the
  * range" is `PRESETS` from `date-range.ts`, the same twelve `DateControl`
  * offers. A palette that lists a page the rail does not is worse than one that
@@ -273,6 +276,7 @@ export function AskSurface({
   presetId,
   onSelectPreset,
   suggestions = [],
+  isDeveloper,
   onSubmit,
   askState,
   onAskBack,
@@ -290,6 +294,13 @@ export function AskSurface({
   onSelectPreset?: (id: PresetId) => void
   /** "Ask about {page}" — the page's own suggested questions, or no group. */
   suggestions?: string[]
+  /**
+   * Whether this reader may open `/dashboard/admin/**`, so "Go to" offers the
+   * same destinations the rail does. Absent means no, for the rail's reason:
+   * a surface that does not know who is reading must not offer a door that
+   * only ever refuses.
+   */
+  isDeveloper?: boolean
   onSubmit?: (question: string, context: AskContext) => void
   /** The lifecycle of the last submitted question. PRESENT is what turns this
    *  palette into an answering surface: absent, submitting closes it and hands
@@ -388,7 +399,7 @@ export function AskSurface({
 
     out.push({
       caption: "Go to",
-      rows: NAV_GROUPS.flatMap((g) => g.items).map((item) => {
+      rows: visibleNavGroups(isDeveloper).flatMap((g) => g.items).map((item) => {
         const Icon = NAV_ICONS[item.icon]
         return {
           key: `go:${item.id}`,

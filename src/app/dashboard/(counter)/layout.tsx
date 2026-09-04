@@ -68,7 +68,14 @@ export default async function CounterLayout({
       // draws no account row rather than inventing one.
       user={
         session
-          ? { name: session.user.name, role: titleCase(session.user.role) }
+          ? {
+              name: session.user.name,
+              role: titleCase(session.user.role),
+              // The SAME comparison `admin/layout.tsx` makes to let someone
+              // through, made here to decide whether to offer the door. The
+              // raw enum, not the title-cased label beside it.
+              isDeveloper: session.user.role === "DEVELOPER",
+            }
           : undefined
       }
       // Resolved on the server so the shell and the page below it cannot

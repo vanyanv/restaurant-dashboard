@@ -48,10 +48,24 @@ describe("getRatingsSummary", () => {
     expect(await getRatingsSummary()).toBeNull()
   })
 
-  it("returns null when the account has no reviews at all", async () => {
+  /*
+   * NOT null. This asserted null until 2026-09-04, and that is exactly how the
+   * Overview came to raise a red `!` and "Guest ratings did not load" on every
+   * account nobody had reviewed yet: null is this reader saying it COULD NOT
+   * ANSWER, and the caller is entitled to treat that as a failure. An empty
+   * table is an answer.
+   */
+  it("answers with a zero count when the account has no reviews at all", async () => {
     vi.mocked(getServerSession).mockResolvedValue(session as never)
     vi.mocked(prisma.otterRating.findMany).mockResolvedValue([] as never)
-    expect(await getRatingsSummary()).toBeNull()
+    const summary = await getRatingsSummary()
+    expect(summary).not.toBeNull()
+    expect(summary!.count).toBe(0)
+    expect(summary!.average).toBeNull()
+    // `stale` means "the window was empty so these are older reviews". There
+    // are no reviews at all, so nothing here is stale.
+    expect(summary!.stale).toBe(false)
+    expect(summary!.recent).toEqual([])
   })
 
   it("averages the window and counts 1–2 star reviews", async () => {
