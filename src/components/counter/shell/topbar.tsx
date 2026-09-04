@@ -69,10 +69,25 @@ export function Topbar({
   sync?: { state: SyncState; at?: Date; now: Date }
 }) {
   const destination = owningDestination(pathname)
-  // A crumb only when the route runs deeper than the destination's own href —
-  // a top-level page has nothing above it worth naming.
-  const crumb = destination && pathname !== destination.href ? destination : null
   const leafText = leaf ?? destination?.label ?? ""
+  /*
+   * A crumb only when the route runs deeper than the destination's own href —
+   * a top-level page has nothing above it worth naming — AND when it is not
+   * already the leaf.
+   *
+   * The second half is what the three store-scoped detail pages needed. Labor,
+   * Analytics and COGS for one store each passed `leaf: storeName` beside the
+   * `storeName` that opens the trail, so the store was named at both ends:
+   * "Mario's Downtown Location / Labor / Mario's Downtown Location". Dropping
+   * the duplicated leaf leaves the destination's own label in its place, and
+   * without this the trail would then read "… / Labor / Labor". Nothing is
+   * lost by cutting the link: every one of those pages draws an
+   * "All stores | One store" bar directly beneath it.
+   */
+  const crumb =
+    destination && pathname !== destination.href && destination.label !== leafText
+      ? destination
+      : null
 
   return (
     <div className="topbar">

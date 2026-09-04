@@ -128,12 +128,24 @@ export function CounterStoreCogsClient({
   // query string before this island ever rendered.
   const storeName = stores.find((s) => s.id === storeId)?.name ?? "This store"
 
-  // `leaf`, `storeId` and `storeName` are all owed here. The layout's switcher
-  // and breadcrumb read `?store=`, and this route carries none — without them
-  // the crumb reads "All stores / COGS / COGS" on a page about one store, and
-  // the switcher offers to change a store it does not know is selected.
+  /*
+   * `storeId` and `storeName` are owed here and `leaf` is not.
+   *
+   * The layout's switcher and breadcrumb read `?store=`, and this route
+   * carries none, so without the first two the switcher offers to change a
+   * store it does not know is selected. `leaf: storeName` was passed for the
+   * same reason and overshot: `storeName` ALREADY opens the trail — that is
+   * what the first element of a Counter breadcrumb is, the scope the page is
+   * drawn for — so the store was named at both ends of one trail, measured on
+   * 2026-09-04 as "Mario's Downtown Location / COGS / Mario's Downtown
+   * Location".
+   *
+   * It was passed to stop the trail reading "… / COGS / COGS", which was a real
+   * fault; `Topbar` now drops a crumb that merely repeats the leaf, which
+   * fixes that case at its source and leaves this page's own section name
+   * standing alone.
+   */
   usePageChrome({
-    leaf: storeName,
     storeId,
     storeName,
     askSuggestions: ASK_SUGGESTIONS,
