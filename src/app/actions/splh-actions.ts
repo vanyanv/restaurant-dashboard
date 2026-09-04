@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getAccountStoreRows } from "@/lib/account-stores"
+import { cached, stableKey } from "@/lib/cache/cached"
+import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
+import { todayInLA } from "@/lib/dashboard-utils"
 import { Prisma } from "@/generated/prisma/client"
 import {
   buildSplhSeries,
@@ -120,10 +123,45 @@ export async function getSplhSeries(
 
   const rangeStartDay = range ? calendarDay(range.startDate) : null
   const rangeEndDay = range ? calendarDay(range.endDate) : null
+  const accountId = session.user.accountId
+
+  return cached(
+    // Without a range the window is "trailing, ending now", so the key must
+    // carry the day — or this morning's reader would be served last night's
+    // window until the TTL ran out. With a range the bounds ARE the key.
+    `splh:account:${accountId}:${stableKey({
+      g: granularity,
+      s: range?.startDate ?? null,
+      e: range?.endDate ?? null,
+      d: range ? null : todayInLA(),
+    })}`,
+    rangeTtl(until ?? new Date()),
+    // Both sides of the join have a writer. `/api/cron/harri` busts `harri`
+    // and `/api/cron/otter/hourly` busts `otter`; each also busts `dash` and
+    // the month tags of the days it wrote. The month tags here span the
+    // QUERIED window (`since`, not the range's start), because a backfill into
+    // the 56-day history moves the weekday medians every bar is scored
+    // against, and a key tagged only with the displayed months would survive
+    // it.
+    ["harri", ...otterRangeTags(since, until ?? new Date())],
+    () => loadSplhSeries({ accountId, granularity, range, since, until, rangeStartDay, rangeEndDay }),
+  )
+}
+
+async function loadSplhSeries(input: {
+  accountId: string
+  granularity: "day" | "week"
+  range: SplhRange | undefined
+  since: Date
+  until: Date | null
+  rangeStartDay: string | null
+  rangeEndDay: string | null
+}): Promise<SplhSeries[]> {
+  const { accountId, granularity, range, since, until, rangeStartDay, rangeEndDay } = input
 
   // The one store query a request makes — `@/lib/account-stores` — with this
   // caller's own `isActive` filter applied over it.
-  const stores = (await getAccountStoreRows(session.user.accountId)).filter(
+  const stores = (await getAccountStoreRows(accountId)).filter(
     (s) => s.isActive,
   )
   if (stores.length === 0) return []

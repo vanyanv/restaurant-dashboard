@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import { rangeTtl } from "@/lib/cache/range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -210,10 +212,23 @@ export async function loadLeakLedger(input: {
   }
   const storeIds = stores.map((s) => s.id)
 
-  const alerts = await prisma.harriTimekeepingAlert.findMany({
-    where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
-    select: { alertCode: true, timeDiffSec: true, userId: true },
-  })
+  // The rows themselves are cached — every selected column is a string or a
+  // number, so they round-trip exactly. `blendedRate` is SPLH's figure and
+  // stays outside the key: it only enters at `leakLedger`, and a ledger keyed
+  // on a float would cache nothing while today is open.
+  const alerts = await cached(
+    `counter:leaks:${stableKey({ ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    rangeTtl(endDate),
+    // Written by `runHarriLaborSync`, which the harri cron runs before it
+    // busts `harri`, `dash` and the months it wrote. No Otter table here, so
+    // no `otter` tag — an hourly sales sync should not evict a timekeeping ledger.
+    ["harri", "dash", ...monthTags(startDate, endDate)],
+    () =>
+      prisma.harriTimekeepingAlert.findMany({
+        where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
+        select: { alertCode: true, timeDiffSec: true, userId: true },
+      }),
+  )
 
   return leakLedger(alerts, blendedRate)
 }

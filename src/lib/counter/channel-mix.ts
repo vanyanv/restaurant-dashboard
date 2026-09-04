@@ -2,6 +2,8 @@ import { Prisma } from "@/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import { CHANNELS, type ChannelId } from "@/lib/counter/channels"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
+import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
+import { cached, stableKey } from "@/lib/cache/cached"
 import { getScopedStores } from "@/lib/account-stores"
 
 /**
@@ -218,8 +220,45 @@ export async function loadChannelMixByStore(
   )
 }
 
-/** The one summary read both loaders share. */
+/**
+ * The one summary read both loaders share.
+ *
+ * ## Why the cache sits HERE and not on either loader
+ *
+ * `loadChannelMix` returns an array and `loadChannelMixByStore` returns a
+ * `Map`, and a `Map` does not survive the Redis JSON round-trip — it comes back
+ * as `{}`, which folds to a channel strip of zeroes rather than an error. This
+ * function is the shared Prisma call underneath both, and `SummaryRow` is
+ * entirely strings and numbers, so it round-trips exactly. Caching the shared
+ * read also means the two loaders cannot disagree about a range: they now fold
+ * the same rows.
+ *
+ * The fold itself stays uncached. It is pure arithmetic over rows already in
+ * memory, and `foldToChannels` is deliberately the single implementation of
+ * that arithmetic — caching its output per shape would reintroduce the second
+ * copy the docblock below exists to prevent.
+ */
 function queryChannelRows(
+  storeIds: string[],
+  startDate: Date,
+  endDate: Date,
+): Promise<SummaryRow[]> {
+  return cached(
+    // Store ids rather than the account: `getScopedStores` has already resolved
+    // the account and the store filter into this exact list, so two readers with
+    // different scopes cannot collide on one key.
+    `counter:chanrows:${stableKey({
+      ids: [...storeIds].sort(),
+      from: startDate,
+      to: endDate,
+    })}`,
+    rangeTtl(endDate),
+    otterRangeTags(startDate, endDate),
+    () => queryChannelRowsUncached(storeIds, startDate, endDate),
+  )
+}
+
+function queryChannelRowsUncached(
   storeIds: string[],
   startDate: Date,
   endDate: Date,

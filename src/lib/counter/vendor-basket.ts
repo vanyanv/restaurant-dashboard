@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { cached } from "@/lib/cache/cached"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 
 /**
@@ -59,6 +60,33 @@ export interface VendorBasketTrends {
  * hand them straight to `foldBasketTrends` instead of querying twice.
  */
 export async function loadVendorBasketWeeks(input: {
+  accountId: string
+  today: Date
+}): Promise<Array<{ wk: Date; vendor: string; px: number }>> {
+  // `wk` is a `Date` on the contract above and a string in Redis, so the
+  // cached shape carries it as ISO and the ONE known field is revived on the
+  // way out. Explicit and local — not a generic reviver, which is how a
+  // string that merely looks like a date gets turned into one.
+  //
+  // Keyed on the UTC day of `today`, which is the day `${today}::date`
+  // resolves to in the query (Neon's session zone is UTC), so the key and the
+  // SQL agree about which week "this week" is.
+  const rows = await cached(
+    `counter:basket:${input.accountId}:${input.today.toISOString().slice(0, 10)}`,
+    300,
+    // Every invoice writer — the sync, the review actions, the API — busts
+    // `invoices` and `account:*`; a basket that spans BASKET_WEEKS has no
+    // narrower tag worth carrying.
+    ["invoices", `account:${input.accountId}`],
+    async () => {
+      const raw = await queryVendorBasketWeeks(input)
+      return raw.map((r) => ({ wk: r.wk.toISOString(), vendor: r.vendor, px: r.px }))
+    },
+  )
+  return rows.map((r) => ({ wk: new Date(r.wk), vendor: r.vendor, px: r.px }))
+}
+
+function queryVendorBasketWeeks(input: {
   accountId: string
   today: Date
 }): Promise<Array<{ wk: Date; vendor: string; px: number }>> {
