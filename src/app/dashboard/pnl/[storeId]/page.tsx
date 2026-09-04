@@ -33,9 +33,35 @@ import { permanentRedirect } from "next/navigation"
  */
 export default async function StorePnlRedirect({
   params,
+  searchParams,
 }: {
   params: Promise<{ storeId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { storeId } = await params
-  permanentRedirect(`/dashboard/pnl?store=${encodeURIComponent(storeId)}`)
+  const sp = await searchParams
+
+  /*
+   * THE QUERY IS CARRIED. This shim used to drop it, which was harmless while
+   * the only links to it were bare hrefs. `storeViewTabs` now builds the P&L's
+   * "One store" tab as `/dashboard/pnl/<id>?range=…` — the same bar Analytics,
+   * Labor and COGS have always had — so dropping the query would make that tab
+   * reset the window on every press. `store` is dropped on the way through
+   * because the id is in the path and two sources for one fact is how they
+   * come to disagree.
+   */
+  const carried = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (key === "store") continue
+    if (typeof value === "string") carried.set(key, value)
+  }
+  const prefix = carried.toString()
+
+  // `encodeURIComponent` for the id rather than a third `set` on `carried`:
+  // `URLSearchParams` writes a space as `+`, and this shim has emitted `%20`
+  // since it was written. Both decode the same, and neither is worth changing
+  // the output of a redirect owners have bookmarked.
+  permanentRedirect(
+    `/dashboard/pnl?${prefix ? `${prefix}&` : ""}store=${encodeURIComponent(storeId)}`,
+  )
 }

@@ -13,6 +13,7 @@ import {
   Section,
   STAGE_TAG,
   Strip,
+  SubNav,
   Table,
   WeekTable,
   useCounterTransition,
@@ -21,6 +22,7 @@ import {
   type Row,
   type SwitchableStore,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
   COMPARISONS,
@@ -276,6 +278,13 @@ export function CounterPnlClient({
           onRange={(next) => push({ range: next })}
         />
       </PageHead>
+
+      {/* `VIEWS.pnl`'s group/store pair — see `storeViewTabs`. Analytics, Labor
+          and COGS all carry this bar; the P&L, the fourth page in the design
+          with a per-store twin, drew nothing and left `/dashboard/pnl/<id>`
+          reachable only from the Overview. "One store" appears only once a
+          store is picked. */}
+      <SubNav items={storeViewTabs("/dashboard/pnl", counterParams.storeId, paramsString)} label="P&L" />
 
       {/* The strip and the sentence under it — one section, because the
           sentence is a reading OF those five figures. Both sit at page level,

@@ -5,6 +5,7 @@ import { useMemo } from "react"
 import {
   ChannelRows,
   Chart,
+  CountUp,
   MHead,
   MList,
   MStrip,
@@ -246,7 +247,9 @@ return (
         {(d) => (
           <MHead
             label={days === 1 ? "Net sales" : `Net sales · ${count(days)} days`}
-            value={money(d.grossSales)}
+            // Counts up to the rollup's number, as the desk's head figure does
+            // — one system at two sizes.
+            value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
             // Only when a comparison is on: with it off the string is "no
             // comparison set", which is what `.msub` above already says.
             //

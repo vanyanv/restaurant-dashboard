@@ -3,8 +3,7 @@ import { Suspense } from "react"
 import { Fraunces } from "next/font/google"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { MobileTabBar } from "@/components/mobile/mobile-tab-bar"
-import { getTabs } from "@/lib/mobile/tabs"
+import { MTabs } from "@/components/counter"
 import { WelcomeMarquee } from "@/components/dashboard/welcome-marquee"
 import { consumePendingWelcome } from "@/lib/welcome"
 import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
@@ -83,7 +82,6 @@ export default async function MobileLayout({
       // Local-only escape hatch; never honoured in production.
       (process.env.TRACK_DEVELOPER_PAGE_VIEWS === "1" &&
         process.env.NODE_ENV !== "production"))
-  const tabs = getTabs()
   const firstName = session?.user?.firstName ?? null
 
   return (
@@ -104,8 +102,20 @@ export default async function MobileLayout({
             that requires one, and `/m/login` now lives under this layout — a
             sign-in screen offering five links to pages you cannot open is a
             row of dead ends. The layout already reads the session for the
-            welcome marquee, so this costs no query. */}
-        {session ? <MobileTabBar tabs={tabs} /> : null}
+            welcome marquee, so this costs no query.
+
+            The bar brings its OWN Counter token root (see `MTabs`) rather
+            than being wrapped in one here: this file is still the pre-Counter
+            shell and loads its stylesheets, and
+            `tests/styles/token-parity.test.ts` requires that no file which can
+            open a Counter root carries any of the old design.
+
+            It is mounted HERE and not in `PhoneShell` because the bar belongs
+            to EVERY `/m` route, and `PhoneShell` is mounted by the `(counter)`
+            group alone — mounting it there would leave the handful of routes
+            not yet rebuilt carrying the old bar, which is the split this
+            replaces rather than a state to preserve. */}
+        {session ? <MTabs /> : null}
       </div>
     </div>
   )

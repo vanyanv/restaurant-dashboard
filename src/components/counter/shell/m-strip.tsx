@@ -1,6 +1,7 @@
 import { bwords, isJudged } from "@/lib/counter/bullet-state"
 import { Bullet } from "@/components/counter/surface/bullet"
 import type { FigureProps } from "@/components/counter/surface/figure"
+import { Arriving } from "@/components/counter/motion/count-up"
 
 /**
  * `.mstrip` — the phone's ruled strip of figures.
@@ -63,7 +64,7 @@ export function MStrip({ cells }: { cells: FigureProps[] }) {
   )
 }
 
-function MCell({ label, value, delta, deltaTone, caption, reference }: FigureProps) {
+function MCell({ label, value, arrive, delta, deltaTone, caption, reference }: FigureProps) {
   const judged = reference != null && isJudged(reference)
   // `quiet` draws the meter but says nothing about it — no flag words.
   const spoken = judged && !reference.quiet
@@ -75,7 +76,7 @@ function MCell({ label, value, delta, deltaTone, caption, reference }: FigurePro
     <div>
       <span className="k">{label}</span>
       <span data-figure-value className="v">
-        {value}
+        <Arriving arrive={arrive}>{value}</Arriving>
       </span>
       {delta ? <span className={deltaTone ? `d ${deltaTone}` : "d"}>{delta}</span> : null}
       {judged ? <Bullet reference={reference} /> : null}

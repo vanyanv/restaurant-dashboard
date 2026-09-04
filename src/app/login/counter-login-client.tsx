@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { signIn, getSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Logo } from "@/components/counter"
+import {
+  Logo,
+  WelcomeLine,
+  greetingFor,
+  welcomeNext,
+  welcomeHoldMs,
+  DOOR_WIPE_MS,
+  useReducedMotion,
+} from "@/components/counter"
 
 /**
  * Sign in — `P.login`, on the "Sign on" composition.
@@ -87,7 +95,10 @@ export function CounterLoginClient() {
   const [problem, setProblem] = useState<string | null>(null)
   const [why, setWhy] = useState<string | null>(null)
   const [reveal, setReveal] = useState(false)
+  // Set on success from the session, and read only by the door.
+  const [greeting, setGreeting] = useState<string | null>(null)
   const router = useRouter()
+  const reduced = useReducedMotion()
 
   // `good` holds the door open for its own animation before the route changes.
   // The timer is cleared on unmount so a fast navigation cannot push twice.
@@ -155,7 +166,18 @@ export function CounterLoginClient() {
         return
       }
       setPhase("good")
-      timer.current = setTimeout(() => router.push("/dashboard"), 620)
+      /*
+       * The door holds long enough for the greeting to be typed and read
+       * (`welcomeHoldMs`, from the name's length) — about 1.05s for "Chris"
+       * against the 620ms the wipe alone took. Under reduced motion the
+       * sentence is simply there, so the door holds only its wipe.
+       */
+      const hello = greetingFor(session.user.name)
+      setGreeting(hello)
+      timer.current = setTimeout(
+        () => router.push("/dashboard"),
+        reduced ? DOOR_WIPE_MS : welcomeHoldMs(hello),
+      )
     } catch {
       fail("Something went wrong on our end", WHY_OURS)
     }
@@ -303,6 +325,13 @@ export function CounterLoginClient() {
           accessibility tree — it is the transition, not content. */}
       <div className="login__door" aria-hidden="true">
         <Logo width={340} priority={false} />
+        {/* The one sentence that is not a figure — see `welcome-line.tsx`.
+            Mounted with the `good` phase so its typing starts with the wipe;
+            `new Date()` is the client's clock, which is the right clock for a
+            line that names the day the reader is about to open. */}
+        {greeting !== null ? (
+          <WelcomeLine greeting={greeting} next={welcomeNext(new Date())} />
+        ) : null}
       </div>
     </main>
   )

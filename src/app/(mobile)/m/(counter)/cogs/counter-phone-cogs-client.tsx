@@ -111,7 +111,7 @@ export function CounterPhoneCogsClient({
     <>
       {/* `VIEWS`'s group/store pair, first inside `.mscroll`. "One store"
           appears only once a store is picked — the design's own sequence. */}
-      <SubNav items={storeViewTabs("/m/cogs", counterParams.storeId, paramsString, [{ label: "Theoretical vs actual", href: "/m/operations/product-usage" }])} label="COGS" />
+      <SubNav items={storeViewTabs("/m/cogs", counterParams.storeId, paramsString, [{ label: "Theoretical vs actual", href: "/m/operations/product-usage" }], "Cost")} label="COGS" />
 
       <div>
         <h2 className="mtitle">Cost of goods</h2>

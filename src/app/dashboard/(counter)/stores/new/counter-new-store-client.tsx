@@ -11,8 +11,10 @@ import {
   useCounterTransition,
   usePageChrome,
   type Column,
+  SubNav,
 } from "@/components/counter"
 import { createStoreRecord } from "@/lib/counter/actions/store"
+import { storesViewTabs } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { NewStoreSections } from "@/lib/counter/adapters/new-store"
 
@@ -40,8 +42,10 @@ const CHECK_COLUMNS: Column[] = [
 
 export function CounterNewStoreClient({
   sections,
+  storeId,
 }: {
   sections: SectionSources<NewStoreSections>
+  storeId: string | null
 }) {
   usePageChrome({
     leaf: "New store",
@@ -71,6 +75,13 @@ export function CounterNewStoreClient({
   return (
     <>
       <PageHead title="New store" sub="Three fields to start · the rest can wait" />
+
+      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. The phone grew this
+          bar first; the desk had a "New store" button on the list page and
+          nothing at all on the other two, so the create form and the store file
+          each sat with no way back to their siblings. Same three tabs, same
+          order, one helper. */}
+      <SubNav items={storesViewTabs("/dashboard/stores", storeId)} label="Stores" />
 
       <Section title="The store" meta={(f) => f.meta} data={sections.form} pending={pending}>
         {(f) => (

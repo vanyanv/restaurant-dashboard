@@ -61,8 +61,11 @@ export function MHead({
 }: {
   /** `.k` — "Net sales today", "Net sales · 7 days", "Build-out". */
   label: string
-  /** `.v` — pre-formatted. Formatting belongs to `@/lib/counter/format`. */
-  value: string
+  /**
+   * `.v` — pre-formatted, or a `CountUp` that formats each frame with the
+   * same `@/lib/counter/format` function. Formatting belongs there either way.
+   */
+  value: ReactNode
   /** `.d` — "▲ 4.1% vs the same 4 weekdays". Omitted when there is no comparison. */
   delta?: string
   /**

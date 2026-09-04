@@ -1,214 +1,56 @@
-import { formatCurrencyWhole as fmtMoney } from "@/lib/format"
-import Link from "next/link"
-import { notFound, redirect } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { authOptions, hasOwnerAccess } from "@/lib/auth"
-import { getStorePnL } from "@/app/actions/store-actions"
-import { parsePnLRange, pnlRangeToState } from "@/lib/mobile/pnl-period"
-import { PageHead } from "@/components/mobile/page-head"
-import {
-  MastheadFigures,
-  type MastheadCell,
-} from "@/components/mobile/masthead-figures"
-import { Panel } from "@/components/mobile/panel"
-import { MPnLToolbar } from "@/components/mobile/m-pnl-toolbar"
-import { SwitchToDesktopButton } from "@/app/(mobile)/m/more/switch-to-desktop"
+import { permanentRedirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-
-const fmtPct = (n: number) => `${n.toFixed(1)}%`
-
-const fmtSigned = (n: number) =>
-  `${n >= 0 ? "" : "−"}${fmtMoney(Math.abs(n))}`
-
-const PNL_PERIOD_LABELS: Record<string, string> = {
-  "this-week": "this week",
-  "last-week": "last week",
-  "this-month": "this month",
-  "last-month": "last month",
-  "last-8-weeks": "last 8 weeks",
-}
-
-export default async function MobileStorePnLPage({
+/**
+ * `/m/pnl/<id>` — a redirect shim onto `/m/pnl?store=<id>`, the phone's copy
+ * of the decision `src/app/dashboard/pnl/[storeId]/page.tsx` took for the desk.
+ *
+ * What was here until now was 214 lines of the pre-Counter editorial design —
+ * `PageHead`, `MastheadFigures`, `Panel`, `MPnLToolbar` and its five `?period=`
+ * chips — reached from the Counter Overview's own "Open this store's P&L"
+ * button. An owner on a rebuilt phone pressed a Counter button and landed on
+ * the old product, which is the single largest remaining mismatch between this
+ * surface and the design.
+ *
+ * It is a shim rather than a Counter rebuild because the rebuild already
+ * happened somewhere else, and doing it again here would be the regression
+ * `pnl-store.ts` warns about: "a store is a PARAM on one P&L, `?store=` is what
+ * `writeCounterParams` writes." The prototype's `P.pnlstore` content lands on
+ * the group page — the strip, the cascade, the eight weeks and the statement
+ * take a `storeId` and always have, and "What this store carries" is now
+ * rendered there from the same `getStoreFixedSectionPromises` the desk uses.
+ *
+ * THE QUERY IS CARRIED, unlike the desk's shim. `storeViewTabs` builds the
+ * "One store" tab as `/m/pnl/<id>?range=…`, so dropping the query would make
+ * that tab silently reset the window every time it was pressed — note 42's
+ * defect, introduced by the bar rather than fixed by it. `store` is dropped on
+ * the way through because the id is in the path and two sources for one fact
+ * is how they come to disagree.
+ *
+ * No session check, for the reason the desk shim gives: this resolves to a
+ * redirect and nothing else, and `/m/pnl` carries the gate a line later.
+ */
+export default async function MobileStorePnlRedirect({
   params,
   searchParams,
 }: {
   params: Promise<{ storeId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const session = await getServerSession(authOptions)
-  if (!session) redirect("/login")
-  if (!hasOwnerAccess(session.user.role)) redirect("/m")
-
   const { storeId } = await params
-  const sp = normalize(await searchParams)
-  const range = parsePnLRange(sp)
-  const state = pnlRangeToState(range)
+  const sp = await searchParams
 
-  const result = await getStorePnL({
-    storeId,
-    startDate: state.startDate,
-    endDate: state.endDate,
-    granularity: state.granularity,
-  })
-
-  const subLabel =
-    range.kind === "custom"
-      ? `Custom · ${state.granularity}`
-      : PNL_PERIOD_LABELS[range.period] ?? range.period
-
-  if ("error" in result) {
-    if (result.error === "Store not found") notFound()
-    return (
-      <>
-        <BackLink href="/m/pnl" label="All stores" />
-        <PageHead dept="P&L" title="Error" sub={subLabel} />
-        <MPnLToolbar pathname={`/m/pnl/${storeId}`} searchParams={sp} range={range} />
-        <div className="m-empty dock-in dock-in-2">
-          <strong>Couldn&apos;t load.</strong> {result.error}
-        </div>
-      </>
-    )
+  const carried = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (key === "store") continue
+    if (typeof value === "string") carried.set(key, value)
   }
+  const prefix = carried.toString()
 
-  const cells: MastheadCell[] = [
-    {
-      label: "GROSS",
-      value: fmtMoney(result.kpis.grossSales),
-      sub: subLabel,
-    },
-    {
-      label: "MARGIN",
-      value: fmtPct(result.kpis.marginPct),
-      sub: fmtSigned(result.kpis.bottomLine),
-    },
-    {
-      label: "FIXED",
-      value: fmtMoney(result.kpis.fixedCosts),
-      sub: result.fixedLaborConfigured && result.fixedRentConfigured
-        ? "configured"
-        : "incomplete",
-    },
-  ]
-
-  return (
-    <>
-      <BackLink href="/m/pnl" label="All stores" />
-
-      <PageHead
-        dept="P&L"
-        title={result.storeName}
-        sub={`${result.periods.length} periods · ${state.granularity}`}
-      />
-
-      <MPnLToolbar pathname={`/m/pnl/${storeId}`} searchParams={sp} range={range} />
-
-      <MastheadFigures cells={cells} />
-
-      <div className="dock-in dock-in-3" style={{ marginTop: 14 }}>
-        <Panel
-          dept={`COGS ${fmtPct(result.cogs.grossMarginPct)}`}
-          title="Gross profit"
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 12,
-              alignItems: "baseline",
-            }}
-          >
-            <span
-              style={{
-                fontFamily:
-                  "var(--font-jetbrains-mono), ui-monospace, monospace",
-                fontSize: 10,
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                color: "var(--ink-muted)",
-              }}
-            >
-              {fmtMoney(result.cogs.totalCogs)} cost
-            </span>
-            <span className="inv-row__total">
-              {fmtMoney(result.cogs.grossProfit)}
-            </span>
-          </div>
-          {result.cogs.unmappedItems.length > 0 ||
-          result.cogs.missingCostItems.length > 0 ? (
-            <div className="m-readonly-note" style={{ marginTop: 12 }}>
-              {result.cogs.unmappedItems.length} unmapped ·{" "}
-              {result.cogs.missingCostItems.length} missing cost
-            </div>
-          ) : null}
-        </Panel>
-      </div>
-
-      <div className="dock-in dock-in-4" style={{ marginTop: 14 }}>
-        <Panel dept="STATEMENT" title="Full breakdown">
-          <p
-            style={{
-              fontSize: 13,
-              color: "var(--ink-muted)",
-              lineHeight: 1.6,
-              margin: "0 0 12px",
-            }}
-          >
-            The line-by-line statement is a desktop view — every P&L row,
-            expanded and exportable.
-          </p>
-          <SwitchToDesktopButton
-            target={`/dashboard/pnl/${storeId}`}
-            label="Full statement on desktop →"
-          />
-        </Panel>
-      </div>
-
-      {result.channelMix.length > 0 ? (
-        <div className="dock-in dock-in-5" style={{ marginTop: 14 }}>
-          <Panel dept="CHANNEL MIX" title="By platform" flush>
-            {result.channelMix
-              .filter((c) => c.amount > 0)
-              .sort((a, b) => b.amount - a.amount)
-              .map((c) => (
-                <div
-                  key={c.channel}
-                  className="inv-row"
-                  style={{
-                    cursor: "default",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 12,
-                    padding: "12px 18px",
-                  }}
-                >
-                  <span className="inv-row__vendor-name" style={{ fontSize: 14 }}>
-                    {c.channel}
-                  </span>
-                  <span className="inv-row__total">{fmtMoney(c.amount)}</span>
-                </div>
-              ))}
-          </Panel>
-        </div>
-      ) : null}
-    </>
+  // `encodeURIComponent` for the id rather than a third `set` on `carried`:
+  // `URLSearchParams` writes a space as `+`, and this shim has emitted `%20`
+  // since it was written. Both decode the same, and neither is worth changing
+  // the output of a redirect owners have bookmarked.
+  permanentRedirect(
+    `/m/pnl?${prefix ? `${prefix}&` : ""}store=${encodeURIComponent(storeId)}`,
   )
-}
-
-function BackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} className="m-back-link">
-      <span className="m-cap m-cap--ink">← {label}</span>
-    </Link>
-  )
-}
-
-function normalize(
-  raw: Record<string, string | string[] | undefined>,
-): Record<string, string | undefined> {
-  const out: Record<string, string | undefined> = {}
-  for (const [k, v] of Object.entries(raw)) {
-    if (Array.isArray(v)) out[k] = v[0]
-    else out[k] = v
-  }
-  return out
 }

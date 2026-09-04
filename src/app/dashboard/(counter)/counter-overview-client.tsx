@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Chart,
   ChannelRows,
+  CountUp,
   Dispatch,
   DateControl,
   Drill,
@@ -353,7 +354,12 @@ export function CounterOverviewClient({
             {(d) => (
               <LeadFigure
                 label={netSalesLabel(range)}
-                value={money(d.grossSales)}
+                // The figure arrives: it counts up to the rollup's number over
+                // 480ms, worded by the same `money` it would be worded by at
+                // rest. Data arriving is louder than a hover and quieter than
+                // a figure that needs the reader — see the motion block in
+                // `counter-repairs.css` for the hierarchy.
+                value={<CountUp value={d.grossSales} format={(v) => money(v)} />}
                 detail={d.comparison}
                 // The adapter decides this, not the arrow in the string: net
                 // sales is a figure whose direction and sentiment agree, and
@@ -367,7 +373,7 @@ export function CounterOverviewClient({
             {(d) => (
               <LeadFigure
                 label="Sales per labor hour"
-                value={money(d.value, { cents: true })}
+                value={<CountUp value={d.value} format={(v) => money(v, { cents: true })} />}
                 // "1 daily readings" was on the first screen at this page's own
                 // default range. `plural` agrees the noun with the number.
                 detail={`${plural(d.series.length, `${buckets} reading`)} with labor posted`}

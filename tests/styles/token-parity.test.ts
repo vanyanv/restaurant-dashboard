@@ -220,6 +220,18 @@ const COUNTER_ROOT_EXCEPTIONS: Array<{ file: string; token: string }> = [
   // `ct-phone` WITHOUT `ct-root` would be redeclaring the scale over the
   // desk's ink and ground, which is a defect worth failing on.
   { file: "components/counter/shell/phone-shell.tsx", token: "ct-phone" },
+  // THE PHONE'S BOTTOM BAR, which is a Counter root of its own and has to be.
+  //
+  // `MTabs` is mounted by `src/app/(mobile)/m/layout.tsx` — for EVERY `/m`
+  // route, not only the `(counter)` group, because the routes still on the
+  // editorial design need a bar too and the one they had was the pre-Counter
+  // `MobileTabBar`. That layout loads `editorial-tokens.css` and carries
+  // `.editorial-surface`, so it is precisely a file the third test below
+  // forbids from opening a `.ct-root`. The bar therefore brings its own: a
+  // sibling of every editorial root, never an ancestor, wrapping nothing but
+  // this file's ported `.mtabs` markup.
+  { file: "components/counter/shell/m-tabs.tsx", token: "ct-root" },
+  { file: "components/counter/shell/m-tabs.tsx", token: "ct-phone" },
 ]
 
 function tsxFiles(dir: string): string[] {
@@ -290,9 +302,13 @@ describe("the Counter/editorial token-name collision stays harmless", () => {
     // an eighth file rather than a seventh entry: it draws the four refusals,
     // which the design does not have, in the same grid.
     //
-    // Eighteen entries, ten files.
-    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(18)
-    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(10)
+    // The eleventh file is the phone's bottom bar. It is a shell like the
+    // first three and unlike them it is mounted from a layout that is still
+    // editorial, which is exactly why it carries the root itself.
+    //
+    // Twenty entries, eleven files.
+    expect(COUNTER_ROOT_EXCEPTIONS).toHaveLength(20)
+    expect(new Set(COUNTER_ROOT_EXCEPTIONS.map((x) => x.file)).size).toBe(11)
     // `ct-phone` is only ever worn with `ct-root`; a file carrying it alone
     // would be redeclaring the type scale over the wrong ink and ground.
     const phone = COUNTER_ROOT_EXCEPTIONS.filter((x) => x.token === "ct-phone")

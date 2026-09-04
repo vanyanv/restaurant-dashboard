@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
-import { MList, Note, Section, useCounterTransition } from "@/components/counter"
+import { MList, Note, Section, useCounterTransition, SubNav } from "@/components/counter"
 import { createStoreRecord } from "@/lib/counter/actions/store"
+import { storesViewTabs } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { NewStoreSections } from "@/lib/counter/adapters/new-store"
 
@@ -30,8 +31,10 @@ import type { NewStoreSections } from "@/lib/counter/adapters/new-store"
  */
 export function CounterPhoneNewStoreClient({
   sections,
+  storeId,
 }: {
   sections: SectionSources<NewStoreSections>
+  storeId: string | null
 }) {
   const { pending } = useCounterTransition()
   const router = useRouter()
@@ -54,6 +57,12 @@ export function CounterPhoneNewStoreClient({
 
   return (
     <>
+      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. This bar is how
+          the design reaches the create form and the store file, and the phone
+          drew none of it: nothing in the product linked to `/m/stores/new`, so
+          a page that exists was reachable only by typing its URL. */}
+      <SubNav items={storesViewTabs("/m/stores", storeId)} label="Stores" />
+
       {/* NOT a Section. Every word in this head is a constant — the
           callback took no argument at all — so there was nothing here for
           a `SectionData` to be about, and gating it on form

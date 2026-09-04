@@ -25,13 +25,32 @@ describe("/dashboard/pnl/[storeId]", () => {
   it("sends a bookmarked per-store URL to the one P&L, scoped by ?store=", async () => {
     // `?store=` is what `writeCounterParams` writes and `readCounterParams`
     // reads — the same param the rail's store switcher sets.
-    await StorePnlRedirect({ params: Promise.resolve({ storeId: "hollywood" }) })
+    await StorePnlRedirect({
+      params: Promise.resolve({ storeId: "hollywood" }),
+      searchParams: Promise.resolve({}),
+    })
     expect(permanentRedirect).toHaveBeenCalledWith("/dashboard/pnl?store=hollywood")
   })
 
   it("encodes the id rather than pasting it into a query string", async () => {
-    await StorePnlRedirect({ params: Promise.resolve({ storeId: "a b&c=d" }) })
+    await StorePnlRedirect({
+      params: Promise.resolve({ storeId: "a b&c=d" }),
+      searchParams: Promise.resolve({}),
+    })
     expect(permanentRedirect).toHaveBeenCalledWith("/dashboard/pnl?store=a%20b%26c%3Dd")
+  })
+
+  it("carries the window through, because the P&L's own tab links here with one", async () => {
+    // `storeViewTabs` builds "One store" as `/dashboard/pnl/<id>?range=…`, so a
+    // shim that dropped the query would reset the window on every press of it.
+    // `store` is dropped on the way through: the id is in the path already.
+    await StorePnlRedirect({
+      params: Promise.resolve({ storeId: "hollywood" }),
+      searchParams: Promise.resolve({ range: "d30", cmp: "prior", store: "somewhere-else" }),
+    })
+    expect(permanentRedirect).toHaveBeenCalledWith(
+      "/dashboard/pnl?range=d30&cmp=prior&store=hollywood",
+    )
   })
 
   it("is a redirect and nothing else — no second copy of the owner gate to drift", () => {

@@ -442,6 +442,7 @@ function buildStrip(
     cells.push({
       label: "Orders",
       value: count(orders),
+      arrive: { value: orders, as: "count" },
       reference: referenceFor(orders, targets?.orders ?? null, "high", `Orders ${count(orders)}`),
     })
   }
@@ -454,6 +455,7 @@ function buildStrip(
       cells.push({
         label: "Avg ticket",
         value: money(ticket, { cents: true }),
+        arrive: { value: ticket, as: "moneyCents" },
         reference: referenceFor(
           ticket,
           targets?.ticket ?? null,
@@ -470,6 +472,7 @@ function buildStrip(
     cells.push({
       label: "Food cost",
       value: pct(foodPct, { scaled: true }),
+      arrive: { value: foodPct, as: "pct" },
       caption: plan?.kind === "target" ? `Plan ${pct(plan.value, { scaled: true })}` : undefined,
       delta:
         plan?.kind === "target"
@@ -498,6 +501,7 @@ function buildStrip(
     cells.push({
       label: "Labor",
       value: pct(laborPct, { scaled: true }),
+      arrive: { value: laborPct, as: "pct" },
       caption: money(p.laborValue),
       reference: {
         ...(referenceFor(laborPct, targets?.labor ?? null, "low", `Labor ${pct(laborPct, { scaled: true })}`) ?? {
@@ -523,6 +527,7 @@ function buildStrip(
     cells.push({
       label: "Prime cost",
       value: pct(prime.primePct, { scaled: true }),
+      arrive: { value: prime.primePct, as: "pct" },
       caption: `Ceiling ${pct(prime.ceilingPct, { scaled: true })}`,
       delta: prime.roomPp != null ? `${prime.roomPp.toFixed(1)} pts of room` : undefined,
       reference: {
@@ -548,6 +553,7 @@ function buildStrip(
       cells.push({
         label: "Marketplace fees",
         value: money(fees),
+        arrive: { value: fees, as: "money" },
         // Naming what the figure excludes is the honest alternative to
         // folding a channel with no published rate in at zero.
         //

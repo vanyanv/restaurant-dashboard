@@ -1,15 +1,5 @@
 import type { Role } from "@/generated/prisma/client"
 
-export type MobileTabIcon = "home" | "count" | "invoices" | "orders" | "more"
-
-export type MobileTab = {
-  href: string
-  label: string
-  icon: MobileTabIcon
-  /** Pathname prefixes that should mark this tab active. */
-  matches: string[]
-}
-
 export type MobileSection = {
   href: string
   label: string
@@ -18,19 +8,6 @@ export type MobileSection = {
   /** Higher-level job grouping so the More page scans as tasks, not a directory. */
   group: string
 }
-
-const OWNER_TABS: MobileTab[] = [
-  { href: "/m", label: "Home", icon: "home", matches: ["/m"] },
-  { href: "/m/count", label: "Count", icon: "count", matches: ["/m/count"] },
-  {
-    href: "/m/invoices",
-    label: "Invoices",
-    icon: "invoices",
-    matches: ["/m/invoices"],
-  },
-  { href: "/m/orders", label: "Orders", icon: "orders", matches: ["/m/orders"] },
-  { href: "/m/more", label: "More", icon: "more", matches: ["/m/more"] },
-]
 
 const OWNER_MORE: MobileSection[] = [
   { href: "/m/labor", label: "Labor", dept: "STAFF", group: "Plan service" },
@@ -48,16 +25,8 @@ const DEV_MORE: MobileSection[] = [
   { href: "/m/monitoring", label: "Monitoring", dept: "DEV", group: "Admin" },
 ]
 
-export function getTabs(): MobileTab[] {
-  return OWNER_TABS
-}
-
 export function getMoreForRole(role?: Role): MobileSection[] {
   if (role === "DEVELOPER") return [...OWNER_MORE, ...DEV_MORE]
   return OWNER_MORE
 }
 
-export function isTabActive(tab: MobileTab, pathname: string): boolean {
-  if (tab.href === "/m") return pathname === "/m"
-  return tab.matches.some((m) => pathname === m || pathname.startsWith(m + "/"))
-}
