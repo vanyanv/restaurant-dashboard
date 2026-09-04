@@ -566,9 +566,33 @@ button.wkd {
  * `dvh` rather than `vh` because `/m/ask` shares this rule and a phone's URL
  * bar is exactly what `vh` lies about.
  */
+/*
+ * `height`, not `max-height`, and this was measured twice.
+ *
+ * `max-height` caps a grid that is still sized by its CONTENT, so everything
+ * below depends on the history being long enough to hit the cap. It was, on
+ * the account this was written against — thirty-nine threads, 2740px. With two
+ * threads and one short answer, measured 2026-09-04 at 1440x900:
+ *
+ *     .askpage  126 -> 350   (224px of an available 690)
+ *     .composer 364 -> 415   <- 485px of empty viewport beneath it
+ *     .ansfail  175 -> 301   <- "centred" inside a box its own height
+ *
+ * So none of the three rules under this one did anything in the state a new
+ * account is actually in: the composer did not stick to any bottom, the empty
+ * state did not sit in the middle of the space, and `.convs` had nothing to
+ * scroll. The page reverted to the shape this block exists to prevent — an
+ * input floating mid-screen over a void — just without the 2000px of history
+ * that made it obvious.
+ *
+ * Giving the column the height outright makes the rules below true in every
+ * state rather than only in the crowded one. The calc is unchanged and is
+ * bounded by the viewport by construction, and `min-height:0` below already
+ * lets both children shrink inside it.
+ */
 .askpage {
   align-items: stretch;
-  max-height: calc(100dvh - 210px);
+  height: calc(100dvh - 210px);
 }
 /* `min-height:0` is what lets a grid child actually be shorter than its
    content — without it `overflow-y` has nothing to overflow, because the
