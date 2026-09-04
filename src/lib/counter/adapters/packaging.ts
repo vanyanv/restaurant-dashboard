@@ -133,7 +133,19 @@ const disagrees = (u: number | null): boolean => {
  */
 function headlineOf({ d, rangeLabel: label }: Data): PackagingHeadline {
   const t = d.totals
-  const off = d.validation.filter((v) => disagrees(v.utilizationPct)).length
+  /*
+   * Only containers with a utilisation can be said to agree or disagree.
+   *
+   * `off` counts definite DISAGREEMENTS, so `validation.length - off` quietly
+   * counted every container whose utilisation is null as one that agrees.
+   * Measured on 2026-09-04 against an account with no invoice on record: three
+   * containers, none bought, none used, every utilisation null — and the cell
+   * read "Invoices agree · 3 of 3 · usage matches what was bought" over a
+   * ledger whose every row printed "—". A vacuous truth shown as a pass is
+   * worse than no cell, because it is the one cell a reader would check.
+   */
+  const measured = d.validation.filter((v) => v.utilizationPct != null)
+  const off = measured.filter((v) => disagrees(v.utilizationPct)).length
 
   const perOrderCell: FigureProps = {
     label: "Per order",
@@ -143,11 +155,13 @@ function headlineOf({ d, rangeLabel: label }: Data): PackagingHeadline {
   }
   const agreeCell: FigureProps = {
     label: "Invoices agree",
-    value: `${count(d.validation.length - off)} of ${count(d.validation.length)}`,
+    value: measured.length === 0 ? "—" : `${count(measured.length - off)} of ${count(measured.length)}`,
     delta:
-      off === 0
-        ? "usage matches what was bought"
-        : `${count(off)} ${off === 1 ? "container is" : "containers are"} out by more than ${count(UTILISATION_BAND)}%`,
+      measured.length === 0
+        ? "nothing bought to check against"
+        : off === 0
+          ? "usage matches what was bought"
+          : `${count(off)} ${off === 1 ? "container is" : "containers are"} out by more than ${count(UTILISATION_BAND)}%`,
     deltaTone: off > 0 ? "is-down" : "is-flat",
   }
 
@@ -181,6 +195,62 @@ function headlineOf({ d, rangeLabel: label }: Data): PackagingHeadline {
  * column is that ratio, and a row outside a 15-point band around 100% is
  * marked — which on this account is two of the three.
  */
+/**
+ * What the container ledger says about itself, in the tense the data supports.
+ *
+ * Two sentences here asserted facts about an account that had none. Measured
+ * on 2026-09-04 against a two-store account with no invoice and no order:
+ *
+ *   "Every container is inside the band."   — no container had a band. Every
+ *   utilisation in the column above it printed "—", because nothing was
+ *   bought, so there was nothing to be inside or outside of.
+ *
+ *   "…which is small here only because almost nothing is eaten in."  — read
+ *   off 0 of 0 orders. It is a claim about a service mix, and it was a
+ *   constant: true of the account this page was written against and asserted
+ *   for every other one.
+ *
+ * The rule both broke is the same: a verdict needs a measurement. Where there
+ * is none, the honest sentence names what is missing, and the dine-in share is
+ * now the number itself rather than a judgement about it.
+ */
+function containersNote(d: PackagingCostData): string {
+  const measured = d.validation.filter((v) => v.utilizationPct !== null)
+  const worst = [...measured].sort(
+    (a, b) => (offBy(b.utilizationPct) ?? 0) - (offBy(a.utilizationPct) ?? 0),
+  )[0]
+
+  const verdict =
+    measured.length === 0
+      ? `No container has been bought in this window, so there is nothing to check the model ` +
+        `against yet.`
+      : worst && disagrees(worst.utilizationPct)
+        ? `${titleCase(worst.label)} reads ${pct(worst.utilizationPct ?? 0, { scaled: true })} — ` +
+          `${count(worst.inferredUnits)} used against ${count(worst.purchasedUnits)} bought, which ` +
+          `is not a variance but an impossibility, and it is the model or the purchase record ` +
+          `rather than the kitchen.`
+        : `Every container with a purchase behind it is inside the band.`
+
+  // What "Which orders carry it" was for. `P.packaging` has no such table — it
+  // draws a chart in that slot — and the table's whole payload is this
+  // sentence: which orders are in the per-order denominator and which are not.
+  // The per-mode order counts it also printed belong to Orders.
+  const dineIn =
+    d.totals.totalOrders === 0
+      ? `A dine-in order leaves no container behind and is excluded from the per-order figure; ` +
+        `no order at all fell in this range, so there is no figure to exclude it from.`
+      : `A dine-in order leaves no container behind, so it is excluded from the per-order ` +
+        `figure rather than diluting it — ${count(d.totals.excludedOrders)} of ` +
+        `${count(d.totals.totalOrders)} orders in this range, worth ` +
+        `${money(d.totals.avoidedDineInCost)} of packaging not bought.`
+
+  return (
+    `Used is what the packing model says each order needed; bought is what the invoices ` +
+    `record. Utilisation is the first over the second, so 100% means the two agree. ` +
+    `${verdict} ${dineIn}`
+  )
+}
+
 function ledgerOf({ d }: Data): PackagingLedger {
   const byGroup = new Map(d.validation.map((v) => [v.group, v]))
 
@@ -222,24 +292,7 @@ function ledgerOf({ d }: Data): PackagingLedger {
       }
     }),
     meta: `${count(d.containers.length)} containers · ${count(d.totals.packagingUnits)} units`,
-    note:
-      `Used is what the packing model says each order needed; bought is what the invoices ` +
-      `record. Utilisation is the first over the second, so 100% means the two agree. ` +
-      (worst && disagrees(worst.utilizationPct)
-        ? `${titleCase(worst.label)} reads ${pct(worst.utilizationPct ?? 0, { scaled: true })} — ` +
-          `${count(worst.inferredUnits)} used against ${count(worst.purchasedUnits)} bought, which ` +
-          `is not a variance but an impossibility, and it is the model or the purchase record ` +
-          `rather than the kitchen.`
-        : `Every container is inside the band.`) +
-      // What "Which orders carry it" was for. `P.packaging` has no such table —
-      // it draws a chart in that slot — and the table's whole payload is this
-      // sentence: which orders are in the per-order denominator and which are
-      // not. The per-mode order counts it also printed belong to Orders.
-      ` A dine-in order leaves no container behind, so it is excluded from the ` +
-      `per-order figure rather than diluting it — ${count(d.totals.excludedOrders)} of ` +
-      `${count(d.totals.totalOrders)} orders in this range, worth ` +
-      `${money(d.totals.avoidedDineInCost)} of packaging not bought, which is small here only ` +
-      `because almost nothing is eaten in.`,
+    note: containersNote(d),
   }
 }
 
