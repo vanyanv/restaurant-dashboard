@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { isOperational } from "@/lib/store-lifecycle"
 import { count, pct } from "@/lib/counter/format"
 import { comparisonRange, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
@@ -138,6 +139,21 @@ interface MixData {
   prior: Window | null
   /** Every name in either window, so a term dropping to zero still counts. */
   names: string[]
+  /**
+   * Why this page can be empty, decided where the scope is known.
+   *
+   * `null` means the window simply caught nothing and widening it is a real
+   * way out. The other two are not: an account with no store has nowhere for a
+   * mix to come from, and a scope whose every store is pre-open will read
+   * empty at any range a reader can pick.
+   *
+   * Analytics, the P&L, COGS and Labor have all resolved `pre_open` for that
+   * last case since they were built. This page did not, so one account was
+   * told "Not trading yet" on four pages and "No rows fall inside the current
+   * filters and date range. Widen either to see figures." on this one —
+   * measured 2026-09-04, on a page that draws no filter row at all.
+   */
+  emptyBecause: "no_stores" | "pre_open" | null
 }
 
 async function loadWindow(
@@ -184,7 +200,12 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
   const stores = await getScopedStores(accountId, storeId ?? null)
   const storeIds = stores.map((s) => s.id)
   if (storeIds.length === 0) {
-    return { now: { units: new Map(), totalQty: 0, orders: 0 }, prior: null, names: [] }
+    return {
+      now: { units: new Map(), totalQty: 0, orders: 0 },
+      prior: null,
+      names: [],
+      emptyBecause: "no_stores",
+    }
   }
 
   // The window immediately before this one, of the same length. `prior` is
@@ -201,6 +222,10 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
   return {
     now,
     prior,
+    // The same test Analytics, the P&L, COGS and Labor make, on whole `Store`
+    // rows this call already has — `getScopedStores` returns them, so this
+    // costs no query.
+    emptyBecause: stores.some(isOperational) ? null : "pre_open",
     names: [...new Set([...now.units.keys(), ...(prior ? prior.units.keys() : [])])],
   }
 }
@@ -451,7 +476,7 @@ export function getProductMixSectionPromises(
   const dataP = classify(() => loadMix(input), {
     retryAction: "retryProductMix",
     isEmpty: (d) => d.now.units.size === 0,
-    emptyReason: "no_match",
+    emptyReason: (d) => d.emptyBecause ?? "no_match",
   })
 
   return {
