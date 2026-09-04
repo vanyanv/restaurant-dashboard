@@ -897,7 +897,16 @@ export function getIngredientsSectionPromises(
   const dataP = classify(() => loadIngredients(input), {
     retryAction: "retryIngredients",
     isEmpty: (d) => d.total === 0,
-    emptyReason: "no_match",
+    /*
+     * `no_ingredients`, not `no_match`.
+     *
+     * `d.total` is `COUNT(*) FROM "CanonicalIngredient" WHERE "accountId" = …`
+     * — see `loadIngredients`. It takes neither the range nor the store scope,
+     * so no control this page draws can change it, and `no_match`'s "Widen
+     * either to see figures" was advice that could be followed to the letter
+     * and leave all seven panels reading the same sentence.
+     */
+    emptyReason: "no_ingredients",
   })
 
   const s = <T,>(f: (d: IngredientData) => T) =>

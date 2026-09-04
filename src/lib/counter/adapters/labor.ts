@@ -133,8 +133,8 @@ import type { DeltaTone, FigureProps, MListRow, TagTone, Tone } from "@/componen
  *
  * Van Nuys and Glendale are `pre_open` and carry NO Harri rows at all: not a
  * shift, not an alert, not a position row. Every section resolves either
- * `empty("pre_open")` — whose copy is "Not trading yet · this store has no
- * sales because it has no customers yet", which is exactly the fact and
+ * `empty("pre_open")` — whose copy is "Not trading yet · no sales have been
+ * rung up, because trading has not started", which is exactly the fact and
  * exactly the next step (none) — or, where an OPERATIONAL store is simply
  * missing the rows a section needs, `not_computed` **in that section's own
  * words**. A heading over a blank white panel is the defect this rule exists

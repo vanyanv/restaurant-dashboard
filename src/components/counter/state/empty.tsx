@@ -1,21 +1,44 @@
 import type { EmptyReason } from "@/lib/counter/section-data"
 
 /**
- * Four reasons, four different next steps (note 23). A pre-open store has no
- * sales because it has no customers — nothing is broken and there is nothing to
- * fix. A filter that matched nothing is a dead end the reader backs out of. An
- * `all_clear` worklist is empty because the work is done. Rendering them all as
- * "No data" would hide which situation the reader is in — and rendering the
- * third as the second actively misleads, which is why it exists. `no_delivery`
- * is the fourth and was added for the same reason: an invoice page at a
- * one-day window is not a dead end a reader should back out of, it is a window
- * shorter than the thing it is watching. Telling them to widen "filters" a
- * purchasing page does not have was advice they could not take.
+ * One reason per next step (note 23) — seven of them now, not the four this
+ * comment described until 2026-09-04. Nothing has traded yet, so there is
+ * nothing to fix. A filter matched nothing, so the reader backs out of a dead
+ * end. An `all_clear` worklist is empty because the work is done. Rendering
+ * them all as "No data" would hide which situation the reader is in — and
+ * rendering the third as the second actively misleads, which is why the split
+ * exists at all.
+ *
+ * The four added since are all the same lesson in a different page's words: an
+ * empty state must name a step the reader can actually take. `no_delivery` is
+ * an invoice page at a one-day window against a several-day delivery cadence —
+ * not a dead end, a window shorter than the thing it watches.
+ * `nothing_received`, `nothing_to_count` and `no_stores` were each split off
+ * `no_match` because "widen the filters and date range" was unfollowable on a
+ * page with no filters, no date control, or no stores to filter.
  */
 const COPY: Record<EmptyReason, { head: string; body: string }> = {
+  /*
+   * "No sales have been rung up", not "This store has no sales".
+   *
+   * Every reason in this map is written once and read by every page, at every
+   * scope — and `pre_open` is reached from a SCOPE, not from a store: each
+   * adapter resolves it with `!scope.some(isOperational)`, so an account whose
+   * two stores are both in fit-out gets it at "All stores". Measured on
+   * 2026-09-04, `/dashboard/labor` at that scope printed "This store has no
+   * sales" ten times down one page while the masthead beside it read "ALL
+   * STORES · 2 LOCATIONS". The singular was not a small infelicity there; it
+   * was the page naming the wrong subject.
+   *
+   * `Empty` takes a reason and nothing else, on purpose, so the fix is a
+   * sentence true at either number rather than a store count threaded through
+   * every adapter. "Trading has not started" is the same reassurance the old
+   * copy carried — nothing is broken, there is simply no trade yet — with no
+   * claim about how many stores are in scope.
+   */
   pre_open: {
     head: "Not trading yet",
-    body: "This store has no sales because it has no customers yet. Figures appear here once it opens.",
+    body: "No sales have been rung up, because trading has not started. Figures appear here once it does.",
   },
   no_match: {
     head: "Nothing matched",
@@ -41,6 +64,18 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
   no_stores: {
     head: "No stores yet",
     body: "Every figure in this product belongs to a store. Add the first one to begin.",
+  },
+  no_ingredients: {
+    head: "The catalogue is empty",
+    body:
+      "Ingredients are read off the lines of your invoices, so the catalogue fills as " +
+      "invoices arrive. Nothing has been read in yet.",
+  },
+  no_recipes: {
+    head: "No recipes yet",
+    body:
+      "A recipe says what one menu item is made of, which is how a plate gets a cost. " +
+      "None have been built yet — they start from the menu.",
   },
   all_clear: {
     head: "Nothing needs you",
