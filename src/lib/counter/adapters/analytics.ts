@@ -1498,13 +1498,38 @@ export function getStoreAnalyticsSectionPromises(
     )
   })
 
-  const menuDataP = menuP.then((menuSd) =>
+  /*
+   * The SAME reason the other six sections resolve, so this page tells one
+   * story about itself.
+   *
+   * Measured on 2026-09-04 at `/dashboard/analytics/<a pre-open store>`: six
+   * sections read "Not trading yet · no sales have been rung up, because
+   * trading has not started" and, between them, Top items and By category read
+   * "Nothing matched · No rows fall inside the current filters and date range.
+   * Widen either to see figures." One page, one store, two accounts of why it
+   * is blank — and the second sends a reader hunting through a date picker for
+   * sales at a restaurant that has not opened.
+   *
+   * `getMenuEngineering` knows nothing about a store's lifecycle; it returns
+   * no rows and cannot say whether that is because nothing sold or because
+   * nothing has ever sold. `scopeEmptyReason` is the thing that knows, so it
+   * decides here too. A reason it does not raise leaves `no_match` standing,
+   * which is correct for a trading store with no menu rows in the window.
+   */
+  const scopeReasonP = Promise.all([dailyP, filesP]).then(([dailySd, filesSd]) => {
+    const s = dataOf(dailySd)
+    return s === null ? null : scopeEmptyReason(s, dataOf(filesSd) ?? [], storeId)
+  })
+
+  const menuDataP = Promise.all([menuP, scopeReasonP]).then(([menuSd, scopeReason]) =>
     mapReadyTo(menuSd, (result) => {
       // `null` is no session at all and `{ ok: false }` is a store this
       // account does not own — both are the same answer to the reader: there
       // is nothing here for this selection.
       if (result === null || !result.ok) return empty<MenuEngineeringData>("no_match")
-      if (result.data.rows.length === 0) return empty<MenuEngineeringData>("no_match")
+      if (result.data.rows.length === 0) {
+        return empty<MenuEngineeringData>(scopeReason ?? "no_match")
+      }
       return ready(result.data)
     }),
   )
