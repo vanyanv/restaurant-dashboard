@@ -418,6 +418,22 @@ const D = (d: Date) =>
 const daysBetween = (a: Date, b: Date) =>
   Math.max(0, Math.round((b.getTime() - a.getTime()) / 86_400_000))
 
+/**
+ * Where "Start the count" goes, and it took until 2026-09-04 to be honest.
+ *
+ * It pointed at `/m/count`, the pre-Counter flow, from Counter pages — so an
+ * owner pressed a rebuilt button and landed on the old product. It could not
+ * move before now: `/m/operations/inventory/count/new` opened a session and
+ * pushed you to a session page that had no box to type a number into.
+ *
+ * It does now, and the whole loop was driven on an iPhone 13 viewport before
+ * this line changed: begin, six boxes, two quantities typed, both surviving a
+ * reload and priced ($5.04 and $218.40), then closed — the FIRST count ever to
+ * reach COMPLETED on any database here, which is the status the on-hand model
+ * calibrates on.
+ */
+const COUNT_NEW = "/m/operations/inventory/count/new"
+
 /* -- sections --------------------------------------------------------- */
 
 function headlineOf(d: InventoryData): InventoryHeadline {
@@ -595,7 +611,7 @@ function nextCountOf(d: InventoryData): InventoryNextCount {
           `${count(d.ingredients.length)}. All ${count(abandoned)} attempts ended the same way. ` +
           `Until one finishes, every on-hand figure in this product is an unanchored integral.`,
     actions: [
-      { label: "Start the count", href: "/m/count", primary: true },
+      { label: "Start the count", href: COUNT_NEW, primary: true },
       { label: "The ingredients", href: "/dashboard/ingredients" },
     ],
   }
@@ -637,7 +653,7 @@ function settleOf(d: InventoryData): InventorySettle {
       `error, added together, with nothing to tell them apart. A completed count separates ` +
       `them and anchors every figure after it.`,
     actions: [
-      { label: "Start the count", href: "/m/count", primary: true },
+      { label: "Start the count", href: COUNT_NEW, primary: true },
       { label: "What came in", href: "/dashboard/invoices" },
     ],
   }

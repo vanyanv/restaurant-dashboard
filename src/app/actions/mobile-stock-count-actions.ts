@@ -56,6 +56,27 @@ export type StartStockCountResult = {
  * Open a new IN_PROGRESS StockCount for the store. If one is already open the
  * caller can resume it via `getOpenSessionForStore` instead of starting fresh.
  */
+/**
+ * The editorial phone count's server actions.
+ *
+ * Its UI was deleted on 2026-09-04 when `/m/count` became a shim onto the
+ * Counter flow (see that page for what moved and what did not), so most of
+ * this file has no caller: `startStockCount`, `saveCountLine` and
+ * `completeStockCount` are `beginStockCount`, `recordCountLine` and
+ * `finishStockCount` in `lib/counter/actions/stock-count.ts` now.
+ *
+ * It is kept for `logAdjustment`, which is not. `InventoryAdjustment` has
+ * never held a row, five separate readers are starved by that, and the Counter
+ * Inventory page already draws an "Adjust on hand" section with the same five
+ * reasons and no action behind it — see `InventoryAdjust` in
+ * `adapters/inventory.ts`, whose docblock lists what the empty table costs.
+ * A form with no writer and a writer with no form is one wire, not two
+ * missing features, so the writer stays until it is joined up.
+ *
+ * The `revalidatePath("/m/count")` calls below are left pointing at the shim
+ * on purpose: it is a `permanentRedirect`, so revalidating it is a no-op
+ * rather than a lie, and rewriting them is part of wiring the form up.
+ */
 export async function startStockCount(input: {
   storeId: string
 }): Promise<StartStockCountResult> {
