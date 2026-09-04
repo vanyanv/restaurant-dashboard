@@ -5,6 +5,7 @@ import Link, { useLinkStatus } from "next/link"
 import { signOut } from "next-auth/react"
 import { LogOut } from "lucide-react"
 import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
+import { visibleNavGroups } from "@/lib/counter/nav-access"
 import { NAV_ICONS } from "./nav-icons"
 import { Wordmark } from "./wordmark"
 import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
@@ -72,6 +73,17 @@ export interface RailUser {
   name: string
   /** "Owner", "Developer" — printed under the name, beside "settings". */
   role: string
+  /**
+   * Whether this account may open `/dashboard/admin/**`. A PERMISSION, not the
+   * label above: `role` is title-cased for display, and deciding what a reader
+   * can reach by matching a display string is how a rename becomes a security
+   * change.
+   *
+   * Optional, and absent means NO. A rail with no account row cannot know who
+   * is reading, and the safe answer to "should I offer this link" when you do
+   * not know is not to.
+   */
+  isDeveloper?: boolean
 }
 
 /**
@@ -146,8 +158,11 @@ export function Rail({
           caption and the group as SIBLINGS inside one unclassed container, and
           a per-group box would be a fourth element in a stylesheet that has
           rules for three. */}
+      {/* `visibleNavGroups`, not `NAV_GROUPS`: the ⌘K palette draws from the
+          same helper, so the rail and the palette cannot offer different sets
+          of destinations to the same reader. See `nav-access.ts`. */}
       <nav aria-label="Sections">
-        {NAV_GROUPS.map((group) => (
+        {visibleNavGroups(user?.isDeveloper).map((group) => (
           <Fragment key={group.caption}>
             <div className="rail__cap">{group.caption}</div>
             <div className="rail__group" role="group" aria-label={group.caption}>

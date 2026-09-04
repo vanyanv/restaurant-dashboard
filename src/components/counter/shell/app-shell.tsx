@@ -312,6 +312,9 @@ export function AppShell({
           presetId={windowed ? presetId : undefined}
           onSelectPreset={windowed ? onSelectPreset : undefined}
           suggestions={page.askSuggestions}
+          // The same permission the rail filters on, from the same `user`, so
+          // "Go to" and the rail cannot list different destinations.
+          isDeveloper={user?.isDeveloper}
         />
       </div>
     </div>

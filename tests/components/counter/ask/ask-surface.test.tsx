@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { AskSurface } from "@/components/counter/ask/ask-surface"
-import { NAV_GROUPS } from "@/lib/counter/nav"
+import { visibleNavGroups } from "@/lib/counter/nav-access"
 import { PRESETS } from "@/lib/counter/date-range"
 import type { SwitchableStore } from "@/components/counter/shell/store-switcher"
 
@@ -143,14 +143,36 @@ describe("AskSurface", () => {
 
   /* ------------------------------------------------------------ the rows */
 
+  /*
+   * `visibleNavGroups`, not `NAV_GROUPS`, because that is what the rail draws
+   * too — and the parity this test is named for is with the RAIL, not with the
+   * constant. Asserting the constant is what let the palette go on offering
+   * Monitoring to an owner whose every visit to it ends at
+   * `/dashboard/forbidden`.
+   */
   it("offers every destination the rail offers, and no other", () => {
     render(<AskSurface {...props} />)
     openWith("k", { metaKey: true })
-    const items = NAV_GROUPS.flatMap((g) => g.items)
+    const items = visibleNavGroups().flatMap((g) => g.items)
     const hrefs = rows()
       .filter((r) => r.tagName === "A")
       .map((r) => r.getAttribute("href"))
     expect(hrefs).toEqual(items.map((i) => i.href))
+  })
+
+  it("offers Monitoring to a developer and withholds it from everyone else", () => {
+    const hrefsFor = (isDeveloper?: boolean) => {
+      const { unmount } = render(<AskSurface {...props} isDeveloper={isDeveloper} />)
+      openWith("k", { metaKey: true })
+      const out = rows()
+        .filter((r) => r.tagName === "A")
+        .map((r) => r.getAttribute("href"))
+      unmount()
+      return out
+    }
+    expect(hrefsFor(true)).toContain("/dashboard/admin/monitoring")
+    expect(hrefsFor(false)).not.toContain("/dashboard/admin/monitoring")
+    expect(hrefsFor(undefined)).not.toContain("/dashboard/admin/monitoring")
   })
 
   it("draws Switch store from the same list the rail's switcher gets", () => {
