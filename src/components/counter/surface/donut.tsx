@@ -77,9 +77,11 @@ export function Donut({ slices, center }: DonutProps) {
               a ring. React then regenerates the whole tree on the client,
               which is a flash and a lost render, not a cosmetic warning.
 
-              A template literal is one text node with no separators. It is
-              also what `components/mobile/daily-revenue-chart.tsx` already
-              does in its own two `<title>`s.
+              A template literal is one text node with no separators. That
+              was learned from the editorial phone's own revenue chart, which
+              did the same in its two `<title>`s; that file is gone with the
+              rest of the pre-Counter mobile components, so the reason is
+              written out here rather than pointed at.
             */}
             <title>{`${a.name} · ${pct(a.value, { scaled: true })}`}</title>
           </path>
