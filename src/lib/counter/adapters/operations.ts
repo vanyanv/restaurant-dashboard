@@ -284,6 +284,24 @@ const isStale = (a: Area, today: Date): boolean => {
   return days === null || days > STALE_DAYS
 }
 
+/**
+ * An area that has NEVER been touched, as opposed to one that stopped.
+ *
+ * `isStale` folds the two together, which is right for marking a row and wrong
+ * for every sentence this page writes about it. Measured on 2026-09-04 against
+ * an account with two pre-open stores and no invoice, no recipe and no count
+ * ever recorded: the strip read "invoices, ingredients and 4 more stopped" and
+ * the note under the table read "the open counts beside them stopped changing
+ * when the areas did, so they are a backlog from spring rather than this
+ * week's work." Nothing had stopped, there was no backlog, and there was no
+ * spring — every one of those areas was at zero because nothing had ever
+ * happened in it. The page had been given one account's history as a constant.
+ *
+ * The `Last touched` column already prints "never" for these. The prose has to
+ * agree with the column beside it.
+ */
+const neverTouched = (a: Area): boolean => a.lastTouched === null
+
 /* -- sections --------------------------------------------------------- */
 
 /**
@@ -332,13 +350,23 @@ function headlineOf(d: OperationsData): OperationsHeadline {
     delta: `across ${count(d.areas.filter((a) => a.open > 0).length)} of ${count(d.areas.length)} areas`,
     deltaTone: open > 0 ? "is-down" : "is-flat",
   }
+  // The verb has to match what actually happened. "Stopped" is a claim that
+  // something once ran; on an area with no history at all it is false, and it
+  // contradicts the "never" this page prints in that area's own Last touched
+  // cell. Where the two are mixed, "not moving" is the one verb true of both.
+  const never = stale.filter(neverTouched)
+  const staleNames = staleWords(stale.map((a) => a.name.toLowerCase()))
   const staleCell: FigureProps = {
     label: "Areas still moving",
     value: `${count(live)} of ${count(d.areas.length)}`,
     delta:
       stale.length === 0
         ? `every area touched in ${count(STALE_DAYS)} days`
-        : `${staleWords(stale.map((a) => a.name.toLowerCase()))} stopped`,
+        : never.length === stale.length
+          ? `${staleNames} never started`
+          : never.length === 0
+            ? `${staleNames} stopped`
+            : `${staleNames} not moving`,
     deltaTone: stale.length > 0 ? "is-down" : "is-flat",
   }
 
@@ -484,20 +512,57 @@ function areasOf(d: OperationsData): OperationsAreas {
       title: a.name,
       detail: a.open === 0 ? a.openUnit : `${count(a.open)} ${a.openUnit}`,
       value: a.worth === null ? "—" : money(a.worth),
-      note: isStale(a, d.today) ? `last ${D(a.lastTouched)}` : "current",
+      // `D(null)` is "never", and "last never" is not English. An area with no
+      // history says so; one that stopped says when.
+      note: neverTouched(a) ? "never" : isStale(a, d.today) ? `last ${D(a.lastTouched)}` : "current",
       noteTone: isStale(a, d.today) ? "down" : "up",
     })),
     meta: `${count(d.areas.length)} areas · ${d.rangeLabel}`,
-    note:
-      stale.length === 0
-        ? `Every area has been touched in the last ${count(STALE_DAYS)} days.`
-        : `${count(stale.length)} of ${count(d.areas.length)} areas have not been touched in ` +
-          `${count(STALE_DAYS)} days — ${stale.map((a) => a.name.toLowerCase()).join(", ")}. ` +
-          `That is not a tidy-up: the open counts beside them stopped changing when the areas ` +
-          `did, so they are a backlog from spring rather than this week's work. Worth is what ` +
-          `the area is responsible for over ${d.rangeLabel}; a recipe and a count are not worth ` +
-          `money and say so rather than showing a zero.`,
+    note: areasNote(d, stale),
   }
+}
+
+/**
+ * What the table says about itself, in the tense the data supports.
+ *
+ * Three states, because there are three: nothing has ever happened here, some
+ * of it stopped, or all of it is current. The middle sentence used to be the
+ * only one for the last two, and it carried "a backlog from spring" — a season
+ * read off the account this page was built against and then printed for
+ * everyone. An account with no invoice, no recipe and no count on record was
+ * told its zeroes were a backlog, which is both false and the opposite of
+ * reassuring: a queue you never joined is not work you are behind on.
+ *
+ * The closing clause about `Worth` is unconditional because it explains a
+ * COLUMN, which is on the table in every one of the three states.
+ */
+function areasNote(d: OperationsData, stale: Area[]): string {
+  const worth =
+    `Worth is what the area is responsible for over ${d.rangeLabel}; a recipe and a count ` +
+    `are not worth money and say so rather than showing a zero.`
+
+  if (stale.length === 0) {
+    return `Every area has been touched in the last ${count(STALE_DAYS)} days. ${worth}`
+  }
+
+  const names = stale.map((a) => a.name.toLowerCase()).join(", ")
+
+  // Nothing to be behind on. The open counts are zero because there is nothing
+  // to open, and saying so is the difference between a page that reads as a
+  // backlog and one that reads as a beginning.
+  if (stale.every(neverTouched)) {
+    return (
+      `Nothing has been recorded in ${stale.length === d.areas.length ? "any of these areas" : names} ` +
+      `yet, so the counts beside them are zero rather than done. ${worth}`
+    )
+  }
+
+  return (
+    `${count(stale.length)} of ${count(d.areas.length)} areas have not been touched in ` +
+    `${count(STALE_DAYS)} days — ${names}. That is not a tidy-up: the open counts beside them ` +
+    `stopped changing when the areas did, so what is open there is old work rather than this ` +
+    `week's. ${worth}`
+  )
 }
 
 /* -- assembly --------------------------------------------------------- */
