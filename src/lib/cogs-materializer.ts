@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { bustTags, monthTagsForRange } from "@/lib/cache/cached"
 import { startOfDayUTC } from "@/lib/date-utils"
 import { getCanonicalIngredientCost } from "@/lib/canonical-ingredients"
 import { computeRecipeCost, type RecipeCostResult } from "@/lib/recipe-cost"
@@ -563,6 +564,10 @@ export async function recomputePackagingCogsForRange(input: {
     lineCost += result.lineCost
   }
 
+  // Once per run, not per day — see the same call in
+  // `recomputeDailyCogsForRange` for why the tags are what they are.
+  await bustTags(["cogs", ...monthTagsForRange(start, end)])
+
   return { daysProcessed, rowsUpserted, rowsDeleted, lineCost }
 }
 
@@ -598,6 +603,14 @@ export async function recomputeDailyCogsForRange(input: {
       accountId: input.accountId,
     })
   )
+
+  // COGS rows had no reader-side cache until `loadCogs` gained one, so this
+  // writer never busted anything. Now it says which months it rewrote, the
+  // same way the Otter and Harri syncs do, so a cached COGS window for a
+  // range this run did not touch survives it. `cogs` is the broad tag for a
+  // writer that cannot name its dates; a range recompute always can, but the
+  // reader joins both so it stays reachable either way.
+  await bustTags(["cogs", ...monthTagsForRange(start, end)])
 
   return {
     daysProcessed: dates.length,

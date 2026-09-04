@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { cached, stableKey } from "@/lib/cache/cached"
+import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -337,13 +339,24 @@ export async function loadServiceProfile(input: {
 
   const storeIds = stores.map((s) => s.id)
 
-  const rows = await prisma.otterHourlySummary.findMany({
-    where: {
-      storeId: { in: storeIds },
-      date: { gte: startDate, lte: endDate },
+  // The PROFILE is cached, not the rows: `serviceProfile` reads `row.date`
+  // through `dateKey`, which a string back from Redis cannot satisfy, while
+  // the profile itself is hours, counts and one peak block — all numbers.
+  // A range with no rows returns `null`, which `cached` declines to store;
+  // that read is one indexed miss and not worth a key.
+  return cached(
+    `counter:service:${stableKey({ ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    rangeTtl(endDate),
+    otterRangeTags(startDate, endDate),
+    async () => {
+      const rows = await prisma.otterHourlySummary.findMany({
+        where: {
+          storeId: { in: storeIds },
+          date: { gte: startDate, lte: endDate },
+        },
+        select: { hour: true, date: true, orderCount: true },
+      })
+      return serviceProfile(rows)
     },
-    select: { hour: true, date: true, orderCount: true },
-  })
-
-  return serviceProfile(rows)
+  )
 }

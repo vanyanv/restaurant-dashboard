@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { cached, monthTags, stableKey } from "@/lib/cache/cached"
+import { rangeTtl } from "@/lib/cache/range"
 import { toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 
 /**
@@ -354,6 +356,60 @@ export async function loadCogs(input: {
   const storeIds = stores.map((s) => s.id)
   const plan = agreedPlan(stores.map((s) => s.targetCogsPct))
 
+  // The FOLD is what is cached, never the rows: a `DailyCogsItem.date` is a
+  // `Date` and the fold reads it with `toISOString()`, which a string back
+  // from Redis does not have. Every field of the fold is a string, a number or
+  // null, so it round-trips exactly.
+  //
+  // `sales` is deliberately OUTSIDE the key. It is a float from the statement
+  // and only `cogsWindow` reads it, so folding it in would mint a fresh key
+  // every time the statement moved by a cent and cache nothing while today is
+  // open. `plan` IS in the key: `targetCogsPct` is an owner-edited setting
+  // that shapes every item's `againstPlan`, and a setting edit should show on
+  // the next load, not after a TTL.
+  const fold = await cached(
+    `counter:cogs:${stableKey({
+      ids: [...storeIds].sort(),
+      from: startDate,
+      to: endDate,
+      plan,
+    })}`,
+    rangeTtl(endDate),
+    // `cogs` is what `recomputeDailyCogsForRange` busts; the month tags let a
+    // recompute of last month leave this month's window alone.
+    ["cogs", ...monthTags(startDate, endDate)],
+    () => foldCogsRows({ storeIds, startDate, endDate, plan }),
+  )
+
+  const window = cogsWindow({
+    cost: fold.cost,
+    sales,
+    plan,
+    categories: fold.categories,
+    partialLines: fold.partialLines,
+    unmappedLines: fold.unmappedLines,
+  })
+
+  return { window, items: fold.items, byDay: fold.byDay }
+}
+
+/** The row read and the arithmetic over it — everything `sales` does not touch. */
+async function foldCogsRows(input: {
+  storeIds: string[]
+  startDate: Date
+  endDate: Date
+  plan: number | null
+}): Promise<{
+  cost: number
+  /** Raw per-category cost; `cogsWindow` derives each `share` from it. */
+  categories: Array<{ category: string; cost: number }>
+  partialLines: number
+  unmappedLines: number
+  items: CogsItem[]
+  byDay: CogsDay[]
+}> {
+  const { storeIds, startDate, endDate, plan } = input
+
   const rows = await prisma.dailyCogsItem.findMany({
     where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
     select: {
@@ -394,17 +450,10 @@ export async function loadCogs(input: {
     itemAgg.set(r.itemName, bucket)
   }
 
-  const window = cogsWindow({
-    cost,
-    sales,
-    plan,
-    categories: [...categoryCost.entries()].map(([category, catCost]) => ({
-      category,
-      cost: catCost,
-    })),
-    partialLines,
-    unmappedLines,
-  })
+  const categories = [...categoryCost.entries()].map(([category, catCost]) => ({
+    category,
+    cost: catCost,
+  }))
 
   const items = [...itemAgg.entries()].map(([itemName, agg]) =>
     cogsItem({ itemName, cost: agg.cost, revenue: agg.revenue, units: agg.units, plan }),
@@ -414,7 +463,7 @@ export async function loadCogs(input: {
     .map(([day, dCost]) => ({ day, cost: dCost }))
     .sort((a, b) => a.day.localeCompare(b.day))
 
-  return { window, items, byDay }
+  return { cost, categories, partialLines, unmappedLines, items, byDay }
 }
 
 /**

@@ -1,6 +1,8 @@
 import { addDays } from "date-fns"
 import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
+import { cached, stableKey } from "@/lib/cache/cached"
+import { otterRangeTags, rangeTtl } from "@/lib/cache/range"
 import {
   dayCount,
   isoDay,
@@ -464,6 +466,63 @@ export async function loadLaborWeek(input: {
   if (stores.length === 0) return { days: [], roles: [], overtimeCost: 0 }
   const storeIds = stores.map((s) => s.id)
 
+  // The FOLD is cached, never the rows — every row here carries a `Date` that
+  // `dbDay` reads with `toISOString()`, which a string back from Redis lacks.
+  // `salesByDay` stays OUTSIDE: it is the statement's figure, already cached
+  // under its own key, and it only enters at `laborDay` below. Folding it in
+  // would make this key move with the statement instead of with labour.
+  const fold = await cached(
+    `counter:laborweek:${stableKey({ ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    rangeTtl(endDate),
+    // Three tables, two writers: `/api/cron/harri` busts `harri` (positions
+    // AND shifts come from that one run) and `/api/cron/otter/hourly` busts
+    // `otter`; both bust `dash` and the months they wrote.
+    ["harri", ...otterRangeTags(startDate, endDate)],
+    () => foldLaborWeekRows({ storeIds, startDate, endDate }),
+  )
+
+  const days: LaborDay[] = []
+  const n = dayCount(range)
+  for (let i = 0; i < n; i++) {
+    const d = addDays(range.start, i)
+    const key = isoDay(d)
+    const hb = fold.hoursByDate[key]
+    days.push(
+      laborDay({
+        key,
+        label: dayLabel(d),
+        actualSeconds: hb?.seconds ?? 0,
+        scheduledMinutes: key in fold.scheduledByDate ? fold.scheduledByDate[key] : null,
+        cost: hb?.cost ?? 0,
+        platformSales: key in fold.platformByDate ? fold.platformByDate[key] : null,
+        totalSales: salesByDay.has(key) ? (salesByDay.get(key) as number) : null,
+      }),
+    )
+  }
+
+  const roles = laborRole([...fold.roles].sort((a, b) => b.cost - a.cost))
+
+  return { days, roles, overtimeCost: fold.overtimeCost }
+}
+
+/**
+ * The three row reads and the arithmetic over them, as plain records so they
+ * round-trip through Redis. `Record<string, …>` rather than `Map` on purpose:
+ * a `Map` serialises to `{}` and would fold to a week that cost nothing.
+ */
+async function foldLaborWeekRows(input: {
+  storeIds: string[]
+  startDate: Date
+  endDate: Date
+}): Promise<{
+  hoursByDate: Record<string, { seconds: number; cost: number }>
+  scheduledByDate: Record<string, number>
+  platformByDate: Record<string, number>
+  roles: Array<{ position: string; payType: "HOURLY" | "SALARIED"; hours: number; cost: number }>
+  overtimeCost: number
+}> {
+  const { storeIds, startDate, endDate } = input
+
   const [positionRows, shiftRows, platformRows] = await Promise.all([
     prisma.harriPositionDaily.findMany({
       where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
@@ -493,7 +552,7 @@ export async function loadLaborWeek(input: {
     }),
   ])
 
-  const hoursByDate = new Map<string, { seconds: number; cost: number }>()
+  const hoursByDate: Record<string, { seconds: number; cost: number }> = {}
   const roleAgg = new Map<
     string,
     { position: string; payType: "HOURLY" | "SALARIED"; hours: number; cost: number }
@@ -502,10 +561,10 @@ export async function loadLaborWeek(input: {
 
   for (const r of positionRows) {
     const key = dbDay(r.date)
-    const bucket = hoursByDate.get(key) ?? { seconds: 0, cost: 0 }
+    const bucket = hoursByDate[key] ?? { seconds: 0, cost: 0 }
     bucket.seconds += r.actualSeconds ?? 0
     bucket.cost += r.totalLabor ?? 0
-    hoursByDate.set(key, bucket)
+    hoursByDate[key] = bucket
 
     overtimeCost += r.overtimeAmount ?? 0
 
@@ -522,40 +581,19 @@ export async function loadLaborWeek(input: {
     roleAgg.set(roleKey, role)
   }
 
-  const scheduledByDate = new Map<string, number>()
+  const scheduledByDate: Record<string, number> = {}
   for (const s of shiftRows) {
     const key = dbDay(s.date)
-    scheduledByDate.set(key, (scheduledByDate.get(key) ?? 0) + s.minutes)
+    scheduledByDate[key] = (scheduledByDate[key] ?? 0) + s.minutes
   }
 
-  const platformByDate = new Map<string, number>()
+  const platformByDate: Record<string, number> = {}
   for (const p of platformRows) {
     const key = dbDay(p.date)
-    platformByDate.set(key, (platformByDate.get(key) ?? 0) + (p.netSales ?? 0))
+    platformByDate[key] = (platformByDate[key] ?? 0) + (p.netSales ?? 0)
   }
 
-  const days: LaborDay[] = []
-  const n = dayCount(range)
-  for (let i = 0; i < n; i++) {
-    const d = addDays(range.start, i)
-    const key = isoDay(d)
-    const hb = hoursByDate.get(key)
-    days.push(
-      laborDay({
-        key,
-        label: dayLabel(d),
-        actualSeconds: hb?.seconds ?? 0,
-        scheduledMinutes: scheduledByDate.has(key) ? (scheduledByDate.get(key) as number) : null,
-        cost: hb?.cost ?? 0,
-        platformSales: platformByDate.has(key) ? (platformByDate.get(key) as number) : null,
-        totalSales: salesByDay.has(key) ? (salesByDay.get(key) as number) : null,
-      }),
-    )
-  }
-
-  const roles = laborRole([...roleAgg.values()].sort((a, b) => b.cost - a.cost))
-
-  return { days, roles, overtimeCost }
+  return { hoursByDate, scheduledByDate, platformByDate, roles: [...roleAgg.values()], overtimeCost }
 }
 
 /**
@@ -599,6 +637,44 @@ export async function loadLaborTrend(input: {
   const last = windows[windows.length - 1]
   const { endDate } = toQueryBounds({ start: last.end, end: last.end })
 
+  // Same rule as `loadLaborWeek`: the fold is cached, `weeklyTotalSales` is
+  // the statement's and stays outside.
+  const { costByDate, hoursByDate, salesByDate } = await cached(
+    `counter:labortrend:${stableKey({ ids: [...storeIds].sort(), from: startDate, to: endDate })}`,
+    rangeTtl(endDate),
+    ["harri", ...otterRangeTags(startDate, endDate)],
+    () => foldLaborTrendRows({ storeIds, startDate, endDate }),
+  )
+
+  return windows.map((w) => {
+    const days: TrendDayInput[] = []
+    for (let i = 0; i < w.days; i++) {
+      const d = addDays(w.start, i)
+      const key = isoDay(d)
+      days.push({
+        cost: costByDate[key] ?? 0,
+        hours: hoursByDate[key] ?? 0,
+        platformSales: key in salesByDate ? salesByDate[key] : null,
+      })
+    }
+    const weekKey = isoDay(w.start)
+    const totalSales = weeklyTotalSales.has(weekKey) ? (weeklyTotalSales.get(weekKey) as number) : null
+    return laborTrendWeek(w.start, w.partial, days, totalSales)
+  })
+}
+
+/** The two row reads behind the trend, as plain records for the same reason as `foldLaborWeekRows`. */
+async function foldLaborTrendRows(input: {
+  storeIds: string[]
+  startDate: Date
+  endDate: Date
+}): Promise<{
+  costByDate: Record<string, number>
+  hoursByDate: Record<string, number>
+  salesByDate: Record<string, number>
+}> {
+  const { storeIds, startDate, endDate } = input
+
   const [positionRows, platformRows] = await Promise.all([
     prisma.harriPositionDaily.findMany({
       where: { storeId: { in: storeIds }, date: { gte: startDate, lte: endDate } },
@@ -610,33 +686,19 @@ export async function loadLaborTrend(input: {
     }),
   ])
 
-  const costByDate = new Map<string, number>()
-  const hoursByDate = new Map<string, number>()
+  const costByDate: Record<string, number> = {}
+  const hoursByDate: Record<string, number> = {}
   for (const r of positionRows) {
     const key = dbDay(r.date)
-    costByDate.set(key, (costByDate.get(key) ?? 0) + (r.totalLabor ?? 0))
-    hoursByDate.set(key, (hoursByDate.get(key) ?? 0) + (r.actualSeconds ?? 0) / 3600)
+    costByDate[key] = (costByDate[key] ?? 0) + (r.totalLabor ?? 0)
+    hoursByDate[key] = (hoursByDate[key] ?? 0) + (r.actualSeconds ?? 0) / 3600
   }
 
-  const salesByDate = new Map<string, number>()
+  const salesByDate: Record<string, number> = {}
   for (const p of platformRows) {
     const key = dbDay(p.date)
-    salesByDate.set(key, (salesByDate.get(key) ?? 0) + (p.netSales ?? 0))
+    salesByDate[key] = (salesByDate[key] ?? 0) + (p.netSales ?? 0)
   }
 
-  return windows.map((w) => {
-    const days: TrendDayInput[] = []
-    for (let i = 0; i < w.days; i++) {
-      const d = addDays(w.start, i)
-      const key = isoDay(d)
-      days.push({
-        cost: costByDate.get(key) ?? 0,
-        hours: hoursByDate.get(key) ?? 0,
-        platformSales: salesByDate.has(key) ? (salesByDate.get(key) as number) : null,
-      })
-    }
-    const weekKey = isoDay(w.start)
-    const totalSales = weeklyTotalSales.has(weekKey) ? (weeklyTotalSales.get(weekKey) as number) : null
-    return laborTrendWeek(w.start, w.partial, days, totalSales)
-  })
+  return { costByDate, hoursByDate, salesByDate }
 }
