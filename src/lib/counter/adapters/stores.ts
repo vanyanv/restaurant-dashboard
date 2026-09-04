@@ -541,6 +541,11 @@ export interface StoreFileInputs {
   place: KvRow[]
   meta: string
   note: string
+  /**
+   * The Location file's own caption, which has to say whether those signals
+   * are actually on. Static text there claimed them unconditionally.
+   */
+  placeMeta: string
 }
 
 /**
@@ -786,14 +791,32 @@ export function getStoreFileSectionPromises(
           value: store.phone ?? "not set",
           ...(store.phone === null ? { tone: "bad" as const } : {}),
         },
-        {
-          label: "Geocoded",
-          value: store.geocoded ? "yes" : "no",
-          ...(store.geocoded ? {} : { tone: "bad" as const }),
-        },
+        /*
+         * NOT toned `bad`, unlike Phone directly above it.
+         *
+         * The docblock above draws exactly the right line — Phone is red
+         * because it is "a missing input a reader can fix" — and this row was
+         * on the wrong side of it. Nothing in this product writes `latitude`:
+         * grep it and there are four reads (here, `new-store.ts`, `ml-status`
+         * twice) and no write anywhere, which `new-store.ts` says out loud in
+         * its own copy — "The address turns on weather, once SOMEBODY
+         * geocodes it".
+         *
+         * So the store file was painting a red fault on the one row of the
+         * page an owner cannot act on, on a page whose whole instruction is
+         * "every figure above comes from here". A red mark you cannot clear
+         * teaches a reader to stop reading red marks.
+         *
+         * The fact stays — whether weather is on is worth knowing — and the
+         * caption below now carries what it means instead.
+         */
+        { label: "Geocoded", value: store.geocoded ? "yes" : "no" },
         { label: "Lifecycle", value: stageLabel(store) },
       ],
       meta: "standing inputs",
+      placeMeta: store.geocoded
+        ? "used by weather and event signals"
+        : "weather and event signals wait on coordinates nothing here sets yet",
       note:
         defaultRates(store)
           ? `The commission rates are the platform defaults to the digit. Nothing in the product ` +

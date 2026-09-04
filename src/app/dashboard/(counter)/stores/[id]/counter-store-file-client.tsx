@@ -692,7 +692,7 @@ export function CounterStoreFileClient({
 
         <Section
           title="Location file"
-          meta={() => "used by weather and event signals"}
+          meta={(i) => i.placeMeta}
           data={sections.inputs}
           pending={pending}
         >
