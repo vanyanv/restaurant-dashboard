@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 
 import {
   Kv,
@@ -22,7 +21,7 @@ import type {
   CountSessionEntryRow,
   CountSessionSections,
 } from "@/lib/counter/adapters/stock-counts"
-import { finishStockCount, recordCountLine } from "@/lib/counter/actions/stock-count"
+import { useCountEntry } from "@/lib/counter/use-count-entry"
 
 /**
  * One count session — `P.countsession`.
@@ -87,49 +86,14 @@ const ENTRY_COLUMNS: Column[] = [
  * on-hand model calibrates on COMPLETED counts. Every count ever taken here
  * has therefore been invisible to the thing it exists to feed. The button is
  * the point of the section, not an afterthought at the end of it.
+ *
+ * The state machine moved to `useCountEntry` when the PHONE needed the same
+ * one — see that hook for the saving rules. What is left here is the desk's
+ * shape for it, a table, which is the only part that should differ.
  */
 function CountEntry({ entry }: { entry: CountSessionEntry }) {
-  const router = useRouter()
-  const [finishing, startFinishing] = useTransition()
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      entry.rows.map((r) => [r.ingredientId, r.entered === null ? "" : String(r.entered)]),
-    ),
-  )
-  const [saved, setSaved] = useState<Record<string, "saving" | "ok" | "failed">>({})
-
-  const commit = (row: CountSessionEntryRow) => {
-    const raw = (values[row.ingredientId] ?? "").trim()
-    if (raw === "") return
-    const qty = Number(raw)
-    if (!Number.isFinite(qty) || qty < 0) {
-      setSaved((s) => ({ ...s, [row.ingredientId]: "failed" }))
-      return
-    }
-    // Unchanged from what the server already holds — saving would be a write
-    // that says nothing.
-    if (row.entered !== null && qty === row.entered) return
-    setSaved((s) => ({ ...s, [row.ingredientId]: "saving" }))
-    void recordCountLine({
-      stockCountId: entry.countId,
-      ingredientId: row.ingredientId,
-      qty,
-      unit: row.unit,
-      estimate: row.estimate,
-    }).then((result) => {
-      setSaved((s) => ({ ...s, [row.ingredientId]: result.ok ? "ok" : "failed" }))
-    })
-  }
-
-  const finish = () => {
-    startFinishing(async () => {
-      const result = await finishStockCount(entry.countId)
-      if (!result.ok) return
-      // The lines, the value, the status cell and the inventory pages that
-      // read completed counts all change at once.
-      router.refresh()
-    })
-  }
+  const { values, saved, setValue, commit, finish, finishing, finishLabel } =
+    useCountEntry(entry)
 
   const rows: Row[] = entry.rows.map((r) => ({
     key: r.ingredientId,
@@ -145,9 +109,7 @@ function CountEntry({ entry }: { entry: CountSessionEntry }) {
             value={values[r.ingredientId] ?? ""}
             aria-label={`${r.name} counted, in ${r.unit}`}
             placeholder={r.unit}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, [r.ingredientId]: e.target.value }))
-            }
+            onChange={(e) => setValue(r.ingredientId, e.target.value)}
             onBlur={() => commit(r)}
           />
           {saved[r.ingredientId] === "failed" ? <span className="k"> not saved</span> : null}
@@ -167,11 +129,7 @@ function CountEntry({ entry }: { entry: CountSessionEntry }) {
             disabled={!entry.open || finishing}
             onClick={finish}
           >
-            {!entry.open
-              ? "This count is closed"
-              : finishing
-                ? "Closing…"
-                : "Finish this count"}
+            {finishLabel}
           </button>
         </div>
         <Note>{entry.note}</Note>

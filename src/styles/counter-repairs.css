@@ -1845,3 +1845,16 @@ button.wkd {
     animation: none !important;
   }
 }
+
+/*
+ * `.mqty` — `.search`, narrowed to fit beside an ingredient name.
+ *
+ * The count entry box is the desk's `.search` field, reused rather than
+ * reinvented so both surfaces get the same focus ring and the same border.
+ * Its `min-width:214px` is a desk measurement and on a 390px phone it pushes
+ * the ingredient name out of its own row, so the one thing that changes is
+ * the width. Right-aligned and tabular because it holds a quantity, and every
+ * other number on this surface is set the same way (`.mli .rt`).
+ */
+.mqty { min-width: 0; width: 104px; padding: 8px 10px }
+.mqty input { text-align: right; font-variant-numeric: tabular-nums }
