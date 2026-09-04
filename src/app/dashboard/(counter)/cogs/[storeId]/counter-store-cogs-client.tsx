@@ -183,7 +183,7 @@ export function CounterStoreCogsClient({
       {/* The same `VIEWS` pair as the group page, so the bar works in both
           directions. The store here is the PATH's, which is the one this page
           is about. */}
-      <SubNav items={storeViewTabs("/dashboard/cogs", storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }])} label="COGS" />
+      <SubNav items={storeViewTabs("/dashboard/cogs", storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }], "Cost")} label="COGS" />
 
       {/* The store note and the strip are ONE section, because the note is a
           statement about the figures beside it — a page that could show one

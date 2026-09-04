@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { getPnlSectionPromises } from "@/lib/counter/adapters/pnl"
+import { getStoreFixedSectionPromises } from "@/lib/counter/adapters/pnl-store"
 import { CounterPhonePnlClient } from "./counter-phone-pnl-client"
 import { counterToday } from "@/lib/counter/today"
 
@@ -64,9 +65,28 @@ export default async function MobilePnlPage({
     today,
   })
 
+  /*
+   * `P.pnlstore`'s fixed-cost section, started only when a store is SELECTED
+   * — the same call the desk page makes, for the reason `pnl-store.ts` states:
+   * a store is a PARAM on one P&L, not a second composition. The desk has
+   * carried this since the section was written and the phone did not, so
+   * `/m/pnl?store=<id>` was the group statement filtered to one store with the
+   * part that is ABOUT that store missing.
+   */
+  const storeSections = counterParams.storeId
+    ? getStoreFixedSectionPromises({
+        range: counterParams.range,
+        comparisonId: counterParams.comparisonId,
+        storeId: counterParams.storeId,
+        accountId: session.user.accountId,
+        today,
+      })
+    : null
+
   return (
     <>
       <CounterPhonePnlClient
+        storeSections={storeSections}
         // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
         // the RSC boundary with its prototype stripped.
         params={params.toString()}

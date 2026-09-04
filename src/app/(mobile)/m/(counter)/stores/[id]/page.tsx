@@ -51,7 +51,7 @@ export default async function Page({
 
   return (
     <>
-      <CounterPhoneStoreFileClient sections={sections} />
+      <CounterPhoneStoreFileClient sections={sections} storeId={id} />
       <span hidden data-perf-ready="/m/stores/[id]" />
     </>
   )

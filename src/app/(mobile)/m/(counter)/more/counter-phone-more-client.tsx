@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import { useEffect, useState, useTransition } from "react"
-import { MHead, MList, Note, Section, Wordmark, useCounterTransition } from "@/components/counter"
+import { Logo, MHead, MList, Note, Section, useCounterTransition } from "@/components/counter"
 import { saveNotificationPreferences } from "@/lib/counter/actions/settings"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SettingsNotifications, SettingsSections } from "@/lib/counter/adapters/settings"
@@ -111,12 +111,28 @@ export function CounterPhoneMoreClient({
 
   return (
     <>
-      {/* `.mlogo`, and no landmark class — the prototype's own wrapper. */}
+      {/* `.mlogo`, and no landmark class — the prototype's own wrapper, with
+          its own inline style: `P.settings.phone()` (prototype line 5900) is
+          `display:grid;justify-items:center;gap:6px;padding:6px 0 2px` holding
+          the MARK and a mono caption.
+
+          THE MARK, not `Wordmark`. This drew the name in Bricolage, and the
+          give-away that it was wrong is in the ported sheet: `.mlogo .logo`
+          declares `width:118px` (counter-components.css:519) and nothing in
+          the application matched it, because nothing rendered a `.logo` here.
+          Note 15 is why it matters — "the wordmark is the palette's alibi":
+          Counter's red and signal yellow read as a designer's choice until the
+          real mark sits beside them, and a line of type is not the real thing.
+          This is the fifth tab, the one phone surface with room for it.
+
+          `priority={false}`, which `Logo`'s own note asks for: it defaults on
+          because every other slot that draws this is a bare auth page where
+          the mark is the LCP candidate. Here it is chrome above a list. */}
       <div
         className="mlogo"
         style={{ display: "grid", justifyItems: "center", gap: 6, padding: "6px 0 2px" }}
       >
-        <Wordmark />
+        <Logo width={118} priority={false} />
         <span className="mono">Operations</span>
       </div>
 

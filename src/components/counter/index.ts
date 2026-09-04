@@ -38,6 +38,14 @@ export { Toast, type ToastTone } from "./surface/toast"
 export { Dispatch, type DispatchItem } from "./surface/dispatch"
 export { HeadBlock, LeadFigure, type HeadFigure } from "./surface/head-block"
 export { Say } from "./surface/say"
+export {
+  WelcomeLine,
+  greetingFor,
+  welcomeNext,
+  welcomeHoldMs,
+  DOOR_WIPE_MS,
+  WELCOME_TYPE_DELAY_MS,
+} from "./surface/welcome-line"
 export { FloorMeter } from "./surface/floor-meter"
 export { Stars } from "./surface/stars"
 export { Note } from "./surface/note"
@@ -106,11 +114,17 @@ export { MList, type MListRow } from "./shell/m-list"
    be built — and why a phone-only reader could not change the store, the range
    or the comparison until it was. */
 export { MTop, type MTopProps } from "./shell/m-top"
+/* The phone's bottom bar. Mounted by `src/app/(mobile)/m/layout.tsx` for every
+   `/m` route rather than by `PhoneShell`, because it belongs to the routes
+   still on the editorial design too. */
+export { MTabs } from "./shell/m-tabs"
 export { MDateSheet, type MDateSheetProps } from "./shell/m-date-sheet"
 export { PhoneSheet } from "./shell/phone-sheet"
 
 export { useEntry, ENTRY_STAGGER_MS, ENTRY_DURATION_MS, ENTRY_TOTAL_MS } from "./motion/use-entry"
 export { useCountUp, COUNT_UP_MS } from "./motion/use-count-up"
+export { CountUp, Arriving, type Arrival } from "./motion/count-up"
+export { useTypewriter, TYPE_CHAR_MS } from "./motion/use-typewriter"
 export { useChartDraw, LINE_DRAW_MS, BAR_STAGGER_MS } from "./motion/use-chart-draw"
 export { useReducedMotion } from "./motion/use-reduced-motion"
 

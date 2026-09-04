@@ -1,6 +1,7 @@
 "use client"
 
-import { MList, MStrip, Section, useCounterTransition } from "@/components/counter"
+import { MList, MStrip, Section, SubNav, useCounterTransition } from "@/components/counter"
+import { PHONE_USAGE_TABS } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { ProductUsageSections } from "@/lib/counter/adapters/product-usage"
 
@@ -22,6 +23,12 @@ export function CounterPhoneUsageClient({
 
   return (
     <>
+      {/* `P.usage`'s own three tabs, first inside `.mscroll` — the position
+          every other phone `.seg` takes. The desk has drawn these since the
+          page was built and the phone drew nothing, so two of the three
+          destinations the labels promise were unreachable from here. */}
+      <SubNav items={PHONE_USAGE_TABS} label="Product usage" />
+
       {/* The page's own NAME is a constant, so it is drawn in every state.
           Inside the section it was not: a failed headline left this phone
           page with no title at all, showing "Product usage unavailable" where

@@ -289,6 +289,16 @@ export const PHONE_INVENTORY_TABS = toPhone(INVENTORY_TABS)
 export const PHONE_MENU_TABS = toPhone(MENU_TABS)
 
 /**
+ * The same three on the phone. `/m/operations/product-usage` had NO
+ * sub-navigation at all while the desk has carried `USAGE_TABS` since the page
+ * was built — so the promise those labels make ("menu item costs and vendor
+ * prices are over there") was kept on one surface and dropped on the other,
+ * and the phone's Product usage was a page with no way out but the back
+ * button. All three destinations have a phone route.
+ */
+export const PHONE_USAGE_TABS = toPhone(USAGE_TABS)
+
+/**
  * `VIEWS`'s "One store" tab, which cannot be a constant.
  *
  * The prototype's own note says why: "A per-store page is the store switcher's
@@ -310,15 +320,48 @@ export function storeViewTabs(
   storeId: string | null,
   search: string,
   extra: readonly SubNavItem[] = [],
+  /*
+   * What the GROUP tab is called, when "All stores" is not what the design
+   * calls it. Three of the four store-view bars read "All stores" in the
+   * prototype and one does not: `VIEWS.cogs` opens `['cost', 'Cost', 'cogs']`,
+   * because that bar's other tab is "Theoretical vs actual" and the pair is a
+   * choice between two ways of costing, not between two scopes. Ours said
+   * "All stores" on it, which reads as a scope toggle next to a tab that is
+   * not one.
+   */
+  groupLabel = "All stores",
 ): readonly SubNavItem[] {
   const params = new URLSearchParams(search)
   params.delete("store")
   const qs = params.toString()
   const q = qs ? `?${qs}` : ""
   return [
-    { label: "All stores", href: `${base}${q}` },
+    { label: groupLabel, href: `${base}${q}` },
     ...extra.map((e) => ({ label: e.label, href: `${e.href}${q}` })),
     ...(storeId ? [{ label: "One store", href: `${base}/${storeId}${q}` }] : []),
+  ]
+}
+
+/**
+ * `VIEWS.stores` — "All stores | Store file | New store", which neither
+ * surface drew.
+ *
+ * Not `storeViewTabs`: that helper's shape is group-then-extras-then-"One
+ * store", and this bar puts the per-store tab in the MIDDLE and calls it
+ * something else. The design's order is the sequence you use it in — see all
+ * of them, open the one you picked, or add another.
+ *
+ * "Store file" is absent until a store is picked, for `storeViewTabs`' reason:
+ * a tab whose destination does not exist yet is a chevron to nowhere. Nothing
+ * is carried in the query — `P.stores` is `nodate`, so there is no window to
+ * keep, and `?store=` is the selection the middle tab already spells out in
+ * its path.
+ */
+export function storesViewTabs(base: string, storeId: string | null): readonly SubNavItem[] {
+  return [
+    { label: "All stores", href: base },
+    ...(storeId ? [{ label: "Store file", href: `${base}/${storeId}` }] : []),
+    { label: "New store", href: `${base}/new` },
   ]
 }
 

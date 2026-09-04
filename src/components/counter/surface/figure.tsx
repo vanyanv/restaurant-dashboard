@@ -1,6 +1,7 @@
 import { bstat, bwords, isJudged, type Reference } from "@/lib/counter/bullet-state"
 import { Bullet } from "./bullet"
 import { Spark } from "./spark"
+import { Arriving, type Arrival } from "@/components/counter/motion/count-up"
 
 /**
  * The delta's tone. Up is the default and needs no class — `.strip .d` is
@@ -13,6 +14,12 @@ export interface FigureProps {
   label: string
   /** The prototype's `c[1]`. Pre-formatted — formatting belongs to `@/lib/counter/format`. */
   value: string
+  /**
+   * The number behind `value` and the name of the formatter that wrote it,
+   * so the cell can count up to `value` on arrival (spec §5.4). Optional: a
+   * cell whose adapter does not say arrives as text, exactly as before.
+   */
+  arrive?: Arrival
   /** `c[2]`. */
   delta?: string
   /** `c[3]` — the delta's class. */
@@ -61,6 +68,7 @@ export interface FigureProps {
 export function Figure({
   label,
   value,
+  arrive,
   delta,
   deltaTone,
   caption,
@@ -79,7 +87,7 @@ export function Figure({
     <div className={lead ? "fig" : undefined}>
       <span className="k">{label}</span>
       <span data-figure-value className="v">
-        {value}
+        <Arriving arrive={arrive}>{value}</Arriving>
       </span>
       {reference?.series ? <Spark series={reference.series} breach={breach} /> : null}
       {delta ? <span className={deltaTone ? `d ${deltaTone}` : "d"}>{delta}</span> : null}

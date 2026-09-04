@@ -681,7 +681,7 @@ button.wkd {
   left: 12px;
   right: 12px;
   width: auto;
-  bottom: calc(var(--m-tabbar-height) + env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: calc(var(--m-bar-h) + env(safe-area-inset-bottom, 0px) + 8px);
   background: var(--surface);
   z-index: 30;
 }
@@ -938,6 +938,145 @@ button.wkd {
 
 /*
  * ============================================================================
+ * THE PHONE'S BOTTOM BAR, AGAINST THE PHONE'S BOTTOM EDGE
+ * ============================================================================
+ *
+ * `.mtabs` is drawn by `MTabs` and styled entirely by `counter-components.css`
+ * — grid, five columns, the mono labels, the raised `.bub`. One thing the
+ * ported rule cannot carry: WHERE it sits.
+ *
+ * In the prototype `.pframe` is a fixed-height flex column and `.mtabs` is its
+ * last child, so the bar lands on the frame's bottom edge because the frame
+ * has one. The application has no frame — a phone route scrolls the window,
+ * and `.mscroll` under `main.m-shell__main` is not a scroll container (the
+ * comment above `.mscroll > .composer` measured exactly this). Last-child of a
+ * document that is 4,758px tall puts the bar 4,758px down.
+ *
+ * Fixed, then, which is what the editorial `.m-tabbar` this replaces already
+ * did, at the same `z-index: 40` and against the same safe area. The height is
+ * not restated: `padding: 8px 0 14px` plus `.mtab`'s own 44px minimum is the
+ * prototype's 66px, and `.m-shell__main` already reserves 80px below its
+ * content, so nothing is covered and no number here has to agree with a number
+ * there.
+ *
+ * The safe area is ADDED to the prototype's 14px rather than replacing it, so
+ * a phone with a home indicator keeps the drawn gap above it instead of
+ * spending it on the indicator.
+ */
+.ct-root > .mtabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+}
+
+/*
+ * `.mtab` is an anchor here and a `<button>` in the prototype, so the two
+ * declarations `:where(.pframe) button` made for it — no underline, inherited
+ * colour — have to be made again for a link. `.mtab.on` and `.mtab--ask` set
+ * their own colours after this, so `inherit` is the resting state only.
+ */
+.mtabs .mtab {
+  text-decoration: none;
+  color: var(--ink-3);
+}
+
+/*
+ * ============================================================================
+ * A COUNTER PHONE PAGE IS THE SCREEN, NOT A COLUMN INSIDE THE OLD ONE
+ * ============================================================================
+ *
+ * Measured on `/m` at 390x844 before this rule: `main.m-shell__main` computes
+ * `padding: 18px 16px 76px` with `max-width: 480px`, so `.ct-root.ct-phone`
+ * begins at x=16 and is 358px wide on a 390px screen. Everything the phone
+ * shell draws inherits that inset — and `.mtop` is the one that shows it,
+ * because it is a BAND: `--chrome` behind it and a `--line` border under it,
+ * both of which stop 16px short of each edge and 18px below the top. The
+ * prototype's `.mtop` is flush against three edges of `.pframe`; ours was a
+ * floating grey rectangle with cream around it, which is most of why the
+ * rebuilt pages read as "not the design" at a glance even where every block
+ * inside them was right.
+ *
+ * The measure and the padding are correct for the dozen `/m` routes still on
+ * the editorial design, so this is an opt-OUT keyed on what is inside, exactly
+ * as `.m-shell__main:has(> .plogin)` above already does for the sign-in
+ * screen: the page that wants the whole viewport opts out by being the page
+ * that wants it, and no layout has to grow a class that says which design its
+ * child is.
+ *
+ * The 76px bottom reserve goes with the padding, so `.mscroll` takes over the
+ * job of keeping the last block clear of the fixed bar. `--m-bar-h` is that
+ * bar's drawn height — 8px of top padding, `.mtab`'s 44px minimum (45 as
+ * drawn), 14px under it — declared once here rather than restated at the three
+ * places that need to clear it.
+ */
+.ct-root {
+  --m-bar-h: 67px;
+}
+
+.m-shell .m-shell__main:has(> .ct-root.ct-phone) {
+  max-width: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* `.pframe`'s own arrangement, which `.ct-root.ct-phone` stands in for here:
+   a flex column that fills its shell, so `.mtop` sits on the top edge and
+   `.mscroll` takes the rest. */
+.m-shell__main > .ct-root.ct-phone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The clearance the layout's padding used to provide, moved inside so it is
+   the SCROLL region that ends above the bar rather than the page. */
+.m-shell__main > .ct-root.ct-phone > .mscroll {
+  padding-bottom: calc(12px + var(--m-bar-h) + env(safe-area-inset-bottom, 0px));
+}
+
+/* Ask, which has both: the composer is fixed above the bar and the history
+   has to end above the composer. Restated at this specificity because the
+   rule that says so (`.mscroll:has(> .composer)`, above) is now outranked by
+   the one directly above this. */
+.m-shell__main > .ct-root.ct-phone > .mscroll:has(> .composer) {
+  padding-bottom: calc(
+    12px + var(--m-bar-h) + env(safe-area-inset-bottom, 0px) + 51px + 11px
+  );
+}
+
+/*
+ * `.mtop` does not scroll away, because in the design it cannot.
+ *
+ * `.pframe` is a 718px bezel that never scrolls, so the prototype's store
+ * switcher and date chip are on screen at every scroll position of every
+ * page — which is the whole reason they are chrome and not the first block of
+ * the page. `/m` is a document that scrolls (2,325px on the overview), so the
+ * ported markup put both controls 2,270px above the reader the moment they
+ * moved. `PhoneSheet`'s docblock already names this class of divergence: "the
+ * cost of mounting a bezel's furniture in a scrolling document", and takes the
+ * same kind of decision for the sheet.
+ *
+ * Sticky rather than fixed: `.mtop` is in the flow and `.mscroll` is sized
+ * around it, so it needs to STOP at the top edge, not to be lifted out and
+ * have its height given back by hand.
+ *
+ * z-index 35 is deliberate and sits in the band `PhoneSheet` established: the
+ * bar is 40, the shade 41 and the sheet 42, so a sheet still covers the top
+ * chrome exactly as it covers the bar, and `.mtop` still passes over the page
+ * content beneath it.
+ */
+.m-shell__main > .ct-root.ct-phone > .mtop {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+}
+
+/*
+ * ============================================================================
  * A `<select>` IN A ROWLINE FILLS ITS TRACK RATHER THAN DICTATING IT
  * ============================================================================
  *
@@ -955,4 +1094,754 @@ button.wkd {
 .rowline select.fld {
   width: 100%;
   min-width: 0;
+}
+
+/* ===========================================================================
+ * "Sign on" — the `/login` and `/m/login` composition.
+ *
+ * Sign-in is the only route in the application that is not instrumentation,
+ * and the mark is already a sign painter's job: gold fill, red outline, a hard
+ * drop shadow. That is a lit sign drawn flat, so this puts it on a dark ground
+ * and gives it its own light. The screen it replaced was a 236px logo stranded
+ * in whitespace beside a grey slab of marketing prose.
+ *
+ * SCOPE. Every rule below is keyed to `.login--sign` / `.plogin--sign`, which
+ * only `/login` and `/m/login` carry. `/signup/<token>` and `/shutdown` also
+ * carry bare `.login` / `.plogin` and are deliberately untouched — the signup
+ * screen still draws `.login__aside`, whose rule is above.
+ *
+ * NO NEW COLOUR, AND NO NEW TOKEN. The sign panel is dark in BOTH application
+ * themes, which sounds like it needs a night token; it does not. Every colour
+ * in `counter.css` is declared as a `light-dark()` pair, and `light-dark()`
+ * resolves against the *using* element's computed `color-scheme` — so
+ * `color-scheme: dark` on the panel makes `var(--sunk)`, `var(--ink)` and the
+ * rest resolve to their dark halves while the form column beside it keeps
+ * following the reader's theme. Confirmed in Chromium against a `:root` pinned
+ * to `light` before this was written: the probe computed `var(--ct-sunk)` as
+ * `oklch(0.14 0.009 55)`, the dark half, exactly as intended.
+ *
+ * That is why there is no `--ct-night`. An earlier draft of this design
+ * invented one and claimed the logo's red was `--ct-accent`; neither was true.
+ * Translucency is `color-mix()` over a token rather than an rgba() literal,
+ * because this file is NOT exempt from `no-colour-literal` (only `counter.css`
+ * and the generated `counter-components.css` are).
+ * ======================================================================== */
+
+.login--sign {
+  position: relative;
+  grid-template-columns: minmax(0, 44fr) minmax(0, 56fr);
+  overflow: hidden;
+}
+
+/* ---- the sign panel ------------------------------------------------- */
+.login--sign .login__sign {
+  color-scheme: dark;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 34px 34px 26px;
+  color: var(--ink);
+  background-color: var(--sunk);
+  background-image:
+    radial-gradient(118% 88% at 50% 36%, var(--surface) 0%, var(--chrome) 46%, var(--sunk) 100%);
+}
+.login--sign .login__sign > * { position: relative; z-index: 3 }
+
+.login--sign .login__where {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.login--sign .login__stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 6px 0 14px;
+}
+
+.login__mark {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: min(100%, 320px);
+}
+.login__mark .logo {
+  position: relative;
+  z-index: 2;
+  max-width: 100%;
+  /* The hard shadow is the mark's own; the second is the light it throws. */
+  filter:
+    drop-shadow(0 3px 0 color-mix(in srgb, var(--sunk) 70%, transparent))
+    drop-shadow(0 0 24px color-mix(in srgb, var(--signal) 34%, transparent));
+}
+
+/* The light pooled on the wall behind the sign. */
+.login__bloom {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 190%;
+  height: 290%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: blur(14px);
+  opacity: 0.76;
+  background:
+    radial-gradient(46% 38% at 50% 50%,
+      color-mix(in srgb, var(--signal) 40%, transparent) 0%,
+      color-mix(in srgb, var(--signal) 12%, transparent) 44%,
+      transparent 72%),
+    radial-gradient(70% 56% at 50% 56%,
+      color-mix(in srgb, var(--accent) 25%, transparent) 0%,
+      transparent 70%);
+  animation: login-breathe 9s ease-in-out infinite;
+}
+@keyframes login-breathe {
+  0%, 100% { opacity: 0.68; transform: translate(-50%, -50%) scale(1) }
+  50%      { opacity: 0.86; transform: translate(-50%, -50%) scale(1.035) }
+}
+
+.login__op {
+  position: relative;
+  z-index: 2;
+  margin: 14px 0 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--signal-ink);
+}
+
+/* Three facts true for a stranger, counted in on a stagger after the strike. */
+.login--sign .login__svc {
+  display: flex;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 13px;
+}
+.login--sign .login__svc > div {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  animation: login-svc 0.5s var(--ease) backwards;
+}
+.login--sign .login__svc > div:nth-child(2) { animation-delay: 0.08s }
+.login--sign .login__svc > div:nth-child(3) { animation-delay: 0.16s }
+@keyframes login-svc {
+  from { opacity: 0; transform: translateY(6px) }
+  to   { opacity: 1; transform: none }
+}
+.login--sign .login__svc .k {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.login--sign .login__svc .v { font-size: 12px; color: var(--ink-2) }
+
+.login__pulse {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--signal);
+  animation: login-beat 2.6s ease-in-out infinite;
+}
+@keyframes login-beat {
+  0%, 100% { opacity: 0.4 }
+  50%      { opacity: 1 }
+}
+
+/* ---- the power-on, and the stutter a rejection causes ---------------- */
+.login--sign .login__mark .logo { animation: login-strike 1200ms steps(1, end) }
+@keyframes login-strike {
+  0%, 20% { filter: brightness(0.45) saturate(0.35) }
+  28%     { filter: brightness(1.18) saturate(1.05) }
+  35%     { filter: brightness(0.56) saturate(0.5) }
+  43%     { filter: brightness(1.2) saturate(1.1) }
+  50%     { filter: brightness(0.74) saturate(0.72) }
+  62%     { filter: brightness(1.1) }
+}
+.login--sign.is-stutter .login__mark .logo,
+.plogin--sign.is-stutter .login__mark .logo { animation: login-stutter 420ms steps(1, end) }
+@keyframes login-stutter {
+  18% { filter: brightness(0.42) saturate(0.3) }
+  30% { filter: brightness(1.15) }
+  46% { filter: brightness(0.5) saturate(0.4) }
+}
+
+/* ---- the form column ------------------------------------------------- */
+.login--sign .login__form {
+  display: flex;
+  flex-direction: column;
+  padding: 34px 40px 26px;
+  gap: 0;
+  max-width: none;
+  justify-self: stretch;
+}
+/* The head, the message and the fields centre as ONE group in the height left
+   between the eyebrow and the colophon. As three siblings of a three-row grid
+   they fell into implicit rows and sat on the foot of the column. */
+.login--sign .login__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 360px;
+  margin-inline: auto;
+  padding: 24px 0;
+}
+.login--sign .login__eyebrow {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.login--sign .login__head { text-align: left }
+.login--sign .login__head h1 { text-align: left; font-size: var(--t-hero) }
+.login--sign .login__head .sub { text-align: left; margin-top: 6px }
+.login--sign .loginmsg { margin-top: 18px }
+.login--sign .login__fields { display: grid; gap: 16px; margin-top: 22px }
+.login--sign .login__foot {
+  margin: 0;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+/* ---- the field, and a reveal control with a real hit area ------------ */
+.login__fields .inp { transition: border-color 0.18s var(--ease), box-shadow 0.22s var(--ease) }
+.login__fields .inp:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.login__fields .inp input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  outline: 0;
+  font: inherit;
+  color: var(--ink);
+}
+.login__fields .inp input::placeholder { color: var(--ink-3) }
+.login__fields .field2:focus-within label { color: var(--accent) }
+/* It was a 9.5px text run; a phone needs something a thumb can find. */
+/* `counter-components.css` carries `.login button { font: inherit }` — the
+ * login screen resets its controls to the body face, which is the same rule
+ * the `.login a.btn` repair above names. At (0,1,1) it outranks `.reveal`'s own
+ * (0,1,0) declaration, so the control rendered "SHOW" in 15px DM Sans instead
+ * of the 9.5px mono the design asks for. Restated here at (0,2,0), where it
+ * wins, along with the hit area — it was a 9.5px text run with no box, and a
+ * thumb cannot find one of those. */
+.login__fields .reveal {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--ink-3);
+}
+.login__fields .reveal:hover { color: var(--accent) }
+
+/* ---- the button, as a four-state control ----------------------------- */
+.login__go {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  justify-content: center;
+}
+/* 11px on all four sides is what the screen this replaced set inline, and what
+   the prototype's `.btn` measures under `.login`. Scoped to the desk: the
+   phone's `.mbtn` carries its own 13px 12px and must keep it. */
+.login--sign .login__go { padding: 11px }
+.login__go .login__label {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.login__sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(100deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 26%, transparent) 46%,
+    transparent);
+}
+.login__go.is-working { cursor: progress }
+.login__go.is-working .login__sweep {
+  opacity: 1;
+  animation: login-sweep 1s linear infinite;
+}
+@keyframes login-sweep { to { transform: translateX(100%) } }
+.login__go.is-good,
+.login__go.is-good:hover,
+.login__go.is-good[disabled] {
+  opacity: 1;
+  background: var(--good);
+  border-color: var(--good);
+  color: var(--surface);
+}
+.login__tick { width: 15px; height: 15px; flex: none }
+.login__tick path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: login-draw 0.42s var(--ease) 0.06s forwards;
+}
+@keyframes login-draw { to { stroke-dashoffset: 0 } }
+
+/* ---- the door: success wipes the sign across the form ---------------- */
+.login__door {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  color-scheme: dark;
+  clip-path: inset(0 100% 0 0);
+  background-color: var(--sunk);
+  background-image:
+    radial-gradient(100% 80% at 50% 45%, var(--surface) 0%, var(--chrome) 48%, var(--sunk) 100%);
+}
+.login__door .logo {
+  max-width: 46%;
+  opacity: 0;
+  transform: scale(0.9);
+  filter:
+    drop-shadow(0 3px 0 color-mix(in srgb, var(--sunk) 70%, transparent))
+    drop-shadow(0 0 34px color-mix(in srgb, var(--signal) 55%, transparent));
+}
+.login--sign.is-opening .login__door {
+  animation: login-door 0.62s var(--ease) forwards;
+}
+.login--sign.is-opening .login__door .logo {
+  animation: login-doormark 0.62s var(--ease) 0.1s forwards;
+}
+@keyframes login-door {
+  from { clip-path: inset(0 100% 0 0) }
+  to   { clip-path: inset(0 0 0 0) }
+}
+@keyframes login-doormark { to { opacity: 1; transform: scale(1) } }
+
+/* ---- the greeting on the door --------------------------------------------
+ *
+ * `WelcomeLine` (src/components/counter/surface/welcome-line.tsx): the one
+ * sentence the product says that is not a figure, typed under the mark on
+ * the desk's door and the phone's flooded stage. Both containers were a
+ * single centred cell; they become a centred column so the mark keeps its
+ * place and the sentence takes the row beneath it.
+ *
+ * The face is the product's own — DM Sans at `--t-hero`, the size of the
+ * "Sign in" heading the door has just covered — with the mono line under it
+ * set exactly like `.login__where` above the sign. The caret is the accent,
+ * the same blink `.cmdk__in .q u` uses, and it is the only accent on the
+ * door: state, not decoration. Once the sentence is complete it lets go, so
+ * a finished sentence does not look like a field waiting for input.
+ * ------------------------------------------------------------------------ */
+.login__door,
+.plogin--sign .plogin__stage {
+  grid-auto-rows: max-content;
+  align-content: center;
+  gap: 24px;
+}
+.login__greet {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.login__hello {
+  margin: 0;
+  display: inline-flex;
+  align-items: baseline;
+  font-size: var(--t-hero);
+  font-weight: 500;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.plogin--sign .login__hello { font-size: var(--t-xl) }
+.login__caret {
+  display: inline-block;
+  width: 2px;
+  height: .9em;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+  transform: translateY(.1em);
+  animation: login-caret 1.1s steps(1) infinite;
+  transition: opacity .2s var(--ease) .24s;
+}
+/* `animation: none` as well as the opacity: a running animation's opacity
+   keyframes outrank any declared opacity, so without it the caret blinked on
+   over a finished sentence (measured, then fixed). */
+.login__greet[data-done] .login__caret { animation: none; opacity: 0 }
+@keyframes login-caret { 50% { opacity: 0 } }
+.login__next {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  animation: login-svc .4s var(--ease) backwards;
+}
+
+/* One column under the prototype's own 900px break: the sign becomes a band
+   above the form rather than disappearing, because on this composition it IS
+   the page's identity. `.login__aside`'s `display:none` at the same width does
+   not reach here — that rule names the class the signup screen still uses. */
+@media (max-width: 900px) {
+  .login--sign { grid-template-columns: 1fr; grid-template-rows: auto 1fr }
+  .login--sign .login__sign { padding: 24px 24px 20px; gap: 12px }
+  .login--sign .login__stage { padding: 4px 0 8px }
+  .login--sign .login__mark { width: min(100%, 240px) }
+  .login--sign .login__form { padding: 26px 24px 20px }
+}
+
+/* ===========================================================================
+ * The same composition on a phone.
+ *
+ * The whole screen is dark here rather than a panel, because a phone has no
+ * second column to keep light. The keyboard is the design constraint: it takes
+ * roughly half the viewport, so `.is-typing` folds the sign instead of letting
+ * the form slide under it. That fold is LAYOUT, not decoration, which is why
+ * the reduced-motion block at the foot leaves it alone.
+ * ======================================================================== */
+
+/*
+ * `color-scheme: dark` sits on the STAGE, not on the screen.
+ *
+ * It was on `.plogin--sign` first, and the fidelity gate was right to reject
+ * that: every token inside resolved dark, including the ones on `.mbtn`, so
+ * the phone's primary button painted the dark accent (oklch 0.6875) over the
+ * dark surface ink in the application's LIGHT theme. The prototype's `.mbtn`
+ * is the light accent on light surface, and a button is not part of the sign.
+ *
+ * Scoping it to the stage also makes the phone the same idea as the desk —
+ * a dark sign with a light form beside it, here stacked instead of split —
+ * rather than a second, darker composition. The sheet keeps the reader's own
+ * theme because nothing between it and `<html>` overrides `color-scheme`.
+ *
+ * The sheet is square-cornered for the same reason: rounding its top would
+ * show the screen's own ground through two corners, and that ground would
+ * have to be dark in both themes, which is the override this just removed.
+ */
+.plogin--sign {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.plogin--sign .plogin__stage {
+  color-scheme: dark;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 34px 20px 24px;
+  color: var(--ink);
+  background-color: var(--sunk);
+  background-image:
+    radial-gradient(122% 74% at 50% 32%, var(--surface) 0%, var(--chrome) 54%, var(--sunk) 100%);
+  transition: padding 0.4s var(--ease), flex-grow 0.4s var(--ease);
+}
+.plogin--sign .login__mark { width: 190px; transition: width 0.4s var(--ease) }
+.plogin--sign .login__op { transition: opacity 0.28s var(--ease), margin 0.4s var(--ease) }
+
+.plogin--sign .plogin__sheet {
+  margin-top: auto;
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  border-top: 1px solid var(--line-strong);
+  animation: plogin-sheet 0.62s var(--ease) 0.5s backwards;
+  transition: transform 0.34s var(--ease);
+}
+@keyframes plogin-sheet {
+  from { opacity: 0; transform: translateY(46px) }
+  to   { opacity: 1; transform: none }
+}
+.plogin--sign .plogin__foot { margin: 0; text-align: center }
+
+/* The fold. 104px is the smallest the mark stays legible at, measured against
+   its own 957x253 alpha box. */
+.plogin--sign.is-typing .plogin__stage { padding: 10px 20px 8px }
+.plogin--sign.is-typing .login__mark { width: 104px }
+.plogin--sign.is-typing .login__op { opacity: 0; margin-top: 0 }
+.plogin--sign.is-typing .login__bloom { opacity: 0.5 }
+
+/* Success: the sheet drops, the sign floods, then the route changes. */
+.plogin--sign.is-flooding .plogin__sheet {
+  animation: plogin-drop 0.5s var(--ease) 0.2s forwards;
+}
+@keyframes plogin-drop { to { opacity: 0; transform: translateY(60px) } }
+.plogin--sign.is-flooding .login__bloom {
+  animation: plogin-flood 0.7s var(--ease) forwards;
+}
+@keyframes plogin-flood {
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1.25) }
+}
+
+/* ---------------------------------------------------------------------
+ * Reduced motion. Everything decorative stops; the keyboard fold does not,
+ * because a reader who suppresses motion still needs to see the field they
+ * are typing into. Its transition is dropped, so the fold is instant.
+ * ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .login__bloom,
+  .login__pulse,
+  .login--sign .login__mark .logo,
+  .login--sign .login__svc > div,
+  .login--sign.is-stutter .login__mark .logo,
+  .plogin--sign.is-stutter .login__mark .logo,
+  .login__go.is-working .login__sweep,
+  .login__tick path,
+  .plogin--sign .plogin__sheet,
+  .plogin--sign.is-flooding .plogin__sheet,
+  .plogin--sign.is-flooding .login__bloom {
+    animation: none;
+  }
+  .login__tick path { stroke-dashoffset: 0 }
+  .login__go.is-working .login__sweep { opacity: 0 }
+  .plogin--sign .plogin__stage,
+  .plogin--sign .login__mark,
+  .plogin--sign .login__op,
+  .plogin--sign .plogin__sheet { transition: none }
+  /* The door still has to cover the screen before the route changes, or the
+     redirect flashes the form. It jumps instead of wiping. */
+  .login--sign.is-opening .login__door { animation: none; clip-path: inset(0 0 0 0) }
+  .login--sign.is-opening .login__door .logo { animation: none; opacity: 1; transform: none }
+  /* The greeting is complete on arrival (`useTypewriter` hands over the whole
+     sentence), so the caret has nothing to mark and the line does not rise. */
+  .login__caret { animation: none; transition: none; opacity: 0 }
+  .login__next { animation: none }
+}
+
+/* The tab-bar reserve, once more, and this time it has to go to zero.
+ *
+ * `.editorial-surface--mobile main.plogin { padding-bottom: 26px }` above is
+ * right for a centred card and wrong for a bottom sheet: it left 26px of the
+ * night ground below a sheet that is supposed to meet the foot of the screen.
+ * Same specificity as that rule (0,2,1) and later in the file, which is how it
+ * wins — deliberately not raised, so the two stay legible as a pair.
+ */
+.editorial-surface--mobile main.plogin--sign { padding-bottom: 0 }
+
+/* ===========================================================================
+ * WHAT MOVES, AND HOW LOUDLY
+ *
+ * Four tiers, so that a figure needing the reader is never as quiet as a
+ * hover, and a hover is never as loud as a figure needing the reader:
+ *
+ *   1. LOOPS — exactly one, the dot beside "3 need you", and only while
+ *      something needs you (spec §5.4). Nothing else on a screen repeats.
+ *   2. ARRIVALS OF AN OPERATIONAL CHANGE — a section going stale, a section
+ *      failing, a sign-in refused. These rise in AND carry a one-shot mark
+ *      (a border that cools from its state colour, a glyph that lands), so
+ *      they are seen once even by a reader looking elsewhere.
+ *   3. DATA ARRIVING — the entry stagger, charts drawing, the lead figures
+ *      counting up. Once per load, over inside half a second, no mark.
+ *   4. ORDINARY INTERACTION — hovers, presses, a drawer opening. .16–.18s,
+ *      colour and opacity only, nothing that asks to be looked at.
+ *
+ * Everything here is paint or compositor work (opacity, transform, colour),
+ * never layout, and all of it is silenced at the foot under
+ * `prefers-reduced-motion`.
+ * ======================================================================== */
+
+/* ---- 1. The one loop -------------------------------------------------- */
+
+/*
+ * `.dispatch .hot::before` is the prototype's own rule (counter-prototype.html
+ * line 1177) and `cnpulse` its keyframe (line 1167). Neither reached the
+ * generated sheet: the keyframe is written on the same source line as a
+ * trailing comment, and the extractor carries a keyframe only when a ported
+ * rule animates with it — with the rule dropped, the keyframe went with it.
+ * The reduced-motion silencer for the rule DID survive (counter-components
+ * .css:917), which is how this was found: a `!important` off-switch for an
+ * animation nothing declared.
+ *
+ * The result was the one signal §5.4 asks to loop being the one thing on the
+ * page that did not move. Restated here verbatim.
+ */
+.dispatch .hot::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 7px;
+  vertical-align: 1px;
+  animation: cnpulse 2.4s ease-in-out infinite;
+}
+@keyframes cnpulse {
+  0%, 100% { opacity: 1 }
+  50%      { opacity: .45 }
+}
+
+/* ---- 2. Arrivals of an operational change ----------------------------- */
+
+/*
+ * A section's stale banner and its failed block are rendered by `Section`
+ * inside a `.sec__body` — not a direct child of `.screen`, so the page's
+ * entry stagger never reached them. Both replaced a skeleton with no
+ * ceremony at all, which is the wrong volume for "the sync has not succeeded
+ * since" and "this section failed to load".
+ *
+ * The rise is `cnter`, the sheet's own 9px, so a state arrives the way the
+ * page arrived. The mark is what distinguishes this tier from tier 3: the
+ * banner's border starts at the state colour itself and cools to the line
+ * colour it rests on, and the failed glyph lands from slightly larger. Both
+ * run once. `backwards`, not `both` — see the top of this file.
+ *
+ * The cooling is `ease-in`, against the file's habit, on purpose: measured in
+ * the browser, `--ease` (an ease-out) had spent the whole mark within 40ms
+ * of starting — the ring was 0.26px by the time the rise finished. A mark
+ * has to HOLD before it lets go; ease-in holds.
+ *
+ * `.loginmsg` is the same event on the sign-in screen: the sign stutters
+ * (above) and, until now, the message under it simply existed. It is the
+ * only thing on that screen that arrives after the reader acted, so it
+ * should be the loudest thing on it for the half second it takes.
+ */
+.failed {
+  animation: cnter .3s var(--ease) backwards;
+}
+.stalebanner {
+  animation:
+    cnter .3s var(--ease) backwards,
+    ct-cool-signal 1.2s ease-in .1s backwards;
+}
+.loginmsg {
+  animation:
+    cnter .3s var(--ease) backwards,
+    ct-cool-bad 1.2s ease-in .1s backwards;
+}
+.failed .fi,
+.loginmsg .fi {
+  animation: ct-land .36s var(--ease) .08s backwards;
+}
+@keyframes ct-cool-signal {
+  from { border-color: var(--signal) }
+  to   { border-color: var(--signal-line) }
+}
+/* `.loginmsg` rests on `var(--bad)` already; the mark is the glyph's colour
+   filling the frame for a beat and letting go. */
+@keyframes ct-cool-bad {
+  from { box-shadow: 0 0 0 3px var(--bad-wash) }
+  to   { box-shadow: 0 0 0 0 transparent }
+}
+@keyframes ct-land {
+  from { opacity: 0; transform: scale(1.35) }
+  to   { opacity: 1; transform: none }
+}
+
+/* ---- 3. Data arriving --------------------------------------------------- */
+
+/*
+ * The lead figures and the strip cells count up (`CountUp` and `Arriving`,
+ * `src/components/counter/motion/`), and the sheet already fades
+ * `.headline .v` in over the same window and staggers `.strip > div`.
+ *
+ * Two blocks the sheet staggers nothing inside. The verdict is the third
+ * thing in the head block and the one sentence on the page — it follows the
+ * two figures it is a verdict ON, at the same 36ms the page's own stagger
+ * uses, so the reading order is figure, figure, sentence rather than all
+ * three at once. The "still moving" band is the strip's sibling in every
+ * other respect (a row of `.k`/`.v` cells) and gets the strip's own cadence.
+ */
+.headline .say {
+  animation: cnter .3s var(--ease) 90ms backwards;
+}
+.moving > div {
+  animation: cnter .3s var(--ease) backwards;
+}
+.moving > div:nth-child(2) { animation-delay: 40ms }
+.moving > div:nth-child(3) { animation-delay: 70ms }
+.moving > div:nth-child(4) { animation-delay: 96ms }
+.moving > div:nth-child(n+5) { animation-delay: 118ms }
+
+/*
+ * The sign-in form column had nothing at all — the sign strikes on beside a
+ * form that was simply there. This is the form at tier 3, deliberately
+ * quieter than the sign: one rise for the head-and-fields group, delayed
+ * until the strike's first flash so the two do not compete, and the
+ * eyebrow and colophon fading in after it.
+ */
+.login--sign .login__body {
+  animation: login-svc .5s var(--ease) .12s backwards;
+}
+.login--sign .login__eyebrow,
+.login--sign .login__foot {
+  animation: cnfade .5s ease-out .3s backwards;
+}
+
+/* ---- 4. Ordinary interaction ------------------------------------------- */
+
+/*
+ * The per-store ledger's drawer is `display: none` to `display: block`
+ * (counter-components.css:1133-1134) — a click, and 300px of channel rows
+ * exist. Opacity only, and short: opening a drawer you asked for is not news.
+ * `display` cannot transition, so this is an animation on the open state.
+ */
+.stores > .ldrawer.is-open {
+  animation: cnfade .18s var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dispatch .hot::before,
+  .stalebanner,
+  .failed,
+  .loginmsg,
+  .failed .fi,
+  .loginmsg .fi,
+  .login--sign .login__body,
+  .login--sign .login__eyebrow,
+  .login--sign .login__foot,
+  .headline .say,
+  .moving > div,
+  .stores > .ldrawer.is-open {
+    animation: none !important;
+  }
 }

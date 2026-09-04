@@ -93,7 +93,8 @@ export interface CounterParams {
  * day that finished, not the one that has barely started — a half-day of
  * figures compared against a whole one reads as a collapse.
  */
-const DEFAULT_PRESET: PresetId = "yesterday"
+/** Exported for the sign-in door, which names the window this default opens. */
+export const DEFAULT_PRESET: PresetId = "yesterday"
 const DEFAULT_COMPARISON: ComparisonId = "prev"
 
 const isPreset = (v: string | null): v is PresetId =>

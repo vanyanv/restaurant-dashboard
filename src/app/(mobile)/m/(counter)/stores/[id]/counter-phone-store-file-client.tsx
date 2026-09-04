@@ -1,7 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { DeskHandoff, MList, MStrip, Note, Section, useCounterTransition } from "@/components/counter"
+import {
+  DeskHandoff,
+  MList,
+  MStrip,
+  Note,
+  Section,
+  SubNav,
+  useCounterTransition,
+} from "@/components/counter"
+import { storesViewTabs } from "@/lib/counter/nav"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { StoreFileSections } from "@/lib/counter/adapters/stores"
 
@@ -24,13 +33,21 @@ import type { StoreFileSections } from "@/lib/counter/adapters/stores"
  */
 export function CounterPhoneStoreFileClient({
   sections,
+  storeId,
 }: {
   sections: SectionSources<StoreFileSections>
+  storeId: string
 }) {
   const { pending } = useCounterTransition()
 
   return (
     <>
+      {/* `VIEWS.stores` — see `storesViewTabs` in `nav.ts`. This bar is how
+          the design reaches the create form and the store file, and the phone
+          drew none of it: nothing in the product linked to `/m/stores/new`, so
+          a page that exists was reachable only by typing its URL. */}
+      <SubNav items={storesViewTabs("/m/stores", storeId)} label="Stores" />
+
       {/* The page's own NAME is a constant, so it is drawn in every state.
           Inside the section it was not: a failed headline left this phone
           page with no title at all, showing "Store file unavailable" where

@@ -10,7 +10,7 @@ import {
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import { monthlyCostForDays } from "@/lib/pnl"
 import type { PnlSectionsInput } from "@/lib/counter/adapters/pnl"
-import type { MoneyLine, Row } from "@/components/counter"
+import type { MListRow, MoneyLine, Row } from "@/components/counter"
 
 /**
  * One store's P&L — `P.pnlstore` (`docs/counter/counter-prototype.html`).
@@ -68,6 +68,17 @@ const FIXED_FIELDS = [
 
 export interface StoreFixed {
   rows: Row[]
+  /**
+   * The same four lines for a 316px column, where a four-column table is not
+   * a table. `MList` carries the line's name, the monthly figure on the right,
+   * what it lands in underneath and this range's share as the qualifier — the
+   * desk's four columns, folded into one row rather than dropped, because the
+   * phone reader is the one who cannot see the table.
+   *
+   * DERIVED FROM THE SAME `FIXED_FIELDS` walk as `rows`, in the same function,
+   * because these are the same four figures on two pages.
+   */
+  phoneRows: MListRow[]
   money: MoneyLine[]
   meta: string
   lead: string
@@ -201,6 +212,19 @@ function fixedOf(d: Loaded): StoreFixed {
           range: v === null ? "—" : money(inRange(v)),
           lands: f.lands,
         },
+      }
+    }),
+    phoneRows: FIXED_FIELDS.map((f) => {
+      const v = valueOf(s, f.key)
+      return {
+        key: f.key,
+        title: f.label,
+        detail: f.lands,
+        // "not on file" and $0 are DIFFERENT and both are wrong, so neither is
+        // shown as a dash: the desk marks each with `cls: "hot"` and the phone
+        // says which it is in words, since `MList` has no cell tone to carry.
+        value: v === null ? "not on file" : money(v),
+        note: v === null ? "nothing to prorate" : `${money(inRange(v))} this range`,
       }
     }),
     money: [

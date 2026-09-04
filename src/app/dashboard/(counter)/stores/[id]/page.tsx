@@ -53,6 +53,7 @@ export default async function StoreFilePage({
   return (
     <>
       <CounterStoreFileClient
+        storeId={id}
         title={named.name}
         params={qs.toString()}
         today={today}

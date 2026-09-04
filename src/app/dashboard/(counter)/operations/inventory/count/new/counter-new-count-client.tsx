@@ -6,11 +6,13 @@ import {
   Note,
   PageHead,
   Section,
+  SubNav,
   Table,
   useCounterTransition,
   usePageChrome,
   type Column,
 } from "@/components/counter"
+import { INVENTORY_TABS } from "@/lib/counter/nav"
 import { beginStockCount } from "@/lib/counter/actions/stock-count"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { NewCountSections } from "@/lib/counter/adapters/new-count"
@@ -91,6 +93,11 @@ export function CounterNewCountClient({
         title="Start a count"
         sub="Choose the shape of the count here; count it on the phone"
       />
+
+      {/* The design's `VIEWS` bar for this family — see `INVENTORY_TABS` in
+          `nav.ts`. On hand and Counts both draw it; the tab you are standing
+          on drew nothing. */}
+      <SubNav items={INVENTORY_TABS} label="Inventory" />
 
       <Section
         title="What to count"

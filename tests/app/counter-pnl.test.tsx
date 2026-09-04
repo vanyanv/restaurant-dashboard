@@ -196,12 +196,20 @@ describe("Counter P&L", () => {
   })
 
   it("composes the page in the prototype's order, with the strip and the reading OUTSIDE any section", () => {
-    // The whole task as one assertion: strip → reading → cascade → eight weeks
-    // → statement → the split → by store.
+    // The whole task as one assertion: the view bar → strip → reading →
+    // cascade → eight weeks → statement → the split → by store.
+    //
+    // `.seg` is `VIEWS.pnl`, and it was missing from this page entirely until
+    // the phone pass added it. Analytics, Labor and COGS have all drawn their
+    // group/store bar directly after `</PageHead>` since they were built; this
+    // is the fourth page in the design with a per-store twin, and it had no
+    // bar at all — so `/dashboard/pnl/<id>` was reachable only from the
+    // Overview's store cards. Its position here is theirs.
     const { container } = render(<CounterPnlClient {...base} sections={sections} />)
     const kids = [...main(container).children].map((c) => c.className.split(" ")[0])
     expect(kids).toEqual([
       "pagehead",
+      "seg",
       "strip",
       "ans__lead",
       "sec", // where it went

@@ -27,7 +27,10 @@ export function StaleBanner({ lastGoodAt }: { lastGoodAt: Date }) {
   return (
     <div
       role="status"
-      className="mb-3 flex items-baseline gap-2 rounded-ct-sm border border-ct-signal-line bg-ct-signal-wash px-3 py-2"
+      // `stalebanner` carries no style of its own; it is the hook the motion
+      // block in `counter-repairs.css` uses to make this arrive rather than
+      // appear — a figure that stopped being current is an operational change.
+      className="stalebanner mb-3 flex items-baseline gap-2 rounded-ct-sm border border-ct-signal-line bg-ct-signal-wash px-3 py-2"
     >
       <span className="font-ct-mono text-ct-micro uppercase tracking-wider text-ct-signal-ink">
         Last good run

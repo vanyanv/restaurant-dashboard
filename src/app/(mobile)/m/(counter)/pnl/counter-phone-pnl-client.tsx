@@ -8,16 +8,19 @@ import {
   MoneyLines,
   Note,
   Section,
+  SubNav,
   useCounterTransition,
   type MListRow,
   type MoneyLine,
   type WeekRow,
 } from "@/components/counter"
+import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import { dayCount, monthDay, rangeLabel, type DateRange } from "@/lib/counter/date-range"
 import { money, pct } from "@/lib/counter/format"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections, PnlStatement } from "@/lib/counter/adapters/pnl"
+import type { StoreFixedSections } from "@/lib/counter/adapters/pnl-store"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 
 /**
@@ -81,11 +84,13 @@ export function CounterPhonePnlClient({
   params: paramsString,
   today,
   sections,
+  storeSections = null,
 }: {
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
   today: Date
   sections: SectionSources<PnlSections>
+  storeSections?: SectionSources<StoreFixedSections> | null
 }) {
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
@@ -139,6 +144,14 @@ export function CounterPhonePnlClient({
      * rendered here is what goes INSIDE `.mscroll`, unchanged.
      */
     <>
+      {/* `VIEWS.pnl`'s group/store pair, which NEITHER surface drew. Analytics,
+          Labor and COGS all carry this bar and the P&L — the fourth page in the
+          design with a per-store twin, and the one an owner reaches it from
+          most — had no way to that twin except the overview's own button.
+          "One store" appears only once a store is picked, the design's own
+          sequence. */}
+      <SubNav items={storeViewTabs("/m/pnl", counterParams.storeId, paramsString)} label="P&L" />
+
       {/*
         The page's NAME, not a sentence about the range — a statement is the
         same document whatever window it is drawn over, and the window is the
@@ -186,6 +199,31 @@ export function CounterPhonePnlClient({
           </>
         )}
       </Section>
+
+      {/* `P.pnlstore`'s fixed-cost section, rendered only with a store
+          selected — the desk's own condition, in the desk's own position,
+          from the same `getStoreFixedSectionPromises`. `f.phoneRows` and not a
+          slice of `f.rows`: the four-column table is a table on 1440px and a
+          scroll on 316, so the adapter folds each line into one `MList` row.
+          The prototype's `pnlstore` is a whole page; ours is this section on
+          the P&L, which is the call `pnl-store.ts` made before this and the
+          reason `/m/pnl/<id>` is now a shim onto `?store=`. */}
+      {storeSections ? (
+        <Section
+          title="What this store carries"
+          meta={(f) => f.meta}
+          data={storeSections.fixed}
+          pending={pending}
+        >
+          {(f) => (
+            <>
+              <MList rows={f.phoneRows} />
+              <MoneyLines rows={f.money} />
+              <Note>{f.note}</Note>
+            </>
+          )}
+        </Section>
+      ) : null}
     </>
   )
 }

@@ -234,7 +234,7 @@ export function CounterCogsClient({
 
       {/* `VIEWS`'s group/store pair — see `storeViewTabs`. "One store" appears
           only once a store is picked, which is the design's own sequence. */}
-      <SubNav items={storeViewTabs("/dashboard/cogs", counterParams.storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }])} label="COGS" />
+      <SubNav items={storeViewTabs("/dashboard/cogs", counterParams.storeId, paramsString, [{ label: "Theoretical vs actual", href: "/dashboard/operations/product-usage" }], "Cost")} label="COGS" />
 
       {/* Page level, above the first `.sec`, exactly as `strip([...])` is
           written in `P.cogs.desk()`. Three cells (C-R3, C-R4). */}

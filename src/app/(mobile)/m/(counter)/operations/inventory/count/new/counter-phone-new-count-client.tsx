@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
-import { MList, Note, Section, useCounterTransition } from "@/components/counter"
+import { MList, Note, Section, SubNav, useCounterTransition } from "@/components/counter"
+import { PHONE_INVENTORY_TABS } from "@/lib/counter/nav"
 import { beginStockCount } from "@/lib/counter/actions/stock-count"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { NewCountSections } from "@/lib/counter/adapters/new-count"
@@ -51,6 +52,12 @@ export function CounterPhoneNewCountClient({
 
   return (
     <>
+      {/* The design's `VIEWS` bar for this family. Start a count is the THIRD
+          tab of it — `VIEWS.inventory` is `['hand','On hand'], ['counts','Counts'],
+          ['start','Start a count']` — and On hand and Counts both drew it while
+          this page, the tab you are standing on, drew nothing. */}
+      <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+
       {/* The page's own NAME is a constant, so it is drawn in every state.
           Inside the section it was not: a failed headline left this phone
           page with no title at all, showing "Start a count unavailable" where
