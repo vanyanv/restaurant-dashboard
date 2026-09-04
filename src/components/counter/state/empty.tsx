@@ -71,6 +71,12 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
       "Ingredients are read off the lines of your invoices, so the catalogue fills as " +
       "invoices arrive. Nothing has been read in yet.",
   },
+  no_reviews: {
+    head: "No reviews yet",
+    body:
+      "Guest ratings arrive with the order sync from the delivery platforms. Nobody has " +
+      "left one yet.",
+  },
   no_recipes: {
     head: "No recipes yet",
     body:

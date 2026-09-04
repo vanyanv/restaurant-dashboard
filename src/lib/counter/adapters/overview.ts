@@ -938,11 +938,15 @@ export function getOverviewSectionPromises(
       const summary = await getRatingsSummary({ storeId })
       // Never throws by contract — it returns null for "not signed in" and
       // for a query that failed, and this page must not print an empty tile
-      // over a dead ratings sync.
+      // over a dead ratings sync. It no longer returns null for an account
+      // with no reviews, which is why `isEmpty` below is now reachable: that
+      // case used to arrive here as a failure and put a red `!` and "Guest
+      // ratings did not load" on the Overview of every restaurant nobody had
+      // reviewed yet, on every load.
       if (summary === null) throw new Error("Guest ratings could not be read")
       return summary
     },
-    { retryAction: "retryRatings", isEmpty: (r) => r.count === 0 },
+    { retryAction: "retryRatings", isEmpty: (r) => r.count === 0, emptyReason: "no_reviews" },
   )
 
   /*

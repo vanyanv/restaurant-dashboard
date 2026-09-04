@@ -128,7 +128,10 @@ export function CounterMenuProfitClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
-  usePageChrome({ askSuggestions: ASK_SUGGESTIONS })
+  // `leaf` explicitly, the same reason Product mix passes one: Menu profit has
+  // no rail entry of its own, so `owningDestination` finds nothing and the
+  // trail rendered as the store followed by a bare separator and no page name.
+  usePageChrome({ leaf: "Menu profit", askSuggestions: ASK_SUGGESTIONS })
 
   const { pending, startTransition } = useCounterTransition()
 
