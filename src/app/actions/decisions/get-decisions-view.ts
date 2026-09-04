@@ -183,7 +183,22 @@ export interface DecisionsView {
    * The one sentence the page leads with. `model` is null when the
    * deterministic composer wrote it, which is a normal state, not an error.
    */
-  verdict: { line: string; sources: string[]; model: string | null }
+  verdict: {
+    line: string
+    sources: string[]
+    model: string | null
+    /**
+     * Whether that sentence is the briefing's most urgent line, absorbed.
+     *
+     * `briefing` above is `slice(1)`, so when the briefing held exactly one
+     * line the remainder is empty and nothing downstream could tell "there was
+     * one thing and the verdict said it" from "there was nothing". The
+     * headline above the verdict read `actions` alone and, on 2026-09-04,
+     * printed "Nothing needs you this week" directly above a sentence about
+     * what needed the reader this week.
+     */
+    fromBriefing: boolean
+  }
 }
 
 export type GetDecisionsViewResult =
@@ -703,7 +718,11 @@ export async function getDecisionsView(input: {
       scorecard,
       briefing: sanitizedBriefing.slice(1),
       vitals,
-      verdict: { ...verdict, sources: verdictSources(verdictFacts) },
+      verdict: {
+        ...verdict,
+        sources: verdictSources(verdictFacts),
+        fromBriefing: topBriefing !== null,
+      },
     },
   }
 }
