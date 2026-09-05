@@ -19,6 +19,7 @@ import {
 // BY PATH, not through the ask barrel: it reaches a `"use server"` module and
 // the barrel is shared with the overview clients. See that barrel's own note.
 import { ThreadActions } from "@/components/counter/ask/thread-actions"
+import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion"
 import type { AskSections, AskThread, AskTurn } from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
@@ -408,6 +409,17 @@ export function CounterAskClient({
    * their own address bar, so a question with no turn yet IS asking.
    */
   const shown = askTurnsFor(turns, urlConversationId ? "" : question)
+
+  // The newest turn scrolls into view when it is sent, smoothly unless the
+  // reader asked for no motion. Nothing already on the page moves: the turn
+  // rises from the composer's side (counter-repairs.css, "the whole chat")
+  // and the page comes to it.
+  const reduced = useReducedMotion()
+  const newestRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (shown.length === 0) return
+    newestRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" })
+  }, [shown.length, reduced])
   const lastTurn = shown.length > 0 ? shown[shown.length - 1] : null
 
   const verdict = lastTurn ? (askAnswer(lastTurn.state)?.filed?.verdict?.trim() ?? "") : ""
@@ -524,7 +536,7 @@ export function CounterAskClient({
           ) : null}
 
           {shown.map((turn, i) => (
-            <div key={turn.id}>
+            <div key={turn.id} ref={i === shown.length - 1 ? newestRef : undefined}>
               {/* The question as the reader asked it, in the prototype's own
                   bubble. `useAsk` sends the scope sentence in front of it on
                   the wire; that plumbing is never shown back to the reader. */}

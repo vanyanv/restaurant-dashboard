@@ -1,85 +1,47 @@
+"use client"
+
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { toneStyle, type Tone } from "./tone"
+import { useFreshKeys } from "@/components/counter/motion/use-fresh-keys"
 
-/**
- * One thing that needs the owner: how big it is, what it is, and the one thing
- * to do about it.
- */
 export type QueueItem = {
   key: string
-  /** Which of the three judgement colours the lead figure reads in. */
   tone: Tone
-  /** The prototype's `i.lead` — the figure, already formatted. */
   lead: string
-  /** `i.unit` — the `<em>` under the figure: "lines", "per lb", "margin". */
   unit?: string
   title: string
   body: ReactNode
 } & (
-  | /**
-     * `act` and its handler arrive together or not at all. The prototype
-     * renders `.do` on `i.act` alone and wires it through a global
-     * `data-goto` delegate; we have no such delegate, and a button that does
-     * nothing is worse than no button (the same rule `Failed` follows), so
-     * the type makes the pair inseparable.
-     */
+  | /** A row whose act is a page action (a client handler). */
   { act: string; onAct: () => void; href?: never }
-  | /**
-     * The same rule, for the arm the prototype actually uses most: `data-goto`
-     * is a DESTINATION, not a callback. Without this, an adapter with somewhere
-     * to send the reader had to invent a handler or drop the button — the
-     * order page dropped it, which cost that page its `.do` landmark and left
-     * a worklist item telling a reader to do something with no way to go do it.
-     */
+  | /** A row whose act is a destination. */
   { act: string; href: string; onAct?: never }
   | { act?: undefined; onAct?: undefined; href?: never }
 ) & {
-  /**
-   * What the reader can DECIDE about this item, rendered beside the `.do`
-   * button that takes them to it.
-   *
-   * `act`/`href` is a DESTINATION — "Open Pricing" sends you to the page where
-   * the work happens. That is a different thing from recording that the work
-   * was done, or that you are passing, and the Needs-you queue needs both:
-   * `DecisionLog` is empty in production precisely because the queue could
-   * only ever point at things and never hear back about them.
-   *
-   * A slot rather than a second act/href arm, because whoever fills it owns a
-   * write with its own pending and failure states, and `Queue` is a pure
-   * presentational component that should not learn about either.
-   */
   decide?: ReactNode
 }
 
 /**
- * The "what needs you" list. Ported from `queue()` at line 3074 of
- * `docs/counter/counter-prototype.html`:
+ * The queue of what needs the reader.
  *
- *   <div class="queue">
- *     <div class="qitem">
- *       <span class="lead" style="color:var(--tone)">lead<em>unit</em></span>
- *       <div><b>title</b><p>body</p><button class="do">act</button></div>
- *     </div>
- *   </div>
- *
- * `.qitem` is a two-column grid whose first track is the lead figure and whose
- * second is that inner `<div>` — which carries no class, exactly as in the
- * prototype, because `.qitem b`, `.qitem p` and `.qitem .do` style its
- * children directly. Wrapping them in anything classed would be inventing an
- * element the sheet has no rule for.
- *
- * The inline `style` on `.lead` is the one place a colour legitimately appears
- * in a Counter TSX file: it names a token rather than a value, and the token
- * comes from a checked union — see `./tone`.
- *
- * Sole state renderer is `Section` (R3): a `Queue` takes plain items.
+ * Rows stagger in on mount (the generated sheet's own `.qitem` rule). A row
+ * that ARRIVES while the page is up is a different thing from a row that was
+ * rendered: it is the one operational change a normal day has, so it rises
+ * with the bad cool-down and its lead lands (`is-new`, tier 2). `useFreshKeys`
+ * tells the two apart, and `scope` is what makes a range change, which
+ * replaces every row, count as the reader's own act and ring at nothing.
+ * Callers that never change data while mounted may leave `scope` alone.
  */
-export function Queue({ items }: { items: QueueItem[] }) {
+export function Queue({ items, scope = "" }: { items: QueueItem[]; scope?: string }) {
+  const fresh = useFreshKeys(
+    items.map((i) => i.key),
+    scope,
+  )
   return (
     <div className="queue">
       {items.map((i) => (
-        <div className="qitem" key={i.key}>
+        <div className={fresh.has(i.key) ? "qitem is-new" : "qitem"} key={i.key}>
           <span className="lead" style={toneStyle(i.tone)}>
             {i.lead}
             {i.unit ? <em>{i.unit}</em> : null}
@@ -88,9 +50,6 @@ export function Queue({ items }: { items: QueueItem[] }) {
             <b>{i.title}</b>
             <p>{i.body}</p>
             {i.act && i.href ? (
-              // A link, not a button: it navigates, so it has to be
-              // middle-clickable and copyable like every other destination on
-              // the page. `.do` styles either element.
               <Link className="do" href={i.href}>
                 {i.act}
               </Link>

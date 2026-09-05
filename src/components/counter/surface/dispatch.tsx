@@ -1,5 +1,8 @@
+"use client"
+
 import Link from "next/link"
 import { Fragment } from "react"
+import { useFreshKeys } from "@/components/counter/motion/use-fresh-keys"
 
 /**
  * `.dispatch` — the masthead dispatch line, emitted inline inside
@@ -27,6 +30,14 @@ import { Fragment } from "react"
  * same reason `.navbtn` is: a real href is middle-clickable. It renders only
  * when there is somewhere to go — a button that does nothing is worse than no
  * button.
+ *
+ * Motion (tier 2, D4): a `hot` fact whose text changed AFTER first paint — the
+ * count of what needs the reader went up while the page was open — rings the
+ * whole line once: `is-ringing`, the bad cool-down from counter-repairs.css.
+ * `useFreshKeys` is what knows "after first paint", and `scope` (the store and
+ * range the page is showing) is what stops the reader's own range change from
+ * ringing. Each fact is keyed on its text, so a changed fact remounts and
+ * fades in under the generated sheet's own entry rule rather than snapping.
  */
 
 export interface DispatchItem {
@@ -38,12 +49,19 @@ export interface DispatchItem {
 export function Dispatch({
   items,
   action,
+  scope = "",
 }: {
   items: DispatchItem[]
   action?: { label: string; href: string }
+  /** Names the reader's own act (store + range); a change inside it never rings. */
+  scope?: string
 }) {
+  const fresh = useFreshKeys(
+    items.filter((i) => i.tone === "hot").map((i) => i.text),
+    scope,
+  )
   return (
-    <div className="dispatch">
+    <div className={fresh.size > 0 ? "dispatch is-ringing" : "dispatch"}>
       {items.map((item, i) => (
         <Fragment key={`${item.tone}-${item.text}`}>
           {i > 0 ? (

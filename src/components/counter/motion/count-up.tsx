@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { useCountUp } from "./use-count-up"
+import { useChanged } from "./use-changed"
 import { count, money, pct } from "@/lib/counter/format"
 
 /**
@@ -26,7 +27,12 @@ export function CountUp({
   format: (v: number) => string
 }) {
   const shown = useCountUp(value)
-  return <>{format(shown)}</>
+  // D3: a figure that changed after first paint wears `ct-changed` for the
+  // length of its cell's cool-down (counter-repairs.css reads it through
+  // `:has()` on the cell), so the reader's eye is taken to the one cell that
+  // moved. Never on mount, so a page's first paint carries no marks.
+  const changed = useChanged(value)
+  return <span className={changed ? "ct-changed" : undefined}>{format(shown)}</span>
 }
 
 /**

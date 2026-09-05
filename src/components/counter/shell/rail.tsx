@@ -1,114 +1,112 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import Link, { useLinkStatus } from "next/link"
 import { signOut } from "next-auth/react"
 import { LogOut } from "lucide-react"
 import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
 import { visibleNavGroups } from "@/lib/counter/nav-access"
+import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion"
 import { NAV_ICONS } from "./nav-icons"
 import { Wordmark } from "./wordmark"
 import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
 
 /**
- * The rail, as the prototype builds it (`rail()`, line 8231):
+ * `.rail` — the left column: wordmark, store switcher, seventeen destinations
+ * in five captioned groups, and the account foot. Ported from `rail()` in the
+ * prototype (line ~8232); the destinations themselves are declared once in
+ * `@/lib/counter/nav`.
  *
- * ```
- * <aside class="rail">
- *   <div class="rail__logo">…
- *   <div style="position:relative;padding:0 10px">   ← THE STORE SWITCHER
- *   <div>  .rail__cap / .rail__group / .navbtn  × 5 groups
- *   <button class="rail__foot"> .avatar + name + role
- * </aside>
- * ```
- *
- * The store switcher belongs HERE, not in the topbar — that is the first of
- * task 5's three structural corrections. Its open state is a class on this
- * element (`.rail.is-picking .storepop{display:block}`,
- * counter-components.css:743), which is why the state lives in the rail and
- * `StoreSwitcher` is controlled.
- *
- * WHAT IS NOT PORTED, AND WHY:
+ * Three things the prototype's rail has that this one does not, on purpose:
  *
  *   - `.badge`. The prototype puts a count on a nav item from `p.badge`. No
- *     destination in `src/lib/counter/nav.ts` has a count behind it yet, and a
- *     badge that is always absent is dead markup; a badge that is invented is
- *     worse. It comes back with the data.
- *   - `.rail__logo`'s `<img class="logo">`. `Wordmark` draws the name in type
- *     instead, and the reason given here — "we have no logo asset" — was
- *     never true: `public/logo.png` has been in the tree since the first
- *     commit, and the auth screens now draw it through `shell/logo.tsx`. The
- *     rail is the last slot still set in type, and swapping it is a change to
- *     the chrome of every desk page rather than one screen, so it is being
- *     left for a deliberate pass rather than carried in on the back of the
- *     sign-in fix. Note 15 ("the wordmark is the palette's alibi") argues FOR
- *     the mark here, not against it. `.rail__logo`'s own padding applies
- *     either way.
- *   - `<nav>` in place of the prototype's unclassed wrapper `<div>` around the
- *     groups. A `<nav>` computes identically to a `<div>` and is what makes the
- *     five groups a navigation landmark; the rail as a whole is now more than
- *     navigation (a store control and an account row live in it), so the
- *     landmark is scoped to the part that navigates.
+ *     page declares one, so the rail rendered none — a badge that is always
+ *     absent is dead markup; a badge that is invented is a lie. It now has a
+ *     source: `needsYou`, the count of open alerts the dashboard layout reads
+ *     once per request (`getShellStatus`). Above zero it renders on "Needs
+ *     you"; at zero it does not exist. (R3)
+ *   - The prototype's `data-goto` buttons are `<Link>`s, so every destination
+ *     is a real href: middle-clickable, hoverable for its URL, prefetched.
+ *   - `aria-current="page"` from the pathname, not a demo `active` string.
  *
- * `.navbtn` is a `<Link>` rather than the prototype's `<button data-goto>`: a
- * destination that is a real href is middle-clickable and openable in a new
- * tab, and the ported rules (`.navbtn`, `.navbtn[aria-current="page"]`, the
- * accent bar in `::before`) are all class- and attribute-keyed, so they apply
- * to an `<a>` unchanged.
+ * ## What moves in the rail, and what does not
  *
- * ## Prefetch (streaming-architecture plan, task 5)
+ * Chrome is silent on load: nothing here animates when a page arrives. Four
+ * things move, each once, each because something happened:
  *
- * No `prefetch` prop is set on any `<Link>` below, and that is deliberate
- * rather than an oversight: the default is `"auto"`, which prefetches a
- * static route in full and a DYNAMIC route down to its nearest `loading.tsx`
- * on viewport entry and hover. Every Counter route this rail can link to
- * already has a `loading.tsx` (Task 2), so hovering an item already warms its
- * destination's shell with no code here to add. Setting `prefetch={true}`
- * would force the FULL dynamic response to prefetch on hover — every
- * section's data, for every item a reader's mouse merely crosses — which is
- * the opposite of the per-section isolation Task 3 exists for.
+ *   R1  The MARKER travels. One `.rail__marker` sits behind the links and
+ *       slides (transform, 220ms) to the current destination instead of the
+ *       wash snapping from one item to the next. It is measured from the
+ *       active link's offset on every pathname change; under reduced motion
+ *       the transition is off and it snaps. The accent bar rides on it.
+ *   R2  Pending, honestly. On click the marker moves at once (optimistic —
+ *       `chosen`), the destination's icon goes to full ink and the pending
+ *       dot breathes until the route lands. If the pathname does not follow
+ *       (the navigation failed or was cancelled), `chosen` clears with the
+ *       pending state and the marker returns to where the pathname says.
+ *   R3  The count on Needs you lands (`ct-land`) and the bell nudges once
+ *       when the count RISES after first paint; a falling count only fades.
+ *       Only a rising count is news.
+ *   R4  The store name cross-fades when the store changes (in
+ *       `StoreSwitcher`), and the picker rises in 160ms (the sheet's rule).
+ *
+ * `RailLinkPending` renders NOTHING once `pending` goes false, rather than an
+ * always-present span toggling a class, so a rail with nothing pending (the
+ * state every fidelity screenshot measures) comes out byte-identical to a
+ * `.navbtn` with no pending child.
  */
 
 export interface RailUser {
   name: string
-  /** "Owner", "Developer" — printed under the name, beside "settings". */
   role: string
-  /**
-   * Whether this account may open `/dashboard/admin/**`. A PERMISSION, not the
-   * label above: `role` is title-cased for display, and deciding what a reader
-   * can reach by matching a display string is how a rename becomes a security
-   * change.
-   *
-   * Optional, and absent means NO. A rail with no account row cannot know who
-   * is reading, and the safe answer to "should I offer this link" when you do
-   * not know is not to.
-   */
   isDeveloper?: boolean
 }
 
-/**
- * Task 5's third change: Next 16's `useLinkStatus` — readable only from a
- * descendant of the `<Link>` it reports on, which is why this is a child
- * component rather than a hook call inside `RailLink` itself.
- *
- * Renders NOTHING once `pending` goes false, rather than an always-present
- * element toggled by a class: the settled DOM (the state `npm run fidelity`
- * measures) must come out byte-identical to a `.navbtn` with no pending
- * feedback at all, and `null` is the only value that guarantees that. The dot
- * only exists for the moment between a click and the destination's own
- * paint — after prefetch, `useLinkStatus`'s own docs say that moment is often
- * skipped entirely.
- */
-function RailLinkPending() {
+function RailLinkPending({ onSettle }: { onSettle: () => void }) {
   const { pending } = useLinkStatus()
+  // When a click's navigation ends without the pathname changing (cancelled,
+  // failed, same page), the optimistic marker must give up its guess.
+  const was = useRef(pending)
+  useEffect(() => {
+    if (!(was.current && !pending)) {
+      was.current = pending
+      return
+    }
+    was.current = pending
+    // A beat later, not now: on a successful navigation the pathname commits
+    // right after `pending` drops, and clearing the guess in between would
+    // send the marker back to the old item for one frame before the pathname
+    // effect moves it forward again. If the pathname has moved by then the
+    // guess is already gone; if it has not, the navigation went nowhere.
+    const t = setTimeout(onSettle, 300)
+    return () => clearTimeout(t)
+  }, [pending, onSettle])
   return pending ? <span className="navbtn__pending" aria-hidden="true" /> : null
 }
 
-function RailLink({ item, pathname }: { item: NavItem; pathname: string }) {
-  const active = isActive(item, pathname)
+function RailLink({
+  item,
+  active,
+  badge,
+  onChoose,
+  onSettle,
+}: {
+  item: NavItem
+  active: boolean
+  badge?: number
+  onChoose: (id: NavItem["id"]) => void
+  onSettle: (id: NavItem["id"]) => void
+}) {
   const Icon = NAV_ICONS[item.icon]
+  const settleThis = useCallback(() => onSettle(item.id), [onSettle, item.id])
   return (
-    <Link href={item.href} aria-current={active ? "page" : undefined} className="navbtn">
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className="navbtn"
+      data-nav={item.id}
+      onClick={() => onChoose(item.id)}
+    >
       {/* The label beside it is the accessible name — an icon announced
           twice (once by name, once by the label) is noise, not help. */}
       {Icon ? <Icon aria-hidden="true" /> : null}
@@ -116,8 +114,63 @@ function RailLink({ item, pathname }: { item: NavItem; pathname: string }) {
       {/* The prototype prints the shortcut on Ask alone, and ours is real:
           AskSurface listens for ⌘K from anywhere (note 46). */}
       {item.id === "ask" ? <span className="kb">⌘K</span> : null}
-      <RailLinkPending />
+      {badge !== undefined ? <NeedsYouBadge count={badge} /> : null}
+      <RailLinkPending onSettle={settleThis} />
     </Link>
+  )
+}
+
+/**
+ * The count on "Needs you". Renders only above zero. A rise after first
+ * paint lands the number and rings the bell (`is-rising` on the badge; the
+ * sheet reaches the icon through the link); a fall just re-renders, and a
+ * fall to zero fades out before the element goes.
+ */
+function NeedsYouBadge({ count }: { count: number }) {
+  const reduced = useReducedMotion()
+  const prev = useRef<number | null>(null)
+  const [rising, setRising] = useState(false)
+  const [shown, setShown] = useState(count)
+  const [leaving, setLeaving] = useState(false)
+
+  useEffect(() => {
+    const was = prev.current
+    prev.current = count
+    if (was === null) {
+      setShown(count)
+      return
+    }
+    if (count > was) {
+      setShown(count)
+      setLeaving(false)
+      if (reduced) return
+      setRising(true)
+      const t = setTimeout(() => setRising(false), 700)
+      return () => clearTimeout(t)
+    }
+    if (count === 0 && was > 0) {
+      if (reduced) {
+        setShown(0)
+        return
+      }
+      setLeaving(true)
+      const t = setTimeout(() => {
+        setLeaving(false)
+        setShown(0)
+      }, 300)
+      return () => clearTimeout(t)
+    }
+    setShown(count)
+  }, [count, reduced])
+
+  if (shown <= 0) return null
+  const cls = ["badge", rising ? "is-rising" : null, leaving ? "is-leaving" : null]
+    .filter(Boolean)
+    .join(" ")
+  return (
+    <span className={cls} aria-label={`${shown} open`}>
+      {shown}
+    </span>
   )
 }
 
@@ -127,16 +180,60 @@ export function Rail({
   selectedStoreId = null,
   onSelectStore,
   user,
+  needsYou,
 }: {
   pathname: string
-  /** Omitted (or empty) renders no store control at all, rather than an empty one. */
   stores?: SwitchableStore[]
   selectedStoreId?: string | null
   onSelectStore?: (id: string | null) => void
   user?: RailUser
+  /** Open alerts, from the layout. Undefined renders no badge at all. */
+  needsYou?: number
 }) {
   const [picking, setPicking] = useState(false)
   const settings = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.id === "settings")
+  const groups = visibleNavGroups(user?.isDeveloper)
+  const items = groups.flatMap((g) => g.items)
+
+  // R1/R2: where the marker sits. The pathname decides; a click may guess
+  // ahead of it, and the guess is dropped the moment the pathname moves or
+  // the pending link settles without it moving.
+  const currentId = items.find((i) => isActive(i, pathname))?.id ?? null
+  const [chosen, setChosen] = useState<NavItem["id"] | null>(null)
+  useEffect(() => {
+    setChosen(null)
+  }, [pathname])
+  // Scoped to the item that settled: a click on A abandoned by a click on B
+  // ends A's pending state, and A's settle must not clear B's guess while B
+  // is still on its way. Stable, so a re-render inside the 300ms beat does
+  // not clear the timer and leave a guess standing.
+  const settle = useCallback((id: NavItem["id"]) => setChosen((c) => (c === id ? null : c)), [])
+  const markedId = chosen ?? currentId
+
+  const navRef = useRef<HTMLElement>(null)
+  const [marker, setMarker] = useState<{ y: number; h: number } | null>(null)
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    if (!nav || !markedId) {
+      setMarker(null)
+      return
+    }
+    const place = () => {
+      const el = nav.querySelector<HTMLElement>(`[data-nav="${markedId}"]`)
+      if (!el) {
+        setMarker(null)
+        return
+      }
+      const a = nav.getBoundingClientRect()
+      const b = el.getBoundingClientRect()
+      setMarker({ y: b.top - a.top + nav.scrollTop, h: b.height })
+    }
+    place()
+    // Fonts landing or the window resizing move every link; follow them.
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(place) : null
+    ro?.observe(nav)
+    return () => ro?.disconnect()
+  }, [markedId, groups.length])
 
   return (
     <aside className={picking ? "rail is-picking" : "rail"}>
@@ -161,13 +258,27 @@ export function Rail({
       {/* `visibleNavGroups`, not `NAV_GROUPS`: the ⌘K palette draws from the
           same helper, so the rail and the palette cannot offer different sets
           of destinations to the same reader. See `nav-access.ts`. */}
-      <nav aria-label="Sections">
-        {visibleNavGroups(user?.isDeveloper).map((group) => (
+      <nav aria-label="Sections" ref={navRef} className={marker ? "has-marker" : undefined}>
+        {marker ? (
+          <span
+            className="rail__marker"
+            aria-hidden="true"
+            style={{ transform: `translateY(${marker.y}px)`, height: marker.h }}
+          />
+        ) : null}
+        {groups.map((group) => (
           <Fragment key={group.caption}>
             <div className="rail__cap">{group.caption}</div>
             <div className="rail__group" role="group" aria-label={group.caption}>
               {group.items.map((item) => (
-                <RailLink key={item.id} item={item} pathname={pathname} />
+                <RailLink
+                  key={item.id}
+                  item={item}
+                  active={item.id === currentId}
+                  badge={item.id === "needs-you" ? needsYou : undefined}
+                  onChoose={setChosen}
+                  onSettle={settle}
+                />
               ))}
             </div>
           </Fragment>
@@ -175,42 +286,6 @@ export function Rail({
       </nav>
 
       {user && settings ? (
-        /*
-         * The account row EXACTLY as the prototype draws it (`rail()`, line
-         * 8259: avatar, `.nm`, and an `.rl` reading "Owner · settings"), and
-         * then the thing the prototype has nowhere on the desk.
-         *
-         * There was no way to sign out of a Counter desk page. Not here, not
-         * on Settings, not anywhere: `signOut` was called from exactly two
-         * places in `src/` — the phone's More tab and `app-sidebar.tsx`, which
-         * renders only on the four routes still left in `(editorial)`. That is
-         * 48 of the 52 desk pages with no exit.
-         *
-         * It went missing by inheritance rather than by decision. The
-         * prototype's desk puts its only two sign-out controls in `P.settings`'
-         * Sessions panel — "End" and "Sign out everywhere" — and the fidelity
-         * manifest declares both absent, correctly: auth is `strategy: "jwt"`
-         * with no session table, so there is nothing to enumerate and nothing
-         * to revoke on a device this browser is not. What that argument does
-         * NOT cover is signing out of THIS browser, which is a cookie and no
-         * session table at all — which is exactly why the phone's button has
-         * always worked. The absence was one button too wide, and the desk had
-         * no others.
-         *
-         * A LABELLED ROW OF ITS OWN, not an icon in the account row and not a
-         * menu behind it. Both of those were tried. An icon beside the name
-         * takes ~35px out of a 194px row and wraps the design's own
-         * "DEVELOPER · SETTINGS" onto two lines; a menu hides the control
-         * whose absence is the bug being fixed. `.navbtn` is the rail's
-         * existing row idiom, seventeen of them are already stacked above it,
-         * and a reader looking for "Sign out" finds the words.
-         *
-         * `next-auth/react` is a client import and this shell is on all 48
-         * routes, so it costs bytes there. It is the same call the phone's More
-         * tab and `app-sidebar.tsx` already make, and the alternative — posting
-         * to `/api/auth/signout` by hand — means re-deriving the CSRF token and
-         * the environment-dependent cookie name that next-auth already knows.
-         */
         <>
           <Link className="rail__foot" href={settings.href}>
             <span className="avatar" aria-hidden="true">

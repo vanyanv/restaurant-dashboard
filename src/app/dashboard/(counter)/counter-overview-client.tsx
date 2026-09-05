@@ -220,6 +220,10 @@ export function CounterOverviewClient({
 
   const { range, presetId, comparisonId } = counterParams
   const selectedStore = stores.find((s) => s.id === counterParams.storeId) ?? null
+  // What names the reader's own act: a change of any of these is a range or
+  // store change (tier 3, figures count from where they were), never an
+  // arrival (tier 2, something rings). See `useFreshKeys`.
+  const scope = `${counterParams.storeId ?? ""}|${presetId}|${comparisonId}`
   const storeName = selectedStore?.name ?? "all stores"
   const windowLabel = rangeLabel(range, "custom")
   const buckets = BUCKET_WORD[bucketFor(range)]
@@ -341,7 +345,7 @@ export function CounterOverviewClient({
           would point at `/dashboard/needs-you`, which `nav.ts` declares and
           this application does not serve yet. A link to a 404 is worse than no
           link. */}
-      <Dispatch items={dispatchItems(stores, selectedStore)} />
+      <Dispatch items={dispatchItems(stores, selectedStore)} scope={scope} />
 
       {/* Note 30, as two figures and a verdict: net sales says whether the day
           happened, sales per labor hour says whether it was worth having.
@@ -526,7 +530,7 @@ export function CounterOverviewClient({
       ) : null}
 
       <Section title="What needs you" data={sections.needsYou} pending={pending} askAbout="what needs me">
-        {(items) => <Queue items={items.map(toQueueItem)} />}
+        {(items) => <Queue items={items.map(toQueueItem)} scope={scope} />}
       </Section>
 
       {/* Where the money came from belongs to the store that made it. And a

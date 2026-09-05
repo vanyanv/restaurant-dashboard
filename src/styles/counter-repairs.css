@@ -1858,3 +1858,386 @@ button.wkd {
  */
 .mqty { min-width: 0; width: 104px; padding: 8px 10px }
 .mqty input { text-align: right; font-variant-numeric: tabular-nums }
+
+/* ---- 4. Switching the theme --------------------------------------------
+ *
+ * `ThemeToggle` stamps `data-theme-switching` on <html> for 320ms around a
+ * change. For that window every colour on the page cross-fades instead of
+ * cutting: paint only (background, ink, hairlines), never layout. The
+ * `!important` is deliberate — it has to outrank the .16s hover transitions
+ * already on buttons so the whole page turns at one speed. Outside the
+ * window the rule does nothing, so it costs no frame at rest. Under
+ * reduced motion the cut is the design. */
+html[data-theme-switching] body,
+html[data-theme-switching] .ct-root,
+html[data-theme-switching] .ct-root *,
+html[data-theme-switching] .ct-root *::before,
+html[data-theme-switching] .ct-root *::after {
+  /* --ct-ease, not --ease: <body> sits above .ct-root, where the short alias
+     is not defined, and an undefined var() would void the whole declaration. */
+  transition:
+    background-color .22s var(--ct-ease),
+    color .22s var(--ct-ease),
+    border-color .22s var(--ct-ease),
+    fill .22s var(--ct-ease),
+    stroke .22s var(--ct-ease) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-switching] body,
+  html[data-theme-switching] .ct-root,
+  html[data-theme-switching] .ct-root * { transition: none !important }
+}
+
+
+/* ========================================================================
+ * WHAT MOVES, AND HOW LOUDLY — the second pass (proposal of 2026-09-04)
+ *
+ * The first pass above put the four tiers in place. This one builds the
+ * rest of the proposal on the same tiers, and every rule here names its
+ * item (D1–D12 on the Overview, R1–R6 in the rail). The JS side is small
+ * and lives in `src/components/counter/motion/`: `useChanged` (D3),
+ * `useFreshKeys` (D4), `useFlip` (D11), and the previous-value memory in
+ * `useCountUp` (D3). Everything below is paint or compositor work, and all
+ * of it is silenced at the foot under `prefers-reduced-motion`.
+ * ======================================================================== */
+
+/* ---- D2. The figure, then its verdict --------------------------------
+ * The lead figure counts up over 480ms (the generated sheet fades `.v` in
+ * over the same beat). Its delta and the sentence that judges it wait for
+ * the figure to land before they appear, so the fact is read before the
+ * judgment on it. A warn or bad verdict carries the one-shot signal cool as
+ * it lands; a good verdict is quiet. */
+.headline .fig .d,
+.headline .say {
+  animation: cnfade .3s var(--ease) .42s both;
+}
+.headline .say .state.is-warn {
+  animation: ct-cool-signal 1.2s ease-in .5s 1;
+}
+.headline .say .state.is-bad {
+  animation: ct-cool-bad 1.2s ease-in .5s 1;
+}
+
+/* ---- D3. Only what changed moves --------------------------------------
+ * `CountUp` wraps a figure that changed AFTER first paint in `.ct-changed`
+ * for 1.3s (never on mount). The cell it sits in takes a brief inset touch
+ * that cools, so the eye goes to the one cell that moved while the cells
+ * that did not hold perfectly still. The figure itself counts from its
+ * previous value, not from zero (`useCountUp`). */
+.strip > div:has(.ct-changed),
+.mstrip > div:has(.ct-changed),
+.headline .fig:has(.ct-changed) {
+  animation: ct-touch 1.2s ease-in 1;
+}
+@keyframes ct-touch {
+  from { box-shadow: inset 0 0 0 1px var(--ink-3); background-color: var(--sunk) }
+  to   { box-shadow: inset 0 0 0 0 transparent; background-color: transparent }
+}
+
+/* ---- D4. An alert arrives ---------------------------------------------
+ * A `.qitem` that arrives while the page is up (`is-new`, decided by
+ * `useFreshKeys` so a range change never counts) rises with the bad
+ * cool-down and its lead lands; the dispatch line rings once when a hot
+ * fact changed (`is-ringing`, same hook). The rail badge is R3. */
+.qitem.is-new {
+  border-radius: var(--r-sm);
+  animation: cnter .3s var(--ease) both, ct-cool-bad 1.2s ease-in .1s 1;
+}
+.qitem.is-new .lead {
+  animation: ct-land .5s var(--ease) .1s both;
+}
+.dispatch.is-ringing {
+  animation: ct-cool-bad 1.2s ease-in 1;
+}
+/* Each fact is keyed on its text, so a changed fact remounts and fades in
+   rather than snapping. */
+.dispatch > .hot,
+.dispatch > .quiet {
+  animation: cnfade .2s var(--ease) both;
+}
+
+/* ---- D5, D6. The sync chip -------------------------------------------
+ * `is-syncing` breathes the dot: a loop, but bounded by the sync it
+ * reports. `is-ringing` is the one-shot good ring the moment a syncing
+ * chip becomes synced. `is-stale` is the signal colour and nothing else:
+ * stale is a state, not a thing that needs the reader this minute. The
+ * words are keyed on their text (`.sync__t`) and cross-fade. */
+.sync.is-syncing i {
+  animation: cnpulse 1.2s ease-in-out infinite;
+}
+.sync.is-ringing i {
+  animation: ct-ring-good 1.2s ease-in 1;
+}
+.sync.is-stale {
+  color: var(--signal-ink);
+}
+.sync .sync__t {
+  animation: cnfade .2s var(--ease) both;
+}
+@keyframes ct-ring-good {
+  from { box-shadow: 0 0 0 4px var(--good-wash), 0 0 0 1px var(--good) }
+  to   { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent }
+}
+
+/* ---- D7. A drawer is a place you asked for ---------------------------
+ * The store card's colour change is interaction (160ms). The drawer that
+ * opens under it rises (220ms), and the channel bars inside fill once from
+ * zero, 40ms apart: data arriving. The first pass faded the drawer; a rise
+ * is the same length and says "from here". */
+.stcard {
+  transition: border-color .16s var(--ease), background-color .16s var(--ease);
+}
+.stores > .ldrawer.is-open {
+  animation: cnter .22s var(--ease) both;
+}
+.stores > .ldrawer.is-open .cbar i,
+.stores > .ldrawer.is-open .cbar u {
+  transform-origin: left;
+  animation: ct-fillx .5s var(--ease) both;
+}
+.stores > .ldrawer.is-open .chan__row:nth-child(2) .cbar i,
+.stores > .ldrawer.is-open .chan__row:nth-child(2) .cbar u { animation-delay: 40ms }
+.stores > .ldrawer.is-open .chan__row:nth-child(3) .cbar i,
+.stores > .ldrawer.is-open .chan__row:nth-child(3) .cbar u { animation-delay: 80ms }
+.stores > .ldrawer.is-open .chan__row:nth-child(4) .cbar i,
+.stores > .ldrawer.is-open .chan__row:nth-child(4) .cbar u { animation-delay: 120ms }
+.stores > .ldrawer.is-open .chan__row:nth-child(n+5) .cbar i,
+.stores > .ldrawer.is-open .chan__row:nth-child(n+5) .cbar u { animation-delay: 160ms }
+@keyframes ct-fillx {
+  from { transform: scaleX(0) }
+  to   { transform: none }
+}
+
+/* ---- D8. Ask, anywhere -------------------------------------------------
+ * The surface already opens in 180ms with a scrim (the generated sheet's
+ * `.cmdkwrap`/`.cmdk` rules). What was missing is the answer landing in the
+ * order it is read: the verdict, then the figures, then the caveat and what
+ * was read, 120ms apart. `Thinking` is replaced by these in one commit, so
+ * they all mount together and the delays do the ordering. */
+.askans__body > .ans__lead { animation: cnter .3s var(--ease) both }
+.askans__body > .strip,
+.askans__body > .mstrip,
+.askans__body > .askans__fig { animation: cnter .3s var(--ease) .12s both }
+.askans__body > .callout { animation: cnter .3s var(--ease) .24s both }
+.askans__body > .srcs { animation: cnfade .3s var(--ease) .36s both }
+
+/* ---- D9. Reading a chart ---------------------------------------------
+ * The generated sheet eased the crosshair and the tip toward the pointer
+ * (`left .09s linear`). A reading that lags the pointer by 90ms is a
+ * reading of the wrong bar, so position follows the pointer on the same
+ * frame; only the appearing and disappearing fade. */
+.ch-cross,
+.ch-tip,
+.ch-dot {
+  transition: opacity .12s var(--ease) !important;
+}
+
+/* ---- D10. A section fails, then comes back ---------------------------
+ * Failing is tier 2 and is handled above (`.failed`, `.failed .fi`).
+ * Retrying is the reader's own act: the panel dims to half and waits. When
+ * the data returns, `Section` swaps the panel for the body, and only that
+ * body arrives (the sheet's own chart-draw and entry rules), alone. */
+.failed {
+  transition: opacity .16s var(--ease);
+}
+.failed.is-retrying {
+  opacity: .5;
+}
+
+/* ---- D11. Rows travel --------------------------------------------------
+ * `useFlip` sets the transition inline on the rows it moves, so there is
+ * no rule to write; this comment is here so the tier is complete on the
+ * page. Transform only, 220ms, the one ease. */
+
+/* ---- D12. Resolving an item is a cut ----------------------------------
+ * The alert row the owner just closed fades and slips 6px in 200ms, then
+ * the refresh removes it and the rows below take its place at once.
+ * Collapsing its height would animate layout; nothing here does. */
+.tbl tbody tr.is-leaving {
+  animation: ct-leave .2s var(--ease) forwards;
+  pointer-events: none;
+}
+@keyframes ct-leave {
+  to { opacity: 0; transform: translateX(6px) }
+}
+
+/* ---- R1, R2. The marker travels; pending, honestly -------------------
+ * One `.rail__marker` behind the links carries the wash and the accent bar
+ * and slides to the current destination (transform, 220ms). While the
+ * marker exists the active link paints no wash of its own, so the two
+ * never double; the link keeps its colour and weight. A pending link's
+ * icon goes to full ink so the click is seen to have taken. */
+.rail nav {
+  position: relative;
+}
+.rail__marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 0;
+  border-radius: var(--r-sm);
+  background: var(--accent-wash);
+  pointer-events: none;
+  transition: transform .22s var(--ease), height .22s var(--ease);
+}
+.rail__marker::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.rail nav.has-marker .navbtn {
+  position: relative;
+  z-index: 1;
+}
+.rail nav.has-marker .navbtn[aria-current="page"] {
+  background: transparent;
+}
+.rail nav.has-marker .navbtn[aria-current="page"]::before {
+  display: none;
+}
+.navbtn:has(.navbtn__pending) svg {
+  opacity: 1;
+}
+
+/* ---- R3. The count on Needs you --------------------------------------
+ * The badge lands and the bell swings once when the count rises after
+ * first paint (`is-rising`, set by the rail); a fall to zero fades out
+ * (`is-leaving`) before the element goes. A count that only fell does
+ * nothing: a count going down is not news. */
+.navbtn .badge.is-rising {
+  animation: ct-land .5s var(--ease) both;
+}
+.navbtn:has(.badge.is-rising) svg {
+  transform-origin: 50% 15%;
+  animation: ct-bell .6s var(--ease) 1;
+}
+.navbtn .badge.is-leaving {
+  animation: cnfade .3s var(--ease) reverse both;
+}
+@keyframes ct-bell {
+  0%   { transform: rotate(0) }
+  20%  { transform: rotate(-14deg) }
+  50%  { transform: rotate(10deg) }
+  80%  { transform: rotate(-4deg) }
+  100% { transform: rotate(0) }
+}
+
+/* ---- R4. The store switcher ------------------------------------------
+ * The picker rises in 160ms (the sheet's `.storepop` rule). The name in the
+ * rail is keyed on the store, so a change remounts it and this is the
+ * cross-fade. */
+.rail__store .nm {
+  animation: cnfade .2s var(--ease) both;
+}
+
+/* ---- Silence -----------------------------------------------------------
+ * Every rule above, off. `useFlip`, `useChanged`, `useFreshKeys` and the
+ * rail already check `useReducedMotion` and add nothing under it; this is
+ * the belt for the braces. */
+@media (prefers-reduced-motion: reduce) {
+  .headline .fig .d,
+  .headline .say,
+  .headline .say .state.is-warn,
+  .headline .say .state.is-bad,
+  .strip > div:has(.ct-changed),
+  .mstrip > div:has(.ct-changed),
+  .headline .fig:has(.ct-changed),
+  .qitem.is-new,
+  .qitem.is-new .lead,
+  .dispatch.is-ringing,
+  .dispatch > .hot,
+  .dispatch > .quiet,
+  .sync.is-syncing i,
+  .sync.is-ringing i,
+  .sync .sync__t,
+  .stores > .ldrawer.is-open .cbar i,
+  .stores > .ldrawer.is-open .cbar u,
+  .askans__body > .ans__lead,
+  .askans__body > .strip,
+  .askans__body > .mstrip,
+  .askans__body > .askans__fig,
+  .askans__body > .callout,
+  .askans__body > .srcs,
+  .tbl tbody tr.is-leaving,
+  .navbtn .badge.is-rising,
+  .navbtn:has(.badge.is-rising) svg,
+  .navbtn .badge.is-leaving,
+  .rail__store .nm {
+    animation: none !important;
+  }
+  .rail__marker,
+  .stcard,
+  .failed {
+    transition: none !important;
+  }
+  .tbl tbody tr.is-leaving {
+    opacity: 0;
+  }
+}
+
+/* ---- D8, the whole chat --------------------------------------------------
+ * The palette's answer panel lands in reading order (above). The Ask PAGE
+ * is the same conversation at full width, and it moved like nothing at all:
+ * a question appeared, a thinking box appeared, an answer appeared. Now:
+ *
+ *   - A question the reader just sent rises from the composer's side in
+ *     220ms (tier 4: their own act, quiet). A restored thread mounts every
+ *     turn at once, so the rise is capped to the first few and the rest are
+ *     simply there.
+ *   - Each thinking step lands as its tool is called (the steps mount one by
+ *     one); the reading dot's pulse is the generated sheet's own, bounded by
+ *     the turn.
+ *   - The answer's parts land in the order they are read: the verdict, the
+ *     figures, the caveat, what was read, then the follow-ups, 120ms apart,
+ *     the chips 40ms apart. `Thinking` is swapped for these in one commit,
+ *     so the delays do the ordering.
+ *   - The newest turn scrolls into view (the client, `useReducedMotion`
+ *     decides smooth or not). Nothing that was already on the page moves. */
+.chat .youmsg {
+  animation: ct-fromright .22s var(--ease) both;
+}
+.chat > :nth-child(n+7) .youmsg {
+  animation: none;
+}
+@keyframes ct-fromright {
+  from { opacity: 0; transform: translate(6px, 4px) }
+  to   { opacity: 1; transform: none }
+}
+.thinking .tstep {
+  animation: cnter .2s var(--ease) both;
+}
+.ans > .ans__lead { animation: cnter .3s var(--ease) both }
+.ans > .strip,
+.ans > .mstrip { animation: cnter .3s var(--ease) .12s both }
+.ans > .callout { animation: cnter .3s var(--ease) .24s both }
+.ans > .srcs { animation: cnfade .3s var(--ease) .36s both }
+.ans > .sugs { animation: cnfade .3s var(--ease) .48s both }
+.ans > .sugs > .sug { animation: cnter .24s var(--ease) both }
+.ans > .sugs > .sug:nth-child(1) { animation-delay: .48s }
+.ans > .sugs > .sug:nth-child(2) { animation-delay: .52s }
+.ans > .sugs > .sug:nth-child(3) { animation-delay: .56s }
+.ans > .sugs > .sug:nth-child(n+4) { animation-delay: .6s }
+/* A thread restored from its address arrives as one thing: the page-level
+   stagger has already placed it, so its answers do not each land again. */
+.chat > .sec .ans > *,
+.chat > .sec .ans > .sugs > .sug { animation: none }
+
+@media (prefers-reduced-motion: reduce) {
+  .chat .youmsg,
+  .thinking .tstep,
+  .ans > .ans__lead,
+  .ans > .strip,
+  .ans > .mstrip,
+  .ans > .callout,
+  .ans > .srcs,
+  .ans > .sugs,
+  .ans > .sugs > .sug {
+    animation: none !important;
+  }
+}

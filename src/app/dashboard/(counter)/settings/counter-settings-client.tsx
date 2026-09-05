@@ -12,6 +12,7 @@ import {
   useCounterTransition,
   usePageChrome,
   Logo,
+  ThemeRow,
   type Column,
 } from "@/components/counter"
 import {
@@ -365,6 +366,9 @@ export function CounterSettingsClient({
         {(p) => (
           <>
             <Kv rows={p.rows} />
+            {/* The one preference that is a control, not a reading. Kept out of
+                the adapter's rows because a row is a string and this one is not. */}
+            <ThemeRow />
             <Note>
               {p.note}
             </Note>

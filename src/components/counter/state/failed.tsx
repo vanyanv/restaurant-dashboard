@@ -1,3 +1,7 @@
+"use client"
+
+import { useState } from "react"
+
 /**
  * One section failed; the rest of the page is untouched and its figures are
  * still good. That is how this app already behaves, and saying so is the
@@ -29,6 +33,20 @@
  *
  * `.mono` carries the real error where the prototype hardcodes "timed out
  * after 8s". `role="alert"` is ours; the prototype has no assistive layer.
+ *
+ * Motion. Failing is an operational change (tier 2): the panel rises with the
+ * bad cool-down and the mark lands — counter-repairs.css, on `.failed` and
+ * `.failed .fi`. Retrying is the reader's own act (tier 4), so it is quiet:
+ * `is-retrying` dims the panel to half and disables the button until the
+ * section's data comes back, at which point `Section` swaps this component
+ * out for the body, and only that body arrives — its chart draws alone while
+ * the page around it holds still (D10). On a page whose retry runs through
+ * the shared `useCounterTransition`, `Section` shows its skeleton for the
+ * pending beat instead (a failed section under `pending` renders as
+ * loading), so the dim is seen only on the frame before that transition
+ * starts; the arrival that follows is the same either way. The flag never
+ * needs clearing: success unmounts this component, and a second failure
+ * re-renders it fresh from `SectionData`.
  */
 export function Failed({
   title,
@@ -42,8 +60,9 @@ export function Failed({
   retryAction: string
   onRetry?: (action: string) => void
 }) {
+  const [retrying, setRetrying] = useState(false)
   return (
-    <div className="failed" role="alert">
+    <div className={retrying ? "failed is-retrying" : "failed"} role="alert" aria-busy={retrying}>
       <span className="fi">!</span>
       <div>
         {/*
@@ -71,8 +90,16 @@ export function Failed({
         </p>
         <span className="acts">
           {onRetry ? (
-            <button className="btn" type="button" onClick={() => onRetry(retryAction)}>
-              Try again
+            <button
+              className="btn"
+              type="button"
+              disabled={retrying}
+              onClick={() => {
+                setRetrying(true)
+                onRetry(retryAction)
+              }}
+            >
+              {retrying ? "Trying…" : "Try again"}
             </button>
           ) : null}
           <span className="mono">{error}</span>

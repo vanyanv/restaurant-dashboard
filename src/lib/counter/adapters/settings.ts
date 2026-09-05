@@ -521,15 +521,14 @@ function preferencesOf(d: SettingsData): SettingsPreferences {
       { label: "Week starts", value: "not stored" },
       { label: "Currency", value: "not stored · USD throughout" },
       { label: "Density", value: "not stored" },
-      { label: "Theme", value: "follows your system — light and dark both ship" },
     ],
-    meta: "one of these is real",
+    meta: "two of these are real",
     note:
-      `Timezone is the only preference this product stores. The prototype lists four more ` +
-      `and says of the last "Light — the only one", which stopped being true when Counter ` +
-      `shipped a dark theme; the page follows whatever your system asks for. The other ` +
-      `three are listed as unstored rather than dropped, because a settings page that ` +
-      `silently omits them reads as though they were never asked for.`,
+      `Timezone and theme are the preferences this product keeps: timezone on your ` +
+      `account, theme in this browser. The prototype lists three more and says of the ` +
+      `theme "Light — the only one", which stopped being true when Counter shipped a ` +
+      `dark theme. The other three are listed as unstored rather than dropped, because ` +
+      `a settings page that silently omits them reads as though they were never asked for.`,
   }
 }
 

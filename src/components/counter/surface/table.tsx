@@ -1,7 +1,8 @@
 "use client"
 
-import { Fragment, isValidElement, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
+import { Fragment, isValidElement, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
+import { useFlip } from "@/components/counter/motion/use-flip"
 
 export interface Column {
   key: string
@@ -156,6 +157,12 @@ function hasTextSelection(): boolean {
 
 export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
   const router = useRouter()
+  // D11: when the same rows come back in a different order (a sort, a range
+  // change that re-ranks them), each row travels to its new place over 220ms
+  // instead of being redrawn there, so the row the reader was on stays
+  // findable. Rows that are new fade in under the generated sheet's own rule.
+  const body = useRef<HTMLTableSectionElement>(null)
+  useFlip(body, rows.map((r) => r.key).join("\n"))
 
   return (
     <div className="tblscroll">
@@ -169,7 +176,7 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={body}>
           {rows.map((r) => {
             const href = r.href
             const act = href ? () => router.push(href) : r.onSelect
@@ -212,6 +219,7 @@ export function Table({ columns, rows }: { columns: Column[]; rows: Row[] }) {
               <Fragment key={r.key}>
                 <tr
                   className={classes || undefined}
+                  data-flip-key={r.key}
                   // `data-goto` on a link row is what the sheet paints; a
                   // pressable row uses the sheet's other pressable-row hook,
                   // `data-ln` (line 304: `.tbl tbody tr[data-ln]{cursor:pointer}`),

@@ -155,7 +155,11 @@ export function StoreSwitcher({
         onClick={() => onOpenChange(!open)}
       >
         <span>
-          <span className="nm">{selected ? selected.name : "All stores"}</span>
+          {/* Keyed on the store: a change remounts the name, and the entry
+              fade in counter-repairs.css is the cross-fade (R4). */}
+          <span className="nm" key={selected ? selected.id : "all"}>
+            {selected ? selected.name : "All stores"}
+          </span>
           <span className="mt">{meta}</span>
         </span>
         <Chevron />
