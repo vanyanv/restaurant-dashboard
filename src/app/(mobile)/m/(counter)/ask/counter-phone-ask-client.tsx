@@ -109,7 +109,7 @@ export function CounterPhoneAskClient({
     origin: params.get("asked"),
   })
 
-  const { turns, state, conversationId, ask, follow, reset, engineMount } =
+  const { turns, state, conversationId, ask, follow, stop, reset, engineMount } =
     useAskDeferred(urlConversationId)
 
   /*
@@ -410,7 +410,8 @@ export function CounterPhoneAskClient({
             : `Ask about ${context.store}…`
         }
         onSubmit={submit}
-        disabled={askPending(state)}
+        busy={askPending(state)}
+        onStop={stop}
       />
     </>
   )

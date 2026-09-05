@@ -5,6 +5,7 @@ import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { CounterAskClient } from "./counter-ask-client"
 import { counterToday } from "@/lib/counter/today"
+import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
 
 /**
  * Counter Ask — `P.ask` at line 4504 of `docs/counter/counter-prototype.html`.
@@ -114,6 +115,9 @@ export default async function AskPage({
       params={params.toString()}
       stores={stores}
       today={today}
+      // Named in the hints row. Read here, server-side, so the client bundle
+      // never imports the OpenAI module for two strings.
+      model={`${CHAT_ROUTING_MODEL} · ${CHAT_REASONING_EFFORT}`}
     />
   )
 }

@@ -15,6 +15,7 @@ import {
   AskComposer,
   Conversations,
   ConversationsRail,
+  Stopped,
 } from "@/components/counter/ask"
 // BY PATH, not through the ask barrel: it reaches a `"use server"` module and
 // the barrel is shared with the overview clients. See that barrel's own note.
@@ -43,6 +44,7 @@ import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
   askAnswer,
   askPending,
+  askStopped,
   askTurnsFor,
   restoredAskState,
 } from "@/lib/counter/ask-state"
@@ -154,6 +156,7 @@ export function CounterAskClient({
   params: paramsString,
   stores,
   today,
+  model,
 }: {
   /**
    * The query string this page was rendered for, as PLAIN TEXT — not a
@@ -165,6 +168,8 @@ export function CounterAskClient({
   today: Date
   /** The rail's list and, when `?c=` names one, the thread being read. */
   sections: SectionSources<AskSections>
+  /** "gpt-5-mini · low" — what the hints row names. Read by the page, server-side. */
+  model: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -498,6 +503,54 @@ export function CounterAskClient({
   }, [state])
   const liveMs = askedAt !== null ? now - askedAt : null
 
+  /*
+   * ESCAPE STOPS THE TURN, from anywhere on the page — the composer handles
+   * its own Escape (menu first, then stop) and this catches the rest. Not
+   * inside an input that is not ours: a rename's Escape means "keep the old
+   * name", and `ConversationRow` stops that event before it gets here.
+   */
+  useEffect(() => {
+    if (!askPending(state)) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return
+      stop()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [state, stop])
+
+  /*
+   * THE WAY BACK DOWN. `.chat` scrolls; while a turn runs and the reader has
+   * scrolled up to re-read something, a "New answer" pill appears instead of
+   * the page yanking them to the bottom. It never scrolls on its own — the
+   * reader presses it, or reaches the bottom themselves and it goes.
+   */
+  const chatRef = useRef<HTMLDivElement>(null)
+  const [awayFromBottom, setAwayFromBottom] = useState(false)
+  const nearBottom = () => {
+    const el = chatRef.current
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }
+  useEffect(() => {
+    const el = chatRef.current
+    if (!el) return
+    const onScroll = () => setAwayFromBottom(!nearBottom())
+    el.addEventListener("scroll", onScroll, { passive: true })
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [])
+  // A new turn: follow it only if the reader was already at the bottom.
+  const turnCount = turns.length
+  useEffect(() => {
+    if (turnCount === 0) return
+    const el = chatRef.current
+    if (!el) return
+    if (!awayFromBottom) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnCount])
+  const showPill = awayFromBottom && askPending(state)
+
   const { range, presetId, comparisonId } = counterParams
   // The window named by its ENDS, as the prototype's sub-line names it
   // ("reading Aug 20 – Aug 26") and as every other Counter page names it.
@@ -592,7 +645,7 @@ export function CounterAskClient({
           </Section>
         </ConversationsRail>
 
-        <div className="chat">
+        <div className="chat" ref={chatRef}>
           {/*
             * THE STORED HALF OF THE THREAD, read-only, inside its own
             * `Section` so the restore gets the same six states everything else
@@ -669,11 +722,18 @@ export function CounterAskClient({
           ) : null}
 
           {shown.map((turn, i) => (
-            <div key={turn.id} ref={i === shown.length - 1 ? newestRef : undefined}>
+            <div key={turn.id} ref={i === shown.length - 1 ? newestRef : undefined} className="turn">
               {/* The question as the reader asked it, in the prototype's own
                   bubble. `useAsk` sends the scope sentence in front of it on
                   the wire; that plumbing is never shown back to the reader. */}
               <div className="youmsg">{turn.question}</div>
+              {askStopped(turn.state) ? (
+                <Stopped
+                  steps={askStopped(turn.state)!.steps}
+                  durationMs={askStopped(turn.state)!.durationMs}
+                  onContinue={() => submit(turn.question)}
+                />
+              ) : (
               <AskAnswerBody
                 state={turn.state}
                 className="ans"
@@ -691,6 +751,7 @@ export function CounterAskClient({
                   onRate: (f) => rate(askAnswer(turn.state)?.meta?.chatTurnId ?? null, f),
                 }}
               />
+              )}
             </div>
           ))}
 
@@ -723,18 +784,48 @@ export function CounterAskClient({
         </div>
       </div>
 
-      <AskComposer
-        // The prototype's "Ask a follow-up about this range…" is now honest —
-        // a follow-up here IS a follow-up. Before the thread exists it names
-        // the scope instead, which is what a first question is asked under.
-        placeholder={
-          shown.length > 0 || urlConversationId
-            ? `Ask a follow-up about ${context.store}, reading ${windowLabel}…`
-            : `Ask about ${context.store}, reading ${windowLabel}…`
-        }
-        onSubmit={submit}
-        disabled={askPending(state)}
-      />
+      {/*
+        * THE DOCK — the mock's scope row, composer and hints, sticky at the
+        * bottom of the page so the last answer never scrolls it away. The
+        * "New answer" pill sits just above it.
+        */}
+      <div className="dock">
+        <button
+          type="button"
+          className={`tobottom${showPill ? " on" : ""}`}
+          aria-hidden={!showPill}
+          tabIndex={showPill ? 0 : -1}
+          onClick={() => {
+            chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" })
+            setAwayFromBottom(false)
+          }}
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M8 3v10M4 9l4 4 4-4" />
+          </svg>
+          New answer
+        </button>
+        <AskComposer
+          // The prototype's "Ask a follow-up about this range…" is now honest —
+          // a follow-up here IS a follow-up. Before the thread exists it names
+          // the scope instead, which is what a first question is asked under.
+          placeholder={
+            shown.length > 0 || urlConversationId
+              ? "Ask a follow-up about this range…"
+              : `Ask about ${context.store}…`
+          }
+          onSubmit={submit}
+          busy={askPending(state)}
+          onStop={stop}
+          scope={{ store: context.store, range: windowLabel }}
+          scopeNote={
+            shown.length > 0 || urlConversationId
+              ? "Follow-ups keep this scope"
+              : "From the head · change it there"
+          }
+          model={model}
+        />
+      </div>
     </>
   )
 }

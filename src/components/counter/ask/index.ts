@@ -33,6 +33,8 @@ export { AskBar } from "./ask-bar"
 export { AskSheet } from "./ask-sheet"
 export { AskAnswerPane, AskAnswerBody } from "./ask-answer"
 export { AskComposer } from "./ask-composer"
+export { Stopped } from "./stopped"
+export { TurnFoot } from "./turn-foot"
 /*
  * The reading log an answer shows while it is worked out.
  *
