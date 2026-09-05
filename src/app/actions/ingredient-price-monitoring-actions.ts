@@ -7,7 +7,7 @@ import { getAccountStoreRows } from "@/lib/account-stores"
 import { deriveCostFromLineItem } from "@/lib/ingredient-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
 import { computeIngredientLineCost } from "@/lib/recipe-cost"
-import { isLikelyNonFood } from "@/app/dashboard/(editorial)/recipes/components/ingredient-picker-utils"
+import { isLikelyNonFood } from "@/lib/ingredient-picker-utils"
 import type {
   IngredientPriceIssueStatus,
   IngredientPriceMonitorFilters,

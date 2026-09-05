@@ -9,8 +9,8 @@ import {
   accuracySubtitle,
   computeVitals,
   type VitalsDay,
-} from "@/app/dashboard/(editorial)/decisions/lib/vitals"
-import type { Scorecard } from "@/app/dashboard/(editorial)/decisions/lib/scorecard"
+} from "@/lib/decisions/vitals"
+import type { Scorecard } from "@/lib/decisions/scorecard"
 
 const day = (over: Partial<VitalsDay> = {}): VitalsDay => ({
   predictedRevenue: 8000,

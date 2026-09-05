@@ -24,10 +24,13 @@ labels, `oklch()` `ct-` tokens in `src/styles/counter.css` as the only colour
 source, 8px/5px radii, both a light and a dark theme asserted by test. The old
 pre-Counter design system (a serif italic display face, cream-toned hex
 colours, hairline-bordered panels, a red hover-bar row pattern) is being
-deleted page by page as each route is rebuilt, and it is nearly gone: measured
-2026-09-03, **48 of the 53 `page.tsx` under `src/app/dashboard/` are under
-`(counter)`**. The five that are not are `pnl/[storeId]` and four under
-`(editorial)` — chat, operations/recipes, operations/costs, stores/[id]/edit.
+deleted page by page as each route is rebuilt, and as of 2026-09-04 it is
+**gone from `src/app/dashboard/`**: the `(editorial)` route group no longer
+exists. Every page that renders anything is under `(counter)`. Five routes sit
+outside it — `chat`, `operations/costs`, `operations/recipes`,
+`stores/[id]/edit` and `pnl/[storeId]` — and all five are redirect shims whose
+whole body is one `redirect()`; `src/proxy.ts` intercepts them before render,
+and they exist as the fallback if that map and the tree ever disagree.
 The phone shell is Counter too now; `src/app/(mobile)/m/layout.tsx` renders
 `MTabs` from `@/components/counter`. So the default assumption for anything
 you open is Counter, not legacy — this paragraph said the opposite ("a

@@ -3,30 +3,25 @@ import { PageViewTracker } from "@/components/telemetry/page-view-tracker"
 import { authOptions } from "@/lib/auth"
 
 /**
- * Shared shell for every route under `/dashboard`, Counter and editorial
- * alike. Deliberately thin: everything that used to live here — the cream
- * sidebar, the chat drawer (and its ⌘K listener), the welcome marquee, the
- * editorial stylesheets, Fraunces — moved to `(editorial)/layout.tsx` and
- * now wraps only the ~19 still-editorial pages under that route group. A
- * Counter page gets its chrome from `(counter)/layout.tsx` instead, so this
- * layout no longer renders any of that for it — that doubled shell (and the
- * ⌘K collision it caused, since the old chat drawer's own listener no longer
- * mounts on Counter routes) is exactly what moving the chrome out of here
- * fixes. See DESIGN.md.
+ * Shared shell for every route under `/dashboard`. Deliberately thin, and now
+ * thin for good: everything that used to live here — the cream sidebar, the
+ * chat drawer (and its ⌘K listener), the welcome marquee, the editorial
+ * stylesheets, Fraunces — moved to `(editorial)/layout.tsx`, and on 2026-09-04
+ * that layout was DELETED along with the route group it wrapped. A Counter
+ * page gets its chrome from `(counter)/layout.tsx`; nothing gets editorial
+ * chrome, because there is no longer an editorial page to give it to.
  *
- * BOTH route groups below it now carry a shell, and that symmetry is the
- * point: `(editorial)/layout.tsx` holds the cream sidebar for the ~19 pages
- * that have not been rebuilt, and `(counter)/layout.tsx` holds the rail, the
- * topbar, the store switcher and the ⌘K surface for the ones that have. The
- * Counter half used to be rendered inside each page's client island — 4 mount
- * sites, 0 layouts — so every navigation between Counter pages destroyed and
- * rebuilt the whole frame. A layout survives a sibling navigation; a page does
- * not. This file stays thin because there is nothing BOTH groups want except
- * the tracker below.
+ * What is left directly under this layout is five redirect shims —
+ * `chat`, `operations/costs`, `operations/recipes`, `stores/[id]/edit` and
+ * `pnl/[storeId]` — whose whole body is one `redirect()`. They render nothing,
+ * so they want no shell at all, which is why they sit outside `(counter)`
+ * rather than inside it: wrapping a 307 in a rail would fetch a store list and
+ * a session to draw a frame nobody sees. See `src/proxy.ts`, which intercepts
+ * all five before render.
  *
- * `PageViewTracker` stays here rather than moving with the editorial
- * chrome: it's pathname-driven telemetry with no styling and no editorial
- * dependency, so both worlds want it and it costs nothing to share.
+ * `PageViewTracker` is the one thing this layout does render: pathname-driven
+ * telemetry with no styling and no chrome dependency, wanted by every route
+ * under `/dashboard` and cheap enough to share.
  */
 export default async function DashboardLayout({
   children,

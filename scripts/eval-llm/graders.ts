@@ -34,7 +34,7 @@ import {
 import {
   verdictFactBlock,
   type VerdictFacts,
-} from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
+} from "@/lib/decisions/verdict-copy"
 
 export interface Grade {
   pass: boolean

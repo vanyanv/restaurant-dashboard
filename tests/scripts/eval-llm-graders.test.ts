@@ -35,7 +35,7 @@ import {
   checkFloors,
   type GradedCase,
 } from "../../scripts/eval-llm/graders"
-import { composeVerdict, type VerdictFacts } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
+import { composeVerdict, type VerdictFacts } from "@/lib/decisions/verdict-copy"
 
 const facts = (over: Partial<VerdictFacts> = {}): VerdictFacts => ({
   storeName: "Hollywood",

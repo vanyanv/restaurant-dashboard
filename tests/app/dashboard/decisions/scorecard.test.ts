@@ -9,7 +9,7 @@ import {
   COVERAGE_TARGET,
   combineEvaluations,
   type EvaluationRow,
-} from "@/app/dashboard/(editorial)/decisions/lib/scorecard"
+} from "@/lib/decisions/scorecard"
 
 const row = (over: Partial<EvaluationRow> = {}): EvaluationRow => ({
   wape: 0.064,

@@ -6,7 +6,7 @@ import {
   isNarratable,
   verdictInputsHash,
   type VerdictFacts,
-} from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
+} from "@/lib/decisions/verdict-copy"
 
 /**
  * The verdict sentence for one scope on one day.
