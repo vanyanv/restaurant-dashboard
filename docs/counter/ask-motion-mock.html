@@ -1,0 +1,649 @@
+<title>Ask in Motion</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --surface:oklch(98.4% .004 66);--paper:oklch(96.2% .006 60);--chrome:oklch(94.4% .008 56);--sunk:oklch(92.6% .009 55);
+  --line:oklch(89.5% .009 58);--line-strong:oklch(82.5% .013 55);
+  --ink:oklch(24% .014 40);--ink-2:oklch(47% .012 45);--ink-3:oklch(52.5% .011 50);
+  --accent:oklch(52% .19 27);--accent-hi:oklch(44% .17 27);--accent-wash:oklch(94.5% .028 27);
+  --signal:oklch(80% .155 78);--signal-wash:oklch(95.5% .042 82);--signal-line:oklch(87% .07 80);--signal-ink:oklch(44% .095 70);
+  --good:oklch(47% .098 160);--good-wash:oklch(95.5% .026 160);--warn:oklch(53% .115 70);--bad:oklch(50% .175 25);--bad-wash:oklch(94.5% .03 25);
+  --gp-1:oklch(35.5% .125 28);--gp-2:oklch(51.5% .158 30);--gp-3:oklch(67% .118 45);
+  --raise:oklch(24% .014 40 / .10);--scrim:oklch(24% .014 40 / .3);
+  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;--body:"DM Sans",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --t-micro:10px;--t-cap:11.5px;--t-body:13px;--t-mid:15px;--t-lg:18px;--t-xl:22px;--t-hero:30px;
+  --r:8px;--r-sm:5px;--ease:cubic-bezier(.22,1,.36,1);--ease-io:cubic-bezier(.77,0,.175,1);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --surface:oklch(22% .006 66);--paper:oklch(19% .007 60);--chrome:oklch(16.5% .008 56);--sunk:oklch(14% .009 55);
+  --line:oklch(28% .009 58);--line-strong:oklch(38% .013 55);--ink:oklch(93% .01 60);--ink-2:oklch(74% .011 55);--ink-3:oklch(65% .011 52);
+  --accent:oklch(68.75% .2 27);--accent-hi:oklch(76% .15 27);--accent-wash:oklch(27% .045 27);
+  --signal:oklch(82.5% .15 78);--signal-wash:oklch(26% .045 82);--signal-line:oklch(36% .06 80);--signal-ink:oklch(84% .09 78);
+  --good:oklch(74% .115 160);--good-wash:oklch(24% .03 160);--warn:oklch(68.5% .11 64);--bad:oklch(67.75% .17 25);--bad-wash:oklch(26% .04 25);
+  --gp-1:oklch(55.8% .125 28);--gp-2:oklch(71.5% .15 30);--gp-3:oklch(91.8% .11 45);--raise:oklch(8% .01 60 / .45);--scrim:oklch(8% .01 60 / .55);
+}}
+:root[data-theme="dark"]{
+  --surface:oklch(22% .006 66);--paper:oklch(19% .007 60);--chrome:oklch(16.5% .008 56);--sunk:oklch(14% .009 55);
+  --line:oklch(28% .009 58);--line-strong:oklch(38% .013 55);--ink:oklch(93% .01 60);--ink-2:oklch(74% .011 55);--ink-3:oklch(65% .011 52);
+  --accent:oklch(68.75% .2 27);--accent-hi:oklch(76% .15 27);--accent-wash:oklch(27% .045 27);
+  --signal:oklch(82.5% .15 78);--signal-wash:oklch(26% .045 82);--signal-line:oklch(36% .06 80);--signal-ink:oklch(84% .09 78);
+  --good:oklch(74% .115 160);--good-wash:oklch(24% .03 160);--warn:oklch(68.5% .11 64);--bad:oklch(67.75% .17 25);--bad-wash:oklch(26% .04 25);
+  --gp-1:oklch(55.8% .125 28);--gp-2:oklch(71.5% .15 30);--gp-3:oklch(91.8% .11 45);--raise:oklch(8% .01 60 / .45);--scrim:oklch(8% .01 60 / .55);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--chrome);color:var(--ink);font-family:var(--body);font-size:var(--t-body);line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg{display:block}
+
+/* ---------- document chrome ---------- */
+.wrap{max-width:1060px;margin:0 auto;padding:40px 20px 100px}
+.mast{display:grid;gap:12px;margin-bottom:22px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap}
+.eyebrow b{color:var(--ink-2);font-weight:500}
+h1{font-family:var(--display);font-size:clamp(30px,4.6vw,42px);line-height:1.02;letter-spacing:-.02em;font-weight:600;margin:0;text-wrap:balance}
+.lede{font-size:var(--t-mid);color:var(--ink-2);max-width:66ch;margin:0;text-wrap:pretty}
+.lede b{color:var(--ink);font-weight:500}
+.scenes{position:sticky;top:0;z-index:5;display:flex;gap:2px;flex-wrap:wrap;padding:6px;margin:0 0 20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 8px 24px -16px var(--raise)}
+.scenes button{padding:7px 12px;border-radius:var(--r-sm);font-size:var(--t-body);font-weight:500;color:var(--ink-2);transition:background-color .16s var(--ease),color .16s var(--ease)}
+.scenes button:hover{background:var(--paper);color:var(--ink)}
+.scenes button[aria-selected="true"]{background:var(--accent-wash);color:var(--accent-hi);font-weight:600}
+.scenes button i{font-family:var(--mono);font-size:9.5px;font-style:normal;color:var(--ink-3);margin-right:6px}
+.scenes button[aria-selected="true"] i{color:var(--accent)}
+.scene{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:22px;align-items:start}
+.scene[hidden]{display:none}
+@media (max-width:860px){.scene{grid-template-columns:1fr}}
+.stage{background:var(--surface);border:1px solid var(--line-strong);border-radius:11px;padding:20px;min-height:420px;position:relative;overflow:hidden}
+.stage.phone{padding:0;background:var(--sunk);display:grid;place-items:center;min-height:620px}
+.aside{display:grid;gap:14px;position:sticky;top:64px}
+.aside h2{font-family:var(--display);font-size:var(--t-xl);letter-spacing:-.015em;line-height:1.15;margin:0;font-weight:600;text-wrap:balance}
+.aside p{margin:0;font-size:var(--t-body);color:var(--ink-2);text-wrap:pretty}
+.aside .why{border-left:3px solid var(--accent);padding:2px 0 2px 12px}
+.aside .why b{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
+.spec{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);border-top:1px solid var(--line);padding-top:10px}
+.spec b{color:var(--ink-2);font-weight:500;white-space:nowrap}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);font-size:var(--t-body);font-weight:600;transition:background-color .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease),transform .08s ease-out}
+.btn:hover{background:var(--sunk);border-color:var(--ink-3)}
+.btn:active{transform:scale(.97)}
+.btn--primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn--primary:hover{background:var(--accent-hi);border-color:var(--accent-hi)}
+.btn--quiet{border-color:transparent;color:var(--ink-2)}
+.btn--quiet:hover{background:var(--paper);border-color:transparent}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:var(--r-sm);overflow:hidden}
+.seg button{padding:5px 10px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);transition:background-color .16s var(--ease),color .16s var(--ease)}
+.seg button+button{border-left:1px solid var(--line-strong)}
+.seg button[aria-pressed="true"]{background:var(--sunk);color:var(--ink)}
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:600px){.diff{grid-template-columns:1fr}}
+.diff>div{display:grid;gap:8px;align-content:start}
+.diff .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+.diff .k.now{color:var(--accent)}
+
+/* ---------- Counter Ask pieces (ported from the prototype) ---------- */
+.chat{display:grid;gap:14px;max-width:760px;width:100%}
+.youmsg{justify-self:end;max-width:70%;background:var(--ink);color:var(--surface);padding:9px 14px;border-radius:12px 12px 3px 12px;font-size:var(--t-mid);line-height:1.45}
+.ctx{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);justify-self:end}
+.ctx b{color:var(--ink-2);font-weight:500}
+.thinking{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 15px 13px;display:grid;gap:7px;max-width:560px}
+.tstep{display:flex;align-items:center;gap:9px;font-size:var(--t-cap)}
+.tstep i{width:8px;height:8px;border-radius:50%;flex:none;background:var(--line-strong);transition:background-color .2s var(--ease)}
+.tstep b{font-weight:600;color:var(--ink-3);transition:color .2s var(--ease)}
+.tstep span{font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.tstep em{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-style:normal;color:var(--ink-3);transition:color .2s var(--ease)}
+.tstep.is-read i{background:var(--good)}.tstep.is-read b{color:var(--ink-2)}
+.tstep.is-reading i{background:var(--accent);animation:tpulse 1.15s var(--ease) infinite}
+.tstep.is-reading b,.tstep.is-reading em{color:var(--accent)}
+.tstep.is-out i{background:var(--bad)}.tstep.is-out b{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-strong)}.tstep.is-out em{color:var(--bad)}
+@keyframes tpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+.thinking .elapsed{margin:2px 0 0;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.ans{display:grid;gap:12px}
+.ans__lead{margin:0;font-size:var(--t-mid);line-height:1.55;max-width:66ch;min-height:1.55em}
+.ans__lead b{font-weight:600}
+.ans__lead .w{opacity:0;animation:wfade .18s ease-out both}
+@keyframes wfade{to{opacity:1}}
+.caret{display:inline-block;width:1.5px;height:1em;background:var(--accent);vertical-align:-2px;margin-left:1px;animation:cur 1.1s steps(1) infinite}
+@keyframes cur{50%{opacity:0}}
+.priorq{font-size:var(--t-cap);line-height:1.5;color:var(--ink-3);border-left:2px solid var(--line-strong);padding:1px 0 1px 11px;max-width:76ch}
+.priorq b{font-weight:600;color:var(--ink-2)}
+.strip{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.strip>div{flex:1 1 140px;padding:11px 15px;display:grid;gap:3px;border-right:1px solid var(--line)}
+.strip>div:last-child{border-right:0}
+.strip .k{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.strip .v{font-size:var(--t-xl);font-weight:600;letter-spacing:-.025em;line-height:1.1}
+.strip .d{font-family:var(--mono);font-size:var(--t-cap);font-weight:500;color:var(--ink-3)}
+.strip .d.up{color:var(--bad)}.strip .d.dn{color:var(--good)}
+.gap{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:13px 15px 14px}
+.gap__ends{display:flex;align-items:baseline;gap:12px;margin-bottom:9px}
+.gap__ends span{display:flex;align-items:baseline;gap:6px}
+.gap__ends em{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;font-style:normal;color:var(--ink-3)}
+.gap__ends b{font-size:var(--t-lg);font-weight:600;letter-spacing:-.015em}
+.gap__ends .hi{margin-left:auto}
+.gap__bar{display:flex;height:15px;border-radius:3px;overflow:hidden;background:var(--sunk)}
+.gap__bar i{display:block;height:100%;transform-origin:left center;transition:width .5s var(--ease)}
+.gap__bar i+i{box-shadow:-2px 0 0 var(--surface)}
+.gap__key{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin:11px 0 0;background:var(--line);border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.gap__key div{background:var(--surface);padding:7px 10px;display:grid;gap:1px}
+.gap__key .k{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.gap__key .k i{width:8px;height:8px;border-radius:2px}
+.gap__key b{font-size:var(--t-mid);font-weight:600;letter-spacing:-.01em}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.sec__head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 15px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.sec__head h3{margin:0;font-size:var(--t-mid);font-weight:600;letter-spacing:-.015em}
+.sec__head .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+.sec__body{padding:13px 15px}
+.ch{position:relative}
+.ch svg{width:100%;height:auto;overflow:visible}
+.ch .grid line{stroke:var(--line);stroke-width:1}
+.ch .axis text{font-family:var(--mono);font-size:9px;fill:var(--ink-3)}
+.ch .bar{transform-origin:center bottom;transition:transform .5s var(--ease),height .5s var(--ease),y .5s var(--ease)}
+.ch .bar.in{animation:cngrow .42s var(--ease) both}
+@keyframes cngrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.ch .plan{stroke:var(--ink-3);stroke-dasharray:3 3;stroke-width:1}
+.ch .lbl{font-family:var(--mono);font-size:9px;fill:var(--ink-3)}
+.ch .hover{fill:var(--accent-wash);opacity:0;transition:opacity .12s var(--ease)}
+.ch .hover.on{opacity:1}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);padding:6px 9px;border-radius:var(--r-sm);font-size:var(--t-cap);line-height:1.4;opacity:0;transform:translate(-50%,-6px) scale(.97);transform-origin:center bottom;transition:opacity .12s var(--ease),transform .12s var(--ease);white-space:nowrap}
+.tip.on{opacity:1;transform:translate(-50%,-10px) scale(1)}
+.tip b{font-weight:600}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:8px;height:8px;border-radius:2px}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+.tbl th.num,.tbl td.num{text-align:right}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:var(--t-body)}
+.tbl td.num{font-weight:500}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr{transition:background-color .14s var(--ease)}
+.tbl tbody tr[data-goto]{cursor:pointer}
+.tbl tbody tr[data-goto]:hover{background:var(--accent-wash)}
+.tbl tbody tr[data-goto]:hover td.hot{color:var(--accent);font-weight:600}
+.tbl tbody tr[data-goto] td:last-child{position:relative;padding-right:24px}
+.tbl tbody tr[data-goto] td:last-child::after{content:"\203A";position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:15px;line-height:1;color:var(--ink-3);opacity:.45;transition:opacity .16s var(--ease),color .16s var(--ease),right .16s var(--ease)}
+.tbl tbody tr[data-goto]:hover td:last-child::after{opacity:1;color:var(--accent);right:6px}
+.tbl tbody tr.in{animation:rowin .3s ease-out both}
+@keyframes rowin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.tbl .bad{color:var(--bad)}.tbl .good{color:var(--good)}
+.drill{margin-top:11px;border-top:1px solid var(--line);padding-top:8px}
+.drill__t{display:flex;align-items:center;gap:7px;width:100%;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);transition:color .16s var(--ease)}
+.drill__t:hover,.drill__t[aria-expanded="true"]{color:var(--accent)}
+.drill__t .car{display:inline-grid;place-items:center;width:12px;height:12px;flex:none;transition:transform .16s var(--ease)}
+.drill__t .car svg{width:11px;height:11px}
+.drill__t[aria-expanded="true"] .car{transform:rotate(90deg)}
+.ldrawer{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s var(--ease)}
+.ldrawer.is-open{grid-template-rows:1fr}
+.ldrawer>div{overflow:hidden}
+.lpanel{padding:10px 0 0;font-size:var(--t-cap);color:var(--ink-2);line-height:1.55;max-width:66ch}
+.lpanel code{font-family:var(--mono);font-size:10px;background:var(--sunk);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.callout{padding:9px 13px;background:var(--signal-wash);border-left:3px solid var(--signal);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:var(--t-cap);color:var(--ink-2);line-height:1.5}
+.callout b{color:var(--ink);font-weight:600}
+.srcs{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.src{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:var(--paper);display:inline-flex;align-items:center;gap:6px;transition:border-color .16s var(--ease),color .16s var(--ease)}
+.src b{color:var(--ink-2);font-weight:500}
+.src.rk{border:0;background:none;padding-left:0}
+.src.v{border-color:var(--good);color:var(--good)}
+.src.v svg{width:9px;height:9px}
+button.src:hover{border-color:var(--accent);color:var(--accent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);transition:background-color .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease),transform .08s ease-out}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip:active{transform:scale(.97)}
+.chip svg{width:10px;height:10px;opacity:.6}
+.chip .lbl{color:var(--ink-3)}
+.chip.busy{border-color:var(--accent);color:var(--accent)}
+.sugs{display:flex;gap:6px;flex-wrap:wrap}
+.sug{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line-strong);border-radius:999px;background:var(--paper);font-size:var(--t-cap);font-weight:500;color:var(--ink-2);transition:background-color .16s var(--ease),border-color .16s var(--ease),color .16s var(--ease),transform .08s ease-out}
+.sug:hover{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-hi)}
+.sug:active{transform:scale(.97)}
+.sug .sk{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.turnfoot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:9px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--ink-3);position:relative}
+.turnfoot button{color:var(--ink-3);transition:color .16s var(--ease)}
+.turnfoot button:hover{color:var(--accent)}
+.turnfoot .sp{margin-left:auto}
+.thumbs{display:inline-flex;gap:2px;position:relative}
+.thumbs>button{width:22px;height:22px;display:grid;place-items:center;border-radius:4px;transition:background-color .16s var(--ease),color .16s var(--ease),transform .1s ease-out}
+.thumbs>button:hover{background:var(--sunk)}
+.thumbs>button:active{transform:scale(.9)}
+.thumbs>button svg{width:12px;height:12px}
+.thumbs>button.on{color:var(--good);background:var(--good-wash)}
+.thumbs>button.on.dn{color:var(--bad);background:var(--bad-wash)}
+.pop{position:absolute;right:0;bottom:calc(100% + 8px);width:230px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:6px;display:grid;gap:2px;transform-origin:bottom right;opacity:0;transform:scale(.96) translateY(3px);transition:opacity .15s var(--ease),transform .15s var(--ease);pointer-events:none;letter-spacing:0;text-transform:none;font-family:var(--body);font-size:var(--t-body)}
+.pop.on{opacity:1;transform:none;pointer-events:auto}
+.pop .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding:4px 8px 2px}
+.pop button{display:block;width:100%;text-align:left;padding:6px 8px;border-radius:var(--r-sm);color:var(--ink);transition:background-color .12s var(--ease)}
+.pop button:hover{background:var(--accent-wash);color:var(--accent-hi)}
+.pop button span{display:block;font-size:var(--t-cap);color:var(--ink-3)}
+.thanks{display:inline-flex;align-items:center;gap:6px;color:var(--good);opacity:0;transform:translateY(2px);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.thanks.on{opacity:1;transform:none}
+.composer{display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface);max-width:760px;width:100%;transition:border-color .16s var(--ease),box-shadow .16s var(--ease)}
+.composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+.composer svg{width:15px;height:15px;color:var(--ink-3);flex:none}
+.composer input{flex:1;border:0;background:none;font:inherit;font-size:var(--t-mid);color:var(--ink);outline:none;min-width:0}
+.composer input::placeholder{color:var(--ink-3)}
+.sendbtn{width:28px;height:28px;border-radius:var(--r-sm);background:var(--accent);color:var(--surface);display:grid;place-items:center;flex:none;transition:transform .1s ease-out,background-color .16s var(--ease)}
+.sendbtn:hover{background:var(--accent-hi)}.sendbtn:active{transform:scale(.92)}
+.sendbtn svg{width:13px;height:13px;color:currentColor}
+.enter{animation:cnter .34s var(--ease) both}
+@keyframes cnter{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.ansfail{display:grid;gap:9px;border:1px solid var(--line);border-radius:var(--r);background:var(--paper);padding:13px 15px 14px}
+.ansfail .rk{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+.ansfail p{margin:0;font-size:var(--t-cap);line-height:1.55;color:var(--ink-2);max-width:66ch}
+.rsrc{display:grid;gap:1px}
+.rsrc b{font-size:var(--t-cap);font-weight:600;color:var(--ink-2)}
+.rsrc span{font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.rsrc.is-out b{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-strong)}
+.rsrc.is-out span{color:var(--bad)}
+
+/* ---------- cmdk ---------- */
+.cmdkwrap{position:absolute;inset:0;display:grid;justify-items:center;align-items:start;padding-top:36px;background:var(--scrim)}
+.cmdk{width:min(548px,92%);background:var(--surface);border:1px solid var(--line-strong);border-radius:11px;box-shadow:0 34px 80px -34px var(--raise);overflow:hidden;display:grid;align-content:start}
+.cmdk__in{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line)}
+.cmdk__in svg{width:15px;height:15px;color:var(--accent);flex:none}
+.cmdk__in .q{flex:1;font-size:var(--t-mid)}
+.cmdk__ctx{display:flex;gap:8px;align-items:center;padding:7px 15px;background:var(--paper);border-bottom:1px solid var(--line);font-size:var(--t-cap);color:var(--ink-3)}
+.cmdk__ctx b{color:var(--ink-2);font-weight:600}
+.cmdk__ctx span{margin-left:auto;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+.cmdk__k{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);padding:10px 15px 4px}
+.cmdk__row{display:flex;align-items:center;gap:10px;padding:8px 15px;font-size:var(--t-body);width:100%;text-align:left}
+.cmdk__row svg{width:14px;height:14px;color:var(--ink-3);flex:none}
+.cmdk__row .hint{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.cmdk__row.on{background:var(--accent-wash);color:var(--accent-hi)}
+.cmdk__row.on svg,.cmdk__row.on .hint{color:var(--accent)}
+.cmdk__pane{padding:14px 15px 12px;display:grid;gap:10px}
+.cmdk__foot{display:flex;gap:14px;padding:9px 15px;border-top:1px solid var(--line);background:var(--paper);font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.cmdk__foot span:last-child{margin-left:auto}
+.cmdk .mini{display:grid;gap:8px}
+.cmdk .mini .lead{font-size:var(--t-body);line-height:1.5;margin:0}
+.cmdk .mini .figs{display:flex;gap:16px}
+.cmdk .mini .figs div{display:grid;gap:1px}
+.cmdk .mini .figs .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.cmdk .mini .figs .v{font-size:var(--t-lg);font-weight:600;letter-spacing:-.02em}
+.cmdk .mini .figs .v.bad{color:var(--bad)}
+.swap{display:grid}
+.swap>*{grid-area:1/1;transition:opacity .16s var(--ease),filter .16s var(--ease)}
+.swap>.off{opacity:0;filter:blur(2px);pointer-events:none}
+
+/* ---------- phone ---------- */
+.ph{width:320px;height:600px;border-radius:32px;background:var(--surface);border:1px solid var(--line-strong);box-shadow:0 30px 70px -30px var(--raise);overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;font-size:var(--t-body)}
+.ph .scroll::-webkit-scrollbar{display:none}
+.ph .top{display:flex;justify-content:space-between;padding:12px 20px 0;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.ph .scroll{overflow:auto;scrollbar-width:none;padding:12px 14px 16px;display:grid;gap:12px;align-content:start}
+.ph h2{font-family:var(--display);font-size:var(--t-xl);letter-spacing:-.015em;margin:4px 0 0;line-height:1.1;font-weight:600}
+.ph .sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.brief{border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface);overflow:hidden;box-shadow:0 10px 30px -18px var(--raise)}
+.brief__h{display:flex;align-items:center;gap:8px;padding:9px 13px;background:var(--paper);border-bottom:1px solid var(--line)}
+.brief__h .k{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)}
+.brief__h span{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+.brief__b{padding:12px 13px;display:grid;gap:9px}
+.brief__q{font-size:var(--t-cap);color:var(--ink-3)}
+.brief__lead{margin:0;font-size:var(--t-body);line-height:1.5}
+.brief__lead b{font-weight:600}
+.brief .strip{border:0;border-top:1px solid var(--line);border-radius:0}
+.brief .strip>div{padding:9px 0 0;border-right:0;flex:1 1 90px}
+.brief .strip .v{font-size:var(--t-lg)}
+.brief__f{display:flex;gap:8px;padding:0 13px 12px}
+.mtabs{display:flex;justify-content:space-around;padding:10px 8px 18px;border-top:1px solid var(--line);background:var(--paper)}
+.mtabs span{display:grid;justify-items:center;gap:3px;font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.mtabs span i{width:18px;height:18px;border-radius:5px;background:var(--line-strong)}
+.mtabs span.on{color:var(--accent)}.mtabs span.on i{background:var(--accent)}
+.mic{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3);border:1px solid var(--line-strong);position:relative;transition:color .16s var(--ease),border-color .16s var(--ease)}
+.mic svg{width:14px;height:14px}
+.mic.on{color:var(--accent);border-color:var(--accent)}
+.mic.on::before{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid var(--accent);animation:ring 1.2s var(--ease) infinite}
+@keyframes ring{from{transform:scale(.85);opacity:.8}to{transform:scale(1.35);opacity:0}}
+.pull{height:0;overflow:hidden;display:grid;place-items:center;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);transition:height .22s var(--ease)}
+.pull.on{height:28px}
+.stale{display:inline-flex;align-items:center;gap:5px;color:var(--signal-ink)}
+.stale i{width:6px;height:6px;border-radius:50%;background:var(--signal)}
+
+@media (prefers-reduced-motion:reduce){
+  .enter,.tbl tbody tr.in,.ch .bar.in,.ans__lead .w{animation:none!important;opacity:1!important;transform:none!important}
+  .tstep.is-reading i,.mic.on::before{animation:none!important}
+  .gap__bar i,.ch .bar,.ldrawer,.pop,.pull{transition-duration:.01ms!important}
+}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-ask" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 9.5a1.6 1.6 0 01-1.6 1.6H5.6L2.5 13.8V4.1a1.6 1.6 0 011.6-1.6h7.8a1.6 1.6 0 011.6 1.6z"/><path d="M6 6.4h4M6 8.6h2.4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 7l4-4 4 4"/></symbol>
+  <symbol id="i-car" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></symbol>
+  <symbol id="i-chk" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></symbol>
+  <symbol id="i-thup" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 14H3.5a1 1 0 01-1-1V8a1 1 0 011-1H5M5 7l2.6-4.6a1.3 1.3 0 012.4.7V6h2.7a1.4 1.4 0 011.4 1.6l-.9 5.2A1.4 1.4 0 0111.8 14H5z"/></symbol>
+  <symbol id="i-thdn" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2h1.5a1 1 0 011 1v5a1 1 0 01-1 1H11M11 9l-2.6 4.6a1.3 1.3 0 01-2.4-.7V10H3.3a1.4 1.4 0 01-1.4-1.6l.9-5.2A1.4 1.4 0 014.2 2H11z"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h9l-3-3M13 10H4l3 3"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 7.5a5 5 0 0010 0M8 12.5v2"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="eyebrow"><b>Chris Neddy's</b><span>Ask · motion and surface studies</span><span>2026-09-04</span></div>
+    <h1>Ask in Motion</h1>
+    <p class="lede">Six moments from the proposed Ask, built in Counter's own tokens so what you see is what would ship. Each one is live — press <b>Replay</b> to watch it again, hover the chart, click the thumbs. The right column says <b>why</b> each thing moves and how fast, because a professional dashboard should be crisp, not showy.</p>
+  </header>
+
+  <nav class="scenes" role="tablist" aria-label="Scenes">
+    <button role="tab" aria-selected="true" data-scene="turn"><i>1</i>The turn</button>
+    <button role="tab" aria-selected="false" data-scene="cmdk"><i>2</i>⌘K answers in place</button>
+    <button role="tab" aria-selected="false" data-scene="scope"><i>3</i>Change the scope</button>
+    <button role="tab" aria-selected="false" data-scene="trust"><i>4</i>Read, verify, rate</button>
+    <button role="tab" aria-selected="false" data-scene="fail"><i>5</i>Could not finish</button>
+    <button role="tab" aria-selected="false" data-scene="phone"><i>6</i>It comes to you</button>
+  </nav>
+
+  <!-- ================= 1 · THE TURN ================= -->
+  <div class="scene" data-scene="turn">
+    <div class="stage" id="turnStage">
+      <div class="chat">
+        <div class="ctx">Answering about <b>P&amp;L</b> · Hollywood · Last 7 days</div>
+        <div class="youmsg">Why is food cost over plan?</div>
+        <div id="turnBody"></div>
+      </div>
+    </div>
+    <aside class="aside">
+      <h2>Narrate the wait, then let the answer arrive in reading order</h2>
+      <p>Today a question shows a spinner for 15 seconds and then everything at once. Here the "Reading" block names each source as it opens, so the wait explains itself; then the verdict streams first, the figures count to their values, the bar fills, the chart draws, the rows stagger in. Nothing appears from nothing.</p>
+      <div class="why"><b>Why it moves</b><p>State indication and preventing a jarring change. The owner's one complaint is speed — perceived speed is what a narrated wait fixes while the router fixes the real one.</p></div>
+      <div class="ctl"><button class="btn btn--primary" id="turnReplay">Replay</button><div class="seg" id="turnSpeed"><button aria-pressed="true" data-s="1">1×</button><button aria-pressed="false" data-s="3">slow</button></div></div>
+      <div class="spec"><b>Reading dot</b><span>tpulse 1.15s, one dot lit at a time</span><b>Verdict</b><span>word-by-word, 18ms opacity each</span><b>Figures</b><span>count-up 600ms ease-out</span><b>Gap bar</b><span>width 500ms var(--ease)</span><b>Bars</b><span>scaleY 420ms, 40ms stagger</span><b>Rows</b><span>opacity+4px, 300ms, 40ms stagger</span><b>Reduced motion</b><span>opacity only, no travel</span></div>
+    </aside>
+  </div>
+
+  <!-- ================= 2 · CMDK ================= -->
+  <div class="scene" data-scene="cmdk" hidden>
+    <div class="stage" style="min-height:520px;background:var(--paper)">
+      <div class="cmdkwrap">
+        <div class="cmdk" role="dialog" aria-label="Ask, or jump to anything">
+          <div class="cmdk__in"><svg><use href="#i-ask"/></svg><div class="q" id="ckQ">Ask about Hollywood, or jump to anything…</div></div>
+          <div class="cmdk__ctx">Asking about <b>Overview</b><span>Hollywood · Last 7 days</span></div>
+          <div class="swap" id="ckSwap">
+            <div id="ckList">
+              <div class="cmdk__k">Ask about overview</div>
+              <button class="cmdk__row on"><svg><use href="#i-ask"/></svg><span>Why is food cost over plan?</span><span class="hint">Answer</span></button>
+              <button class="cmdk__row"><svg><use href="#i-ask"/></svg><span>Which channel is costing the most to sell through?</span><span class="hint">Answer</span></button>
+              <button class="cmdk__row"><svg><use href="#i-ask"/></svg><span>What should I prep for Saturday?</span><span class="hint">Answer</span></button>
+              <div class="cmdk__k">Go to</div>
+              <button class="cmdk__row"><svg><use href="#i-car"/></svg><span>P&amp;L</span><span class="hint">/pnl</span></button>
+              <button class="cmdk__row"><svg><use href="#i-car"/></svg><span>Menu profit</span><span class="hint">/menu</span></button>
+            </div>
+            <div id="ckAns" class="off">
+              <div class="cmdk__pane">
+                <div class="thinking" id="ckThinking" style="max-width:none"></div>
+                <div class="mini" id="ckMini" hidden>
+                  <p class="lead">Food cost is <b>3.4 points over plan</b>, and ground beef is more than half of it.</p>
+                  <div class="figs"><div><span class="k">Food cost</span><span class="v bad">31.4%</span></div><div><span class="k">Plan</span><span class="v">28.0%</span></div><div><span class="k">Ground beef</span><span class="v">+1.8 pts</span></div></div>
+                  <div class="srcs"><span class="src rk">Read</span><span class="src"><b>Otter sales</b> · complete</span><span class="src"><b>Invoices</b> · 4 vendors</span><span class="src"><b>Recipes</b> · 41</span></div>
+                  <div class="sugs"><button class="sug">Is any vendor cheaper on ground beef?</button><button class="sug">Has the gap been this wide before?</button></div>
+                  <div class="btnrow"><button class="btn btn--quiet" id="ckBack">Back to search</button><button class="btn">Open in Ask</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="cmdk__foot"><span>↑↓ to move</span><span>↵ to open</span><span>esc to close</span><span>Reading last 7 days</span></div>
+        </div>
+      </div>
+    </div>
+    <aside class="aside">
+      <h2>The palette does not animate open. The answer swaps in without leaving.</h2>
+      <p>⌘K is pressed dozens of times a day, so it opens instantly — no scale, no fade. What earns motion is the moment the list becomes an answer: a 160ms crossfade with a 2px blur so two states never overlap visibly. Escape or "Back to search" returns you with the question still in the box.</p>
+      <div class="why"><b>Why it moves</b><p>Spatial consistency: the answer replaces the list in the same frame, so it reads as the palette answering, not as a second window.</p></div>
+      <div class="ctl"><button class="btn btn--primary" id="ckGo">Press ↵</button><button class="btn" id="ckReset">Reset</button></div>
+      <div class="spec"><b>Open</b><span>none — keyboard-initiated</span><b>List → answer</b><span>opacity + blur(2px), 160ms</span><b>Reading</b><span>same block as the page</span><b>Escape</b><span>none, focus restored</span></div>
+    </aside>
+  </div>
+
+  <!-- ================= 3 · SCOPE ================= -->
+  <div class="scene" data-scene="scope" hidden>
+    <div class="stage">
+      <div class="chat">
+        <div class="youmsg">Why is food cost over plan?</div>
+        <div class="ans">
+          <div class="chips" id="scopeChips">
+            <span class="chip"><span class="lbl">Store</span> Hollywood <svg><use href="#i-swap"/></svg></span>
+            <button class="chip" data-range="7" aria-pressed="true"><span class="lbl">Range</span> <span class="rt">Last 7 days</span> <svg><use href="#i-swap"/></svg></button>
+            <span class="src" style="margin-left:auto">Re-runs the same tools · no retyping</span>
+          </div>
+          <p class="ans__lead" id="scopeLead">Food cost is <b>3.4 points over plan</b> this week, and ground beef is more than half of it.</p>
+          <div class="strip" id="scopeStrip">
+            <div><span class="k">Food cost</span><span class="v" data-v="31.4" data-fmt="pct">31.4%</span><span class="d up" data-d>+3.4 pts vs plan</span></div>
+            <div><span class="k">Ground beef</span><span class="v" data-v="1.8" data-fmt="pts">+1.8 pts</span><span class="d">of the gap</span></div>
+            <div><span class="k">Channel mix</span><span class="v" data-v="1.1" data-fmt="pts">+1.1 pts</span><span class="d">DoorDash share up</span></div>
+          </div>
+          <div class="gap">
+            <div class="gap__ends"><span><em>Plan</em><b>28.0%</b></span><span class="hi"><em>Actual</em><b id="scopeActual">31.4%</b></span></div>
+            <div class="gap__bar" id="scopeBar"><i style="background:var(--gp-1);width:53%"></i><i style="background:var(--gp-2);width:32%"></i><i style="background:var(--gp-3);width:15%"></i></div>
+          </div>
+          <div class="sec"><div class="sec__head"><h3>The gap, day by day</h3><span class="k" id="scopeK">points over plan · the plan is the zero</span></div><div class="sec__body"><div class="ch" id="scopeChart"></div></div></div>
+        </div>
+      </div>
+    </div>
+    <aside class="aside">
+      <h2>Change the week on the answer, not in a new question</h2>
+      <p>Every answer carries the store and range it was computed for as chips. Tap the range and the same tools re-run; the figures count from the old value to the new one, the gap bar retargets its widths, and the chart's bars move to their new heights. The reader watches the number change rather than reloading the page in their head.</p>
+      <div class="why"><b>Why it moves</b><p>Explanation. A transition between two values shows the direction of change; a cut shows two unrelated numbers. Uses transitions, not keyframes, so a second tap mid-flight retargets smoothly.</p></div>
+      <div class="ctl"><button class="btn btn--primary" id="scopeToggle">Switch to last 30 days</button></div>
+      <div class="spec"><b>Chip press</b><span>scale(.97) 80ms</span><b>Busy</b><span>chip outlines in accent while tools run</span><b>Figures</b><span>tween old→new 500ms ease-out</span><b>Bars</b><span>height transition 500ms var(--ease)</span><b>Second tap</b><span>retargets from current value</span></div>
+    </aside>
+  </div>
+
+  <!-- ================= 4 · TRUST ================= -->
+  <div class="scene" data-scene="trust" hidden>
+    <div class="stage">
+      <div class="chat">
+        <div class="youmsg">Which recipes carry the ground-beef gap?</div>
+        <div class="ans">
+          <p class="ans__lead"><b>Six recipes</b> carry 1.6 of the 1.8 beef points; the Double Slider alone is 0.7.</p>
+          <div class="sec"><div class="sec__head"><h3>Six recipes, one ingredient</h3><span class="k">margin at today's beef price</span></div>
+            <table class="tbl"><thead><tr><th>Recipe</th><th class="num">Sold</th><th class="num">Beef $/plate</th><th class="num">Margin</th><th class="num">Was</th></tr></thead>
+            <tbody id="trustRows">
+              <tr data-goto><td class="hot">Double Slider</td><td class="num">412</td><td class="num">$2.18</td><td class="num bad">58.1%</td><td class="num">63.4%</td></tr>
+              <tr data-goto><td class="hot">Slider Combo</td><td class="num">380</td><td class="num">$1.09</td><td class="num bad">61.0%</td><td class="num">64.7%</td></tr>
+              <tr data-goto><td class="hot">Chili Fries</td><td class="num">201</td><td class="num">$0.84</td><td class="num">66.2%</td><td class="num">68.9%</td></tr>
+              <tr data-goto><td class="hot">Neddy Burger</td><td class="num">188</td><td class="num">$2.61</td><td class="num bad">55.9%</td><td class="num">61.2%</td></tr>
+              <tr data-goto><td class="hot">Kids Slider</td><td class="num">96</td><td class="num">$1.09</td><td class="num">63.3%</td><td class="num">66.1%</td></tr>
+              <tr data-goto><td class="hot">Beef Bowl</td><td class="num">54</td><td class="num">$3.02</td><td class="num">60.4%</td><td class="num">64.8%</td></tr>
+            </tbody></table>
+          </div>
+          <div class="srcs" id="trustSrcs">
+            <span class="src rk">Read</span>
+            <button class="src v"><svg><use href="#i-chk"/></svg><b>Recipe costs</b> · 41 recipes · as of 06:12</button>
+            <button class="src v"><svg><use href="#i-chk"/></svg><b>Invoices</b> · 4 vendors · as of 06:12</button>
+            <button class="src v"><svg><use href="#i-chk"/></svg><b>Otter sales</b> · 7 days · <span class="stale"><i></i>as of 04:40</span></button>
+          </div>
+          <div class="drill"><button class="drill__t" id="howT" aria-expanded="false"><span class="car"><svg><use href="#i-car"/></svg></span>How I got here</button>
+            <div class="ldrawer" id="howD"><div><div class="lpanel">
+              <p style="margin:0 0 6px"><code>rankRecipes</code>(store: hollywood, range: 2026-08-28 → 09-03, ingredient: ground-beef, sort: margin) — the same function the Recipes page calls, so this table cannot disagree with that one.</p>
+              <p style="margin:0 0 6px"><code>getIngredientPriceHistory</code>(ingredient: ground-beef, days: 60) → last price move 08-21, +$0.42/lb, Sysco.</p>
+              <p style="margin:0">Otter sales synced at 04:40 and the range is still open; today's figure will move until the 06:00 sync. <b>Verified</b> means every number above came from one of these calls, none from me.</p>
+            </div></div></div>
+          </div>
+          <div class="btnrow"><button class="btn">Open menu profit</button><button class="btn">Ground beef, all vendors</button></div>
+          <div class="turnfoot" id="trustFoot">
+            <span>Read 3 sources</span><span>$0.004</span><span>5.8s</span>
+            <span class="sp"></span>
+            <span class="thanks" id="thanks"><svg width="10" height="10"><use href="#i-chk"/></svg>Noted — wrong scope</span>
+            <span class="thumbs"><button id="thUp" aria-label="Good answer"><svg><use href="#i-thup"/></svg></button><button id="thDn" aria-label="Wrong or unhelpful"><svg><use href="#i-thdn"/></svg></button>
+              <div class="pop" id="thPop" role="menu"><div class="k">What was wrong?</div>
+                <button data-r="number">Wrong number<span>a figure does not match a page</span></button>
+                <button data-r="scope">Wrong scope<span>answered a different store or week</span></button>
+                <button data-r="refused">Refused wrongly<span>it could have answered</span></button>
+                <button data-r="slow">Too slow<span>right, but not worth the wait</span></button>
+              </div>
+            </span>
+            <button>Fork from here</button><button>Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="aside">
+      <h2>An answer names what it read, and the reader can check it in place</h2>
+      <p>Each source chip is verified (green mark) because it is one of the 58 curated loaders, and it carries its sync time — the one with the amber dot is the open range that will move at the next sync. "How I got here" opens a drawer with the exact calls and parameters. The footer shows what the turn really cost and how long it took, from <code style="font-family:var(--mono);font-size:11px">AiUsageEvent</code>, and a thumbs-down asks one question with four answers.</p>
+      <div class="why"><b>Why it moves</b><p>Feedback and origin. The drawer grows from its toggle (grid-rows, 220ms). The reason popover scales from the thumb it belongs to (bottom-right origin, .96→1, 150ms), then morphs into a "Noted" line rather than vanishing.</p></div>
+      <div class="ctl"><button class="btn" id="trustReset">Reset</button></div>
+      <div class="spec"><b>Drawer</b><span>grid-template-rows 0fr→1fr, 220ms</span><b>Caret</b><span>rotate 90°, 160ms</span><b>Popover</b><span>origin bottom-right, 150ms</span><b>Thumb press</b><span>scale(.9) 100ms</span><b>Row hover</b><span>wash 140ms, arrow slides 3px</span></div>
+    </aside>
+  </div>
+
+  <!-- ================= 5 · FAIL ================= -->
+  <div class="scene" data-scene="fail" hidden>
+    <div class="stage">
+      <div class="chat">
+        <div class="youmsg">Why is food cost over plan?</div>
+        <div id="failBody"></div>
+      </div>
+    </div>
+    <aside class="aside">
+      <h2>A refusal is an answer. A partial answer says what it could still read.</h2>
+      <p>Recipe costs time out. Instead of a red banner, the reading block marks the source that failed, the answer says which half of the question that removes, lists what it did read, gives the part of the answer those two sources support, and offers one retry and one way around. It does not guess at the ingredient.</p>
+      <div class="why"><b>Why it moves</b><p>State indication only. The failed step turns red in place — the same dot, a different colour — so the reader sees where it broke without a layout shift. The fallback block enters like any answer.</p></div>
+      <div class="ctl"><button class="btn btn--primary" id="failReplay">Replay</button></div>
+      <div class="spec"><b>Failed step</b><span>dot → bad, label strikes through, 200ms</span><b>Fallback block</b><span>cnter 340ms, same as an answer</span><b>Retry</b><span>primary; "Open recipe costs" secondary</span></div>
+    </aside>
+  </div>
+
+  <!-- ================= 6 · PHONE ================= -->
+  <div class="scene" data-scene="phone" hidden>
+    <div class="stage phone">
+      <div class="ph">
+        <div class="top"><span>7:02</span><span>Mon Sep 7</span></div>
+        <div class="scroll" id="phScroll">
+          <div class="pull" id="phPull">Reading Otter · 06:00 sync</div>
+          <div><div class="sub">Hollywood · this morning</div><h2>Good morning.</h2></div>
+          <div id="phCard"></div>
+          <div class="priorq" id="phPrior" hidden><b>You asked this last Monday.</b> The gap was 2.9 points then — it has widened by 0.5 since, and the reason has not changed.</div>
+          <div class="composer" style="padding:9px 12px"><svg><use href="#i-ask"/></svg><input placeholder="Ask about Hollywood…" aria-label="Ask"><button class="mic" id="mic" aria-label="Speak"><svg><use href="#i-mic"/></svg></button></div>
+          <div class="sub" id="micHint" style="text-align:center;min-height:14px"></div>
+        </div>
+        <div class="mtabs"><span class="on"><i></i>Home</span><span><i></i>Sales</span><span><i></i>Ask</span><span><i></i>Count</span><span><i></i>More</span></div>
+      </div>
+    </div>
+    <aside class="aside">
+      <h2>The Monday answer is on the phone before the owner is</h2>
+      <p>A saved question ran after the 06:00 Otter sync. Its card is the first thing on the phone home: the question, the verdict, the two figures, the delta since last Monday, and "Open in Ask" to carry on. Below it, the prior-question recall. The mic is for a ten-word question in a kitchen — hold to speak, release to send; it transcribes server-side so it works on every iOS browser.</p>
+      <div class="why"><b>Why it moves</b><p>Rare, so it may have a little delight: the card enters once, 340ms, when the sync lands. The mic's ring is constant-motion feedback that it is listening; it stops the moment you let go.</p></div>
+      <div class="ctl"><button class="btn btn--primary" id="phReplay">Sync arrives</button></div>
+      <div class="spec"><b>Card enter</b><span>cnter 340ms, once</span><b>Figures</b><span>count-up 600ms</span><b>Mic</b><span>ring 1.2s while held, none on release</span><b>Tab switch</b><span>none</span></div>
+    </aside>
+  </div>
+</div>
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+  var RM=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var easeOut=function(t){return 1-Math.pow(1-t,3)};
+  function tween(from,to,dur,fn,done){ if(RM){fn(to);done&&done();return;} var t0=performance.now(); function f(now){var p=Math.min(1,(now-t0)/dur);fn(from+(to-from)*easeOut(p));if(p<1)requestAnimationFrame(f);else done&&done();} requestAnimationFrame(f); }
+  function fmt(v,kind){ if(kind==='pct')return v.toFixed(1)+'%'; if(kind==='pts')return (v>=0?'+':'')+v.toFixed(1)+' pts'; if(kind==='usd')return '$'+Math.round(v).toLocaleString(); return v.toFixed(1); }
+  function countUp(el,to,kind,dur){ var from=parseFloat(el.dataset.cur||0); tween(from,to,dur||600,function(v){el.textContent=fmt(v,kind)}); el.dataset.cur=to; }
+  var speed=1; function wait(ms){return new Promise(function(r){setTimeout(r,RM?0:ms*speed)})}
+  var runId=0;
+
+  /* ---- scenes ---- */
+  $$('.scenes [role=tab]').forEach(function(b){ b.addEventListener('click',function(){
+    $$('.scenes [role=tab]').forEach(function(x){x.setAttribute('aria-selected',x===b?'true':'false')});
+    $$('.scene').forEach(function(s){s.hidden=s.dataset.scene!==b.dataset.scene});
+    var init=SCENES[b.dataset.scene]; if(init&&!init.done){init.done=true;init.fn();}
+  })});
+
+  /* ---- shared builders ---- */
+  var SRC=[['Otter sales','Hollywood · last 7 days','complete'],['Invoices','I28402 → I40118 · 34 received','4 vendors'],['Recipe costs','41 sellable · batch','128 lines'],['Harri hours','labour, same range','hours']];
+  function thinkingHTML(steps){ return steps.map(function(s){return '<div class="tstep"><i></i><b>'+s[0]+'</b><span>'+s[1]+'</span><em>waiting</em></div>'}).join('')+'<p class="elapsed" data-el>0.0s</p>'; }
+  function runThinking(box,steps,opts){ opts=opts||{}; box.innerHTML=thinkingHTML(steps); var rows=$$('.tstep',box), el=$('[data-el]',box), t0=performance.now(), tick=setInterval(function(){el.textContent=((performance.now()-t0)/1000/(speed||1)).toFixed(1)+'s'},100);
+    var chain=Promise.resolve(); rows.forEach(function(r,i){ chain=chain.then(function(){ r.className='tstep is-reading'; $('em',r).textContent='reading'; return wait(opts.per||650).then(function(){ if(opts.failAt===i){r.className='tstep is-out';$('em',r).textContent='timed out';} else {r.className='tstep is-read';$('em',r).textContent=steps[i][2];} }); }); });
+    return chain.then(function(){clearInterval(tick);return box;}); }
+  function streamWords(el,html,per){ el.innerHTML=''; var tmp=document.createElement('span'); tmp.innerHTML=html; var nodes=[]; function walk(n,b){ if(n.nodeType===3){ n.textContent.split(/(\s+)/).forEach(function(w){ if(!w)return; var s=document.createElement('span'); s.className='w'; s.textContent=w; if(b)s.style.fontWeight='600'; nodes.push(s);}); } else Array.prototype.forEach.call(n.childNodes,function(c){walk(c,b||n.tagName==='B')}); } walk(tmp,false);
+    var caret=document.createElement('span'); caret.className='caret'; el.appendChild(caret);
+    return new Promise(function(res){ var i=0; (function next(){ if(i>=nodes.length){caret.remove();res();return;} el.insertBefore(nodes[i++],caret); setTimeout(next,RM?0:(per||18)*speed); })(); }); }
+
+  /* stacked bar chart, retargetable */
+  var DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  function chart(container,data,opts){ opts=opts||{}; var W=560,H=150,padL=26,padB=18,padT=8,n=DAYS.length,gap=10,bw=(W-padL-gap*(n-1))/n,max=opts.max||4;
+    var y=function(v){return padT+(H-padT-padB)*(1-v/max)};
+    var svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Points over plan by day">';
+    svg+='<g class="grid">'; [0,1,2,3,4].forEach(function(g){ if(g>max)return; svg+='<line x1="'+padL+'" x2="'+W+'" y1="'+y(g)+'" y2="'+y(g)+'"/><text class="lbl" x="0" y="'+(y(g)+3)+'">'+g+'</text>'; }); svg+='</g>';
+    svg+='<line class="plan" x1="'+padL+'" x2="'+W+'" y1="'+y(0)+'" y2="'+y(0)+'"/>';
+    var cols=['var(--gp-1)','var(--gp-2)','var(--gp-3)'];
+    for(var i=0;i<n;i++){ var x=padL+i*(bw+gap); svg+='<rect class="hover" data-i="'+i+'" x="'+(x-4)+'" y="0" width="'+(bw+8)+'" height="'+(H-padB+2)+'" rx="3"/>'; svg+='<g class="bar'+(opts.enter?' in':'')+'" style="animation-delay:'+(i*40)+'ms;transform-box:fill-box;transform-origin:bottom">'; var acc=0; for(var s=0;s<3;s++){ var v=data[s][i]; svg+='<rect data-s="'+s+'" data-i="'+i+'" x="'+x+'" y="'+y(acc+v)+'" width="'+bw+'" height="'+(y(acc)-y(acc+v))+'" fill="'+cols[s]+'" rx="'+(s===2?2:0)+'"/>'; acc+=v; } svg+='</g>'; svg+='<text class="lbl axis" x="'+(x+bw/2)+'" y="'+(H-4)+'" text-anchor="middle">'+DAYS[i]+'</text>'; }
+    svg+='</svg><div class="tip" id="tip"></div><div class="legend"><span><i style="background:var(--gp-1)"></i>Ground beef</span><span><i style="background:var(--gp-2)"></i>Channel mix</span><span><i style="background:var(--gp-3)"></i>Everything else</span></div>';
+    container.innerHTML=svg; var cur=data.map(function(a){return a.slice()}); var tip=$('.tip',container), svgEl=$('svg',container);
+    $$('.hover',container).forEach(function(h){ h.addEventListener('mouseenter',function(){ var i=+h.dataset.i; $$('.hover',container).forEach(function(o){o.classList.toggle('on',o===h)}); var tot=cur[0][i]+cur[1][i]+cur[2][i]; tip.innerHTML='<b>'+DAYS[i]+' · +'+tot.toFixed(1)+' pts</b><br>beef '+cur[0][i].toFixed(1)+' · mix '+cur[1][i].toFixed(1)+' · else '+cur[2][i].toFixed(1); var r=svgEl.getBoundingClientRect(), k=r.width/W, x=padL+i*(bw+gap)+bw/2; tip.style.left=(x*k)+'px'; tip.style.top=(y(tot)*k)+'px'; tip.classList.add('on'); }); });
+    svgEl.addEventListener('mouseleave',function(){tip.classList.remove('on');$$('.hover',container).forEach(function(o){o.classList.remove('on')})});
+    return { update:function(next){ var from=cur.map(function(a){return a.slice()}); cur=next.map(function(a){return a.slice()}); tween(0,1,500,function(p){ for(var i=0;i<n;i++){ var acc=0; for(var s=0;s<3;s++){ var v=from[s][i]+(next[s][i]-from[s][i])*p; var r=$('rect[data-s="'+s+'"][data-i="'+i+'"]',container); r.setAttribute('y',y(acc+v)); r.setAttribute('height',Math.max(0,y(acc)-y(acc+v))); acc+=v; } } }); } };
+  }
+  var D7=[[1.2,1.6,1.9,2.1,1.7,2.3,1.8],[0.8,1.0,1.2,1.4,1.1,1.3,0.9],[0.3,0.5,0.6,0.4,0.6,0.7,0.4]];
+  var D30=[[1.0,1.3,1.5,1.6,1.4,1.8,1.5],[0.6,0.8,0.9,1.0,0.9,1.1,0.8],[0.3,0.4,0.4,0.3,0.5,0.5,0.3]];
+
+  function answerHTML(){ return ''+
+    '<div class="priorq enter"><b>You asked this at the start of this range.</b> The gap was 2.9 points then — it has widened by 0.5 since, and the reason has not changed.</div>'+
+    '<p class="ans__lead" data-lead></p>'+
+    '<div class="strip enter" data-strip hidden><div><span class="k">Food cost</span><span class="v" data-v="31.4" data-fmt="pct">0.0%</span><span class="d up">+3.4 pts vs plan</span></div><div><span class="k">Ground beef</span><span class="v" data-v="1.8" data-fmt="pts">+0.0 pts</span><span class="d">of the gap · Sysco +$0.42/lb</span></div><div><span class="k">Channel mix</span><span class="v" data-v="1.1" data-fmt="pts">+0.0 pts</span><span class="d">DoorDash 41% of orders</span></div></div>'+
+    '<div class="gap enter" data-gap hidden><div class="gap__ends"><span><em>Plan</em><b>28.0%</b></span><span class="hi"><em>Actual</em><b>31.4%</b></span></div><div class="gap__bar"><i style="background:var(--gp-1);width:0"></i><i style="background:var(--gp-2);width:0"></i><i style="background:var(--gp-3);width:0"></i></div><div class="gap__key"><div><span class="k"><i style="background:var(--gp-1)"></i>Ground beef</span><b>+1.8</b></div><div><span class="k"><i style="background:var(--gp-2)"></i>Channel mix</span><b>+1.1</b></div><div><span class="k"><i style="background:var(--gp-3)"></i>Everything else</span><b>+0.5</b></div></div></div>'+
+    '<div class="sec enter" data-chart hidden><div class="sec__head"><h3>The gap, day by day</h3><span class="k">points over the 28.0% plan · the plan is the zero</span></div><div class="sec__body"><div class="ch"></div></div></div>'+
+    '<div class="sec enter" data-table hidden><div class="sec__head"><h3>Six recipes, one ingredient</h3><span class="k">margin at today\'s beef price</span></div><table class="tbl"><thead><tr><th>Recipe</th><th class="num">Sold</th><th class="num">Beef $/plate</th><th class="num">Margin</th><th class="num">Was</th></tr></thead><tbody>'+
+      [['Double Slider',412,'$2.18','58.1%','63.4%',1],['Slider Combo',380,'$1.09','61.0%','64.7%',1],['Chili Fries',201,'$0.84','66.2%','68.9%',0],['Neddy Burger',188,'$2.61','55.9%','61.2%',1],['Kids Slider',96,'$1.09','63.3%','66.1%',0],['Beef Bowl',54,'$3.02','60.4%','64.8%',0]].map(function(r,i){return '<tr data-goto class="in" style="animation-delay:'+(i*40)+'ms"><td class="hot">'+r[0]+'</td><td class="num">'+r[1]+'</td><td class="num">'+r[2]+'</td><td class="num'+(r[5]?' bad':'')+'">'+r[3]+'</td><td class="num">'+r[4]+'</td></tr>'}).join('')+
+    '</tbody></table></div>'+
+    '<div class="callout enter" data-rest hidden><b>Three invoices are still unposted</b> (I40102, I40109, I40118), so the invoice half of this is 34 of 37. The direction will not change; the beef figure may move a tenth.</div>'+
+    '<div class="srcs enter" data-rest hidden><span class="src rk">Read</span><span class="src v"><svg><use href="#i-chk"/></svg><b>Otter sales</b> · complete</span><span class="src v"><svg><use href="#i-chk"/></svg><b>Invoices</b> · 4 vendors</span><span class="src v"><svg><use href="#i-chk"/></svg><b>Recipes</b> · 41</span><span class="src v"><svg><use href="#i-chk"/></svg><b>Harri</b> · hours</span></div>'+
+    '<div class="btnrow enter" data-rest hidden><button class="btn">Open menu profit</button><button class="btn">Ground beef, all vendors</button><button class="btn btn--quiet">Post the three invoices first</button></div>'+
+    '<div class="sugs enter" data-rest hidden><button class="sug"><span class="sk">What if</span> I raise the Double Slider by $0.20?</button><button class="sug">Is any vendor cheaper on ground beef?</button><button class="sug">Has the gap been this wide before?</button></div>'+
+    '<div class="turnfoot enter" data-rest hidden><span>Read 4 sources</span><span>$0.004</span><span data-secs>5.8s</span><span class="sp"></span><span class="thumbs"><button aria-label="Good answer"><svg><use href="#i-thup"/></svg></button><button aria-label="Wrong or unhelpful"><svg><use href="#i-thdn"/></svg></button></span><button>Save this question</button><button>Fork from here</button><button>Copy</button></div>';
+  }
+  function composerHTML(ph){ return '<div class="composer enter" data-rest hidden><svg><use href="#i-ask"/></svg><input placeholder="'+(ph||'Ask a follow-up about this range…')+'" aria-label="Ask a follow-up"><button class="sendbtn" aria-label="Send"><svg><use href="#i-up"/></svg></button></div>'; }
+  function show(el){ el.hidden=false; return wait(60); }
+
+  /* ---- scene 1: the turn ---- */
+  function playTurn(){ var my=++runId, body=$('#turnBody'); body.innerHTML='<div class="thinking enter" data-th></div>'; var th=$('[data-th]',body); var t0=performance.now();
+    runThinking(th,SRC,{per:700}).then(function(){ if(my!==runId)return; return wait(250); }).then(function(){ if(my!==runId)return;
+      var secs=((performance.now()-t0)/1000).toFixed(1); body.innerHTML='<div class="ans">'+answerHTML()+'</div>'+composerHTML(); $('[data-secs]',body).textContent=secs+'s';
+      return streamWords($('[data-lead]',body),'Food cost is <b>3.4 points over plan</b> this week, and ground beef is more than half of it. The price moved on Aug 21 and the recipes that carry it did not.').then(function(){ if(my!==runId)return;
+        return show($('[data-strip]',body)).then(function(){ $$('[data-strip] .v',body).forEach(function(v){countUp(v,+v.dataset.v,v.dataset.fmt,600)}); return wait(220); })
+        .then(function(){ if(my!==runId)return; return show($('[data-gap]',body)).then(function(){ var bars=$$('[data-gap] .gap__bar i',body); requestAnimationFrame(function(){bars[0].style.width='53%';bars[1].style.width='32%';bars[2].style.width='15%';}); return wait(320); }); })
+        .then(function(){ if(my!==runId)return; return show($('[data-chart]',body)).then(function(){ chart($('[data-chart] .ch',body),D7,{enter:true}); return wait(420); }); })
+        .then(function(){ if(my!==runId)return; return show($('[data-table]',body)).then(function(){return wait(300)}); })
+        .then(function(){ if(my!==runId)return; var rest=$$('[data-rest]',body); var c=Promise.resolve(); rest.forEach(function(r){ c=c.then(function(){ r.hidden=false; return wait(70); }); }); return c; });
+      });
+    }); }
+  $('#turnReplay').addEventListener('click',playTurn);
+  $$('#turnSpeed button').forEach(function(b){ b.addEventListener('click',function(){ $$('#turnSpeed button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')}); speed=+b.dataset.s; }); });
+
+  /* ---- scene 2: cmdk ---- */
+  function ckReset(){ ++runId; $('#ckQ').textContent='Ask about Hollywood, or jump to anything…'; $('#ckList').classList.remove('off'); $('#ckAns').classList.add('off'); $('#ckMini').hidden=true; }
+  function ckGo(){ var my=++runId; $('#ckQ').textContent='Why is food cost over plan?'; $('#ckList').classList.add('off'); $('#ckAns').classList.remove('off'); $('#ckMini').hidden=true; $('#ckThinking').hidden=false;
+    runThinking($('#ckThinking'),SRC.slice(0,3),{per:520}).then(function(){ if(my!==runId)return; return wait(200); }).then(function(){ if(my!==runId)return; $('#ckThinking').hidden=true; var m=$('#ckMini'); m.hidden=false; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); }); }
+  $('#ckGo').addEventListener('click',ckGo); $('#ckReset').addEventListener('click',ckReset); $('#ckBack').addEventListener('click',ckReset);
+
+  /* ---- scene 3: scope ---- */
+  var scopeChart, scopeIs7=true;
+  function scopeInit(){ scopeChart=chart($('#scopeChart'),D7,{enter:true}); }
+  $('#scopeToggle').addEventListener('click',function(){ var chip=$('#scopeChips [data-range]'); chip.classList.add('busy'); $('.rt',chip).textContent=scopeIs7?'Last 30 days':'Last 7 days'; $('#scopeToggle').textContent=scopeIs7?'Switch to last 7 days':'Switch to last 30 days';
+    var to7=!scopeIs7; scopeIs7=to7; wait(380).then(function(){ chip.classList.remove('busy'); var vs=$$('#scopeStrip .v'); var vals=to7?[31.4,1.8,1.1]:[30.9,1.5,0.9]; vs.forEach(function(v,i){countUp(v,vals[i],v.dataset.fmt,500)}); $('#scopeStrip .d[data-d]').textContent=to7?'+3.4 pts vs plan':'+2.9 pts vs plan'; var bars=$$('#scopeBar i'); var w=to7?[53,32,15]:[52,31,17]; bars.forEach(function(b,i){b.style.width=w[i]+'%'}); tween(parseFloat($('#scopeActual').dataset.cur||31.4),to7?31.4:30.9,500,function(v){$('#scopeActual').textContent=v.toFixed(1)+'%'}); $('#scopeActual').dataset.cur=to7?31.4:30.9; scopeChart.update(to7?D7:D30); $('#scopeK').textContent=to7?'points over plan · the plan is the zero':'by weekday · 30-day average · the plan is the zero'; $('#scopeLead').innerHTML=to7?'Food cost is <b>3.4 points over plan</b> this week, and ground beef is more than half of it.':'Over 30 days food cost is <b>2.9 points over plan</b>; the beef share is the same, the gap was narrower before Aug 21.'; }); });
+
+  /* ---- scene 4: trust ---- */
+  $('#howT').addEventListener('click',function(){ var open=this.getAttribute('aria-expanded')!=='true'; this.setAttribute('aria-expanded',open?'true':'false'); $('#howD').classList.toggle('is-open',open); });
+  $('#thDn').addEventListener('click',function(e){ e.stopPropagation(); $('#thPop').classList.toggle('on'); });
+  $('#thUp').addEventListener('click',function(){ this.classList.toggle('on'); $('#thDn').classList.remove('on','dn'); $('#thanks').classList.remove('on'); });
+  $$('#thPop button').forEach(function(b){ b.addEventListener('click',function(){ $('#thPop').classList.remove('on'); $('#thDn').classList.add('on','dn'); $('#thUp').classList.remove('on'); var t=$('#thanks'); t.lastChild.textContent='Noted — '+b.firstChild.textContent.toLowerCase(); t.classList.add('on'); }); });
+  document.addEventListener('click',function(e){ if(!e.target.closest('.thumbs')) $('#thPop').classList.remove('on'); });
+  $('#trustReset').addEventListener('click',function(){ $('#thanks').classList.remove('on'); $('#thUp').classList.remove('on'); $('#thDn').classList.remove('on','dn'); $('#howD').classList.remove('is-open'); $('#howT').setAttribute('aria-expanded','false'); var rows=$$('#trustRows tr'); rows.forEach(function(r,i){ r.classList.remove('in'); void r.offsetWidth; r.style.animationDelay=(i*40)+'ms'; r.classList.add('in'); }); });
+  function trustInit(){ $$('#trustRows tr').forEach(function(r,i){ r.style.animationDelay=(i*40)+'ms'; r.classList.add('in'); }); }
+
+  /* ---- scene 5: fail ---- */
+  function playFail(){ var my=++runId, body=$('#failBody'); body.innerHTML='<div class="thinking enter" data-th></div>'; runThinking($('[data-th]',body),SRC.slice(0,3),{per:650,failAt:2}).then(function(){ if(my!==runId)return; return wait(300); }).then(function(){ if(my!==runId)return;
+    body.insertAdjacentHTML('beforeend','<div class="ans enter" style="margin-top:14px"><p class="ans__lead" data-lead></p><div class="ansfail" data-f hidden><span class="rk">What I could still read</span><div class="rsrc"><b>Otter daily sales</b><span>last 7 days · complete</span></div><div class="rsrc"><b>Invoices I28402 → I40118</b><span>34 received · complete</span></div><div class="rsrc is-out"><b>Recipe costs</b><span>timed out after 20s</span></div><p>From those two alone: food spend is running <b>3.4 points above plan</b> and DoorDash has taken 41% of your volume. I will not guess at which ingredient without the costs.</p><div class="btnrow"><button class="btn btn--primary">Try the answer again</button><button class="btn">Open recipe costs</button></div></div></div>');
+    return streamWords($('[data-lead]',body),'I could not finish this answer. <b>Recipe costs did not come back</b>, so I can see what you sold and what you were invoiced, but not what each plate costs to make — which is the half that names an ingredient.').then(function(){ if(my!==runId)return; var f=$('[data-f]',body); f.hidden=false; f.classList.add('enter'); }); }); }
+  $('#failReplay').addEventListener('click',playFail);
+
+  /* ---- scene 6: phone ---- */
+  function playPhone(){ var my=++runId; $('#phCard').innerHTML=''; $('#phPrior').hidden=true; var pull=$('#phPull'); pull.classList.add('on'); wait(900).then(function(){ if(my!==runId)return; pull.classList.remove('on');
+    $('#phCard').innerHTML='<div class="brief enter"><div class="brief__h"><span class="k">Every Monday · 7:00</span><span>ran 06:04 · $0.004</span></div><div class="brief__b"><div class="brief__q">Why is food cost over plan?</div><p class="brief__lead">Still <b>3.4 points over</b>, up 0.5 from last Monday. Ground beef is more than half of it and the price has not moved back.</p><div class="strip"><div><span class="k">Food cost</span><span class="v" data-v="31.4" data-fmt="pct">0.0%</span><span class="d up">+0.5 vs last Mon</span></div><div><span class="k">Ground beef</span><span class="v" data-v="1.8" data-fmt="pts">+0.0 pts</span><span class="d">Sysco +$0.42/lb</span></div></div></div><div class="brief__f"><button class="btn btn--primary" style="flex:1;justify-content:center">Open in Ask</button><button class="btn">Vendors</button></div></div>';
+    return wait(200).then(function(){ if(my!==runId)return; $$('#phCard .v').forEach(function(v){countUp(v,+v.dataset.v,v.dataset.fmt,600)}); return wait(400); }).then(function(){ if(my!==runId)return; var p=$('#phPrior'); p.hidden=false; p.classList.add('enter'); }); }); }
+  $('#phReplay').addEventListener('click',playPhone);
+  var mic=$('#mic'), hint=$('#micHint'), micT;
+  function micOn(e){ e.preventDefault(); mic.classList.add('on'); hint.textContent='Listening… release to send'; micT=performance.now(); }
+  function micOff(){ if(!mic.classList.contains('on'))return; mic.classList.remove('on'); var held=(performance.now()-micT)>350; hint.textContent=held?'Sent: "is any vendor cheaper on ground beef"':'Hold to speak'; }
+  mic.addEventListener('pointerdown',micOn); mic.addEventListener('pointerup',micOff); mic.addEventListener('pointerleave',micOff); mic.addEventListener('pointercancel',micOff);
+
+  var SCENES={turn:{fn:playTurn},cmdk:{fn:function(){}},scope:{fn:scopeInit},trust:{fn:trustInit},fail:{fn:playFail},phone:{fn:playPhone}};
+  SCENES.turn.done=true; document.fonts&&document.fonts.ready?document.fonts.ready.then(playTurn):playTurn();
+})();
+</script>
