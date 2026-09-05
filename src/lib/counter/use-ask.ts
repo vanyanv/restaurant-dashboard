@@ -13,6 +13,7 @@ import {
   type AskTurnView,
 } from "./ask-state"
 import type { ReturnPart } from "@/lib/chat/return"
+import { readAskTurnMeta } from "./ask-meta"
 
 /**
  * The one thing in the Ask surface that talks to the model.
@@ -78,6 +79,10 @@ export function useAsk(
   ask: (question: string, context: AskContext) => void
   /** Add a turn to the thread on screen. */
   follow: (question: string, context: AskContext) => void
+  /** Cut the turn in flight. What streamed is kept, as a `stopped` state. */
+  stop: () => void
+  /** When the turn in flight was sent, for the seconds the footer counts. */
+  askedAt: number | null
   reset: () => void
 } {
   /*
@@ -87,6 +92,14 @@ export function useAsk(
    * of what was sent.
    */
   const [questions, setQuestions] = useState<string[]>([])
+  /*
+   * Which turns the reader stopped, by index. The SDK reports an aborted
+   * stream as `ready` with a partial message — indistinguishable from an
+   * answer that simply had nothing to file — so the fact that Stop was
+   * pressed is kept here, where it happened.
+   */
+  const stoppedRef = useRef<Set<number>>(new Set())
+  const [askedAt, setAskedAt] = useState<number | null>(null)
 
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId)
   /*
@@ -137,7 +150,8 @@ export function useAsk(
     [],
   )
 
-  const { messages, sendMessage, setMessages, status, error } = useChat({ transport })
+  const { messages, sendMessage, setMessages, status, error, stop: stopStream } =
+    useChat({ transport })
 
   /*
    * A DIFFERENT THREAD ARRIVED IN THE URL.
@@ -165,9 +179,11 @@ export function useAsk(
         conversationIdRef.current = null
         setConversationId(null)
         setQuestions([trimmed])
+        stoppedRef.current = new Set()
       } else {
         setQuestions((q) => [...q, trimmed])
       }
+      setAskedAt(Date.now())
       void sendMessage({ text: `${context.sentence}.\n${trimmed}` })
     },
     [sendMessage, setMessages],
@@ -187,7 +203,15 @@ export function useAsk(
     setMessages([])
     conversationIdRef.current = null
     setConversationId(null)
+    stoppedRef.current = new Set()
+    setAskedAt(null)
   }, [setMessages])
+
+  const stop = useCallback(() => {
+    if (status !== "submitted" && status !== "streaming") return
+    stoppedRef.current.add(questions.length - 1)
+    void stopStream()
+  }, [status, stopStream, questions.length])
 
   const turns = useMemo<AskTurnView[]>(() => {
     /*
@@ -228,10 +252,31 @@ export function useAsk(
       // `ready` with no assistant turn yet is the tick between the send and
       // the SDK moving to `submitted`.
       if (!answers[i]) {
+        if (stoppedRef.current.has(i)) {
+          return {
+            id: `${i}`,
+            question,
+            state: { status: "stopped", question, steps: [], durationMs: sinceAsked(askedAt) },
+          }
+        }
         return { id: `${i}`, question, state: { status: "asking", question, steps: [] } }
       }
 
       const filed = selectFiledReturn(parts)
+      // Stopped before anything was filed: the steps are what it read, the
+      // answer is the one it never wrote. Stopped AFTER filing is an answer.
+      if (!filed && stoppedRef.current.has(i)) {
+        return {
+          id: `${i}`,
+          question,
+          state: {
+            status: "stopped",
+            question,
+            steps: askSteps(parts),
+            durationMs: sinceAsked(askedAt),
+          },
+        }
+      }
       return {
         id: `${i}`,
         question,
@@ -245,13 +290,20 @@ export function useAsk(
             // Nothing filed means nothing to lay out — the empty form is prose
             // and its sources, which is exactly what there is.
             form: filed ? returnForm(filed) : "empty",
+            meta: readAskTurnMeta(answers[i]?.metadata),
+            // The SDK's ids are its own, not `Message.id` — see `AskAnswer`.
+            messageId: null,
           },
         },
       }
     })
-  }, [questions, status, error, messages])
+  }, [questions, status, error, messages, askedAt])
 
   const state = turns.length > 0 ? turns[turns.length - 1].state : { status: "idle" as const }
 
-  return { turns, state, conversationId, ask, follow, reset }
+  return { turns, state, conversationId, ask, follow, stop, askedAt, reset }
+}
+
+function sinceAsked(askedAt: number | null): number {
+  return askedAt === null ? 0 : Date.now() - askedAt
 }

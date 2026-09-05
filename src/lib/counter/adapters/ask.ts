@@ -79,6 +79,16 @@ export interface AskTurn {
    * See `filedFrom`. This is not a guess and costs no model call.
    */
   filed: FiledReturn | null
+  /** When the row was written — the thread's day separators are cut on it. */
+  at: Date
+  /**
+   * The turn's cost, seconds and `ChatTurn` id, joined from the table the
+   * route wrote in `onFinish`. `null` on user rows, and on an answer whose
+   * turn row was never written (a crash before `onFinish`, or a thread from
+   * before the table). See `ask-meta.ts` — the live turn gets the same shape
+   * off the message.
+   */
+  meta: AskTurnMeta | null
 }
 
 export interface AskThread {

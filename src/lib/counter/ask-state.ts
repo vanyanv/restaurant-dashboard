@@ -27,6 +27,7 @@ import {
   type ReturnPart,
 } from "@/lib/chat/return"
 import type { AskContext } from "./ask-context"
+import type { AskTurnMeta } from "./ask-meta"
 
 /**
  * ONE question's lifecycle, for the ⌘K palette.
@@ -77,6 +78,20 @@ export interface AskAnswer {
   /** Tool names called, in order, deduped — the "Read" row. */
   read: string[]
   form: ReturnForm
+  /**
+   * What the turn cost and which `ChatTurn` it became — off the message's
+   * metadata for a live turn, off the adapter for a restored one. `null`
+   * until the route's `finish` lands, and for good on a turn whose row was
+   * never written; the footer prints nothing it did not get (D2).
+   */
+  meta: AskTurnMeta | null
+  /**
+   * The assistant `Message.id`, for "Fork from here". Only a RESTORED turn
+   * has one: the SDK's client-side ids are not the database's, so a turn
+   * asked in this session forks from the rail (through its last message)
+   * after the refresh that lists it.
+   */
+  messageId: string | null
 }
 
 /**
@@ -135,6 +150,12 @@ export type AskState =
     }
   | { status: "answered"; answer: AskAnswer }
   | { status: "failed"; question: string; message: string }
+  /**
+   * The reader pressed Stop. What streamed is kept — the steps show which
+   * sources were read and which one was cut — and the question is kept
+   * with it, so Continue can ask it again without retyping (F-R10).
+   */
+  | { status: "stopped"; question: string; steps: AskStep[]; durationMs: number }
 
 /** Filing the return is not reading anything, so it never appears in "Read". */
 const FILE_RETURN_TOOL = "fileReturn"
@@ -203,6 +224,12 @@ export function askFailure(state: AskState): string | null {
 /** A question is in flight. A surface with a send button does not offer a second. */
 export function askPending(state: AskState): boolean {
   return state.status === "asking"
+}
+
+export function askStopped(
+  state: AskState,
+): { question: string; steps: AskStep[]; durationMs: number } | null {
+  return state.status === "stopped" ? state : null
 }
 
 /**
@@ -313,12 +340,15 @@ export function askTurnsFor(turns: AskTurnView[], question: string): AskTurnView
  * beneath — rather than a special case for history.
  */
 export function restoredAskState(turn: {
+  /** The assistant `Message.id` — what "Fork from here" branches through. */
+  id: string
   question: string
   /** The assistant's stored prose. */
   text: string
   /** Tool names, `fileReturn` already excluded by the adapter. */
   read: string[]
   filed: FiledReturn | null
+  meta: AskTurnMeta | null
 }): AskState {
   return {
     status: "answered",
@@ -328,6 +358,8 @@ export function restoredAskState(turn: {
       body: splitProvenance(turn.text).body.trim(),
       read: turn.read,
       form: turn.filed ? returnForm(turn.filed) : "empty",
+      meta: turn.meta,
+      messageId: turn.id,
     },
   }
 }
