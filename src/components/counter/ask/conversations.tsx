@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { SearchGlyph } from "@/components/counter/surface/search-glyph"
 import type { AskConversation } from "@/lib/counter/adapters/ask"
-import { groupThreadsByDay, threadTurnLabel } from "@/lib/counter/thread-groups"
+import { groupThreadsByDay } from "@/lib/counter/thread-groups"
 import { DotsGlyph, ForkGlyph, PenGlyph, PlusGlyph, TrashGlyph } from "./rail-glyphs"
 
 /**
@@ -256,7 +256,15 @@ function ConversationRow({
   const [arming, setArming] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
-  const meta = threadTurnLabel(c.turns)
+  // "3 turns · 14:02" — the mock's caption. The clock for a thread touched
+  // today, the date otherwise; the day group above already says which.
+  const when = c.updatedAt
+  const sameDay = when.toDateString() === new Date().toDateString()
+  const meta = `${c.turns} turn${c.turns === 1 ? "" : "s"} · ${
+    sameDay
+      ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : when.toLocaleDateString([], { month: "short", day: "numeric" })
+  }`
 
   const startRename = () => {
     onMenu(false)
@@ -352,11 +360,7 @@ function ConversationRow({
           ) : (
             <b>{c.title ?? "Untitled"}</b>
           )}
-          {said ? (
-            <span className="m is-said">{said}</span>
-          ) : meta ? (
-            <span className="m">{meta}</span>
-          ) : null}
+          <span className={`m${said ? " is-said" : ""}`}>{said ?? meta}</span>
         </span>
         {!renaming && !arming ? (
           <span

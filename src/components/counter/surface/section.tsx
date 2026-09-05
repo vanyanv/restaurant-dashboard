@@ -190,6 +190,14 @@ type SectionProps<T> = {
    * none of which passes this — is unaffected.
    */
   pending?: boolean
+  /**
+   * Render NOTHING for the empty state, instead of the `Empty` panel. For a
+   * section that is an offer rather than a report — the Ask page's "pick up
+   * where you left off" under its starters — where an empty offer is not a
+   * finding worth a panel, it is simply not there. Every other state renders
+   * as it always does: a failed offer still says so.
+   */
+  quietWhenEmpty?: boolean
   children: (data: T) => ReactNode
 }
 
@@ -206,6 +214,7 @@ function SectionBody<T>({
   pad = true,
   bare = false,
   pending = false,
+  quietWhenEmpty = false,
   children,
 }: Omit<SectionProps<T>, "data"> & { data: SectionData<T> }) {
   /*
@@ -276,6 +285,7 @@ function SectionBody<T>({
       true,
     )
   } else if (data.status === "empty") {
+    if (quietWhenEmpty) return null
     // No `.sec__body` — see the note above. `.empty` pads itself.
     body = <Empty reason={data.reason} />
   } else if (data.status === "not_computed") {

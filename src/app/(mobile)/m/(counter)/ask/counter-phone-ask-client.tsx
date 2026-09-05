@@ -327,7 +327,7 @@ export function CounterPhoneAskClient({
             you send is the whole exchange.
           </p>
           <div className="sugs">
-            {ASK_STARTERS.map((q) => (
+            {ASK_STARTERS.map(({ q }) => (
               <button className="sug" type="button" key={q} onClick={() => submit(q)}>
                 {q}
               </button>

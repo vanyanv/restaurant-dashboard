@@ -128,17 +128,21 @@ function isAskRoute(pathname: string): boolean {
 }
 
 /**
- * The three questions Ask opens with, on both surfaces.
+ * The six questions Ask opens with, on both surfaces — one per department.
  *
- * Module-level and shared so the desk's empty state and the phone's offer the
- * same three, and phrased as questions this backend can actually answer: each
- * names a department the tools cover, rather than advertising an ability the
- * model would have to refuse (K-R3).
+ * Module-level and shared so the desk's empty state, the phone's, and the
+ * ⌘K palette's "Ask about" group offer the same six, and phrased as questions
+ * this backend can actually answer: each names a department the tools cover,
+ * rather than advertising an ability the model would have to refuse (K-R3).
+ * The department is the mock's `.starter .k` caption; it is not sent.
  */
 export const ASK_STARTERS = [
-  "How were sales last week?",
-  "Which channel is costing the most to sell through?",
-  "What is driving food cost right now?",
+  { dept: "P&L", q: "Why is food cost where it is?" },
+  { dept: "Sales", q: "Which channel is costing the most to sell through?" },
+  { dept: "Forecast", q: "What should I prep for Saturday?" },
+  { dept: "Invoices", q: "Which invoices do not reconcile?" },
+  { dept: "Ingredients", q: "Has any ingredient price moved this month?" },
+  { dept: "Inventory", q: "What is on hand that I should count today?" },
 ] as const
 
 /**

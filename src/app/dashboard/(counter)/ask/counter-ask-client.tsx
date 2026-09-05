@@ -38,7 +38,7 @@ import type {
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
 import type { AskFeedback } from "@/lib/counter/ask-feedback"
-import { threadDayLabel } from "@/lib/counter/thread-groups"
+import { threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
@@ -176,7 +176,7 @@ export function CounterAskClient({
   const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
-  usePageChrome({ askSuggestions: [...ASK_STARTERS] })
+  usePageChrome({ askSuggestions: ASK_STARTERS.map((s) => s.q) })
   const { pending, startTransition } = useCounterTransition()
 
   const question = (params.get("q") ?? "").trim()
@@ -757,28 +757,49 @@ export function CounterAskClient({
 
           {shown.length === 0 && !urlConversationId ? (
             /*
-             * NOTHING ASKED YET.
+             * NOTHING ASKED YET — the mock's `.newask`.
              *
-             * The prototype's own empty shape (`P.ask.desk()`, `e === 'empty'`):
-             * `.ansfail` with a `.rk` caption and a `.sugs` row of what CAN be
-             * answered. A heading over an empty page is the failure mode this
-             * project has shipped before; a page that says what it is for and
-             * offers three questions it can answer is not one.
+             * "Ask about Hollywood." over six department starters and the
+             * last four threads. A heading over an empty page is the failure
+             * mode this project has shipped before; a page that says what it
+             * is for, offers six questions it can answer and the four threads
+             * you were last in is not one. The recent list reads the same
+             * section the rail does, so the two cannot disagree.
              */
-            <div className="ansfail">
-              <span className="rk">Nothing asked yet</span>
+            <div className="newask">
+              <div>
+                <div className="ctx">
+                  Answering about <b>{context.store}</b> · {windowLabel}
+                </div>
+                <h2>Ask about {context.store}.</h2>
+              </div>
               <p>
-                Ask about <b>{context.store}</b>, reading {windowLabel}. Every answer names the
-                sources it read, follow-ups keep the thread, and its address carries the
-                conversation — so what you send is the whole exchange.
+                A question here is answered against the store and range in the head, and kept in
+                the rail on the left. Start from one of these, or type your own.
               </p>
-              <div className="sugs">
-                {ASK_STARTERS.map((q) => (
-                  <button className="sug" type="button" key={q} onClick={() => submit(q)}>
-                    {q}
+              <div className="starters">
+                {ASK_STARTERS.map(({ dept, q }) => (
+                  <button className="starter" type="button" key={q} onClick={() => submit(q)}>
+                    <span className="k">{dept}</span>
+                    <b>{q}</b>
                   </button>
                 ))}
               </div>
+              <Section bare quietWhenEmpty title="Recent" data={sections.conversations}>
+                {(items) =>
+                  items.length === 0 ? null : (
+                    <div className="recent">
+                      <span className="k">Pick up where you left off</span>
+                      {items.slice(0, 4).map((c) => (
+                        <button type="button" key={c.id} onClick={() => openThread(c.id)}>
+                          <b>{c.title ?? "Untitled"}</b>
+                          <span>{threadTurnLabel(c.turns) || "1 turn"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                }
+              </Section>
             </div>
           ) : null}
         </div>
