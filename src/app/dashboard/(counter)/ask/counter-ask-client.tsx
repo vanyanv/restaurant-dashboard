@@ -845,6 +845,7 @@ export function CounterAskClient({
               : "From the head · change it there"
           }
           model={model}
+          mic
         />
       </div>
     </>

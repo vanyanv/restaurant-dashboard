@@ -41,6 +41,7 @@ export function AskComposer({
   scopeNote,
   model,
   prefill = null,
+  mic = false,
 }: {
   placeholder: string
   onSubmit: (question: string) => void
@@ -55,10 +56,79 @@ export function AskComposer({
   model?: string
   /** Text to place in the field (not send) — a chip that wants editing first. */
   prefill?: string | null
+  /**
+   * Hold-to-speak. Records with `MediaRecorder`, posts to
+   * `/api/ask/transcribe`, and puts the words in the field — never sends
+   * them. Off by default; the surfaces that show it opt in.
+   */
+  mic?: boolean
 }) {
   const [value, setValue] = useState("")
   const [cursor, setCursor] = useState(0)
   const ta = useRef<HTMLTextAreaElement>(null)
+
+  /*
+   * THE MIC. Pointer down starts a recording and lights the ring; pointer up
+   * stops it and sends the blob to be transcribed. Under 400ms is a tap, not
+   * a hold, and gets the hint instead of a request. The transcript lands in
+   * the field for the reader to check — a mis-heard word should not become a
+   * question. Nothing here runs unless `mic` is on and the browser has a
+   * recorder; where it does not, the button is not drawn.
+   */
+  const [listening, setListening] = useState(false)
+  const [micSaid, setMicSaid] = useState<string | null>(null)
+  const rec = useRef<{ recorder: MediaRecorder; chunks: Blob[]; started: number } | null>(null)
+  const canRecord =
+    mic && typeof window !== "undefined" && typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices
+  const micDown = async () => {
+    if (rec.current || busy) return
+    setMicSaid(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      const chunks: Blob[] = []
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data)
+      }
+      rec.current = { recorder, chunks, started: Date.now() }
+      recorder.start()
+      setListening(true)
+    } catch {
+      setMicSaid("Microphone is off in this browser")
+    }
+  }
+  const micUp = () => {
+    const r = rec.current
+    if (!r) return
+    rec.current = null
+    setListening(false)
+    const seconds = (Date.now() - r.started) / 1000
+    r.recorder.onstop = () => {
+      r.recorder.stream.getTracks().forEach((t) => t.stop())
+      if (seconds < 0.4) {
+        setMicSaid("Hold to speak")
+        return
+      }
+      const blob = new Blob(r.chunks, { type: r.recorder.mimeType || "audio/webm" })
+      const form = new FormData()
+      form.append("audio", blob, "question.webm")
+      form.append("seconds", seconds.toFixed(1))
+      setMicSaid("Transcribing…")
+      void fetch("/api/ask/transcribe", { method: "POST", body: form })
+        .then(async (res) => {
+          const data = (await res.json()) as { text?: string; error?: string }
+          if (!res.ok || !data.text) {
+            setMicSaid(data.error ?? "The recording could not be transcribed")
+            return
+          }
+          setValue((v) => (v.trim() ? `${v.trim()} ${data.text}` : data.text!))
+          setMicSaid("Transcribed · ↵ to send")
+          ta.current?.focus()
+        })
+        .catch(() => setMicSaid("The recording could not be transcribed"))
+    }
+    r.recorder.stop()
+  }
 
   const commands = matchSlashCommands(value)
   const menuOpen = commands.length > 0
@@ -177,6 +247,26 @@ export function AskComposer({
           />
         </label>
         <div className="tools">
+          {canRecord ? (
+            <button
+              type="button"
+              className={`ibtn mic${listening ? " on" : ""}`}
+              aria-label={listening ? "Listening — release to send" : "Hold to speak"}
+              aria-pressed={listening}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                void micDown()
+              }}
+              onPointerUp={micUp}
+              onPointerLeave={micUp}
+              onPointerCancel={micUp}
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
+                <path d="M3 7.5a5 5 0 0010 0M8 12.5v2" />
+              </svg>
+            </button>
+          ) : null}
           <button
             className={`sendbtn${busy ? " busy" : ""}`}
             type={busy ? "button" : "submit"}
@@ -218,7 +308,11 @@ export function AskComposer({
           <span>
             <kbd>esc</kbd> stop
           </span>
-          <span>{busy ? "reading… esc to stop" : model}</span>
+          <span>{micSaid ?? (busy ? "reading… esc to stop" : model)}</span>
+        </div>
+      ) : micSaid ? (
+        <div className="hints">
+          <span>{micSaid}</span>
         </div>
       ) : null}
     </div>

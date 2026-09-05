@@ -2572,3 +2572,16 @@ html[data-theme-switching] .ct-root *::after {
 .mscroll .scoperow .sp,.mscroll .scoperow > span:first-child{display:none}
 .mscroll .scoperow{gap:6px}
 .mscroll .scoperow .chip{padding:3px 8px;font-size:9px}
+
+/*
+ * THE MIC — `.ibtn` beside the send square, with the listening ring the
+ * motion study drew: constant motion while held, nothing on release.
+ */
+.ibtn{width:28px;height:28px;border:0;border-radius:var(--r-sm);background:none;display:grid;place-items:center;color:var(--ink-3);cursor:pointer;position:relative;transition:background-color .14s var(--ease),color .14s var(--ease),transform .1s ease-out;touch-action:none;-webkit-user-select:none;user-select:none}
+.ibtn:hover{background:var(--sunk);color:var(--ink)}
+.ibtn:active{transform:scale(.92)}
+.ibtn svg{width:14px;height:14px}
+.ibtn.mic.on{color:var(--accent)}
+.ibtn.mic.on::before{content:"";position:absolute;inset:-3px;border-radius:50%;border:1.5px solid var(--accent);animation:ring 1.2s var(--ease) infinite}
+@keyframes ring{from{transform:scale(.85);opacity:.8}to{transform:scale(1.35);opacity:0}}
+@media (prefers-reduced-motion: reduce){.ibtn.mic.on::before{animation:none}}

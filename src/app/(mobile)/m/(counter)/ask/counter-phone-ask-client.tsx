@@ -544,6 +544,7 @@ export function CounterPhoneAskClient({
         busy={askPending(state)}
         onStop={stop}
         scope={{ store: context.store, range: windowLabel }}
+        mic
       />
     </>
   )

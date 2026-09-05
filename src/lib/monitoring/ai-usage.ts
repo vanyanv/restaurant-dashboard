@@ -42,7 +42,19 @@ export type AiUsageInput = {
   storeId?: string | null
   userId?: string | null
   durationMs?: number
+  /**
+   * A cost the caller already knows, for a call that is not priced by token
+   * — transcription is billed per minute of audio. When given it is recorded
+   * as-is and the token table is not consulted.
+   */
+  costUsd?: number
 }
+
+/** Per minute of audio, USD — the transcription models' own unit. */
+export const PRICING_PER_MINUTE = {
+  "gpt-4o-mini-transcribe": 0.003,
+  "gpt-4o-transcribe": 0.006,
+} as const
 
 export function computeCostUsd(
   model: string,
@@ -67,7 +79,8 @@ export function computeCostUsd(
 export async function recordAiUsage(input: AiUsageInput): Promise<string | null> {
   try {
     const cached = input.cachedTokens ?? 0
-    const cost = computeCostUsd(input.model, input.inputTokens, input.outputTokens, cached)
+    const cost =
+      input.costUsd ?? computeCostUsd(input.model, input.inputTokens, input.outputTokens, cached)
     const row = await prisma.aiUsageEvent.create({
       data: {
         feature: input.feature,
