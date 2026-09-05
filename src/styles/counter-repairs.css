@@ -805,7 +805,7 @@ button.wkd {
  * expression, read from the same custom property rather than restated as a
  * number that could drift from it. `z-index:30` sits under the bar's 40.
  */
-.mscroll > .composer {
+.mscroll > .dock__in {
   position: fixed;
   left: 12px;
   right: 12px;
@@ -814,11 +814,13 @@ button.wkd {
   background: var(--surface);
   z-index: 30;
 }
+/* `.dock__in` since 2026-09-05: the composer's root is the dock (scope row
+   above the bar), so the fixed element is the dock. Same box, same bottom. */
 /* The space the fixed bar no longer occupies in the flow, given back so the
    last history row is not permanently under it. `.mscroll`'s own 12px, plus
    the bar (51px) and the gap above it. */
-.mscroll:has(> .composer) {
-  padding-bottom: calc(12px + 51px + 11px);
+.mscroll:has(> .dock__in) {
+  padding-bottom: calc(12px + 51px + 11px + 44px);
 }
 
 /*
@@ -2549,3 +2551,24 @@ html[data-theme-switching] .ct-root *::after {
 .recent button b{font-weight:500;color:var(--ink);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .14s var(--ease)}
 .recent button span{font-family:var(--mono);font-size:9px;color:var(--ink-3)}
 .recent button:hover b{color:var(--accent)}
+
+/*
+ * THE PHONE'S THREADS SHEET AND ITS BUTTON — `ask-page-mock.html`, phone.
+ *
+ * ADDITIONS. `.threadsbtn` is `.chip`'s pill in the conversation head;
+ * `.msheet .convs` drops the rail's border inside the sheet that already has
+ * one, and lets the list take the sheet's height. `.newask--phone` is the
+ * desk's empty state at the phone's type scale.
+ */
+.threadsbtn{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);padding:5px 9px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);cursor:pointer;margin-left:auto}
+.threadsbtn svg{width:11px;height:11px}
+.convhead .threadsbtn{margin-left:0}
+.msheet .convs{border:0;border-radius:0;display:flex;flex-direction:column;max-height:60dvh;overflow-y:auto}
+.msheet .cv{padding:10px 8px 10px 12px}
+.msheet .cv .kebab{opacity:1}
+.newask--phone{padding-top:8px;gap:14px}
+.newask--phone h2{font-size:var(--t-xl)}
+.newask--phone .starters{grid-template-columns:1fr}
+.mscroll .scoperow .sp,.mscroll .scoperow > span:first-child{display:none}
+.mscroll .scoperow{gap:6px}
+.mscroll .scoperow .chip{padding:3px 8px;font-size:9px}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { deleteAskThread, renameAskThread } from "@/lib/counter/actions/conversation"
 
@@ -42,12 +42,15 @@ export function ThreadActions({
   id,
   title,
   onDeleted,
+  children,
 }: {
   id: string
   /** The thread's stored name, or null before the model has written one. */
   title: string | null
   /** The thread is gone; the surface decides where the reader now is. */
   onDeleted: () => void
+  /** Anything the surface wants at the end of the row — the phone's "Threads". */
+  children?: ReactNode
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -150,6 +153,7 @@ export function ThreadActions({
           Keep
         </button>
       ) : null}
+      {children}
     </div>
   )
 }
