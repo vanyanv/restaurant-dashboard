@@ -3,6 +3,7 @@ import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { getConversation, searchConversations } from "@/lib/chat/conversation"
 import { selectFiledReturn, type FiledReturn } from "@/lib/chat/return"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
+import type { AskTurnMeta } from "@/lib/counter/ask-meta"
 import type { SectionData } from "@/lib/counter/section-data"
 
 /**
@@ -203,6 +204,43 @@ function filedFrom(
 const loadThread = cache(
   async (accountId: string, conversationId: string): Promise<AskThread | null> => {
     const detail = await getConversation(chatPrisma, accountId, conversationId)
+
+    /*
+     * THE TURN ROWS, JOINED BY THE QUESTION THEY ANSWERED.
+     *
+     * `ChatTurn` has no foreign key to `Message` — it was written as an audit
+     * log, one row per request, beside the transcript rather than inside it.
+     * The two agree on one thing: the user text the request carried
+     * (`userMessage` is `Message.content` of the user row, truncated to 4KB).
+     * So each answer is matched to the first unclaimed turn row whose
+     * `userMessage` is its question's stored content. Order alone would
+     * misalign the moment one request errored — that path writes a turn row
+     * and no assistant message.
+     */
+    const turnRows = await chatPrisma.chatTurn.findMany({
+      where: { conversationId },
+      orderBy: { occurredAt: "asc" },
+      select: {
+        id: true,
+        userMessage: true,
+        feedback: true,
+        aiUsageEvent: { select: { estimatedCostUsd: true, durationMs: true } },
+      },
+    })
+    const claimed = new Set<string>()
+    const metaFor = (storedQuestion: string): AskTurnMeta | null => {
+      const key = storedQuestion.slice(0, 4000)
+      const row = turnRows.find((r) => !claimed.has(r.id) && r.userMessage === key)
+      if (!row) return null
+      claimed.add(row.id)
+      return {
+        chatTurnId: row.id,
+        costUsd: row.aiUsageEvent ? Number(row.aiUsageEvent.estimatedCostUsd) : null,
+        durationMs: row.aiUsageEvent?.durationMs ?? null,
+        feedback: row.feedback,
+      }
+    }
+
     return {
       id: detail.id,
       title: detail.title,
@@ -217,10 +255,12 @@ const loadThread = cache(
           // answers in a row (a retry that persisted twice) still attributes
           // each of them to a question the reader actually asked.
           let question = ""
+          let stored = ""
           if (!isUser) {
             for (let j = i - 1; j >= 0; j--) {
               if (rows[j].role === "user") {
-                question = questionFrom(rows[j].content)
+                stored = rows[j].content
+                question = questionFrom(stored)
                 break
               }
             }
@@ -237,12 +277,13 @@ const loadThread = cache(
               // row makes in `toolNamesFrom`, so a restored turn and a fresh one
               // name the same sources.
               .filter((name) => name !== "fileReturn"),
+            at: m.createdAt,
+            meta: isUser ? null : metaFor(stored),
           }
         }),
     }
   },
 )
-
 /**
  * The question as the reader TYPED it, recovered from what was stored.
  *

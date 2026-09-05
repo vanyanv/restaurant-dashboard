@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import {
@@ -14,7 +15,7 @@ import { Prisma } from "@/generated/prisma/client"
 import { authOptions, hasOwnerAccess } from "@/lib/auth"
 import { rateLimit, RATE_LIMIT_TIERS } from "@/lib/rate-limit"
 import { prisma } from "@/lib/prisma"
-import { recordAiUsage } from "@/lib/monitoring/ai-usage"
+import { computeCostUsd, recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { chatTools } from "@/lib/chat/tools"
 import {
@@ -206,6 +207,17 @@ export async function POST(req: Request) {
   const capturedToolErrors: Record<string, string> = {}
   const stepStartTimes = new Map<string, number>()
   const turnStartMs = Date.now()
+  /*
+   * THE TURN'S ID IS DECIDED BEFORE THE TURN RUNS.
+   *
+   * `ChatTurn` is written in `onFinish`, after the stream has closed, so the
+   * client could never learn which row its answer became — and a thumb that
+   * cannot name its turn has nothing to write to. Minting the id here and
+   * stamping it on the message at `finish` (see `messageMetadata` below)
+   * lets the footer rate the turn it is under, live, with the same id a
+   * restored thread reads back out of the table.
+   */
+  const chatTurnId = randomUUID()
 
   const modelMessages = [...priorMessages, ...(await convertToModelMessages(body.messages))]
 
@@ -324,6 +336,7 @@ export async function POST(req: Request) {
       try {
         await prisma.chatTurn.create({
           data: {
+            id: chatTurnId,
             conversationId: conversationId!,
             userId: ownerId,
             userMessage: userMessageStored,
@@ -380,6 +393,7 @@ export async function POST(req: Request) {
     try {
       await prisma.chatTurn.create({
         data: {
+          id: chatTurnId,
           conversationId: conversationId!,
           userId: ownerId,
           userMessage: userMessageStored,
@@ -395,7 +409,40 @@ export async function POST(req: Request) {
     throw err
   }
 
-  const response = result.toUIMessageStreamResponse()
+  /*
+   * WHAT THE TURN COST, ON THE TURN.
+   *
+   * The footer under an answer prints "$0.004 · 5.8s" and it prints the
+   * figures `AiUsageEvent` records — not an estimate the client made. The
+   * usage is only known at `finish`, so it rides the message as metadata:
+   * `useAsk` reads it off `message.metadata`, and the adapter reads the same
+   * three fields back off `ChatTurn` + `AiUsageEvent` for a restored thread.
+   * One shape (`AskTurnMeta`), two sources, same numbers.
+   */
+  const response = result.toUIMessageStreamResponse({
+    messageMetadata: ({ part }) => {
+      if (part.type !== "finish") return undefined
+      const usage = part.totalUsage as
+        | {
+            inputTokens?: number
+            outputTokens?: number
+            inputTokenDetails?: { cacheReadTokens?: number }
+            cachedInputTokens?: number
+          }
+        | undefined
+      const cached = usage?.inputTokenDetails?.cacheReadTokens ?? usage?.cachedInputTokens ?? 0
+      return {
+        chatTurnId,
+        durationMs: Date.now() - turnStartMs,
+        costUsd: computeCostUsd(
+          CHAT_ROUTING_MODEL,
+          usage?.inputTokens ?? 0,
+          usage?.outputTokens ?? 0,
+          cached,
+        ),
+      }
+    },
+  })
   // Surface the conversation id so the client can pin it after first turn.
   response.headers.set("x-conversation-id", conversationId)
   return response
