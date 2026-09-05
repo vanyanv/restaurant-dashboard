@@ -44,7 +44,13 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     turns: AskEngine["turns"]
     state: AskEngine["state"]
     conversationId: string | null
-  }>({ turns: [], state: { status: "idle" }, conversationId: initialConversationId })
+    askedAt: number | null
+  }>({
+    turns: [],
+    state: { status: "idle" },
+    conversationId: initialConversationId,
+    askedAt: null,
+  })
 
   const onEngine = useCallback((engine: AskEngine) => {
     const first = engineRef.current === null
@@ -63,6 +69,7 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
       turns: engine.turns,
       state: engine.state,
       conversationId: engine.conversationId,
+      askedAt: engine.askedAt,
     })
   }, [])
 
@@ -78,6 +85,17 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
 
   const reset = useCallback(() => {
     if (engineRef.current) engineRef.current.reset()
+    else pendingRef.current = null
+  }, [])
+
+  /*
+   * Before the engine lands there is no stream to cut, so the only thing
+   * `stop` can mean is "drop the question that is waiting to be sent" — the
+   * same reading `reset` takes above. A reader who presses stop in that window
+   * gets what they asked for: nothing is sent when the chunk arrives.
+   */
+  const stop = useCallback(() => {
+    if (engineRef.current) engineRef.current.stop()
     else pendingRef.current = null
   }, [])
 
@@ -100,6 +118,10 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     conversationId: engineRef.current ? snapshot.conversationId : initialConversationId,
     ask,
     follow,
+    stop,
+    // Null until the engine sends: nothing has been asked, so the turn footer's
+    // live seconds have no anchor to count from yet.
+    askedAt: snapshot.askedAt,
     reset,
     engineMount,
   }

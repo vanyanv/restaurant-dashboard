@@ -25,6 +25,7 @@ import {
   deleteAllAskThreads,
   deleteAskThread,
   forkAskThread,
+  rateAskTurn,
   renameAskThread,
 } from "@/lib/counter/actions/conversation"
 import type {
@@ -35,6 +36,8 @@ import type {
 } from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
+import type { AskFeedback } from "@/lib/counter/ask-feedback"
+import { threadDayLabel } from "@/lib/counter/thread-groups"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
@@ -195,8 +198,17 @@ export function CounterAskClient({
     origin: params.get("asked"),
   })
 
-  const { turns, state, conversationId, ask, follow, reset, engineMount } =
-    useAskDeferred(urlConversationId)
+  const {
+    turns,
+    state,
+    conversationId,
+    ask,
+    follow,
+    stop,
+    askedAt,
+    reset,
+    engineMount,
+  } = useAskDeferred(urlConversationId)
 
   /*
    * ASK WHAT THE URL SAYS — once, and only for a thread that has no id yet.
@@ -450,6 +462,42 @@ export function CounterAskClient({
   /** What the rail's list reported it holds — see `ConversationsRail.count`. */
   const [railCount, setRailCount] = useState<number | null>(null)
 
+  /*
+   * THE TURN FOOTER'S TWO VERBS. A thumb writes `ChatTurn.feedback` through
+   * the turn's id; a turn with no id (its row was never written) accepts the
+   * press and says so rather than silently doing nothing. Fork branches
+   * through the assistant message and opens the branch as the current thread.
+   */
+  const rate = useCallback(
+    async (chatTurnId: string | null, feedback: AskFeedback | null) => {
+      if (!chatTurnId) return "This turn was not recorded, so it cannot be rated"
+      const r = await rateAskTurn({ chatTurnId, feedback })
+      return r.ok ? null : r.error
+    },
+    [],
+  )
+  const forkAt = useCallback(
+    (threadId: string, messageId: string) => {
+      void forkAskThread({ id: threadId, throughMessageId: messageId }).then((r) => {
+        if (r.ok) openThread(r.id)
+      })
+    },
+    [openThread],
+  )
+
+  /*
+   * Seconds on the LIVE turn, before the route's metadata lands. Ticks only
+   * while a turn is in flight; once `meta.durationMs` arrives the footer
+   * prints that instead (D2 — a measurement, then the record).
+   */
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!askPending(state)) return
+    const t = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(t)
+  }, [state])
+  const liveMs = askedAt !== null ? now - askedAt : null
+
   const { range, presetId, comparisonId } = counterParams
   // The window named by its ENDS, as the prototype's sub-line names it
   // ("reading Aug 20 – Aug 26") and as every other Counter page names it.
@@ -569,10 +617,26 @@ export function CounterAskClient({
                         it. Inside the Section because the name comes with the
                         thread — there is nothing to rename until it loads. */}
                     <ThreadActions id={t.id} title={t.title} onDeleted={closeThread} />
-                    {storedTurns(t).map((turn) =>
-                      turn.role === "user" ? (
-                        <div className="youmsg" key={turn.id}>
-                          {turn.text}
+                    {storedTurns(t).map((turn, i, all) => {
+                      /*
+                       * A DAY SEPARATOR where the thread crossed midnight —
+                       * the mock's `.daysep`. Cut on the row's own `at`, and
+                       * labelled the way the rail labels its groups so the
+                       * two never disagree about what "Yesterday" is.
+                       */
+                      const prev = i > 0 ? all[i - 1] : null
+                      const crossed =
+                        prev !== null && prev.at.toDateString() !== turn.at.toDateString()
+                      const sep = crossed ? (
+                        <div className="daysep">
+                          {threadDayLabel(turn.at, today)} ·{" "}
+                          {turn.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      ) : null
+                      return turn.role === "user" ? (
+                        <div key={turn.id} className="turn">
+                          {sep}
+                          <div className="youmsg">{turn.text}</div>
                         </div>
                       ) : (
                         /*
@@ -590,9 +654,14 @@ export function CounterAskClient({
                           state={restoredAskState(turn)}
                           className="ans"
                           onFollowUp={submit}
+                          foot={{
+                            meta: turn.meta,
+                            onRate: (f) => rate(turn.meta?.chatTurnId ?? null, f),
+                            onFork: () => forkAt(t.id, turn.id),
+                          }}
                         />
-                      ),
-                    )}
+                      )
+                    })}
                   </>
                 )
               }
@@ -616,6 +685,11 @@ export function CounterAskClient({
                 // document-level delegation — here that would open the palette
                 // OVER this page and answer in it.
                 onFollowUp={submit}
+                foot={{
+                  meta: askAnswer(turn.state)?.meta ?? null,
+                  liveDurationMs: i === shown.length - 1 ? liveMs : null,
+                  onRate: (f) => rate(askAnswer(turn.state)?.meta?.chatTurnId ?? null, f),
+                }}
               />
             </div>
           ))}

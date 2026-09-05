@@ -937,16 +937,19 @@ button.wkd {
  * filling `to` state of `transform: none` traps `position: fixed` children,
  * and the phone's composer is fixed.
  */
-.chat > .youmsg,
-.chat > .ans,
-.mchat > .youmsg,
-.mchat > .manswer {
+.chat .youmsg,
+.chat .ans,
+.mchat .youmsg,
+.mchat .manswer {
   animation: cnter .3s var(--ease) backwards;
 }
-.chat > .ans,
-.mchat > .manswer {
+.chat .ans,
+.mchat .manswer {
   animation-delay: 36ms;
 }
+/* Descendant, not child, since 2026-09-05: a live turn sits in its own
+   wrapper and a restored one inside its `Section`, so the child selector
+   above matched neither and the entry this comment describes never ran. */
 
 @media (prefers-reduced-motion: reduce) {
   /*
@@ -965,7 +968,7 @@ button.wkd {
   .sendbtn:active, .navbtn:active, .rail__signout:active {
     transform: none !important;
   }
-  .chat > .youmsg, .chat > .ans, .mchat > .youmsg, .mchat > .manswer {
+  .chat .youmsg, .chat .ans, .mchat .youmsg, .mchat .manswer {
     animation: none !important;
   }
 }
@@ -2422,3 +2425,37 @@ html[data-theme-switching] .ct-root *::after {
 .convs__f button{margin-left:auto;font:inherit;color:var(--ink-3);border:0;background:none;padding:0;cursor:pointer;transition:color .14s var(--ease)}
 .convs__f button:hover,.convs__f button.arming{color:var(--bad)}
 @media (prefers-reduced-motion: reduce){.cv.leaving,.cvmenu{transition-duration:.01ms!important}}
+
+/*
+ * THE TURN FOOTER'S THUMBS, AND THE DAY SEPARATOR — `ask-page-mock.html`.
+ *
+ * ADDITIONS to the prototype's `.turnfoot` ("Read 4 sources · $0.041 · 6.2s ·
+ * Fork from here · Copy"), which it drew and never wired. `.thumbs` is two
+ * 22px buttons; `.pop` is the thumbs-down question, scaled from the thumb it
+ * belongs to (bottom-right origin, 150ms — the popover rule: a popover grows
+ * from its trigger, a modal from the centre); `.thanks` is the line the
+ * answer becomes. `.daysep` is `.cvgrp`'s caption between two hairlines.
+ * `--good-wash`/`--bad-wash` are the lit states, the same two washes the
+ * status pills use for the same two meanings.
+ */
+.turnfoot{gap:12px;position:relative}
+.turnfoot .sp{margin-left:auto}
+.thumbs{display:inline-flex;gap:2px;position:relative}
+.thumbs>button{width:22px;height:22px;display:grid;place-items:center;border-radius:4px;transition:background-color .16s var(--ease),color .16s var(--ease),transform .1s ease-out}
+.thumbs>button:hover{background:var(--sunk);color:var(--ink)}
+.thumbs>button:active{transform:scale(.9)}
+.thumbs>button svg{width:12px;height:12px}
+.thumbs>button.on{color:var(--good);background:var(--good-wash)}
+.thumbs>button.on.dn{color:var(--bad);background:var(--bad-wash)}
+.pop{position:absolute;right:0;bottom:calc(100% + 8px);width:230px;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r);box-shadow:0 18px 40px -20px var(--raise);padding:6px;display:grid;gap:2px;transform-origin:bottom right;opacity:0;transform:scale(.96) translateY(3px);transition:opacity .15s var(--ease),transform .15s var(--ease);pointer-events:none;letter-spacing:0;text-transform:none;font-family:var(--body);font-size:var(--t-body);z-index:4}
+.pop.on{opacity:1;transform:none;pointer-events:auto}
+.pop .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding:4px 8px 2px}
+.pop button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;border-radius:var(--r-sm);background:none;font:inherit;color:var(--ink);cursor:pointer;transition:background-color .12s var(--ease)}
+.pop button:hover{background:var(--accent-wash);color:var(--accent-hi)}
+.pop button span{display:block;font-size:var(--t-cap);color:var(--ink-3)}
+.thanks{display:inline-flex;align-items:center;gap:6px;color:var(--good);opacity:0;transform:translateY(2px);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.thanks.on{opacity:1;transform:none}
+.daysep{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+.daysep::before,.daysep::after{content:"";flex:1;height:1px;background:var(--line)}
+.turn{display:grid;gap:12px}
+@media (prefers-reduced-motion: reduce){.pop,.thanks{transition-duration:.01ms!important}}

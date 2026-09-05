@@ -5,6 +5,7 @@ import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { Strip } from "@/components/counter/surface/strip"
 import { MStrip } from "@/components/counter/shell/m-strip"
 import { Thinking } from "@/components/counter/ask/thinking"
+import { TurnFoot, type TurnFootProps } from "@/components/counter/ask/turn-foot"
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
@@ -119,6 +120,7 @@ export function AskAnswerBody({
   verdictShownAbove = false,
   onFollowUp,
   figures = "strip",
+  foot,
 }: {
   state: AskState
   className?: string
@@ -128,6 +130,14 @@ export function AskAnswerBody({
   onFollowUp?: (question: string) => void
   /** `.strip` on the desk's two surfaces, `.mstrip` on the phone. */
   figures?: "strip" | "mstrip"
+  /**
+   * The turn footer (cost, seconds, thumbs, fork, copy) — the page passes
+   * it; the palette does not, because a palette answer is one question and
+   * one answer, dismissed with Escape, and has no turn to keep (D2 of the
+   * front-door spec). `read` and `copyText` are filled in here from the
+   * answer, so the caller names only what it alone knows.
+   */
+  foot?: Omit<TurnFootProps, "read" | "copyText">
 }) {
   const { status } = state
   const answer = askAnswer(state)
@@ -158,6 +168,13 @@ export function AskAnswerBody({
   // …and is then not repeated underneath itself.
   const note = verdictAbove ? "" : prose
   const caveat = failure ?? (empty ? prose : "")
+  const copyText = [
+    filed?.verdict ?? "",
+    ...filedFigures.map((f) => `${f.label}: ${f.value}${f.delta ? ` (${f.delta})` : ""}`),
+    answer?.body ?? "",
+  ]
+    .filter(Boolean)
+    .join("\n")
 
   return (
     <div className={className} aria-live="polite" aria-busy={status === "asking"}>
@@ -218,6 +235,7 @@ export function AskAnswerBody({
               )}
             </div>
           ) : null}
+          {foot && answer ? <TurnFoot {...foot} read={answer.read} copyText={copyText} /> : null}
         </>
       )}
     </div>

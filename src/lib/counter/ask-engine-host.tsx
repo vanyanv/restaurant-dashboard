@@ -34,10 +34,12 @@ export function AskEngineHost({
 
   useEffect(() => {
     onEngine(engine)
-    // Deps are the three DATA halves on purpose: `ask`/`follow`/`reset` are
-    // stable useCallbacks inside useAsk, and publishing on every render would
-    // loop through the parent's setState.
-  }, [engine.turns, engine.state, engine.conversationId, onEngine])
+    // Deps are the four DATA halves on purpose: `ask`/`follow`/`stop`/`reset`
+    // are stable useCallbacks inside useAsk, and publishing on every render
+    // would loop through the parent's setState. `askedAt` joins them because
+    // the turn footer counts live seconds from it; it moves once per question,
+    // not per tick, so it costs one extra publish per send.
+  }, [engine.turns, engine.state, engine.conversationId, engine.askedAt, onEngine])
 
   return null
 }
