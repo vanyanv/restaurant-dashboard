@@ -19,8 +19,20 @@ import {
 // BY PATH, not through the ask barrel: it reaches a `"use server"` module and
 // the barrel is shared with the overview clients. See that barrel's own note.
 import { ThreadActions } from "@/components/counter/ask/thread-actions"
+import type { ConversationActions } from "@/components/counter/ask/conversations"
 import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion"
-import type { AskSections, AskThread, AskTurn } from "@/lib/counter/adapters/ask"
+import {
+  deleteAllAskThreads,
+  deleteAskThread,
+  forkAskThread,
+  renameAskThread,
+} from "@/lib/counter/actions/conversation"
+import type {
+  AskConversation,
+  AskSections,
+  AskThread,
+  AskTurn,
+} from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
@@ -398,6 +410,46 @@ export function CounterAskClient({
     })
   }, [params, pathname, router, reset, startTransition])
 
+  /*
+   * THE RAIL'S FOUR VERBS. Each reaches a server action and then tells the
+   * router what changed; the rail itself only reports the press (see
+   * `ConversationActions`). A deleted CURRENT thread closes the page's
+   * address the way the head's Delete does; any other deletion, and every
+   * rename, is a refresh so the rail re-reads.
+   */
+  const railActions = useMemo<ConversationActions>(
+    () => ({
+      onRename: async (id, title) => {
+        const r = await renameAskThread({ id, title })
+        if (!r.ok) return r.error
+        router.refresh()
+        return null
+      },
+      onDelete: async (id) => {
+        const r = await deleteAskThread({ id })
+        if (!r.ok) return r.error
+        if (id === urlConversationId) closeThread()
+        else router.refresh()
+        return null
+      },
+      onFork: (c: AskConversation) => {
+        if (!c.lastAnswerId) return
+        void forkAskThread({ id: c.id, throughMessageId: c.lastAnswerId }).then((r) => {
+          if (r.ok) openThread(r.id)
+        })
+      },
+    }),
+    [router, urlConversationId, closeThread, openThread],
+  )
+  const deleteAll = useCallback(async () => {
+    const r = await deleteAllAskThreads()
+    if (!r.ok) return r.error
+    newThread()
+    return null
+  }, [newThread])
+  /** What the rail's list reported it holds — see `ConversationsRail.count`. */
+  const [railCount, setRailCount] = useState<number | null>(null)
+
   const { range, presetId, comparisonId } = counterParams
   // The window named by its ENDS, as the prototype's sub-line names it
   // ("reading Aug 20 – Aug 26") and as every other Counter page names it.
@@ -462,7 +514,13 @@ export function CounterAskClient({
         * grid degrades to one column without a second layout.
         */}
       <div className="askpage">
-        <ConversationsRail query={typed} onQuery={onQuery} onNew={newThread}>
+        <ConversationsRail
+          query={typed}
+          onQuery={onQuery}
+          onNew={newThread}
+          count={railCount}
+          onDeleteAll={deleteAll}
+        >
           <Section
             bare
             title="Conversations"
@@ -479,6 +537,8 @@ export function CounterAskClient({
                 // the server rather than by the reader's own clock.
                 today={today}
                 onOpen={openThread}
+                actions={railActions}
+                onCount={setRailCount}
               />
             )}
           </Section>

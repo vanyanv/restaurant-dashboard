@@ -50,6 +50,12 @@ export interface ConversationSummary {
    * query.
    */
   answerCount: number
+  /**
+   * The newest assistant message, for "Fork from the end": `forkConversation`
+   * branches THROUGH a message id, and the rail has no other way to name the
+   * last one without loading the thread it is about to fork.
+   */
+  lastAnswerId: string | null
 }
 
 export interface ConversationDetail extends ConversationSummary {
@@ -210,7 +216,11 @@ export async function searchConversations(
        * is the answer and not a gap: those are the threads whose turn failed
        * before an answer was written.
        */
-      messages: { where: { role: "assistant" }, select: { id: true } },
+      messages: {
+        where: { role: "assistant" },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
   })
   return rows.map((r) => ({
@@ -220,6 +230,7 @@ export async function searchConversations(
     updatedAt: r.updatedAt,
     messageCount: r._count.messages,
     answerCount: r.messages.length,
+    lastAnswerId: r.messages.length > 0 ? r.messages[r.messages.length - 1].id : null,
   }))
 }
 
@@ -252,7 +263,11 @@ export async function listConversations(
        * is the answer and not a gap: those are the threads whose turn failed
        * before an answer was written.
        */
-      messages: { where: { role: "assistant" }, select: { id: true } },
+      messages: {
+        where: { role: "assistant" },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
   })
   return rows.map((r) => ({
@@ -262,6 +277,7 @@ export async function listConversations(
     updatedAt: r.updatedAt,
     messageCount: r._count.messages,
     answerCount: r.messages.length,
+    lastAnswerId: r.messages.length > 0 ? r.messages[r.messages.length - 1].id : null,
   }))
 }
 
@@ -319,6 +335,8 @@ export async function getConversation(
     // Counted from the rows already loaded — a detail read has every message
     // in hand, so it needs no second query to say how many are answers.
     answerCount: c.messages.filter((m) => m.role === "assistant").length,
+    lastAnswerId:
+      [...c.messages].reverse().find((m) => m.role === "assistant")?.id ?? null,
     messages: c.messages,
   }
 }

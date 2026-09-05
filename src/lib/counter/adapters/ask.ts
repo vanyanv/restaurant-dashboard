@@ -55,6 +55,8 @@ export interface AskConversation {
   turns: number
   /** Last activity, which is what the rail orders and dates by. */
   updatedAt: Date
+  /** The last answer's `Message.id` — what "Fork from the end" branches through. */
+  lastAnswerId: string | null
 }
 
 /** One restored turn: what was asked, what came back, what it read. */
@@ -152,6 +154,7 @@ const loadConversations = cache(
           title: c.title,
           turns: c.answerCount,
           updatedAt: c.updatedAt,
+          lastAnswerId: c.lastAnswerId,
         }))
     )
   },

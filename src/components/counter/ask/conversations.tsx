@@ -1,9 +1,10 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { SearchGlyph } from "@/components/counter/surface/search-glyph"
 import type { AskConversation } from "@/lib/counter/adapters/ask"
 import { groupThreadsByDay, threadTurnLabel } from "@/lib/counter/thread-groups"
+import { DotsGlyph, ForkGlyph, PenGlyph, PlusGlyph, TrashGlyph } from "./rail-glyphs"
 
 /**
  * The `.convs` rail — what this account has already asked.
@@ -23,14 +24,20 @@ import { groupThreadsByDay, threadTurnLabel } from "@/lib/counter/thread-groups"
  * database held **39 conversations** with model-written titles and turn
  * counts by the time this was built. The rail was never waiting on a backend.
  *
- * ## What a row can honestly offer
+ * ## What a row can do now (the Sept-5 mock)
  *
- * `ChatTurn` persists `userMessage`, `assistantMessage` and `toolsUsed` — the
- * question, the prose, and what was read. It does NOT persist the
- * `FiledReturn`, so a restored thread has no figures and this rail must not
- * promise any. Selecting a row opens that thread; the strip that was on
- * screen when it was first answered is gone and is not reconstructed from
- * guesses.
+ * `docs/counter/ask-page-mock.html` gave every row a ⋯ menu — Rename, Fork
+ * from the end, Delete — and the rail a footer with the count and a two-step
+ * Delete all. All four verbs reach server actions that already existed or
+ * wrap functions that did (`src/lib/counter/actions/conversation.ts`); what
+ * was missing was a place in the rail to press. The rules the head's
+ * `ThreadActions` set are kept exactly: a rename is inline (Enter saves,
+ * Escape keeps the old name, so does blur), a delete arms in place ("Delete
+ * for good?" · Delete / Keep) and a click anywhere else disarms it.
+ *
+ * The rail does not own the mutations. It reports what the reader pressed and
+ * the page decides what a deleted current thread means for the URL — the
+ * same split `ThreadActions` makes with `onDeleted`.
  *
  * ## The markup is the sheet's
  *
@@ -43,127 +50,381 @@ import { groupThreadsByDay, threadTurnLabel } from "@/lib/counter/thread-groups"
  * the style hook and the correct assistive announcement — one attribute doing
  * the job it is actually for.
  */
-/**
- * THE SHELL — the box, its header, "New", and the search field.
- *
- * Separate from the rows because the rows live inside a `<Section>`, and a
- * `Section` whose data is empty renders `Empty` INSTEAD of its children. With
- * the search field inside them, searching for something that matches nothing
- * would take the search field off screen along with the rows, and the reader
- * would have no way back except the browser's own history. The control that
- * caused a state has to survive that state.
- */
+export interface ConversationActions {
+  /** Returns an error to show on the row, or null when the rename landed. */
+  onRename: (id: string, title: string) => Promise<string | null>
+  /** Returns an error to show on the row, or null when the thread is gone. */
+  onDelete: (id: string) => Promise<string | null>
+  /** Branches through the thread's last answer and opens the branch. */
+  onFork: (c: AskConversation) => void
+}
+
 export function ConversationsRail({
   query,
   onQuery,
   onNew,
+  count,
+  onDeleteAll,
   children,
 }: {
-  /** What is being searched for, from `?cq=`. */
   query: string
   onQuery: (next: string) => void
   onNew: () => void
-  /** The `<Section>` holding the rows. */
+  /**
+   * How many rows the list holds — reported up by `Conversations` through
+   * `onCount`, because the rail renders before the section's rows stream in
+   * and the footer must not print a number it has not got. `null` hides it.
+   */
+  count: number | null
+  /** The footer's two-step; returns an error, or null when they are all gone. */
+  onDeleteAll: () => Promise<string | null>
   children: ReactNode
 }) {
+  const search = useRef<HTMLInputElement>(null)
+
+  /*
+   * `/` from anywhere on the page focuses the search — the mock's `<kbd>/</kbd>`
+   * beside it is a promise, and this keeps it. Not while typing somewhere
+   * else: a `/` in the composer opens the shortcut menu, and a `/` in a
+   * rename is a character.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return
+      e.preventDefault()
+      search.current?.focus()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [])
+
   return (
     <div className="convs">
       <div className="convs__h">
         <span>Conversations</span>
         <button type="button" onClick={onNew}>
+          <PlusGlyph />
           New
         </button>
       </div>
-      {/*
-        * `.convs__q` — the one thing on this rail the prototype does not have,
-        * because the prototype's rail is four hand-written threads and this
-        * one is however many the account has asked. `searchConversations`
-        * matches TITLES AND TURN TEXT, so a thread the reader remembers by a
-        * number in its answer is reachable; a rail of auto-generated titles
-        * alone is not.
-        */}
       <label className="convs__q">
         <SearchGlyph />
         <input
+          ref={search}
           type="search"
           value={query}
           placeholder="Search threads"
           aria-label="Search conversations"
           onChange={(e) => onQuery(e.target.value)}
         />
+        <kbd aria-hidden="true">/</kbd>
       </label>
-      {children}
+      <div className="convs__list">{children}</div>
+      {count !== null && count > 0 ? (
+        <ConversationsFoot count={count} onDeleteAll={onDeleteAll} />
+      ) : null}
     </div>
   )
 }
 
-/**
- * The rows themselves — one `.cv` per thread, under a `.cvgrp` day heading.
- *
- * ## The second line used to say nothing
- *
- * Every row read `Aug 28 · 1 turn`. The turn count is 1 for 40 of the
- * account's 47 threads (the adapter says so in its own note), so it appeared
- * on almost every row and separated none of them; and six consecutive rows
- * repeating `Sep 1` under six titles that all begin "weekly sales" is a date
- * printed as decoration rather than as a way to find anything.
- *
- * So the date is hoisted into a heading over the run of rows it covers, and
- * the turn count is drawn only when a thread was actually returned to. A
- * single-exchange row is now its title and nothing else, which is also what
- * makes the multi-turn ones visible at a glance. See
- * `@/lib/counter/thread-groups`.
- *
- * `today` comes down from the page rather than from `new Date()` here: the
- * word "Today" must be decided once, on the server, or the server and the
- * client can disagree about it across a hydration.
- */
+/** The rail's footer: how many, and the two-step "Delete all". */
+function ConversationsFoot({
+  count,
+  onDeleteAll,
+}: {
+  count: number
+  onDeleteAll: () => Promise<string | null>
+}) {
+  const [arming, setArming] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+
+  // A click anywhere that is not the button itself disarms it.
+  useEffect(() => {
+    if (!arming) return
+    const off = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest("[data-delete-all]")) return
+      setArming(false)
+    }
+    document.addEventListener("click", off)
+    return () => document.removeEventListener("click", off)
+  }, [arming])
+
+  return (
+    <div className="convs__f">
+      <span>{said ?? `${count} thread${count === 1 ? "" : "s"}`}</span>
+      <button
+        type="button"
+        data-delete-all
+        className={arming ? "arming" : undefined}
+        onClick={() => {
+          if (!arming) {
+            setSaid(null)
+            setArming(true)
+            return
+          }
+          setArming(false)
+          void onDeleteAll().then((err) => setSaid(err))
+        }}
+      >
+        {arming ? `Delete all ${count} for good?` : "Delete all"}
+      </button>
+    </div>
+  )
+}
+
 export function Conversations({
   items,
   currentId,
   today,
   onOpen,
+  actions,
+  onCount,
 }: {
   items: AskConversation[]
-  /** The thread being read, if any — marks the row and paints its border. */
   currentId: string | null
-  /** The one `today` this page resolved, for "Today" / "Yesterday". */
+  /** The page's resolved `today` — "Today" decided once, on the server. */
   today: Date
   onOpen: (id: string) => void
+  actions: ConversationActions
+  /** Tells the rail how many rows it is holding, for the footer. */
+  onCount?: (n: number) => void
 }) {
+  useEffect(() => {
+    onCount?.(items.length)
+  }, [items.length, onCount])
+
+  // One menu open at a time, across every group.
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!menuFor) return
+    const off = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest("[data-cv-menu]")) return
+      setMenuFor(null)
+    }
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuFor(null)
+    }
+    document.addEventListener("click", off)
+    document.addEventListener("keydown", esc)
+    return () => {
+      document.removeEventListener("click", off)
+      document.removeEventListener("keydown", esc)
+    }
+  }, [menuFor])
+
   return (
     <>
       {groupThreadsByDay(items, today).map((group) => (
         <div key={group.label}>
           <div className="cvgrp">{group.label}</div>
-          {group.items.map((c) => {
-            const turns = threadTurnLabel(c.turns)
-            return (
-              <button
-                key={c.id}
-                type="button"
-                className="cv"
-                /*
-                 * The attribute is only PRESENT on the current row.
-                 * `aria-current` is not a boolean that can usefully be
-                 * "false": the prototype's selector is `[aria-current="true"]`,
-                 * and emitting `false` on thirty-nine rows would announce each
-                 * of them as a current-ness decision rather than saying
-                 * nothing about them at all.
-                 */
-                {...(c.id === currentId ? { "aria-current": true as const } : {})}
-                onClick={() => onOpen(c.id)}
-              >
-                <b>{c.title ?? "Untitled"}</b>
-                {/* Dropped entirely rather than rendered empty — an empty
-                    caption still costs its line-height, and this row's whole
-                    point is that it has nothing more to say. */}
-                {turns ? <span>{turns}</span> : null}
-              </button>
-            )
-          })}
+          {group.items.map((c) => (
+            <ConversationRow
+              key={c.id}
+              c={c}
+              current={c.id === currentId}
+              menuOpen={menuFor === c.id}
+              onMenu={(open) => setMenuFor(open ? c.id : null)}
+              onOpen={() => onOpen(c.id)}
+              actions={actions}
+            />
+          ))}
         </div>
       ))}
     </>
+  )
+}
+
+function ConversationRow({
+  c,
+  current,
+  menuOpen,
+  onMenu,
+  onOpen,
+  actions,
+}: {
+  c: AskConversation
+  current: boolean
+  menuOpen: boolean
+  onMenu: (open: boolean) => void
+  onOpen: () => void
+  actions: ConversationActions
+}) {
+  const [renaming, setRenaming] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [arming, setArming] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  const meta = threadTurnLabel(c.turns)
+
+  const startRename = () => {
+    onMenu(false)
+    setArming(false)
+    setDraft(c.title ?? "")
+    setRenaming(true)
+  }
+  const finishRename = (save: boolean) => {
+    setRenaming(false)
+    const next = draft.trim()
+    if (!save || !next || next === c.title) return
+    void actions.onRename(c.id, next).then((err) => setSaid(err))
+  }
+  const arm = () => {
+    onMenu(false)
+    setRenaming(false)
+    setSaid(null)
+    setArming(true)
+  }
+  const remove = () => {
+    setArming(false)
+    setLeaving(true)
+    // 180ms is the row's own `.leaving` transition; the request runs
+    // underneath it and the row is gone from the list when it lands.
+    void actions.onDelete(c.id).then((err) => {
+      if (err) {
+        setLeaving(false)
+        setSaid(err)
+      }
+    })
+  }
+
+  // The "row" is a div, not a button, once it holds a menu and an input of
+  // its own: a button cannot contain them. It keeps the button's behaviour —
+  // Enter/Space open, `r` renames, Delete/Backspace arm — via the handlers.
+  const cls = [
+    "cv",
+    arming ? "arming" : "",
+    leaving ? "leaving" : "",
+    menuOpen ? "menu-open" : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+
+  return (
+    <div className="swipe" data-id={c.id}>
+      <div
+        className={cls}
+        role="button"
+        tabIndex={0}
+        {...(current ? { "aria-current": true as const } : {})}
+        onClick={(e) => {
+          if (arming || renaming) return
+          if ((e.target as HTMLElement).closest("[data-cv-menu]")) return
+          onOpen()
+        }}
+        onKeyDown={(e) => {
+          if (renaming || (e.target as HTMLElement).tagName === "INPUT") return
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            if (!arming) onOpen()
+          } else if (e.key === "r" || e.key === "R") {
+            e.preventDefault()
+            startRename()
+          } else if (e.key === "Delete" || e.key === "Backspace") {
+            e.preventDefault()
+            arm()
+          }
+        }}
+      >
+        <span className="tx">
+          {renaming ? (
+            <input
+              className="rn"
+              type="text"
+              value={draft}
+              autoFocus
+              maxLength={80}
+              aria-label="Name this conversation"
+              onChange={(e) => setDraft(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onBlur={() => finishRename(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  finishRename(true)
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  finishRename(false)
+                }
+              }}
+            />
+          ) : (
+            <b>{c.title ?? "Untitled"}</b>
+          )}
+          {said ? (
+            <span className="m is-said">{said}</span>
+          ) : meta ? (
+            <span className="m">{meta}</span>
+          ) : null}
+        </span>
+        {!renaming && !arming ? (
+          <span
+            className="kebab"
+            role="button"
+            tabIndex={-1}
+            aria-label="Thread actions"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            data-cv-menu
+            onClick={(e) => {
+              e.stopPropagation()
+              onMenu(!menuOpen)
+            }}
+          >
+            <DotsGlyph />
+          </span>
+        ) : null}
+        {arming ? (
+          <span className="arm">
+            Delete for good?
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                remove()
+              }}
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              className="keep"
+              onClick={(e) => {
+                e.stopPropagation()
+                setArming(false)
+              }}
+            >
+              Keep
+            </button>
+          </span>
+        ) : null}
+      </div>
+      <div className={`cvmenu${menuOpen ? " on" : ""}`} role="menu" data-cv-menu>
+        <button type="button" role="menuitem" onClick={startRename}>
+          <PenGlyph />
+          Rename
+          <span className="kbd">R</span>
+        </button>
+        {c.lastAnswerId ? (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onMenu(false)
+              actions.onFork(c)
+            }}
+          >
+            <ForkGlyph />
+            Fork from the end
+          </button>
+        ) : null}
+        <button type="button" role="menuitem" className="danger" onClick={arm}>
+          <TrashGlyph />
+          Delete
+          <span className="kbd">⌫</span>
+        </button>
+      </div>
+    </div>
   )
 }
