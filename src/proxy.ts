@@ -353,9 +353,9 @@ export default withAuth(
      * `/dashboard/stores/<id>/edit`, `/dashboard/pnl/<id>` and `/m/settings`.
      * Each is a Server Component whose whole body is `redirect(...)`, which is
      * the documented way to do this and which DOES NOT WORK from inside a
-     * streamed layout. By the time the page component runs, the `(editorial)`
-     * or `(counter)` layout above it has already flushed the shell, the
-     * response headers are gone, and Next falls back to what it can still do:
+     * streamed layout. By the time the page component runs, the layout above
+     * it has already flushed the shell, the response headers are gone, and
+     * Next falls back to what it can still do:
      *
      *     <meta id="__next-page-redirect" http-equiv="refresh" content="1;url=/dashboard/ask">
      *
@@ -370,11 +370,17 @@ export default withAuth(
      * Middleware runs before any rendering, so a redirect from here is a real
      * 307 with no document, no wasted hydration and no second of waiting.
      *
-     * The page files stay where they are. They are the fallback if this list
-     * and the tree ever disagree, and `/dashboard/pnl/<id>` in particular is
-     * still a route on purpose — two server actions call
+     * The page files stay. They are the fallback if this list and the tree
+     * ever disagree, and `/dashboard/pnl/<id>` in particular is still a route
+     * on purpose — two server actions call
      * `revalidatePath("/dashboard/pnl/<id>")`, and a path no route serves
      * revalidates nothing.
+     *
+     * All five desk shims now sit directly under `src/app/dashboard/` rather
+     * than inside a route group. They were graduated out of `(editorial)` on
+     * 2026-09-04, which emptied that group of pages and let its layout — a
+     * cream sidebar, a chat drawer, a QueryProvider and four stylesheets, all
+     * mounted to serve a one-line `redirect()` — be deleted outright.
      *
      * AFTER the phone block above, deliberately: `/dashboard/chat` maps to a
      * phone route and that mapping still wins. It maps to `/m/ask` now —

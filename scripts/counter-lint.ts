@@ -357,12 +357,14 @@ const LEGACY_BASELINE_COMMIT = "aecadf0f90c87bb7d0dc9c3ccb05f7bade67466b"
  * `src/app/dashboard` was the first entry here and it is GONE, which is the
  * outcome this list was shaped to produce. Measured on the day it was deleted:
  * linting that tree with the exemption OFF produced zero violations, so the
- * entry suppressed nothing. 46 of its 51 pages are Counter pages now; the five
- * that are not (`(editorial)/chat`, `(editorial)/operations/costs`,
- * `(editorial)/operations/recipes`, `(editorial)/stores/[id]/edit` and
- * `pnl/[storeId]`) break none of these rules — the editorial design kept its
- * colours in `src/styles/editorial-*.css`, which is why the `src/styles` entry
- * below is still load-bearing and this one stopped being.
+ * entry suppressed nothing. every page under it is a Counter page
+ * now. The five that were not are redirect shims and always were — bodies of
+ * one `redirect()` call that render nothing — and on 2026-09-04 the four under
+ * `(editorial)` were graduated out to sit beside `pnl/[storeId]`, which
+ * emptied that route group of pages and let the whole of it be deleted. They
+ * break none of these rules; the editorial design kept its colours in
+ * `src/styles/editorial-*.css`, which is why the `src/styles` entry below is
+ * still load-bearing and this one stopped being.
  *
  * `tests/styles/counter-lint.test.ts` is what forced the deletion rather than
  * anyone noticing: an entry that suppresses nothing fails its "still

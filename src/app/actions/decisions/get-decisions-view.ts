@@ -16,42 +16,42 @@ import { getLostSales } from "@/app/actions/forecasts/lost-sales-actions"
 import { getMenuEngineering } from "@/app/actions/forecasts/menu-engineering-actions"
 import { getOpportunities } from "@/app/actions/growth/opportunities-actions"
 import { buildBriefing, type BriefingLine } from "@/app/actions/decisions/build-briefing"
-import { bucketByMean, pctVsTrailing, trailingMean, type VolumeBucket } from "@/app/dashboard/(editorial)/decisions/lib/bucket-volume"
+import { bucketByMean, pctVsTrailing, trailingMean, type VolumeBucket } from "@/lib/decisions/bucket-volume"
 import {
   confidenceFromForecast,
   type DotCount,
-} from "@/app/dashboard/(editorial)/decisions/lib/confidence"
+} from "@/lib/decisions/confidence"
 import {
   deadlineFor,
   type DecisionDeadline,
-} from "@/app/dashboard/(editorial)/decisions/lib/deadline"
+} from "@/lib/decisions/deadline"
 import {
   combineEvaluations,
   type Scorecard,
-} from "@/app/dashboard/(editorial)/decisions/lib/scorecard"
-import { computeVitals, type Vitals } from "@/app/dashboard/(editorial)/decisions/lib/vitals"
-import { buildVerdictFacts, verdictSources } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
+} from "@/lib/decisions/scorecard"
+import { computeVitals, type Vitals } from "@/lib/decisions/vitals"
+import { buildVerdictFacts, verdictSources } from "@/lib/decisions/verdict-copy"
 import { getVerdictLine } from "@/app/actions/decisions/get-verdict"
 import { weekDayKeys } from "@/lib/counter/week-window"
 import {
   computeLaborLane,
   type LaborLane,
-} from "@/app/dashboard/(editorial)/decisions/lib/labor-lane"
+} from "@/lib/decisions/labor-lane"
 import {
   OPERATING_HOURS,
   buildHourlyCoverage,
   type HourlyCoverage,
-} from "@/app/dashboard/(editorial)/decisions/lib/hourly-coverage"
+} from "@/lib/decisions/hourly-coverage"
 import {
   mergeAttributions,
   parseAttribution,
   type Attribution,
-} from "@/app/dashboard/(editorial)/decisions/lib/attribution"
+} from "@/lib/decisions/attribution"
 import {
   computeDecisionOutcome,
   type DecisionOutcome,
   type FrozenDay,
-} from "@/app/dashboard/(editorial)/decisions/lib/decision-outcome"
+} from "@/lib/decisions/decision-outcome"
 import { bucketShiftHours } from "@/lib/harri-schedule"
 import {
   stripJargon,
@@ -59,7 +59,7 @@ import {
   translateOpportunityType,
   weatherPhrase,
   eventPhrase,
-} from "@/app/dashboard/(editorial)/decisions/lib/translate"
+} from "@/lib/decisions/translate"
 import type { OpportunityType, OpportunityConfidence } from "@/types/growth"
 
 export interface DecisionDay {

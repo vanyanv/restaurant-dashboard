@@ -11,7 +11,7 @@
  * the comment says which rule.
  */
 
-import type { VerdictFacts } from "@/app/dashboard/(editorial)/decisions/lib/verdict-copy"
+import type { VerdictFacts } from "@/lib/decisions/verdict-copy"
 import type { AdjudicatorCase } from "@/lib/ingredient-match-llm"
 import type {
   ExpectedAdjudication,

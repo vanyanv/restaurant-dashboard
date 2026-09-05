@@ -19,7 +19,7 @@ import {
   computeDecisionOutcome,
   MIN_DAYS_TO_JUDGE,
   type FrozenDay,
-} from "@/app/dashboard/(editorial)/decisions/lib/decision-outcome"
+} from "@/lib/decisions/decision-outcome"
 
 const day = (date: string, predicted: number, spread = 1000): FrozenDay => ({
   date,

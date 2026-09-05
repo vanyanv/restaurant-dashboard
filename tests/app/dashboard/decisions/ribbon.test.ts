@@ -4,7 +4,7 @@
 // so the arithmetic lives here and is pinned.
 
 import { describe, it, expect } from "vitest"
-import { computeRibbon, type RibbonDay } from "@/app/dashboard/(editorial)/decisions/lib/ribbon"
+import { computeRibbon, type RibbonDay } from "@/lib/decisions/ribbon"
 
 const day = (over: Partial<RibbonDay> = {}): RibbonDay => ({
   date: "2026-08-18",

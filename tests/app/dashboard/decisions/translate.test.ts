@@ -8,7 +8,7 @@
 // behaviour so the whitespace can't be trimmed away again.
 
 import { describe, it, expect } from "vitest"
-import { eventPhrase, stripJargon } from "@/app/dashboard/(editorial)/decisions/lib/translate"
+import { eventPhrase, stripJargon } from "@/lib/decisions/translate"
 
 describe("stripJargon — chunk edge whitespace", () => {
   it("keeps the trailing space that joins a chunk to the number after it", () => {

@@ -15,7 +15,7 @@ import { describe, it, expect } from "vitest"
 import {
   OPERATING_HOURS,
   buildHourlyCoverage,
-} from "@/app/dashboard/(editorial)/decisions/lib/hourly-coverage"
+} from "@/lib/decisions/hourly-coverage"
 
 const flat = (orders: number, staffed: number) =>
   OPERATING_HOURS.map((hour) => ({ hour, predictedOrders: orders, staffedHours: staffed }))
