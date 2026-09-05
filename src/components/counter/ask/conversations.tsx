@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { SearchGlyph } from "@/components/counter/surface/search-glyph"
 import type { AskConversation } from "@/lib/counter/adapters/ask"
-import { groupThreadsByDay } from "@/lib/counter/thread-groups"
+import { groupThreadsByDay, threadWhenLabel } from "@/lib/counter/thread-groups"
 import { DotsGlyph, ForkGlyph, PenGlyph, PlusGlyph, TrashGlyph } from "./rail-glyphs"
 
 /**
@@ -223,6 +223,7 @@ export function Conversations({
             <ConversationRow
               key={c.id}
               c={c}
+              today={today}
               current={c.id === currentId}
               menuOpen={menuFor === c.id}
               onMenu={(open) => setMenuFor(open ? c.id : null)}
@@ -238,6 +239,7 @@ export function Conversations({
 
 function ConversationRow({
   c,
+  today,
   current,
   menuOpen,
   onMenu,
@@ -245,6 +247,7 @@ function ConversationRow({
   actions,
 }: {
   c: AskConversation
+  today: Date
   current: boolean
   menuOpen: boolean
   onMenu: (open: boolean) => void
@@ -256,15 +259,9 @@ function ConversationRow({
   const [arming, setArming] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
-  // "3 turns · 14:02" — the mock's caption. The clock for a thread touched
+  // "3 turns · 2:02 PM" — the mock's caption. The clock for a thread touched
   // today, the date otherwise; the day group above already says which.
-  const when = c.updatedAt
-  const sameDay = when.toDateString() === new Date().toDateString()
-  const meta = `${c.turns} turn${c.turns === 1 ? "" : "s"} · ${
-    sameDay
-      ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : when.toLocaleDateString([], { month: "short", day: "numeric" })
-  }`
+  const meta = `${c.turns} turn${c.turns === 1 ? "" : "s"} · ${threadWhenLabel(c.updatedAt, today)}`
 
   const startRename = () => {
     onMenu(false)

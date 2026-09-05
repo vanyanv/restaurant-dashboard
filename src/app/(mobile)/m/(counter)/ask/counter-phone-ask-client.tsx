@@ -38,7 +38,7 @@ import {
   restoredAskState,
 } from "@/lib/counter/ask-state"
 import { useAskDeferred } from "@/lib/counter/use-ask-deferred"
-import { threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
+import { threadClock, threadDayKey, threadDayLabel } from "@/lib/counter/thread-groups"
 import type {
   AskConversation,
   AskSections,
@@ -388,11 +388,11 @@ export function CounterPhoneAskClient({
                 {storedTurns(t).map((turn, i, all) => {
                   const prev = i > 0 ? all[i - 1] : null
                   const crossed =
-                    prev !== null && prev.at.toDateString() !== turn.at.toDateString()
+                    prev !== null && threadDayKey(prev.at) !== threadDayKey(turn.at)
                   const sep = crossed ? (
                     <div className="daysep">
                       {threadDayLabel(turn.at, today)} ·{" "}
-                      {turn.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {threadClock(turn.at)}
                     </div>
                   ) : null
                   return turn.role === "user" ? (

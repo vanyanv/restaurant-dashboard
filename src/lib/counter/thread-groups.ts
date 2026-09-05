@@ -93,3 +93,28 @@ export function groupThreadsByDay<T extends DatedThread>(
   }
   return groups
 }
+
+/**
+ * "10:47 AM" for a thread touched on `today`, "Sep 4" otherwise — the rail
+ * row's caption and the thread's day separator. Formatted in the product's
+ * own zone (every Counter date is LA, see `counterToday`), and with a fixed
+ * locale, so the server and the browser print the same string and hydration
+ * has nothing to disagree about.
+ */
+const TZ = "America/Los_Angeles"
+const clock = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ })
+const day = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: TZ })
+const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: TZ })
+
+export function threadClock(when: Date): string {
+  return clock.format(when)
+}
+
+export function threadWhenLabel(when: Date, today: Date): string {
+  return ymd.format(when) === ymd.format(today) ? clock.format(when) : day.format(when)
+}
+
+/** The LA calendar date, for "did this thread cross midnight". */
+export function threadDayKey(when: Date): string {
+  return ymd.format(when)
+}

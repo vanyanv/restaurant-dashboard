@@ -78,8 +78,12 @@ export function AskComposer({
   const [listening, setListening] = useState(false)
   const [micSaid, setMicSaid] = useState<string | null>(null)
   const rec = useRef<{ recorder: MediaRecorder; chunks: Blob[]; started: number } | null>(null)
-  const canRecord =
-    mic && typeof window !== "undefined" && typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices
+  // Decided after mount, not during render: the server has no recorder and
+  // must not draw a different composer from the one the browser hydrates.
+  const [canRecord, setCanRecord] = useState(false)
+  useEffect(() => {
+    setCanRecord(mic && typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices)
+  }, [mic])
   const micDown = async () => {
     if (rec.current || busy) return
     setMicSaid(null)

@@ -38,7 +38,7 @@ import type {
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import { ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
 import type { AskFeedback } from "@/lib/counter/ask-feedback"
-import { threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
+import { threadClock, threadDayKey, threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
 import { rangeLabel, stepRange } from "@/lib/counter/date-range"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 import {
@@ -679,11 +679,11 @@ export function CounterAskClient({
                        */
                       const prev = i > 0 ? all[i - 1] : null
                       const crossed =
-                        prev !== null && prev.at.toDateString() !== turn.at.toDateString()
+                        prev !== null && threadDayKey(prev.at) !== threadDayKey(turn.at)
                       const sep = crossed ? (
                         <div className="daysep">
                           {threadDayLabel(turn.at, today)} ·{" "}
-                          {turn.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {threadClock(turn.at)}
                         </div>
                       ) : null
                       return turn.role === "user" ? (
