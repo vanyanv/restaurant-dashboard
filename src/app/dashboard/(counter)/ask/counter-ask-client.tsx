@@ -31,7 +31,7 @@ import {
   askTurnsFor,
   restoredAskState,
 } from "@/lib/counter/ask-state"
-import { useAsk } from "@/lib/counter/use-ask"
+import { useAskDeferred } from "@/lib/counter/use-ask-deferred"
 
 /**
  * Counter Ask on the desk — `P.ask` at line 4504 of
@@ -183,7 +183,8 @@ export function CounterAskClient({
     origin: params.get("asked"),
   })
 
-  const { turns, state, conversationId, ask, follow, reset } = useAsk(urlConversationId)
+  const { turns, state, conversationId, ask, follow, reset, engineMount } =
+    useAskDeferred(urlConversationId)
 
   /*
    * ASK WHAT THE URL SAYS — once, and only for a thread that has no id yet.
@@ -429,6 +430,9 @@ export function CounterAskClient({
     /* A FRAGMENT: the rail, the topbar, the store switcher and the ⌘K surface
        belong to `(counter)/layout.tsx`. */
     <>
+      {/* Invisible. Loads the AI SDK chunk after hydration — see
+          `@/lib/counter/use-ask-deferred`. */}
+      {engineMount}
       <PageHead
         title={title}
         // "Asked from Overview · Hollywood · reading Aug 20 – Aug 26". The

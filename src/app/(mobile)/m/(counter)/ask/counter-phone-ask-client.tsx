@@ -18,7 +18,7 @@ import { ASK_PHONE_ROUTE, ASK_STARTERS, describeAskContext } from "@/lib/counter
 import { rangeLabel } from "@/lib/counter/date-range"
 import { readCounterParams } from "@/lib/counter/url-state"
 import { askPending, askTurnsFor, restoredAskState } from "@/lib/counter/ask-state"
-import { useAsk } from "@/lib/counter/use-ask"
+import { useAskDeferred } from "@/lib/counter/use-ask-deferred"
 import { threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
 import type { AskSections, AskThread, AskTurn } from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
@@ -109,7 +109,8 @@ export function CounterPhoneAskClient({
     origin: params.get("asked"),
   })
 
-  const { turns, state, conversationId, ask, follow, reset } = useAsk(urlConversationId)
+  const { turns, state, conversationId, ask, follow, reset, engineMount } =
+    useAskDeferred(urlConversationId)
 
   /*
    * ASK WHAT THE URL SAYS — the desk client's effect, unchanged, and for the
@@ -231,6 +232,9 @@ export function CounterPhoneAskClient({
     /* A FRAGMENT: `.ct-root.ct-phone`, `.mtop` and `.mscroll` belong to
        `(mobile)/m/(counter)/layout.tsx`. */
     <>
+      {/* Invisible. Loads the AI SDK chunk after hydration — see
+          `@/lib/counter/use-ask-deferred`. */}
+      {engineMount}
       {/*
         * THE STORED HALF OF THE THREAD, read-only, in its own `Section` so a
         * restore gets the same six states everything else does rather than a
