@@ -6,11 +6,14 @@ import { chatPrisma } from "@/lib/chat/prisma-chat"
 import {
   ConversationAccessError,
   MAX_CONVERSATION_TITLE,
+  deleteAllConversations,
   deleteConversation,
+  forkConversation,
   getConversation,
   normalizeConversationTitle,
   setConversationTitle,
 } from "@/lib/chat/conversation"
+import { isAskFeedback, type AskFeedback } from "@/lib/counter/ask-feedback"
 
 /**
  * NAMING AND DISCARDING A THREAD, from the Counter Ask rail.
@@ -92,6 +95,83 @@ export async function deleteAskThread(input: { id: string }): Promise<Result<obj
 
 /** The two access failures say different things to a reader; everything else
  *  is reported as itself rather than flattened into "something went wrong". */
+/**
+ * DELETE ALL, FORK, RATE — the three the mock adds to the rail and the footer.
+ *
+ * All three reach functions that already existed: `deleteAllConversations`
+ * (the editorial drawer's "delete everything"), `forkConversation` (the
+ * `/fork` route nobody linked to), and `ChatTurn.feedback` (a column that has
+ * been null on every row since the table was made). What was missing was a
+ * door on the Counter side, and the door is here for the same reason the two
+ * above are: the rail is a client island and this is where its mutations go.
+ */
+export async function deleteAllAskThreads(): Promise<Result<{ deleted: number }>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false, error: "Not signed in" }
+
+  try {
+    const deleted = await deleteAllConversations(chatPrisma, session.user.accountId)
+    return { ok: true, deleted }
+  } catch (err) {
+    return { ok: false, error: describe(err) }
+  }
+}
+
+export async function forkAskThread(input: {
+  id: string
+  throughMessageId: string
+}): Promise<Result<{ id: string }>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false, error: "Not signed in" }
+
+  try {
+    const fork = await forkConversation(
+      chatPrisma,
+      session.user.id,
+      session.user.accountId,
+      input.id,
+      input.throughMessageId,
+    )
+    return { ok: true, id: fork.id }
+  } catch (err) {
+    return { ok: false, error: describe(err) }
+  }
+}
+
+export async function rateAskTurn(input: {
+  chatTurnId: string
+  feedback: AskFeedback | null
+}): Promise<Result<object>> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return { ok: false, error: "Not signed in" }
+  if (input.feedback !== null && !isAskFeedback(input.feedback)) {
+    return { ok: false, error: "That is not a rating" }
+  }
+
+  // `ChatTurn` carries a `conversationId` and no relation, so ownership is
+  // checked through the conversations this account holds: a turn on another
+  // account's thread does not exist for this one.
+  const owned = await chatPrisma.conversation.findMany({
+    where: { accountId: session.user.accountId },
+    select: { id: true },
+  })
+  const turn = await chatPrisma.chatTurn.findFirst({
+    where: { id: input.chatTurnId, conversationId: { in: owned.map((c) => c.id) } },
+    select: { id: true },
+  })
+  if (!turn) return { ok: false, error: "That turn no longer exists" }
+
+  try {
+    await chatPrisma.chatTurn.update({
+      where: { id: turn.id },
+      data: { feedback: input.feedback },
+    })
+  } catch (err) {
+    return { ok: false, error: describe(err) }
+  }
+  return { ok: true }
+}
+
 function describe(err: unknown): string {
   if (err instanceof ConversationAccessError) {
     return err.code === "NOT_OWNED"
