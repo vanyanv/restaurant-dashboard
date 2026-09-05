@@ -40,14 +40,25 @@ interface BudgetRule {
 
 /** Order matters — first match wins. Keep tightest budgets at the top.
  *
- * Numbers reflect post-PR3 baseline + ~5% headroom. Auth/marketing is
- * inflated by framer-motion in the login/signup forms (deferred to a
- * follow-up PR); when that lands, drop the auth budget to ~600 KB. */
+ * Numbers reflect the 2026-09-04 baseline + ~5% headroom, re-measured after
+ * the `sideEffects` declaration (CSS-only) landed in package.json. Without it
+ * the bundler had to assume every module re-exported by the
+ * `@/components/counter` barrel might run import-time side effects, so all
+ * ~79 exports — desk shell included — shipped on every route that imported
+ * any one of them: a single 71 KB chunk carrying AppShell + MTabs +
+ * DateControl sat in the first load of 107 of 114 routes, and every `/m/**`
+ * route ran ~26 KB gzipped over its budget. If a route class goes over now,
+ * check whether someone added a genuinely side-effectful module (it must be
+ * listed in package.json `sideEffects`) before reaching for a bigger budget.
+ *
+ * (The old note here blamed framer-motion in the login/signup forms; those
+ * editorial forms are dead code — nothing imports them since the Counter
+ * login/signup rebuild — and /login carries no framer-motion at all.) */
 const BUDGETS: BudgetRule[] = [
   {
     label: "auth + marketing",
     match: (r) => r === "/login" || r === "/" || r === "/signup/[token]",
-    uncompressedBytes: 800_000,
+    uncompressedBytes: 600_000,
   },
   /*
    * The routes that TALK TO THE MODEL, and so legitimately carry
@@ -65,27 +76,27 @@ const BUDGETS: BudgetRule[] = [
   {
     label: "AI SDK routes (ask + chat)",
     match: (r) => r === "/m/ask" || r === "/dashboard/ask" || r === "/m/chat",
-    uncompressedBytes: 1_250_000,
+    uncompressedBytes: 1_230_000,
   },
   {
     label: "mobile shell",
     match: (r) => r.startsWith("/m"),
-    uncompressedBytes: 700_000,
+    uncompressedBytes: 680_000,
   },
   {
     label: "dashboard chat (AI SDK)",
     match: (r) => r === "/dashboard/chat",
-    uncompressedBytes: 1_750_000,
+    uncompressedBytes: 750_000,
   },
   {
     label: "dashboard route",
     match: (r) => r.startsWith("/dashboard"),
-    uncompressedBytes: 1_600_000,
+    uncompressedBytes: 750_000,
   },
   {
     label: "default",
     match: () => true,
-    uncompressedBytes: 1_500_000,
+    uncompressedBytes: 600_000,
   },
 ]
 

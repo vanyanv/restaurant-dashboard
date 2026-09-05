@@ -775,6 +775,20 @@ Three rules came out of the first pass, each measured rather than assumed:
   swap` makes that a swap rather than a block. Font bytes per screen: 234kB to
   116kB.
 
+- **A barrel of client components is only shakeable if the package says so.**
+  package.json declares `"sideEffects": ["**/*.css"]`; before it did (added
+  2026-09-04), the bundler had to assume any module re-exported by
+  `@/components/counter` might run import-time side effects, so importing one
+  export shipped all ~79 — a 71 KB chunk carrying `AppShell` + `MTabs` +
+  `DateControl` sat in the first load of 107 of 114 routes, phone routes
+  downloaded the desk shell they never render, and every `/m/**` route ran
+  ~26 KB gzipped over its bundle budget. The flip side of the declaration: a
+  new module whose IMPORT must run (a polyfill, a registration) has to be
+  named in package.json `sideEffects`, or an optimized build is free to drop
+  it. CSS is already excluded; nothing else in `src/` imports for effect
+  today (`import "server-only"` is a build-time export condition, not a
+  runtime side effect).
+
 One measurement trap, since it cost a wrong conclusion once: **do not check for
 font preloads by grepping the `<head>`.** On any route with a `loading.tsx` the
 page segment renders after the shell has flushed, so React delivers its font
