@@ -125,8 +125,11 @@ export { useEntry, ENTRY_STAGGER_MS, ENTRY_DURATION_MS, ENTRY_TOTAL_MS } from ".
 export { useCountUp, COUNT_UP_MS } from "./motion/use-count-up"
 export { CountUp, Arriving, type Arrival } from "./motion/count-up"
 export { useTypewriter, TYPE_CHAR_MS } from "./motion/use-typewriter"
+export { useChanged, CHANGED_MS } from "./motion/use-changed"
+export { useFreshKeys, FRESH_MS } from "./motion/use-fresh-keys"
+export { useFlip, FLIP_MS } from "./motion/use-flip"
 export { useChartDraw, LINE_DRAW_MS, BAR_STAGGER_MS } from "./motion/use-chart-draw"
 export { useReducedMotion } from "./motion/use-reduced-motion"
 
 export { CounterThemeProvider, useCounterTheme, themeNoFlashScript } from "./theme-provider"
-export { ThemeToggle } from "./theme-toggle"
+export { ThemeToggle, ThemeRow } from "./theme-toggle"

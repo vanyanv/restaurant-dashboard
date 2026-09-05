@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { signOut } from "next-auth/react"
 import { useEffect, useState, useTransition } from "react"
-import { Logo, MHead, MList, Note, Section, useCounterTransition } from "@/components/counter"
+import { Logo, MHead, MList, Note, Section, ThemeRow, useCounterTransition } from "@/components/counter"
 import { saveNotificationPreferences } from "@/lib/counter/actions/settings"
 import type { SectionSources } from "@/lib/counter/adapters/types"
 import type { SettingsNotifications, SettingsSections } from "@/lib/counter/adapters/settings"
@@ -153,6 +153,12 @@ export function CounterPhoneMoreClient({
         pending={pending}
       >
         {(n) => <Switches data={n} />}
+      </Section>
+
+      {/* Theme is kept in this browser, so the phone gets its own control rather
+          than a note sending the reader to the desk. Static, like "More". */}
+      <Section title="Appearance" meta={() => "kept on this phone"} data={sections.account} pending={pending}>
+        {() => <ThemeRow />}
       </Section>
 
       {/* `P.settings.phone()`'s "More" list: the destinations the four other

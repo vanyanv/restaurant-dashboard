@@ -67,13 +67,25 @@ export function useCountUp(value: number, opts: { durationMs?: number } = {}): n
   // mount effect below ever moves it to `from`.
   const [display, setDisplay] = useState(value)
   const frame = useRef<number | null>(null)
+  /** The last value this hook animated to; null until the first mount effect. */
+  const prevRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (reduced) {
       setDisplay(value)
       return
     }
-    const from = 0
+    // D3 ("only what changed moves"): on mount the figure counts from 0; on
+    // a later change it counts from the figure it was showing; and when the
+    // value did not change it does not move at all. Counting a page from 0
+    // again because one cell changed is how the one cell that did gets lost.
+    const prev = prevRef.current
+    prevRef.current = value
+    if (prev !== null && prev === value) {
+      setDisplay(value)
+      return
+    }
+    const from = prev === null ? 0 : prev
     setDisplay(from)
     const start = performance.now()
 

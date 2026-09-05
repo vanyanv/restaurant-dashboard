@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth"
 import { AppShell } from "@/components/counter"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
+import { getShellStatus } from "@/lib/counter/adapters/shell-status"
 import { authOptions } from "@/lib/auth"
 import { counterToday } from "@/lib/counter/today"
 
@@ -54,10 +55,18 @@ export default async function CounterLayout({
   // to ask for the stores — `getOverviewStores` resolves its own — so awaiting
   // them in sequence made the store query wait out a JWT decrypt for no
   // reason, on the critical path of every desk page's first byte.
+  const now = new Date()
+  // The sync chip and the "Needs you" count: two facts every Counter page's
+  // chrome carries, read once here (cached a minute) rather than by the rail
+  // and the topbar themselves. See `shell-status.ts`.
   const [session, stores] = await Promise.all([
     getServerSession(authOptions),
     getOverviewStores(),
   ])
+  // Scoped to this account's stores, never the whole table.
+  const status = session
+    ? await getShellStatus({ accountId: session.user.accountId, storeIds: stores.map((s) => s.id) }, now)
+    : { sync: null, needsYou: 0 }
 
   return (
     <AppShell
@@ -80,6 +89,8 @@ export default async function CounterLayout({
       }
       // Resolved on the server so the shell and the page below it cannot
       // disagree about which calendar day "today" is.
+      sync={status.sync ? { ...status.sync, now } : undefined}
+      needsYou={status.needsYou}
       today={counterToday()}
     >
       {children}

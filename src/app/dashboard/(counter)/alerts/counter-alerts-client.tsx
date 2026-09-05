@@ -165,9 +165,12 @@ function figureOf(c: AlertStripCell): FigureProps {
 function AlertDecision({
   alert,
   onDone,
+  onLeaving,
 }: {
   alert: AlertsRow
   onDone: () => void
+  /** The row is closed and about to go: let the table show it leaving. */
+  onLeaving?: () => void
 }) {
   const router = useRouter()
   const [saving, startSaving] = useTransition()
@@ -210,6 +213,7 @@ function AlertDecision({
         return
       }
       setWhy("")
+      onLeaving?.()
       onDone()
       // The row's status, the strip's open count and the topbar dispatch badge
       // all read the same column. Refresh so none of them can disagree with
@@ -284,12 +288,20 @@ function alertRows(
   rows: AlertsRow[],
   selectedId: string | null,
   onSelect: (id: string) => void,
+  leavingId: string | null,
 ): Row[] {
   return rows.map((r) => ({
     key: r.key,
     // The first thing these rows have ever done. See `AlertDecision`.
     onSelect: () => onSelect(r.id),
     selected: r.id === selectedId,
+    // D12: the row the owner just closed fades and slips (200ms) while the
+    // refresh is in flight; when the data comes back the rows below take its
+    // place at once. A cut, deliberately: its height is layout, and nothing
+    // on a Counter page animates layout. `closable` is the reset: once the
+    // refresh lands the row is closed, so a closed alert this table still
+    // lists (it does list them) never wears the class a second time.
+    className: r.id === leavingId && r.closable ? "is-leaving" : undefined,
     cells: {
       // The class map (CRITICAL wears `REJECTED`, WATCH wears `REVIEW`) lives
       // in `StatusPill` and nowhere else.
@@ -477,6 +489,8 @@ export function CounterAlertsClient({
     (id: string | null) => push({ alert: id }),
     [push],
   )
+  // The alert whose close just succeeded, until the refresh removes its row.
+  const [leaving, setLeaving] = useState<string | null>(null)
 
   return (
     <>
@@ -533,7 +547,7 @@ export function CounterAlertsClient({
             <>
               <Table
                 columns={COLUMNS}
-                rows={alertRows(rows, selectedAlert, selectAlert)}
+                rows={alertRows(rows, selectedAlert, selectAlert, leaving)}
               />
               {/* Nothing until a row is picked — the page's default
                   composition is unchanged, which is both the honest reading of
@@ -542,7 +556,11 @@ export function CounterAlertsClient({
               {(() => {
                 const picked = rows.find((r) => r.id === selectedAlert)
                 return picked ? (
-                  <AlertDecision alert={picked} onDone={() => selectAlert(null)} />
+                  <AlertDecision
+                    alert={picked}
+                    onDone={() => selectAlert(null)}
+                    onLeaving={() => setLeaving(picked.id)}
+                  />
                 ) : null
               })()}
             </>

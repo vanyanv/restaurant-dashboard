@@ -113,12 +113,15 @@ export function AppShell({
   stores,
   user,
   sync,
+  needsYou,
   today,
   children,
 }: {
   stores?: SwitchableStore[]
   user?: RailUser
   sync?: { state: SyncState; at?: Date; now: Date }
+  /** Open alerts, for the count on "Needs you" (R3). */
+  needsYou?: number
   today?: Date
   children: ReactNode
 }) {
@@ -253,6 +256,7 @@ export function AppShell({
         selectedStoreId={selectedStoreId}
         onSelectStore={onSelectStore}
         user={user}
+        needsYou={needsYou}
       />
 
       <div className="app">
