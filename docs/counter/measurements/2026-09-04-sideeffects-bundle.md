@@ -110,3 +110,71 @@ and Lighthouse's simulated 4G — not JavaScript.
 `bundle:check` all 114 under (tightened) budget; fidelity suite run against
 the changed build (see PR/commit notes for the run's result); all 108
 route/surface pairs return 200 with real paint in the after sweeps.
+
+---
+
+# 2026-09-05 follow-up — the ranked opportunities, worked
+
+The four remaining opportunities from the pass above, each taken as far as the
+evidence supported.
+
+## 1. The AI SDK leaves the two Ask pages' first load (DONE)
+
+`/dashboard/ask` and `/m/ask` imported `useAsk` directly, so `@ai-sdk/react` +
+`ai` sat in each page's initial JavaScript. `useAskDeferred` +
+`AskEngineHost` (a null-rendering component loaded via `next/dynamic`) give the
+same hook contract with the SDK behind an async chunk that starts loading at
+hydration; a `?q=` question asked before the chunk lands is buffered and
+flushed. First-load JS: `/dashboard/ask` 1229.6 → 654.7 KB, `/m/ask` 1232.5 →
+611.0 KB. Verified end-to-end against a production build on both surfaces (one
+POST per question, conversation id takes the URL, answer streams and persists,
+zero console errors). Commit `b8dd00bb`.
+
+## 2. `/login` and `/m` LCP (~3.4–4 s simulated 4G) — premise disproven, no change
+
+The hypothesis was "font-paint dominated; the login hero waits on Bricolage."
+The Lighthouse trace says otherwise:
+
+- **LCP element is the logo wordmark `<img>`**, not any text — and it is
+  already `priority` (preloaded) and already 23 KB (flat 3-colour art).
+- **`font-display` audit scores 1** — every face already swaps; no face
+  blocks paint.
+- The measurable cost is **5 render-blocking stylesheets (~1.9 s aggregate,
+  754 ms critical)**, which are tailwind + the three Counter design-system
+  sheets. No editorial CSS leaks into `/login` (`editorial-auth.css` is
+  confined to `/signup` and the 404, which still render it).
+
+So the font-trimming idea has no evidence behind it, and the real bottleneck
+(render-blocking design-system CSS) has no fix that is at once low-risk,
+in-scope, and locally measurable — critical-CSS extraction is a broad rewrite,
+and `unoptimized` on the shared `<Logo>` for a 23 KB asset is an unmeasurable
+marginal change that touches every surface that draws the mark. Left unchanged
+on purpose, per "no speculative optimizations without evidence."
+
+## 3. Delete the dead editorial auth forms (DONE)
+
+`login-form.tsx`, `signup-form.tsx`, `kpi-cards.tsx`, `collapsible-section.tsx`,
+`invoice-sync-button.tsx`, `otter-sync-button.tsx`, `query-client.tsx` — zero
+importers after the Counter auth rebuild and the `(editorial)` deletion, and
+the last framer-motion users in `src/`. Removed, and `framer-motion` comes out
+of package.json + next.config.ts. `src/` imports framer-motion nowhere now.
+Commit `b8dd00bb`.
+
+## 4. The fidelity failures — a data gap, not a regression (diagnosed, no code change)
+
+138 of 303 fidelity checks fail, spanning essentially every page and both
+surfaces including the "dark mode is themed" theme tests — breadth that rules
+out a per-page code regression. Root cause confirmed by querying the dev
+database (`restaurant_dev`, the secondary Neon the dev server points at):
+**every operational table is empty** — `OtterDailySummary` 0, `OtterOrder` 0,
+`OtterHourlySummary` 0, `DailyCogsItem` 0, `HarriDailyLabor` 0, `Alert` 0,
+`Invoice` 0, `ForecastDailyRevenue` 0; only the 2 `Store` rows exist. The
+fidelity suite pins the clock to 2026-08-28 and compares a data-rich prototype
+against our pages, which correctly render empty states — so the gate reads
+"prototype 86 landmarks, we render 48" everywhere content should be. This is
+already recorded in project memory (`project_dev_db_secondary_neon.md`: "the
+seed only creates an account, a demo user and 2 stores … fidelity's numeric
+comparisons fail on missing data, not design drift"). Fixing it means seeding
+`restaurant_dev` (a live Otter JWT + the backfill scripts) or pointing
+fidelity at a seeded database — a deliberate, DB-touching operation left to a
+human, not an autonomous perf pass. No code change.
