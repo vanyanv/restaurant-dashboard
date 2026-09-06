@@ -360,6 +360,42 @@ describe("getOverviewSections", () => {
     expect(cell(withPlan, "Orders")?.reference?.target).toBeUndefined()
   })
 
+  it("prints a food-cost 'pts vs plan' delta the reader can derive from the rounded figure beside it", async () => {
+    // cogsPct 0.2844 → unrounded 28.44 (28.439999999999998, floating-point
+    // noise and all). Round once, at the figure: 28.4. The delta beside a
+    // printed 28.4% must be 28.4 − 29.0 = −0.6, not a delta computed from the
+    // unrounded 28.44.
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsValue: 2844, cogsPct: 2844 / 10000 } }) as never,
+    )
+    vi.mocked(loadStripTargets).mockResolvedValue({
+      ...NO_TARGETS,
+      foodCost: { kind: "target", value: 29.0, better: "low" },
+    } as never)
+    const s = await load()
+    const food = cell(s, "Food cost")
+    expect(food?.value).toBe("28.4%")
+    expect(food?.delta).toBe("-0.6 pts vs plan")
+  })
+
+  it("never prints a '-0.0 pts vs plan' when the rounded figure ties the plan", async () => {
+    // cogsPct 0.2899 → unrounded 28.99, which rounds to the same 29.0% the
+    // plan publishes. The unrounded delta (28.99 − 29.0 = −0.01) prints as
+    // the nonsensical "-0.0" beside two figures that read identically;
+    // derived from the rounded 29.0 the delta is a clean "0.0".
+    vi.mocked(getAllStoresPnL).mockResolvedValue(
+      pnl({ combined: { ...pnl().combined, cogsValue: 2899, cogsPct: 2899 / 10000 } }) as never,
+    )
+    vi.mocked(loadStripTargets).mockResolvedValue({
+      ...NO_TARGETS,
+      foodCost: { kind: "target", value: 29.0, better: "low" },
+    } as never)
+    const s = await load()
+    const food = cell(s, "Food cost")
+    expect(food?.value).toBe("29.0%")
+    expect(food?.delta).toBe("0.0 pts vs plan")
+  })
+
   it("takes the prime cell's ceiling from primeCost, never from loadStripTargets", async () => {
     const s = await load()
     const prime = cell(s, "Prime cost")

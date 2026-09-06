@@ -466,7 +466,9 @@ function buildStrip(
     }
   }
 
-  const foodPct = p.grossSales > 0 ? p.cogsPct * 100 : null
+  // Rounded once, at the figure — the delta beside a printed 28.4 must be
+  // derivable from 28.4, the same rule primeCost() applies to roomPp.
+  const foodPct = p.grossSales > 0 ? Math.round(p.cogsPct * 1000) / 10 : null
   if (foodPct !== null) {
     const plan = targets?.foodCost ?? null
     cells.push({
