@@ -28,9 +28,13 @@ deleted page by page as each route is rebuilt, and as of 2026-09-04 it is
 **gone from `src/app/dashboard/`**: the `(editorial)` route group no longer
 exists. Every page that renders anything is under `(counter)`. Five routes sit
 outside it — `chat`, `operations/costs`, `operations/recipes`,
-`stores/[id]/edit` and `pnl/[storeId]` — and all five are redirect shims whose
-whole body is one `redirect()`; `src/proxy.ts` intercepts them before render,
-and they exist as the fallback if that map and the tree ever disagree.
+`stores/[id]/edit` and `pnl/[storeId]` — and all five are redirect shims;
+`src/proxy.ts` intercepts them before render, and they exist as the fallback
+if that map and the tree ever disagree. Four are a bare `redirect()`.
+`pnl/[storeId]` is not: it carries the query string through and issues a 308
+via `permanentRedirect`, because owners have that URL bookmarked and
+`storeViewTabs` links to it with a `range` that must survive the hop. Read it
+before you assume it is one line.
 The phone shell is Counter too now; `src/app/(mobile)/m/layout.tsx` renders
 `MTabs` from `@/components/counter`. So the default assumption for anything
 you open is Counter, not legacy — this paragraph said the opposite ("a
@@ -62,8 +66,20 @@ come from a single load; the list and the reason for each are in
 Two things the linter cannot check, because they need judgment:
 
 - **A figure shown on two pages comes from one function in
-  `src/lib/counter/`.** (`src/lib/counter/*` doesn't exist yet — it's the
-  next phase — but the rule applies from the moment it does.)
+  `src/lib/counter/`.** That layer exists and is now the largest in the app:
+  ~40 helper modules plus `src/lib/counter/adapters/**`, one adapter per
+  route, each exporting `get*SectionPromises(...)`. `prime-cost.ts` is the
+  worked example — its docblock names itself "the one function that owns
+  prime cost", and `targets.ts` defers to it rather than recomputing.
+- **An adapter takes `accountId` and filters every query by it.** `accountId`
+  is the tenancy boundary, not `ownerId` and not `storeId` — see
+  `src/lib/auth-scope.ts`. The page reads it from the session and passes it
+  in; adapters do not fetch their own session. `adapters/ingredients.ts` is
+  the pattern to copy. This is judgment, not lint: `adapters/prices.ts` and
+  `adapters/new-count.ts` both shipped querying `CanonicalIngredient` with no
+  `where` at all, and a green gate had nothing to say about it. `StockCount`
+  and other store-owned models reach the boundary through
+  `store: { accountId }`; in raw SQL, join `"Store"` and filter on it.
 - **Don't split or restructure files >400 lines without reading
   [`docs/refactor-playbook.md`](docs/refactor-playbook.md).** The methodology
   assumes a re-export shim at the original path (and that shim must NOT have
