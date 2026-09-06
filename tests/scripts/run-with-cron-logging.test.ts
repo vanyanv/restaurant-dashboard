@@ -24,7 +24,11 @@ function run(failures: number, env: Record<string, string> = {}) {
     fake,
     `#!/usr/bin/env bash\n` +
       `echo x >> "${counter}"\n` +
-      `n=$(wc -l < "${counter}")\n` +
+      // BSD `wc -l` left-pads its count ("       1"); GNU does not. The numeric
+      // test below tolerates the padding but the echoed text does not, so a
+      // macOS run logged "attempt        1 failing" and only the log
+      // assertion failed. Strip it here rather than loosen the assertion.
+      `n=$(wc -l < "${counter}" | tr -d "[:space:]")\n` +
       `if [ "$n" -le ${failures} ]; then echo "attempt $n failing" >&2; exit 7; fi\n` +
       `echo "attempt $n ok"\n`,
     { mode: 0o755 },
