@@ -135,7 +135,16 @@ export function ChannelRows({
         // and the hatch fills the rest. fee 0 or null: nothing was taken (or
         // nothing is known to have been), so the kept bar fills the whole
         // slice and there is no hatch.
-        const keepWidth = fee !== null && fee > 0 ? keep! : r.net
+        //
+        // `fee` is the store's rate against GROSS (`channel-mix.ts`); `keep`
+        // here is against THIS row's net. A high rate on a heavily discounted
+        // range can push fee past net, so `keep` can go negative — clamped to
+        // 0 for the geometry (an unclamped negative width is silently
+        // dropped by the browser) rather than for the meta line, which still
+        // prints the honest `($50)`. The hatch is capped the same way, so
+        // `left + width` never draws past this channel's own share of net.
+        const keepWidth = fee !== null && fee > 0 ? Math.max(0, keep!) : r.net
+        const feeWidth = fee !== null && fee > 0 ? Math.min(fee, r.net - keepWidth) : 0
 
         return (
           <div className="chan__row" key={r.id}>
@@ -148,8 +157,8 @@ export function ChannelRows({
               {fee !== null && fee > 0 ? (
                 <u
                   style={{
-                    left: `${shareOf(keep!).toFixed(1)}%`,
-                    width: `${shareOf(fee).toFixed(1)}%`,
+                    left: `${shareOf(keepWidth).toFixed(1)}%`,
+                    width: `${shareOf(feeWidth).toFixed(1)}%`,
                   }}
                 />
               ) : null}

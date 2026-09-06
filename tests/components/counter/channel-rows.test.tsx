@@ -87,6 +87,39 @@ describe("ChannelRows", () => {
     expect(gh.meta).toBe("12.7% of net · 131 orders · $25.09 ticket · commission rate not on file · keeps —")
   })
 
+  it("clamps geometry when a high rate on a discounted range pushes fee past net", () => {
+    // `commission` is the store's rate against GROSS (`channel-mix.ts`);
+    // `net` here is what actually landed on this row. A heavily discounted
+    // range can leave net below what that gross-based fee would be, so
+    // `keep = net - fee` goes negative. The BAR must clamp — an unclamped
+    // negative width is silently dropped by the browser, and the hatch's
+    // `left`/`width` must not overflow the row's own track — while the META
+    // LINE stays the honest parenthesized negative.
+    const { container } = render(
+      <ChannelRows
+        caption="c"
+        rows={[{ id: "doordash", net: 100, orders: 4, commission: 150, ticket: 25 }]}
+      />,
+    )
+    const r = rows(container)[0]
+    const keepPct = parseFloat(r.keep)
+    const feeLeft = parseFloat(r.fee!.style.left)
+    const feeWidth = parseFloat(r.fee!.style.width)
+    expect(keepPct).toBeGreaterThanOrEqual(0)
+    expect(feeLeft).toBeGreaterThanOrEqual(0)
+    expect(feeWidth).toBeGreaterThanOrEqual(0)
+    // The hatch never draws past this channel's own share of net — with a
+    // single row, that share is the whole track (100%).
+    expect(feeLeft + feeWidth).toBeLessThanOrEqual(100)
+    // Nothing is left to call "kept" — the slice is fully hatched.
+    expect(keepPct).toBe(0)
+    // The meta line stays honest — a parenthesized negative keep, never a
+    // clamped-to-zero figure.
+    expect(r.meta).toBe(
+      "100.0% of net · 4 orders · $25.00 ticket · commission −$150 · keeps ($50)",
+    )
+  })
+
   it("the keeps/commission legend is drawn once, in the cap", () => {
     const { container } = render(<ChannelRows caption="c" rows={ROWS} />)
     const key = container.querySelector(".chan__cap .chan__key")!
