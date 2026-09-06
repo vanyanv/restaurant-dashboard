@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getScopedStores } from "@/lib/account-stores"
 import { isOperational } from "@/lib/store-lifecycle"
 import { count, pct } from "@/lib/counter/format"
+import { blendedMargin } from "@/lib/counter/blended-margin"
 import { comparisonRange, toQueryBounds, type DateRange } from "@/lib/counter/date-range"
 import type { ChartSpec } from "@/lib/counter/chart-geometry"
 import { shortLabels } from "@/lib/counter/short-labels"
@@ -234,8 +235,13 @@ async function loadMix(input: ProductMixInput): Promise<MixData> {
  * `1 - Σ(cost × qty) / Σ(price × qty)`, with each term drawn from whichever
  * window the caller names. This is the whole bridge: every line is this
  * function with a different mixture of the two windows.
+ *
+ * `Unit.price` is `salesRevenue / qty` (`loadWindow`, above, around :190), so
+ * `price × qty` reconstitutes recorded revenue exactly — this is the same
+ * figure as `blendedMargin(cost, revenue)` elsewhere, decomposed by window
+ * and delegated to it for the final ratio.
  */
-function blendedMargin(
+function bridgeMargin(
   names: string[],
   pick: (name: string) => Unit | null,
 ): number | null {
@@ -247,7 +253,7 @@ function blendedMargin(
     cost += u.cost * u.qty
     revenue += u.price * u.qty
   }
-  return revenue > 0 ? 100 - (cost / revenue) * 100 : null
+  return blendedMargin(cost, revenue)
 }
 
 const pts = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(2)} pts`
@@ -261,9 +267,9 @@ function headlineOf(d: MixData): MixHeadline {
   const top = ranked[0]
   const topShare = top && now.totalQty > 0 ? (top[1].qty / now.totalQty) * 100 : null
 
-  const margin = blendedMargin(d.names, (n) => now.units.get(n) ?? null)
+  const margin = bridgeMargin(d.names, (n) => now.units.get(n) ?? null)
   const priorMargin = prior
-    ? blendedMargin(d.names, (n) => prior.units.get(n) ?? null)
+    ? bridgeMargin(d.names, (n) => prior.units.get(n) ?? null)
     : null
 
   const perOrderCell: FigureProps = {
@@ -421,7 +427,7 @@ function bridgeOf(d: MixData): MixBridge {
     priceFrom: Window,
     qtyFrom: Window,
   ): number | null =>
-    blendedMargin(d.names, (n) => {
+    bridgeMargin(d.names, (n) => {
       const q = qtyFrom.units.get(n)
       if (!q) return null
       // A term with no reading in the window a factor is taken from falls back

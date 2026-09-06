@@ -4,6 +4,7 @@ import {
   type MenuEngineeringRow,
 } from "@/app/actions/forecasts/menu-engineering-actions"
 import { count, money, pct } from "@/lib/counter/format"
+import { blendedMargin } from "@/lib/counter/blended-margin"
 import { dayCount, type DateRange } from "@/lib/counter/date-range"
 import { loadStatement } from "@/lib/counter/statement"
 import { COGS_CODE } from "@/lib/pnl"
@@ -196,7 +197,7 @@ function headlineOf(
 ): MenuProfitHeadline {
   const revenue = data.rows.reduce((t, r) => t + r.revenue, 0)
   const cogs = data.rows.reduce((t, r) => t + r.cogs, 0)
-  const margin = revenue > 0 ? 100 - (cogs / revenue) * 100 : null
+  const margin = blendedMargin(cogs, revenue)
 
   const marginCell: FigureProps = {
     label: "Blended margin",

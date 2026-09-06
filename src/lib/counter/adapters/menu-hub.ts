@@ -11,6 +11,7 @@ import {
 } from "@/lib/counter/adapters/types"
 import { empty, mapReady, ready, type SectionData } from "@/lib/counter/section-data"
 import type { DonutSlice, FigureProps, MListRow, QueueItem } from "@/components/counter"
+import { blendedMargin } from "@/lib/counter/blended-margin"
 
 /**
  * The Menu hub — `P.menuhub` (`docs/counter/counter-prototype.html:7274`).
@@ -227,11 +228,7 @@ async function loadMenuCounts(input: MenuHubInput): Promise<MenuCounts> {
   }
 }
 
-/** `cost / revenue` as a MARGIN percent, or `null` with no revenue — never `0`. */
-export function blendedMargin(cost: number, revenue: number): number | null {
-  if (!(revenue > 0)) return null
-  return 100 - (cost / revenue) * 100
-}
+export { blendedMargin } from "@/lib/counter/blended-margin"
 
 function headline(c: MenuCounts): MenuHubHeadline {
   const margin = blendedMargin(c.cost, c.revenue)
