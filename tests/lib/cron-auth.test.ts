@@ -151,3 +151,30 @@ describe("parseJsonBody", () => {
     expect(await res.json()).toEqual({ error: "Body must be JSON" })
   })
 })
+
+describe("isCronRequest · malformed bearer", () => {
+  /**
+   * The length guard compared `authHeader.length` — UTF-16 code units — and
+   * then handed both strings to `timingSafeEqual`, which compares BYTES. A
+   * header of the same character length but a longer UTF-8 encoding got past
+   * the guard and made the comparison throw `RangeError: Input buffers must
+   * have the same byte length`, turning an unauthenticated request into a 500
+   * on every cron route. It must be an ordinary 401.
+   */
+  it("rejects a same-length multibyte bearer with 401 rather than throwing", async () => {
+    const handler = vi.fn(async () => Response.json({ ok: true }))
+    const route = withCronAuth(handler)
+
+    // "tést-secret" is 11 characters and 12 bytes, so this header matches
+    // "Bearer test-secret" in length but not in encoded size.
+    const req = new NextRequest("http://localhost/api/cron/x", {
+      method: "POST",
+      headers: { authorization: "Bearer tést-secret" },
+    })
+
+    const res = await route(req)
+
+    expect(res.status).toBe(401)
+    expect(handler).not.toHaveBeenCalled()
+  })
+})

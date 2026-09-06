@@ -11,8 +11,16 @@ export function isCronRequest(request: Request): boolean {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret || !authHeader) return false
   const expected = `Bearer ${cronSecret}`
-  if (authHeader.length !== expected.length) return false
-  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected))
+
+  // Compare BYTES, not UTF-16 code units. `timingSafeEqual` throws
+  // `RangeError` on a length mismatch, so a guard on `String.length` let a
+  // same-character-length, longer-encoding header ("Bearer tést-secret")
+  // through to it — and an unauthenticated request became a 500 on every
+  // cron route instead of a 401.
+  const received = Buffer.from(authHeader)
+  const want = Buffer.from(expected)
+  if (received.length !== want.length) return false
+  return timingSafeEqual(received, want)
 }
 
 // --- Rate limiter ---
