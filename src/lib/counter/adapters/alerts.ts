@@ -14,6 +14,7 @@ import {
 } from "@/lib/counter/alert-filters"
 import { isoDay, monthDay, rangeTitle } from "@/lib/counter/date-range"
 import { plural } from "@/lib/counter/format"
+import { median } from "@/lib/counter/median"
 import { classify } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
 import type { ChartSeries } from "@/lib/counter/chart-geometry"
@@ -269,14 +270,10 @@ const DAY_MS = 86_400_000
  * Exported because it is the arithmetic behind a figure an owner reads as
  * "how long this takes me", and a figure like that gets a test of its own.
  * Returns null for an empty population rather than 0 — nothing closed is not
- * "closes instantly".
+ * "closes instantly". Owned by `@/lib/counter/median`; re-exported here so
+ * this module keeps its existing export contract.
  */
-export function median(values: number[]): number | null {
-  if (values.length === 0) return null
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = sorted.length >> 1
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
-}
+export { median }
 
 /**
  * How long each closed alert took, in hours — and what population that was.

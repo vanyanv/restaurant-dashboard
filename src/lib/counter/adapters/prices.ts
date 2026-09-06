@@ -13,6 +13,7 @@ import {
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
 import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { median } from "@/lib/counter/median"
 import type { FigureProps, MListRow, Row } from "@/components/counter"
 
 /**
@@ -100,12 +101,6 @@ interface PriceData {
 }
 
 /* ── Load ─────────────────────────────────────────────────────────────── */
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)]
-}
 
 async function loadPrices(accountId: string): Promise<PriceData> {
   const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000)
