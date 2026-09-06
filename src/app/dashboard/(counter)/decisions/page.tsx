@@ -66,6 +66,7 @@ export default async function DecisionsPage({
     // Straight off the URL, and the SAME key the phone reads. A day pressed
     // on the desk and a link opened on a phone land on one day.
     day: counterParams.day ?? undefined,
+    accountId: session.user.accountId,
   })
 
   // The rail's switcher is the LAYOUT's; this list is for the page's own

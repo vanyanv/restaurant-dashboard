@@ -69,6 +69,7 @@ export default async function MobileDecisionsPage({
   const sections = getDecisionsSectionPromises({
     storeId: counterParams.storeId ?? undefined,
     day: counterParams.day ?? undefined,
+    accountId: session.user.accountId,
   })
 
   return (

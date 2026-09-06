@@ -6,7 +6,7 @@ import {
   type DecisionsView,
 } from "@/app/actions/decisions/get-decisions-view"
 import { prisma } from "@/lib/prisma"
-import { getCachedSession, resolveStoreContext } from "@/app/actions/forecasts/_shared"
+import { resolveStoreContext } from "@/app/actions/forecasts/_shared"
 import { newestGenerationPerDay } from "@/lib/counter/forecast-generation"
 import {
   defaultForecastPreference,
@@ -319,6 +319,14 @@ export interface DecisionsSectionsInput {
    * rendering an empty panel.
    */
   day?: string
+  /**
+   * The tenancy boundary — see `src/lib/auth-scope.ts`. Read from the session
+   * by the page and passed in here; this adapter does not fetch its own
+   * session (`loadSettledDays` used to, via `getCachedSession`, which is the
+   * defect this field closes). Required, not optional: every caller has a
+   * session by the time it reaches an adapter, same as `IngredientsInput`.
+   */
+  accountId: string
 }
 
 /* ── Constants the page's shape depends on ────────────────────────────── */
@@ -705,6 +713,7 @@ export interface SettledDay {
 export async function loadSettledDays(
   view: DecisionsView,
   storeId: string | undefined,
+  accountId: string,
 ): Promise<SettledDay[]> {
   const asOf = parseDayKey(view.asOf)
   if (asOf === null) return []
@@ -712,12 +721,11 @@ export async function loadSettledDays(
   // Today is Monday: the week has nothing behind it yet.
   if (start.getTime() >= asOf.getTime()) return []
 
-  const session = await getCachedSession()
-  const accountId = session?.user?.accountId
-  if (!accountId) return []
-  // The SAME store resolution `getDecisionsView` ran, and `cache()`d, so this
-  // is the same set of stores rather than a second opinion about which stores
-  // the reader is looking at — and it costs no query.
+  // `accountId` arrives from `DecisionsSectionsInput` — the page read the
+  // session, not this function. The SAME store resolution `getDecisionsView`
+  // ran, and `cache()`d, so this is the same set of stores rather than a
+  // second opinion about which stores the reader is looking at — and it
+  // costs no query.
   const resolved = await resolveStoreContext(storeId, accountId)
   if (!resolved.ok) return []
   const storeIds = resolved.ctx.storeIds
@@ -1270,7 +1278,7 @@ function deadlineWords(a: DecisionAction): string {
  * implementation of what a section holds and not two.
  */
 export function getDecisionsSectionPromises(
-  input: DecisionsSectionsInput = {},
+  input: DecisionsSectionsInput,
 ): StreamedSections<DecisionsSections> {
   // ONE load, started here and awaited by nobody in this function. A loader
   // that answers `{ ok: false }` is a FAILED section and not an empty one:
@@ -1326,7 +1334,7 @@ export function getDecisionsSectionPromises(
   const settledP: Promise<SettledDay[]> = viewP
     .then((sd) => {
       const view = dataOf(sd)
-      return view === null ? [] : loadSettledDays(view, input.storeId)
+      return view === null ? [] : loadSettledDays(view, input.storeId, input.accountId)
     })
     .catch(() => [])
 
@@ -1430,7 +1438,7 @@ export function getDecisionsSectionPromises(
  * show one restaurant two different weeks.
  */
 export async function getDecisionsSections(
-  input: DecisionsSectionsInput = {},
+  input: DecisionsSectionsInput,
 ): Promise<DecisionsSections> {
   return awaitSections(getDecisionsSectionPromises(input))
 }
