@@ -165,6 +165,127 @@ button.wkd {
   color: var(--ink-2);
 }
 
+/* Two icon circles the generated sheet paints on a solid `--signal` ground
+ * with the same literal text colour, `oklch(30% 0.06 70)`: `.navbtn .badge`
+ * (counter-components.css:119) and `.loginmsg.is-warn .fi` (:782). A third,
+ * `.stalebar .fi` (:744), carries the identical literal but `.stalebar` is
+ * dead CSS — the live component, `stale.tsx`, renders `stalebanner`
+ * (defined below in this file), never `.stalebar` — so it is left alone
+ * rather than repaired for a selector nothing renders.
+ *
+ * `--ct-signal-ink` in `counter.css` is the only ink named for a signal
+ * surface, and its light arm, `oklch(44% 0.095 70)`, matches the literal's
+ * hue and chroma family exactly (70°, the same low-mid chroma) — the
+ * strongest sign available that this is the intended pairing and not a
+ * coincidence. `.stalebar span` (counter-components.css:746, also unused,
+ * but drawn from the same prototype block) already reaches for this exact
+ * token on this exact ground, which is the pairing surviving into the two
+ * classes that ARE live.
+ *
+ * It was authored for a `--signal-wash` ground — the "signal text on signal
+ * wash" row is the only `--ct-signal-ink` entry in
+ * tests/styles/counter-tokens.test.ts's CONTRAST table — not a solid
+ * `--signal` circle, and `--signal` itself barely inverts between themes
+ * (80% light / 82.5% dark, unlike every other state token) where
+ * `--signal-ink` inverts hard (44% / 84%). So the dark arm sits close in
+ * lightness to the ground it is drawn on and reads with real but reduced
+ * contrast — a known trade, not an oversight: no token in this file stays
+ * dark against a ground that stays light in both themes. When the
+ * generator next emits either rule it should emit the token and this
+ * repair should go. */
+.navbtn .badge,
+.loginmsg.is-warn .fi {
+  color: var(--signal-ink);
+}
+
+/* The menu matrix's fourth quadrant TAG, not just its dot. `.classtag.PUZZLE`
+ * (counter-components.css:247) writes both halves as literals —
+ * `oklch(94% 0.028 250)` background, `oklch(45% 0.11 250)` ink — where its
+ * three siblings each reuse an existing state pair (STAR: `--good-wash`/
+ * `--good`; PLOWHORSE: `--signal-wash`/`--signal-ink`; DOG: `--bad-wash`/
+ * `--bad`, all at :245-248).
+ *
+ * The ink half has an exact answer: `--ct-quadrant-puzzle`'s light arm IS
+ * this literal, verbatim — the same token `.mdot.PUZZLE` above already
+ * names for the identical value ported to a different selector.
+ *
+ * The background half does not: no `-wash` token in counter.css carries
+ * this hue (250, blue) — every one is a warm hue (25-160), because the
+ * prototype's own quadrant-blue was never given a wash to go with it. The
+ * two numerically closest, `--ct-accent-wash` and `--ct-bad-wash`, are both
+ * within 0.5 lightness points and near enough in chroma, but both sit at
+ * hue 25-27 — effectively the same pale pink `--bad-wash` already paints
+ * for DOG. Picking either would make PUZZLE read as a paler DOG rather than
+ * its own colour, the opposite of what a four-way legend needs. `--sunk` is
+ * the deliberate answer instead: the neutral surface this file already
+ * reaches for when a state should read as itself with "no judgement in it"
+ * (`.statuspill.MATCHED`, immediately above), close in lightness (92.6% vs
+ * 94%), and it lets the ink alone carry PUZZLE's identity instead of
+ * colliding with a hue another quadrant already claims. When the generator
+ * next emits this rule it should emit both tokens and this repair should
+ * go. */
+.classtag.PUZZLE {
+  background: var(--sunk);
+  color: var(--ct-quadrant-puzzle);
+}
+
+/* `.statebar button[aria-pressed="true"]` (counter-components.css:765) is a
+ * pressed pill on `--page-accent` — the prototype's own alias for
+ * `--ct-accent` (counter-components.css:63) — with a literal text colour,
+ * `oklch(98% 0.004 66)`. That value is not a guess at white: it is
+ * `--ct-surface`'s light arm to three decimal places (98.4% 0.004 66), and
+ * "text on a solid accent" already has an established answer everywhere
+ * else this sheet draws it — `.avatar`, `.btn--primary`, `.sendbtn`,
+ * `.drd.edge`, `.mpresets button[aria-pressed="true"]`
+ * (counter-components.css:121,328,458,956,994) all pair
+ * `background:var(--accent)` with `color:var(--surface)`. `--surface`
+ * inverts with `--accent` correctly in both themes — dark text (22%) on the
+ * dark theme's lighter accent (68.75%) reads at least as well as the light
+ * arm's near-white on the light theme's red. When the generator next emits
+ * this rule it should emit the token and this repair should go. */
+.statebar button[aria-pressed="true"] {
+  color: var(--surface);
+}
+
+/* The toast (counter-components.css:900-904) is drawn as a fixed literal
+ * pill — background `oklch(24% 0.014 40)`, text `oklch(97% 0.004 66)`, its
+ * own shadow tinted from that same background colour at 70% alpha — plus an
+ * icon circle inside it, `.toast i`, with a second pair of literals:
+ * `oklch(70% 0.16 150)` background, `oklch(20% 0.02 150)` text.
+ *
+ * The pill's background is `--ct-ink`'s light arm, verbatim (24% 0.014 40),
+ * and its text is `--ct-surface`'s light arm to a rounding error (98.4% vs
+ * 97%, same hue and chroma both). `background:var(--ink);color:var(--surface)`
+ * is not a new pairing — it is `.qbtn[aria-pressed="true"]`'s own inversion
+ * (counter-components.css:242), reused here for the same reason: a toast is
+ * meant to read as a fixed dark chip regardless of the page under it, which
+ * is exactly what "ink as a ground, surface as its text" gives in the light
+ * theme, and its mirror (a light chip, dark text) in the dark theme — still
+ * legible, just carrying the theme's own polarity rather than a colour that
+ * stopped reacting to it. The shadow is the same ground at partial alpha;
+ * `color-mix()` over the token rather than a second literal, matching this
+ * file's own rule for translucency (see the "Sign on" section below).
+ *
+ * The icon dot reads as a success mark (hue 150, next to the 70/150 hues
+ * this sheet's own `--good` uses), and `.loginmsg.is-ok .fi`
+ * (counter-components.css:785) already states the pairing for exactly this
+ * shape — a solid `--good` circle with `--surface` text. `--good`'s light
+ * arm (47% 0.098 160) sits well below the literal's 70% lightness, a real,
+ * visible change and not a rounding error — but `--good` is still the only
+ * token this hue belongs to, and picking it over inventing a shade keeps
+ * the icon inside the same green the rest of the app already uses for
+ * "succeeded." When the generator next emits either rule it should emit
+ * these tokens and this repair should go. */
+.toast {
+  background: var(--ink);
+  color: var(--surface);
+  box-shadow: 0 14px 34px -14px color-mix(in srgb, var(--ink) 70%, transparent);
+}
+.toast i {
+  background: var(--good);
+  color: var(--surface);
+}
+
 /* `.seg` holds LINKS as well as buttons.
  *
  * `viewTabs()` (prototype line 8199) draws a page's siblings as
