@@ -303,6 +303,6 @@ describe("C2: shallow-checkout resilience", () => {
     // True in a full clone; CI is fixed (fetch-depth: 0) to always be one.
     // On a genuinely shallow checkout this would be false, and the tests
     // above cover exactly that condition without needing one to reproduce.
-    expect(isCommitReachable("aecadf0f90c87bb7d0dc9c3ccb05f7bade67466b")).toBe(true)
+    expect(isCommitReachable("6778c852f4213cdc5df52262e2f6613ce4907eeb")).toBe(true)
   })
 })

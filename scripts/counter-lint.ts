@@ -343,8 +343,15 @@ const RULES: Array<{
  * files / 1803 passed / 8 skipped, tsc clean, build green). Every LEGACY
  * entry's exemption is measured against the content of files at this
  * commit — see the module doc comment above.
+ *
+ * Re-pinned on 2026-09-05: `dashboardv2` was rebased onto a rewritten `main`
+ * (a history purge of tmp/perf-audit), so every commit on this branch got a
+ * new hash and the old pin became unreachable — three tests here failed on
+ * that alone. This is the same commit, replayed: `src/styles`,
+ * `src/components` and `src/app/dashboard` hash identically to the original,
+ * which is all this baseline reads. Do not chase the old SHA; it is gone.
  */
-const LEGACY_BASELINE_COMMIT = "aecadf0f90c87bb7d0dc9c3ccb05f7bade67466b"
+const LEGACY_BASELINE_COMMIT = "6778c852f4213cdc5df52262e2f6613ce4907eeb"
 
 /**
  * Pre-Counter directories still on the old editorial design. Each entry
