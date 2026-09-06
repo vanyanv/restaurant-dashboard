@@ -170,6 +170,58 @@
  *                          record's name, so the headline must resolve before
  *                          anything renders; see the note on the constant.
  *
+ * --- Task 20 (three holes closed) ---
+ *
+ * Enforcement-phase audit found three gaps between what the rules were meant
+ * to catch and what they actually matched:
+ *
+ *   - `DIRECT_DATA_SPECIFIERS` matched `@prisma/client`, which this repo
+ *     never imports outside the generated client's own internals
+ *     (`src/generated/prisma/**`, which no `ROOTS` entry walks) — dead
+ *     coverage for a specifier nothing here uses. The repo's real generated
+ *     import is `@/generated/prisma/client` (and `@/generated/prisma/enums`),
+ *     which the old pattern did not match at all, so a page or page client
+ *     could import an enum or a `Prisma` value straight from the generated
+ *     client and rule 4 said nothing. `@prisma/client` is gone from the
+ *     alternative; `@\/generated\/prisma(?:\/[^"']+)?` covers the bare
+ *     specifier and any subpath.
+ *   - `no-direct-data-import` was registered `.tsx`-only, so every `.ts` file
+ *     in `ROOTS` — all ~40 of `src/lib/counter`'s helper modules, its
+ *     `actions/` wrapper layer, `adapters/**` itself — was never checked by
+ *     this rule at all. Extended to `.ts` and `.tsx` both. That reach also
+ *     needed two corrections to land clean rather than merely louder:
+ *     a line starting `import type ` is now skipped for this rule only
+ *     (`typeImportExempt`), since a type erases at build and is not the data
+ *     access the rule polices — `counter-alerts-client.tsx` imports only
+ *     `AlertSeverity`/`AlertSource`/`AlertStatus` as types from
+ *     `@/generated/prisma/client` and needs exactly this to stay legal; and
+ *     `DATA_ALLOWED` widened from `lib/counter/adapters/` to all of
+ *     `lib/counter/**` — see the comment on `DATA_ALLOWED` for why this is
+ *     the same "nothing under src/lib/counter is a page" call
+ *     `STATUS_BRANCH_ALLOWED` already made, not a suppression reached for to
+ *     silence an inconvenient finding. Extending to `.ts` without that
+ *     widening produced 25 violations across 17 files — `channel-mix.ts`,
+ *     `cogs.ts`, `labor-leaks.ts`, `labor-week.ts`, `service-profile.ts`,
+ *     `staffing-curve.ts`, `statement.ts`, `vendor-basket.ts`, all nine
+ *     `lib/counter/actions/*.ts` wrappers — none of them a page, none of them
+ *     a tenancy bug, all of them the data layer the rule was never meant to
+ *     reach; a real page- or page-client-level violation of this kind
+ *     (a value import of `@/generated/prisma` or `@/lib/prisma` inside
+ *     `src/app/**` or a `src/components/counter` client) would still fail
+ *     the gate exactly as before, since neither correction touches those
+ *     roots.
+ *   - `COLOUR_LITERAL` did not match `color-mix(` even though the sibling
+ *     check in `tests/styles/counter-components.test.ts` did, so the two
+ *     copies had drifted: a `color-mix()` could fail the components test's
+ *     "no colour VALUE outside counter.css" assertion while passing this
+ *     rule outright. `\bcolor-mix\(` joins the alternation. Its one existing
+ *     consumer, `src/styles/counter-repairs.css`, mixes only `var(--ct-*)`
+ *     tokens with `transparent` (drop-shadows and a radial bloom on the login
+ *     screen, a sweep highlight on its submit button) — no literal colour in
+ *     any argument — so it joined `COLOUR_ALLOWED` as a narrow, file-level
+ *     exemption; see that constant's comment for the shape of the value and
+ *     the risk the exemption accepts.
+ *
  * --- Known holes, left as regex-over-text limitations (not fixed) ---
  *
  *   - Dynamic Tailwind classes: `` `bg-${color}-500` `` or
@@ -189,21 +241,40 @@
  *     substring `rgb(` the rule is looking for, not a static literal, and
  *     the rule can't distinguish "raw colour bypassing the token system"
  *     from "raw colour because the domain genuinely needs one". No consumer
- *     of this exists yet; when the first Counter chart primitive needs it,
- *     the honest options are a narrow allowlist for that one file, or an
- *     inline suppression comment on that one line — do not build either
- *     speculatively.
+ *     of this exists yet for `rgb(`/`hsl(`/`oklch(` themselves; when the
+ *     first Counter chart primitive needs one, the honest options are a
+ *     narrow allowlist for that one file, or an inline suppression comment
+ *     on that one line — do not build either speculatively. `color-mix(`,
+ *     added to this same alternation in Task 20, hit exactly this shape
+ *     immediately rather than hypothetically: `counter-repairs.css` already
+ *     mixed only tokens (`color-mix(in srgb, var(--sunk) 70%, transparent)`)
+ *     — no consumer needing a literal input has shown up, but the
+ *     token-input case is real and on-disk, so it was resolved with the
+ *     first option, a narrow file-level allowlist (see `COLOUR_ALLOWED`),
+ *     not built speculatively ahead of the need.
  *   - `COLOUR_ALLOWED` matches on BASENAME, unanchored: any file called
- *     `counter.css` or `counter-components.css` anywhere in ROOTS is exempt
- *     from `no-colour-literal`, not only the two under `src/styles/`. The
- *     `counter\.css$` half has always been this shape (and one test in
- *     tests/styles/counter-lint.test.ts depends on it, allowlisting a
- *     `style-scope/counter.css` fixture that is not under src/styles);
- *     `counter-components\.css$` was added in the same shape rather than
- *     anchored, so it is the existing hole reused, not a wider one. Anchoring
- *     both to `src/styles/` is a real option, but it changes what that
- *     fixture test means and so is its own decision, not a side effect of
- *     adding the second file.
+ *     `counter.css`, `counter-components.css` or `counter-repairs.css`
+ *     anywhere in ROOTS is exempt from `no-colour-literal`, not only the
+ *     three under `src/styles/`. The `counter\.css$` half has always been
+ *     this shape (and one test in tests/styles/counter-lint.test.ts depends
+ *     on it, allowlisting a `style-scope/counter.css` fixture that is not
+ *     under src/styles); `counter-components\.css$` and, in Task 20,
+ *     `counter-repairs\.css$` were each added in the same shape rather than
+ *     anchored, so this is the existing hole reused twice, not one made
+ *     wider each time. Anchoring all three to `src/styles/` is a real
+ *     option, but it changes what that fixture test means and so is its own
+ *     decision, not a side effect of adding a third file.
+ *   - `DATA_ALLOWED`'s widening in Task 20 (see the "Task 20" section above
+ *     and the comment on the constant) is file-path-level, same as
+ *     `COLOUR_ALLOWED` and `STATUS_BRANCH_ALLOWED`: it cannot tell a
+ *     legitimate helper module's Prisma access from a hypothetical future
+ *     one that queries a store-owned model without an `accountId` scope. The
+ *     rule was never able to check tenancy — see CLAUDE.md's own "this is
+ *     judgment, not lint" note on `adapters/prices.ts` and
+ *     `adapters/new-count.ts` shipping with no `where` at all — and widening
+ *     which files it reaches does not add that ability, it only makes the
+ *     rule's true scope ("a page/page-client, not the data layer") match
+ *     what it actually checks.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { dirname, join, relative, sep } from "node:path"
@@ -216,8 +287,21 @@ export interface Violation {
   text: string
 }
 
-/** Colour written as a literal rather than taken from a token. */
-const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(/
+/**
+ * Colour written as a literal rather than taken from a token.
+ *
+ * `\bcolor-mix\(` joins the set 2026-09-06 — `tests/styles/counter-components.test.ts:156`
+ * has carried the twin of this regex (with `color-mix` included) since before
+ * this file's copy caught up, so the two were out of sync: the components
+ * test could fail a colour-mix violation this rule would pass. `color-mix()`
+ * mixing two tokens (`color-mix(in srgb, var(--sunk) 70%, transparent)`) is
+ * exactly as untraceable to the token system as a hand-written `rgba()` once
+ * it's computed — see the `--ct-ink-inverse-3` comment in `counter.css` for
+ * a mix that was tried and rejected for precisely that reason on a token the
+ * dark-mode gate needed to see. See `COLOUR_ALLOWED` for how
+ * `counter-repairs.css`'s existing token-only uses were kept legal.
+ */
+const COLOUR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\boklch\(|\brgba?\(|\bhsla?\(|\bcolor-mix\(/
 /**
  * Any Tailwind palette colour. Counter's own utilities are all `ct-`
  * prefixed. Two alternatives: the shaded palette names (`bg-sky-500` and
@@ -263,7 +347,7 @@ const STATUS_BRANCH =
  * `import("...")` / `require("...")` forms — the latter are exactly what
  * someone reaches for once the static import starts failing this gate.
  */
-const DIRECT_DATA_SPECIFIERS = String.raw`@\/lib\/prisma|@\/app\/actions\/[^"']+|@prisma\/client`
+const DIRECT_DATA_SPECIFIERS = String.raw`@\/lib\/prisma|@\/app\/actions\/[^"']+|@\/generated\/prisma(?:\/[^"']+)?`
 const DIRECT_DATA_IMPORT = new RegExp(
   String.raw`from\s+["'](?:${DIRECT_DATA_SPECIFIERS})["']|\b(?:import|require)\s*\(\s*["'](?:${DIRECT_DATA_SPECIFIERS})["']`,
 )
@@ -288,7 +372,39 @@ const SHELL_IN_PAGE = /\bAppShell\b|\bPhoneShell\b/
 const STATUS_BRANCH_ALLOWED =
   /[/\\]components[/\\]counter[/\\](?:surface|state)[/\\]|[/\\]lib[/\\]counter[/\\]/
 const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
-const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]adapters[/\\]/
+/**
+ * Widened from `lib/counter/adapters/` alone to all of `lib/counter/**` on
+ * 2026-09-06, the same day rule 4 gained the `.ts` extension (it was
+ * `.tsx`-only before, which is exactly why this gap went unseen: nothing
+ * under `lib/counter` is `.tsx` except `adapters/`, so the narrower pattern
+ * had never been exercised against the rest of the tree).
+ *
+ * Extending to `.ts` reaches `src/lib/counter`'s ~40 helper modules — the
+ * layer CLAUDE.md itself describes as "the largest in the app," each one the
+ * single function an adapter defers to rather than recomputing (the
+ * `prime-cost.ts` pattern) — and `src/lib/counter/actions/*.ts`, the
+ * write-side mirror of `adapters/`: pages call these wrappers instead of an
+ * `@/app/actions/*` server action directly, same as they call an adapter
+ * instead of Prisma directly. `channel-mix.ts` (a raw `Prisma.sql` query
+ * behind `@/lib/prisma`), `cogs.ts`, `labor-leaks.ts`, `labor-week.ts`,
+ * `service-profile.ts`, `staffing-curve.ts`, `statement.ts` and
+ * `vendor-basket.ts` all import data access directly and are all consumed by
+ * one or more files under `adapters/` — `git grep` confirms every one of
+ * them is read by `adapters/pnl.ts`, `adapters/overview.ts`,
+ * `adapters/orders.ts`, `adapters/labor.ts`, `adapters/cogs.ts`,
+ * `adapters/vendor(s).ts`, `adapters/menu-item.ts`, `adapters/menu-profit.ts`
+ * or `adapters/analytics.ts` — so narrowing this to `(adapters|actions)/`
+ * still leaves 8 real files failing for the same non-bug reason.
+ *
+ * This is the exact shape `STATUS_BRANCH_ALLOWED` already settled two rules
+ * up, for the identical argument: "nothing under src/lib/counter is a page,"
+ * and that comment's own warning — do not narrow this back down thinking the
+ * wide exemption was an oversight — applies here too. Confirmed empirically,
+ * not by inspection alone: before this widened, extending rule 4 to `.ts`
+ * produced 25 new violations across 17 files, none of them a page, all of
+ * them an existing, reviewed, working data-access pattern; after, zero.
+ */
+const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]/
 /**
  * Rule 1's exemption: the Counter stylesheets, and only those.
  *
@@ -309,8 +425,23 @@ const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]adapters[/\\]/
  * suppress nothing and fail its own "still suppressing at least one real
  * violation" check in tests/styles/counter-lint.test.ts. Verified by trying
  * it: 1 failed, "expected 0 to be greater than 0".
+ *
+ * `counter-repairs\.css$` joined this list 2026-09-06, when `color-mix(`
+ * joined `COLOUR_LITERAL` above. Every `color-mix()` in that file mixes two
+ * `var(--ct-*)` tokens with `transparent` (the login mark's drop-shadows and
+ * bloom, the working-state sweep) — no hex, no oklch, no rgb component
+ * anywhere in the arguments — so this is a narrow, file-level allowlist of
+ * the kind the "known holes" section above says is the honest fix, not a
+ * speculative one: the need is real and on-disk, not anticipated. The risk
+ * taken is the same shape as the other two entries in this regex: the
+ * allowlist is file-level, not line-level, so a FUTURE hex or oklch literal
+ * added anywhere else in `counter-repairs.css` would also pass unnoticed by
+ * rule 1. `counter-repairs.css` is small enough and reviewed closely enough
+ * (it is the file that fixes visual defects, not a growing generated port
+ * like `counter-components.css`) that this is judged an acceptable trade;
+ * revisit if the file grows the way `counter-components.css` did.
  */
-const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$/
+const COLOUR_ALLOWED = /counter\.css$|counter-components\.css$|counter-repairs\.css$/
 /**
  * `SHELL_IN_PAGE`'s exemption: the two layout files that ARE the shell's one
  * legitimate mount site each, plus everything reachable from `ROOTS` that is
@@ -329,11 +460,30 @@ const RULES: Array<{
   pattern: RegExp
   allowed?: RegExp
   extensions: readonly string[]
+  /**
+   * Skip a line whose trimmed text starts with `import type ` before testing
+   * `pattern` against it. Only `no-direct-data-import` sets this: a type
+   * import erases completely at build (no runtime specifier survives to
+   * touch Prisma), so it is not the data-access the rule polices — see the
+   * comment on `DIRECT_DATA_SPECIFIERS`. No other rule needs this: a type
+   * import can still legitimately be a colour, a Tailwind class, a `.status`
+   * literal, `framer-motion`, or `AppShell`/`PhoneShell` in source text (it
+   * can't, in practice, but nothing about those rules is specific to values
+   * the way data-access is), so widening this past rule 4 was not done
+   * speculatively.
+   */
+  typeImportExempt?: boolean
 }> = [
   { name: "no-colour-literal", pattern: COLOUR_LITERAL, allowed: COLOUR_ALLOWED, extensions: [".tsx", ".ts", ".css"] },
   { name: "no-tailwind-palette", pattern: TAILWIND_PALETTE, extensions: [".tsx", ".ts"] },
   { name: "no-status-branch", pattern: STATUS_BRANCH, allowed: STATUS_BRANCH_ALLOWED, extensions: [".tsx"] },
-  { name: "no-direct-data-import", pattern: DIRECT_DATA_IMPORT, allowed: DATA_ALLOWED, extensions: [".tsx"] },
+  {
+    name: "no-direct-data-import",
+    pattern: DIRECT_DATA_IMPORT,
+    allowed: DATA_ALLOWED,
+    extensions: [".ts", ".tsx"],
+    typeImportExempt: true,
+  },
   { name: "no-direct-motion-import", pattern: DIRECT_MOTION_IMPORT, allowed: MOTION_ALLOWED, extensions: [".tsx", ".ts"] },
   { name: "no-shell-in-page", pattern: SHELL_IN_PAGE, allowed: SHELL_ALLOWED, extensions: [".tsx"] },
 ]
@@ -875,6 +1025,7 @@ export function lintCounter(
       const lines = stripComments(content).split("\n")
       lines.forEach((text, i) => {
         for (const rule of rules) {
+          if (rule.typeImportExempt && text.trimStart().startsWith("import type ")) continue
           if (rule.pattern.test(text)) {
             violations.push({
               file: relative(process.cwd(), file),
