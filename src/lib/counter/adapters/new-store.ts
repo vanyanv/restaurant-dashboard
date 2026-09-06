@@ -88,9 +88,15 @@ async function loadNewStore(input: NewStoreInput): Promise<NewStoreData> {
         latitude: true,
       },
     }),
-    prisma.otterStore.findMany({ select: { storeId: true } }),
-    prisma.harriBrand.findMany({ select: { storeId: true } }),
-    prisma.storeWeatherSignal.count(),
+    prisma.otterStore.findMany({
+      where: { store: { accountId: input.accountId } },
+      select: { storeId: true },
+    }),
+    prisma.harriBrand.findMany({
+      where: { store: { accountId: input.accountId } },
+      select: { storeId: true },
+    }),
+    prisma.storeWeatherSignal.count({ where: { store: { accountId: input.accountId } } }),
   ])
 
   const otterIds = new Set(otter.map((o) => o.storeId))
