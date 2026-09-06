@@ -1,19 +1,12 @@
 import { describe, it, expect } from "vitest"
 import {
-  CHANNELS, channelById, bandClassFor, markClassFor, commissionFor,
+  CHANNELS, channelById, bandClassFor, markClassFor,
   bandVarFor, markVarFor,
 } from "@/lib/counter/channels"
 
 describe("channels", () => {
   it("knows the four the restaurant actually sells through", () => {
     expect(CHANNELS.map((c) => c.id)).toEqual(["house", "doordash", "ubereats", "grubhub"])
-  })
-
-  it("carries the commission each marketplace takes, from one place", () => {
-    expect(commissionFor("house")).toBe(0)
-    expect(commissionFor("doordash")).toBe(0.25)
-    expect(commissionFor("ubereats")).toBe(0.23)
-    expect(commissionFor("grubhub")).toBe(0.20)
   })
 
   it("maps a channel to a BAND class fixed to the channel, never to its rank", () => {

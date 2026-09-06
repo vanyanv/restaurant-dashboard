@@ -306,7 +306,13 @@ describe("getOverviewSections", () => {
     // The same readings the strip's orders and ticket came from — one call per
     // store, not one call per drawer.
     expect(holly.channels.map((c) => c.id)).toEqual(["house", "doordash", "grubhub"])
-    expect(holly.channels[0]).toEqual({ id: "house", net: 4000, orders: 160 })
+    // Task 8: commission and ticket now pass through from the mix's own
+    // reading — store-rate × gross, not a trade-average constant.
+    expect(holly.channels[0]).toEqual({ id: "house", net: 4000, orders: 160, commission: 0, ticket: 25 })
+    expect(holly.channels[1]).toMatchObject({
+      id: "doordash", net: 2000, orders: 80,
+      commission: 500, ticket: 25,
+    })
   })
 
   it("maps the lifecycle stage in ONE place, and a warming-up store still trades", async () => {

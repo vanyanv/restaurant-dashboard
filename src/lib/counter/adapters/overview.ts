@@ -1299,10 +1299,13 @@ function buildStoreCards(input: {
       // no average ticket. Zero would claim every order on this store was free.
       ticket: orders > 0 ? channelNet / orders : null,
       salesPerHour: hours > 0 ? splhNet / hours : null,
-      // Passed through, not summed: `ChannelRows` wants the net and the order
-      // count per channel and works the commission out from the contract rate
-      // itself.
-      channels: mix.map((c) => ({ id: c.channel, net: c.net, orders: c.orders })),
+      // Passed through from loadChannelMix — the one place commission is
+      // derived (store contract rate × gross, null when the schema
+      // publishes no rate).
+      channels: mix.map((c) => ({
+        id: c.channel, net: c.net, orders: c.orders,
+        commission: c.commission, ticket: c.ticket,
+      })),
     }
   })
 }

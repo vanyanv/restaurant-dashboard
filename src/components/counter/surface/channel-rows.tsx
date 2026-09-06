@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react"
-import { commissionFor, channelById, markVarFor, type ChannelId } from "@/lib/counter/channels"
+import { channelById, markVarFor, type ChannelId } from "@/lib/counter/channels"
 import { money, count } from "@/lib/counter/format"
 
 /**
@@ -49,6 +49,26 @@ import { money, count } from "@/lib/counter/format"
  * `rows` renders that shape — the keeps/commission legend is suppressed
  * (nothing on screen for it to key) and the footnote loses its top margin, both
  * as the prototype does it.
+ *
+ * ## Where this diverges from the prototype's `commission 25% −$2,494`
+ *
+ * The markup above is the ported sheet's, and its `25%` is DoorDash's
+ * trade-average rate — a constant, the same for every store. This component
+ * used to reproduce that exactly, reading the rate from `channels.ts`'s
+ * `commissionFor` and multiplying it by the row's own net. That was fabricated
+ * for any store whose real contract differs from the trade average, and it
+ * was fabricated OUTRIGHT for Grubhub, which has no published rate at all —
+ * `commissionFor("grubhub")` returned a made-up `0.20` and drew a bar for it.
+ *
+ * The fee now comes from `ChannelReading.commission` (`channel-mix.ts`), the
+ * one place a commission is derived: the STORE's own contract rate against
+ * gross, the same basis the P&L's commission lines use. A row here can no
+ * longer print a percent, because with multi-store aggregation there is no
+ * single rate behind the dollar figure — a dollar total is the honest thing to
+ * show, so the meta line reads `commission −$1,870 · keeps $5,609`, with no
+ * rate before it. And a row can genuinely have no rate on file (Grubhub): that
+ * prints `commission rate not on file · keeps —`, not a `0%` that would claim
+ * the marketplace works for free.
  */
 export interface ChannelRow {
   id: ChannelId
@@ -56,6 +76,19 @@ export interface ChannelRow {
   net: number
   /** Orders on this channel over the range. */
   orders: number
+  /**
+   * What the marketplace kept, in dollars — `ChannelReading.commission`,
+   * passed through unchanged. `0` for in-house, genuinely none. `null` when
+   * the schema publishes no rate (Grubhub): never coalesced to `0`, which
+   * would claim that marketplace works for free.
+   */
+  commission: number | null
+  /**
+   * `ChannelReading.ticket` passed through: `net / orders`, `null` when the
+   * channel had no orders. Never `0` — a channel with no orders has no
+   * average ticket.
+   */
+  ticket: number | null
 }
 
 export function ChannelRows({
@@ -93,10 +126,16 @@ export function ChannelRows({
 
       {rows.map((r) => {
         const channel = channelById(r.id)
-        const rate = commissionFor(r.id)
-        const fee = r.net * rate
-        const keep = r.net - fee
-        const ticket = r.orders === 0 ? null : r.net / r.orders
+        // The store's own reading, not a trade-average constant: `0` is
+        // genuinely no commission (in-house), `null` is no published rate
+        // (Grubhub) — see the module docblock above.
+        const fee = r.commission
+        const keep = fee === null ? null : r.net - fee
+        // fee>0: the kept slice is narrower than the channel's share of net,
+        // and the hatch fills the rest. fee 0 or null: nothing was taken (or
+        // nothing is known to have been), so the kept bar fills the whole
+        // slice and there is no hatch.
+        const keepWidth = fee !== null && fee > 0 ? keep! : r.net
 
         return (
           <div className="chan__row" key={r.id}>
@@ -105,11 +144,11 @@ export function ChannelRows({
               {channel.name}
             </span>
             <span className="cbar">
-              <i style={{ width: `${shareOf(keep).toFixed(1)}%` }} />
-              {fee > 0 ? (
+              <i style={{ width: `${shareOf(keepWidth).toFixed(1)}%` }} />
+              {fee !== null && fee > 0 ? (
                 <u
                   style={{
-                    left: `${shareOf(keep).toFixed(1)}%`,
+                    left: `${shareOf(keep!).toFixed(1)}%`,
                     width: `${shareOf(fee).toFixed(1)}%`,
                   }}
                 />
@@ -122,10 +161,14 @@ export function ChannelRows({
                   em-dash for a figure that does not exist, which is the right
                   answer HERE — it is a missing measurement on a row that has
                   every other figure, not a whole store reduced to dashes. */}
-              {money(ticket, { cents: true })} ticket ·{" "}
-              {rate > 0 ? (
+              {money(r.ticket, { cents: true })} ticket ·{" "}
+              {fee === null ? (
                 <>
-                  commission {Math.round(rate * 100)}% −{money(fee)} · keeps <b>{money(keep)}</b>
+                  commission rate not on file · keeps {money(null)}
+                </>
+              ) : fee > 0 ? (
+                <>
+                  commission −{money(fee)} · keeps <b>{money(keep!)}</b>
                 </>
               ) : (
                 <>

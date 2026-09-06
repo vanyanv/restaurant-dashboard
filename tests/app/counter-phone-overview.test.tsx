@@ -63,7 +63,7 @@ const sections: OverviewSections = {
       orders: 291,
       ticket: 25.66,
       salesPerHour: 71.4,
-      channels: [{ id: "house", net: 4000, orders: 160 }],
+      channels: [{ id: "house", net: 4000, orders: 160, commission: 0, ticket: 25 }],
     },
     { kind: "pre_open", id: "glendale", name: "Glendale", opensOn: null, missingFromFile: ["Rent"] },
   ]),

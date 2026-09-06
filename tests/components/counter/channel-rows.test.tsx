@@ -4,12 +4,14 @@ import { render, screen } from "@testing-library/react"
 import { ChannelRows, type ChannelRow } from "@/components/counter/surface/channel-rows"
 import { markVarFor } from "@/lib/counter/channels"
 
-// The prototype's own split of a $25,879 range: 39.1 / 28.9 / 19.3 / 12.7.
+// The prototype's own split of a $25,879 range: 39.1 / 28.9 / 19.3 / 12.7 —
+// commission and ticket now come from the reading itself (Task 8), not a
+// trade-average constant applied here.
 const ROWS: ChannelRow[] = [
-  { id: "house", net: 10_119, orders: 400 },
-  { id: "doordash", net: 7_479, orders: 296 },
-  { id: "ubereats", net: 4_995, orders: 197 },
-  { id: "grubhub", net: 3_286, orders: 131 },
+  { id: "house", net: 10_119, orders: 400, commission: 0, ticket: 25.3 },
+  { id: "doordash", net: 7_479, orders: 296, commission: 1_870, ticket: 25.27 },
+  { id: "ubereats", net: 4_995, orders: 197, commission: 1_149, ticket: 25.36 },
+  { id: "grubhub", net: 3_286, orders: 131, commission: null, ticket: 25.09 },
 ]
 
 function rows(container: HTMLElement) {
@@ -46,34 +48,43 @@ describe("ChannelRows", () => {
   it("bar LENGTH is the channel's share of net; inside it, i keeps and u is commission", () => {
     const { container } = render(<ChannelRows caption="c" rows={ROWS} />)
     const dd = rows(container)[1]
-    // 7,479 of 25,879 = 28.9%. DoorDash takes 25%, so the store keeps 21.7%
-    // of net and the marketplace takes 7.2% — and the two are the whole slice.
+    // 7,479 of 25,879 = 28.9% of net. DoorDash's own reading kept $5,609 of
+    // that — 21.7% of the whole track — and the $1,870 fee is the remaining
+    // 7.2%, drawn as the hatch.
     expect(dd.keep).toBe("21.7%")
     expect(dd.fee!.style.left).toBe("21.7%")
     expect(dd.fee!.style.width).toBe("7.2%")
   })
 
-  it("in-house has no commission, so it draws no taken portion at all", () => {
+  it("in-house has no commission (fee === 0), so it draws no taken portion at all", () => {
     const { container } = render(<ChannelRows caption="c" rows={ROWS} />)
     const house = rows(container)[0]
     expect(house.fee).toBeNull()
+    // fee===0: full-width kept bar — the whole slice, not a share of it.
+    expect(house.keep).toBe(`${((10_119 / 25_879) * 100).toFixed(1)}%`)
     expect(house.meta).toMatch(/no commission · keeps \$10,119/)
   })
 
-  it("the meta line states share, orders, ticket, rate, what it took and what is left", () => {
+  it("a published rate draws the dollar fee, with no percent on the line", () => {
     const { container } = render(<ChannelRows caption="c" rows={ROWS} />)
     expect(rows(container)[1].meta).toBe(
-      "28.9% of net · 296 orders · $25.27 ticket · commission 25% −$1,870 · keeps $5,609",
+      "28.9% of net · 296 orders · $25.27 ticket · commission −$1,870 · keeps $5,609",
     )
+    // The percent left the line entirely — multi-store aggregation has no
+    // single rate to print, so only the trade-average constants used to
+    // fabricate one. "commission 25%" (the old, fabricated form) never
+    // appears again.
+    expect(rows(container)[1].meta).not.toMatch(/commission \d+%/)
   })
 
-  it("the commission rate comes from channels.ts, not from the caller", () => {
-    // The prototype's own note: DoorDash was 20% on an order, 20% on an item
-    // and 25% here. There is no prop to retype it into.
+  it("no published rate (Grubhub) draws no hatch and keeps nothing, never a fabricated bar", () => {
     const { container } = render(<ChannelRows caption="c" rows={ROWS} />)
-    const r = rows(container)
-    expect(r[2].meta).toMatch(/commission 23%/) // Uber Eats
-    expect(r[3].meta).toMatch(/commission 20%/) // Grubhub
+    const gh = rows(container)[3]
+    expect(gh.fee).toBeNull()
+    // fee===null: full-width kept bar too — there is no known fee to carve
+    // a hatch out of.
+    expect(gh.keep).toBe(`${((3_286 / 25_879) * 100).toFixed(1)}%`)
+    expect(gh.meta).toBe("12.7% of net · 131 orders · $25.09 ticket · commission rate not on file · keeps —")
   })
 
   it("the keeps/commission legend is drawn once, in the cap", () => {
@@ -102,7 +113,10 @@ describe("ChannelRows", () => {
 
   it("a range with no sales at all renders 0%, never NaN%", () => {
     const { container } = render(
-      <ChannelRows caption="c" rows={[{ id: "house", net: 0, orders: 0 }]} />,
+      <ChannelRows
+        caption="c"
+        rows={[{ id: "house", net: 0, orders: 0, commission: 0, ticket: null }]}
+      />,
     )
     const r = rows(container)[0]
     expect(r.keep).toBe("0%")
