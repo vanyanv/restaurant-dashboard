@@ -218,7 +218,7 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
       }),
       batchRecipeCosts(accountId),
       prisma.stockCountLine.count({ where: { canonicalIngredientId: ingredientId } }),
-      prisma.stockCountLine.count(),
+      prisma.stockCountLine.count({ where: { stockCount: { store: { accountId } } } }),
       prisma.$queryRaw<Array<{ mine: number; all: number }>>`
         SELECT COALESCE(SUM(li."extendedPrice") FILTER (
                  WHERE li."canonicalIngredientId" = ${ingredientId}), 0)::float AS mine,
