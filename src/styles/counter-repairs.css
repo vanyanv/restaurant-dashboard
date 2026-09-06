@@ -173,29 +173,34 @@ button.wkd {
  * (defined below in this file), never `.stalebar` — so it is left alone
  * rather than repaired for a selector nothing renders.
  *
- * `--ct-signal-ink` in `counter.css` is the only ink named for a signal
- * surface, and its light arm, `oklch(44% 0.095 70)`, matches the literal's
- * hue and chroma family exactly (70°, the same low-mid chroma) — the
- * strongest sign available that this is the intended pairing and not a
- * coincidence. `.stalebar span` (counter-components.css:746, also unused,
- * but drawn from the same prototype block) already reaches for this exact
- * token on this exact ground, which is the pairing surviving into the two
- * classes that ARE live.
+ * `--ct-signal-ink` looked like the obvious token — it is the only ink named
+ * for a signal surface, and its light arm, `oklch(44% 0.095 70)`, matches
+ * the literal's hue and chroma family (70°, the same low-mid chroma).
+ * `.stalebar span` (counter-components.css:746, also unused, but drawn from
+ * the same prototype block) even reaches for it on this exact ground. It is
+ * WRONG here, measured with culori's `wcagContrast` against `--ct-signal`
+ * (the same tool tests/styles/counter-tokens.test.ts uses): 4.171:1 in
+ * light — already under the 4.5:1 AA floor — and 1.061:1 in dark, which is
+ * not a reduced-contrast trade, it is invisible. The reason is structural,
+ * not a rounding error: `--ct-signal-ink` was authored for a
+ * `--ct-signal-wash` ground (the "signal text on signal wash" row is its
+ * only entry in tests/styles/counter-tokens.test.ts's CONTRAST table) and so
+ * inverts hard (44% / 84%), while `--ct-signal` itself barely inverts (80%
+ * light / 82.5% dark, unlike every other state token) — so an inverting ink
+ * on a ground that stays light lands near-illegible in whichever theme the
+ * ink's own dark arm is the LIGHT one. No existing ink-family token clears
+ * both theme values against a ground that never darkens: `--ct-ink` (1.42
+ * dark), `--ct-ink-2` (1.32 dark) and `--ct-warn` (1.66 dark) were all
+ * checked and all fail the same way.
  *
- * It was authored for a `--signal-wash` ground — the "signal text on signal
- * wash" row is the only `--ct-signal-ink` entry in
- * tests/styles/counter-tokens.test.ts's CONTRAST table — not a solid
- * `--signal` circle, and `--signal` itself barely inverts between themes
- * (80% light / 82.5% dark, unlike every other state token) where
- * `--signal-ink` inverts hard (44% / 84%). So the dark arm sits close in
- * lightness to the ground it is drawn on and reads with real but reduced
- * contrast — a known trade, not an oversight: no token in this file stays
- * dark against a ground that stays light in both themes. When the
- * generator next emits either rule it should emit the token and this
- * repair should go. */
+ * `--ct-signal-ink-strong`, named in counter.css for exactly this ground, is
+ * the fix: the prototype's own literal, kept theme-static in BOTH arms of a
+ * light-dark() pair, because the ground it sits on is also theme-static.
+ * Measured: 7.244:1 in light, 7.895:1 in dark. When the generator next
+ * emits either rule it should emit the token and this repair should go. */
 .navbtn .badge,
 .loginmsg.is-warn .fi {
-  color: var(--signal-ink);
+  color: var(--ct-signal-ink-strong);
 }
 
 /* The menu matrix's fourth quadrant TAG, not just its dot. `.classtag.PUZZLE`

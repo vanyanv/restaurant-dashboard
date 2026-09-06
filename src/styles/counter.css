@@ -210,6 +210,33 @@
   --ct-signal-wash:  light-dark(oklch(95.5% 0.042 82), oklch(26% 0.045 82));
   --ct-signal-line:  light-dark(oklch(87% 0.070 80),   oklch(36% 0.060 80));
   --ct-signal-ink:   light-dark(oklch(44% 0.095 70),   oklch(84% 0.090 78));
+
+  /* A second, deliberately theme-STATIC ink for text drawn directly on a
+   * solid `--ct-signal` chip (a badge, an icon circle) rather than on
+   * `--ct-signal-wash`. `--ct-signal-ink` inverts hard (44% -> 84%) because
+   * every other ink/wash pair in this file inverts — but `--ct-signal`
+   * itself does NOT invert: it is light in both themes (80% / 82.5% L), the
+   * one state colour that never flips. Pairing an inverting ink with a
+   * non-inverting ground works in the theme the ink happens to be dark in
+   * and fails in the other: `--ct-signal-ink` on `--ct-signal` measures
+   * 4.171:1 in light (already under the 4.5:1 AA floor) and 1.061:1 in dark
+   * (effectively invisible — its 84% dark arm sits right next to
+   * `--ct-signal`'s own 82.5%), both computed with culori's `wcagContrast`,
+   * the same tool tests/styles/counter-tokens.test.ts uses.
+   *
+   * The prototype's own literal for this exact spot, `oklch(30% 0.06 70)`
+   * (counter-components.css:119, :782), was correct in both themes for
+   * exactly this reason: it never flips either, because the ground it sits
+   * on never does. So it is named here verbatim, in BOTH arms of a
+   * light-dark() pair — not a bare value, which `tests/styles/counter-
+   * tokens.test.ts` would flag as "no dark value" — following `--ct-scrim`
+   * and `--ct-raise` above as tokens this file authors outright rather than
+   * inheriting from the prototype's ink/wash system. Measured: 7.244:1 in
+   * light, 7.895:1 in dark, both against `--ct-signal`. See the repair at
+   * `src/styles/counter-repairs.css` (`.navbtn .badge`, `.loginmsg.is-warn
+   * .fi`) for where this is consumed. */
+  --ct-signal-ink-strong: light-dark(oklch(30% 0.06 70), oklch(30% 0.06 70));
+
   --ct-good:         light-dark(oklch(47% 0.098 160),  oklch(74% 0.115 160));
   --ct-good-wash:    light-dark(oklch(95.5% 0.026 160), oklch(24% 0.030 160));
   --ct-warn:         light-dark(oklch(53% 0.115 70),   oklch(68.5% 0.110 64));
