@@ -66,4 +66,30 @@ describe("recipes adapter · partial-cost scan store scope", () => {
       true,
     )
   })
+
+  it("skips the $queryRaw call entirely when the account has no scoped stores", async () => {
+    asMock(getScopedStores).mockResolvedValue([])
+
+    const sections = getRecipesSectionPromises({
+      storeId: null,
+      accountId: "acct_ours",
+      range: { start: new Date(0), end: new Date() },
+      today: new Date(),
+    })
+    // Should resolve without a runtime error from `= ANY('{}')`, same as the
+    // sibling `sold` query's guard.
+    const headline = await sections.headline
+    expect(headline.status).not.toBe("error")
+
+    // Every $queryRaw call left is one of the OTHER raw queries in this file
+    // (there are none here, since `sold` and `partialDays` are the only two
+    // and both are guarded) — so no call's template text should mention the
+    // partial-cost scan at all.
+    const calls = asMock(prisma.$queryRaw).mock.calls
+    const partialCall = calls.find((c) => {
+      const strings = c[0] as TemplateStringsArray
+      return strings.join(" ").includes("partialCost")
+    })
+    expect(partialCall).toBeUndefined()
+  })
 })

@@ -166,12 +166,14 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
           GROUP BY 1`,
     // Not range-bound: "how long has this been wrong" is the question, and a
     // day inside the reader's range does not answer it.
-    prisma.$queryRaw<Array<{ recipe_id: string; days: number }>>`
-      SELECT "recipeId" AS recipe_id, COUNT(*)::int AS days
-      FROM "DailyCogsItem"
-      WHERE "recipeId" IS NOT NULL AND "partialCost"
-        AND "storeId" = ANY(${storeIds})
-      GROUP BY 1`,
+    storeIds.length === 0
+      ? Promise.resolve([] as Array<{ recipe_id: string; days: number }>)
+      : prisma.$queryRaw<Array<{ recipe_id: string; days: number }>>`
+          SELECT "recipeId" AS recipe_id, COUNT(*)::int AS days
+          FROM "DailyCogsItem"
+          WHERE "recipeId" IS NOT NULL AND "partialCost"
+            AND "storeId" = ANY(${storeIds})
+          GROUP BY 1`,
   ])
 
   const soldById = new Map(sold.map((s) => [s.recipe_id, s]))
