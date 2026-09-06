@@ -120,18 +120,18 @@ Consumers across `src/app/dashboard/*`, `src/app/m/*`, and lib code keep their e
 
 ### 8. Verify
 
-The repo's `package.json` only defines `test` and `build` — there is no `typecheck` or `lint` script, and the lockfile is `package-lock.json` (the project happens to run `pnpm` over an npm-installed tree; both work). Run the actual gates that exist:
+The repo's `package.json` defines 33 npm scripts, including `typecheck` (`tsc --noEmit`) — there is still no `lint` script (Next 16 dropped `next lint` and this repo has no ESLint installed; see the root `CLAUDE.md`). The lockfile is `package-lock.json`. Run the actual gates:
 
 ```
-pnpm test                  # vitest: contract + helper tests + existing tests
-pnpm exec tsc --noEmit     # the typecheck gate (no script alias)
-pnpm build                 # next build also runs Next.js compile-time checks
+npm test                   # vitest: contract + helper tests + existing tests
+npm run typecheck          # tsc --noEmit
+npm run build              # next build also runs Next.js compile-time checks
 graphify update .          # AGENTS.md / CLAUDE.md require this after any code change
 ```
 
 Then **manually** smoke the routes the consumer map flagged. For mobile, that means actually loading each `(mobile)/m/*` route in a phone-sized viewport — not just confirming the page returns 200.
 
-If the project later gains real `typecheck` / `lint` scripts (preferred), update this step to use them.
+If the project later gains a real `lint` script, update this step to use it.
 
 ### 9. Settle, then optionally codemod imports & drop the shim
 

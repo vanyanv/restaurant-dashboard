@@ -113,10 +113,12 @@
  *     filesystem directly instead, scoped to `COUNTER_ROUTE_GROUPS` (the two
  *     `(counter)` route groups, not the wider `src/app/dashboard/**` /
  *     `src/app/(mobile)/m/**` the other rules police). That scope is also
- *     why it needs no LEGACY exemption of its own: the ~19 remaining
- *     editorial pages live outside both `(counter)` groups, so this check
- *     structurally cannot reach them, unlike a regex rule that would see
- *     every editorial page and need LEGACY to look away from it.
+ *     why it needs no LEGACY exemption of its own: the five redirect shims
+ *     (`chat`, `operations/costs`, `operations/recipes`, `stores/[id]/edit`,
+ *     `pnl/[storeId]`) are the only pages left outside both `(counter)`
+ *     groups, and this check structurally cannot reach them, unlike a regex
+ *     rule that would see every one of those files and need LEGACY to look
+ *     away from it.
  *
  * --- Task 4 (ruling S-R6: streaming itself was unenforced) ---
  *
@@ -136,14 +138,18 @@
  *     client island or a layout would be noise. `findAwaitedSectionsViolations`
  *     walks `page.tsx` files under `COUNTER_ROUTE_GROUPS` directly, the same
  *     scope `findRouteLoadingViolations` uses and for the same reason: the
- *     ~19 remaining editorial pages live outside both `(counter)` groups, so
- *     this check structurally cannot reach them and needs no LEGACY
- *     exemption of its own.
+ *     five redirect shims live outside both `(counter)` groups, so this
+ *     check structurally cannot reach them and needs no LEGACY exemption of
+ *     its own.
  *   - `await Promise.all([..., getXSections(...)])` is NOT caught: the
  *     pattern is line-oriented and looks for `await get\w*Sections(`, which a
- *     loader called inside a `Promise.all` never produces. The desk menu-item
- *     route does exactly this and is legitimately exempt anyway, so the hole
- *     has not yet hidden a real violation — but it would.
+ *     loader called inside a `Promise.all` never produces. Four of the six
+ *     exempted routes now call their loader this way — both order-detail
+ *     routes, the desk alert-inbox route and the desk menu-item route — and
+ *     all four are exempt anyway, so the hole has not yet hidden a real
+ *     violation. It would for any FUTURE route written this way without the
+ *     single-load argument S-R5/S-R6 require: the exemption stands on that
+ *     argument, not on which shape happens to trip the pattern.
  *   - Routes are exempted BY NAME, not by pattern. Ruling S-R5 covers the
  *     first pair: all seven of the order-detail sections come from one
  *     `getOrderDetail` load, so seven promises resolving in the same tick
@@ -586,8 +592,10 @@ export const LEGACY: Array<{ path: string; reason: string }> = [
   {
     path: "src/styles",
     reason:
-      "src/styles/** entered ROOTS' no-colour-literal scope in this fix round (the linter-scope finding sibling to C2) — src/styles held only counter.css before that, so its four pre-Counter stylesheets " +
-      "(editorial-tokens.css, editorial-dashboard.css, editorial-mobile.css, editorial-auth.css — loaded by the still-editorial dashboard/login/signup/mobile layouts) were never walked at all. " +
+      "src/styles/** entered ROOTS' no-colour-literal scope in this fix round (the linter-scope finding sibling to C2) — src/styles held only counter.css before that, so its pre-Counter stylesheets " +
+      "were never walked at all. Four at the time (editorial-tokens.css, editorial-dashboard.css, editorial-mobile.css, editorial-auth.css); editorial-dashboard.css is gone now, deleted with the rest " +
+      "of src/app/dashboard's editorial tree — dashboard and /login are Counter, not \"still-editorial,\" any more. The three left (editorial-tokens.css, editorial-mobile.css, editorial-auth.css) " +
+      "load from signup's layout and the root/mobile-shell not-found and error boundaries. " +
       "counter.css itself needs no entry here: RULES already excludes it up front via COLOUR_ALLOWED, before LEGACY is ever consulted. Deleted file by file in the same final dead-CSS sweep " +
       "(spec §6 Phase F) as the rest of the editorial tree — narrow this to the remaining un-rewritten files as each stylesheet's pages move to Counter.",
   },
@@ -963,12 +971,21 @@ const AWAITED_SECTIONS_PATTERN = /\bawait\s+get\w*Sections\s*\(/
  *
  *   - The two order-detail routes: all seven sections are `mapReadyTo` over
  *     one `getOrderDetail` load plus its costing batch, and the head must be
- *     resolved at page level anyway to decide the 404.
+ *     resolved at page level anyway to decide the 404. Both now call it
+ *     inside `await Promise.all([getOverviewStores(...), getOrderSections(...)])`
+ *     rather than a bare `await getOrderSections(...)`, so the pattern does
+ *     not currently catch either — a hole in the pattern, not an exemption
+ *     either earned; they are listed here regardless, on the single-load
+ *     argument above.
  *   - The two alert-inbox routes: `getAlertsSections` is one `getAlertInbox`
  *     load — a `findMany`, a `groupBy` and two small scope reads, all issued
  *     concurrently — and every section is a projection of its single result.
  *     Contrast `/dashboard/decisions`, whose `getDecisionsView` is nine
  *     independent queries and which therefore streams and is NOT listed here.
+ *     The DESK route calls it inside the same `Promise.all([...])` shape as
+ *     the order-detail pair, so the pattern misses it too; the PHONE route
+ *     still writes a bare `await getAlertsSections(...)`, which the pattern
+ *     does catch.
  */
 export const AWAITED_SECTIONS_ALLOWED = [
   join(process.cwd(), "src", "app", "dashboard", "(counter)", "orders", "[id]", "page.tsx"),
@@ -984,7 +1001,10 @@ export const AWAITED_SECTIONS_ALLOWED = [
   // it: it calls the loader inside a `Promise.all([...])`, so no single line
   // reads `await get*Sections(`. That is a hole in the pattern, not an
   // exemption it earned, and listing the path here records the decision where
-  // the next reader will look for it rather than leaving it to chance.
+  // the next reader will look for it rather than leaving it to chance. The
+  // PHONE route still writes a bare `await getMenuItemSections(...)`, which
+  // the pattern does catch — it is listed for the same single-load reason,
+  // not because it needs the same hole papered over.
   join(process.cwd(), "src", "app", "dashboard", "(counter)", "menu", "catalog", "[item]", "page.tsx"),
   join(process.cwd(), "src", "app", "(mobile)", "m", "(counter)", "menu", "catalog", "[item]", "page.tsx"),
 ]
@@ -996,7 +1016,7 @@ export const AWAITED_SECTIONS_ALLOWED = [
  * section-loading call, not on every `.tsx`/`.ts` under `ROOTS`. Walks
  * `page.tsx` files under `routeGroupRoots` directly and needs no LEGACY
  * exemption for the same structural reason `findRouteLoadingViolations`
- * doesn't: the ~19 remaining editorial pages live outside both `(counter)`
+ * doesn't: the five redirect shims live outside both `(counter)`
  * route groups.
  */
 export function findAwaitedSectionsViolations(

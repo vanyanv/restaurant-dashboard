@@ -233,9 +233,10 @@ check, not an AST, and fails the build on:
    `(counter)` route groups that holds a `page.tsx` but no `loading.tsx`
    beside it. This is the one rule that is a directory check rather than a
    regex — the defect is an absence, and there is no line of text for a
-   pattern to match against an absence. It never reaches the ~19 remaining
-   editorial pages at all (they live outside both `(counter)` groups), so it
-   needs no LEGACY exemption of its own.
+   pattern to match against an absence. It never reaches the five redirect
+   shims left outside both `(counter)` groups (they render nothing but a
+   `redirect()`, so a missing `loading.tsx` is not a real gap), so it needs no
+   LEGACY exemption of its own.
 8. **`no-awaited-sections-in-page`** — a `page.tsx` under one of the two
    `(counter)` route groups calling `await get<Anything>Sections(...)`
    instead of the not-awaited `get<Anything>SectionPromises(...)` shape Task 3
@@ -243,15 +244,23 @@ check, not an AST, and fails the build on:
    onto. Like rule 7, this walks `page.tsx` files under the two route groups
    directly rather than running as a per-file regex over everything else the
    other rules reach, and for the same reason needs no LEGACY exemption: the
-   editorial pages live outside both `(counter)` groups. Two routes are
-   exempted **by name**, not by pattern —
-   `src/app/dashboard/(counter)/orders/[id]/page.tsx` and
-   `src/app/(mobile)/m/(counter)/orders/[id]/page.tsx` — because ruling S-R5
-   keeps both on a single `await getOrderSections(...)`: all seven of their
-   sections come from one `getOrderDetail` load, so splitting it into seven
-   promises resolving in the same tick would be a picture of streaming rather
-   than streaming, and the page must resolve `head` before rendering at all,
-   to decide its 404.
+   five redirect shims live outside both `(counter)` groups. Six routes —
+   three desk/phone pairs — are exempted **by name**, not by pattern, because
+   in each every section comes from a single load, so splitting it into
+   several promises would be a picture of streaming rather than streaming:
+   both order-detail routes (ruling S-R5 — all seven sections are one
+   `getOrderDetail` load plus its costing batch, and the page must resolve
+   `head` before rendering at all to decide its 404), both alert-inbox routes
+   (`getAlertsSections` is one `getAlertInbox` load), and both menu-item
+   routes (the page's own title is the record's name, so the headline must
+   resolve before anything renders). Four of the six now call their loader
+   inside `await Promise.all([...])` rather than a bare
+   `await get<Anything>Sections(...)`, which the pattern cannot see at all —
+   a hole in the pattern, not an exemption any of them needed to earn. They
+   stay listed regardless: the exemption rests on the single-load argument
+   above, not on whichever shape happens to trip the regex. See
+   `scripts/counter-lint.ts`'s `AWAITED_SECTIONS_ALLOWED` for exactly which
+   two of the six still write the awaited-bare shape.
 
 It checks `src/app/dashboard/**`, `src/app/(mobile)/m/**`,
 `src/components/counter/**`, and `src/lib/counter/**`. Legacy files under the
@@ -262,6 +271,21 @@ uncommitted edit), it loses the exemption and is linted for real. The
 exemption can only shrink. Rules 7 and 8 are scoped narrower than the other
 six (the two `(counter)` route groups, not the full first two roots) for
 exactly the reason their own entries above give.
+
+`(mobile)/m/login` is a Counter page — `CounterPhoneLoginClient` carries
+`ct-root` and `ct-phone` like any other phone screen — that sits beside the
+`(counter)` group rather than inside it (`src/app/(mobile)/m/login/`, not
+`src/app/(mobile)/m/(counter)/login/`), for the same "no shell above it"
+reason the rest of `COUNTER_ROOT_EXCEPTIONS`' sign-in and sign-up pages are
+their own bare roots. That places it outside rules 7 and 8's reach along with
+the five redirect shims, but for a different reason: it is a real, rendered
+Counter page with neither a `loading.tsx` nor a section loader, not a stub. It
+is deliberately left there rather than moved or given a LEGACY entry, because
+today it reads no session and no data (`page.tsx`'s own comment: "Public, so
+it takes no session and reads no data") — there is no load for `loading.tsx`
+to cover and no `get*Sections` call for rule 8 to catch. Revisit this if
+`/m/login` ever starts loading data of its own; until then, the gap is a
+consequence of what the page is, not a hole in the rule.
 
 It's a regex, so it has known, documented holes — five of them, recorded in
 `scripts/counter-lint.ts`'s module comment rather than only in a report: a

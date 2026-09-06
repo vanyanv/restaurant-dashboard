@@ -13,29 +13,12 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   reactCompiler: true,
   experimental: {
-    optimizePackageImports: [
-      "lucide-react",
-      "recharts",
-      "framer-motion",
-      "date-fns",
-      "@radix-ui/react-alert-dialog",
-      "@radix-ui/react-avatar",
-      "@radix-ui/react-checkbox",
-      "@radix-ui/react-collapsible",
-      "@radix-ui/react-dialog",
-      "@radix-ui/react-dropdown-menu",
-      "@radix-ui/react-label",
-      "@radix-ui/react-popover",
-      "@radix-ui/react-progress",
-      "@radix-ui/react-select",
-      "@radix-ui/react-separator",
-      "@radix-ui/react-slider",
-      "@radix-ui/react-switch",
-      "@radix-ui/react-tabs",
-      "@radix-ui/react-toggle",
-      "@radix-ui/react-toggle-group",
-      "@radix-ui/react-tooltip",
-    ],
+    // @radix-ui/react-* used to fill this list — 17 entries, one per
+    // component still on the pre-Counter design. All of them are gone from
+    // package.json now (Counter's own primitives replaced Radix), so an
+    // entry naming a package that isn't a dependency has nothing to
+    // optimize; removed rather than left as dead config.
+    optimizePackageImports: ["lucide-react", "recharts", "framer-motion", "date-fns"],
   },
   images: {
     formats: ["image/webp", "image/avif"],
