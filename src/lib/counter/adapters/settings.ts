@@ -114,23 +114,27 @@ function agentName(raw: string | null): string {
 async function loadSettings(input: SettingsInput): Promise<SettingsData> {
   const since = new Date(Date.now() - SIGNIN_DAYS * 86_400_000)
 
-  const [users, stores, alertPreferences, logins, signouts, invites, roles] =
+  const users = await prisma.user.findMany({
+    where: { accountId: input.accountId },
+    orderBy: { role: "asc" },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      timezone: true,
+      notifyInvoices: true,
+      notifyWeeklyReport: true,
+      notifyAnomaly: true,
+      ownedStores: { select: { name: true } },
+    },
+  })
+  // LoginEvent has no relation to User — the boundary is the id list.
+  // Failed attempts (userId null) are other people's business, not this page's.
+  const userIds = users.map((u) => u.id)
+
+  const [stores, alertPreferences, logins, signouts, invites, roles] =
     await Promise.all([
-      prisma.user.findMany({
-        where: { accountId: input.accountId },
-        orderBy: { role: "asc" },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          timezone: true,
-          notifyInvoices: true,
-          notifyWeeklyReport: true,
-          notifyAnomaly: true,
-          ownedStores: { select: { name: true } },
-        },
-      }),
       prisma.store.findMany({
         where: { accountId: input.accountId },
         orderBy: { name: "asc" },
@@ -138,10 +142,12 @@ async function loadSettings(input: SettingsInput): Promise<SettingsData> {
       }),
       prisma.alertPreference.count({ where: { accountId: input.accountId } }),
       prisma.loginEvent.findMany({
-        where: { kind: "SIGN_IN", createdAt: { gt: since } },
+        where: { kind: "SIGN_IN", createdAt: { gt: since }, userId: { in: userIds } },
         select: { userAgent: true, ipAddress: true, createdAt: true },
       }),
-      prisma.loginEvent.count({ where: { kind: "SIGN_OUT", createdAt: { gt: since } } }),
+      prisma.loginEvent.count({
+        where: { kind: "SIGN_OUT", createdAt: { gt: since }, userId: { in: userIds } },
+      }),
       prisma.invite.findMany({
         where: { accountId: input.accountId },
         select: { expiresAt: true, usedAt: true, revokedAt: true },
