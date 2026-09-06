@@ -235,7 +235,7 @@ async function loadUsage(input: ProductUsageInput): Promise<UsageData> {
   const missing = rows.filter((r) => r.name === "").map((r) => r.id)
   if (missing.length > 0) {
     const named = await prisma.canonicalIngredient.findMany({
-      where: { id: { in: missing } },
+      where: { id: { in: missing }, accountId },
       select: { id: true, name: true },
     })
     const byId = new Map(named.map((n) => [n.id, n.name]))

@@ -170,6 +170,7 @@ async function loadRecipes(input: RecipesInput): Promise<RecipeData> {
       SELECT "recipeId" AS recipe_id, COUNT(*)::int AS days
       FROM "DailyCogsItem"
       WHERE "recipeId" IS NOT NULL AND "partialCost"
+        AND "storeId" = ANY(${storeIds})
       GROUP BY 1`,
   ])
 
