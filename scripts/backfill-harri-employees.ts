@@ -1,7 +1,10 @@
 // scripts/backfill-harri-employees.ts
-// Resolve Harri user_ids → first/last names. Same code path as the monthly
-// cron at src/app/api/cron/harri-employees/route.ts; runnable from CLI for
-// the initial backfill or any time we want to force an early refresh.
+// Resolve Harri user_ids → first/last names. Runs monthly via
+// .github/workflows/harri-employees-cron.yml, which calls this script
+// directly (the API route this once shared a code path with,
+// src/app/api/cron/harri-employees/route.ts, was unreachable dead code and
+// was deleted); also runnable from CLI for the initial backfill or any time
+// we want to force an early refresh.
 //
 // Usage:
 //   pnpm tsx scripts/backfill-harri-employees.ts              # all active brands

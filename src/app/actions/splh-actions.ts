@@ -33,10 +33,11 @@ const ROLLING_WEEKS = 8
  * An explicit window to report on, instead of the trailing one this action
  * derives for itself.
  *
- * Deliberately `{ startDate, endDate }` — the shape of
- * `src/app/actions/_shared/date-range.ts`, which is what every existing query
- * in this layer speaks and which treats `endDate` as an INCLUSIVE bound. It
- * is NOT Counter's `{ start, end }` (`src/lib/counter/date-range.ts`), whose
+ * Deliberately `{ startDate, endDate }`, treating `endDate` as an INCLUSIVE
+ * bound — the same convention pre-Counter actions in this layer use
+ * elsewhere (see `store/pnl-actions.ts`'s `buildPeriods`, which documents
+ * `endDate` as inclusive for the same reason). It is NOT Counter's
+ * `{ start, end }` (`src/lib/counter/date-range.ts`), whose
  * `end` is a local midnight. A Counter caller converts with `toQueryBounds`
  * before calling; handing the raw `end` in would silently drop the last day
  * of every range, which is the whole reason that helper exists.

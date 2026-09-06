@@ -85,9 +85,10 @@ export function dayCount(r: DateRange): number {
 }
 
 /**
- * `src/app/actions/_shared/date-range.ts` ALREADY exports a DIFFERENT
- * `DateRange` — `{ startDate, endDate }`, with `endDate` at 23:59:59 local,
- * built for existing Prisma queries that treat it as an inclusive bound.
+ * Pre-Counter actions in this layer (e.g. `store/pnl-actions.ts`,
+ * `splh-actions.ts`) use a DIFFERENT `DateRange` shape — `{ startDate,
+ * endDate }`, with `endDate` at 23:59:59 local, built for existing Prisma
+ * queries that treat it as an inclusive bound.
  * Counter's `DateRange` here is `{ start, end }` at local midnight. The two
  * are not interchangeable: an adapter that hands Counter's `end` straight
  * into one of those existing queries silently drops the last day of every

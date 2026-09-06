@@ -88,9 +88,10 @@ import type {
  *   headline and the cards sum to the headline, by construction rather than by
  *   luck (note 39: a total is the sum of the series drawn beside it).
  * - **Food cost, labour and prime** are the same statement's `cogsValue`,
- *   `laborValue` and `prime` — not `@/lib/cogs`, which reaches the same sales
- *   figure by its own path and would drift the moment either query's bounds
- *   changed.
+ *   `laborValue` and `prime` — not recomputed via a separate path.
+ *   `src/lib/cogs.ts` used to reach the same sales figure that way; it was
+ *   dead code and got deleted, which is exactly the drift this rule guards
+ *   against.
  * - **Orders, avg ticket and the channel split** come from `loadChannelMix`,
  *   which reads net and orders off the SAME `OtterDailySummary` rows. Task 1's
  *   ruling: the ticket in that table has to be the net in that table over the
