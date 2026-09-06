@@ -195,21 +195,25 @@
  *     access the rule polices — `counter-alerts-client.tsx` imports only
  *     `AlertSeverity`/`AlertSource`/`AlertStatus` as types from
  *     `@/generated/prisma/client` and needs exactly this to stay legal; and
- *     `DATA_ALLOWED` widened from `lib/counter/adapters/` to all of
- *     `lib/counter/**` — see the comment on `DATA_ALLOWED` for why this is
- *     the same "nothing under src/lib/counter is a page" call
- *     `STATUS_BRANCH_ALLOWED` already made, not a suppression reached for to
- *     silence an inconvenient finding. Extending to `.ts` without that
- *     widening produced 25 violations across 17 files — `channel-mix.ts`,
- *     `cogs.ts`, `labor-leaks.ts`, `labor-week.ts`, `service-profile.ts`,
- *     `staffing-curve.ts`, `statement.ts`, `vendor-basket.ts`, all nine
- *     `lib/counter/actions/*.ts` wrappers — none of them a page, none of them
- *     a tenancy bug, all of them the data layer the rule was never meant to
- *     reach; a real page- or page-client-level violation of this kind
- *     (a value import of `@/generated/prisma` or `@/lib/prisma` inside
- *     `src/app/**` or a `src/components/counter` client) would still fail
- *     the gate exactly as before, since neither correction touches those
- *     roots.
+ *     `DATA_ALLOWED` grew from `lib/counter/adapters/` alone to also cover
+ *     `lib/counter/actions/` in full and eight NAMED top-level helper
+ *     modules — see the comment on `DATA_ALLOWED` for the full list and why
+ *     it stops at those names rather than all of `lib/counter/**` (a first
+ *     pass tried the wider form and review caught it: that would have also
+ *     exempted `use-ask.ts`/`use-count-entry.ts`, "use client" hooks a page
+ *     client imports directly, from ever being checked for a future
+ *     accidental Prisma import — exactly the client-facing case the rule
+ *     exists for). Extending to `.ts` with no exemption beyond `adapters/`
+ *     produced 25 violations across 20 files (12 under
+ *     `lib/counter/actions/*.ts`, 8 top-level: `channel-mix.ts`, `cogs.ts`,
+ *     `labor-leaks.ts`, `labor-week.ts`, `service-profile.ts`,
+ *     `staffing-curve.ts`, `statement.ts`, `vendor-basket.ts`) — none of them
+ *     a page, none of them a tenancy bug, all of them the data layer the
+ *     rule was never meant to reach; a real page- or page-client-level
+ *     violation of this kind (a value import of `@/generated/prisma` or
+ *     `@/lib/prisma` inside `src/app/**`, a `src/components/counter` client,
+ *     or one of the un-named `lib/counter` hooks) still fails the gate
+ *     exactly as before.
  *   - `COLOUR_LITERAL` did not match `color-mix(` even though the sibling
  *     check in `tests/styles/counter-components.test.ts` did, so the two
  *     copies had drifted: a `color-mix()` could fail the components test's
@@ -264,17 +268,25 @@
  *     wider each time. Anchoring all three to `src/styles/` is a real
  *     option, but it changes what that fixture test means and so is its own
  *     decision, not a side effect of adding a third file.
- *   - `DATA_ALLOWED`'s widening in Task 20 (see the "Task 20" section above
- *     and the comment on the constant) is file-path-level, same as
- *     `COLOUR_ALLOWED` and `STATUS_BRANCH_ALLOWED`: it cannot tell a
- *     legitimate helper module's Prisma access from a hypothetical future
- *     one that queries a store-owned model without an `accountId` scope. The
- *     rule was never able to check tenancy — see CLAUDE.md's own "this is
- *     judgment, not lint" note on `adapters/prices.ts` and
- *     `adapters/new-count.ts` shipping with no `where` at all — and widening
- *     which files it reaches does not add that ability, it only makes the
- *     rule's true scope ("a page/page-client, not the data layer") match
- *     what it actually checks.
+ *   - `DATA_ALLOWED`'s Task 20 additions (`lib/counter/actions/` in full,
+ *     plus eight named top-level files — see the comment on the constant)
+ *     are file-path-level, same as `COLOUR_ALLOWED` and
+ *     `STATUS_BRANCH_ALLOWED`: once a file is named or a directory is
+ *     covered, the rule cannot tell a legitimate query from a hypothetical
+ *     future one on the same path that queries a store-owned model without
+ *     an `accountId` scope. The rule was never able to check tenancy — see
+ *     CLAUDE.md's own "this is judgment, not lint" note on
+ *     `adapters/prices.ts` and `adapters/new-count.ts` shipping with no
+ *     `where` at all — naming these eight files does not add that ability,
+ *     it only makes the rule's true scope ("a page or page client, not the
+ *     data layer") match what it actually checks, while deliberately NOT
+ *     extending that trust to every other file in `lib/counter` — the two
+ *     "use client" hooks (`use-ask.ts`, `use-count-entry.ts`) imported
+ *     directly by page clients stay covered, and so does anything named
+ *     here only because a future refactor moves its Prisma access
+ *     elsewhere: an entry earning its keep is not re-verified once added,
+ *     the same limitation `LEGACY`'s content-hash mechanism was built to
+ *     avoid for a different list.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { dirname, join, relative, sep } from "node:path"
@@ -373,38 +385,61 @@ const STATUS_BRANCH_ALLOWED =
   /[/\\]components[/\\]counter[/\\](?:surface|state)[/\\]|[/\\]lib[/\\]counter[/\\]/
 const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
 /**
- * Widened from `lib/counter/adapters/` alone to all of `lib/counter/**` on
- * 2026-09-06, the same day rule 4 gained the `.ts` extension (it was
- * `.tsx`-only before, which is exactly why this gap went unseen: nothing
- * under `lib/counter` is `.tsx` except `adapters/`, so the narrower pattern
- * had never been exercised against the rest of the tree).
+ * `lib/counter/adapters/` and `lib/counter/actions/` in full, plus eight
+ * NAMED top-level modules — not all of `lib/counter/**`, on review: an
+ * earlier version of this fix widened to the whole directory when rule 4
+ * gained the `.ts` extension (it was `.tsx`-only before, which is exactly
+ * why this gap went unseen — nothing under `lib/counter` is `.tsx` except
+ * `adapters/`). That was too wide: `use-ask.ts` and `use-count-entry.ts` are
+ * "use client" HOOKS imported directly by page clients
+ * (`counter-ask-client.tsx`, `counter-phone-ask-client.tsx`,
+ * `counter-count-session-client.tsx`,
+ * `counter-phone-count-session-client.tsx`) — client-facing code, exactly
+ * where the rule exists to catch a future accidental value import of
+ * Prisma — and a directory-wide exemption would have gone on trusting them
+ * forever, not because either imports Prisma today (neither does) but
+ * because the pattern would stop looking.
  *
- * Extending to `.ts` reaches `src/lib/counter`'s ~40 helper modules — the
- * layer CLAUDE.md itself describes as "the largest in the app," each one the
- * single function an adapter defers to rather than recomputing (the
- * `prime-cost.ts` pattern) — and `src/lib/counter/actions/*.ts`, the
- * write-side mirror of `adapters/`: pages call these wrappers instead of an
- * `@/app/actions/*` server action directly, same as they call an adapter
- * instead of Prisma directly. `channel-mix.ts` (a raw `Prisma.sql` query
- * behind `@/lib/prisma`), `cogs.ts`, `labor-leaks.ts`, `labor-week.ts`,
- * `service-profile.ts`, `staffing-curve.ts`, `statement.ts` and
- * `vendor-basket.ts` all import data access directly and are all consumed by
- * one or more files under `adapters/` — `git grep` confirms every one of
- * them is read by `adapters/pnl.ts`, `adapters/overview.ts`,
- * `adapters/orders.ts`, `adapters/labor.ts`, `adapters/cogs.ts`,
- * `adapters/vendor(s).ts`, `adapters/menu-item.ts`, `adapters/menu-profit.ts`
- * or `adapters/analytics.ts` — so narrowing this to `(adapters|actions)/`
- * still leaves 8 real files failing for the same non-bug reason.
+ * `adapters/` and `actions/` are directories, not files, because that IS
+ * their contract: everything under `adapters/` is a `get*SectionPromises`
+ * read boundary and everything under `actions/` is the write-side mirror —
+ * pages call these wrappers instead of Prisma or an `@/app/actions/*` server
+ * action directly, so anything future added to either directory inherits
+ * the same legitimacy without a linter edit.
  *
- * This is the exact shape `STATUS_BRANCH_ALLOWED` already settled two rules
- * up, for the identical argument: "nothing under src/lib/counter is a page,"
- * and that comment's own warning — do not narrow this back down thinking the
- * wide exemption was an oversight — applies here too. Confirmed empirically,
- * not by inspection alone: before this widened, extending rule 4 to `.ts`
- * produced 25 new violations across 17 files, none of them a page, all of
- * them an existing, reviewed, working data-access pattern; after, zero.
+ * The eight top-level files below have no such directory to shelter under —
+ * they are `src/lib/counter`'s helper-module layer, "the largest in the
+ * app" per CLAUDE.md, each the one function an adapter defers to rather
+ * than recomputing (the `prime-cost.ts` pattern) — so they are named
+ * individually, the same surgical style `COLOUR_ALLOWED` uses for
+ * `counter-repairs.css`. Verified two ways before naming them: (1) each
+ * genuinely imports `@/lib/prisma`, `@/generated/prisma/client` (value, not
+ * type — `channel-mix.ts` uses `Prisma.sql`/`Prisma.join` at runtime), or an
+ * `@/app/actions/*` server action (`statement.ts` calls `getAllStoresPnL`
+ * directly, the same as an `actions/*.ts` wrapper would); (2) `git grep`
+ * confirms every one is read by one or more files under `adapters/`
+ * (`pnl.ts`, `overview.ts`, `orders.ts`, `labor.ts`, `cogs.ts`,
+ * `vendor(s).ts`, `menu-item.ts`, `menu-profit.ts`, `analytics.ts`) — the
+ * data layer an adapter defers to, not a page and not a client hook.
+ * `targets.ts`, by contrast, only mentions `@/lib/prisma` in a comment (it
+ * defers to `prime-cost.ts` instead of querying) and is correctly NOT named
+ * here — naming it would be exempting a file the rule already passes.
+ *
+ * Confirmed empirically: extending rule 4 to `.ts` with no exemption beyond
+ * `adapters/` produced 25 violations across 20 files (12 under `actions/`,
+ * 8 top-level); this allowance, `(adapters|actions)/` plus these eight
+ * names, resolves all 25 while leaving `use-ask.ts`, `use-count-entry.ts`,
+ * and every other unnamed `lib/counter` file subject to the rule exactly as
+ * before — see task-20-report.md's fix-round addendum for a dry-run proving
+ * a fake Prisma import inside a hook is still caught.
  */
-const DATA_ALLOWED = /[/\\]lib[/\\]counter[/\\]/
+const DATA_ALLOWED_TOP_LEVEL_FILES =
+  "channel-mix|cogs|labor-leaks|labor-week|service-profile|staffing-curve|statement|vendor-basket"
+const DATA_ALLOWED = new RegExp(
+  String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
+    "|" +
+    String.raw`[/\\]lib[/\\]counter[/\\](?:${DATA_ALLOWED_TOP_LEVEL_FILES})\.ts$`,
+)
 /**
  * Rule 1's exemption: the Counter stylesheets, and only those.
  *
