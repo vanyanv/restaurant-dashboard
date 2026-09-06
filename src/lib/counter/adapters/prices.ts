@@ -107,12 +107,13 @@ function median(values: number[]): number | null {
   return sorted[Math.floor(sorted.length / 2)]
 }
 
-async function loadPrices(): Promise<PriceData> {
+async function loadPrices(accountId: string): Promise<PriceData> {
   const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000)
   const volumeSince = new Date(Date.now() - VOLUME_DAYS * 86_400_000)
 
   const [canonicals, lines] = await Promise.all([
     prisma.canonicalIngredient.findMany({
+      where: { accountId },
       select: {
         id: true,
         name: true,
@@ -123,7 +124,9 @@ async function loadPrices(): Promise<PriceData> {
     prisma.invoiceLineItem.findMany({
       where: {
         canonicalIngredientId: { not: null },
-        invoice: { invoiceDate: { gte: since } },
+        // The account boundary reaches a line through its invoice. Filtering
+        // on the date alone ranked every account's deliveries in one table.
+        invoice: { accountId, invoiceDate: { gte: since } },
       },
       orderBy: { invoice: { invoiceDate: "asc" } },
       select: {
@@ -426,17 +429,18 @@ export interface PriceSections {
   movers: SectionData<PriceMovers>
 }
 
-export function getPriceSectionPromises(): StreamedSections<PriceSections> {
-  const dataP = classify(() => loadPrices(), {
+export function getPriceSectionPromises(accountId: string): StreamedSections<PriceSections> {
+  const dataP = classify(() => loadPrices(accountId), {
     retryAction: "retryPrices",
     isEmpty: (d) => d.movers.length === 0 && d.held.length === 0,
     /*
      * Two causes, two answers — and `no_match` was neither.
      *
-     * `loadPrices()` takes no argument at all: not the reader's range, not the
-     * store scope. Its window is a fixed `HISTORY_DAYS` trailing one. So
-     * "Widen either to see figures" pointed at two controls that cannot reach
-     * this section, on the page whose whole subject is what things cost.
+     * `loadPrices()` takes the account and nothing else: not the reader's
+     * range, not the store scope. Its window is a fixed `HISTORY_DAYS`
+     * trailing one. So "Widen either to see figures" pointed at two controls
+     * that cannot reach this section, on the page whose whole subject is what
+     * things cost.
      *
      * With no catalogue there is nothing to price and the answer is about
      * invoices. With a catalogue but nothing priced, the catalogue is fine and
@@ -453,6 +457,6 @@ export function getPriceSectionPromises(): StreamedSections<PriceSections> {
   }
 }
 
-export async function getPriceSections(): Promise<PriceSections> {
-  return awaitSections(getPriceSectionPromises())
+export async function getPriceSections(accountId: string): Promise<PriceSections> {
+  return awaitSections(getPriceSectionPromises(accountId))
 }

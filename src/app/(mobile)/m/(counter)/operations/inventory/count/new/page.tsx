@@ -27,7 +27,11 @@ export default async function Page({
   const stores = await getOverviewStores()
   const targetStoreId =
     storeId ?? stores.find((s) => s.stage === "trading")?.id ?? stores[0]?.id ?? null
-  const sections = getNewCountSectionPromises({ storeId, targetStoreId })
+  const sections = getNewCountSectionPromises({
+    accountId: session.user.accountId,
+    storeId,
+    targetStoreId,
+  })
 
   return (
     <>

@@ -11,7 +11,7 @@ export default async function Page() {
   const session = await getServerSession(authOptions)
   if (!session) redirect("/login")
 
-  const sections = getPriceSectionPromises()
+  const sections = getPriceSectionPromises(session.user.accountId)
 
   return (
     <>

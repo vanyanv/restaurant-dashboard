@@ -31,7 +31,11 @@ export default async function Page({
   // button can never name different stores.
   const targetStoreId =
     storeId ?? stores.find((s) => s.stage === "trading")?.id ?? stores[0]?.id ?? null
-  const sections = getNewCountSectionPromises({ storeId, targetStoreId })
+  const sections = getNewCountSectionPromises({
+    accountId: session.user.accountId,
+    storeId,
+    targetStoreId,
+  })
 
   return (
     <>

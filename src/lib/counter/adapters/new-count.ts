@@ -90,7 +90,16 @@ interface NewCountData {
 const UNCATEGORIZED = "Uncategorized"
 
 export interface NewCountInput {
-  /** Narrows the open-count list. `null` shows every store. */
+  /**
+   * The account boundary. Every query below is filtered by it —
+   * `CanonicalIngredient` carries it directly, `StockCount` reaches it through
+   * its store. `storeId` below is a VIEW filter applied in JS and is not a
+   * substitute: it narrowed the open list while the catalogue, the
+   * ever-counted set and the started/finished tallies still spanned every
+   * account in the database.
+   */
+  accountId: string
+  /** Narrows the open-count list. `null` shows every store in the account. */
   storeId: string | null
   /**
    * The store the page's button will act on. The verdict must name THIS store
@@ -101,8 +110,11 @@ export interface NewCountInput {
 }
 
 async function loadNewCount(input: NewCountInput): Promise<NewCountData> {
+  const { accountId } = input
+
   const [canonicals, lastLines, counts] = await Promise.all([
     prisma.canonicalIngredient.findMany({
+      where: { accountId },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -112,11 +124,18 @@ async function loadNewCount(input: NewCountInput): Promise<NewCountData> {
         _count: { select: { recipeIngredients: true } },
       },
     }),
+    // The join to "Store" is the account filter: StockCountLine has no
+    // account of its own, so without it this credited our ingredients with
+    // every account's counting history.
     prisma.$queryRaw<Array<{ canonicalIngredientId: string; lastAt: Date }>>`
       SELECT l."canonicalIngredientId", MAX(c."countedAt") "lastAt"
-      FROM "StockCountLine" l JOIN "StockCount" c ON c.id = l."stockCountId"
+      FROM "StockCountLine" l
+      JOIN "StockCount" c ON c.id = l."stockCountId"
+      JOIN "Store" s ON s.id = c."storeId"
+      WHERE s."accountId" = ${accountId}
       GROUP BY 1`,
     prisma.stockCount.findMany({
+      where: { store: { accountId } },
       orderBy: { startedAt: "desc" },
       select: {
         id: true,
