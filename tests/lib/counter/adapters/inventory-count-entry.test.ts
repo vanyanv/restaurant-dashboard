@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 const { db } = vi.hoisted(() => ({ db: {
   store: { findMany: vi.fn(), findFirst: vi.fn() },
-  stockCount: { findUnique: vi.fn() },
+  stockCount: { findFirst: vi.fn() },
   stockCountLine: { findMany: vi.fn() },
   canonicalIngredient: { findMany: vi.fn() },
   ingredientModelState: { count: vi.fn() },
@@ -32,7 +32,7 @@ describe("inventory scope and count units", () => {
     }))
   })
   it("loads converted recipe quantities for the recipe-unit entry field", async () => {
-    db.stockCount.findUnique.mockResolvedValue({ id: "count", status: "IN_PROGRESS", store: { accountId: "account" } })
+    db.stockCount.findFirst.mockResolvedValue({ id: "count", status: "IN_PROGRESS" })
     db.canonicalIngredient.findMany.mockResolvedValue([{ id: "beef", name: "beef", category: "Food", recipeUnit: "oz" }])
     db.stockCountLine.findMany.mockResolvedValue([{ canonicalIngredientId: "beef", nativeQty: 2, nativeUnit: "lb", qtyInRecipeUnit: 32 }])
     const section = await getCountSessionSectionPromises({ accountId: "account", countId: "count" }).entry

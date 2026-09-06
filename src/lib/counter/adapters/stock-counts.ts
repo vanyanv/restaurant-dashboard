@@ -249,7 +249,7 @@ async function loadCounts(input: StockCountsInput): Promise<Data> {
           },
           orderBy: { createdAt: "desc" },
         }),
-    prisma.ingredientModelState.count(),
+    prisma.ingredientModelState.count({ where: { storeId: { in: storeIds } } }),
   ])
 
   const lines: CountedLine[] = []
@@ -822,7 +822,7 @@ export function getCountSessionSectionPromises(
      * load should cost the page its entry form, not its receipt.
      */
     entry: guardSection(
-      classify(() => loadCountEntry(input.countId), {
+      classify(() => loadCountEntry(input.countId, input.accountId), {
         retryAction: "retryCountSession",
         isEmpty: (e) => e === null,
         emptyReason: "no_match",
@@ -873,16 +873,21 @@ export function getCountSessionSectionPromises(
  * column. That is a change to the open path and to `StockCount`, it wants its
  * own migration, and it does not belong inside a UI restoration.
  */
-async function loadCountEntry(countId: string): Promise<CountSessionEntry | null> {
-  const countRow = await prisma.stockCount.findUnique({
-    where: { id: countId },
-    select: { id: true, status: true, store: { select: { accountId: true } } },
+async function loadCountEntry(
+  countId: string,
+  accountId: string,
+): Promise<CountSessionEntry | null> {
+  // The boundary is the caller's account, never the fetched row's: deriving
+  // accountId from the record makes any countId "valid".
+  const countRow = await prisma.stockCount.findFirst({
+    where: { id: countId, store: { accountId } },
+    select: { id: true, status: true },
   })
   if (!countRow) return null
 
   const [ingredients, lines] = await Promise.all([
     prisma.canonicalIngredient.findMany({
-      where: { accountId: countRow.store.accountId },
+      where: { accountId },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: { id: true, name: true, category: true, recipeUnit: true },
     }),
