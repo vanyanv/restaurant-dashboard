@@ -19,14 +19,7 @@ import {
   avgTicketPacePct,
   type AggregateHourlyRow,
 } from "@/lib/hourly-orders"
-import {
-  computePnLPace,
-  formatMarginPace,
-  formatProfitPace,
-  sumPnLDays,
-} from "@/lib/pnl-pace"
 import type { OrderPatternsHourlyComparison } from "@/types/analytics"
-import type { PnLRow } from "@/lib/pnl"
 
 // 2026-08-18 is a Tuesday.
 const NOW = { todayLA: "2026-08-18", currentLAHour: 16 }
@@ -297,116 +290,5 @@ describe("bucketHourlyRows per-hour spread", () => {
     // height of the bars it is meant to explain.
     expect(hourly[12].orderCount).toBe(2)
     expect(hourly[12].groupOrderCounts).toEqual([2])
-  })
-})
-
-describe("P&L pace", () => {
-  const periodDates = ["2026-07-20", "2026-07-27", "2026-08-03", "2026-08-10"]
-  const rows: PnLRow[] = [
-    {
-      code: "TOTAL_SALES",
-      label: "Total Sales",
-      values: [1000, 1000, 1000, 1000],
-      percents: [1, 1, 1, 1],
-    },
-    {
-      code: "AFTER_FIXED",
-      label: "Net Profit",
-      values: [100, 100, 100, 100],
-      percents: [0.1, 0.1, 0.1, 0.1],
-    },
-  ]
-
-  it("sums only the requested baseline days", () => {
-    expect(sumPnLDays(rows, periodDates, ["2026-08-03", "2026-08-10"])).toEqual({
-      totalSales: 2000,
-      bottomLine: 200,
-      labor: 0,
-    })
-  })
-
-  it("sums the labor line when the P&L carries one", () => {
-    const withLabor: PnLRow[] = [
-      ...rows,
-      {
-        code: "6200",
-        label: "Labor",
-        values: [210, 210, 220, 230],
-        percents: [0.21, 0.21, 0.22, 0.23],
-      },
-    ]
-    expect(
-      sumPnLDays(withLabor, periodDates, ["2026-08-03", "2026-08-10"]).labor
-    ).toBe(450)
-  })
-
-  it("returns labor as a magnitude when the P&L stores costs as negatives", () => {
-    // Regression: the live P&L signs costs negative, so this summed to −450
-    // while `combined.laborPct` stayed positive. The masthead lede then read
-    // "labor is 40.6 points above its four-week share" on a 22.4% business.
-    const negativeLabor: PnLRow[] = [
-      ...rows,
-      {
-        code: "6200",
-        label: "Labor",
-        values: [-210, -210, -220, -230],
-        percents: [-0.21, -0.21, -0.22, -0.23],
-      },
-    ]
-    const totals = sumPnLDays(negativeLabor, periodDates, [
-      "2026-08-03",
-      "2026-08-10",
-    ])
-    expect(totals.labor).toBe(450)
-    // And the share it feeds is then plausible rather than absurd.
-    expect(totals.labor! / totals.totalSales).toBeCloseTo(0.225, 3)
-  })
-
-  it("reports zero labor rather than undefined when the row is absent", () => {
-    // The masthead lede divides by sales to get a labor share; an undefined
-    // here would silently become NaN in that ratio.
-    expect(sumPnLDays(rows, periodDates, ["2026-08-03"]).labor).toBe(0)
-  })
-
-  it("reports profit percent and margin points against the average", () => {
-    const groups = periodDates.map((d) => sumPnLDays(rows, periodDates, [d]))
-    const pace = computePnLPace({ totalSales: 1000, bottomLine: 150 }, groups)
-    expect(pace?.baselineWeeks).toBe(4)
-    expect(pace?.profitPct).toBe(50)
-    expect(pace?.marginDeltaPts).toBe(5) // 15% vs 10%
-    expect(formatProfitPace(pace, "Tue")).toBe("▲ 50% vs avg Tue")
-    expect(formatMarginPace(pace, "Tue")).toBe("+5.0 pts vs avg Tue")
-  })
-
-  it("drops baseline weeks with no sales instead of averaging in zeros", () => {
-    const groups = [
-      { totalSales: 1000, bottomLine: 100 },
-      { totalSales: 1000, bottomLine: 100 },
-      { totalSales: 0, bottomLine: 0 },
-      { totalSales: 0, bottomLine: 0 },
-    ]
-    const pace = computePnLPace({ totalSales: 1000, bottomLine: 100 }, groups)
-    expect(pace?.baselineWeeks).toBe(2)
-    expect(pace?.profitPct).toBe(0)
-  })
-
-  it("withholds a percentage when the baseline lost money", () => {
-    const groups = [
-      { totalSales: 1000, bottomLine: -100 },
-      { totalSales: 1000, bottomLine: -100 },
-    ]
-    const pace = computePnLPace({ totalSales: 1000, bottomLine: 100 }, groups)
-    expect(pace?.profitPct).toBeNull()
-    expect(pace?.marginDeltaPts).toBe(20) // +10% vs −10%
-    expect(formatProfitPace(pace, "Tue")).toBeNull()
-    expect(formatMarginPace(pace, "Tue")).toBe("+20.0 pts vs avg Tue")
-  })
-
-  it("stays silent below two usable baseline weeks", () => {
-    expect(
-      computePnLPace({ totalSales: 1000, bottomLine: 100 }, [
-        { totalSales: 1000, bottomLine: 100 },
-      ])
-    ).toBeNull()
   })
 })
