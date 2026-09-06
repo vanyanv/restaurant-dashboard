@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
 
-const TODAY = new Date(2026, 7, 24)
+const TODAY = new Date("2026-08-24T00:00:00-07:00")
 
 describe("readCounterParams", () => {
   it("defaults to yesterday and prior-period when nothing is set", () => {
@@ -25,7 +25,7 @@ describe("readCounterParams", () => {
 
   it("resolves the preset to a real range", () => {
     const p = readCounterParams(new URLSearchParams("range=d7"), TODAY)
-    expect(p.range.end).toEqual(TODAY)
+    expect(p.range.end).toEqual(new Date(2026, 7, 24))
     expect(p.range.start).toEqual(new Date(2026, 7, 18))
   })
 

@@ -25,10 +25,24 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  */
 export function CounterPhoneInventoryClient({
   sections,
+  storeId,
 }: {
   sections: SectionSources<InventorySections>
+  storeId: string | null
 }) {
   const { pending } = useCounterTransition()
+
+  if (storeId === null) {
+    return (
+      <>
+        <SubNav items={PHONE_INVENTORY_TABS} label="Inventory" />
+        <h2 className="mtitle">Inventory</h2>
+        <Section title="Inventory" data={sections.headline} pending={pending}>
+          {() => null}
+        </Section>
+      </>
+    )
+  }
 
   return (
     <>

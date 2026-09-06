@@ -57,7 +57,7 @@ const base = {
   // constructs the component directly does not).
   params: "",
   stores: [{ id: "hollywood", name: "Hollywood", stage: "trading" as const }],
-  today: new Date(2026, 7, 25),
+  today: new Date("2026-08-25T00:00:00-07:00"),
 }
 
 const sections: OverviewSections = {

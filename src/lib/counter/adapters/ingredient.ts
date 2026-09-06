@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import { getScopedStores } from "@/lib/account-stores"
 import { batchRecipeCosts } from "@/lib/recipe-cost"
 import { normalizeVendorName } from "@/lib/vendor-normalize"
@@ -198,7 +199,7 @@ async function loadIngredient(input: IngredientInput): Promise<Loaded | null> {
         FROM "InvoiceLineItem" li JOIN "Invoice" i ON i.id = li."invoiceId"
         WHERE li."canonicalIngredientId" = ${ingredientId} AND i."accountId" = ${accountId}
           AND li."unitPrice" > 0
-          AND i."invoiceDate" >= DATE_TRUNC('week', ${today}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
+          AND i."invoiceDate" >= DATE_TRUNC('week', ${businessQueryDate(today)}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
         GROUP BY 1, 2 ORDER BY 1`,
       prisma.ingredientSkuMatch.findMany({
         where: { canonicalIngredientId: ingredientId },

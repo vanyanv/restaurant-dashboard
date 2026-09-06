@@ -1,5 +1,7 @@
 "use client"
 
+import { businessCalendarDate } from "@/lib/counter/business-date"
+
 import { useId, useState, type CSSProperties } from "react"
 import { startOfMonth } from "date-fns"
 import {
@@ -119,7 +121,7 @@ export function MDateSheet({
   const sheetId = useId()
 
   const days = dayCount(range)
-  const today = new Date()
+  const today = businessCalendarDate(new Date())
   const comparisonOptions = COMPARISONS.filter(
     (c) => c.id === "none" || comparisonRange(range, c.id) !== null,
   )

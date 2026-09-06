@@ -3,6 +3,7 @@ import {
   type ComparisonId, type DateRange, type PresetId, type RangeId,
 } from "./date-range"
 import { CHANNELS, type ChannelId } from "./channels"
+import { businessCalendarDate } from "./business-date"
 import {
   DEFAULT_ALERT_SEGMENT,
   isAlertSegment,
@@ -198,7 +199,7 @@ export function readCounterParams(params: URLSearchParams, today: Date): Counter
       ? rawPreset
       : DEFAULT_PRESET
 
-  const range = custom ?? resolvePreset(presetId as PresetId, today)
+  const range = custom ?? resolvePreset(presetId as PresetId, businessCalendarDate(today))
 
   const rawCmp = params.get("cmp")
   let comparisonId: ComparisonId = isComparison(rawCmp) ? rawCmp : DEFAULT_COMPARISON

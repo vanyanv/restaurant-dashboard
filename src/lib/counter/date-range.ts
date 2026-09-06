@@ -10,9 +10,10 @@ import {
  * to regenerate the series, the totals, the bucket size and the tooltips — so
  * everything a caller needs to do that lives here, and nothing here renders.
  *
- * All dates are local midnights. The dashboard's day boundary is the
- * restaurant's, not UTC's, and every existing query in this codebase already
- * works that way.
+ * Ranges are date-only values represented by local fields for date-fns.
+ * readCounterParams converts the current instant to the Los Angeles business
+ * date before calling these calendar helpers. Do not timezone-convert an
+ * already selected calendar date. Serialize dates as day keys across Flight.
  */
 
 export interface DateRange {
@@ -373,6 +374,17 @@ export interface WeekWindow extends DateRange {
   days: number
   /** True when the window stops short of its own week's Sunday. */
   partial: boolean
+}
+
+/** Day keys preserve a week when a UTC server sends it to an LA browser. */
+export type SerializedWeekWindow = Omit<WeekWindow, "start" | "end"> & { start: string; end: string }
+
+export function serializeWeekWindow(window: WeekWindow): SerializedWeekWindow {
+  return { ...window, start: isoDay(window.start), end: isoDay(window.end) }
+}
+
+export function readWeekWindow(window: SerializedWeekWindow): WeekWindow {
+  return { ...window, start: parseIsoDay(window.start)!, end: parseIsoDay(window.end)! }
 }
 
 /**

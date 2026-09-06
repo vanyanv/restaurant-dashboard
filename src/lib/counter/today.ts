@@ -32,8 +32,8 @@
  *
  * ## It is a DATE, not a timestamp
  *
- * `COUNTER_TODAY=2026-08-28` resolves to that local midnight, because every
- * consumer immediately floors it (`startOfDay`, `weekStart`, `resolvePreset`).
+ * `COUNTER_TODAY=2026-08-28` resolves to an instant on that Los Angeles date.
+ * Calendar consumers use businessCalendarDate rather than the process zone.
  * Accepting a time would imply a precision none of them keep. A value that is
  * not a `YYYY-MM-DD` is ignored rather than throwing: a malformed pin should
  * degrade to the real clock, not take the app down.
@@ -56,11 +56,11 @@ export function counterToday(): Date {
     // Never on a deployment. See the docblock: this is the guard, not NODE_ENV.
     process.env.VERCEL_ENV === undefined
   ) {
-    // Local midnight, to match what `startOfDay(new Date())` would have given
-    // — a `Date.parse` of the bare date string would be UTC midnight and put
-    // the whole app a day early for every caller west of Greenwich.
-    const [y, m, d] = pin.split("-").map(Number)
-    return new Date(y, m - 1, d)
+    // 20:00Z falls on the requested LA day in both standard and daylight time.
+    const pinned = new Date(`${pin}T20:00:00.000Z`)
+    if (Number.isFinite(pinned.getTime()) && pinned.toISOString().slice(0, 10) === pin) {
+      return pinned
+    }
   }
   return new Date()
 }

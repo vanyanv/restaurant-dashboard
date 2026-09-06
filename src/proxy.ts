@@ -389,7 +389,12 @@ export default withAuth(
      */
     const legacy = legacyTargetFor(path)
     if (legacy) {
-      return NextResponse.redirect(new URL(legacy + req.nextUrl.search, req.url))
+      const destination = new URL(legacy, req.url)
+      // The path-derived store wins; all other filters survive the redirect.
+      for (const [key, value] of req.nextUrl.searchParams) {
+        if (!destination.searchParams.has(key)) destination.searchParams.set(key, value)
+      }
+      return NextResponse.redirect(destination)
     }
 
     return NextResponse.next()

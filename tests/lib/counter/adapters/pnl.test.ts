@@ -48,7 +48,7 @@ const accountId = "acct_1"
 /** A Monday-to-Sunday week, so the comparison windows are clean. */
 const range = { start: new Date(2026, 7, 17), end: new Date(2026, 7, 23) }
 /** A Tuesday, so the eighth week is a two-day part-week. */
-const today = new Date(2026, 7, 25)
+const today = new Date("2026-08-25T00:00:00-07:00")
 
 /**
  * Note 60's own figures: food 31.4%, labour 24.8%, prime 56.2%.

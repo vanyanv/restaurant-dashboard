@@ -53,6 +53,7 @@ export type EmptyReason =
   | "nothing_received"
   | "nothing_to_count"
   | "no_stores"
+  | "select_store"
   | "no_ingredients"
   | "no_recipes"
   | "no_reviews"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 
 import { finishStockCount, recordCountLine } from "@/lib/counter/actions/stock-count"
@@ -52,42 +52,74 @@ export function useCountEntry(entry: CountSessionEntry) {
     ),
   )
   const [saved, setSaved] = useState<Record<string, SaveState>>({})
+  const valuesRef = useRef(values)
+  const persisted = useRef(new Map(entry.rows.map((r) => [r.ingredientId, r.entered])))
+  const writes = useRef(new Map<string, Promise<boolean>>())
+  const [finishError, setFinishError] = useState<string | null>(null)
 
-  const setValue = (ingredientId: string, next: string) =>
-    setValues((v) => ({ ...v, [ingredientId]: next }))
+  const setValue = (ingredientId: string, next: string) => {
+    valuesRef.current = { ...valuesRef.current, [ingredientId]: next }
+    setValues(valuesRef.current)
+    setFinishError(null)
+  }
 
-  const commit = (row: CountSessionEntryRow) => {
-    const raw = (values[row.ingredientId] ?? "").trim()
+  const commit = (row: CountSessionEntryRow): Promise<boolean> => {
+    if (!entry.open) return Promise.resolve(true)
+    const id = row.ingredientId
+    const raw = (valuesRef.current[id] ?? "").trim()
     // Nothing typed: see the docblock — an untouched box must not become a
     // recorded zero.
-    if (raw === "") return
-    const qty = Number(raw)
-    if (!Number.isFinite(qty) || qty < 0) {
-      setSaved((s) => ({ ...s, [row.ingredientId]: "failed" }))
-      return
+    if (raw === "" && persisted.current.get(id) == null && !writes.current.has(id)) {
+      return Promise.resolve(true)
     }
-    // Unchanged from what the server already holds — saving would be a write
-    // that says nothing.
-    if (row.entered !== null && qty === row.entered) return
-    setSaved((s) => ({ ...s, [row.ingredientId]: "saving" }))
-    void recordCountLine({
-      stockCountId: entry.countId,
-      ingredientId: row.ingredientId,
-      qty,
-      unit: row.unit,
-      estimate: row.estimate,
-    }).then((result) => {
-      setSaved((s) => ({ ...s, [row.ingredientId]: result.ok ? "ok" : "failed" }))
+    const qty = Number(raw)
+    if (raw === "" || !Number.isFinite(qty) || qty < 0) {
+      setSaved((s) => ({ ...s, [id]: "failed" }))
+      return Promise.resolve(false)
+    }
+    setSaved((s) => ({ ...s, [id]: "saving" }))
+    // Serialize edits to this ingredient. Compare against the last successful
+    // write only after earlier edits settle, so 5 -> 7 -> 5 saves both changes.
+    const write = (writes.current.get(id) ?? Promise.resolve(true)).then(async () => {
+      if (persisted.current.get(id) === qty) return true
+      try {
+        const result = await recordCountLine({
+          stockCountId: entry.countId, ingredientId: id, qty,
+          unit: row.unit, estimate: row.estimate,
+        })
+        if (result.ok) persisted.current.set(id, qty)
+        return result.ok
+      } catch {
+        return false
+      }
     })
+    writes.current.set(id, write)
+    void write.then((ok) => {
+      if (writes.current.get(id) !== write) return
+      writes.current.delete(id)
+      setSaved((s) => ({ ...s, [id]: ok ? "ok" : "failed" }))
+    })
+    return write
   }
 
   const finish = () => {
+    setFinishError(null)
     startFinishing(async () => {
-      const result = await finishStockCount(entry.countId)
-      if (!result.ok) return
-      // The lines, the value, the status cell and the inventory pages that
-      // read completed counts all change at once.
-      router.refresh()
+      const results = await Promise.all(entry.rows.map(commit))
+      if (results.some((ok) => !ok)) {
+        setFinishError("Some quantities were not saved. Check them before closing the count.")
+        return
+      }
+      try {
+        const result = await finishStockCount(entry.countId)
+        if (!result.ok) {
+          setFinishError("The count could not be closed. Please try again.")
+          return
+        }
+        router.refresh()
+      } catch {
+        setFinishError("The count could not be closed. Please try again.")
+      }
     })
   }
 
@@ -98,5 +130,5 @@ export function useCountEntry(entry: CountSessionEntry) {
       ? "Closing…"
       : "Finish this count"
 
-  return { values, saved, setValue, commit, finish, finishing, finishLabel }
+  return { values, saved, setValue, commit, finish, finishing, finishLabel, finishError }
 }

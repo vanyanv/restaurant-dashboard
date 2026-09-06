@@ -1,5 +1,7 @@
 "use client"
 
+import { businessCalendarDate } from "@/lib/counter/business-date"
+
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { startOfMonth } from "date-fns"
 import {
@@ -143,7 +145,7 @@ export function DateControl({
   // Preset lengths ("7d") are each preset's OWN span, not the selected range's.
   // Most are fixed; the calendar-anchored ones need SOME "today" to resolve
   // against, and the real one is fine here because it only feeds display text.
-  const today = useMemo(() => new Date(), [])
+  const today = useMemo(() => businessCalendarDate(new Date()), [])
 
   // `.drpop` is 438px wide and right-anchored; below 640px the stylesheet turns
   // it into a bottom sheet and this returns "position nothing". Note 21.

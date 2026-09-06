@@ -1,6 +1,7 @@
 "use server"
 
 import { ymdUTC as ymd } from "@/lib/date-utils"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -247,7 +248,7 @@ export async function getDecisionsView(input: {
   if (storeIds.length === 0) return { ok: false, error: "no_stores" }
 
   const isAggregate = storeIdOut == null
-  const today = new Date()
+  const today = businessQueryDate(new Date())
   const todayKey = ymd(today)
 
   const [

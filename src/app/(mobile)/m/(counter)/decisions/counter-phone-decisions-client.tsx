@@ -1,5 +1,7 @@
 "use client"
 
+import { businessQueryDate } from "@/lib/counter/business-date"
+
 import { useMemo, useState, useTransition } from "react"
 import {
   Chart,
@@ -173,7 +175,7 @@ export function CounterPhoneDecisionsClient({
   // server, which is also where the adapter's `asOf` came from, so the sub
   // and the seven bars cannot name two different weeks — and the desk's own
   // sub is this same string from this same function.
-  const window = weekLabel(today)
+  const window = weekLabel(businessQueryDate(today))
 
   return (
     /*

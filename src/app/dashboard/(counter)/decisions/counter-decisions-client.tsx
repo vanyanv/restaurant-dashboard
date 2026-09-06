@@ -1,5 +1,7 @@
 "use client"
 
+import { businessQueryDate } from "@/lib/counter/business-date"
+
 import { Fragment, useCallback, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -297,7 +299,7 @@ export function CounterDecisionsClient({
   // The week the picker draws, named by its ends. `today` came from the
   // server, which is also where the adapter's `asOf` came from, so the sub
   // and the seven cells cannot name two different weeks.
-  const window = weekLabel(today)
+  const window = weekLabel(businessQueryDate(today))
   // Today when nothing has been pressed — the adapter's own fallback, said
   // here so the picker's `is-sel` cell and the panel below it agree before
   // either has loaded.

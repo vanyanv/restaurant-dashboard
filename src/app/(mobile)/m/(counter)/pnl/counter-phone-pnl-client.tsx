@@ -16,7 +16,7 @@ import {
 } from "@/components/counter"
 import { storeViewTabs } from "@/lib/counter/nav"
 import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
-import { dayCount, monthDay, rangeLabel, type DateRange } from "@/lib/counter/date-range"
+import { dayCount, monthDay, rangeLabel, readWeekWindow, type DateRange } from "@/lib/counter/date-range"
 import { money, pct } from "@/lib/counter/format"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections, PnlStatement } from "@/lib/counter/adapters/pnl"
@@ -238,7 +238,7 @@ export function CounterPhonePnlClient({
  * entry (see the adapter's note on the eight windows).
  */
 function toWeekRow(row: WeekRow, href: (range: DateRange) => string): MListRow {
-  const { window: w } = row
+  const w = readWeekWindow(row.window)
   return {
     key: w.start.toISOString(),
     title: `${monthDay(w.start)}${w.partial ? ` · ${w.days}d` : ""}`,

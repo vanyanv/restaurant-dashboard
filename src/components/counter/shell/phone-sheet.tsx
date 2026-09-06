@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react"
 
 /**
  * `.pshade` + `.msheet` — the phone's bottom sheet, and the ONE place the two
@@ -57,18 +57,65 @@ export function PhoneSheet({
   id: string
   children: ReactNode
 }) {
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   // Escape closes without choosing anything — the same contract `DateControl`
   // and `StoreSwitcher` keep on the desk. The prototype has no key handling at
   // all here; a sheet a keyboard cannot dismiss is a trap, and a phone in a
   // browser still has a keyboard on it more often than the bezel suggests.
   useEffect(() => {
-    if (!open) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
+    const sheet = sheetRef.current
+    if (!open || !sheet) return
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusable = () => Array.from(sheet.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
+    )).filter((el) => !el.closest('[hidden], [inert], [aria-hidden="true"]'))
+    const focusFirst = () => (focusable()[0] ?? sheet).focus()
+    // Mark background branches inert, leaving the dismissing shade clickable.
+    const background: Array<[HTMLElement, boolean]> = []
+    let branch: HTMLElement = sheet
+    while (branch.parentElement) {
+      for (const sibling of branch.parentElement.children) {
+        if (!(sibling instanceof HTMLElement) || sibling === branch || sibling.classList.contains("pshade")) continue
+        background.push([sibling, sibling.inert])
+        sibling.inert = true
+      }
+      branch = branch.parentElement
+      if (branch === document.body) break
     }
-    document.addEventListener("keydown", onKeyDown)
-    return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, onClose])
+    focusFirst()
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        e.stopPropagation()
+        closeRef.current()
+      }
+      if (e.key === "Tab") {
+        const items = focusable()
+        const first = items[0] ?? sheet
+        const last = items.at(-1) ?? sheet
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === sheet)) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && (document.activeElement === last || document.activeElement === sheet)) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    const onFocus = (e: FocusEvent) => {
+      if (!sheet.contains(e.target as Node)) focusFirst()
+    }
+    document.addEventListener("keydown", onKeyDown, true)
+    document.addEventListener("focusin", onFocus)
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true)
+      document.removeEventListener("focusin", onFocus)
+      for (const [element, inert] of background) element.inert = inert
+      if (previous?.isConnected) previous.focus()
+    }
+  }, [open])
 
   return (
     <>
@@ -82,6 +129,10 @@ export function PhoneSheet({
         className={open ? "msheet on" : "msheet"}
         style={SHEET_STYLE}
         id={id}
+        ref={sheetRef}
+        tabIndex={-1}
+        inert={!open}
+        aria-hidden={!open}
         role="dialog"
         aria-modal="true"
         aria-label={title}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { businessQueryDate } from "@/lib/counter/business-date"
 import { isNonIngredientRow } from "@/lib/invoice-charges"
 import { isCreditArtifact } from "@/lib/counter/ingredient-reach"
 import { count, money, titleCase, unitCost } from "@/lib/counter/format"
@@ -9,7 +10,7 @@ import {
   guardSection,
   type StreamedSections,
 } from "@/lib/counter/adapters/types"
-import { mapReady, type SectionData } from "@/lib/counter/section-data"
+import { empty, mapReady, type SectionData } from "@/lib/counter/section-data"
 import type { CostBand, FigureProps, MoneyLine, Row } from "@/components/counter"
 
 /**
@@ -242,7 +243,7 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
   const { accountId, storeId, today } = input
 
   const store = await prisma.store.findFirst({
-    where: { accountId, isActive: true, ...(storeId ? { id: storeId } : {}) },
+    where: { accountId, isActive: true, id: storeId ?? "" },
     select: { id: true, name: true },
     orderBy: { createdAt: "asc" },
   })
@@ -284,7 +285,7 @@ async function loadInventory(input: InventoryInput): Promise<InventoryData> {
       WHERE i."accountId" = ${accountId}
         AND i."storeId" = ${store.id}
         AND l."canonicalIngredientId" IS NOT NULL
-        AND i."invoiceDate" >= DATE_TRUNC('week', ${today}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
+        AND i."invoiceDate" >= DATE_TRUNC('week', ${businessQueryDate(today)}::date) - MAKE_INTERVAL(weeks => ${WEEKS - 1})
       GROUP BY 1 ORDER BY 1`,
     // When each ingredient was last written down by a person. This is the ONLY
     // thing the page takes from the count tables, because it is the only thing
@@ -664,6 +665,13 @@ function settleOf(d: InventoryData): InventorySettle {
 export function getInventorySectionPromises(
   input: InventoryInput,
 ): StreamedSections<InventorySections> {
+  if (input.storeId === null) {
+    const selection = Promise.resolve(empty("select_store"))
+    return {
+      headline: selection, roster: selection, readiness: selection,
+      delivered: selection, nextCount: selection, settle: selection, adjust: selection,
+    }
+  }
   const dataP = classify(() => loadInventory(input), {
     retryAction: "retryInventory",
     isEmpty: (d) => d.ingredients.length === 0,

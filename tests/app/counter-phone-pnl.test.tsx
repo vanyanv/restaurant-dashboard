@@ -31,11 +31,11 @@ vi.mock("next/navigation", () => ({
 import { PhoneShell } from "@/components/counter"
 import { CounterPhonePnlClient } from "@/app/(mobile)/m/(counter)/pnl/counter-phone-pnl-client"
 import { ready, failed } from "@/lib/counter/section-data"
-import { trailingWeeks } from "@/lib/counter/date-range"
+import { trailingWeeks, serializeWeekWindow } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import type { PnlSections } from "@/lib/counter/adapters/pnl"
 
-const TODAY = new Date(2026, 7, 25) // Tuesday 25 Aug 2026
+const TODAY = new Date("2026-08-25T00:00:00-07:00") // Tuesday in Los Angeles
 const WEEKS = trailingWeeks(TODAY, 8)
 
 const STORES = [
@@ -62,7 +62,7 @@ const CASCADE = {
 
 /** The eight weeks the adapter loads. The seventh is over the ceiling. */
 const WEEK_ROWS = WEEKS.map((w, i) => ({
-  window: w,
+  window: serializeWeekWindow(w),
   grossSales: 20_000 + i * 500,
   cogsPct: 31.4,
   laborPct: 24.8,

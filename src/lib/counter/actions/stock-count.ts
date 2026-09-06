@@ -83,7 +83,7 @@ export async function loadCountEntry(stockCountId: string): Promise<
       // shows rather than leaving the box unlabelled.
       unit: i.recipeUnit ?? "each",
       estimate: i.estimatedOnHand,
-      entered: i.existingLine?.nativeQty ?? null,
+      entered: i.existingLine?.qtyInRecipeUnit ?? null,
     })),
   }
 }

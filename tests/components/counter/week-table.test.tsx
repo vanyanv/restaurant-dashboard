@@ -28,7 +28,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { WeekTable, type WeekRow } from "@/components/counter/surface/week-table"
-import { trailingWeeks, type DateRange } from "@/lib/counter/date-range"
+import { trailingWeeks, serializeWeekWindow, readWeekWindow, type DateRange } from "@/lib/counter/date-range"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 
 const SHEET = readFileSync(join(process.cwd(), "src/styles/counter-components.css"), "utf-8")
@@ -54,7 +54,7 @@ const WINDOWS = trailingWeeks(THU, 8)
 
 /** Eight weeks of plausible trade, the running one short in dollars and not in rates. */
 const WEEKS: WeekRow[] = WINDOWS.map((w, i) => ({
-  window: w,
+  window: serializeWeekWindow(w),
   grossSales: w.partial ? 21_400 : 34_000 + i * 900,
   cogsPct: 27.4 + i * 0.4,
   laborPct: 24.1,
@@ -144,11 +144,11 @@ describe("WeekTable — the eight pressable weeks", () => {
     it("stays silent when every week on the table is whole", () => {
       // Sun 23 Aug 2026 — the last day of its own week, so nothing is clipped.
       const whole = trailingWeeks(new Date(2026, 7, 23), 8).map((w, i) => ({
-        ...WEEKS[i], window: w,
+        ...WEEKS[i], window: serializeWeekWindow(w),
       }))
       renderTable({
         weeks: whole,
-        selected: { start: whole[7].window.start, end: whole[7].window.end },
+        selected: readWeekWindow(whole[7].window),
       })
       expect(screen.queryByText(/not seven/)).toBeNull()
     })

@@ -92,7 +92,7 @@ const ENTRY_COLUMNS: Column[] = [
  * shape for it, a table, which is the only part that should differ.
  */
 function CountEntry({ entry }: { entry: CountSessionEntry }) {
-  const { values, saved, setValue, commit, finish, finishing, finishLabel } =
+  const { values, saved, setValue, commit, finish, finishing, finishLabel, finishError } =
     useCountEntry(entry)
 
   const rows: Row[] = entry.rows.map((r) => ({
@@ -105,7 +105,7 @@ function CountEntry({ entry }: { entry: CountSessionEntry }) {
           <input
             type="text"
             inputMode="decimal"
-            disabled={!entry.open}
+            disabled={!entry.open || finishing}
             value={values[r.ingredientId] ?? ""}
             aria-label={`${r.name} counted, in ${r.unit}`}
             placeholder={r.unit}
@@ -132,6 +132,7 @@ function CountEntry({ entry }: { entry: CountSessionEntry }) {
             {finishLabel}
           </button>
         </div>
+        {finishError ? <p role="alert">{finishError}</p> : null}
         <Note>{entry.note}</Note>
       </div>
     </>

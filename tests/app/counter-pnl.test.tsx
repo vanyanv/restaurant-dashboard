@@ -41,10 +41,10 @@ function CounterPnlClient(props: React.ComponentProps<typeof PnlIsland>) {
 /** The rail's account row — the layout's now, not the page's. */
 const USER = { name: "Chris Karimian", role: "Owner" }
 import { ready, empty, failed } from "@/lib/counter/section-data"
-import { trailingWeeks } from "@/lib/counter/date-range"
+import { trailingWeeks, serializeWeekWindow } from "@/lib/counter/date-range"
 import type { PnlSections } from "@/lib/counter/adapters/pnl"
 
-const TODAY = new Date(2026, 7, 25) // Tuesday 25 Aug 2026
+const TODAY = new Date("2026-08-25T00:00:00-07:00") // Tuesday in Los Angeles
 const WEEKS = trailingWeeks(TODAY, 8)
 
 const base = {
@@ -100,7 +100,7 @@ const sections: PnlSections = {
   cascade: ready(CASCADE),
   weeks: ready({
     rows: WEEKS.map((w, i) => ({
-      window: w,
+      window: serializeWeekWindow(w),
       grossSales: 20_000 + i * 500,
       cogsPct: 31.4,
       laborPct: 24.8,

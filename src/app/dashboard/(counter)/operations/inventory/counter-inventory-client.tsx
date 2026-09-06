@@ -255,6 +255,18 @@ export function CounterInventoryClient({
   const storeName =
     stores.find((s) => s.id === counterParams.storeId)?.name ?? "All stores"
 
+  if (counterParams.storeId === null) {
+    return (
+      <>
+        <PageHead title="Inventory" sub="Choose a store" />
+        <SubNav items={INVENTORY_TABS} label="Inventory" />
+        <Section title="Inventory" data={sections.headline} pending={pending}>
+          {() => null}
+        </Section>
+      </>
+    )
+  }
+
   return (
     <>
       <PageHead title="Inventory" sub={`${storeName} · the state of the count`}>

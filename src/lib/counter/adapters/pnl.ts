@@ -1,4 +1,5 @@
 import { getStores } from "@/app/actions/store/crud-actions"
+import { businessCalendarDate } from "@/lib/counter/business-date"
 import type { LifecycleStage } from "@/generated/prisma/enums"
 import { isOperational } from "@/lib/store-lifecycle"
 import { loadChannelMix, type ChannelReading } from "@/lib/counter/channel-mix"
@@ -19,6 +20,7 @@ import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
 import { count, delta, money, pct, plural, points } from "@/lib/counter/format"
 import {
   comparisonRange,
+  serializeWeekWindow,
   trailingWeeks,
   type ComparisonId,
   type DateRange,
@@ -988,7 +990,7 @@ function buildWeeks(windows: WeekWindow[], weeks: Statement[]): WeekRow[] {
     const s = weeks[i]
     const known = laborKnown(s)
     return {
-      window,
+      window: serializeWeekWindow(window),
       grossSales: s.grossSales,
       cogsPct: s.prime.cogsPct,
       laborPct: known ? s.prime.laborPct : null,
@@ -1094,7 +1096,7 @@ export function getPnlSectionPromises(input: PnlSectionsInput): StreamedSections
   // "weekly" from itself, which is a comparison of two different things.
   const granularity = granularityFor(range)
   const cmpRange = comparisonId === "none" ? null : comparisonRange(range, comparisonId)
-  const windows = trailingWeeks(today, WEEKS_SHOWN)
+  const windows = trailingWeeks(businessCalendarDate(today), WEEKS_SHOWN)
 
   /* ── The loads. Every one of them starts here; none is awaited here. ── */
 

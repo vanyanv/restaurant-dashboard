@@ -888,11 +888,11 @@ async function loadCountEntry(countId: string): Promise<CountSessionEntry | null
     }),
     prisma.stockCountLine.findMany({
       where: { stockCountId: countId },
-      select: { canonicalIngredientId: true, nativeQty: true },
+      select: { canonicalIngredientId: true, qtyInRecipeUnit: true },
     }),
   ])
 
-  const enteredById = new Map(lines.map((l) => [l.canonicalIngredientId, l.nativeQty]))
+  const enteredById = new Map(lines.map((l) => [l.canonicalIngredientId, l.qtyInRecipeUnit]))
 
   const rows: CountSessionEntryRow[] = ingredients.map((i) => ({
     ingredientId: i.id,

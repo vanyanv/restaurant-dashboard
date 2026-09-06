@@ -18,6 +18,10 @@ import type { EmptyReason } from "@/lib/counter/section-data"
  * page with no filters, no date control, or no stores to filter.
  */
 const COPY: Record<EmptyReason, { head: string; body: string }> = {
+  select_store: {
+    head: "Pick a store",
+    body: "Choose a store in the store picker to see its inventory and record adjustments.",
+  },
   /*
    * "No sales have been rung up", not "This store has no sales".
    *

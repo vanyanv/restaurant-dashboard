@@ -1,4 +1,5 @@
 import { getStores } from "@/app/actions/store/crud-actions"
+import { businessDay } from "@/lib/counter/business-date"
 import { isOperational } from "@/lib/store-lifecycle"
 import { buildPeriods, TOTAL_SALES_CODE } from "@/lib/pnl"
 import {
@@ -901,7 +902,7 @@ function buildWeekStrip(days: LaborDay[], range: DateRange, today: Date): LaborW
   // this comparable to a `HarriPositionDaily` day key at all; `today` itself is
   // resolved ONCE in `page.tsx` and handed down, so nothing here can evaluate a
   // second `new Date()` that disagrees about which day it is.
-  const todayKey = isoDay(today)
+  const todayKey = businessDay(today)
 
   const cells: WeekStripDay[] = shown.map((d) => ({
     key: d.key,

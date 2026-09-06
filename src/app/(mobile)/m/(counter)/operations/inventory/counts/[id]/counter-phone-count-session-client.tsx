@@ -32,7 +32,7 @@ import { useCountEntry } from "@/lib/counter/use-count-entry"
  * name at 390px, and that is the whole of the CSS.
  */
 function PhoneCountEntry({ entry }: { entry: CountSessionEntry }) {
-  const { values, saved, setValue, commit, finish, finishing, finishLabel } =
+  const { values, saved, setValue, commit, finish, finishing, finishLabel, finishError } =
     useCountEntry(entry)
 
   return (
@@ -56,7 +56,7 @@ function PhoneCountEntry({ entry }: { entry: CountSessionEntry }) {
               <input
                 type="text"
                 inputMode="decimal"
-                disabled={!entry.open}
+                disabled={!entry.open || finishing}
                 value={values[r.ingredientId] ?? ""}
                 aria-label={`${r.name} counted, in ${r.unit}`}
                 placeholder={r.unit}
@@ -77,6 +77,7 @@ function PhoneCountEntry({ entry }: { entry: CountSessionEntry }) {
         {finishLabel}
       </button>
 
+      {finishError ? <p role="alert">{finishError}</p> : null}
       <Note>{entry.note}</Note>
     </>
   )

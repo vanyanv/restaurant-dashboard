@@ -39,7 +39,7 @@ export default async function MobileInventoryPage({
 
   return (
     <>
-      <CounterPhoneInventoryClient sections={sections} />
+      <CounterPhoneInventoryClient sections={sections} storeId={counterParams.storeId} />
       <span hidden data-perf-ready="/m/operations/inventory" />
     </>
   )

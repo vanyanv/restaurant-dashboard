@@ -3,7 +3,7 @@ import type { KeyboardEvent } from "react"
 import { Meter } from "./meter"
 import { money, pct } from "@/lib/counter/format"
 import { PRIME_CEILING_PCT } from "@/lib/counter/prime-cost"
-import { isoDay, monthDay, type DateRange, type WeekWindow } from "@/lib/counter/date-range"
+import { isoDay, monthDay, readWeekWindow, type DateRange, type WeekWindow, type SerializedWeekWindow } from "@/lib/counter/date-range"
 
 /**
  * The last eight weeks, each one a range you can press.
@@ -121,7 +121,7 @@ const PRIME_METER_HI = 66
  */
 export interface WeekRow {
   /** The window itself, from `trailingWeeks` — clipped end and all. */
-  window: WeekWindow
+  window: SerializedWeekWindow
   grossSales: number
   cogsPct: number | null
   laborPct: number | null
@@ -163,8 +163,9 @@ const rowLabel = (w: WeekWindow) =>
   `Read ${monthDay(w.start)} – ${monthDay(w.end)}${w.partial ? `, ${w.days} of 7 days,` : ""} in full`
 
 export function WeekTable({
-  weeks, selected, selectedLabel, foodTargetPct, onSelect,
+  weeks: serializedWeeks, selected, selectedLabel, foodTargetPct, onSelect,
 }: WeekTableProps) {
+  const weeks = serializedWeeks.map((row) => ({ ...row, window: readWeekWindow(row.window) }))
   // Not an empty `.wkt` with a head and no body: eight weeks of nothing is a
   // state, and states belong to `Section`.
   if (weeks.length === 0) return null
