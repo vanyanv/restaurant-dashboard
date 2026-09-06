@@ -99,3 +99,8 @@ ml/.venv/
 # local runtime logs
 /logs/
 /tmp-perf/
+
+# One-off scratch scripts and data dumps (untracked 2026-09; working copies
+# stay on disk for triage, tracking only)
+/tmp/
+/debug-*.png
