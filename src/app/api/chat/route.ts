@@ -20,6 +20,7 @@ import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { chatTools } from "@/lib/chat/tools"
 import { activeToolsForPage, toolsInGroups } from "@/lib/chat/tool-groups"
 import { classifyToolGroups } from "@/lib/chat/tool-group-classifier"
+import { asOfForTool } from "@/lib/chat/data-as-of"
 import type { AskRequestScope } from "@/lib/counter/ask-context"
 import {
   appendMessage,
@@ -192,8 +193,32 @@ export async function POST(req: Request) {
       tool({
         description: t.description,
         inputSchema: t.parameters,
-        execute: async (args: unknown) =>
-          t.execute(args as never, ctx) as Promise<unknown>,
+        execute: async (args: unknown) => {
+          /*
+           * The freshness stamp rides along with every result, read in
+           * parallel so it costs the turn nothing: a `MAX(syncedAt)` on the
+           * table behind the tool, memoised for five minutes.
+           *
+           * Attached HERE rather than inside 22 tool files so there is one
+           * place that decides what an `asOf` means. A tool that already
+           * reports its own (`getInventoryStatus` computes one from the
+           * count it read) keeps it — the more specific answer wins.
+           */
+          const [result, asOf] = await Promise.all([
+            t.execute(args as never, ctx) as Promise<unknown>,
+            asOfForTool(t.name),
+          ])
+          if (
+            asOf &&
+            result &&
+            typeof result === "object" &&
+            !Array.isArray(result) &&
+            !("asOf" in result)
+          ) {
+            return { ...(result as Record<string, unknown>), asOf }
+          }
+          return result
+        },
       }),
     ]),
   )
