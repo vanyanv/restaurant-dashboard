@@ -2675,3 +2675,7 @@ html[data-theme-switching] .ct-root *::after {
   color: var(--ink-3);
   white-space: nowrap;
 }
+
+/* An answer served from the answer cache. Quiet — it explains the 0.2s, it
+   does not compete with the figures above it. */
+.turnfoot__c { color: var(--ink-3); font-style: normal; opacity: .85 }

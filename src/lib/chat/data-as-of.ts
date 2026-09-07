@@ -156,6 +156,41 @@ async function readSource(source: AsOfSource): Promise<Date | null> {
   return p
 }
 
+/**
+ * The NEWEST stamp across a set of tools — the answer cache's key material.
+ *
+ * Newest rather than oldest on purpose: the question the key has to answer is
+ * "has anything these tools read been rewritten since?", and any one table
+ * moving is enough to invalidate. An oldest-wins key would hold a stale answer
+ * for as long as the least-synced table stood still.
+ */
+export async function maxAsOfForTools(toolNames: readonly string[]): Promise<string | null> {
+  const sources = new Set<AsOfSource>()
+  for (const n of toolNames) {
+    const s = TOOL_AS_OF[n as ChatToolName]
+    if (s) sources.add(s)
+  }
+  if (sources.size === 0) return null
+  const reads = await Promise.all([...sources].map(readSource))
+  const newest = reads.reduce<Date | null>(
+    (acc, d) => (d && (!acc || d > acc) ? d : acc),
+    null,
+  )
+  return newest ? newest.toISOString() : null
+}
+
+/**
+ * Whether every tool in a set reports a stamp.
+ *
+ * The proposal's caching rule, enforced: a tool without an `asOf` has no
+ * moment that could invalidate it, so an answer that read one cannot be
+ * safely cached at any TTL. Used at store time against the tools the turn
+ * ACTUALLY read, not the ones it was offered.
+ */
+export function everyToolStamped(toolNames: readonly string[]): boolean {
+  return toolNames.every((n) => Boolean(TOOL_AS_OF[n as ChatToolName]))
+}
+
 /** The freshness stamp for one tool, or null when it reports none. */
 export async function asOfForTool(toolName: string): Promise<string | null> {
   const source = TOOL_AS_OF[toolName as ChatToolName]

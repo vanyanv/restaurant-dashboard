@@ -127,6 +127,9 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
       )}
       {cost ? <span>{cost}</span> : null}
       {secs ? <span>{secs}</span> : null}
+      {/* Why this one was instant. Without it "$0.000 · 0.2s" is true of this
+          turn and invites the reader to think the model got cheaper. */}
+      {meta?.cached ? <span className="turnfoot__c">answered earlier</span> : null}
       <span className="sp" />
       <span className={`thanks${noted ? " on" : ""}`} aria-live="polite">
         {noted}

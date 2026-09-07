@@ -5,6 +5,8 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   tool,
   type ModelMessage,
   type ToolSet,
@@ -20,7 +22,12 @@ import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { chatTools } from "@/lib/chat/tools"
 import { activeToolsForPage, toolsInGroups } from "@/lib/chat/tool-groups"
 import { classifyToolGroups } from "@/lib/chat/tool-group-classifier"
-import { asOfForTool } from "@/lib/chat/data-as-of"
+import { asOfForTool, maxAsOfForTools, everyToolStamped } from "@/lib/chat/data-as-of"
+import {
+  answerCacheKey,
+  readCachedAnswer,
+  writeCachedAnswer,
+} from "@/lib/chat/answer-cache"
 import type { AskRequestScope } from "@/lib/counter/ask-context"
 import {
   appendMessage,
@@ -244,18 +251,127 @@ export async function POST(req: Request) {
    * turn faster or leave it alone and nothing else.
    */
   let classifiedGroups: string[] | null = null
+  /*
+   * The question WITHOUT the context sentence `use-ask.ts` prepends. Both the
+   * classifier and the cache key want the words the reader actually typed:
+   * the sentence names the store and the window, which the key carries
+   * separately and the classifier would only be biased by.
+   */
+  const askedQuestion = userMessageText.includes("\n")
+    ? userMessageText.slice(userMessageText.indexOf("\n") + 1)
+    : userMessageText
   if (!activeTools && userMessageText) {
-    // The context sentence is prepended to the question before sending
-    // (`use-ask.ts`), and it names the store and the window rather than a
-    // department — it would only bias the classifier. Ask it about the
-    // question the reader actually typed.
-    const askedQuestion = userMessageText.includes("\n")
-      ? userMessageText.slice(userMessageText.indexOf("\n") + 1)
-      : userMessageText
     const groups = await classifyToolGroups(askedQuestion)
     if (groups) {
       classifiedGroups = groups
       activeTools = toolsInGroups(groups)
+    }
+  }
+
+  /*
+   * THE TURN'S ID IS DECIDED BEFORE THE TURN RUNS.
+   *
+   * `ChatTurn` is written in `onFinish`, after the stream has closed, so the
+   * client could never learn which row its answer became — and a thumb that
+   * cannot name its turn has nothing to write to. Minting the id here and
+   * stamping it on the message at `finish` (see `messageMetadata` below)
+   * lets the footer rate the turn it is under, live, with the same id a
+   * restored thread reads back out of the table.
+   */
+  const chatTurnId = randomUUID()
+
+  /*
+   * THE SAME QUESTION, ASKED AGAIN.
+   *
+   * Keyed on the account, the typed question, the page, and the newest sync
+   * stamp across the tools this turn may read — so the entry invalidates
+   * itself when Otter backfills rather than when a timer expires. No stamp
+   * means nothing could invalidate it, so it is not looked up and not stored.
+   *
+   * The hit is replayed as the same UI message stream a live turn produces:
+   * the tool parts first (the Read row and the filed return are rebuilt from
+   * them, `fileReturn` included — without it a cached answer would render as
+   * loose prose), then the text, then the metadata.
+   */
+  const cacheToolNames = activeTools ?? Object.keys(toolSet)
+  const dataAsOf = await maxAsOfForTools(cacheToolNames)
+  const cacheKey = dataAsOf
+    ? answerCacheKey({ accountId, question: askedQuestion, pageId: body.askScope?.pageId ?? null, dataAsOf })
+    : null
+  if (cacheKey && askedQuestion) {
+    const hit = await readCachedAnswer(cacheKey)
+    if (hit) {
+      const servedAt = Date.now()
+      // The turn still becomes a row: a cached answer that never reached the
+      // thread would vanish when the reader reopened it, and a thumb needs a
+      // ChatTurn to write to.
+      try {
+        await chatPrisma.chatTurn.create({
+          data: {
+            id: chatTurnId,
+            conversationId: conversationId!,
+            userId: ownerId,
+            userMessage: userMessageStored,
+            assistantMessage: hit.text.slice(0, 4000),
+            toolsUsed: hit.toolCalls.map((t) => t.toolName),
+            status: "OK",
+            finishReason: "cached",
+          },
+        })
+        await userPersistPromise
+        await appendMessage(chatPrisma, {
+          conversationId: conversationId!,
+          role: "assistant",
+          content: hit.text,
+          toolCalls: hit.toolCalls.map((t) => ({
+            toolName: t.toolName,
+            args: t.input,
+            result: t.output,
+            durationMs: 0,
+          })),
+        })
+      } catch (err) {
+        logger.error("[chat] failed to persist a cached turn (non-fatal)", err)
+      }
+
+      const stream = createUIMessageStream({
+        execute: ({ writer }) => {
+          for (const tc of hit.toolCalls) {
+            const toolCallId = randomUUID()
+            writer.write({
+              type: "tool-input-available",
+              toolCallId,
+              toolName: tc.toolName,
+              input: tc.input,
+            })
+            writer.write({ type: "tool-output-available", toolCallId, output: tc.output })
+          }
+          const textId = randomUUID()
+          writer.write({ type: "text-start", id: textId })
+          writer.write({ type: "text-delta", id: textId, delta: hit.text })
+          writer.write({ type: "text-end", id: textId })
+          writer.write({
+            type: "message-metadata",
+            messageMetadata: {
+              chatTurnId,
+              // What THIS turn cost and took, which is the honest reading:
+              // the reader is told it was answered earlier, not that a model
+              // ran for nothing.
+              durationMs: Date.now() - servedAt,
+              costUsd: 0,
+              cached: true,
+            },
+          })
+        },
+      })
+      logger.info(
+        `[chat] ownerId=${ownerId} convId=${conversationId} CACHE HIT ` +
+          `pageId=${body.askScope?.pageId ?? "none"} tools=${hit.toolCalls.length} ` +
+          `servedMs=${Date.now() - servedAt}`,
+      )
+      const cachedResponse = createUIMessageStreamResponse({ stream })
+      cachedResponse.headers.set("x-conversation-id", conversationId)
+      return cachedResponse
     }
   }
 
@@ -279,17 +395,6 @@ export async function POST(req: Request) {
   const capturedToolErrors: Record<string, string> = {}
   const stepStartTimes = new Map<string, number>()
   const turnStartMs = Date.now()
-  /*
-   * THE TURN'S ID IS DECIDED BEFORE THE TURN RUNS.
-   *
-   * `ChatTurn` is written in `onFinish`, after the stream has closed, so the
-   * client could never learn which row its answer became — and a thumb that
-   * cannot name its turn has nothing to write to. Minting the id here and
-   * stamping it on the message at `finish` (see `messageMetadata` below)
-   * lets the footer rate the turn it is under, live, with the same id a
-   * restored thread reads back out of the table.
-   */
-  const chatTurnId = randomUUID()
 
   const modelMessages = [...priorMessages, ...(await convertToModelMessages(body.messages))]
 
@@ -444,6 +549,36 @@ export async function POST(req: Request) {
         })
       } catch (err) {
         logger.error("[chat] failed to persist assistant message", err)
+      }
+
+      /*
+       * Store the answer only if it is safe to serve again.
+       *
+       * `everyToolStamped` against the tools ACTUALLY read, not the ones
+       * offered: one unstamped source and there is no moment that could
+       * invalidate the entry, so no TTL would be honest. A failed, stopped or
+       * empty turn is never stored — a cache that can serve a failure turns
+       * one bad minute into a permanent answer.
+       */
+      const readNames = capturedToolCalls.map((t) => t.toolName)
+      if (
+        cacheKey &&
+        status === "OK" &&
+        text.trim().length > 0 &&
+        Object.keys(capturedToolErrors).length === 0 &&
+        readNames.length > 0 &&
+        everyToolStamped(readNames)
+      ) {
+        await writeCachedAnswer(cacheKey, {
+          text,
+          toolCalls: capturedToolCalls.map((t) => ({
+            toolName: t.toolName,
+            input: t.args,
+            output: t.result,
+          })),
+          costUsd: null,
+          storedAt: new Date().toISOString(),
+        })
       }
 
       // Auto-title on the first assistant turn. Non-fatal: a failure here

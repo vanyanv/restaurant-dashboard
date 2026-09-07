@@ -242,6 +242,10 @@ const loadThread = cache(
         id: true,
         userMessage: true,
         feedback: true,
+        // A turn served from the answer cache stored `finishReason: "cached"`,
+        // so a reopened thread says the same thing the live footer said
+        // rather than quietly presenting it as a model answer.
+        finishReason: true,
         aiUsageEvent: { select: { estimatedCostUsd: true, durationMs: true } },
       },
     })
@@ -256,6 +260,7 @@ const loadThread = cache(
         costUsd: row.aiUsageEvent ? Number(row.aiUsageEvent.estimatedCostUsd) : null,
         durationMs: row.aiUsageEvent?.durationMs ?? null,
         feedback: row.feedback,
+        cached: row.finishReason === "cached",
       }
     }
 

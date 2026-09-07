@@ -14,6 +14,14 @@ export interface AskTurnMeta {
   durationMs: number | null
   /** `ChatTurn.feedback` as stored: `up`, `down:<reason>`, or nothing yet. */
   feedback: string | null
+  /**
+   * Served from the answer cache rather than computed by the model.
+   *
+   * The footer says so. Without it a cached turn reads as "$0.000 · 0.2s",
+   * which is true of THIS turn and invites the reader to conclude the model
+   * got cheaper — the answer was simply already known.
+   */
+  cached: boolean
 }
 
 /** Reads the route's metadata off a UI message; `null` if it never landed. */
@@ -26,5 +34,6 @@ export function readAskTurnMeta(metadata: unknown): AskTurnMeta | null {
     costUsd: typeof m.costUsd === "number" ? m.costUsd : null,
     durationMs: typeof m.durationMs === "number" ? m.durationMs : null,
     feedback: typeof m.feedback === "string" ? m.feedback : null,
+    cached: m.cached === true,
   }
 }
