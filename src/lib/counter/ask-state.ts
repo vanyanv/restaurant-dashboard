@@ -76,7 +76,7 @@ export interface AskAnswer {
   /** Prose the model wrote outside the filed block, provenance split off. */
   body: string
   /** Tool names called, in order, deduped — the "Read" row. */
-  read: string[]
+  read: ToolRead[]
   form: ReturnForm
   /**
    * What the turn cost and which `ChatTurn` it became — off the message's
@@ -167,6 +167,82 @@ const FILE_RETURN_TOOL = "fileReturn"
  * still streaming its input would put a source on the row that produced no
  * figure, which is the precise dishonesty K-R2 exists to prevent.
  */
+/**
+ * One source an answer read: what it was, what it was asked, and how fresh
+ * the table behind it is.
+ *
+ * The proposal's "Read row", and the reason it is worth more than the tool
+ * name alone: a reader who cannot see the parameters cannot tell an answer
+ * about the right week from an answer about the wrong one, and Otter backfills
+ * closed windows, so a figure with no `asOf` cannot be checked at all.
+ */
+export interface ToolRead {
+  tool: string
+  /** `store=Hollywood · days=30`, or null when the tool took no arguments. */
+  params: string | null
+  /** ISO stamp from the tool's own result, or null when it reports none. */
+  asOf: string | null
+}
+
+/**
+ * The tool's arguments as one short line.
+ *
+ * Deliberately lossy. This sits under an answer, not in a debugger: long
+ * values are cut, objects and arrays are summarised rather than dumped, and
+ * the whole line is capped. A Read row that wraps to four lines stops being
+ * read at all.
+ */
+export function formatToolParams(args: unknown): string | null {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null
+  const parts: string[] = []
+  for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
+    if (v === null || v === undefined || v === "") continue
+    let shown: string
+    if (Array.isArray(v)) shown = `${v.length} item${v.length === 1 ? "" : "s"}`
+    else if (typeof v === "object") shown = "…"
+    else shown = String(v)
+    if (shown.length > 24) shown = `${shown.slice(0, 23)}…`
+    parts.push(`${k}=${shown}`)
+    if (parts.length === 4) break
+  }
+  return parts.length > 0 ? parts.join(" · ") : null
+}
+
+/** The `asOf` a tool attached to its own result, if it reported one. */
+export function asOfFromOutput(output: unknown): string | null {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return null
+  const v = (output as Record<string, unknown>).asOf
+  return typeof v === "string" ? v : null
+}
+
+/**
+ * The Read row for a finished turn.
+ *
+ * Same exclusions as `toolNamesFrom`, for the same reasons — a tool whose
+ * output never landed read nothing, and `fileReturn` reads nothing ever. The
+ * difference is only how much of each source survives.
+ *
+ * De-duplicated by tool name, keeping the FIRST call's parameters: a tool
+ * called twice is one row, and the row that matters is the one the answer
+ * opened with.
+ */
+export function toolReadsFrom(parts: readonly ReturnPart[]): ToolRead[] {
+  const out: ToolRead[] = []
+  for (const p of parts) {
+    if (!p || typeof p.type !== "string") continue
+    const name = p.toolName ?? (p.type.startsWith("tool-") ? p.type.slice("tool-".length) : null)
+    if (!name || name === FILE_RETURN_TOOL) continue
+    if (p.state !== "output-available") continue
+    if (out.some((r) => r.tool === name)) continue
+    out.push({
+      tool: name,
+      params: formatToolParams(p.input),
+      asOf: asOfFromOutput(p.output),
+    })
+  }
+  return out
+}
+
 /** Shared with `use-ask.ts`, which builds an AskAnswer from a finished return. */
 export function toolNamesFrom(parts: readonly ReturnPart[]): string[] {
   const out: string[] = []
@@ -346,7 +422,7 @@ export function restoredAskState(turn: {
   /** The assistant's stored prose. */
   text: string
   /** Tool names, `fileReturn` already excluded by the adapter. */
-  read: string[]
+  read: ToolRead[]
   filed: FiledReturn | null
   meta: AskTurnMeta | null
 }): AskState {

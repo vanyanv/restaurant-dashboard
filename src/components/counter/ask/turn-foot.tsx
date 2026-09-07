@@ -1,5 +1,7 @@
 "use client"
 
+import { labelFor } from "@/components/chat/tool-labels"
+import type { ToolRead } from "@/lib/counter/ask-state"
 import { useEffect, useRef, useState } from "react"
 import { ASK_DOWN_REASONS, askFeedbackLabel, type AskFeedback } from "@/lib/counter/ask-feedback"
 import type { AskTurnMeta } from "@/lib/counter/ask-meta"
@@ -36,7 +38,7 @@ import type { AskTurnMeta } from "@/lib/counter/ask-meta"
  * here; the rail's "Fork from the end" reaches it after the refresh.
  */
 export interface TurnFootProps {
-  read: string[]
+  read: ToolRead[]
   meta: AskTurnMeta | null
   /** Seconds the page measured itself, for a live turn before `meta` lands. */
   liveDurationMs?: number | null
@@ -51,6 +53,7 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
   const [asking, setAsking] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showReads, setShowReads] = useState(false)
   const pop = useRef<HTMLSpanElement>(null)
 
   // The stored rating arrives with the thread; a later render of the same
@@ -97,9 +100,31 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
 
   return (
     <div className="turnfoot">
-      <span>
-        Read {read.length} source{read.length === 1 ? "" : "s"}
-      </span>
+      {/*
+        * THE READ ROW.
+        *
+        * "Read 4 sources" was a count and nothing else — the reader could see
+        * that an answer stood on four things and not which four, what each was
+        * asked, or how fresh any of it was. Otter backfills closed windows, so
+        * a figure without an as-of cannot be checked at all.
+        *
+        * Closed by default: the count is what most readers want, and the
+        * detail is one click away for the one who is checking a number. Not a
+        * <details> because the summary sits inline in a flex row with the cost
+        * and the seconds, and the panel has to escape that row.
+        */}
+      {read.length > 0 ? (
+        <button
+          type="button"
+          className={`reads__t${showReads ? " on" : ""}`}
+          aria-expanded={showReads}
+          onClick={() => setShowReads((v) => !v)}
+        >
+          Read {read.length} source{read.length === 1 ? "" : "s"}
+        </button>
+      ) : (
+        <span>Read no sources</span>
+      )}
       {cost ? <span>{cost}</span> : null}
       {secs ? <span>{secs}</span> : null}
       <span className="sp" />
@@ -157,6 +182,49 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
       >
         {copied ? "Copied" : "Copy"}
       </button>
+      {showReads ? (
+        <div className="reads" role="region" aria-label="Sources this answer read">
+          {read.map((r) => (
+            <div className="reads__r" key={r.tool}>
+              <b>{labelFor(r.tool).short}</b>
+              {r.params ? <code>{r.params}</code> : null}
+              <span className="sp" />
+              {/*
+                * Every tool here is a curated loader over the same functions
+                * the pages draw with — there is no raw-SQL path and no web
+                * tool — so every source earns the mark. Its job is to make a
+                * future unverified source visibly different, not to decorate
+                * this one.
+                */}
+              <span className="reads__v" title="Answered from a curated loader, not free-form SQL">
+                Verified
+              </span>
+              <time className="reads__a" dateTime={r.asOf ?? undefined}>
+                {r.asOf ? asOfLabel(r.asOf) : "no sync stamp"}
+              </time>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
+}
+
+/**
+ * How long ago the table behind a source was last written.
+ *
+ * Relative, not absolute, because the question the reader is asking is "can I
+ * trust this number right now", and "4h ago" answers it where a timestamp
+ * makes them do the subtraction. The exact stamp stays in `dateTime` for
+ * anything reading the markup.
+ */
+function asOfLabel(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return "no sync stamp"
+  const mins = Math.round((Date.now() - then) / 60_000)
+  if (mins < 1) return "just synced"
+  if (mins < 60) return `synced ${mins}m ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 48) return `synced ${hours}h ago`
+  return `synced ${Math.round(hours / 24)}d ago`
 }

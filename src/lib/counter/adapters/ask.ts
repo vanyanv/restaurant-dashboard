@@ -1,3 +1,8 @@
+import {
+  asOfFromOutput,
+  formatToolParams,
+  type ToolRead,
+} from "@/lib/counter/ask-state"
 import { cache } from "react"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { getConversation, searchConversations } from "@/lib/chat/conversation"
@@ -65,7 +70,7 @@ export interface AskTurn {
   role: "user" | "assistant"
   text: string
   /** Tool names, for the "Read" row. Empty on a user turn. */
-  read: string[]
+  read: ToolRead[]
   /**
    * The question this answer answers, so a restored turn can be handed to the
    * same `AskAnswerBody` a live one is. Empty on a user turn, and on an answer
@@ -285,11 +290,19 @@ const loadThread = cache(
             question,
             filed: isUser ? null : filedFrom(m.toolCalls),
             read: m.toolCalls
-              .map((t) => t.toolName)
               // `fileReturn` reads nothing — the same exclusion the live "Read"
-              // row makes in `toolNamesFrom`, so a restored turn and a fresh one
+              // row makes in `toolReadsFrom`, so a restored turn and a fresh one
               // name the same sources.
-              .filter((name) => name !== "fileReturn"),
+              .filter((t) => t.toolName !== "fileReturn")
+              // `args` and `result` were always persisted on `ToolCall`; only
+              // the tool's name was ever read back. The parameters and the
+              // freshness stamp come off the same rows, so a restored Read row
+              // says exactly what the live one said.
+              .map((t) => ({
+                tool: t.toolName,
+                params: formatToolParams(t.args),
+                asOf: asOfFromOutput(t.result),
+              })),
             at: m.createdAt,
             meta: isUser ? null : metaFor(stored),
           }

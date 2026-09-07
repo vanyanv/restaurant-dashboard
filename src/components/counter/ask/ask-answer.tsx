@@ -208,9 +208,12 @@ export function AskAnswerBody({
           {answer && answer.read.length > 0 ? (
             <div className="srcs">
               <span className="src">Read</span>
-              {answer.read.map((name) => (
-                <span className="src" key={name}>
-                  <b>{labelFor(name).short}</b>
+              {/* The palette stays a strip of names. Parameters and the
+                  as-of stamp are the Ask page's Read row (`TurnFoot`), which
+                  has the width for them; here they would wrap the answer. */}
+              {answer.read.map((r) => (
+                <span className="src" key={r.tool}>
+                  <b>{labelFor(r.tool).short}</b>
                 </span>
               ))}
             </div>

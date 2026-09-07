@@ -40,6 +40,8 @@ export interface ReturnPart {
   state?: string
   text?: string
   output?: unknown
+  /** The arguments the tool ran with — the "params" half of the Read row. */
+  input?: unknown
 }
 
 const FILE_RETURN_TOOL = "fileReturn"

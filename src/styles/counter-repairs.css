@@ -2585,3 +2585,93 @@ html[data-theme-switching] .ct-root *::after {
 .ibtn.mic.on::before{content:"";position:absolute;inset:-3px;border-radius:50%;border:1.5px solid var(--accent);animation:ring 1.2s var(--ease) infinite}
 @keyframes ring{from{transform:scale(.85);opacity:.8}to{transform:scale(1.35);opacity:0}}
 @media (prefers-reduced-motion: reduce){.ibtn.mic.on::before{animation:none}}
+
+/*
+ * THE READ ROW — what an answer stood on, and how fresh it was.
+ *
+ * "Read 4 sources" was a count. It told the reader an answer rested on four
+ * things and not which four, what each was asked, or when any of it was last
+ * synced — and Otter backfills closed windows, so a figure with no as-of
+ * cannot be checked at all.
+ *
+ * Closed by default and absolutely positioned under the footer, which is
+ * `position:relative` for the thumbs popover already: the panel has to escape
+ * the footer's flex row, and pushing the row taller would move the Copy and
+ * Fork buttons every time someone checked a number.
+ */
+.reads__t {
+  font: inherit;
+  color: var(--ink-3);
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  transition: color .16s var(--ease);
+}
+.reads__t:hover, .reads__t.on { color: var(--ink); }
+
+/*
+ * `.turnfoot` is the Counter footer caption — 9px mono, .1em tracking,
+ * UPPERCASE — and the panel must not inherit that last part. A parameter is
+ * quoted evidence: `store=Hollywood` uppercased to `STORE=HOLLYWOOD` is not
+ * the string the tool ran with, and this row's whole job is to be checkable
+ * against what actually happened. Reset here, once, rather than on each child.
+ */
+.reads {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 5px);
+  overflow: hidden;
+}
+.reads__r {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  background: var(--paper);
+}
+.reads__r > b { font-weight: 600; color: var(--ink); }
+/* The parameters are the half that makes the row checkable — an answer about
+   the right week and one about the wrong week name the same tool. */
+.reads__r > code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  background: var(--sunk);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.reads__r > .sp { margin-left: auto; }
+.reads__v {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--good);
+  border: 1px solid var(--good);
+  background: var(--good-wash);
+  border-radius: 999px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.reads__a {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
