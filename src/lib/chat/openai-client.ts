@@ -26,6 +26,15 @@ export const CHAT_ROUTING_MODEL =
  */
 export const CHAT_REASONING_EFFORT =
   process.env.CHAT_REASONING_EFFORT ?? "low"
+/**
+ * The tool-group classifier (`tool-group-classifier.ts`). Small and
+ * non-reasoning on purpose: it picks one to three names off a fixed list and
+ * sits in front of a turn the reader is already waiting on, so its whole value
+ * is being much cheaper than the 58 schemas it saves.
+ */
+export const CHAT_CLASSIFIER_MODEL =
+  process.env.CHAT_CLASSIFIER_MODEL ?? "gpt-4.1-nano"
+
 export const CHAT_TITLE_MODEL =
   process.env.CHAT_TITLE_MODEL ?? "gpt-4.1-nano"
 export const CHAT_EMBEDDING_MODEL = "text-embedding-3-small"

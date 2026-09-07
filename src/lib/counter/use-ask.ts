@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { returnForm, selectFiledReturn } from "@/lib/chat/return"
-import type { AskContext } from "./ask-context"
+import type { AskContext, AskRequestScope } from "./ask-context"
 import {
   askSteps,
   proseFrom,
@@ -113,6 +113,19 @@ export function useAsk(
    */
   const conversationIdRef = useRef<string | null>(initialConversationId)
 
+  /*
+   * The scope of the question currently being sent, for the same reason the
+   * conversation id needs a ref: `prepareSendMessagesRequest` is built once
+   * and is handed only the messages, but the route has to know which page the
+   * question came from to decide which tool schemas the turn carries.
+   *
+   * The sentence has always travelled — prepended to the question as prose.
+   * This sends the same resolution as DATA, so something can act on it.
+   * Written in `send`, one line before `sendMessage`, so it is never a
+   * previous question's page.
+   */
+  const askScopeRef = useRef<AskRequestScope | null>(null)
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -122,6 +135,7 @@ export function useAsk(
             // The new turn only — see the docblock.
             messages: messages.slice(-1),
             conversationId: conversationIdRef.current,
+            askScope: askScopeRef.current,
           },
         }),
         fetch: (input, init) =>
@@ -184,6 +198,7 @@ export function useAsk(
         setQuestions((q) => [...q, trimmed])
       }
       setAskedAt(Date.now())
+      askScopeRef.current = { pageId: context.pageId }
       void sendMessage({ text: `${context.sentence}.\n${trimmed}` })
     },
     [sendMessage, setMessages],

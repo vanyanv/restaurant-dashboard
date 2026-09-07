@@ -18,6 +18,9 @@ import { prisma } from "@/lib/prisma"
 import { computeCostUsd, recordAiUsage } from "@/lib/monitoring/ai-usage"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { chatTools } from "@/lib/chat/tools"
+import { activeToolsForPage, toolsInGroups } from "@/lib/chat/tool-groups"
+import { classifyToolGroups } from "@/lib/chat/tool-group-classifier"
+import type { AskRequestScope } from "@/lib/counter/ask-context"
 import {
   appendMessage,
   assertConversationAccess,
@@ -51,6 +54,14 @@ const HISTORY_MESSAGES = 20
 interface ChatRequestBody {
   messages: UIMessage[]
   conversationId?: string
+  /**
+   * Which page the question was asked from. UNTRUSTED — it is matched against
+   * `NAV_TOOL_GROUPS` and anything unrecognised resolves to the full tool set,
+   * so the worst a forged value can do is make a turn slower or narrower than
+   * it should be. It can never widen access: `tools` is the whole registry
+   * either way and every tool owner-scopes inside its own `execute`.
+   */
+  askScope?: AskRequestScope | null
 }
 
 /**
@@ -187,6 +198,42 @@ export async function POST(req: Request) {
     ]),
   )
 
+  /*
+   * WHICH SCHEMAS THIS TURN CARRIES.
+   *
+   * `tools` above stays the whole registry — every tool keeps its schema and
+   * its owner-scoped `execute`. `activeTools` narrows what is OFFERED to the
+   * model for this turn, which is where the token cost lives: all 58 schemas
+   * measured 21.9k input tokens before the model had read the question, and a
+   * reasoning model plans across every one of them.
+   *
+   * `null` means the page established no department, and the honest answer to
+   * that is the full menu rather than a guessed one.
+   */
+  let activeTools = activeToolsForPage(body.askScope?.pageId ?? null)
+  /*
+   * The one route whose own name is not a subject. A reader who opened Ask
+   * from the rail carries no page, so the map cannot answer and the question
+   * text is the only evidence there is — one short nano call reads it. Its
+   * failures all return null, which is the full menu, so this can make the
+   * turn faster or leave it alone and nothing else.
+   */
+  let classifiedGroups: string[] | null = null
+  if (!activeTools && userMessageText) {
+    // The context sentence is prepended to the question before sending
+    // (`use-ask.ts`), and it names the store and the window rather than a
+    // department — it would only bias the classifier. Ask it about the
+    // question the reader actually typed.
+    const askedQuestion = userMessageText.includes("\n")
+      ? userMessageText.slice(userMessageText.indexOf("\n") + 1)
+      : userMessageText
+    const groups = await classifyToolGroups(askedQuestion)
+    if (groups) {
+      classifiedGroups = groups
+      activeTools = toolsInGroups(groups)
+    }
+  }
+
   const requestStartMs = performance.now()
   const systemPromptStartMs = performance.now()
   const system = await buildSystemPrompt(accountId)
@@ -228,6 +275,8 @@ export async function POST(req: Request) {
     system,
     messages: modelMessages,
     tools: toolSet,
+    // Undefined, not null: the SDK reads "absent" as "all of them".
+    ...(activeTools ? { activeTools } : {}),
     /*
      * REASONING EFFORT IS THE LARGEST SINGLE LEVER ON THIS ROUTE, AND IT WAS
      * UNSET.
@@ -311,7 +360,12 @@ export async function POST(req: Request) {
           `systemPromptMs=${systemPromptMs} firstTokenMs=${firstTokenMs ?? "n/a"} ` +
           `totalMs=${totalMs} tools=${capturedToolCalls.length} ` +
           `toolMs=[${toolMs.join(",")}] ` +
-          `inputTokens=${promptTokens ?? "n/a"} cachedTokens=${cachedTokens}`,
+          `inputTokens=${promptTokens ?? "n/a"} cachedTokens=${cachedTokens} ` +
+          // The lever and its effect on one line: which page narrowed the
+          // menu, how many schemas that left, and what the prompt then cost.
+          `pageId=${body.askScope?.pageId ?? "none"} ` +
+          `classified=${classifiedGroups ? classifiedGroups.join("+") : "no"} ` +
+          `activeTools=${activeTools ? activeTools.length : Object.keys(toolSet).length}`,
       )
 
       // Record token usage. Wrapper never throws — returns null on failure.

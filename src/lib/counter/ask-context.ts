@@ -1,6 +1,6 @@
 import { rangeLabel } from "./date-range"
 import { readCounterParams } from "./url-state"
-import { NAV_GROUPS, isActive } from "./nav"
+import { NAV_GROUPS, isActive, type NavId } from "./nav"
 import { deskRouteFor } from "./route-shape"
 
 /**
@@ -29,6 +29,37 @@ export interface AskContext {
   askedFrom: string | null
   /** One line the reader can check BEFORE typing — note 43's actual fix. */
   sentence: string
+  /**
+   * The SUBJECT page as a stable id, or null when the question has no subject
+   * (Ask reached from the rail, Settings, Monitoring).
+   *
+   * `page` above is a display label and belongs to the sentence a reader
+   * reads. This is the same resolution keyed for a machine: it decides which
+   * tool schemas the turn carries (`src/lib/chat/tool-groups.ts`). Keeping
+   * them separate is the point — renaming "P&L" in the rail must not silently
+   * change which tools a P&L question can reach.
+   *
+   * Null is not a failure. It means "no department was established", and the
+   * route answers that with the full tool set rather than a guess.
+   */
+  pageId: NavId | null
+}
+
+/**
+ * The scope a question carries to `/api/chat`, as data rather than prose.
+ *
+ * Deliberately the narrow half of `AskContext`: the sentence, the store name
+ * and the range label are all things the model reads as text and already
+ * travel prepended to the question. What the ROUTE needs is the one field it
+ * can branch on, and sending only that keeps the wire contract from drifting
+ * into a second copy of the context.
+ *
+ * Every field is optional and untrusted — it arrives off a request body. The
+ * route matches `pageId` against its own map and falls back to the full tool
+ * set on anything it does not recognise.
+ */
+export interface AskRequestScope {
+  pageId: NavId | null
 }
 
 export function describeAskContext({
@@ -108,7 +139,14 @@ export function describeAskContext({
       ? `Answering about ${page} · ${store} · ${range}`
       : `Answering about ${store} · ${range}`
 
-  return { page, store, range, askedFrom: from?.label ?? null, sentence }
+  return {
+    page,
+    store,
+    range,
+    askedFrom: from?.label ?? null,
+    sentence,
+    pageId: subject?.id ?? null,
+  }
 }
 
 /** The Counter Ask page. `nav.ts` has pointed here since the rail was built. */
