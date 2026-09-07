@@ -188,8 +188,27 @@ export async function maxAsOfForTools(toolNames: readonly string[]): Promise<str
  * ACTUALLY read, not the ones it was offered.
  */
 export function everyToolStamped(toolNames: readonly string[]): boolean {
-  return toolNames.every((n) => Boolean(TOOL_AS_OF[n as ChatToolName]))
+  return toolNames.every(
+    (n) => READS_NO_FIGURES.has(n as ChatToolName) || Boolean(TOOL_AS_OF[n as ChatToolName]),
+  )
 }
+
+/**
+ * Tools that read no data at all, so they cannot go stale and must not block
+ * an answer from being stored.
+ *
+ * `fileReturn` is the one that matters: it is how the model FILES the answer
+ * (verdict, figures, follow-ups), and it is called on nearly every good turn.
+ * Left out of `TOOL_AS_OF` on purpose (above) and checked here as if it were
+ * stamped, because before this the two rules met head-on — every answer that
+ * filed a return "read an unstamped tool", the write guard in the chat route
+ * refused it, and the answer cache held zero entries after a day of turns.
+ * The same question, asked again, ran the model every time.
+ *
+ * `listStores` and `describeSchema` stay out: a store can be added, and an
+ * answer that read the store list has a fact that can change without a sync.
+ */
+const READS_NO_FIGURES: ReadonlySet<ChatToolName> = new Set<ChatToolName>(["fileReturn"])
 
 /** The freshness stamp for one tool, or null when it reports none. */
 export async function asOfForTool(toolName: string): Promise<string | null> {
