@@ -819,12 +819,15 @@ button.wkd {
  * has no rail to be offset from — so the constants simply go to zero at that
  * width and the narrow layout is left exactly as it was.
  *
- * The two numbers are therefore stated twice: here, and at
- * counter-components.css `.askpage`. They must match.
+ * The measurements come from `--ct-ask-rail` / `--ct-ask-gap` in counter.css,
+ * which is also what counter-components.css sizes `.askpage`'s grid with, so
+ * the grid and the bar under it read one source and cannot drift apart. They
+ * are aliased onto local names here only so the media query below can zero
+ * them for the dock without disturbing the grid.
  */
 .screen:has(> .askpage) {
-  --ask-rail: 206px;
-  --ask-gap: 18px;
+  --ask-rail: var(--ct-ask-rail);
+  --ask-gap: var(--ct-ask-gap);
 }
 .screen:has(> .askpage) > .dock {
   margin-left: calc(var(--ask-rail) + var(--ask-gap));

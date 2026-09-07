@@ -1138,7 +1138,70 @@ export function lintCounter(
     roots.some((r) => isUnder(dir, r) || isUnder(r, dir)),
   )
   violations.push(...findPreloadedFontViolations(fontScopeInScope))
+  // `ask-rail-token-matches-prototype` — NOT scoped to Counter roots either,
+  // and not a walk at all: it compares two fixed files. See the function.
+  violations.push(...findAskRailDriftViolations())
   return violations
+}
+
+
+/* ── ask-rail-token-matches-prototype ────────────────────────────────────
+ *
+ * `--ct-ask-rail` / `--ct-ask-gap` in counter.css must equal the numbers
+ * `.askpage` is actually laid out with in counter-components.css.
+ *
+ * Ask's composer sits OUTSIDE the two-column grid it belongs under — `.dock`
+ * is a sibling of `.askpage`, not a child — so it cannot inherit the rail's
+ * width and is offset by these tokens instead (counter-repairs.css). When the
+ * two disagree the composer silently slides out from under the answer, which
+ * is the defect 38ed4814 fixed: the input sat 224px to the left of every
+ * figure it answers about, and nothing failed.
+ *
+ * The obvious fix — have `.askpage` read the tokens — is not available.
+ * counter-components.css is GENERATED from docs/counter/counter-prototype.html
+ * and asserted byte-for-byte against the extractor, so an edit there is undone
+ * by the next `npm run css:extract`. The prototype keeps the literals and the
+ * token mirrors them; this rule is what stops the mirror going stale, because
+ * regenerating from a prototype with a different rail would otherwise move the
+ * grid and leave the composer behind.
+ *
+ * Read from the files rather than from a resolved stylesheet on purpose: this
+ * has to fail in `npm run tokens`, which runs with no browser.
+ */
+function findAskRailDriftViolations(): Violation[] {
+  const tokenFile = join(process.cwd(), "src/styles/counter.css")
+  const protoFile = join(process.cwd(), "src/styles/counter-components.css")
+  if (!existsSync(tokenFile) || !existsSync(protoFile)) return []
+
+  const tokens = readFileSync(tokenFile, "utf8")
+  const proto = readFileSync(protoFile, "utf8")
+
+  const declared = (name: string): string | null =>
+    tokens.match(new RegExp(`--ct-ask-${name}\\s*:\\s*([^;]+);`))?.[1].trim() ?? null
+
+  // `.askpage{...grid-template-columns:206px minmax(0,1fr);gap:18px...}` — the
+  // generated rule is one line, so the declaration block is matched whole.
+  const rule = proto.match(/\.askpage\{([^}]*)\}/)
+  if (!rule) return []
+  const usedRail = rule[1].match(/grid-template-columns:\s*([^ ;]+)/)?.[1]?.trim() ?? null
+  const usedGap = rule[1].match(/gap:\s*([^;]+)/)?.[1]?.trim() ?? null
+
+  const line =
+    tokens.slice(0, tokens.indexOf("--ct-ask-rail")).split("\n").length || 1
+  const out: Violation[] = []
+  for (const [name, used] of [["rail", usedRail], ["gap", usedGap]] as const) {
+    const token = declared(name)
+    if (!token || !used) continue
+    if (token !== used) {
+      out.push({
+        file: "src/styles/counter.css",
+        line,
+        rule: "ask-rail-token-matches-prototype",
+        text: `--ct-ask-${name} is ${token}, but counter-components.css lays .askpage out with ${used}. The Ask composer is offset by the token and would no longer sit under the answer column.`,
+      })
+    }
+  }
+  return out
 }
 
 

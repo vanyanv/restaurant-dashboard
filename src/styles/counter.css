@@ -298,6 +298,25 @@
   --ct-r-sm: 5px;
 
   --ct-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Ask's two-column split, mirrored from the prototype.
+
+     `.askpage`'s grid is sized by these numbers in counter-components.css,
+     and `.dock` is offset by them in counter-repairs.css so the composer
+     starts where the answer does. The dock is a SIBLING of that grid, not a
+     child, so it cannot inherit the measurement — it has to be told, and
+     until 38ed4814 it was not, which put the composer a rail's width to the
+     left of every figure it answers about.
+
+     The obvious tidy — have `.askpage` read these too — is not available:
+     counter-components.css is GENERATED from docs/counter/counter-prototype.html
+     and a test asserts it byte-for-byte against the extractor, so an edit
+     there is erased by the next `npm run css:extract`. The prototype keeps the
+     literals; this mirrors them for the one box that sits outside the grid.
+     `npm run tokens` fails if the two ever disagree, so the mirror cannot go
+     stale silently. */
+  --ct-ask-rail: 206px;
+  --ct-ask-gap:  18px;
 }
 
 @theme inline {
