@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
     // package.json now (Counter's own primitives replaced Radix), so an
     // entry naming a package that isn't a dependency has nothing to
     // optimize; removed rather than left as dead config.
-    optimizePackageImports: ["lucide-react", "recharts", "framer-motion", "date-fns"],
+    optimizePackageImports: ["lucide-react", "date-fns"],
   },
   images: {
     formats: ["image/webp", "image/avif"],

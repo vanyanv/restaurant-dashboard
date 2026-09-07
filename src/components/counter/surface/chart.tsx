@@ -69,9 +69,12 @@ export interface ChartProps extends ChartSpec {
  * — is gone with it: the 42% dim is `.ch.is-live .chbar` / `.chbar.on`, pure
  * CSS, no per-datum React element.
  *
- * `recharts` stays in `package.json`: 28 files under `src/components/charts/`
- * and `src/app/dashboard/(editorial)/**` still import it. This removes it
- * from Counter, which is the only part of the tree this plan governs.
+ * `recharts` is gone from `package.json`. It stayed in the dependency tree
+ * for a while after this file replaced it in Counter, because
+ * `src/components/charts/` and `src/app/dashboard/(editorial)/**` still
+ * imported it elsewhere. Both trees have since been deleted along with the
+ * rest of the pre-Counter design system, so nothing imports `recharts`
+ * anymore and the dependency was removed.
  *
  * ## States
  *

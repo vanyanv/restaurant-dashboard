@@ -18,26 +18,31 @@ copies of `--ink-faint` happened to the previous system. It says what the
 tokens mean and when to reach for each one; go to the file for the actual
 number.
 
-This branch (`dashboardv2`) is rebuilding the dashboard on Counter, page by
-page. The pre-Counter design system — a serif italic display face, cream-
-toned hex colours, hairline-bordered panels, a red hover-bar row pattern —
-still runs on ~59 files under `src/app/dashboard/**` and the mobile shell,
-because those pages haven't been rebuilt yet. It is being deleted phase by
-phase as each page moves to Counter (see the spec's §6 phase table), not
-replaced in one cutover. Don't extend it, and don't mistake its continued
-presence in the tree for it still being the target design.
+This branch (`dashboardv2`) rebuilt the dashboard onto Counter, page by page.
+The pre-Counter design system — a serif italic display face, cream-toned hex
+colours, hairline-bordered panels, a red hover-bar row pattern — is gone from
+`src/app/dashboard/**` and the mobile shell as of 2026-09-04: the
+`(editorial)` route group under `src/app/dashboard` no longer exists, and
+every page that renders anything in either tree is under a `(counter)` route
+group. What's left outside those two groups is nine redirect shims (five
+desktop, four mobile), the `m/[...notFound]` catch-all and `m/login` — see
+"The `(counter)` and `(editorial)` route groups" below for the full account.
+Don't mistake any of that for the old design still being live: none of those
+pages render it.
 
 ## Type
 
 Two tiers, three faces on Counter pages — four are loaded overall. This is
 unchanged from the old system's typography rule, with the display face
-swapped. `src/app/layout.tsx` adds Bricolage Grotesque, but
-`src/app/dashboard/(editorial)/layout.tsx`, `src/app/login/layout.tsx`,
-`src/app/signup/layout.tsx` and `src/app/(mobile)/m/layout.tsx` all still
-also load Fraunces — a deliberate, sound deviation, since removing it would
-break the ~59 still-unrebuilt editorial pages that depend on it; it is
-deleted in Phase F, once every route in the spec's §6 phase table has moved
-to Counter.
+swapped. `src/app/layout.tsx` adds Bricolage Grotesque. `src/app/signup/layout.tsx`
+and `src/app/(mobile)/m/layout.tsx` still also load Fraunces, but not for an
+unrebuilt dashboard tree — `src/app/dashboard/(editorial)/layout.tsx` is
+deleted along with everything it wrapped. `signup/layout.tsx` loads it for
+`/signup/[token]`, a route outside `src/app/dashboard` that hasn't been
+rebuilt; `(mobile)/m/layout.tsx` loads it for `WelcomeMarquee`, a name-reveal
+animation on the Counter phone shell, not an unrebuilt page.
+`src/app/login/layout.tsx` no longer loads it at all — its own comment marks
+it as the first of that group to go quiet.
 
 | Role | Face | Rule |
 |---|---|---|
@@ -233,10 +238,14 @@ check, not an AST, and fails the build on:
    `(counter)` route groups that holds a `page.tsx` but no `loading.tsx`
    beside it. This is the one rule that is a directory check rather than a
    regex — the defect is an absence, and there is no line of text for a
-   pattern to match against an absence. It never reaches the five redirect
-   shims left outside both `(counter)` groups (they render nothing but a
-   `redirect()`, so a missing `loading.tsx` is not a real gap), so it needs no
-   LEGACY exemption of its own.
+   pattern to match against an absence. It never reaches the nine redirect
+   shims left outside both `(counter)` groups — five desktop (`chat`,
+   `operations/costs`, `operations/recipes`, `stores/[id]/edit`,
+   `pnl/[storeId]`) and four mobile (`m/chat`, `m/count`, `m/settings`,
+   `m/pnl/[storeId]`) — nor the `m/[...notFound]` catch-all beside them (they
+   render nothing but a `redirect()` or a `notFound()`, so a missing
+   `loading.tsx` is not a real gap), so it needs no LEGACY exemption of its
+   own.
 8. **`no-awaited-sections-in-page`** — a `page.tsx` under one of the two
    `(counter)` route groups calling `await get<Anything>Sections(...)`
    instead of the not-awaited `get<Anything>SectionPromises(...)` shape Task 3
@@ -244,7 +253,8 @@ check, not an AST, and fails the build on:
    onto. Like rule 7, this walks `page.tsx` files under the two route groups
    directly rather than running as a per-file regex over everything else the
    other rules reach, and for the same reason needs no LEGACY exemption: the
-   five redirect shims live outside both `(counter)` groups. Six routes —
+   nine redirect shims and the `m/[...notFound]` catch-all live outside both
+   `(counter)` groups. Six routes —
    three desk/phone pairs — are exempted **by name**, not by pattern, because
    in each every section comes from a single load, so splitting it into
    several promises would be a picture of streaming rather than streaming:
@@ -278,7 +288,8 @@ exactly the reason their own entries above give.
 `src/app/(mobile)/m/(counter)/login/`), for the same "no shell above it"
 reason the rest of `COUNTER_ROOT_EXCEPTIONS`' sign-in and sign-up pages are
 their own bare roots. That places it outside rules 7 and 8's reach along with
-the five redirect shims, but for a different reason: it is a real, rendered
+the nine redirect shims and the `m/[...notFound]` catch-all, but for a
+different reason: it is a real, rendered
 Counter page with neither a `loading.tsx` nor a section loader, not a stub. It
 is deliberately left there rather than moved or given a LEGACY entry, because
 today it reads no session and no data (`page.tsx`'s own comment: "Public, so
@@ -663,70 +674,85 @@ found alongside it — `/dashboard` rendering inside two navigation shells at
 once, with a ⌘K collision to match — which the `(editorial)` route group
 below fixed.
 
-## The `(counter)` and `(editorial)` route groups, and how a page migrates
+## The `(counter)` and `(editorial)` route groups — the `(editorial)` half is now history
 
-`src/app/dashboard/(editorial)/` holds every page still on the pre-Counter
-design — ~19 directories. Its `layout.tsx` carries the editorial chrome: the
-cream `AppSidebarClient` sidebar, `ChatDrawerProvider`/`ChatDrawerClient` (the
-"Owner Analyst" drawer and its own ⌘K listener), `WelcomeMarquee`, the four
-editorial stylesheets, and Fraunces.
+`src/app/dashboard/(editorial)/` used to hold every page still on the
+pre-Counter design — ~19 directories at its largest. Its `layout.tsx` carried
+the editorial chrome: the cream `AppSidebarClient` sidebar,
+`ChatDrawerProvider`/`ChatDrawerClient` (the "Owner Analyst" drawer and its
+own ⌘K listener), `WelcomeMarquee`, the four editorial stylesheets, and
+Fraunces. That group, its layout and every component named above are gone —
+deleted on 2026-09-04 once the last page under it had either moved into
+`(counter)/` or become one of the redirect shims below and the group held
+nothing left to delete for.
 
-`src/app/dashboard/(counter)/` holds every desk page that HAS been rebuilt —
-`/dashboard`, `/dashboard/orders`, `/dashboard/orders/<id>`, `/dashboard/pnl`
-— and its `layout.tsx` carries the Counter chrome: `AppShell`, and the one
-`getOverviewStores()` call the rail's switcher needs.
+`src/app/dashboard/(counter)/` now holds every desk page that renders —
+`/dashboard`, `/dashboard/orders`, `/dashboard/orders/<id>`, `/dashboard/pnl`,
+all of it — and its `layout.tsx` carries the Counter chrome: `AppShell`, and
+the one `getOverviewStores()` call the rail's switcher needs.
 `src/app/(mobile)/m/(counter)/` is the same arrangement on the phone, for the
-same reason: `src/app/(mobile)/m/layout.tsx` is shared with a dozen editorial
-`/m` pages that have their own toolbar, so the Counter phone shell needs a
-group of its own to sit above.
+same historical reason: `src/app/(mobile)/m/layout.tsx` used to be shared
+with a dozen editorial `/m` pages that had their own toolbar, so the Counter
+phone shell needed a group of its own to sit above. Every one of those
+editorial `/m` pages is rebuilt now too.
 
-`src/app/dashboard/layout.tsx` — the parent of both groups — carries only what
-every route under `/dashboard` needs regardless of design system: a session
-read and `PageViewTracker`. Two route groups under one thin layout is the
-shape: neither shell can reach the other's pages.
+`src/app/dashboard/layout.tsx` — the parent of the `(counter)` group and the
+five desktop redirect shims that sit beside it — carries only what every
+route under `/dashboard` needs regardless of design system: a session read
+and `PageViewTracker`.
 
-Two routes deliberately stay OUTSIDE `(counter)` even though a Counter page
-links to them: `/dashboard/pnl/[storeId]` and `/m/pnl/[storeId]`. The first is
-a `permanentRedirect` shim that renders nothing, and the second is still
-editorial.
+What's left outside `(counter)` on each side is now fully enumerated, not a
+moving target: five desktop redirect shims (`chat`, `operations/costs`,
+`operations/recipes`, `stores/[id]/edit`, `pnl/[storeId]`), four mobile
+redirect shims (`m/chat`, `m/count`, `m/settings`, `m/pnl/[storeId]`), the
+`m/[...notFound]` catch-all, and `m/login` — which sits outside deliberately
+because it reads no session and no data, not because it is unrebuilt (see
+"The rules, and where they're enforced" above). `/dashboard/pnl/[storeId]`
+and `/m/pnl/[storeId]` are both `permanentRedirect` shims now; neither is
+editorial any longer.
 
 Parenthesised segments are a Next.js route group: they organise the file
-tree without becoming a URL segment, so `(editorial)/orders/page.tsx` still
-serves `/dashboard/orders`, not `/dashboard/(editorial)/orders` — verified
-against the real `next build` route manifest, not assumed. This is also the
-mechanism for the rest of the Counter migration: a page moves off the old
-design by moving out of `(editorial)/` and into `(counter)/` (and, for a
-`page.tsx`, being rewritten against the rules on this page) — no routing
-change, no redirect, just `git mv` and a rewrite.
-`ls src/app/dashboard/(editorial)` answers "what's still editorial" at any
-point in the migration, and `ls src/app/dashboard/(counter)` answers the
-other half of the same question.
+tree without becoming a URL segment, so `(editorial)/orders/page.tsx` used to
+serve `/dashboard/orders`, not `/dashboard/(editorial)/orders` — verified
+against the real `next build` route manifest at the time, not assumed. That
+was also the mechanism for the rest of the Counter migration: a page moved
+off the old design by moving out of `(editorial)/` and into `(counter)/`
+(and, for a `page.tsx`, being rewritten against the rules on this page) — no
+routing change, no redirect, just `git mv` and a rewrite. `ls
+src/app/dashboard/(counter)` now answers "every page that renders under
+`/dashboard`" outright, since there is no `(editorial)` sibling left to
+subtract from it.
 
-Before this split, `/dashboard` rendered inside two navigation shells at
-once — Counter's own `AppShell` nested inside the pre-Counter
-`AppSidebarClient` sidebar, because the one `dashboard/layout.tsx` wrapped
-every route, Counter's new Overview page included. The same layout also
-mounted `ChatDrawerClient`, whose own ⌘K listener fired alongside Counter's
-`AskSurface` on every route, Counter's included — pressing ⌘K on
+Before the split that created these groups, `/dashboard` rendered inside two
+navigation shells at once — Counter's own `AppShell` nested inside the
+pre-Counter `AppSidebarClient` sidebar, because the one `dashboard/layout.tsx`
+wrapped every route, Counter's new Overview page included. The same layout
+also mounted `ChatDrawerClient`, whose own ⌘K listener fired alongside
+Counter's `AskSurface` on every route, Counter's included — pressing ⌘K on
 `/dashboard` opened both dialogs at once. Moving the chrome into
-`(editorial)/layout.tsx` fixes both: Counter routes no longer mount
-`AppSidebarClient` or `ChatDrawerClient` at all, so there is exactly one
-shell and one ⌘K target per route, editorial or Counter. See
-`docs/counter/overview-verification.md` for what was measured after the
-fix (route manifest, browser screenshots, ⌘K on each kind of route,
-console errors, bundle size).
+`(editorial)/layout.tsx` fixed both at the time: Counter routes stopped
+mounting `AppSidebarClient` or `ChatDrawerClient` at all, so there was
+exactly one shell and one ⌘K target per route, editorial or Counter. Now that
+`(editorial)/layout.tsx` and both components are deleted outright, the fix is
+moot rather than just contained. See `docs/counter/overview-verification.md`
+for what was measured at the time (route manifest, browser screenshots, ⌘K on
+each kind of route, console errors, bundle size).
 
-A legacy page moved into `(editorial)/` without being rewritten keeps its
-`npm run tokens` LEGACY exemption: `scripts/counter-lint.ts`'s baseline
-comparison tolerates the route-group segment in the file path and the
-mechanical `@/app/dashboard/(editorial)/...` import-path rewrite the move
-itself forces on the handful of files that reach a moved sibling by
-absolute import — see `stripRouteGroups` and
-`normalizeRouteGroupImports` in that file for the exact mechanism, and why
-`git cat-file`, not `git show`, is used for the baseline lookup (a
-dynamic-route folder like `[id]` is valid pathspec glob syntax, and `git
-show <rev>:<path>` silently returns an empty, successful result for a
-non-existent bracketed path instead of failing).
+While `(editorial)/` existed, a legacy page moved into it without being
+rewritten kept its `npm run tokens` LEGACY exemption: `scripts/counter-lint.ts`'s
+baseline comparison tolerated the route-group segment in the file path and
+the mechanical `@/app/dashboard/(editorial)/...` import-path rewrite the move
+itself forced on the handful of files that reached a moved sibling by
+absolute import — see `stripRouteGroups` and `normalizeRouteGroupImports` in
+that file for the mechanism, kept for the next time a route group is
+introduced, and why `git cat-file`, not `git show`, is used for the baseline
+lookup (a dynamic-route folder like `[id]` is valid pathspec glob syntax, and
+`git show <rev>:<path>` silently returns an empty, successful result for a
+non-existent bracketed path instead of failing). Both the `src/app/dashboard`
+and `src/app/(mobile)/m` LEGACY entries described here are themselves gone
+from `scripts/counter-lint.ts` now, for the reason given in that file's
+module comment: an entry that suppresses no real violation fails a test built
+to catch exactly that.
 
 ## Speed, and how it is measured
 

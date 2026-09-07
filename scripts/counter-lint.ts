@@ -113,12 +113,14 @@
  *     filesystem directly instead, scoped to `COUNTER_ROUTE_GROUPS` (the two
  *     `(counter)` route groups, not the wider `src/app/dashboard/**` /
  *     `src/app/(mobile)/m/**` the other rules police). That scope is also
- *     why it needs no LEGACY exemption of its own: the five redirect shims
- *     (`chat`, `operations/costs`, `operations/recipes`, `stores/[id]/edit`,
- *     `pnl/[storeId]`) are the only pages left outside both `(counter)`
- *     groups, and this check structurally cannot reach them, unlike a regex
- *     rule that would see every one of those files and need LEGACY to look
- *     away from it.
+ *     why it needs no LEGACY exemption of its own: every page left outside
+ *     both `(counter)` groups — the five desktop redirect shims (`chat`,
+ *     `operations/costs`, `operations/recipes`, `stores/[id]/edit`,
+ *     `pnl/[storeId]`), the four mobile redirect shims (`m/chat`, `m/count`,
+ *     `m/settings`, `m/pnl/[storeId]`), the `m/[...notFound]` catch-all and
+ *     `m/login` — sits where this check structurally cannot reach it, unlike
+ *     a regex rule that would see every one of those files and need LEGACY
+ *     to look away from it.
  *
  * --- Task 4 (ruling S-R6: streaming itself was unenforced) ---
  *
@@ -137,9 +139,11 @@
  *     `page.tsx` that owns a section-loading call — matching it against a
  *     client island or a layout would be noise. `findAwaitedSectionsViolations`
  *     walks `page.tsx` files under `COUNTER_ROUTE_GROUPS` directly, the same
- *     scope `findRouteLoadingViolations` uses and for the same reason: the
- *     five redirect shims live outside both `(counter)` groups, so this
- *     check structurally cannot reach them and needs no LEGACY exemption of
+ *     scope `findRouteLoadingViolations` uses and for the same reason: every
+ *     page outside both `(counter)` groups — the five desktop redirect
+ *     shims, the four mobile redirect shims, the `m/[...notFound]`
+ *     catch-all and `m/login` — lives outside that scope, so this check
+ *     structurally cannot reach any of them and needs no LEGACY exemption of
  *     its own.
  *   - `await Promise.all([..., getXSections(...)])` is NOT caught: the
  *     pattern is line-oriented and looks for `await get\w*Sections(`, which a
@@ -1016,8 +1020,9 @@ export const AWAITED_SECTIONS_ALLOWED = [
  * section-loading call, not on every `.tsx`/`.ts` under `ROOTS`. Walks
  * `page.tsx` files under `routeGroupRoots` directly and needs no LEGACY
  * exemption for the same structural reason `findRouteLoadingViolations`
- * doesn't: the five redirect shims live outside both `(counter)`
- * route groups.
+ * doesn't: every page outside both `(counter)` route groups — the five
+ * desktop redirect shims, the four mobile redirect shims, the
+ * `m/[...notFound]` catch-all and `m/login` — lives outside that scope.
  */
 export function findAwaitedSectionsViolations(
   routeGroupRoots: string[] = COUNTER_ROUTE_GROUPS,

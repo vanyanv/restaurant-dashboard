@@ -68,9 +68,9 @@ In Batch A this saved ~700 lines (5 dead exports + their imports + the `getOpenA
 For each pure helper to extract:
 
 1. Write a failing test at `tests/<mirror-of-new-path>.test.ts` that imports from a module that doesn't exist yet.
-2. Run `pnpm test` — expect the import to fail (red).
+2. Run `npm test` — expect the import to fail (red).
 3. Create the helper module under `src/app/actions/_shared/<topic>.ts` (or wherever the new home is).
-4. Re-run `pnpm test` — expect green.
+4. Re-run `npm test` — expect green.
 
 Helpers extracted in Batch A: `parseDateRange`, `resolveStoreScope`, `computeVariance`. The tests fingerprint the *exact* boundary semantics (e.g. variance uses strict `> 10` not `>= 10`) so a behavior drift in the split would be caught.
 
@@ -140,7 +140,7 @@ The shim is functionally permanent — it costs ~nothing at runtime. After the s
 - Codemods all consumer imports from the old path to the new domain paths.
 - Deletes the shim file.
 
-This is **also where any cold-start / bundling win actually materializes**. A barrel shim doesn't change what the bundler pulls in — re-exports through it can still keep the action manifest large, since consumers still import from the original path. If the cold-start case matters for a given file, treat step 9 as required (not optional) and measure before vs. after with `pnpm build` output / Vercel function size. Don't claim a perf win that hasn't been measured.
+This is **also where any cold-start / bundling win actually materializes**. A barrel shim doesn't change what the bundler pulls in — re-exports through it can still keep the action manifest large, since consumers still import from the original path. If the cold-start case matters for a given file, treat step 9 as required (not optional) and measure before vs. after with `npm run build` output / Vercel function size. Don't claim a perf win that hasn't been measured.
 
 ---
 
@@ -150,7 +150,7 @@ Before merging any split that touches a file imported from `src/app/(mobile)/m/*
 
 - [ ] Confirmed the shim has **no** `"use server"` directive at the top.
 - [ ] If the new domain modules have `"use server"`, they export **only async functions** — no Zod schemas, no constants, no types as values. (Schemas/types either stay private at module scope or move to a non-`"use server"` sibling.)
-- [ ] Ran `pnpm build` — no "module has no exports" errors anywhere in the trace.
+- [ ] Ran `npm run build` — no "module has no exports" errors anywhere in the trace.
 - [ ] Manually loaded each `(mobile)/m/*` route from the consumer map in a mobile viewport. The list comes from step 2.
 - [ ] Verified `inv-row` / `inv-panel` / `inv-stamp` styles still render on `(mobile)/m/*` (commit b443a09 split CSS specifically for mobile; an accidental import-path change can lose those styles).
 - [ ] Ran `graphify update .` so the knowledge graph reflects the new module layout.
@@ -172,7 +172,7 @@ Before merging any split that touches a file imported from `src/app/(mobile)/m/*
 | 4 | Wrote 16 unit tests across 3 helper modules (`parseDateRange`, `resolveStoreScope`, `computeVariance`). Tests pinned the strict-inequality variance threshold and the `&&`-not-`||` semantics of the date-range explicit-pair check. |
 | 5 | Wrote 14 contract tests covering both new domain modules' response shapes via Zod. |
 | 6 | Created `src/app/actions/product-usage/data-actions.ts` and `recipe-actions.ts`. Shared helpers landed under `src/app/actions/_shared/`. |
-| 7 | Original `product-usage-actions.ts` → 16-line re-export shim. **First attempt failed** because I left `"use server"` at the top — caught by `pnpm build`. Removing it fixed the build immediately. |
+| 7 | Original `product-usage-actions.ts` → 16-line re-export shim. **First attempt failed** because I left `"use server"` at the top — caught by `npm run build`. Removing it fixed the build immediately. |
 | 8 | All gates passed: 32 tests, typecheck, build. |
 | 9 | Shim left in place; codemod deferred. |
 
