@@ -16,6 +16,37 @@
 
 export type ChannelId = "house" | "doordash" | "ubereats" | "grubhub"
 
+/**
+ * What a raw Otter platform slug is CALLED on screen.
+ *
+ * HERE and not in `channel-mix.ts`, where `CHANNEL_FOR_PLATFORM` lives, for a
+ * reason worth stating: that module opens with `import { prisma }`, and this
+ * map is now read by `src/lib/chat/present.ts` to label a chart axis inside an
+ * answer. A pure string map has no business dragging a database client behind
+ * it. This file is the pure half of the channel vocabulary and already knows
+ * every one of these four by id.
+ *
+ * There is exactly one of these because a slug has exactly one name. The
+ * Orders page has printed them for months (it held the only copy); an answer's
+ * bar chart would otherwise `titleCase` the slug and label a bar "Css-Pos".
+ *
+ * Not every slug is listed, deliberately: `chownow` and whatever Otter adds
+ * next fall through to the slug itself — ugly and honest, rather than a
+ * guessed name.
+ */
+export const PLATFORM_LABEL: Record<string, string> = {
+  "css-pos": "In-house",
+  "bnm-web": "Own web",
+  doordash: "DoorDash",
+  ubereats: "Uber Eats",
+  grubhub: "Grubhub",
+}
+
+/** That name, or the slug when there is none for it. */
+export function platformLabel(slug: string): string {
+  return PLATFORM_LABEL[slug] ?? slug
+}
+
 export interface Channel {
   id: ChannelId
   name: string

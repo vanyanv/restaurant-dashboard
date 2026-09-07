@@ -8,6 +8,7 @@ import type { AskContext, AskRequestScope } from "./ask-context"
 import {
   askSteps,
   proseFrom,
+  shownFrom,
   toolReadsFrom,
   type AskState,
   type AskTurnView,
@@ -302,6 +303,7 @@ export function useAsk(
             filed,
             body: proseFrom(parts),
             read: toolReadsFrom(parts),
+            shown: shownFrom(parts, filed),
             // Nothing filed means nothing to lay out — the empty form is prose
             // and its sources, which is exactly what there is.
             form: filed ? returnForm(filed) : "empty",

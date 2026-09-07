@@ -6,7 +6,14 @@ import type { Prisma } from "@/generated/prisma/client"
 import type { HourlyOrderPoint, OrderPatternsHourlyComparison } from "@/types/analytics"
 import { resolveLineCosts, type LineCost } from "@/lib/counter/order-costs"
 import { CHANNEL_FOR_PLATFORM } from "@/lib/counter/channel-mix"
-import { CHANNELS, channelById, markVarFor, type Channel, type ChannelId } from "@/lib/counter/channels"
+import {
+  CHANNELS,
+  channelById,
+  markVarFor,
+  PLATFORM_LABEL as PLATFORM_LABEL_MAP,
+  type Channel,
+  type ChannelId,
+} from "@/lib/counter/channels"
 import { ticketOf, feeAmount, netOf } from "@/lib/counter/order-signs"
 import { count, money, pct, plural } from "@/lib/counter/format"
 import {
@@ -372,13 +379,10 @@ const WEEKDAYS = [
  * slug (`buildToggles`): "In-house" means both slugs, which is why
  * `getOrdersList` had to grow a `platforms` set to say it.
  */
-const PLATFORM_LABEL: Record<string, string> = {
-  "css-pos": "In-house",
-  "bnm-web": "Own web",
-  doordash: "DoorDash",
-  ubereats: "Uber Eats",
-  grubhub: "Grubhub",
-}
+// Moved to `@/lib/counter/channels` — the PURE half of the channel vocabulary
+// — once an answer's chart axis became the second reader of it. Re-bound here
+// so the call sites below read exactly as they did.
+const PLATFORM_LABEL = PLATFORM_LABEL_MAP
 
 /** The Counter channel a raw platform slug belongs to, or none. */
 function channelOf(platform: string): Channel | null {

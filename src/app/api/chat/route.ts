@@ -8,6 +8,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   tool,
+  type JSONValue,
   type ModelMessage,
   type ToolSet,
   type UIMessage,
@@ -23,6 +24,7 @@ import { chatTools } from "@/lib/chat/tools"
 import { activeToolsForPage, toolsInGroups } from "@/lib/chat/tool-groups"
 import { classifyToolGroups } from "@/lib/chat/tool-group-classifier"
 import { asOfForTool, maxAsOfForTools, everyToolStamped } from "@/lib/chat/data-as-of"
+import { presentFor, type Presentation } from "@/lib/chat/present"
 import {
   answerCacheKey,
   readCachedAnswer,
@@ -73,6 +75,50 @@ interface ChatRequestBody {
 }
 
 /**
+ * The result, plus the two things the tool itself does not know: how fresh the
+ * table behind it is, and what picture its rows draw.
+ *
+ * An ARRAY result is wrapped in `{ rows }` because neither can be attached to
+ * an array. That is a change of shape for the eight tools that return one, and
+ * it is also a bug fix: `asOf` used to be attached only to object results, so
+ * `getDailySales` — stamped in `TOOL_AS_OF`, and one of the most-called tools
+ * in the app — reached the Read row with no freshness at all. The stamp was
+ * always right in the cache key (`maxAsOfForTools` reads the source directly);
+ * it was the answer that could not show it.
+ *
+ * A tool that already reports its own `asOf` keeps it: the more specific
+ * answer wins.
+ */
+function withSidecar(
+  result: unknown,
+  asOf: string | null,
+  present: Presentation | null,
+): unknown {
+  const extra: Record<string, unknown> = {}
+  if (asOf) extra.asOf = asOf
+  if (present) extra.present = present
+  if (Object.keys(extra).length === 0) return result
+
+  if (Array.isArray(result)) return { rows: result, ...extra }
+  if (result && typeof result === "object") {
+    const obj = result as Record<string, unknown>
+    return { ...obj, ...extra, ...("asOf" in obj ? { asOf: obj.asOf } : {}) }
+  }
+  // A string, a number or null has nowhere to carry either. Rare, and the
+  // answer is better without a stamp than wrapped in a shape the model has
+  // never seen for this tool.
+  return result
+}
+
+/** The same result with the UI-only payload removed — see `toModelOutput`. */
+function stripPresent(output: unknown): unknown {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return output
+  if (!("present" in output)) return output
+  const { present: _present, ...rest } = output as Record<string, unknown>
+  return rest
+}
+
+/**
  * Streams an LLM reply for the owner-analytics chat. Owner-scoped at every
  * boundary:
  *
@@ -82,6 +128,7 @@ interface ChatRequestBody {
  *   - Conversation reads/writes go through `getConversation` which throws
  *     on `NOT_OWNED`.
  */
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user) {
@@ -215,17 +262,26 @@ export async function POST(req: Request) {
             t.execute(args as never, ctx) as Promise<unknown>,
             asOfForTool(t.name),
           ])
-          if (
-            asOf &&
-            result &&
-            typeof result === "object" &&
-            !Array.isArray(result) &&
-            !("asOf" in result)
-          ) {
-            return { ...(result as Record<string, unknown>), asOf }
-          }
-          return result
+          return withSidecar(result, asOf, presentFor(t.name, args, result))
         },
+        /*
+         * WHAT THE MODEL SEES, WHICH IS NOT WHAT THE CLIENT SEES.
+         *
+         * `present` is a UI object — labels, colours, plot geometry — built
+         * from rows the model already has in the same result. Sending it back
+         * would pay input tokens for a picture the model cannot read and
+         * invite it to retype figures that were already correct.
+         *
+         * The AI SDK calls this both on the way into this turn and inside
+         * `convertToModelMessages` on every replay of it, which is why the
+         * route hands the same `toolSet` to both. That is the proposal's own
+         * condition for adding a presentation payload at all: "the payload is
+         * stripped from what is replayed to the model."
+         */
+        toModelOutput: ({ output }) => ({
+          type: "json",
+          value: stripPresent(output) as JSONValue,
+        }),
       }),
     ]),
   )
@@ -396,7 +452,17 @@ export async function POST(req: Request) {
   const stepStartTimes = new Map<string, number>()
   const turnStartMs = Date.now()
 
-  const modelMessages = [...priorMessages, ...(await convertToModelMessages(body.messages))]
+  /*
+   * `tools` is not decoration here. `convertToModelMessages` is where a PRIOR
+   * turn's tool results are turned back into model messages, and it is the
+   * only thing that will call each tool's `toModelOutput` on them — without
+   * the same `toolSet`, every presentation payload this turn ever built would
+   * be replayed into the prompt in full, on every following turn.
+   */
+  const modelMessages = [
+    ...priorMessages,
+    ...(await convertToModelMessages(body.messages, { tools: toolSet })),
+  ]
 
   let result: ReturnType<typeof streamText>
   try {

@@ -46,9 +46,35 @@ export { TurnFoot } from "./turn-foot"
  * first place. It belongs with the Ask code, which already loads the labels.
  */
 export { Thinking } from "./thinking"
+/*
+ * The chart-and-table half of an answer.
+ *
+ * Only the WRAPPER is here. `ask-show.tsx` imports nothing but `next/dynamic`
+ * and a type; `ask-show-body.tsx`, which it loads on demand, imports `Chart`,
+ * `Table` and `Section`, and is deliberately NOT exported — for the same
+ * reason `ask-mount` is not. Exporting the body would let this barrel's
+ * consumers (which include the two OVERVIEW clients) import the chart geometry
+ * eagerly and undo the split. `tests/components/counter/boundary.test.ts`
+ * exempts it by name with this reason.
+ */
+export { AskShow } from "./ask-show"
 /* The `.convs` rail of past conversations — the prototype's Ask page is a
    two-column `.askpage` and this is its left column. */
 export { Conversations, ConversationsRail } from "./conversations"
+/*
+ * The rail's five glyphs. Pure inline SVG, no data and no imports, and here
+ * only because the completeness rule above is the point of the rule: a file
+ * reachable by a deep path alone is a file nobody knows is public. The phone
+ * client already imports `ListGlyph` from it.
+ */
+export {
+  PlusGlyph,
+  DotsGlyph,
+  PenGlyph,
+  TrashGlyph,
+  ForkGlyph,
+  ListGlyph,
+} from "./rail-glyphs"
 /*
  * `thread-actions.tsx` is DELIBERATELY NOT EXPORTED HERE, for the same kind of
  * reason `ask-mount.tsx` is not: what it reaches must not reach everything

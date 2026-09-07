@@ -6,7 +6,12 @@ import {
 import { cache } from "react"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { getConversation, searchConversations } from "@/lib/chat/conversation"
-import { selectFiledReturn, type FiledReturn } from "@/lib/chat/return"
+import {
+  selectFiledReturn,
+  selectPresentations,
+  type FiledReturn,
+  type ShownPresentation,
+} from "@/lib/chat/return"
 import { classify, guardSection, type StreamedSections } from "@/lib/counter/adapters/types"
 import type { AskTurnMeta } from "@/lib/counter/ask-meta"
 import type { SectionData } from "@/lib/counter/section-data"
@@ -86,6 +91,14 @@ export interface AskTurn {
    * See `filedFrom`. This is not a guess and costs no model call.
    */
   filed: FiledReturn | null
+  /**
+   * The chart or table this answer drew, rebuilt from the same `ToolCall`
+   * rows. `present` was built server-side and persisted with the result, so
+   * re-opening a thread redraws the picture rather than re-deriving one — the
+   * same argument `filed` makes, applied to the half of the answer that is
+   * not text. Empty on a user turn and on any turn that drew nothing.
+   */
+  shown: ShownPresentation[]
   /** When the row was written — the thread's day separators are cut on it. */
   at: Date
   /**
@@ -211,6 +224,35 @@ function filedFrom(
 }
 
 /**
+ * The same, for the picture — and through the same selector the live stream
+ * uses, for the same reason.
+ *
+ * `selectPresentations` is what decides which of the turn's tools to draw and
+ * in what order; running that logic twice, once for a live turn and once here,
+ * is how a thread comes to look different the second time it is opened. The
+ * stored rows are handed to it as settled parts and it does the rest.
+ *
+ * A row written before `present` existed simply carries none, and the shape
+ * check inside the selector drops it — an old thread renders exactly as it
+ * always did rather than half-drawing something.
+ */
+function shownFromCalls(
+  calls: ReadonlyArray<{ toolName: string; args: unknown; result: unknown }>,
+  filed: FiledReturn | null,
+): ShownPresentation[] {
+  return selectPresentations(
+    calls.map((c) => ({
+      type: `tool-${c.toolName}`,
+      toolName: c.toolName,
+      state: "output-available",
+      input: c.args,
+      output: c.result,
+    })),
+    filed?.show ?? [],
+  )
+}
+
+/**
  * A stored thread, rendered read-only.
  *
  * It now carries everything a live turn does — the question, the prose, the
@@ -288,12 +330,14 @@ const loadThread = cache(
               }
             }
           }
+          const filed = isUser ? null : filedFrom(m.toolCalls)
           return {
             id: m.id,
             role: isUser ? ("user" as const) : ("assistant" as const),
             text: isUser ? questionFrom(m.content) : m.content,
             question,
-            filed: isUser ? null : filedFrom(m.toolCalls),
+            filed,
+            shown: isUser ? [] : shownFromCalls(m.toolCalls, filed),
             read: m.toolCalls
               // `fileReturn` reads nothing — the same exclusion the live "Read"
               // row makes in `toolReadsFrom`, so a restored turn and a fresh one

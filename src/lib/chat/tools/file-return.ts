@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { SHOWABLE_TOOLS } from "../present"
 import type { ChatTool } from "./types"
 
 /**
@@ -81,6 +82,13 @@ const parameters = z
       .optional()
       .describe(
         "Up to three questions this answer makes worth asking next, each phrased the way the owner would type it and each answerable by the tools you have. Omit rather than pad.",
+      ),
+    show: z
+      .array(z.enum(SHOWABLE_TOOLS))
+      .max(2)
+      .optional()
+      .describe(
+        "Names of tools you called this turn whose chart or table should be drawn under the figures, most useful first. Pick one when the shape of the data is the point — a trend, a ranking, a per-item table. Omit for a single-fact answer; the picture is already built from the rows, so naming a tool costs nothing but a tool you did not call draws nothing.",
       ),
   })
   .strict()

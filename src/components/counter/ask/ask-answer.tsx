@@ -6,6 +6,7 @@ import { Strip } from "@/components/counter/surface/strip"
 import { MStrip } from "@/components/counter/shell/m-strip"
 import { Thinking } from "@/components/counter/ask/thinking"
 import { TurnFoot, type TurnFootProps } from "@/components/counter/ask/turn-foot"
+import { AskShow } from "@/components/counter/ask/ask-show"
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
@@ -58,6 +59,22 @@ import {
  * spend arrives as "down". No direction at all means the model did not judge
  * it, so the delta is `is-flat` rather than inheriting `.d`'s default
  * `var(--good)`: an unjudged number tinted green is a claim nobody made.
+ *
+ * ---------------------------------------------------------------------------
+ * THE PICTURE, AND WHY IT IS NOT A SECOND CHART
+ * ---------------------------------------------------------------------------
+ *
+ * Between the prose and the sources sit up to two `Section`s holding a `Chart`
+ * or a `Table` — the prototype's own `sec(…, chart(…))` and `sec(…, tbl(…))`
+ * at 4504, and 11 of the 19 landmarks the fidelity report has listed as
+ * missing on this route since it shipped.
+ *
+ * Neither is drawn by this file and neither is typed by the model. The payload
+ * is built on the server from the rows the tool already returned
+ * (`src/lib/chat/present.ts`) and rendered through the same `Chart` and
+ * `Table` the pages use, so a chart in an answer is the chart the page would
+ * have drawn — hover, tooltip, draw-on and all. `AskShow` defers the chunk;
+ * see its note for why that is correct rather than merely cheap.
  *
  * ---------------------------------------------------------------------------
  * NO "GO TO" BUTTON ROW
@@ -199,6 +216,14 @@ export function AskAnswerBody({
           ) : null}
           {caveat ? <p className="callout">{caveat}</p> : null}
           {!empty && note ? <p className="ans__lead">{note}</p> : null}
+
+          {/* The prototype's two `sec()`s under the verdict — a chart and a
+              table, built server-side from the rows a tool returned and
+              chosen by the model's own `fileReturn.show`. On every surface,
+              because an answer opened in the palette and the same answer
+              opened on the page have to be the same answer; the chunk is
+              deferred (see `AskShow`) so no route pays for it unasked. */}
+          {answer && answer.shown.length > 0 ? <AskShow shown={answer.shown} /> : null}
 
           {/* K-R2: an answer names what it read, or it does not ship. The
               labels are `TOOL_LABELS`' own — the thinking indicator in the

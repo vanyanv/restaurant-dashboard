@@ -66,7 +66,15 @@ describe("the Counter public surface", () => {
       // failed `tests/app/counter-overview.test.tsx` and its phone twin with
       // "DATABASE_URL is required" — raised on import alone, before any test
       // body ran. The two Ask clients import it by path.
-      if (name === "ask-mount" || name === "thread-actions") continue
+      //
+      // `ask-show-body` holds the `Chart`/`Table`/`Section` import graph that
+      // `ask-show` loads through `next/dynamic`. Exporting it here would put
+      // the chart geometry back into every consumer of this barrel — the two
+      // overview clients included — which is the whole of what deferring it
+      // was for. The wrapper IS exported; only the body it loads is not.
+      if (name === "ask-mount" || name === "thread-actions" || name === "ask-show-body") {
+        continue
+      }
       expect(askBarrel).toMatch(new RegExp(`from "\\./${name}"`))
     }
   })

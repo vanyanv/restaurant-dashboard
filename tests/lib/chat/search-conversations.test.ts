@@ -67,9 +67,13 @@ describe("searchConversations", () => {
     // The select is the feature: the count comes back filtered to assistant
     // rows rather than being derived from `messageCount`, which counts both
     // sides and so reads "2 turns" for every single exchange.
+    // Ordered, too: `lastAnswerId` is the LAST of these, and "Fork from the
+    // end" branches through it — an unordered select would fork from whichever
+    // row the database happened to hand back last.
     expect(findMany.mock.calls[0][0].select.messages).toEqual({
       where: { role: "assistant" },
       select: { id: true },
+      orderBy: { createdAt: "asc" },
     })
   })
 
@@ -88,6 +92,7 @@ describe("searchConversations", () => {
         updatedAt: new Date("2026-08-19T00:00:00Z"),
         messageCount: 4,
         answerCount: 2,
+        lastAnswerId: "m4",
       },
     ])
   })

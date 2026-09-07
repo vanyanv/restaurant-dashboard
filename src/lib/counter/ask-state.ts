@@ -21,10 +21,12 @@
 import {
   returnForm,
   selectFiledReturn,
+  selectPresentations,
   splitProvenance,
   type FiledReturn,
   type ReturnForm,
   type ReturnPart,
+  type ShownPresentation,
 } from "@/lib/chat/return"
 import type { AskContext } from "./ask-context"
 import type { AskTurnMeta } from "./ask-meta"
@@ -77,6 +79,13 @@ export interface AskAnswer {
   body: string
   /** Tool names called, in order, deduped — the "Read" row. */
   read: ToolRead[]
+  /**
+   * The chart or table drawn under the figures — see `selectPresentations`.
+   *
+   * Never more than two, and empty for most turns: a single-fact answer has
+   * nothing to draw, and that is the common case rather than a degraded one.
+   */
+  shown: ShownPresentation[]
   form: ReturnForm
   /**
    * What the turn cost and which `ChatTurn` it became — off the message's
@@ -241,6 +250,22 @@ export function toolReadsFrom(parts: readonly ReturnPart[]): ToolRead[] {
     })
   }
   return out
+}
+
+/**
+ * The pictures a finished turn draws, chosen the way the model asked.
+ *
+ * Wrapped here rather than imported straight from `@/lib/chat/return` by both
+ * callers, for the same reason `toolReadsFrom` lives here: `use-ask.ts` and
+ * `adapters/ask.ts` build the same `AskAnswer` and must build every field of
+ * it through the same function, or a restored turn quietly stops matching the
+ * live one it was.
+ */
+export function shownFrom(
+  parts: readonly ReturnPart[],
+  filed: FiledReturn | null,
+): ShownPresentation[] {
+  return selectPresentations(parts, filed?.show ?? [])
 }
 
 /** Shared with `use-ask.ts`, which builds an AskAnswer from a finished return. */
@@ -423,6 +448,8 @@ export function restoredAskState(turn: {
   text: string
   /** Tool names, `fileReturn` already excluded by the adapter. */
   read: ToolRead[]
+  /** Rebuilt from the same `ToolCall.result` rows the Read row came from. */
+  shown: ShownPresentation[]
   filed: FiledReturn | null
   meta: AskTurnMeta | null
 }): AskState {
@@ -433,6 +460,7 @@ export function restoredAskState(turn: {
       filed: turn.filed,
       body: splitProvenance(turn.text).body.trim(),
       read: turn.read,
+      shown: turn.shown,
       form: turn.filed ? returnForm(turn.filed) : "empty",
       meta: turn.meta,
       messageId: turn.id,
