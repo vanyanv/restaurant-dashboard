@@ -22,6 +22,8 @@ export interface AskTurnMeta {
    * got cheaper — the answer was simply already known.
    */
   cached: boolean
+  /** When the answer this turn replayed was first written, ISO. Cached turns only. */
+  cachedAt: string | null
 }
 
 /** Reads the route's metadata off a UI message; `null` if it never landed. */
@@ -35,5 +37,6 @@ export function readAskTurnMeta(metadata: unknown): AskTurnMeta | null {
     durationMs: typeof m.durationMs === "number" ? m.durationMs : null,
     feedback: typeof m.feedback === "string" ? m.feedback : null,
     cached: m.cached === true,
+    cachedAt: typeof m.cachedAt === "string" ? m.cachedAt : null,
   }
 }

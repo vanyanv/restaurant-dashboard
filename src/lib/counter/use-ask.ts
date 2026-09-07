@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { returnForm, selectFiledReturn } from "@/lib/chat/return"
-import type { AskContext, AskRequestScope } from "./ask-context"
+import type { AskContext, AskEffort, AskRequestScope, AskTurnScope } from "./ask-context"
+
+/** Per-turn choices the dock makes: how hard to think, and whether to skip the cache. */
+export interface AskTurnOptions {
+  effort?: AskEffort
+  fresh?: boolean
+}
 import {
   askSteps,
   proseFrom,
@@ -77,9 +83,9 @@ export function useAsk(
   /** The thread these turns belong to, once the route has named it. */
   conversationId: string | null
   /** Start a thread: clears what is on screen and asks with no history. */
-  ask: (question: string, context: AskContext) => void
+  ask: (question: string, context: AskContext, opts?: AskTurnOptions) => void
   /** Add a turn to the thread on screen. */
-  follow: (question: string, context: AskContext) => void
+  follow: (question: string, context: AskContext, opts?: AskTurnOptions) => void
   /** Cut the turn in flight. What streamed is kept, as a `stopped` state. */
   stop: () => void
   /** When the turn in flight was sent, for the seconds the footer counts. */
@@ -93,6 +99,18 @@ export function useAsk(
    * of what was sent.
    */
   const [questions, setQuestions] = useState<string[]>([])
+  /*
+   * The store and window each of those questions was asked under, in step
+   * with it.
+   *
+   * Kept per turn rather than read from the context at render, because the
+   * whole point of the row it feeds is that the two can DIVERGE: the reader
+   * moves the date control, the header and the composer both follow it, and
+   * the answer already on screen is still about the window it was asked in.
+   * Reading the live context there would make an answer claim a scope it was
+   * never computed under, which is note 43's defect with the sign flipped.
+   */
+  const [scopes, setScopes] = useState<AskTurnScope[]>([])
   /*
    * Which turns the reader stopped, by index. The SDK reports an aborted
    * stream as `ready` with a partial message — indistinguishable from an
@@ -180,11 +198,12 @@ export function useAsk(
     conversationIdRef.current = initialConversationId
     setConversationId(initialConversationId)
     setQuestions([])
+    setScopes([])
     setMessages([])
   }, [initialConversationId, setMessages])
 
   const send = useCallback(
-    (raw: string, context: AskContext, fresh: boolean) => {
+    (raw: string, context: AskContext, fresh: boolean, opts?: AskTurnOptions) => {
       const trimmed = raw.trim()
       if (!trimmed) return
       if (fresh) {
@@ -194,28 +213,35 @@ export function useAsk(
         conversationIdRef.current = null
         setConversationId(null)
         setQuestions([trimmed])
+        setScopes([{ store: context.store, range: context.range }])
         stoppedRef.current = new Set()
       } else {
         setQuestions((q) => [...q, trimmed])
+        setScopes((s) => [...s, { store: context.store, range: context.range }])
       }
       setAskedAt(Date.now())
-      askScopeRef.current = { pageId: context.pageId }
+      askScopeRef.current = {
+        pageId: context.pageId,
+        ...(opts?.effort ? { effort: opts.effort } : {}),
+        ...(opts?.fresh ? { fresh: true } : {}),
+      }
       void sendMessage({ text: `${context.sentence}.\n${trimmed}` })
     },
     [sendMessage, setMessages],
   )
 
   const ask = useCallback(
-    (raw: string, context: AskContext) => send(raw, context, true),
+    (raw: string, context: AskContext, opts?: AskTurnOptions) => send(raw, context, true, opts),
     [send],
   )
   const follow = useCallback(
-    (raw: string, context: AskContext) => send(raw, context, false),
+    (raw: string, context: AskContext, opts?: AskTurnOptions) => send(raw, context, false, opts),
     [send],
   )
 
   const reset = useCallback(() => {
     setQuestions([])
+    setScopes([])
     setMessages([])
     conversationIdRef.current = null
     setConversationId(null)
@@ -304,6 +330,7 @@ export function useAsk(
             body: proseFrom(parts),
             read: toolReadsFrom(parts),
             shown: shownFrom(parts, filed),
+            scope: scopes[i] ?? null,
             // Nothing filed means nothing to lay out — the empty form is prose
             // and its sources, which is exactly what there is.
             form: filed ? returnForm(filed) : "empty",
@@ -314,7 +341,7 @@ export function useAsk(
         },
       }
     })
-  }, [questions, status, error, messages, askedAt])
+  }, [questions, scopes, status, error, messages, askedAt])
 
   const state = turns.length > 0 ? turns[turns.length - 1].state : { status: "idle" as const }
 

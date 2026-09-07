@@ -2484,6 +2484,21 @@ html[data-theme-switching] .ct-root *::after {
 .scoperow .sp{margin-left:auto;letter-spacing:.04em;text-transform:none}
 .scoperow .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);color:var(--ink-2)}
 .scoperow .chip .lbl{color:var(--ink-3)}
+/*
+ * `.scoperow--was` is the ANSWER's scope row: the store and window one turn
+ * was computed under, shown only once the page has moved off them. Same
+ * chips, opposite tense to the composer's — so its opening label survives the
+ * phone's economies below, which drop the composer's.
+ *
+ * `.rerun` is its action, treated as `.turnfoot button` is (font:inherit, no
+ * chrome, accent on hover) because it is the same thing: a small action
+ * inside a mono caption row. Its own `text-transform:none` keeps "Ask again
+ * for Aug 24 – 30" a sentence while the chips beside it stay uppercase — and
+ * it is NOT `.sp`, which the phone hides.
+ */
+.scoperow .rerun{margin-left:auto;font:inherit;letter-spacing:.04em;text-transform:none;
+  border:0;background:none;padding:0;cursor:pointer;color:var(--ink-3);transition:color .16s var(--ease)}
+.scoperow .rerun:hover{color:var(--accent)}
 .composer{align-items:flex-end;padding:9px 10px 9px 14px;max-width:none;position:relative}
 .composer .csr{align-items:flex-start}
 .composer .csr svg{margin-top:4px}
@@ -2570,6 +2585,9 @@ html[data-theme-switching] .ct-root *::after {
 .newask--phone h2{font-size:var(--t-xl)}
 .newask--phone .starters{grid-template-columns:1fr}
 .mscroll .scoperow .sp,.mscroll .scoperow > span:first-child{display:none}
+/* …except the answer row's, which is the whole of what distinguishes it from
+   the composer's. See `.scoperow--was`. */
+.mscroll .scoperow--was > span:first-child{display:inline}
 .mscroll .scoperow{gap:6px}
 .mscroll .scoperow .chip{padding:3px 8px;font-size:9px}
 

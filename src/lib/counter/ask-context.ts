@@ -46,6 +46,43 @@ export interface AskContext {
 }
 
 /**
+ * The store and the window ONE turn was answered under.
+ *
+ * The narrow, human half of `AskContext` — the two dimensions a reader can
+ * move on the page after an answer is already on screen, and therefore the
+ * two an answer has to be able to state for itself. See `scopeFromSentence`.
+ */
+export interface AskTurnScope {
+  store: string
+  range: string
+}
+
+/**
+ * The scope back out of the sentence that carried it.
+ *
+ * `useAsk` sends `${context.sentence}.\n${question}`, and the route persists
+ * the whole string — so the scope every past turn was answered under is
+ * already in the database, in prose, at the head of its own user message. It
+ * was being split off and thrown away (`questionFrom`).
+ *
+ * That matters because the alternative is a schema column, and this needs no
+ * migration to be exact: what is recovered here is precisely what travelled.
+ *
+ * Both sentence forms end the same way — `… · {store} · {range}` with or
+ * without a leading page — so the last two segments are the answer to both,
+ * and a string shaped like neither returns null rather than a guess.
+ */
+export function scopeFromSentence(sentence: string): AskTurnScope | null {
+  const line = sentence.trim().replace(/\.$/, "")
+  if (!line.startsWith("Answering about ")) return null
+  const parts = line.split(" · ").map((p) => p.trim()).filter(Boolean)
+  if (parts.length < 2) return null
+  const range = parts[parts.length - 1]
+  const store = parts[parts.length - 2].replace(/^Answering about /, "")
+  return store && range ? { store, range } : null
+}
+
+/**
  * The scope a question carries to `/api/chat`, as data rather than prose.
  *
  * Deliberately the narrow half of `AskContext`: the sentence, the store name
@@ -60,7 +97,26 @@ export interface AskContext {
  */
 export interface AskRequestScope {
   pageId: NavId | null
+  /**
+   * The dock's Quick / Careful choice. `careful` lifts the model's reasoning
+   * effort for this one turn; absent or `quick` leaves the route's default.
+   */
+  effort?: AskEffort
+  /**
+   * "Re-ask fresh" — skip the answer cache for this turn. The reader saw the
+   * cached answer and asked for the model on purpose, so a hit is not wanted.
+   */
+  fresh?: boolean
 }
+
+/** How hard the model is asked to think on one turn. */
+export type AskEffort = "quick" | "careful"
+
+/** What the dock offers beside the field, and the seconds each one costs. */
+export const ASK_EFFORTS: ReadonlyArray<{ id: AskEffort; label: string; hint: string }> = [
+  { id: "quick", label: "Quick", hint: "Quick · about 5s" },
+  { id: "careful", label: "Careful", hint: "Careful · about 20s · thinks longer" },
+]
 
 export function describeAskContext({
   pathname,

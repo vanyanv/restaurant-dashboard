@@ -77,6 +77,27 @@ import {
  * see its note for why that is correct rather than merely cheap.
  *
  * ---------------------------------------------------------------------------
+ * THE SCOPE ROW, AND WHY IT IS USUALLY ABSENT
+ * ---------------------------------------------------------------------------
+ *
+ * An answer is computed for one store and one window. The reader can then
+ * move both — the date control sits in this page's own head — and until this
+ * row existed nothing said so: the head, the composer's scope chips and the
+ * answer read as one statement about one window, with the answer three weeks
+ * stale and no way to tell.
+ *
+ * So the row is not "the scope". It is "the scope is no longer what you are
+ * looking at", and it renders only when the two have actually diverged; when
+ * they agree, two other things on the page already say it. The button asks
+ * the same question again under the scope the surface is set to NOW, which is
+ * the one the page can express exactly.
+ *
+ * The scope it prints is the turn's own, never the live context — a restored
+ * turn recovers it from the sentence stored in front of its question
+ * (`scopeFromSentence`), so an answer opened next month still names the
+ * window it was actually computed for.
+ *
+ * ---------------------------------------------------------------------------
  * NO "GO TO" BUTTON ROW
  * ---------------------------------------------------------------------------
  *
@@ -137,6 +158,7 @@ export function AskAnswerBody({
   verdictShownAbove = false,
   onFollowUp,
   figures = "strip",
+  rescope,
   foot,
 }: {
   state: AskState
@@ -147,6 +169,22 @@ export function AskAnswerBody({
   onFollowUp?: (question: string) => void
   /** `.strip` on the desk's two surfaces, `.mstrip` on the phone. */
   figures?: "strip" | "mstrip"
+  /**
+   * The scope the SURFACE is set to now, and how to ask this question again
+   * under it.
+   *
+   * Passed by the two Ask pages, which carry a date control and a store
+   * switcher that can both move while an answer sits on screen. NOT passed by
+   * the palette: it answers one question and is dismissed with Escape, so its
+   * scope cannot drift out from under the answer and a row saying so would be
+   * a row that never fires.
+   */
+  rescope?: {
+    store: string
+    range: string
+    /** `follow(question, currentContext)` — the page already has that. */
+    onAsk: (question: string) => void
+  }
   /**
    * The turn footer (cost, seconds, thumbs, fork, copy) — the page passes
    * it; the palette does not, because a palette answer is one question and
@@ -173,6 +211,27 @@ export function AskAnswerBody({
 
   // The model's own paragraph, kept apart from its verdict — the only text
   // that can appear twice if the two are not kept straight.
+  /*
+   * HAS THE PAGE MOVED OUT FROM UNDER THIS ANSWER?
+   *
+   * Only then is there anything to say. When the two agree, the head and the
+   * composer's own scope chips have said it already and a third copy is noise
+   * — so this row is not "the scope", it is "the scope is no longer what you
+   * are looking at", which is a different and much rarer statement.
+   */
+  const answered = answer?.scope ?? null
+  const storeMoved = Boolean(answered && rescope && answered.store !== rescope.store)
+  const rangeMoved = Boolean(answered && rescope && answered.range !== rescope.range)
+  const moved = storeMoved || rangeMoved
+  // Name only what actually changed. "Ask again for Hollywood · Aug 24 – 30"
+  // when the store did not move claims a change the reader did not make.
+  const rescopeLabel =
+    rescope && storeMoved && rangeMoved
+      ? `${rescope.store} · ${rescope.range}`
+      : rescope && storeMoved
+        ? rescope.store
+        : (rescope?.range ?? "")
+
   const prose = filed && answer?.body ? answer.body : ""
   const verdictAbove = verdictShownAbove && Boolean(filed?.verdict)
 
@@ -206,6 +265,30 @@ export function AskAnswerBody({
         <Thinking steps={askReading(state)} />
       ) : (
         <>
+          {/* Above everything, because it qualifies everything below it. */}
+          {answer && answered && rescope && moved ? (
+            /* `--was`, not a bare `.scoperow`: the composer has one of these
+               saying what the NEXT question is asked against, and the phone
+               hides its opening label for room. Reading "STORE Glendale"
+               with no "Answered for" in front of it turns this row into that
+               one, which is the opposite claim. */
+            <div className="scoperow scoperow--was">
+              <span>Answered for</span>
+              <span className="chip">
+                <span className="lbl">Store</span> {answered.store}
+              </span>
+              <span className="chip">
+                <span className="lbl">Range</span> {answered.range}
+              </span>
+              <button
+                type="button"
+                className="rerun"
+                onClick={() => rescope.onAsk(answer.question)}
+              >
+                Ask again for {rescopeLabel}
+              </button>
+            </div>
+          ) : null}
           {lead ? <p className="ans__lead">{lead}</p> : null}
           {/* `MStrip` reads the same `FigureProps` quartet; a figure filed by
               the model carries no `reference`, so the phone cell's band —

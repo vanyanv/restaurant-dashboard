@@ -6,6 +6,7 @@ import {
 import { cache } from "react"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { getConversation, searchConversations } from "@/lib/chat/conversation"
+import { scopeFromSentence, type AskTurnScope } from "@/lib/counter/ask-context"
 import {
   selectFiledReturn,
   selectPresentations,
@@ -99,6 +100,17 @@ export interface AskTurn {
    * not text. Empty on a user turn and on any turn that drew nothing.
    */
   shown: ShownPresentation[]
+  /**
+   * The store and window this turn was answered under, recovered from the
+   * sentence stored at the head of its question.
+   *
+   * No column and no migration: `useAsk` has prepended `context.sentence` to
+   * every question since Ask shipped and the route persists the whole string,
+   * so the scope of every past turn is already on disk. `questionFrom` splits
+   * it off to show the reader what they typed; `scopeFromSentence` reads the
+   * half it discards.
+   */
+  scope: AskTurnScope | null
   /** When the row was written — the thread's day separators are cut on it. */
   at: Date
   /**
@@ -303,6 +315,9 @@ const loadThread = cache(
         durationMs: row.aiUsageEvent?.durationMs ?? null,
         feedback: row.feedback,
         cached: row.finishReason === "cached",
+        // `ChatTurn` keeps no stamp for the run a cached turn replayed; the
+        // live footer had it from the stream, a reopened one says "earlier".
+        cachedAt: null,
       }
     }
 
@@ -331,6 +346,10 @@ const loadThread = cache(
             }
           }
           const filed = isUser ? null : filedFrom(m.toolCalls)
+          // From the QUESTION's stored row, not the answer's: the sentence
+          // travelled in front of the question, which is the row `stored`
+          // holds. `scopeFromSentence` reads only its first line.
+          const scope = isUser ? null : scopeFromSentence(stored.split("\n")[0] ?? "")
           return {
             id: m.id,
             role: isUser ? ("user" as const) : ("assistant" as const),
@@ -338,6 +357,7 @@ const loadThread = cache(
             question,
             filed,
             shown: isUser ? [] : shownFromCalls(m.toolCalls, filed),
+            scope,
             read: m.toolCalls
               // `fileReturn` reads nothing — the same exclusion the live "Read"
               // row makes in `toolReadsFrom`, so a restored turn and a fresh one

@@ -28,7 +28,7 @@ import {
   type ReturnPart,
   type ShownPresentation,
 } from "@/lib/chat/return"
-import type { AskContext } from "./ask-context"
+import type { AskContext, AskTurnScope } from "./ask-context"
 import type { AskTurnMeta } from "./ask-meta"
 
 /**
@@ -86,6 +86,19 @@ export interface AskAnswer {
    * nothing to draw, and that is the common case rather than a degraded one.
    */
   shown: ShownPresentation[]
+  /**
+   * The store and window THIS turn was answered under — not the ones the
+   * surface is set to now.
+   *
+   * The two diverge the moment a reader moves the date control with an answer
+   * already on screen, and until this existed nothing on the page said so:
+   * the head, the composer's scope chips and the answer all read as one
+   * statement about one window, and one of them was three weeks stale.
+   *
+   * Null for a turn that carried no readable scope — a thread from before the
+   * sentence was prepended, or one whose user row was never persisted.
+   */
+  scope: AskTurnScope | null
   form: ReturnForm
   /**
    * What the turn cost and which `ChatTurn` it became — off the message's
@@ -450,6 +463,8 @@ export function restoredAskState(turn: {
   read: ToolRead[]
   /** Rebuilt from the same `ToolCall.result` rows the Read row came from. */
   shown: ShownPresentation[]
+  /** Recovered from the scope sentence stored at the head of the question. */
+  scope: AskTurnScope | null
   filed: FiledReturn | null
   meta: AskTurnMeta | null
 }): AskState {
@@ -461,6 +476,7 @@ export function restoredAskState(turn: {
       body: splitProvenance(turn.text).body.trim(),
       read: turn.read,
       shown: turn.shown,
+      scope: turn.scope,
       form: turn.filed ? returnForm(turn.filed) : "empty",
       meta: turn.meta,
       messageId: turn.id,
