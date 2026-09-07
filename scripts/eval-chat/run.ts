@@ -21,10 +21,17 @@ import pg from "pg"
 import { QUESTIONS, type EvalCategory, type EvalQuestion } from "./questions"
 import { parseUIMessageStream } from "./stream"
 import {
+  RECOMPUTED_TOOLS,
+  recomputeCall,
+  unexplainedFigures,
+  type FigureDiff,
+} from "./arithmetic"
+import {
   writeReport,
   timestampForFilename,
   type QuestionResult,
 } from "./report"
+import type { ToolCallRecord } from "./stream"
 
 const BASE_URL = process.env.EVAL_BASE_URL ?? "http://localhost:3000"
 const COOKIE_NAME =
@@ -34,6 +41,15 @@ interface CliArgs {
   filter?: EvalCategory
   id?: string
   parallel: number
+  /** Clear the answer cache first, so the run measures cold latency. */
+  fresh: boolean
+}
+
+/** Everything `runOne` needs beyond the question itself. */
+interface RunContext {
+  cookie: string
+  db: pg.Client | null
+  storeIds: string[]
 }
 
 async function main() {
@@ -41,6 +57,8 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const cookie = await loadSessionCookie()
   await ensureDevServerReachable()
+  const ctx = await openTruthConnection(cookie)
+  if (args.fresh) await clearAnswerCache()
 
   const selected = filterQuestions(QUESTIONS, args)
   if (selected.length === 0) {
@@ -58,8 +76,9 @@ async function main() {
   const results: QuestionResult[] = await runWithConcurrency(
     selected,
     args.parallel,
-    (q, idx) => runOne(q, idx, selected.length, cookie),
+    (q, idx) => runOne(q, idx, selected.length, ctx),
   )
+  await ctx.db?.end().catch(() => undefined)
   const totalMs = Date.now() - startMs
 
   const outPath = resolve(
@@ -82,7 +101,7 @@ async function runOne(
   q: EvalQuestion,
   idx: number,
   total: number,
-  cookie: string,
+  ctx: RunContext,
 ): Promise<QuestionResult> {
   const label = `[${idx + 1}/${total}] ${q.id}`
   process.stdout.write(`${label} ... `)
@@ -92,7 +111,7 @@ async function runOne(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        cookie: `${COOKIE_NAME}=${cookie}`,
+        cookie: `${COOKIE_NAME}=${ctx.cookie}`,
       },
       body: JSON.stringify({
         messages: [
@@ -118,6 +137,7 @@ async function runOne(
         toolCalls: [],
         errors: [],
         latencyMs: latency,
+        ...EMPTY_CHECKS,
         fatalError: fatal,
       }
     }
@@ -131,25 +151,60 @@ async function runOne(
         toolCalls: [],
         errors: [],
         latencyMs: latency,
+        ...EMPTY_CHECKS,
         fatalError: "Response had no body",
       }
     }
 
     const parsed = await parseUIMessageStream(res.body)
     const latency = Date.now() - start
-    const validationErrors = validateResult(q, parsed)
-    const errors = [...parsed.errors, ...validationErrors]
-    const tag = errors.length > 0 || parsed.toolCalls.some((t) => t.error)
-      ? "ERROR"
-      : "ok"
-    console.log(`${tag} (${(latency / 1000).toFixed(1)}s, ${parsed.toolCalls.length} tools)`)
-    return {
+    const errors = [...parsed.errors, ...validateResult(q, parsed)]
+
+    // The arithmetic half. Both layers need the answer AND the tool results,
+    // so they run here rather than inside the stream parser.
+    const figureDiffs: FigureDiff[] = []
+    if (ctx.db) {
+      for (const call of parsed.toolCalls) {
+        try {
+          figureDiffs.push(...(await recomputeCall(call, ctx.db, ctx.storeIds)))
+        } catch (err) {
+          errors.push(
+            `Could not recompute ${call.toolName}: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      }
+    }
+    const unexplained = unexplainedFigures(parsed.finalText, parsed.toolCalls)
+    const routing = routingDivergence(q, parsed.toolCalls)
+
+    const result: QuestionResult = {
       question: q,
       finalText: parsed.finalText,
       toolCalls: parsed.toolCalls,
       errors,
       latencyMs: latency,
+      figureDiffs,
+      unexplained,
+      routing,
+      recomputed: parsed.toolCalls.some((t) =>
+        (RECOMPUTED_TOOLS as readonly string[]).includes(t.toolName),
+      ),
     }
+    const tag = isPassing(result) ? "ok" : "FAIL"
+    const wrong = figureDiffs.filter((d) => !d.ok).length
+    const notes = [
+      `${(latency / 1000).toFixed(1)}s`,
+      `${parsed.toolCalls.length} tools`,
+      wrong > 0 ? `${wrong} wrong figures` : null,
+      unexplained.some((u) => u.verdict === "fabricated")
+        ? `${unexplained.filter((u) => u.verdict === "fabricated").length} fabricated`
+        : null,
+      unexplained.some((u) => u.verdict === "underived")
+        ? `${unexplained.filter((u) => u.verdict === "underived").length} underived`
+        : null,
+    ].filter(Boolean)
+    console.log(`${tag} (${notes.join(", ")})`)
+    return result
   } catch (err) {
     const latency = Date.now() - start
     console.log(`FATAL (${(latency / 1000).toFixed(1)}s)`)
@@ -159,6 +214,7 @@ async function runOne(
       toolCalls: [],
       errors: [],
       latencyMs: latency,
+      ...EMPTY_CHECKS,
       fatalError: err instanceof Error ? err.message : String(err),
     }
   }
@@ -183,12 +239,13 @@ async function runWithConcurrency<T, R>(
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { parallel: 1 }
+  const out: CliArgs = { parallel: 1, fresh: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === "--filter") out.filter = argv[++i] as EvalCategory
     else if (a === "--id") out.id = argv[++i]
     else if (a === "--parallel") out.parallel = Math.max(1, Number(argv[++i]) || 1)
+    else if (a === "--fresh") out.fresh = true
     else if (a === "--help" || a === "-h") {
       printUsage()
       process.exit(0)
@@ -206,6 +263,7 @@ function printUsage() {
   --filter <category>   Run only one category (e.g. sales, recipes, should-refuse)
   --id <question-id>    Run only one question by id
   --parallel <n>        Concurrent requests (default 1)
+  --fresh               Clear the answer cache first (cold latency, for a baseline)
   --help                Show this help`)
 }
 
@@ -273,31 +331,96 @@ async function loadEnvLocal(): Promise<void> {
   }
 }
 
-function validateResult(q: EvalQuestion, parsed: Awaited<ReturnType<typeof parseUIMessageStream>>): string[] {
+function validateResult(
+  _q: EvalQuestion,
+  parsed: Awaited<ReturnType<typeof parseUIMessageStream>>,
+): string[] {
   const errors: string[] = []
   if (!parsed.finalText.trim()) errors.push("Empty final answer")
   for (const t of parsed.toolCalls) {
     if (t.error) errors.push(`Tool ${t.toolName} failed: ${t.error}`)
   }
-  for (const expected of q.expectedTools ?? []) {
-    if (!parsed.toolCalls.some((t) => t.toolName === expected)) {
-      errors.push(`Missing expected tool: ${expected}`)
-    }
-  }
   return errors
 }
 
+/**
+ * `expectedTools` is REPORTED, not gated. It was written as one exact name per
+ * question, and the model routinely picks a defensible different one — the
+ * first run of this harness called `compareSales` for "what were my sales last
+ * week?" and answered it correctly, which the old check scored as a failure.
+ * Tool choice already has a graded eval of its own (`npm run eval:llm --feature
+ * chat-tool-choice`, 12/12); a second, dumber copy of it here would only teach
+ * people to ignore a permanently red report.
+ */
+function routingDivergence(q: EvalQuestion, calls: ToolCallRecord[]): string[] {
+  const called = new Set(calls.map((c) => c.toolName))
+  return (q.expectedTools ?? []).filter((t) => !called.has(t))
+}
+
+const EMPTY_CHECKS = {
+  figureDiffs: [] as FigureDiff[],
+  unexplained: [],
+  routing: [],
+  recomputed: false,
+} satisfies Pick<
+  QuestionResult,
+  "figureDiffs" | "unexplained" | "routing" | "recomputed"
+>
+
+/**
+ * Passing means the answer was TRUE, not merely that one arrived: no wrong
+ * figure against SQL, and no dollar figure the tool results cannot account
+ * for. See `arithmetic.ts` for why those are the two that matter.
+ */
 function isPassing(r: QuestionResult): boolean {
   return (
     !r.fatalError &&
     r.finalText.trim().length > 0 &&
     r.errors.length === 0 &&
-    !r.toolCalls.some((t) => t.error)
+    !r.toolCalls.some((t) => t.error) &&
+    r.figureDiffs.every((d) => d.ok) &&
+    r.unexplained.every((u) => u.verdict !== "fabricated")
   )
 }
 
+/**
+ * The second connection the arithmetic layer recomputes through, plus the
+ * store scope a tool call falls back to when the model omits `storeIds` —
+ * which is every store on the eval user's account, the same expansion
+ * `resolveStoreIds` performs inside the app.
+ */
+async function openTruthConnection(cookie: string): Promise<RunContext> {
+  const url = process.env.DATABASE_URL
+  if (!url) {
+    console.warn("No DATABASE_URL — figures will not be recomputed against SQL.")
+    return { cookie, db: null, storeIds: [] }
+  }
+  const db = new pg.Client({ connectionString: url })
+  try {
+    await db.connect()
+    const res = await db.query<{ id: string }>(
+      `SELECT s.id
+         FROM "Store" s
+         JOIN "User" u ON u."accountId" = s."accountId"
+        WHERE u.email = $1`,
+      [EVAL_LOGIN_EMAIL],
+    )
+    const storeIds = res.rows.map((r) => r.id)
+    console.log(`Recomputing figures against ${storeIds.length} store(s) in SQL.`)
+    return { cookie, db, storeIds }
+  } catch (err) {
+    console.warn(
+      `Could not open the truth connection (${err instanceof Error ? err.message : err}); figures will not be recomputed.`,
+    )
+    await db.end().catch(() => undefined)
+    return { cookie, db: null, storeIds: [] }
+  }
+}
+
+const EVAL_LOGIN_EMAIL = "demo@restaurantos.com"
+
 async function loginWithSeededOwner(): Promise<string | null> {
-  const email = "demo@restaurantos.com"
+  const email = EVAL_LOGIN_EMAIL
   const password = "demo123"
   try {
     const csrfRes = await fetch(`${BASE_URL}/api/auth/csrf`)
@@ -373,6 +496,37 @@ function parseSetCookie(raw: string): { name: string; value: string } {
   const eq = first.indexOf("=")
   if (eq === -1) return { name: first, value: "" }
   return { name: first.slice(0, eq), value: first.slice(eq + 1) }
+}
+
+/**
+ * A second run of the same question is served from `chat:answer:*` in about a
+ * second, which is the feature working and useless as a baseline. `--fresh`
+ * drops those keys so latency here is what a reader waiting on the model
+ * actually waits. Nothing else in Redis is touched.
+ */
+async function clearAnswerCache(): Promise<void> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) {
+    console.warn("No Upstash credentials — answer cache not cleared; latency may be a cache hit.")
+    return
+  }
+  const { Redis } = await import("@upstash/redis")
+  const redis = new Redis({ url, token })
+  let cursor = "0"
+  let removed = 0
+  do {
+    const [next, keys] = (await redis.scan(cursor, {
+      match: "chat:answer:*",
+      count: 500,
+    })) as [string, string[]]
+    cursor = String(next)
+    if (keys.length > 0) {
+      await redis.del(...keys)
+      removed += keys.length
+    }
+  } while (cursor !== "0")
+  console.log(`Cleared ${removed} cached answer(s); this run measures cold latency.`)
 }
 
 async function ensureDevServerReachable(): Promise<void> {
