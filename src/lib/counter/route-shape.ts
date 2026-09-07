@@ -47,12 +47,25 @@ function recordRoute(pathname: string) {
  * drawn on every one of them and changed nothing, which is note 46 exactly
  * ("a control that is drawn and does nothing").
  *
- * Phone paths only. The desk draws the same control from the same flag and
- * has the same surplus on the same pages; correcting it there is a change to
- * routes this pass has not looked at, so it is left named here rather than
- * made silently.
+ * Phone paths, plus Ask on both surfaces. The desk draws the same control
+ * from the same flag and has the same surplus on the same pages; correcting
+ * it there is a change to routes this pass has not looked at, so it is left
+ * named here rather than made silently — Ask is the exception because its
+ * control was removed on purpose (see the entry).
  */
 const NO_WINDOW_ROUTES: readonly RegExp[] = [
+  /*
+   * ASK, BOTH SURFACES — the one desk entry, and a decision rather than the
+   * prototype's flag. The range only ever reached the model as a sentence
+   * ("reading Sep 1 – Sep 7 unless you say otherwise"), and the question's
+   * own words override it, so a date control on Ask was a picker that set a
+   * default the next sentence could undo. The 2026-09-07 rebuild took the
+   * control off the desk head; this takes the phone chip and the palette's
+   * "Change the range" group off with it, so no surface offers what the
+   * page no longer does. `?range=` still reads — it is the stated default.
+   */
+  /^\/dashboard\/ask\/?$/,
+  /^\/m\/ask\/?$/,
   /^\/m\/more\/?$/,
   /^\/m\/settings\/?$/,
   /*
