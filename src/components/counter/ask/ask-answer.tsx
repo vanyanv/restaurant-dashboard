@@ -7,6 +7,7 @@ import { MStrip } from "@/components/counter/shell/m-strip"
 import { Thinking } from "@/components/counter/ask/thinking"
 import { TurnFoot, type TurnFootProps } from "@/components/counter/ask/turn-foot"
 import { AskShow } from "@/components/counter/ask/ask-show"
+import { CacheTag, HowIGotHere, ReadRow } from "@/components/counter/ask/read-row"
 import type { FigureProps } from "@/components/counter/surface/figure"
 import { labelFor } from "@/components/chat/tool-labels"
 import type { AskContext } from "@/lib/counter/ask-context"
@@ -159,6 +160,7 @@ export function AskAnswerBody({
   onFollowUp,
   figures = "strip",
   rescope,
+  onFresh,
   foot,
 }: {
   state: AskState
@@ -192,6 +194,11 @@ export function AskAnswerBody({
    * front-door spec). `read` and `copyText` are filled in here from the
    * answer, so the caller names only what it alone knows.
    */
+  /**
+   * "Re-ask fresh" on an answer served from the cache: the same question,
+   * sent again with `fresh: true`, so the model runs. Omitted in the palette.
+   */
+  onFresh?: (question: string) => void
   foot?: Omit<TurnFootProps, "read" | "copyText">
 }) {
   const { status } = state
@@ -253,7 +260,13 @@ export function AskAnswerBody({
     .join("\n")
 
   return (
-    <div className={className} aria-live="polite" aria-busy={status === "asking"}>
+    <div
+      // `is-cached`: an instant answer enters as one flat fade, not a
+      // narrated arrival — see counter-repairs.css, "an instant answer".
+      className={`${className}${answer?.meta?.cached ? " is-cached" : ""}`}
+      aria-live="polite"
+      aria-busy={status === "asking"}
+    >
       {status === "asking" ? (
         /*
          * Was a single static line, "Reading the numbers…", for the whole
@@ -289,6 +302,12 @@ export function AskAnswerBody({
               </button>
             </div>
           ) : null}
+          {answer ? (
+            <CacheTag
+              meta={answer.meta}
+              onFresh={onFresh ? () => onFresh(answer.question) : undefined}
+            />
+          ) : null}
           {lead ? <p className="ans__lead">{lead}</p> : null}
           {/* `MStrip` reads the same `FigureProps` quartet; a figure filed by
               the model carries no `reference`, so the phone cell's band —
@@ -298,6 +317,34 @@ export function AskAnswerBody({
             figures === "mstrip" ? <MStrip cells={cells} /> : <Strip cells={cells} />
           ) : null}
           {caveat ? <p className="callout">{caveat}</p> : null}
+          {/* COULD NOT FINISH ("Ask in Motion II", D). A source that did not
+              come back is named in place, beside the ones that did, and the
+              answer above it is whatever those could support. One retry —
+              the same question, past the cache — and no guessed page link. */}
+          {answer && answer.meta && answer.meta.failed.length > 0 ? (
+            <div className="ansfail">
+              <span className="rk">What I could still read</span>
+              {answer.read.map((r) => (
+                <div className="rsrc" key={r.tool}>
+                  <b>{labelFor(r.tool).short}</b>
+                  <span>{r.params ?? "complete"}</span>
+                </div>
+              ))}
+              {answer.meta.failed.map((t) => (
+                <div className="rsrc is-out" key={t}>
+                  <b>{labelFor(t).short}</b>
+                  <span>did not come back</span>
+                </div>
+              ))}
+              {onFresh ? (
+                <div className="btnrow">
+                  <button className="btn btn--primary" type="button" onClick={() => onFresh(answer.question)}>
+                    Try again
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {!empty && note ? <p className="ans__lead">{note}</p> : null}
 
           {/* The prototype's two `sec()`s under the verdict — a chart and a
@@ -313,18 +360,15 @@ export function AskAnswerBody({
               editorial chat has said "sales", "invoices", "recipes" for
               months, and a second vocabulary for the same 116 tools would
               be two names for one source. */}
+          {/* K-R2: an answer names what it read, or it does not ship. The
+              chips are verified (curated loaders, never free-form SQL) and
+              carry each source's own sync clock; "How I got here" under them
+              opens the exact calls. See `read-row.tsx`. */}
           {answer && answer.read.length > 0 ? (
-            <div className="srcs">
-              <span className="src">Read</span>
-              {/* The palette stays a strip of names. Parameters and the
-                  as-of stamp are the Ask page's Read row (`TurnFoot`), which
-                  has the width for them; here they would wrap the answer. */}
-              {answer.read.map((r) => (
-                <span className="src" key={r.tool}>
-                  <b>{labelFor(r.tool).short}</b>
-                </span>
-              ))}
-            </div>
+            <>
+              <ReadRow read={answer.read} />
+              <HowIGotHere read={answer.read} meta={answer.meta} />
+            </>
           ) : null}
 
           {/* No click handler of its own in the palette: `data-askabout` is

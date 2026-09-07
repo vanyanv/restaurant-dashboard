@@ -58,6 +58,10 @@ export { Thinking } from "./thinking"
  * exempts it by name with this reason.
  */
 export { AskShow } from "./ask-show"
+/* The second pass (2026-09-07): the Read row and its drawer, the cache tag,
+   and the morning brief an empty Ask opens on. */
+export { ReadRow, HowIGotHere, CacheTag } from "./read-row"
+export { MorningBrief, StarterChips } from "./morning-brief"
 /* The `.convs` rail of past conversations — the prototype's Ask page is a
    two-column `.askpage` and this is its left column. */
 export { Conversations, ConversationsRail } from "./conversations"

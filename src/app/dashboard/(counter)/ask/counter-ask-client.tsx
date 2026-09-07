@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  DateControl,
   PageHead,
   Section,
   useCounterTransition,
@@ -20,6 +19,7 @@ import {
 // BY PATH, not through the ask barrel: it reaches a `"use server"` module and
 // the barrel is shared with the overview clients. See that barrel's own note.
 import { ThreadActions } from "@/components/counter/ask/thread-actions"
+import { MorningBrief, StarterChips } from "@/components/counter/ask/morning-brief"
 import type { ConversationActions } from "@/components/counter/ask/conversations"
 import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion"
 import {
@@ -36,11 +36,13 @@ import type {
   AskTurn,
 } from "@/lib/counter/adapters/ask"
 import type { SectionSources } from "@/lib/counter/adapters/types"
-import { ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
+import { ASK_STARTERS, describeAskContext, type AskEffort } from "@/lib/counter/ask-context"
+import type { AskBrief } from "@/lib/counter/adapters/ask-brief"
+import type { SectionData } from "@/lib/counter/section-data"
 import type { AskFeedback } from "@/lib/counter/ask-feedback"
 import { threadClock, threadDayKey, threadDayLabel, threadTurnLabel } from "@/lib/counter/thread-groups"
-import { rangeLabel, stepRange } from "@/lib/counter/date-range"
-import { readCounterParams, writeCounterParams } from "@/lib/counter/url-state"
+import { rangeLabel } from "@/lib/counter/date-range"
+import { readCounterParams } from "@/lib/counter/url-state"
 import {
   askAnswer,
   askPending,
@@ -49,6 +51,9 @@ import {
   restoredAskState,
 } from "@/lib/counter/ask-state"
 import { useAskDeferred } from "@/lib/counter/use-ask-deferred"
+
+/** The window an Ask opens on when its URL names none. See `params` below. */
+const ASK_DEFAULT_RANGE = "d7"
 
 /**
  * Counter Ask on the desk — `P.ask` at line 4504 of
@@ -156,7 +161,8 @@ export function CounterAskClient({
   params: paramsString,
   stores,
   today,
-  model,
+  brief,
+  headings,
 }: {
   /**
    * The query string this page was rendered for, as PLAIN TEXT — not a
@@ -168,12 +174,25 @@ export function CounterAskClient({
   today: Date
   /** The rail's list and, when `?c=` names one, the thread being read. */
   sections: SectionSources<AskSections>
-  /** "gpt-5-mini · low" — what the hints row names. Read by the page, server-side. */
-  model: string
+  /** The morning brief an empty Ask opens on — see `@/lib/counter/adapters/ask-brief`. */
+  brief: SectionData<AskBrief> | Promise<SectionData<AskBrief>>
+  /** "Good morning, Chris." / "Since Saturday", decided on the server. */
+  headings: { greeting: string; since: string }
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
+  /*
+   * THE DEFAULT WINDOW IS SEVEN DAYS, NOT ONE. The date control is gone from
+   * this page — it never constrained an answer (the range reaches the model as
+   * prose the question's own words override) — so the window in the head is
+   * a default, and "yesterday" is the wrong default for almost every question
+   * an owner asks. A link that names a range keeps it.
+   */
+  const params = useMemo(() => {
+    const p = new URLSearchParams(paramsString)
+    if (!p.has("range") && !p.has("from") && !p.has("to")) p.set("range", ASK_DEFAULT_RANGE)
+    return p
+  }, [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   usePageChrome({ askSuggestions: ASK_STARTERS.map((s) => s.q) })
@@ -275,9 +294,41 @@ export function CounterAskClient({
     router.replace(`${pathname}?${next.toString()}`, { scroll: false })
   }, [conversationId, urlConversationId, params, pathname, router])
 
+  /*
+   * THE RAIL LEARNS THE TURN'S NAME WHEN THE TURN SETTLES.
+   *
+   * `?c=` above is written from the response HEADER, before a word of the
+   * answer exists, so the server rail re-renders once with an untitled row —
+   * and then nothing moved it. The title (the filed verdict) and the row's
+   * figure chip are written in the route's `onFinish`, which completes before
+   * the stream closes; refreshing at the moment the turn stops asking is what
+   * lets the row arrive named, and lets `.cv.is-new` mark the row this send
+   * made. Same call the rail's rename and delete already make.
+   */
+  const wasAskingRef = useRef(false)
+  useEffect(() => {
+    const asking = askPending(state)
+    if (wasAskingRef.current && !asking && conversationId) router.refresh()
+    wasAskingRef.current = asking
+  }, [state, conversationId, router])
+
+  /*
+   * QUICK / CAREFUL — the dock's one setting. Careful lifts the model's
+   * reasoning effort for the turns that follow (see `reasoningEffortFor` in
+   * the route). Page state, not composer state, so it outlives a send.
+   */
+  const [effort, setEffort] = useState<AskEffort>("quick")
+  const effortRef = useRef(effort)
+  effortRef.current = effort
+
   /** A follow-up is a TURN, not a navigation — see the docblock. */
   const submit = useCallback(
-    (next: string) => follow(next, contextRef.current),
+    (next: string) => follow(next, contextRef.current, { effort: effortRef.current }),
+    [follow],
+  )
+  /** "Re-ask fresh" on a cached answer: the same question, past the cache. */
+  const fresh = useCallback(
+    (q: string) => follow(q, contextRef.current, { effort: effortRef.current, fresh: true }),
     [follow],
   )
 
@@ -319,17 +370,6 @@ export function CounterAskClient({
     }
     return frozenThread.current.turns
   }, [])
-
-  /** The date control and the store switcher write scope, not questions. */
-  const pushParams = useCallback(
-    (next: Parameters<typeof writeCounterParams>[1]) => {
-      const qs = writeCounterParams(params, next).toString()
-      startTransition(() => {
-        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-      })
-    },
-    [params, pathname, router, startTransition],
-  )
 
   /**
    * Opening a thread IS a navigation — so a conversation the reader opened is
@@ -551,10 +591,23 @@ export function CounterAskClient({
   }, [turnCount])
   const showPill = awayFromBottom && askPending(state)
 
-  const { range, presetId, comparisonId } = counterParams
   // The window named by its ENDS, as the prototype's sub-line names it
   // ("reading Aug 20 – Aug 26") and as every other Counter page names it.
-  const windowLabel = rangeLabel(range, "custom")
+  const windowLabel = rangeLabel(counterParams.range, "custom")
+
+  /*
+   * The scope the PAGE is set to, for an answer to compare itself against.
+   *
+   * `context.range` and not `windowLabel`: the row exists to notice that an
+   * answer and the page have drifted apart, and the answer's own scope was
+   * recovered from `context.sentence`, which names a preset "Yesterday" where
+   * `windowLabel` names its ends "Aug 25 – Aug 25". Comparing the two
+   * vocabularies would report every preset window as moved.
+   */
+  const rescope = useMemo(
+    () => ({ store: context.store, range: context.range, onAsk: submit }),
+    [context.store, context.range, submit],
+  )
 
   /*
    * The server render, and the tick before `useChat` reaches `submitted`, both
@@ -586,6 +639,14 @@ export function CounterAskClient({
       {/* Invisible. Loads the AI SDK chunk after hydration — see
           `@/lib/counter/use-ask-deferred`. */}
       {engineMount}
+      {/*
+        * NO DATE CONTROL. It was the third place this page printed its scope
+        * and the one place it pretended to constrain the answer: the window
+        * reaches the model as a sentence the question's own words override,
+        * so "Sep 6" in the head with "how was August" in the field answered
+        * August. The head now STATES the default window; the question decides;
+        * the Read row under each answer says what was actually read.
+        */}
       <PageHead
         title={title}
         // "Asked from Overview · Hollywood · reading Aug 20 – Aug 26". The
@@ -593,20 +654,10 @@ export function CounterAskClient({
         // from the rail and there is no page to name.
         sub={
           context.askedFrom
-            ? `Asked from ${context.askedFrom} · ${context.store} · reading ${windowLabel}`
-            : `${context.store} · reading ${windowLabel}`
+            ? `Asked from ${context.askedFrom} · ${context.store} · reading ${windowLabel} unless you say otherwise`
+            : `${context.store} · reading ${windowLabel} unless you say otherwise`
         }
-      >
-        <DateControl
-          presetId={presetId}
-          comparisonId={comparisonId}
-          range={range}
-          onPreset={(id) => pushParams({ presetId: id })}
-          onComparison={(id) => pushParams({ comparisonId: id })}
-          onStep={(direction) => pushParams({ range: stepRange(range, direction) })}
-          onRange={(next) => pushParams({ range: next })}
-        />
-      </PageHead>
+      />
 
       {/*
         * `.askpage` — the prototype's two-column Ask: a 206px rail of past
@@ -640,6 +691,8 @@ export function CounterAskClient({
                 onOpen={openThread}
                 actions={railActions}
                 onCount={setRailCount}
+                // The thread this session started: its row enters once.
+                newId={turns.length > 0 ? conversationId : null}
               />
             )}
           </Section>
@@ -707,6 +760,8 @@ export function CounterAskClient({
                           state={restoredAskState(turn)}
                           className="ans"
                           onFollowUp={submit}
+                          onFresh={fresh}
+                          rescope={rescope}
                           foot={{
                             meta: turn.meta,
                             onRate: (f) => rate(turn.meta?.chatTurnId ?? null, f),
@@ -745,6 +800,8 @@ export function CounterAskClient({
                 // document-level delegation — here that would open the palette
                 // OVER this page and answer in it.
                 onFollowUp={submit}
+                onFresh={fresh}
+                rescope={rescope}
                 foot={{
                   meta: askAnswer(turn.state)?.meta ?? null,
                   liveDurationMs: i === shown.length - 1 ? liveMs : null,
@@ -757,34 +814,31 @@ export function CounterAskClient({
 
           {shown.length === 0 && !urlConversationId ? (
             /*
-             * NOTHING ASKED YET — the mock's `.newask`.
+             * NOTHING ASKED YET — THE MORNING BRIEF ("Ask in Motion II", A).
              *
-             * "Ask about Hollywood." over six department starters and the
-             * last four threads. A heading over an empty page is the failure
-             * mode this project has shipped before; a page that says what it
-             * is for, offers six questions it can answer and the four threads
-             * you were last in is not one. The recent list reads the same
-             * section the rail does, so the two cannot disagree.
+             * "Ask about Hollywood." over six department cards was a menu, and
+             * a menu asks before it gives. The page now opens on the three
+             * things that moved since the last visit, each with its figure and
+             * each already phrased as the question to ask next; the six
+             * starters survive as a chip row; the last four threads are the
+             * same section the rail reads, so the two cannot disagree.
              */
             <div className="newask">
-              <div>
-                <div className="ctx">
-                  Answering about <b>{context.store}</b> · {windowLabel}
-                </div>
-                <h2>Ask about {context.store}.</h2>
-              </div>
-              <p>
-                A question here is answered against the store and range in the head, and kept in
-                the rail on the left. Start from one of these, or type your own.
-              </p>
-              <div className="starters">
-                {ASK_STARTERS.map(({ dept, q }) => (
-                  <button className="starter" type="button" key={q} onClick={() => submit(q)}>
-                    <span className="k">{dept}</span>
-                    <b>{q}</b>
-                  </button>
-                ))}
-              </div>
+              <Section bare title="Since you were here" data={brief}>
+                {(b) => (
+                  <MorningBrief
+                    greeting={headings.greeting}
+                    since={
+                      b.syncedAt
+                        ? `${headings.since} · synced ${threadClock(new Date(b.syncedAt))}`
+                        : headings.since
+                    }
+                    signals={b.signals}
+                    onAsk={submit}
+                  />
+                )}
+              </Section>
+              <StarterChips starters={ASK_STARTERS} onAsk={submit} />
               <Section bare quietWhenEmpty title="Recent" data={sections.conversations}>
                 {(items) =>
                   items.length === 0 ? null : (
@@ -806,9 +860,11 @@ export function CounterAskClient({
       </div>
 
       {/*
-        * THE DOCK — the mock's scope row, composer and hints, sticky at the
-        * bottom of the page so the last answer never scrolls it away. The
-        * "New answer" pill sits just above it.
+        * THE DOCK — ONE ROW. The composer with Quick / Careful, the mic and
+        * send; the hints appear on focus. The scope row is gone (the head and
+        * the placeholder name the scope) and so is the model tag. Sticky at
+        * the bottom so the last answer never scrolls it away; the "New answer"
+        * pill sits just above it.
         */}
       <div className="dock">
         <button
@@ -832,19 +888,14 @@ export function CounterAskClient({
           // the scope instead, which is what a first question is asked under.
           placeholder={
             shown.length > 0 || urlConversationId
-              ? "Ask a follow-up about this range…"
-              : `Ask about ${context.store}…`
+              ? "Ask a follow-up…"
+              : `Ask about ${context.store} · ${context.range}…`
           }
           onSubmit={submit}
           busy={askPending(state)}
           onStop={stop}
-          scope={{ store: context.store, range: windowLabel }}
-          scopeNote={
-            shown.length > 0 || urlConversationId
-              ? "Follow-ups keep this scope"
-              : "From the head · change it there"
-          }
-          model={model}
+          effort={effort}
+          onEffort={setEffort}
           mic
         />
       </div>

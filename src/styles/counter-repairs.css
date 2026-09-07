@@ -2487,8 +2487,9 @@ html[data-theme-switching] .ct-root *::after {
 /*
  * `.scoperow--was` is the ANSWER's scope row: the store and window one turn
  * was computed under, shown only once the page has moved off them. Same
- * chips, opposite tense to the composer's — so its opening label survives the
- * phone's economies below, which drop the composer's.
+ * chips, opposite tense to the composer's — which the second pass (2026-09-07)
+ * removed: the dock is one row now, and this is the only `.scoperow` the Ask
+ * page draws. The rules above it stay for this one.
  *
  * `.rerun` is its action, treated as `.turnfoot button` is (font:inherit, no
  * chrome, accent on hover) because it is the same thing: a small action
@@ -2697,3 +2698,122 @@ html[data-theme-switching] .ct-root *::after {
 /* An answer served from the answer cache. Quiet — it explains the 0.2s, it
    does not compete with the figures above it. */
 .turnfoot__c { color: var(--ink-3); font-style: normal; opacity: .85 }
+
+/*
+ * ASK, SECOND PASS — the "Ask in Motion II" mock (2026-09-07), minus the date
+ * picker. Everything below is an ADDITION or a REPAIR to the Ask rules above;
+ * each block names the mock element it draws and the frequency tier it sits in.
+ */
+
+/* THE DOCK IS ONE ROW. The hints appear when the field has focus, or when the
+   row has something to say that is not a shortcut (the mic's transcript, a
+   running turn — `.hints.on`). Tier 1: seen every question, so 160ms and no
+   travel beyond 2px. */
+.dock__in .hints{max-height:0;overflow:hidden;opacity:0;transform:translateY(-2px);margin-top:-8px;
+  transition:max-height .2s var(--ease),opacity .16s var(--ease),transform .16s var(--ease),margin-top .2s var(--ease)}
+.dock__in:focus-within .hints,.dock__in .hints.on{max-height:20px;opacity:1;transform:none;margin-top:0}
+
+/* Quick / Careful. A segmented pill in the tools slot; the pressed half is
+   sunk. `.effort` is new — the mock draws it in place of the model tag. */
+.effort{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex:none;margin-right:2px}
+.effort button{padding:3px 9px;border:0;background:none;cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);transition:background-color .16s var(--ease),color .16s var(--ease)}
+.effort button+button{border-left:1px solid var(--line)}
+.effort button[aria-pressed="true"]{background:var(--sunk);color:var(--ink)}
+.effort button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* THE READ ROW — chips carry the check, the source, and its own sync clock.
+   `.src.v` is the verified chip, `.stale` the amber dot on the source older
+   than the rest of the row. Static: nothing here moves. */
+.srcs .src.rk{border:0;background:none;padding-left:0}
+.srcs .src.v{border-color:var(--good);color:var(--good);display:inline-flex;align-items:center;gap:6px}
+.srcs .src.v svg{width:9px;height:9px;flex:none}
+.srcs .src.v b{color:var(--ink-2)}
+.srcs .src.v>span{color:var(--ink-3)}
+.srcs .stale{display:inline-flex;align-items:center;gap:5px;color:var(--signal-ink)}
+.srcs .stale i{width:6px;height:6px;border-radius:50%;background:var(--signal)}
+
+/* "How I got here" — the prototype's `.drill` under an answer, with the
+   drawer as a grid-rows transition (tier 4: the reader's own act, 220ms). */
+.ans .drill,.manswer .drill{margin-top:0;border-top:1px solid var(--line);padding-top:8px}
+.ans .drill>.ldrawer,.manswer .drill>.ldrawer{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s var(--ease)}
+.ans .drill>.ldrawer.is-open,.manswer .drill>.ldrawer.is-open{display:grid;grid-template-rows:1fr}
+.ans .drill>.ldrawer>div,.manswer .drill>.ldrawer>div{overflow:hidden}
+.ans .lpanel,.manswer .lpanel{display:grid;gap:6px;font-size:var(--t-cap);color:var(--ink-2);line-height:1.55;max-width:66ch}
+.ans .lpanel p,.manswer .lpanel p{margin:0}
+.ans .lpanel code,.manswer .lpanel code{font-family:var(--mono);font-size:10px;background:var(--sunk);padding:1px 5px;border-radius:3px;color:var(--ink)}
+.ans .lpanel b,.manswer .lpanel b{font-weight:600;color:var(--ink)}
+
+/* AN INSTANT ANSWER LOOKS INSTANT. The tag names the run it replayed; the
+   whole answer enters as one flat 200ms fade — streaming a cached answer
+   would be fake latency. `.ans.is-cached` overrides the per-child stagger the
+   motion tiers give a fresh answer. */
+.cachetag{display:inline-flex;align-items:center;gap:7px;justify-self:start;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--good);background:var(--good-wash);border:1px solid var(--good);border-radius:999px;padding:3px 10px 3px 8px}
+.cachetag svg{width:10px;height:10px;flex:none}
+.cachetag button{font-family:var(--body);font-size:var(--t-cap);font-weight:500;letter-spacing:0;text-transform:none;color:var(--ink-2);
+  border:0;border-left:1px solid var(--good);background:none;padding:0 0 0 7px;margin-left:1px;cursor:pointer;transition:color .16s var(--ease)}
+.cachetag button:hover{color:var(--accent)}
+.ans.is-cached,.manswer.is-cached{animation:cnflat .2s ease-out both}
+.ans.is-cached>*,.manswer.is-cached>*{animation:none!important}
+@keyframes cnflat{from{opacity:0}to{opacity:1}}
+
+/* THE MORNING BRIEF — the empty Ask. `.morning` replaces `.newask`'s head;
+   `.signals` is one bordered list, each `.sig` a button whose whole face is
+   the question. Tier 0: seen every morning, so the rows enter once and the
+   only hover is a 3px arrow. */
+.morning{max-width:760px;margin:0 auto;display:grid;gap:14px;padding-top:24px;width:100%}
+.morning .sub{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.morning .sub b{color:var(--ink-2);font-weight:500}
+.morning h2{font-family:var(--display);font-size:var(--t-hero);letter-spacing:-.025em;line-height:1.05;margin:4px 0 0;font-weight:600;text-wrap:balance}
+.morning p{margin:0;color:var(--ink-2);font-size:var(--t-mid);max-width:60ch;text-wrap:pretty}
+.signals{display:grid;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.sig{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px;align-items:center;padding:12px 15px;
+  border:0;border-bottom:1px solid var(--line);background:none;text-align:left;width:100%;cursor:pointer;font:inherit;color:inherit;
+  transition:background-color .14s var(--ease)}
+.sig:last-child{border-bottom:0}
+.sig:hover{background:var(--accent-wash)}
+.sig:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sig .fig{display:grid;gap:2px;min-width:0}
+.sig .fig .k{font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+.sig .fig .k i{width:6px;height:6px;border-radius:50%;background:var(--bad);flex:none}
+.sig .fig .k i.good{background:var(--good)}
+.sig .fig .k i.signal{background:var(--signal)}
+.sig .fig .v{font-size:var(--t-lg);font-weight:600;letter-spacing:-.02em;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sig .fig .v em{font-family:var(--mono);font-size:var(--t-cap);font-style:normal;font-weight:500;color:var(--bad)}
+.sig .fig .v em.good{color:var(--good)}
+.sig .fig .v em.signal{color:var(--signal-ink)}
+.sig .q{display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:var(--t-mid);font-weight:600;letter-spacing:-.01em;color:var(--ink);min-width:0}
+.sig .q svg{width:12px;height:12px;color:var(--ink-3);flex:none;transition:transform .16s var(--ease),color .16s var(--ease)}
+.sig:hover .q{color:var(--accent-hi)}
+.sig:hover .q svg{color:var(--accent);transform:translateX(3px)}
+.sig.in{animation:rowin .3s ease-out both}
+@keyframes rowin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.starts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.starts .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-right:4px}
+@container fr (max-width:620px){
+  .sig{grid-template-columns:1fr;gap:6px;padding:10px 12px}
+  .sig .q{font-size:var(--t-body)}
+}
+.newask--phone .morning{padding-top:8px}
+.newask--phone .morning h2{font-size:var(--t-xl)}
+
+/* THE RAIL: a thread appears where it will live. The row a send just created
+   enters from 6px above (tier 3, 260ms, once); a delta chip on the caption
+   is the figure that made the title a verdict. */
+.cv.is-new{animation:trin .26s var(--ease) both}
+@keyframes trin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.cv span.m em{font-style:normal;font-weight:600;color:var(--bad);margin-left:4px}
+.cv span.m em.dn{color:var(--good)}
+.cv span.m em.partial{color:var(--signal-ink)}
+
+/* A tool that did not come back: the failed step in place — same dot, a
+   different colour — then the fallback block enters like any answer. */
+.tstep.is-failed i{background:var(--bad)}
+.tstep.is-failed b{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-strong)}
+.tstep.is-failed em{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-style:normal;color:var(--bad)}
+
+@media (prefers-reduced-motion: reduce){
+  .sig.in,.cv.is-new,.ans.is-cached,.manswer.is-cached{animation:none!important;opacity:1!important;transform:none!important}
+  .dock__in .hints,.ans .drill>.ldrawer,.manswer .drill>.ldrawer,.sig .q svg{transition-duration:.01ms!important}
+}

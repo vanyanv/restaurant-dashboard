@@ -75,7 +75,7 @@ interface Delivery {
   qty: number
 }
 
-interface Mover {
+export interface Mover {
   id: string
   name: string
   unit: string
@@ -92,7 +92,7 @@ interface Mover {
   history: Delivery[]
 }
 
-interface PriceData {
+export interface PriceData {
   movers: Mover[]
   held: Mover[]
   /** Canonicals that could not be priced at all, and why. */
@@ -102,7 +102,7 @@ interface PriceData {
 
 /* ── Load ─────────────────────────────────────────────────────────────── */
 
-async function loadPrices(accountId: string): Promise<PriceData> {
+export async function loadPrices(accountId: string): Promise<PriceData> {
   const since = new Date(Date.now() - HISTORY_DAYS * 86_400_000)
   const volumeSince = new Date(Date.now() - VOLUME_DAYS * 86_400_000)
 

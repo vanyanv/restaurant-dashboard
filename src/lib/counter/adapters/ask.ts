@@ -2,7 +2,7 @@ import {
   asOfFromOutput,
   formatToolParams,
   type ToolRead,
-} from "@/lib/counter/ask-state"
+} from "@/lib/counter/tool-read"
 import { cache } from "react"
 import { chatPrisma } from "@/lib/chat/prisma-chat"
 import { getConversation, searchConversations } from "@/lib/chat/conversation"
@@ -68,6 +68,8 @@ export interface AskConversation {
   updatedAt: Date
   /** The last answer's `Message.id` — what "Fork from the end" branches through. */
   lastAnswerId: string | null
+  /** The last answer's first figure, for the caption's delta chip. */
+  lastFigure: { value: string; delta: string | null; direction: "up" | "down" | null } | null
 }
 
 /** One restored turn: what was asked, what came back, what it read. */
@@ -185,6 +187,7 @@ const loadConversations = cache(
           turns: c.answerCount,
           updatedAt: c.updatedAt,
           lastAnswerId: c.lastAnswerId,
+          lastFigure: c.lastFigure,
         }))
     )
   },
@@ -300,6 +303,9 @@ const loadThread = cache(
         // so a reopened thread says the same thing the live footer said
         // rather than quietly presenting it as a model answer.
         finishReason: true,
+        // `{ toolName: message }` for every tool that errored — the sources a
+        // reopened partial answer still has to name.
+        toolErrors: true,
         aiUsageEvent: { select: { estimatedCostUsd: true, durationMs: true } },
       },
     })
@@ -318,6 +324,10 @@ const loadThread = cache(
         // `ChatTurn` keeps no stamp for the run a cached turn replayed; the
         // live footer had it from the stream, a reopened one says "earlier".
         cachedAt: null,
+        failed:
+          row.toolErrors && typeof row.toolErrors === "object" && !Array.isArray(row.toolErrors)
+            ? Object.keys(row.toolErrors)
+            : [],
       }
     }
 

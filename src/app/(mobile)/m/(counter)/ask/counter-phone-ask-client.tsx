@@ -28,6 +28,9 @@ import type { AskFeedback } from "@/lib/counter/ask-feedback"
 // the barrel is shared with the overview clients. See that barrel's own note.
 import { ThreadActions } from "@/components/counter/ask/thread-actions"
 import { ASK_PHONE_ROUTE, ASK_STARTERS, describeAskContext } from "@/lib/counter/ask-context"
+import { MorningBrief, StarterChips } from "@/components/counter/ask/morning-brief"
+import type { AskBrief } from "@/lib/counter/adapters/ask-brief"
+import type { SectionData } from "@/lib/counter/section-data"
 import { rangeLabel } from "@/lib/counter/date-range"
 import { readCounterParams } from "@/lib/counter/url-state"
 import {
@@ -93,16 +96,27 @@ export function CounterPhoneAskClient({
   sections,
   stores,
   today,
+  brief,
+  headings,
 }: {
   /** The query string as PLAIN TEXT — a `URLSearchParams` loses its prototype crossing the RSC boundary. */
   params: string
   sections: SectionSources<AskSections>
   stores: SwitchableStore[]
   today: Date
+  /** The morning brief an empty Ask opens on — see `@/lib/counter/adapters/ask-brief`. */
+  brief: SectionData<AskBrief> | Promise<SectionData<AskBrief>>
+  /** "Good morning, Chris." / "Since Saturday", decided on the server. */
+  headings: { greeting: string; since: string }
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const params = useMemo(() => new URLSearchParams(paramsString), [paramsString])
+  // Seven days when the URL names no window — the desk client says why.
+  const params = useMemo(() => {
+    const p = new URLSearchParams(paramsString)
+    if (!p.has("range") && !p.has("from") && !p.has("to")) p.set("range", "d7")
+    return p
+  }, [paramsString])
   const counterParams = useMemo(() => readCounterParams(params, today), [params, today])
 
   const question = (params.get("q") ?? "").trim()
@@ -182,6 +196,24 @@ export function CounterPhoneAskClient({
   }, [conversationId, urlConversationId, params, router])
 
   /*
+   * THE RAIL LEARNS THE TURN'S NAME WHEN THE TURN SETTLES.
+   *
+   * `?c=` above is written from the response HEADER, before a word of the
+   * answer exists, so the server rail re-renders once with an untitled row —
+   * and then nothing moved it. The title (the filed verdict) and the row's
+   * figure chip are written in the route's `onFinish`, which completes before
+   * the stream closes; refreshing at the moment the turn stops asking is what
+   * lets the row arrive named, and lets `.cv.is-new` mark the row this send
+   * made. Same call the rail's rename and delete already make.
+   */
+  const wasAskingRef = useRef(false)
+  useEffect(() => {
+    const asking = askPending(state)
+    if (wasAskingRef.current && !asking && conversationId) router.refresh()
+    wasAskingRef.current = asking
+  }, [state, conversationId, router])
+
+  /*
    * THE STORED HALF OF THE THREAD, FROZEN AT THE MOMENT IT WAS OPENED.
    *
    * `sections.thread` is re-read on every navigation, so after a follow-up it
@@ -221,6 +253,11 @@ export function CounterPhoneAskClient({
     (next: string) => follow(next, contextRef.current),
     [follow],
   )
+  /** "Re-ask fresh" on a cached answer: the same question, past the cache. */
+  const fresh = useCallback(
+    (q: string) => follow(q, contextRef.current, { fresh: true }),
+    [follow],
+  )
 
   /**
    * The thread the reader was in has been deleted — back to an empty Ask,
@@ -237,6 +274,17 @@ export function CounterPhoneAskClient({
   }, [params, router, reset])
 
   const windowLabel = rangeLabel(counterParams.range, "custom")
+
+  /*
+   * The scope the PAGE is set to, for an answer to compare itself against —
+   * see the desk client's note. `context.range`, not `windowLabel`: the
+   * answer's own scope was recovered from `context.sentence`, and comparing
+   * two vocabularies for one window reports every preset as moved.
+   */
+  const rescope = useMemo(
+    () => ({ store: context.store, range: context.range, onAsk: submit }),
+    [context.store, context.range, submit],
+  )
 
   /*
    * The server render, and the tick before `useChat` reaches `submitted`,
@@ -414,6 +462,8 @@ export function CounterPhoneAskClient({
                       className="manswer"
                       figures="mstrip"
                       onFollowUp={submit}
+                      onFresh={fresh}
+                      rescope={rescope}
                       foot={{
                         meta: turn.meta,
                         onRate: (f) => rate(turn.meta?.chatTurnId ?? null, f),
@@ -454,6 +504,8 @@ export function CounterPhoneAskClient({
                 // carry `data-askabout`, and `PhoneShell`'s delegation would
                 // navigate away into a new thread instead.
                 onFollowUp={submit}
+                onFresh={fresh}
+                rescope={rescope}
                 foot={{
                   meta: askAnswer(turn.state)?.meta ?? null,
                   liveDurationMs: i === shown.length - 1 ? liveMs : null,
@@ -473,20 +525,22 @@ export function CounterPhoneAskClient({
          * button that opens the rest of them. See the desk client.
          */
         <div className="newask newask--phone">
-          <div>
-            <div className="ctx">
-              Answering about <b>{context.store}</b> · {windowLabel}
-            </div>
-            <h2>Ask about {context.store}.</h2>
-          </div>
-          <div className="starters">
-            {ASK_STARTERS.map(({ dept, q }) => (
-              <button className="starter" type="button" key={q} onClick={() => submit(q)}>
-                <span className="k">{dept}</span>
-                <b>{q}</b>
-              </button>
-            ))}
-          </div>
+          {/* THE MORNING BRIEF, one signal per row — see the desk client. */}
+          <Section bare title="Since you were here" data={brief}>
+            {(b) => (
+              <MorningBrief
+                greeting={headings.greeting}
+                since={
+                  b.syncedAt
+                    ? `${headings.since} · synced ${threadClock(new Date(b.syncedAt))}`
+                    : headings.since
+                }
+                signals={b.signals}
+                onAsk={submit}
+              />
+            )}
+          </Section>
+          <StarterChips starters={ASK_STARTERS} onAsk={submit} />
           <Section bare quietWhenEmpty title="Recent" data={sections.conversations}>
             {(items) =>
               items.length === 0 ? null : (
@@ -538,12 +592,11 @@ export function CounterPhoneAskClient({
         placeholder={
           shown.length > 0 || urlConversationId
             ? `Ask a follow-up about ${context.store}…`
-            : `Ask about ${context.store}…`
+            : `Ask about ${context.store} · ${context.range}…`
         }
         onSubmit={submit}
         busy={askPending(state)}
         onStop={stop}
-        scope={{ store: context.store, range: windowLabel }}
         mic
       />
     </>

@@ -1,6 +1,5 @@
 "use client"
 
-import { labelFor } from "@/components/chat/tool-labels"
 import type { ToolRead } from "@/lib/counter/ask-state"
 import { useEffect, useRef, useState } from "react"
 import { ASK_DOWN_REASONS, askFeedbackLabel, type AskFeedback } from "@/lib/counter/ask-feedback"
@@ -53,7 +52,6 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
   const [asking, setAsking] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [showReads, setShowReads] = useState(false)
   const pop = useRef<HTMLSpanElement>(null)
 
   // The stored rating arrives with the thread; a later render of the same
@@ -113,18 +111,8 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
         * <details> because the summary sits inline in a flex row with the cost
         * and the seconds, and the panel has to escape that row.
         */}
-      {read.length > 0 ? (
-        <button
-          type="button"
-          className={`reads__t${showReads ? " on" : ""}`}
-          aria-expanded={showReads}
-          onClick={() => setShowReads((v) => !v)}
-        >
-          Read {read.length} source{read.length === 1 ? "" : "s"}
-        </button>
-      ) : (
-        <span>Read no sources</span>
-      )}
+      {/* The Read row above the footer carries the sources; this is the count. */}
+      <span>{read.length > 0 ? `Read ${read.length} source${read.length === 1 ? "" : "s"}` : "Read no sources"}</span>
       {cost ? <span>{cost}</span> : null}
       {secs ? <span>{secs}</span> : null}
       {/* Why this one was instant. Without it "$0.000 · 0.2s" is true of this
@@ -185,30 +173,6 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
       >
         {copied ? "Copied" : "Copy"}
       </button>
-      {showReads ? (
-        <div className="reads" role="region" aria-label="Sources this answer read">
-          {read.map((r) => (
-            <div className="reads__r" key={r.tool}>
-              <b>{labelFor(r.tool).short}</b>
-              {r.params ? <code>{r.params}</code> : null}
-              <span className="sp" />
-              {/*
-                * Every tool here is a curated loader over the same functions
-                * the pages draw with — there is no raw-SQL path and no web
-                * tool — so every source earns the mark. Its job is to make a
-                * future unverified source visibly different, not to decorate
-                * this one.
-                */}
-              <span className="reads__v" title="Answered from a curated loader, not free-form SQL">
-                Verified
-              </span>
-              <time className="reads__a" dateTime={r.asOf ?? undefined}>
-                {r.asOf ? asOfLabel(r.asOf) : "no sync stamp"}
-              </time>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -221,13 +185,3 @@ export function TurnFoot({ read, meta, liveDurationMs = null, onRate, onFork, co
  * makes them do the subtraction. The exact stamp stays in `dateTime` for
  * anything reading the markup.
  */
-function asOfLabel(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return "no sync stamp"
-  const mins = Math.round((Date.now() - then) / 60_000)
-  if (mins < 1) return "just synced"
-  if (mins < 60) return `synced ${mins}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `synced ${hours}h ago`
-  return `synced ${Math.round(hours / 24)}d ago`
-}

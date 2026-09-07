@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { AskGlyph } from "@/components/counter/surface/ask-glyph"
 import { applySlashCommand, matchSlashCommands } from "@/lib/chat/composer"
+import { ASK_EFFORTS, type AskEffort } from "@/lib/counter/ask-context"
 
 /**
  * `.composer` — the prototype's own bar (line 4610: the ask glyph, an input
@@ -22,12 +23,19 @@ import { applySlashCommand, matchSlashCommands } from "@/lib/chat/composer"
  *   crossfading into a stop mark with a ring that says something is in
  *   flight. Escape does the same from the textarea. A stopped turn is kept
  *   (see `Stopped`) — the question is never thrown away (F-R10).
- * - **The scope row** above says what the next question is asked against.
- *   Statements, not controls (D6): the date control in the head and the
- *   store switcher in the rail remain the only two places scope changes.
- * - **The hints row** below, desk only — `↵ send · ⇧↵ new line · / shortcuts
- *   · esc stop` and the model on the right. The phone has no room and no
- *   keyboard to hint about.
+ * - **One row** ("Ask in Motion II", 2026-09-07). The scope row that used to
+ *   sit above is gone: the page head and the placeholder name the scope, and
+ *   the answer's own `.scoperow--was` says when a turn was computed under a
+ *   different one. The store switcher in the rail is where scope changes.
+ * - **Quick / Careful** in the tools slot, where the model tag used to be
+ *   printed. "gpt-5-mini · low" meant nothing to an owner; a choice with a
+ *   cost in seconds does. Careful lifts the reasoning effort for the next
+ *   turn (`reasoningEffortFor` in the route). Drawn only when the page owns
+ *   the choice (`effort` + `onEffort`); the palette and the phone pass none.
+ * - **The hints row** below appears on focus (`.dock__in:focus-within`) and
+ *   whenever it has something to say that is not a shortcut — the mic's
+ *   transcript, a running turn. `↵ send · ⇧↵ new line · / shortcuts · esc
+ *   stop`, and the effort's cost on the right.
  *
  * `onSubmit` is called with the trimmed text and the field is cleared first,
  * so a slow send never lets the same question go twice.
@@ -37,9 +45,8 @@ export function AskComposer({
   onSubmit,
   busy = false,
   onStop,
-  scope,
-  scopeNote,
-  model,
+  effort = null,
+  onEffort,
   prefill = null,
   mic = false,
 }: {
@@ -48,12 +55,14 @@ export function AskComposer({
   /** A turn is in flight: the send square is a stop square. */
   busy?: boolean
   onStop?: () => void
-  /** The scope row: "Answering about · Store X · Range Y". */
-  scope?: { store: string; range: string }
-  /** The scope row's right-hand note — "Follow-ups keep this scope". */
-  scopeNote?: string
-  /** Names the model in the hints row; omit it and the row is not drawn. */
-  model?: string
+  /**
+   * The Quick / Careful choice beside the field, or `null` to draw no toggle
+   * (the palette). Careful lifts the model's reasoning effort for the next
+   * turn — `reasoningEffortFor` in the route. Owned by the page so the choice
+   * outlives a send.
+   */
+  effort?: AskEffort | null
+  onEffort?: (next: AskEffort) => void
   /** Text to place in the field (not send) — a chip that wants editing first. */
   prefill?: string | null
   /**
@@ -168,18 +177,6 @@ export function AskComposer({
 
   return (
     <div className="dock__in">
-      {scope ? (
-        <div className="scoperow">
-          <span>Answering about</span>
-          <span className="chip">
-            <span className="lbl">Store</span> {scope.store}
-          </span>
-          <span className="chip">
-            <span className="lbl">Range</span> {scope.range}
-          </span>
-          {scopeNote ? <span className="sp">{scopeNote}</span> : null}
-        </div>
-      ) : null}
 
 
       <form
@@ -251,6 +248,20 @@ export function AskComposer({
           />
         </label>
         <div className="tools">
+          {effort !== null && onEffort ? (
+            <div className="effort" role="group" aria-label="How hard to think">
+              {ASK_EFFORTS.map((e) => (
+                <button
+                  type="button"
+                  key={e.id}
+                  aria-pressed={effort === e.id}
+                  onClick={() => onEffort(e.id)}
+                >
+                  {e.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {canRecord ? (
             <button
               type="button"
@@ -298,27 +309,33 @@ export function AskComposer({
         </div>
       </form>
 
-      {model ? (
-        <div className="hints">
-          <span>
-            <kbd>↵</kbd> send
-          </span>
-          <span>
-            <kbd>⇧↵</kbd> new line
-          </span>
-          <span>
-            <kbd>/</kbd> shortcuts
-          </span>
-          <span>
-            <kbd>esc</kbd> stop
-          </span>
-          <span>{micSaid ?? (busy ? "reading… esc to stop" : model)}</span>
-        </div>
-      ) : micSaid ? (
-        <div className="hints">
-          <span>{micSaid}</span>
-        </div>
-      ) : null}
+      {/*
+        * THE HINTS ROW SHOWS ON FOCUS (`.dock__in:focus-within .hints`), and
+        * whenever it has something to say that is not a shortcut — the mic's
+        * transcript, a running turn. At rest the dock is one row; the keys
+        * appear the moment the field has focus, which is when a reader
+        * reaches for them. The right-hand slot names the effort chosen and
+        * what it costs in seconds, in place of the model tag it used to print
+        * ("gpt-5-mini · low" meant nothing to an owner).
+        */}
+      <div className={`hints${micSaid || busy ? " on" : ""}`} aria-live="polite">
+        <span>
+          <kbd>↵</kbd> send
+        </span>
+        <span>
+          <kbd>⇧↵</kbd> new line
+        </span>
+        <span>
+          <kbd>/</kbd> shortcuts
+        </span>
+        <span>
+          <kbd>esc</kbd> stop
+        </span>
+        <span>
+          {micSaid ??
+            (busy ? "reading… esc to stop" : (ASK_EFFORTS.find((e) => e.id === effort)?.hint ?? ""))}
+        </span>
+      </div>
     </div>
   )
 }

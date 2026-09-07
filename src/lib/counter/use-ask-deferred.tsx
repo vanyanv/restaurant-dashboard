@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react"
 import type { AskContext } from "./ask-context"
+import type { AskTurnOptions } from "./use-ask"
 import type { AskEngine } from "./ask-engine-host"
 
 /**
@@ -37,7 +38,7 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
 } {
   const engineRef = useRef<AskEngine | null>(null)
   const pendingRef = useRef<
-    { mode: "ask" | "follow"; question: string; context: AskContext } | null
+    { mode: "ask" | "follow"; question: string; context: AskContext; opts?: AskTurnOptions } | null
   >(null)
 
   const [snapshot, setSnapshot] = useState<{
@@ -58,8 +59,8 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     if (first && pendingRef.current) {
       const p = pendingRef.current
       pendingRef.current = null
-      if (p.mode === "ask") engine.ask(p.question, p.context)
-      else engine.follow(p.question, p.context)
+      if (p.mode === "ask") engine.ask(p.question, p.context, p.opts)
+      else engine.follow(p.question, p.context, p.opts)
       // The send mutates the engine's state; the host republishes it on its
       // next render, so this (already stale) snapshot is set and immediately
       // superseded rather than skipped — skipping would leave the page idle
@@ -73,14 +74,14 @@ export function useAskDeferred(initialConversationId: string | null): AskEngine 
     })
   }, [])
 
-  const ask = useCallback((question: string, context: AskContext) => {
-    if (engineRef.current) engineRef.current.ask(question, context)
-    else pendingRef.current = { mode: "ask", question, context }
+  const ask = useCallback((question: string, context: AskContext, opts?: AskTurnOptions) => {
+    if (engineRef.current) engineRef.current.ask(question, context, opts)
+    else pendingRef.current = { mode: "ask", question, context, opts }
   }, [])
 
-  const follow = useCallback((question: string, context: AskContext) => {
-    if (engineRef.current) engineRef.current.follow(question, context)
-    else pendingRef.current = { mode: "follow", question, context }
+  const follow = useCallback((question: string, context: AskContext, opts?: AskTurnOptions) => {
+    if (engineRef.current) engineRef.current.follow(question, context, opts)
+    else pendingRef.current = { mode: "follow", question, context, opts }
   }, [])
 
   const reset = useCallback(() => {

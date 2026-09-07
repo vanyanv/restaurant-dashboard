@@ -24,6 +24,8 @@ export interface AskTurnMeta {
   cached: boolean
   /** When the answer this turn replayed was first written, ISO. Cached turns only. */
   cachedAt: string | null
+  /** Tools that came back with an error this turn — the sources the answer could not read. */
+  failed: string[]
 }
 
 /** Reads the route's metadata off a UI message; `null` if it never landed. */
@@ -38,5 +40,6 @@ export function readAskTurnMeta(metadata: unknown): AskTurnMeta | null {
     feedback: typeof m.feedback === "string" ? m.feedback : null,
     cached: m.cached === true,
     cachedAt: typeof m.cachedAt === "string" ? m.cachedAt : null,
+    failed: Array.isArray(m.failed) ? m.failed.filter((t): t is string => typeof t === "string") : [],
   }
 }

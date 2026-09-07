@@ -75,11 +75,16 @@ export function Thinking({ steps }: { steps: AskStep[] }) {
           return (
             <div
               key={step.tool}
-              className={`tstep ${step.state === "read" ? "is-read" : "is-reading"}`}
+              className={`tstep ${
+                step.state === "read" ? "is-read" : step.state === "failed" ? "is-failed" : "is-reading"
+              }`}
             >
               <i />
               <b>{step.state === "read" ? label.done : label.running}</b>
               <span>{label.short}</span>
+              {/* The one case the row says its state twice: a strike-through
+                  alone reads as "done", and this is the opposite. */}
+              {step.state === "failed" ? <em>did not answer</em> : null}
             </div>
           )
         })

@@ -135,7 +135,8 @@ export interface AskStep {
    * look like the defect that rule exists to catch. `state` is also the AI
    * SDK's own word for the same thing on a message part.
    */
-  state: "reading" | "read"
+  /** `failed`: the tool part came back `output-error` — the source did not answer. */
+  state: "reading" | "read" | "failed"
 }
 
 /**
@@ -189,53 +190,22 @@ const FILE_RETURN_TOOL = "fileReturn"
  * still streaming its input would put a source on the row that produced no
  * figure, which is the precise dishonesty K-R2 exists to prevent.
  */
-/**
- * One source an answer read: what it was, what it was asked, and how fresh
- * the table behind it is.
- *
- * The proposal's "Read row", and the reason it is worth more than the tool
- * name alone: a reader who cannot see the parameters cannot tell an answer
- * about the right week from an answer about the wrong one, and Otter backfills
- * closed windows, so a figure with no `asOf` cannot be checked at all.
+/*
+ * `ToolRead`, `formatToolParams` and `asOfFromOutput` live in `tool-read.ts`
+ * and are re-exported here for the client callers that always imported them
+ * from this module. They moved because this file is `"use client"` and the
+ * Ask ADAPTER (a server module) calls two of them to rebuild a stored turn's
+ * Read row — and a function imported across that boundary is a client
+ * reference, not a function: "Attempted to call formatToolParams() from the
+ * server but formatToolParams is on the client." Every stored thread opened
+ * as "This conversation did not load" until the split.
  */
-export interface ToolRead {
-  tool: string
-  /** `store=Hollywood · days=30`, or null when the tool took no arguments. */
-  params: string | null
-  /** ISO stamp from the tool's own result, or null when it reports none. */
-  asOf: string | null
-}
-
-/**
- * The tool's arguments as one short line.
- *
- * Deliberately lossy. This sits under an answer, not in a debugger: long
- * values are cut, objects and arrays are summarised rather than dumped, and
- * the whole line is capped. A Read row that wraps to four lines stops being
- * read at all.
- */
-export function formatToolParams(args: unknown): string | null {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null
-  const parts: string[] = []
-  for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
-    if (v === null || v === undefined || v === "") continue
-    let shown: string
-    if (Array.isArray(v)) shown = `${v.length} item${v.length === 1 ? "" : "s"}`
-    else if (typeof v === "object") shown = "…"
-    else shown = String(v)
-    if (shown.length > 24) shown = `${shown.slice(0, 23)}…`
-    parts.push(`${k}=${shown}`)
-    if (parts.length === 4) break
-  }
-  return parts.length > 0 ? parts.join(" · ") : null
-}
-
-/** The `asOf` a tool attached to its own result, if it reported one. */
-export function asOfFromOutput(output: unknown): string | null {
-  if (!output || typeof output !== "object" || Array.isArray(output)) return null
-  const v = (output as Record<string, unknown>).asOf
-  return typeof v === "string" ? v : null
-}
+export {
+  formatToolParams,
+  asOfFromOutput,
+  type ToolRead,
+} from "./tool-read"
+import { formatToolParams, asOfFromOutput, type ToolRead } from "./tool-read"
 
 /**
  * The Read row for a finished turn.
@@ -397,7 +367,7 @@ export function askReading(state: AskState): AskStep[] {
  */
 export function askSteps(parts: readonly ReturnPart[]): AskStep[] {
   const order: string[] = []
-  const reached = new Map<string, "reading" | "read">()
+  const reached = new Map<string, "reading" | "read" | "failed">()
 
   for (const p of parts) {
     if (!p || typeof p.type !== "string") continue
@@ -407,6 +377,8 @@ export function askSteps(parts: readonly ReturnPart[]): AskStep[] {
     // Only ever advances. An `output-available` part cannot be un-read by a
     // later `input-streaming` one for the same tool.
     if (p.state === "output-available") reached.set(name, "read")
+    // A source that did not come back is marked in place, not left pulsing.
+    else if (p.state === "output-error") reached.set(name, "failed")
     else if (!reached.has(name)) reached.set(name, "reading")
   }
 

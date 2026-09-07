@@ -72,7 +72,16 @@ describe("searchConversations", () => {
     // row the database happened to hand back last.
     expect(findMany.mock.calls[0][0].select.messages).toEqual({
       where: { role: "assistant" },
-      select: { id: true },
+      select: {
+        id: true,
+        // The last answer's filed return, for the rail's delta chip.
+        toolCalls: {
+          where: { toolName: "fileReturn" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { result: true },
+        },
+      },
       orderBy: { createdAt: "asc" },
     })
   })
@@ -93,6 +102,8 @@ describe("searchConversations", () => {
         messageCount: 4,
         answerCount: 2,
         lastAnswerId: "m4",
+        // The fixture's answers carry no `fileReturn` row.
+        lastFigure: null,
       },
     ])
   })

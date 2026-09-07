@@ -181,6 +181,7 @@ export function Conversations({
   onOpen,
   actions,
   onCount,
+  newId = null,
 }: {
   items: AskConversation[]
   currentId: string | null
@@ -190,6 +191,12 @@ export function Conversations({
   actions: ConversationActions
   /** Tells the rail how many rows it is holding, for the footer. */
   onCount?: (n: number) => void
+  /**
+   * The thread a send just created. Its row enters from 6px above when the
+   * rail re-reads (`.cv.is-new`, once) — the thread appears where it will
+   * live, rather than the list simply being longer next time you look.
+   */
+  newId?: string | null
 }) {
   useEffect(() => {
     onCount?.(items.length)
@@ -225,6 +232,7 @@ export function Conversations({
               c={c}
               today={today}
               current={c.id === currentId}
+              isNew={c.id === newId}
               menuOpen={menuFor === c.id}
               onMenu={(open) => setMenuFor(open ? c.id : null)}
               onOpen={() => onOpen(c.id)}
@@ -241,6 +249,7 @@ function ConversationRow({
   c,
   today,
   current,
+  isNew = false,
   menuOpen,
   onMenu,
   onOpen,
@@ -249,6 +258,7 @@ function ConversationRow({
   c: AskConversation
   today: Date
   current: boolean
+  isNew?: boolean
   menuOpen: boolean
   onMenu: (open: boolean) => void
   onOpen: () => void
@@ -262,6 +272,11 @@ function ConversationRow({
   // "3 turns · 2:02 PM" — the mock's caption. The clock for a thread touched
   // today, the date otherwise; the day group above already says which.
   const meta = `${c.turns} turn${c.turns === 1 ? "" : "s"} · ${threadWhenLabel(c.updatedAt, today)}`
+  // The figure that made the title a verdict: its delta when it has one,
+  // else the value. Coloured by direction — up is the bad colour on this
+  // product's figures (cost, over plan) and the caption follows the strip.
+  const fig = c.lastFigure
+  const chip = fig ? (fig.delta ?? fig.value) : null
 
   const startRename = () => {
     onMenu(false)
@@ -299,6 +314,7 @@ function ConversationRow({
   // Enter/Space open, `r` renames, Delete/Backspace arm — via the handlers.
   const cls = [
     "cv",
+    isNew ? "is-new" : "",
     arming ? "arming" : "",
     leaving ? "leaving" : "",
     menuOpen ? "menu-open" : "",
@@ -357,7 +373,10 @@ function ConversationRow({
           ) : (
             <b>{c.title ?? "Untitled"}</b>
           )}
-          <span className={`m${said ? " is-said" : ""}`}>{said ?? meta}</span>
+          <span className={`m${said ? " is-said" : ""}`}>
+            {said ?? meta}
+            {!said && chip ? <em className={fig?.direction === "down" ? "dn" : undefined}>{chip}</em> : null}
+          </span>
         </span>
         {!renaming && !arming ? (
           <span

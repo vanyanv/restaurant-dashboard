@@ -30,6 +30,26 @@ export interface AppendMessageInput {
   toolCalls?: ToolCallRecord[]
 }
 
+export interface ConversationFigure {
+  value: string
+  delta: string | null
+  direction: "up" | "down" | null
+}
+
+/** `fileReturn`'s stored input, read back leniently — it is JSON off a row. */
+function figureFromReturn(result: unknown): ConversationFigure | null {
+  if (!result || typeof result !== "object") return null
+  const figures = (result as { figures?: unknown }).figures
+  if (!Array.isArray(figures) || figures.length === 0) return null
+  const f = figures[0] as { value?: unknown; delta?: unknown; direction?: unknown }
+  if (typeof f.value !== "string") return null
+  return {
+    value: f.value,
+    delta: typeof f.delta === "string" ? f.delta : null,
+    direction: f.direction === "up" || f.direction === "down" ? f.direction : null,
+  }
+}
+
 export interface ConversationSummary {
   id: string
   title: string | null
@@ -56,6 +76,12 @@ export interface ConversationSummary {
    * last one without loading the thread it is about to fork.
    */
   lastAnswerId: string | null
+  /**
+   * The first figure the LAST answer filed — the number that made its verdict
+   * a verdict — for the rail's delta chip. Null when the last answer filed
+   * nothing (a refusal, an older thread from before `fileReturn`).
+   */
+  lastFigure: ConversationFigure | null
 }
 
 export interface ConversationDetail extends ConversationSummary {
@@ -218,20 +244,34 @@ export async function searchConversations(
        */
       messages: {
         where: { role: "assistant" },
-        select: { id: true },
+        select: {
+          id: true,
+          // The filed return, for the rail's delta chip. One small JSON row
+          // per answer; `fileReturn` echoes its input, so `result` is it.
+          toolCalls: {
+            where: { toolName: "fileReturn" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { result: true },
+          },
+        },
         orderBy: { createdAt: "asc" },
       },
     },
   })
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    messageCount: r._count.messages,
-    answerCount: r.messages.length,
-    lastAnswerId: r.messages.length > 0 ? r.messages[r.messages.length - 1].id : null,
-  }))
+  return rows.map((r) => {
+    const last = r.messages.length > 0 ? r.messages[r.messages.length - 1] : null
+    return {
+      id: r.id,
+      title: r.title,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      messageCount: r._count.messages,
+      answerCount: r.messages.length,
+      lastAnswerId: last?.id ?? null,
+      lastFigure: figureFromReturn(last?.toolCalls?.[0]?.result ?? null),
+    }
+  })
 }
 
 /** Lists conversations on the caller's account, newest-updated first. */
@@ -278,6 +318,8 @@ export async function listConversations(
     messageCount: r._count.messages,
     answerCount: r.messages.length,
     lastAnswerId: r.messages.length > 0 ? r.messages[r.messages.length - 1].id : null,
+    // The plain listing loads no tool calls; the rail reads `searchConversations`.
+    lastFigure: null,
   }))
 }
 
@@ -337,6 +379,12 @@ export async function getConversation(
     answerCount: c.messages.filter((m) => m.role === "assistant").length,
     lastAnswerId:
       [...c.messages].reverse().find((m) => m.role === "assistant")?.id ?? null,
+    lastFigure: figureFromReturn(
+      [...c.messages]
+        .reverse()
+        .find((m) => m.role === "assistant")
+        ?.toolCalls.find((t) => t.toolName === "fileReturn")?.result ?? null,
+    ),
     messages: c.messages,
   }
 }

@@ -75,6 +75,17 @@ interface ChatRequestBody {
 }
 
 /**
+ * The dock's Quick / Careful choice, as OpenAI's reasoning effort. Quick is
+ * the route's default (`CHAT_REASONING_EFFORT`, "low" unless the env says
+ * otherwise); Careful is one notch up, never more — "high" on gpt-5-mini was
+ * measured at over a minute on a four-tool question, which is not an answer
+ * an owner waits for.
+ */
+function reasoningEffortFor(effort: AskRequestScope["effort"]): string {
+  return effort === "careful" ? "medium" : CHAT_REASONING_EFFORT
+}
+
+/**
  * The result, plus the two things the tool itself does not know: how fresh the
  * table behind it is, and what picture its rows draw.
  *
@@ -354,7 +365,7 @@ export async function POST(req: Request) {
   const cacheKey = dataAsOf
     ? answerCacheKey({ accountId, question: askedQuestion, pageId: body.askScope?.pageId ?? null, dataAsOf })
     : null
-  if (cacheKey && askedQuestion) {
+  if (cacheKey && askedQuestion && !body.askScope?.fresh) {
     const hit = await readCachedAnswer(cacheKey)
     if (hit) {
       const servedAt = Date.now()
@@ -386,6 +397,24 @@ export async function POST(req: Request) {
             durationMs: 0,
           })),
         })
+        /*
+         * A NEW THREAD ANSWERED FROM THE CACHE STILL GETS ITS NAME. The live
+         * path titles the thread in `onFinish` from the verdict the model
+         * filed; a hit never reaches `onFinish`, and before this the rail
+         * showed "Untitled" for good on exactly the turns that were fastest.
+         * The cached `fileReturn` output carries the same verdict, so the
+         * same rule applies — and no model is asked, which is the point.
+         */
+        const conv = await chatPrisma.conversation.findUnique({
+          where: { id: conversationId! },
+          select: { title: true },
+        })
+        if (!conv?.title) {
+          const filed = hit.toolCalls.find((t) => t.toolName === "fileReturn")
+          const v = (filed?.output as { verdict?: unknown } | null | undefined)?.verdict
+          const title = verdictTitle(typeof v === "string" ? v : null)
+          if (title) await setConversationTitle(chatPrisma, conversationId!, title)
+        }
       } catch (err) {
         logger.error("[chat] failed to persist a cached turn (non-fatal)", err)
       }
@@ -416,6 +445,7 @@ export async function POST(req: Request) {
               durationMs: Date.now() - servedAt,
               costUsd: 0,
               cached: true,
+              cachedAt: hit.storedAt,
             },
           })
         },
@@ -449,6 +479,8 @@ export async function POST(req: Request) {
     durationMs: number
   }> = []
   const capturedToolErrors: Record<string, string> = {}
+  /** The last `fileReturn` verdict the model filed this turn, for the title. */
+  let filedVerdict: string | null = null
   const stepStartTimes = new Map<string, number>()
   const turnStartMs = Date.now()
 
@@ -499,7 +531,7 @@ export async function POST(req: Request) {
      * settings against the same account.
      */
     providerOptions: {
-      openai: { reasoningEffort: CHAT_REASONING_EFFORT },
+      openai: { reasoningEffort: reasoningEffortFor(body.askScope?.effort) },
     },
     stopWhen: stepCountIs(15),
     onChunk: ({ chunk }) => {
@@ -513,6 +545,10 @@ export async function POST(req: Request) {
         stepStartTimes.set(call.toolCallId, now)
       }
       for (const tr of toolResults) {
+        if (tr.toolName === "fileReturn") {
+          const v = (tr.output as { verdict?: unknown } | null)?.verdict
+          if (typeof v === "string" && v.trim()) filedVerdict = v.trim()
+        }
         const start = stepStartTimes.get(tr.toolCallId) ?? now
         capturedToolCalls.push({
           toolName: tr.toolName,
@@ -657,7 +693,13 @@ export async function POST(req: Request) {
         })
         if (!conv?.title) {
           const firstUser = extractText(lastMessage)
-          const title = await generateConversationTitle(firstUser, text)
+          // THE TITLE IS THE VERDICT. The rail used to show a nano-model's
+          // summary of the exchange ("food cost zero due to no sales"), which
+          // is the model's note to itself. The verdict the answer filed is
+          // the sentence the owner already read as the headline, so it is
+          // the name they will scan for; the summary model is only asked
+          // when no return was filed.
+          const title = verdictTitle(filedVerdict) ?? (await generateConversationTitle(firstUser, text))
           if (title) {
             await setConversationTitle(chatPrisma, conversationId!, title)
           }
@@ -714,6 +756,9 @@ export async function POST(req: Request) {
       return {
         chatTurnId,
         durationMs: Date.now() - turnStartMs,
+        // The sources that did not come back, by tool name, so the answer can
+        // say which half of the question they took with them.
+        failed: Object.keys(capturedToolErrors),
         costUsd: computeCostUsd(
           CHAT_ROUTING_MODEL,
           usage?.inputTokens ?? 0,
@@ -726,6 +771,23 @@ export async function POST(req: Request) {
   // Surface the conversation id so the client can pin it after first turn.
   response.headers.set("x-conversation-id", conversationId)
   return response
+}
+
+/**
+ * A verdict as a rail title: one sentence, no trailing stop, cut at a word
+ * boundary inside `Conversation.title`'s 80 characters. Sentence case is the
+ * verdict's own — "Food cost is 3.4 points over plan" is already how an
+ * owner would name the thread.
+ */
+function verdictTitle(verdict: string | null): string | null {
+  if (!verdict) return null
+  let t = verdict.replace(/\s+/g, " ").replace(/[.!\s]+$/g, "").trim()
+  if (!t) return null
+  if (t.length > 72) {
+    const cut = t.slice(0, 72)
+    t = `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 40))}…`
+  }
+  return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
 function extractText(m: UIMessage): string {

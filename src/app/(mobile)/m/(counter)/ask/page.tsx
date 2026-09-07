@@ -5,6 +5,8 @@ import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { CounterPhoneAskClient } from "./counter-phone-ask-client"
 import { counterToday } from "@/lib/counter/today"
+import { briefHeadings, getAskBriefSectionPromise } from "@/lib/counter/adapters/ask-brief"
+import { readCounterParams } from "@/lib/counter/url-state"
 
 /**
  * Counter Ask — the phone. `P.ask.phone()` at line 4611 of
@@ -82,9 +84,19 @@ export default async function MobileAskPage({
     conversationId: params.get("c"),
   })
 
+  // The morning brief, streamed — see the desk page.
+  const brief = getAskBriefSectionPromise({
+    accountId: session.user.accountId,
+    storeId: readCounterParams(params, today).storeId,
+    today,
+  })
+  const headings = briefHeadings(new Date(), session.user.name ?? null)
+
   return (
     <CounterPhoneAskClient
       sections={sections}
+      brief={brief}
+      headings={headings}
       // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
       // the RSC boundary with its prototype stripped.
       params={params.toString()}

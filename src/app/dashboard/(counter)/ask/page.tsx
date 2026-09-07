@@ -5,7 +5,8 @@ import { getOverviewStores } from "@/lib/counter/adapters/overview"
 import { getAskSectionPromises } from "@/lib/counter/adapters/ask"
 import { CounterAskClient } from "./counter-ask-client"
 import { counterToday } from "@/lib/counter/today"
-import { CHAT_REASONING_EFFORT, CHAT_ROUTING_MODEL } from "@/lib/chat/openai-client"
+import { briefHeadings, getAskBriefSectionPromise } from "@/lib/counter/adapters/ask-brief"
+import { readCounterParams } from "@/lib/counter/url-state"
 
 /**
  * Counter Ask — `P.ask` at line 4504 of `docs/counter/counter-prototype.html`.
@@ -107,17 +108,28 @@ export default async function AskPage({
     query: params.get("cq"),
   })
 
+  // THE MORNING BRIEF — what an empty Ask opens on. Not awaited: it streams
+  // into its own `Section` the way the rail does. Scoped to the store in the
+  // URL, or every store the account has. See `@/lib/counter/adapters/ask-brief`.
+  const brief = getAskBriefSectionPromise({
+    accountId: session.user.accountId,
+    storeId: readCounterParams(params, today).storeId,
+    today,
+  })
+  // "Good morning, Chris." and "Since Saturday" — decided here, in the
+  // store's clock, so the server and the browser print the same words.
+  const headings = briefHeadings(new Date(), session.user.name ?? null)
+
   return (
     <CounterAskClient
       sections={sections}
+      brief={brief}
+      headings={headings}
       // PLAIN TEXT, not the URLSearchParams above: a class instance crosses
       // the RSC boundary with its prototype stripped.
       params={params.toString()}
       stores={stores}
       today={today}
-      // Named in the hints row. Read here, server-side, so the client bundle
-      // never imports the OpenAI module for two strings.
-      model={`${CHAT_ROUTING_MODEL} · ${CHAT_REASONING_EFFORT}`}
     />
   )
 }
