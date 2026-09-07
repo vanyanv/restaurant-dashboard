@@ -782,6 +782,62 @@ button.wkd {
    row above it and the hints below, so the sticky wrapper is the dock. */
 
 /*
+ * ...AND IT SITS UNDER THE COLUMN IT BELONGS TO
+ *
+ * The rule above pins the composer vertically. It never placed it
+ * HORIZONTALLY, and the two boxes disagreed by the width of the rail.
+ *
+ * `.dock` is a sibling of `.askpage`, not a child of it, so it starts at
+ * `.screen`'s left edge — which is where the CONVERSATIONS RAIL starts, not
+ * where the answer does. Measured on the live app at 1440x900, signed in:
+ *
+ *     .askpage columns   206px 968px, 18px gap
+ *     .convs             230 -> 436
+ *     .chat              454 -> 1294     <- the answer's column
+ *     .dock              230 -> 1070     <- 224px to the left of it
+ *
+ * Both are 840px wide, because `.chat` and `.dock` carry the same
+ * `max-width:840px` in counter-components.css — they were written to be the
+ * same box. Only the origin was missed, so an input the reader is asked to
+ * type into sat a rail's width off from every figure it answers about, and
+ * ran out 224px before the text above it did.
+ *
+ * WIDTH AS WELL AS ORIGIN. `.dock` is `width:100%` of `.screen`, which does
+ * not know about the margin, so between 1080px and the width where the 840px
+ * cap starts binding the bar would still overrun the column — measured before
+ * this line at 1280 (chat 454->1262, dock 454->1294) and 1100 (chat 454->1082,
+ * dock 454->1294). Taking the rail out of the width too makes it the column's
+ * width at every size, and the cap still governs once there is room for it.
+ *
+ * ONLY THE DOCK IS TOUCHED, and that is deliberate. `.askpage`'s own grid was
+ * overridden here first, to read the same two constants and so make drift
+ * impossible; it was measured and reverted. At <=1080px counter-components.css
+ * collapses the grid to `1fr` and the rail stacks ABOVE the chat at full width
+ * (measured at 1000px: .convs 230->982 y122-363, .chat 230->982 y381-810), and
+ * an override that forced two columns turned the rail into a 2px sliver of its
+ * own borders. The dock was ALREADY aligned there, because a one-column grid
+ * has no rail to be offset from — so the constants simply go to zero at that
+ * width and the narrow layout is left exactly as it was.
+ *
+ * The two numbers are therefore stated twice: here, and at
+ * counter-components.css `.askpage`. They must match.
+ */
+.screen:has(> .askpage) {
+  --ask-rail: 206px;
+  --ask-gap: 18px;
+}
+.screen:has(> .askpage) > .dock {
+  margin-left: calc(var(--ask-rail) + var(--ask-gap));
+  width: calc(100% - var(--ask-rail) - var(--ask-gap));
+}
+@media (max-width: 1080px) {
+  .screen:has(> .askpage) {
+    --ask-rail: 0px;
+    --ask-gap: 0px;
+  }
+}
+
+/*
  * The phone has no room for a rail, so `Section`-of-history is where its
  * thirty-nine rows land — in the page, above the composer.
  *
