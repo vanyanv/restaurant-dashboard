@@ -40,6 +40,17 @@ export const PLATFORM_LABEL: Record<string, string> = {
   doordash: "DoorDash",
   ubereats: "Uber Eats",
   grubhub: "Grubhub",
+  /*
+   * Named here and deliberately NOT in `CHANNEL_FOR_PLATFORM`, which excludes
+   * it on purpose ("no Counter channel and no CVD-safe band assigned to it").
+   * Those are two different decisions: what a slug is CALLED, and which of the
+   * four coloured channels it counts as. Caviar has a name and no channel.
+   *
+   * It is real and it trades: 40 daily rows and $139 over the fortnight to
+   * 2026-09-07, next to "Uber Eats" and "DoorDash" on the same bar chart,
+   * where "caviar" read as a bug rather than as the honest fallback it was.
+   */
+  caviar: "Caviar",
 }
 
 /** That name, or the slug when there is none for it. */

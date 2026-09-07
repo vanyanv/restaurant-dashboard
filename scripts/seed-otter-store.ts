@@ -50,6 +50,23 @@ if (!process.env.DATABASE_URL) {
 // 2. Constants
 // ---------------------------------------------------------------------------
 
+/*
+ * THIS SCRIPT SEEDS ONE UUID AND HOLLYWOOD HAS TWO. See
+ * `docs/dev-database.md`.
+ *
+ * `findActiveUUID` below takes the highest-revenue store and warns "verify
+ * this is the correct Hollywood location" when more than one has sales. More
+ * than one always does, and the warning is right: measured over the 15 days to
+ * 2026-09-07, `f8f941a6…` carries `css-pos` alone ($29,370 first-party, the
+ * register) and `8c836303…` carries `bnm-web` plus every marketplace ($95,598
+ * third-party). They are one restaurant behind two Otter facilities — a second
+ * location would have its own `css-pos` — and this script keeps only the
+ * second, dropping about $67k a month of register sales on the floor.
+ *
+ * `OtterStore.storeId` is deliberately not unique so both can point at one
+ * `Store`. Until this is rewritten to seed every UUID with sales, map them by
+ * hand rather than trusting the run.
+ */
 const HOLLYWOOD_STORE_ID = "cmexd4zia0001jr04ljkdt9na"
 
 const STORE_IDS = [
