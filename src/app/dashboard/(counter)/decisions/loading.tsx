@@ -13,7 +13,7 @@ import { loading } from "@/lib/counter/section-data"
  * loading appearance in the product.
  *
  * Order and titles mirror `counter-decisions-client.tsx`'s own, including the
- * two `.split` pairs, so the shape a reader sees here is the shape that
+ * day panel at full width and the two `.split` pairs after it, so the shape a reader sees here is the shape that
  * replaces it. The one title that cannot match is the day panel's: the real
  * one is "<day> in detail" and this file has no searchParams to read the day
  * from, so it names the section by what it is.
@@ -36,8 +36,11 @@ export default function DecisionsLoading() {
       <Section title="The call this week" data={loading()}>
         {() => null}
       </Section>
-      <div className="split">
-        <Section title="The day in detail" data={loading()}>
+      <Section title="The day in detail" data={loading()}>
+        {() => null}
+      </Section>
+      <div className="split split--ro">
+        <Section title="What you will run out of" data={loading()}>
           {() => null}
         </Section>
         <Section title="How well we have been calling it" data={loading()}>

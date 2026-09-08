@@ -30,6 +30,13 @@ import type { SectionSources } from "@/lib/counter/adapters/types"
  *   'forecast', chart(bars)) ` → `sec('What to do', '3 open', mlist(3))` →
  *   one `.mbtn.mbtn--primary`
  *
+ * With ONE section the prototype's phone does not have, between the week and
+ * the queue: **Running out**. It is the one thing on this page an owner can
+ * act on while standing in the walk-in, which is where a phone is, and the
+ * urgent rows only — see `buildPhoneRunOut`. `quietWhenEmpty`, because a
+ * shelf with nothing about to go is not a finding worth a panel on a surface
+ * this small.
+ *
  * It calls the SAME adapter the desk calls, with the SAME arguments, so no
  * figure here can disagree with the same figure on `/dashboard/decisions`:
  * they are the same week, out of the same load, read through the same
@@ -216,6 +223,23 @@ export function CounterPhoneDecisionsClient({
             alt="Forecast revenue for each day of the week"
           />
         )}
+      </Section>
+
+      {/* NOT in the prototype's phone, and it belongs here more than most of
+          what is: the one thing an owner standing in the walk-in can act on
+          immediately is what is about to run out. Only rows with an order to
+          place — see `buildPhoneRunOut` — with the FORECAST-shaped cover as the figure,
+          because the flat one is the number this section exists to replace.
+          `metaHot` is the phone's single tier-1 loop. */}
+      <Section
+        title="Running out"
+        meta={(r) => r.meta}
+        metaHot={(r) => r.hot > 0}
+        data={sections.phoneRunOut}
+        pending={pending}
+        quietWhenEmpty
+      >
+        {(r) => <MList rows={r.items} />}
       </Section>
 
       {/* `mlist` of three — the adapter's `phoneQueue`, which is the desk's

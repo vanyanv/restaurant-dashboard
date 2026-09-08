@@ -1,18 +1,39 @@
 /**
- * The seventeen destinations the rail reaches, declared once.
+ * The eighteen destinations the rail reaches, declared once.
  *
  * Note 24: "A rail item is a decision, not an inventory." The pre-Counter
  * dashboard had thirty-two entries, which is a table of contents rather than
- * navigation. Seventeen fits in one glance without scrolling.
+ * navigation. Eighteen still fits in one glance without scrolling.
  *
  * Pages that absorbed another page keep it as a VIEW rather than a rail item —
  * Menu holds Items, Profit and Mix; COGS holds theoretical-vs-actual — so this
  * list is destinations, not screens. And a per-store page is the store
- * switcher's destination, not an eighteenth item (note 25).
+ * switcher's destination, not a rail item of its own (note 25).
+ *
+ * ## Why "The week ahead" is a rail item and not only an Alerts view
+ *
+ * It is BOTH, deliberately, and that is a departure from the prototype worth
+ * stating rather than leaving for someone to "fix" back.
+ *
+ * The prototype folds the two together — line 2256, "Alerts + Decisions →
+ * Needs you" — and `ALERT_TABS` keeps that fold: `/dashboard/decisions` is
+ * still reachable as the "This week" tab beside "Now". The fold is right about
+ * the pages being siblings and wrong about what it costs to find the second
+ * one. Needs you answers "what broke"; the week ahead answers "what do I do
+ * about the next seven days", which is the question the owner opens this
+ * product to ask and the only page that ranks ML output by dollars. A
+ * destination reachable only by first landing on a different page and noticing
+ * a segmented control is a destination most readers never learn exists — and
+ * this one had not been opened once.
+ *
+ * The tab stays because a reader who IS on Alerts should be able to cross over
+ * without going back to the rail. Two doors to one room, which `isActive`
+ * handles: the rail item lights on `/dashboard/decisions` and the tab marks
+ * itself `aria-current` on the same path, so they agree.
  */
 
 export type NavId =
-  | "overview" | "ask" | "needs-you" | "orders"
+  | "overview" | "ask" | "needs-you" | "decisions" | "orders"
   | "analytics" | "pnl" | "cogs" | "labor"
   | "menu" | "recipes"
   | "invoices" | "inventory" | "ingredients" | "vendors"
@@ -63,6 +84,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { id: "overview", label: "Overview", href: "/dashboard", icon: "LayoutDashboard", exact: true },
       { id: "ask", label: "Ask", href: "/dashboard/ask", icon: "MessageSquare" },
       { id: "needs-you", label: "Needs you", href: "/dashboard/alerts", icon: "Bell" },
+      { id: "decisions", label: "The week ahead", href: "/dashboard/decisions", icon: "CalendarCheck" },
       { id: "orders", label: "Orders", href: "/dashboard/orders", icon: "Receipt" },
     ],
   },

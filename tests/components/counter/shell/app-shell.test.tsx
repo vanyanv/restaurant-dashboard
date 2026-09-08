@@ -141,7 +141,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("navigation", { name: /sections/i })).toBeTruthy()
   })
 
-  it("offers a skip link so a keyboard user can pass seventeen rail items", () => {
+  it("offers a skip link so a keyboard user can pass eighteen rail items", () => {
     shell()
     const skip = screen.getByRole("link", { name: /skip to content/i })
     expect(skip.getAttribute("href")).toBe("#ct-main")

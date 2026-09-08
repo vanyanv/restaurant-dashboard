@@ -181,6 +181,19 @@ export interface DecisionsView {
   /** The week read as four numbers — the strip under the verdict. */
   vitals: Vitals
   /**
+   * Sales per labor hour, day by day, oldest first — the trajectory behind
+   * `vitals.splh`.
+   *
+   * Already computed here: `splhHistory` is built to derive the per-weekday
+   * medians `weekdayTargets` returns, and was then thrown away. `vitals.splh`
+   * publishes only the week's own rate against that median, which is a point
+   * with no shape — the strip cell it feeds has had a sparkline slot
+   * (`.strip .sp`) declared in the stylesheet the whole time and nothing to
+   * draw into it. Returned rather than recomputed, so the line under the
+   * figure and the median beside it come from one series.
+   */
+  splhSeries: number[]
+  /**
    * The one sentence the page leads with. `model` is null when the
    * deterministic composer wrote it, which is a normal state, not an error.
    */
@@ -719,6 +732,13 @@ export async function getDecisionsView(input: {
       scorecard,
       briefing: sanitizedBriefing.slice(1),
       vitals,
+      // Ascending, trailing only — the last SPLH_SPARK_DAYS closed days. A
+      // sparkline is a trajectory, so its order is load-bearing.
+      splhSeries: splhHistory
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-SPLH_SPARK_DAYS)
+        .map((r) => r.netSales / r.laborHours),
       verdict: {
         ...verdict,
         sources: verdictSources(verdictFacts),
@@ -727,6 +747,10 @@ export async function getDecisionsView(input: {
     },
   }
 }
+
+/** How many closed days the strip's sparkline draws. Fourteen is two weeks of
+ *  weekday pairs, so the line shows a trend rather than a weekend. */
+const SPLH_SPARK_DAYS = 14
 
 function addDays(d: Date, n: number): Date {
   const out = new Date(d)

@@ -417,7 +417,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * action directly, so anything future added to either directory inherits
  * the same legitimacy without a linter edit.
  *
- * The eight top-level files below have no such directory to shelter under —
+ * The nine top-level files below have no such directory to shelter under —
  * they are `src/lib/counter`'s helper-module layer, "the largest in the
  * app" per CLAUDE.md, each the one function an adapter defers to rather
  * than recomputing (the `prime-cost.ts` pattern) — so they are named
@@ -431,6 +431,14 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * (`pnl.ts`, `overview.ts`, `orders.ts`, `labor.ts`, `cogs.ts`,
  * `vendor(s).ts`, `menu-item.ts`, `menu-profit.ts`, `analytics.ts`) — the
  * data layer an adapter defers to, not a page and not a client hook.
+ * `run-out.ts` was named on the same two tests, on 2026-09-08: it imports
+ * `@/lib/prisma` at runtime (the ingredient roster and the vendor lead-time
+ * cache) and is read only by `adapters/decisions.ts`, which defers to it for
+ * "What you will run out of" on both the desk and the phone rather than
+ * computing cover twice. It is the `prime-cost.ts` pattern applied to
+ * inventory: one function owns days-of-cover, and the two surfaces that print
+ * it read that one function.
+ *
  * `targets.ts`, by contrast, only mentions `@/lib/prisma` in a comment (it
  * defers to `prime-cost.ts` instead of querying) and is correctly NOT named
  * here — naming it would be exempting a file the rule already passes.
@@ -444,7 +452,7 @@ const MOTION_ALLOWED = /[/\\]components[/\\]counter[/\\]motion[/\\]/
  * a fake Prisma import inside a hook is still caught.
  */
 const DATA_ALLOWED_TOP_LEVEL_FILES =
-  "channel-mix|cogs|labor-leaks|labor-week|service-profile|staffing-curve|statement|vendor-basket"
+  "channel-mix|cogs|labor-leaks|labor-week|run-out|service-profile|staffing-curve|statement|vendor-basket"
 const DATA_ALLOWED = new RegExp(
   String.raw`[/\\]lib[/\\]counter[/\\](?:adapters|actions)[/\\]` +
     "|" +

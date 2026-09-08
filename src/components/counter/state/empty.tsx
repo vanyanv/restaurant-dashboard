@@ -93,6 +93,23 @@ const COPY: Record<EmptyReason, { head: string; body: string }> = {
       "A recipe says what one menu item is made of, which is how a plate gets a cost. " +
       "None have been built yet — they start from the menu.",
   },
+  /*
+   * One of the few whose next step is partly OURS rather than the reader's.
+   *
+   * "What you will run out of" projects an ANCHORED quantity forward: the last
+   * completed `StockCount`, plus deliveries, less what the recipes say was
+   * used. With no completed count there is no anchor, and a cover figure taken
+   * from a zero base would announce a stockout every week for something
+   * sitting on the shelf. `no_ingredients` would be the wrong advice — the
+   * catalogue is usually fine; it is the count that has never been finished.
+   */
+  no_counts: {
+    head: "Nothing has been counted yet",
+    body:
+      "Cover is what is on the shelf divided by what the week will get through, and the " +
+      "shelf half of that comes from a finished stock count. Complete one and this fills " +
+      "in — the forecast side is already running.",
+  },
   all_clear: {
     head: "Nothing needs you",
     body: "Every line here is accounted for. This section fills up when something needs a decision.",

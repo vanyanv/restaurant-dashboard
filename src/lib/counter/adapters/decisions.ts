@@ -19,6 +19,9 @@ import {
   weekStartUTC,
 } from "@/lib/counter/week-window"
 import { count, delta, deltaSign, money, pct } from "@/lib/counter/format"
+import { mergeAttributions, type Attribution } from "@/lib/decisions/attribution"
+import { parseAttribution } from "@/lib/decisions/attribution"
+import { loadRunOut, type RunOut } from "@/lib/counter/run-out"
 import {
   awaitSections,
   classify,
@@ -157,11 +160,45 @@ export interface DayDetail {
   date: string
   /** "Wed 26" — what the section titles itself with. */
   label: string
-  /** The prototype's sub: "closed" for a day that has settled, else "still ahead". */
+  /**
+   * The `.sec__head` qualifier: what the day is, and what it was called at.
+   *
+   * Was the bare word "closed" / "still ahead". It is now the day's own band —
+   * "forecast $8,240 · P10–P90 $7,120–$9,480" — because the head is drawn in
+   * every state including while the body loads, and the two figures a reader
+   * opens a day for should not be the two that arrive last.
+   */
   meta: string
   rows: MathRow[]
   /** The "What moves it" paragraph under the rule. Never empty. */
   moves: string
+  /**
+   * The TreeSHAP waterfall, when the row that made this forecast carried one.
+   *
+   * Null on a store the booster declined to explain and on rows written before
+   * 2026-08-19. The panel then falls back to the arithmetic rows alone, which
+   * is what it has always shown.
+   */
+  attribution: Attribution | null
+  /**
+   * The day's forecast as a NUMBER, not the formatted row above it.
+   *
+   * The waterfall's right-hand axis. `attribution`'s parts sum to the
+   * prediction by construction, so drawing the axis at `base + Σ groups`
+   * instead would make the chart self-consistent and unable to disagree with
+   * the figure it is explaining — which is precisely the check worth keeping.
+   */
+  forecast: number
+  /** "$7,120 – $9,480", or the reason there is no band. */
+  band: string
+  /**
+   * How much to trust the number, in a sentence — and what to do about not
+   * trusting it. A band is a hedge, and an owner staffing a Saturday needs to
+   * be told which side of it to hedge on.
+   */
+  sureness: string
+  /** Which model, how far out, calibrated how. See `Provenance`. */
+  provenance: Array<{ label: string; value: string }>
 }
 
 /** "How well we have been calling it". */
@@ -267,6 +304,15 @@ export interface DecisionQueue {
   meta: string
 }
 
+/** The shelf, in `.mli` shape. See `DecisionsSections.phoneRunOut`. */
+export interface PhoneRunOut {
+  items: MListRow[]
+  /** "2 before delivery" — the same claim the desk's head makes. */
+  meta: string
+  /** How many are past the reorder line. Drives the head's one pulse. */
+  hot: number
+}
+
 /** The same, in `.mli` shape. See `DecisionsSections.phoneQueue`. */
 export interface PhoneQueue {
   items: MListRow[]
@@ -292,6 +338,34 @@ export interface DecisionsSections {
   /** EMPTY TODAY — ready with zero rows, never `empty()`. See N-R5 below. */
   ledger: SectionData<LedgerRow[]>
   queue: SectionData<DecisionQueue>
+  /**
+   * "What you will run out of" — the shelf read against the week ahead.
+   *
+   * The one section on this page that is not a rearrangement of what the
+   * loader already computed. `src/lib/counter/run-out.ts` joins the on-hand
+   * quantity, the flat trailing depletion rate the product ships today, and a
+   * NEW forecast-shaped rate (`src/lib/inventory/forecast-depletion.ts`) that
+   * consumes stock at the week's own predicted menu-item demand instead of at
+   * a fourteen-day mean.
+   *
+   * It is the difference between the verdict at the top of this page saying
+   * "1 Slider and Fries ran out, −$2,034" — which it can already do, after the
+   * fact — and saying it four days early.
+   */
+  runOut: SectionData<RunOut>
+  /**
+   * The same shelf, as the phone's `.mlist` rows.
+   *
+   * Only the rows that need an order — now or this week. The desk draws all
+   * four so the reader can watch the two readings diverge on a row that is
+   * fine as well as on one that is not; the phone is the glance-and-do
+   * surface, and an item with nothing to do about it is not a phone row.
+   * (The head still counts only what goes before the next delivery, which is
+   * the smaller number and the one that pulses.) Built here beside the desk's, the same
+   * rule `phoneQueue` follows — a phone that mapped `runOut` itself is one
+   * edit away from rounding cover differently from the desk.
+   */
+  phoneRunOut: SectionData<PhoneRunOut>
   /**
    * The same three items, as the phone's `.mlist` rows (ruling N-R16).
    *
@@ -605,6 +679,31 @@ export function buildDecisionsStrip(view: DecisionsView, week: WeekDay[]): Strip
             ? "no floor on file"
             : `against ${money(splh.target, { cents: true })}`,
       deltaTone: splh.status === "below" ? "is-down" : splh.status === "above" ? undefined : "is-flat",
+      /*
+       * THE SPARKLINE SLOT, FILLED.
+       *
+       * `.strip .sp` has been declared in the ported sheet since the first
+       * Counter commit and `Figure` has drawn into it since `Spark` shipped —
+       * on a `reference.series`, which no cell on this page ever carried. The
+       * figure said $61.40 against a median and gave the reader no way to see
+       * whether it had been climbing to it or falling away from it.
+       *
+       * `quiet` because the verdict is already in the delta beside it: the
+       * meter is context here, and flag words would say "under" twice.
+       * Omitted entirely when there is no rate, rather than drawn against a
+       * floor nothing is being measured against.
+       */
+      reference:
+        splh.actual === null || view.splhSeries.length < 2
+          ? undefined
+          : {
+              v: splh.actual,
+              better: "high",
+              target: splh.target ?? undefined,
+              quiet: true,
+              series: view.splhSeries,
+              label: `Sales per labor hour over the last ${view.splhSeries.length} closed days`,
+            },
     },
   ]
 }
@@ -670,6 +769,17 @@ export interface SettledDay {
   actual: number | null
   p10: number | null
   p90: number | null
+  /**
+   * The TreeSHAP waterfall this day's forecast was written with.
+   *
+   * `view.days` is the FORWARD window, so `DecisionDay.attribution` covers
+   * only days that have not happened yet — which meant pressing a settled cell
+   * in the picker opened a panel with no explanation, on exactly the days
+   * where the explanation can be checked against what actually came in.
+   * Selected in the same `findMany` that gets the settled forecasts and merged
+   * across stores by `mergeAttributions`, the same way the loader does it.
+   */
+  attribution: Attribution | null
 }
 
 /**
@@ -747,6 +857,7 @@ export async function loadSettledDays(
       actualRevenue: true,
       p10: true,
       p90: true,
+      attribution: true,
       reconciledRevenue: true,
       reconciledP10: true,
       reconciledP90: true,
@@ -769,14 +880,21 @@ export async function loadSettledDays(
   const prefer = defaultForecastPreference()
 
   const byDay = new Map<string, SettledDay & { pending: boolean }>()
+  // One store's waterfall per day, collected before merging — SHAP
+  // contributions are additive, so two stores' "Day of week" effects sum the
+  // same way their forecasts do. `mergeAttributions` is the loader's own.
+  const waterfallsByDay = new Map<string, Attribution[]>()
   for (const row of newestGenerationPerDay(rows)) {
     const key = row.forecastDate.toISOString().slice(0, 10)
+    const parsed = parseAttribution(row.attribution)
+    if (parsed) waterfallsByDay.set(key, [...(waterfallsByDay.get(key) ?? []), parsed])
     const held = byDay.get(key) ?? {
       date: key,
       forecast: 0,
       actual: 0,
       p10: null,
       p90: null,
+      attribution: null,
       pending: false,
     }
     const useReconciled =
@@ -796,7 +914,11 @@ export async function loadSettledDays(
   }
 
   return [...byDay.values()]
-    .map(({ pending, ...d }) => ({ ...d, actual: pending ? null : d.actual }))
+    .map(({ pending, ...d }) => ({
+      ...d,
+      actual: pending ? null : d.actual,
+      attribution: mergeAttributions(waterfallsByDay.get(d.date) ?? []),
+    }))
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
@@ -819,6 +941,160 @@ export async function loadSettledDays(
  * at zero. That is a store with no forecast row written for that day, and an
  * empty cell claims a call nobody made.
  */
+/* ── How the day was called, and by what ──────────────────────────────── */
+
+/**
+ * The provenance row under the day panel, per day of the calendar week.
+ *
+ * READ, never asserted. The interval method is not a constant of this system —
+ * `ml/models/revenue.py` fits CQR when `interval_method == "cqr"` and falls
+ * back to symmetric split conformal when the calibration window is too thin or
+ * the quantile fit fails (`_LOG.warning("cqr unavailable, falling back")`).
+ * A page that printed "CQR" unconditionally would be telling the owner the
+ * band is quantile-calibrated on exactly the days it is not. So the row prints
+ * `modelVersion` and `reconciliationMethod` out of the row that made the
+ * forecast, and says "conformal" for the interval without claiming which
+ * flavour — the column that would settle it does not exist.
+ *
+ * Its own small query rather than a widening of `loadSettledDays`: that
+ * function's window is the settled half by design, this needs the whole week,
+ * and its return shape is read by three call sites. Five columns over seven
+ * days is not the cost that matters here.
+ */
+export interface DayProvenance {
+  modelVersion: string | null
+  reconciliation: string | null
+  reconciled: boolean
+}
+
+export async function loadWeekProvenance(
+  view: DecisionsView,
+  storeId: string | undefined,
+  accountId: string,
+): Promise<Map<string, DayProvenance>> {
+  const out = new Map<string, DayProvenance>()
+  const asOf = parseDayKey(view.asOf)
+  if (asOf === null) return out
+  const start = weekStartUTC(asOf)
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+  const resolved = await resolveStoreContext(storeId, accountId)
+  if (!resolved.ok) return out
+  const storeIds = resolved.ctx.storeIds
+  if (storeIds.length === 0) return out
+
+  const rows = await prisma.forecastDailyRevenue.findMany({
+    where: {
+      storeId: { in: storeIds },
+      hourBucket: 0,
+      forecastDate: { gte: start, lt: end },
+    },
+    select: {
+      storeId: true,
+      forecastDate: true,
+      generatedAt: true,
+      modelVersion: true,
+      reconciliationMethod: true,
+      reconciledAt: true,
+    },
+  })
+
+  for (const row of newestGenerationPerDay(rows)) {
+    const key = row.forecastDate.toISOString().slice(0, 10)
+    const held = out.get(key)
+    // Aggregate: a day is reconciled only when every store's row is, the same
+    // rule `loadSettledDays` applies to the actual. One store short and the
+    // day has not been reconciled, whatever the others say.
+    out.set(key, {
+      modelVersion: held?.modelVersion ?? row.modelVersion,
+      reconciliation: held?.reconciliation ?? row.reconciliationMethod,
+      reconciled: (held?.reconciled ?? true) && row.reconciledAt !== null,
+    })
+  }
+  return out
+}
+
+/** "today" / "1 day out" / "3 days out" / "closed". */
+function horizonWords(asOf: string, date: string): string {
+  if (date < asOf) return "closed"
+  const from = parseDayKey(asOf)
+  const to = parseDayKey(date)
+  if (from === null || to === null) return "—"
+  const days = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
+  if (days <= 0) return "today"
+  return `${days} day${days === 1 ? "" : "s"} out`
+}
+
+function provenanceRows(
+  asOf: string,
+  date: string,
+  prov: DayProvenance | undefined,
+  hasWaterfall: boolean,
+): Array<{ label: string; value: string }> {
+  return [
+    { label: "Model", value: prov?.modelVersion ?? "not recorded" },
+    { label: "Horizon", value: horizonWords(asOf, date) },
+    { label: "Interval", value: "conformal, 80%" },
+    {
+      label: "Reconciled",
+      value: prov?.reconciled ? (prov.reconciliation ?? "yes") : "not yet",
+    },
+    { label: "Attribution", value: hasWaterfall ? "TreeSHAP" : "not published" },
+  ]
+}
+
+/**
+ * What the band is asking the reader to do.
+ *
+ * A spread is not a disclaimer; it is an instruction about which way to be
+ * wrong. On a big day the cost of being short is the whole evening's covers
+ * and the cost of being long is one idle hour, so a wide band says staff to
+ * the top of it. On a tight band it says the opposite: stop hedging.
+ *
+ * The threshold is a QUARTER of the point forecast, not a dollar figure — a
+ * $2,000 spread means something different on a $6,000 Tuesday than on a
+ * $20,000 Saturday, and a fixed cutoff would call the same model confident at
+ * one store and hedging at another.
+ */
+const WIDE_BAND_SHARE = 0.25
+
+function sureness(
+  point: number,
+  p10: number | null,
+  p90: number | null,
+  settled: boolean,
+): string {
+  if (settled) {
+    return (
+      "This day is closed. The band is what we said beforehand, kept as it was — "
+      + "so the call can be judged rather than quietly rewritten."
+    )
+  }
+  if (p10 === null || p90 === null) {
+    return (
+      "No interval was published for this day, so there is nothing here to say how "
+      + "firm the figure is. Treat it as a point estimate and nothing more."
+    )
+  }
+  const spread = p90 - p10
+  if (point > 0 && spread / point >= WIDE_BAND_SHARE) {
+    return (
+      `A ${money(spread)} spread on a ${money(point)} day. Staff and order to the top `
+      + "of the band and accept an idle hour — being short on a day this size costs "
+      + "more than the hour does."
+    )
+  }
+  return (
+    "A band this tight means the model has seen this day many times. Staff to the "
+    + "figure itself; the interval is not asking you to hedge."
+  )
+}
+
+function bandWords(p10: number | null, p90: number | null): string {
+  if (p10 === null || p90 === null) return "no interval published"
+  return `${money(p10)} – ${money(p90)}`
+}
+
 export function buildDecisionsWeek(view: DecisionsView, settled: SettledDay[]): WeekDay[] {
   const asOf = parseDayKey(view.asOf)
   const keys = asOf === null ? view.days.map((d) => d.date) : weekDayKeys(asOf)
@@ -829,11 +1105,30 @@ export function buildDecisionsWeek(view: DecisionsView, settled: SettledDay[]): 
   for (const key of keys) {
     const s = settledByDay.get(key)
     if (s) {
-      cells.push({ key, label: dayLabel(key), forecast: s.forecast, actual: s.actual })
+      // The band is carried on BOTH halves. A settled day keeps the interval
+      // it was given beforehand — that is what makes a kept call checkable
+      // rather than quietly rewritten after the fact.
+      cells.push({
+        key,
+        label: dayLabel(key),
+        forecast: s.forecast,
+        actual: s.actual,
+        p10: s.p10,
+        p90: s.p90,
+      })
       continue
     }
     const f = forwardByDay.get(key)
-    if (f) cells.push({ key, label: dayLabel(key), forecast: f.predictedRevenue, actual: null })
+    if (f) {
+      cells.push({
+        key,
+        label: dayLabel(key),
+        forecast: f.predictedRevenue,
+        actual: null,
+        p10: f.p10,
+        p90: f.p90,
+      })
+    }
   }
   // Sorted here as well as upstream, for the reason `newestGenerationPerDay`
   // sorts: the cells are a WEEK and read left to right, so their order is
@@ -877,7 +1172,11 @@ export function selectDay(
  * actually has and a forward one cannot — a real Actual — and the sentence
  * under the rule reads the two against each other.
  */
-export function buildSettledDayDetail(day: SettledDay): DayDetail {
+export function buildSettledDayDetail(
+  day: SettledDay,
+  asOf: string,
+  prov?: DayProvenance,
+): DayDetail {
   const rows: MathRow[] = [
     { key: "forecast", label: "Forecast", value: money(day.forecast) },
     { key: "actual", label: "Actual", value: money(day.actual) },
@@ -895,7 +1194,21 @@ export function buildSettledDayDetail(day: SettledDay): DayDetail {
     { key: "moves", label: "How it landed", strong: true, rule: true, value: "" },
   ]
 
-  return { date: day.date, label: dayLabel(day.date), meta: "closed", rows, moves: landedFor(day) }
+  return {
+    date: day.date,
+    label: dayLabel(day.date),
+    meta:
+      day.actual === null
+        ? `closed · called ${money(day.forecast)} · not reconciled yet`
+        : `closed · called ${money(day.forecast)} · came in ${money(day.actual)}`,
+    rows,
+    moves: landedFor(day),
+    attribution: day.attribution,
+    forecast: day.forecast,
+    band: bandWords(day.p10, day.p90),
+    sureness: sureness(day.forecast, day.p10, day.p90, true),
+    provenance: provenanceRows(asOf, day.date, prov, day.attribution !== null),
+  }
 }
 
 /**
@@ -930,7 +1243,11 @@ function landedFor(day: SettledDay): string {
   return `It ${direction}${band}`
 }
 
-export function buildDayDetail(view: DecisionsView, day: DecisionDay): DayDetail {
+export function buildDayDetail(
+  view: DecisionsView,
+  day: DecisionDay,
+  prov?: DayProvenance,
+): DayDetail {
   const settled = day.date < view.asOf
   const hours = day.labor.scheduledHours
   const impliedSplh = hours > 0 ? day.predictedRevenue / hours : null
@@ -972,9 +1289,17 @@ export function buildDayDetail(view: DecisionsView, day: DecisionDay): DayDetail
   return {
     date: day.date,
     label: dayLabel(day.date),
-    meta: settled ? "closed" : "still ahead",
+    meta:
+      day.p10 === null || day.p90 === null
+        ? `forecast ${money(day.predictedRevenue)} · no interval published`
+        : `forecast ${money(day.predictedRevenue)} · P10–P90 ${money(day.p10)}–${money(day.p90)}`,
     rows,
     moves: movesFor(day),
+    attribution: day.attribution,
+    forecast: day.predictedRevenue,
+    band: bandWords(day.p10, day.p90),
+    sureness: sureness(day.predictedRevenue, day.p10, day.p90, settled),
+    provenance: provenanceRows(view.asOf, day.date, prov, day.attribution !== null),
   }
 }
 
@@ -1241,6 +1566,34 @@ export function buildPhoneQueue(queue: DecisionQueue): PhoneQueue {
   }
 }
 
+/**
+ * The shelf as phone rows — the ones with an order to place.
+ *
+ * The figure on the right is the FORECAST-shaped cover, not the flat one: the
+ * phone has room for one number per row and the whole point of the section is
+ * that the flat one is the wrong one. The desk shows both because it has room
+ * to make the comparison; the phone shows the one the owner should act on.
+ */
+export function buildPhoneRunOut(runOut: RunOut): PhoneRunOut {
+  const urgent = runOut.rows.filter((r) => r.tagTone !== "good")
+  return {
+    hot: runOut.hot,
+    meta: runOut.hot > 0 ? `${runOut.hot} before delivery` : "all covered",
+    items: urgent.map((r) => ({
+      key: r.key,
+      title: r.name,
+      detail: `Out ${r.outLabel}${r.qty ? ` · bring in ${r.qty}` : ""}`,
+      value:
+        r.forecastCoverDays === null
+          ? "—"
+          : `${(Math.round(r.forecastCoverDays * 10) / 10).toFixed(1)}d`,
+      note: r.tag,
+      noteTone: r.tagTone === "bad" ? ("down" as const) : undefined,
+      href: r.href,
+    })),
+  }
+}
+
 /** The claim, without the evidence that follows it. `.mli span` is one line. */
 function firstSentence(body: string): string {
   const stop = body.indexOf(". ")
@@ -1338,6 +1691,51 @@ export function getDecisionsSectionPromises(
     })
     .catch(() => [])
 
+  /*
+   * Which model called each day, and whether reconciliation has been over it.
+   *
+   * Hung off `viewP` for the same reason `settledP` is — the week is
+   * `view.asOf`'s week, not `new Date()`'s. Fails closed to an empty map: a
+   * missing provenance row costs the panel a `MODEL not recorded` caption, and
+   * must never cost it the panel.
+   */
+  const provenanceP: Promise<Map<string, DayProvenance>> = viewP
+    .then((sd) => {
+      const view = dataOf(sd)
+      return view === null
+        ? new Map<string, DayProvenance>()
+        : loadWeekProvenance(view, input.storeId, input.accountId)
+    })
+    .catch(() => new Map<string, DayProvenance>())
+
+  /*
+   * The shelf against the week. Its OWN load, in parallel with the view rather
+   * than derived from it — it reads inventory and the menu-item forecast,
+   * tables `getDecisionsView` never touches, so there is nothing to wait for.
+   * It takes `asOf` from the view all the same, so the week it consumes stock
+   * over is the week the picker above it draws.
+   *
+   * Ready with zero rows is EMPTY here, not ready — unlike the ledger. An
+   * account with no completed stock count has no anchored on-hand to project
+   * forward, which `no_counts` says and tells the reader how to fix; a table
+   * of nothing under a heading would say the week is safe.
+   */
+  const runOutP: Promise<SectionData<RunOut>> = viewP.then(async (sd) => {
+    const view = dataOf(sd)
+    if (view === null) return mapReady(sd, () => undefined as never)
+    const asOf = parseDayKey(view.asOf) ?? new Date()
+    const resolved = await resolveStoreContext(input.storeId, input.accountId)
+    if (!resolved.ok) {
+      return notComputed<RunOut>("what runs out — no store is in view")
+    }
+    const runOut = await loadRunOut({
+      accountId: input.accountId,
+      storeIds: resolved.ctx.storeIds,
+      asOf,
+    })
+    return runOut.rows.length === 0 ? empty<RunOut>("no_counts") : ready(runOut)
+  })
+
   /** The two sections that read the settled half as well as the view. */
   const withWeek = <T,>(
     f: (view: DecisionsView, settled: SettledDay[]) => SectionData<T>,
@@ -1399,19 +1797,26 @@ export function getDecisionsSectionPromises(
     // A week with no days at all is owed work rather than a failure — the
     // forecast has not been written for this store yet, which is a real state
     // for a store that has not opened.
-    day: withWeek<DayDetail>((view, settled) => {
-      const picked = selectDay(view, settled, input.day)
-      if (picked === null) {
-        return notComputed<DayDetail>(
-          "a day to detail — no forecast rows have been written for this store's week",
+    day: guardSection(
+      Promise.all([viewP, settledP, provenanceP]).then(([sd, settled, prov]) => {
+        if (sd.status !== "ready" && sd.status !== "stale") {
+          return mapReady(sd, () => undefined as never)
+        }
+        const view = sd.data
+        const picked = selectDay(view, settled, input.day)
+        if (picked === null) {
+          return notComputed<DayDetail>(
+            "a day to detail — no forecast rows have been written for this store's week",
+          )
+        }
+        return ready(
+          picked.kind === "forward"
+            ? buildDayDetail(view, picked.day, prov.get(picked.day.date))
+            : buildSettledDayDetail(picked.day, view.asOf, prov.get(picked.day.date)),
         )
-      }
-      return ready(
-        picked.kind === "forward"
-          ? buildDayDetail(view, picked.day)
-          : buildSettledDayDetail(picked.day),
-      )
-    }),
+      }),
+      "retryDecisions",
+    ),
 
     accuracy: on<Accuracy>(buildAccuracy),
 
@@ -1423,6 +1828,26 @@ export function getDecisionsSectionPromises(
 
     // N-R6: three of the loader's five, and the cap said out loud beside them.
     queue: simple(buildQueueSection),
+
+    /*
+     * The shelf against the week. Its OWN load, in parallel with the view
+     * rather than derived from it — it reads inventory and the menu-item
+     * forecast, tables `getDecisionsView` never touches, so there is nothing
+     * to wait for. It takes `asOf` from the view all the same, so the week it
+     * consumes stock over is the week the picker above it draws.
+     *
+     * Fails closed to zero rows, which the section renders as `empty` rather
+     * than as a failure: an account with no completed stock count has nothing
+     * to run out OF, and that is a true answer, not a broken query.
+     */
+    runOut: guardSection(runOutP, "retryDecisions"),
+
+    // The urgent half of the same object. ONE load, two shapes — see
+    // `buildPhoneRunOut`.
+    phoneRunOut: guardSection(
+      runOutP.then((sd) => mapReadyTo(sd, (r) => ready(buildPhoneRunOut(r)))),
+      "retryDecisions",
+    ),
 
     // N-R16: the same three, as the phone's rows. Built from the desk's own
     // section, so one figure has one presentation.

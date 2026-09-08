@@ -151,6 +151,18 @@ type SectionProps<T> = {
    * form's absence does.
    */
   meta?: string | ((data: T) => string | undefined)
+  /**
+   * Marks the qualifier as the one thing on the screen that is time-critical:
+   * `.sec__head .k` gains `.hot`, which is tier 1's single pulsing dot (see
+   * `counter-repairs.css`, "the one loop").
+   *
+   * A FUNCTION of the section's data, because whether a head is hot is a fact
+   * about what arrived — "2 before the next delivery" pulses, "0 before the
+   * next delivery" must not. Tier 1's rule is EXACTLY ONE loop per screen, so
+   * a second page passing this on a second section is a bug the reader will
+   * feel before anything catches it.
+   */
+  metaHot?: boolean | ((data: T) => boolean)
   data: SectionSource<T>
   /** `true` asks about the section by its title; a string asks about that instead. */
   askAbout?: boolean | string
@@ -208,6 +220,7 @@ type SectionProps<T> = {
 function SectionBody<T>({
   title,
   meta,
+  metaHot,
   data: rawData,
   askAbout,
   onRetry,
@@ -244,6 +257,11 @@ function SectionBody<T>({
       ? meta(data.data)
       : meta
     : undefined
+  const hot = hasData(data)
+    ? typeof metaHot === "function"
+      ? metaHot(data.data)
+      : metaHot === true
+    : false
   const headingId = useId()
 
   // The button carries the QUESTION, not the title: `true` means "ask about
@@ -315,7 +333,7 @@ function SectionBody<T>({
     <section className="sec" aria-labelledby={headingId}>
       <div className="sec__head">
         <h3 id={headingId}>{title}</h3>
-        {metaText ? <span className="k">{metaText}</span> : null}
+        {metaText ? <span className={hot ? "k hot" : "k"}>{metaText}</span> : null}
         {/* Note 55: this button was rendered on fifty pages and wired to
             nothing. It appears only when there is an answer to ask about —
             asking about a section that failed to load is asking about

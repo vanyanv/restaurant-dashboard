@@ -32,10 +32,11 @@ describe("WeekPicker", () => {
     expect(wed.className).not.toContain("is-hit")
     expect(wed.className).not.toContain("is-miss")
     expect(wed.querySelector(".av")?.textContent).toBe("forecast")
-    // React serialises an inline style object as "width: 0%;" (space after
-    // the colon, trailing semicolon) — the brief's assertion text ("width:0%")
-    // does not match what `style={{ width: ... }}` ever renders.
-    expect(wed.querySelector(".bar i")?.getAttribute("style")).toContain("width: 0%")
+    // No band on this fixture, so the cell draws an EMPTY `.iv` rather than a
+    // full-width one. An interval of unknown width drawn as if it spanned the
+    // week is a claim nothing made.
+    expect(wed.querySelector(".iv")).toBeTruthy()
+    expect(wed.querySelector(".iv .span")).toBeNull()
   })
 
   it("marks exactly one day selected", () => {
@@ -58,21 +59,50 @@ describe("WeekPicker", () => {
     expect(onSelect).toHaveBeenCalledWith("2026-08-25")
   })
 
-  // A bar wider than its track reads as "beat forecast by a lot" no matter how
-  // far past 100 it goes, and overflows the cell.
-  it("clamps the bar at 100%", () => {
-    const { container } = render(
-      <WeekPicker days={[{ key: "d", label: "Sat", forecast: 100, actual: 400 }]} selected="d" onSelect={() => {}} />,
-    )
-    expect(container.querySelector(".bar i")?.getAttribute("style")).toContain("width: 100%")
+  /*
+   * THE BAR IS THE INTERVAL NOW, not a fill of actual ÷ forecast.
+   *
+   * The three assertions this replaced were about that fill: clamping it at
+   * 100%, and not dividing by a zero forecast. Both were guarding arithmetic
+   * that no longer happens — see the component's own note for why the fill
+   * went (on four cells out of seven there is no actual, so four bars were
+   * empty while the 80% band sat on file undrawn).
+   */
+  const BANDED = [
+    { key: "a", label: "Mon 24", forecast: 6600, actual: null, p10: 6000, p90: 7200 },
+    { key: "b", label: "Tue 25", forecast: 6200, actual: null, p10: 5000, p90: 8000 },
+  ]
+
+  it("draws each day's band against ONE scale, so widths compare cell to cell", () => {
+    const { container } = render(<WeekPicker days={BANDED} selected="a" onSelect={() => {}} />)
+    const spans = container.querySelectorAll(".iv .span")
+    expect(spans).toHaveLength(2)
+    const width = (el: Element) =>
+      Number(/width: ([\d.]+)%/.exec(el.getAttribute("style") ?? "")?.[1] ?? "0")
+    // Tue's band is 3000 wide against Mon's 1200. If each cell scaled itself
+    // the two would render the same width, which is the whole failure mode.
+    expect(width(spans[1])).toBeGreaterThan(width(spans[0]) * 2)
   })
 
-  // Guarding the division, not the display: a zero forecast is a real state
-  // for a store that is not trading yet.
-  it("does not divide by a zero forecast", () => {
+  it("marks the point inside the band, and says the band out loud to a screen reader", () => {
+    const { container } = render(<WeekPicker days={BANDED} selected="a" onSelect={() => {}} />)
+    const mon = container.querySelectorAll(".wkd")[0]
+    expect(mon.querySelector(".iv .pt")).toBeTruthy()
+    expect(mon.getAttribute("aria-label")).toContain("80% interval")
+  })
+
+  // A settled day keeps the band it was given BEFOREHAND. That is what makes
+  // a kept call checkable rather than quietly rewritten after the fact.
+  it("keeps a settled day's band and marks where it actually landed", () => {
     const { container } = render(
-      <WeekPicker days={[{ key: "d", label: "Sat", forecast: 0, actual: 500 }]} selected="d" onSelect={() => {}} />,
+      <WeekPicker
+        days={[{ key: "d", label: "Sat", forecast: 6000, actual: 5000, p10: 5500, p90: 6500 }]}
+        selected="d"
+        onSelect={() => {}}
+      />,
     )
-    expect(container.querySelector(".bar i")?.getAttribute("style")).toContain("width: 0%")
+    const cell = container.querySelector(".wkd")!
+    expect(cell.className).toContain("is-miss")
+    expect(cell.querySelector(".iv .span")).toBeTruthy()
   })
 })

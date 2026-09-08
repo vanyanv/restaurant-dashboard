@@ -8,13 +8,13 @@ describe("nav", () => {
     ])
   })
 
-  it("has exactly seventeen destinations — a rail item is a decision, not an inventory", () => {
-    expect(NAV_GROUPS.flatMap((g) => g.items)).toHaveLength(17)
+  it("has exactly eighteen destinations — a rail item is a decision, not an inventory", () => {
+    expect(NAV_GROUPS.flatMap((g) => g.items)).toHaveLength(18)
   })
 
   it("groups the destinations as the design specifies", () => {
     expect(NAV_GROUPS.map((g) => g.items.map((i) => i.id))).toEqual([
-      ["overview", "ask", "needs-you", "orders"],
+      ["overview", "ask", "needs-you", "decisions", "orders"],
       ["analytics", "pnl", "cogs", "labor"],
       ["menu", "recipes"],
       ["invoices", "inventory", "ingredients", "vendors"],
@@ -30,8 +30,8 @@ describe("nav", () => {
 
   it("has no duplicate ids or routes", () => {
     const items = NAV_GROUPS.flatMap((g) => g.items)
-    expect(new Set(items.map((i) => i.id)).size).toBe(17)
-    expect(new Set(items.map((i) => i.href)).size).toBe(17)
+    expect(new Set(items.map((i) => i.id)).size).toBe(18)
+    expect(new Set(items.map((i) => i.href)).size).toBe(18)
   })
 
   it("navById throws on an unknown id rather than returning undefined", () => {

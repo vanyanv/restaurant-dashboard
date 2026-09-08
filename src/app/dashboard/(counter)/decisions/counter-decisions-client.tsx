@@ -5,6 +5,7 @@ import { businessQueryDate } from "@/lib/counter/business-date"
 import { Fragment, useCallback, useMemo, useState, useTransition } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
+  Attribution,
   Briefing,
   Dots,
   HeadBlock,
@@ -12,11 +13,15 @@ import {
   MathLines,
   Note,
   PageHead,
+  Provenance,
   Queue,
   Record,
+  RunOut,
+  RunOutKey,
   Say,
   Section,
   Strip,
+  Sureness,
   Table,
   Tag,
   WeekPicker,
@@ -43,9 +48,26 @@ import type { ReadingSegment } from "@/lib/counter/adapters/pnl"
  *   headBlock(.headline: .fig + .say)            page level, above any .sec
  *   strip([...four cells])                       page level
  *   sec('The briefing', 'what the week turns on', briefline × n)
- *   sec('The call this week', 'forecast against actual · click a day', .wk + p.mono)
- *   <div class="split"> sec('<day> in detail') sec('How well we have been calling it') </div>
- *   <div class="split"> sec('What you decided')  sec('What to do this week')          </div>
+ *   sec('The call this week', 'forecast, P10–P90 · click a day', .wk + p.mono)
+ *   sec('<day> in detail')                       FULL WIDTH — .dayattr + .provenance
+ *   <div class="split split--ro"> sec('What you will run out of') sec('How well …') </div>
+ *   <div class="split">          sec('What you decided')         sec('What to do this week') </div>
+ *
+ * ## Two departures from that order, and why each earns its place
+ *
+ * **The day panel is full width.** It was the left half of a `.split`, which
+ * gave the attribution waterfall about 180px of drawing area — a label gutter,
+ * a base axis, up to six signed steps and a forecast axis, in 180px. The
+ * section that pairs with the scorecard instead is the run-out one, which is
+ * four narrow columns and wants the space far less.
+ *
+ * **"What you will run out of" is new.** It is the only section here that is
+ * not a rearrangement of what `getDecisionsView` already computed: see
+ * `src/lib/counter/run-out.ts` and `src/lib/inventory/forecast-depletion.ts`.
+ * It sits BELOW the week and the day rather than above them, for the same
+ * reason the queue does — this page is called the week ahead, and a reader
+ * opens it to read seven days. What to order is a consequence of that reading,
+ * not its headline.
  *
  * A page composes primitives and calls exactly one adapter; it never imports
  * Prisma or an action directly and never inspects `SectionData.status` —
@@ -78,10 +100,6 @@ import type { ReadingSegment } from "@/lib/counter/adapters/pnl"
  *   coverage, WAPE and a baseline delta; the dollar value of being right is
  *   not among them, and deriving one here would be this page inventing a
  *   figure the evaluator never measured.
- * - **A "Commit" button on each queue item.** `QueueItem` refuses an `act`
- *   without a handler or a destination; an adapter is a server module and has
- *   no handler to give, so each item links to the page where the work is
- *   actually done. See the adapter's `ACTION_ROUTE`.
  * - **Four ledger rows.** `DecisionLog` holds zero rows in production, so the
  *   table renders its four column headers over no rows — never `Empty`, which
  *   would emit a `.empty` landmark this page's prototype does not have
@@ -370,7 +388,7 @@ export function CounterDecisionsClient({
 
       <Section
         title="The call this week"
-        meta="forecast against actual · click a day"
+        meta="forecast, P10–P90 · click a day"
         data={sections.week}
         pending={pending}
       >
@@ -382,33 +400,96 @@ export function CounterDecisionsClient({
               // To the URL, never to state. See the file note.
               onSelect={(key) => push({ day: key })}
             />
-            {/* The prototype's own closing line under the picker. It states
-                what the marks mean, which nothing else on the page does: a
-                cell is a hit at 97% of the call, and a day still ahead is
-                neither. */}
+            {/* The prototype's own closing line under the picker, extended to
+                say what the bar is now that it is not a fill. A reader about to
+                staff or order against the figure above it needs to know that a
+                wide bar is the model hedging. */}
             <Note>
               A day is marked once it has closed and reconciled &mdash; inside 3% of the call is a
-              hit. A day still ahead carries its forecast and no mark.
+              hit. A day still ahead carries its forecast, and the bar under it is the 80%
+              interval: a wide bar is the model saying it is guessing.
             </Note>
           </>
         )}
       </Section>
 
-      <div className="split">
+      {/* FULL WIDTH, and that is the whole reason this stopped being half of a
+          `.split`. The waterfall is the evidence for the biggest figure on the
+          page and it has a label gutter, a base axis, up to six signed steps
+          and a forecast axis to fit; at 1.32fr it had about 180px of drawing
+          area and the step labels were unreadable. The section that pairs with
+          the scorecard below is the run-out one, which is four columns wide
+          and wants the space far less. */}
+      <Section
+        // The day's own name, from the URL rather than from the section's
+        // data — the head is drawn in every state, including before that
+        // data exists. `meta` is the data's, because what the day was called
+        // at is a fact about the day the server resolved.
+        title={`${weekDayLabel(selectedDay)} in detail`}
+        meta={(d) => d.meta}
+        data={sections.day}
+        pending={pending}
+      >
+        {(d) => (
+          <>
+            <div className="dayattr">
+              <div>
+                {/* The waterfall REPLACES the arithmetic rows when it exists,
+                    rather than sitting above them. Two of the six rows are the
+                    waterfall's own axes (Forecast) and its band (80% interval,
+                    now in the head and in `Sureness`), so keeping both printed
+                    the same two figures three times. With no attribution on
+                    file the rows are still the panel — which is exactly what
+                    this section has always been. */}
+                {d.attribution ? (
+                  <Attribution
+                    base={d.attribution.base}
+                    groups={d.attribution.groups}
+                    total={d.forecast}
+                  />
+                ) : (
+                  <MathLines rows={d.rows} />
+                )}
+                <p style={{ margin: "6px 0 0" }}>{d.moves}.</p>
+              </div>
+              <Sureness band={d.band}>{d.sureness}</Sureness>
+            </div>
+            <Provenance items={d.provenance} />
+          </>
+        )}
+      </Section>
+
+      <div className="split split--ro">
+        {/* THE NEW SECTION. See `src/lib/counter/run-out.ts` — the shelf read
+            against the week, at the week's own demand rather than at a flat
+            fourteen-day mean. `metaHot` is tier 1's single loop, and it moved
+            here from the queue because three recommendations that will still
+            be there tomorrow are not the time-critical thing on this page;
+            stock that goes before the next delivery is. */}
         <Section
-          // The day's own name, from the URL rather than from the section's
-          // data — the head is drawn in every state, including before that
-          // data exists. `meta` is the data's, because "closed" against
-          // "still ahead" is a fact about the day the server resolved.
-          title={`${weekDayLabel(selectedDay)} in detail`}
-          meta={(d) => d.meta}
-          data={sections.day}
+          title="What you will run out of"
+          meta={(r) =>
+            r.hot > 0
+              ? `${r.hot} before delivery`
+              : `${r.rows.length} watched · cover to ${r.scaleDays}d`
+          }
+          metaHot={(r) => r.hot > 0}
+          data={sections.runOut}
           pending={pending}
+          askAbout="what we will run out of this week"
         >
-          {(d) => (
+          {(r) => (
             <>
-              <MathLines rows={d.rows} />
-              <p style={{ margin: "6px 0 0" }}>{d.moves}.</p>
+              <RunOutKey />
+              <RunOut rows={r.rows} scaleDays={r.scaleDays} />
+              <Note>
+                Cover is what is on the shelf divided by what gets through it. The grey bar
+                divides by a flat fourteen-day average, which is what this product has always
+                done; the coloured bar divides by the week&rsquo;s own forecast demand, exploded
+                through the recipes. The marker is lead time plus safety &mdash; past it,
+                ordering is already late.
+                {r.partial ? " Some demand could not be exploded, so these are floors." : ""}
+              </Note>
             </>
           )}
         </Section>

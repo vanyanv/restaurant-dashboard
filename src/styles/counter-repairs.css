@@ -2912,3 +2912,235 @@ html[data-theme-switching] .ct-root *::after {
   .sig.in,.cv.is-new,.ans.is-cached,.manswer.is-cached{animation:none!important;opacity:1!important;transform:none!important}
   .dock__in .hints,.ans .drill>.ldrawer,.manswer .drill>.ldrawer,.sig .q svg{transition-duration:.01ms!important}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * THE WEEK AHEAD — four things the prototype's sheet has no rule for
+ *
+ * `counter-components.css` is GENERATED from the prototype and byte-asserted
+ * by `tests/styles/counter-components.test.ts`. Everything below is OURS: a
+ * section the prototype never drew (what you will run out of), a waterfall it
+ * drew as a flat bar, an interval it drew as a fill, and the split ratio those
+ * two need. Structural additions of ours belong here, never there.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+/* ---- The two splits this page needs ------------------------------------ */
+
+/*
+ * `.split` is 1.32fr / 1fr (counter-components.css:188) and is right for the
+ * ledger beside the queue. The run-out section carries four columns of its
+ * own — name, two stacked bars, when it goes, what to do — and at 1.32fr the
+ * bars were 90px and the whole argument of the section was invisible. The
+ * scorecard beside it is five label/value rows and reads fine narrower.
+ */
+.ct-root .split--ro { grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr); }
+@media (max-width: 980px) {
+  .ct-root .split--ro { grid-template-columns: 1fr; }
+}
+
+/* ---- The week picker's interval ---------------------------------------- */
+
+/*
+ * Replaces `.wkd .bar` (counter-components.css:578) for this page. See
+ * `week-picker.tsx` for why the fill went: on four cells out of seven there
+ * is no actual and the bar was empty, while the 80% band was on file and
+ * undrawn. `.bar`'s rule is left in the sheet untouched — `WeekStrip` on the
+ * labour page still emits it.
+ */
+.wkd .iv { position: relative; height: 15px; margin-top: 3px; }
+.wkd .iv .track {
+  position: absolute; inset: 6px 0 auto 0; height: 3px;
+  border-radius: 2px; background: var(--sunk);
+}
+.wkd .iv .span {
+  position: absolute; top: 5px; height: 5px; border-radius: 3px;
+  background: var(--signal-line);
+  transform: scaleX(0); transform-origin: center;
+  animation: ct-iv-grow .5s var(--ease) forwards;
+}
+.wkd .iv .pt {
+  position: absolute; top: 3px; width: 3px; height: 9px; border-radius: 2px;
+  background: var(--accent); opacity: 0;
+  animation: cnfade .3s var(--ease) .28s forwards;
+}
+/* A settled day: the band is context, the point is the verdict. */
+.wkd.is-hit .iv .span,
+.wkd.is-miss .iv .span { background: var(--line-strong); }
+.wkd.is-hit .iv .pt { background: var(--good); }
+.wkd.is-miss .iv .pt { background: var(--bad); }
+.wkd.is-sel { background: var(--accent-wash); box-shadow: inset 0 -2px 0 var(--accent); }
+@keyframes ct-iv-grow { to { transform: scaleX(1) } }
+
+/* ---- The day's attribution --------------------------------------------- */
+
+/*
+ * NOT `.attr`. That class is already the prototype's own three-column
+ * attribution row (counter-components.css:397) with a border-bottom and a
+ * proportional bar, and a two-column container wearing the same name would
+ * inherit both. See `attribution.tsx` for why a waterfall and not that bar.
+ */
+.dayattr {
+  display: grid; gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 214px; align-items: start;
+}
+.attrside {
+  display: grid; gap: 9px;
+  border-left: 1px solid var(--line); padding-left: 15px;
+}
+.attrside .k {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.attrside .band {
+  font-size: var(--t-mid); font-weight: 600;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+}
+.attrside p { margin: 0; font-size: var(--t-cap); color: var(--ink-2); line-height: 1.5; }
+
+.wfall { display: block; }
+.wf-axis { stroke: var(--line); stroke-width: 1; }
+.wf-axis.is-total { stroke: var(--line-strong); }
+.wf-link { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 2 3; }
+.wf-land { stroke: var(--accent); stroke-width: 2; }
+.wf-lab { fill: var(--ink-2); font-family: var(--body); font-size: 12px; }
+.wf-tick { fill: var(--ink-3); font-family: var(--mono); font-size: 9px; }
+.wf-tick.is-total { fill: var(--ink-2); }
+.wf-cap {
+  fill: var(--ink-3); font-family: var(--mono); font-size: 8px; letter-spacing: .8px;
+}
+.wf-dot { fill: var(--ink-3); }
+.wf-bar.is-up { fill: var(--good); }
+.wf-bar.is-down { fill: var(--bad); }
+.wf-val { font-family: var(--mono); font-size: 10px; font-weight: 500; }
+.wf-val.is-up { fill: var(--good); }
+.wf-val.is-down { fill: var(--bad); }
+
+.provenance {
+  display: flex; flex-wrap: wrap; gap: 5px 18px;
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.provenance b { color: var(--ink-2); font-weight: 500; }
+
+/* ---- What you will run out of ------------------------------------------ */
+
+.ro { display: grid; }
+.rorow {
+  display: grid; grid-template-columns: 118px minmax(0, 1fr) 78px 78px;
+  gap: 10px; align-items: center;
+  padding: 11px 0; border-bottom: 1px solid var(--line);
+}
+.rorow:first-child { padding-top: 2px; }
+.rorow:last-child { border-bottom: 0; padding-bottom: 2px; }
+.rorow .nm { min-width: 0; }
+.rorow .nm b { display: block; font-weight: 600; font-size: var(--t-body); }
+.rorow .nm span {
+  display: block; font-family: var(--mono); font-size: 9px; color: var(--ink-3);
+  letter-spacing: .06em; text-transform: uppercase; margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cover { display: grid; gap: 3px; }
+.cbar {
+  position: relative; height: 11px; background: var(--sunk);
+  border-radius: 3px; overflow: hidden;
+}
+.cbar i {
+  position: absolute; inset: 0 auto 0 0; border-radius: 3px;
+  transform-origin: left center;
+  animation: ct-cbar-fill .6s var(--ease) backwards;
+}
+.cbar.flat i { background: var(--line-strong); }
+.cbar.fc i { background: var(--good); }
+.cbar.fc.warnfill i { background: var(--signal); }
+.cbar.fc.badfill i { background: var(--bad); }
+.cbar.fc i { animation-delay: 90ms; }
+@keyframes ct-cbar-fill { from { transform: scaleX(0) } to { transform: none } }
+/* Lead time plus safety — the point past which ordering is already late. */
+.cover .lead-marker {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--ink); opacity: .55; z-index: 2;
+}
+.cover .cl {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.cover .cl b { font-weight: 500; color: var(--ink-2); }
+.rorow .out {
+  font-family: var(--mono); font-size: 9px; text-align: right; line-height: 1.35;
+  font-variant-numeric: tabular-nums; color: var(--ink-3);
+}
+.rorow .out b {
+  display: block; font-weight: 600; font-size: var(--t-cap);
+  font-family: var(--body); line-height: 1.3; color: var(--ink);
+}
+.rorow .out.urgent b { color: var(--bad); }
+.rorow .out.soon b { color: var(--signal-ink); }
+.rorow .act { text-align: right; }
+.rokey {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px;
+}
+.rokey span { display: flex; align-items: center; gap: 5px; }
+.rokey i { width: 14px; height: 5px; border-radius: 2px; }
+.rokey i.is-rule { width: 2px; height: 11px; background: var(--ink); opacity: .55; }
+
+/* Tier 3: the rows arrive with the section, 36ms apart — the page's cadence. */
+.rorow { animation: cnter .3s var(--ease) backwards; }
+.rorow:nth-child(2) { animation-delay: 36ms }
+.rorow:nth-child(3) { animation-delay: 72ms }
+.rorow:nth-child(4) { animation-delay: 108ms }
+.attrrow { animation: cnfade .34s var(--ease) backwards; }
+.attrrow:nth-child(2) { animation-delay: 45ms }
+.attrrow:nth-child(3) { animation-delay: 85ms }
+.attrrow:nth-child(4) { animation-delay: 125ms }
+.attrrow:nth-child(5) { animation-delay: 165ms }
+
+/*
+ * TIER 1, and it MOVES HERE.
+ *
+ * The one loop on a screen. On this page it used to sit on the queue's head —
+ * three recommendations that will still be there tomorrow. What is actually
+ * time-critical is the count of items that go before the next delivery lands,
+ * so the loop follows it. `.dispatch .hot::before` is the same mark; this is
+ * the same rule for a `.sec__head`, and there is still exactly one on screen.
+ */
+.sec__head .hot::before {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; margin-right: 7px; vertical-align: 1px;
+  animation: cnpulse 2.4s ease-in-out infinite;
+}
+.sec__head .hot { color: var(--bad); }
+
+/* TIER 2: an item that has crossed into "order now" since the last look. */
+.rorow.justwent {
+  border-radius: var(--r);
+  animation: cnter .3s var(--ease) backwards, ct-cool-bad 1.2s ease-in .1s backwards;
+}
+
+@media (max-width: 860px) {
+  .dayattr { grid-template-columns: 1fr; }
+  .attrside {
+    border-left: 0; border-top: 1px solid var(--line);
+    padding-left: 0; padding-top: 12px;
+  }
+  .rorow { grid-template-columns: 1fr; gap: 8px; }
+  .rorow .out, .rorow .act { text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wkd .iv .span,
+  .wkd .iv .pt,
+  .cbar i,
+  .rorow,
+  .attrrow,
+  .rorow.justwent,
+  .sec__head .hot::before {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
