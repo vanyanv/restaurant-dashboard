@@ -657,6 +657,20 @@ button.wkd {
 }
 @media (max-width: 900px) {
   .rail__signout { display: none }
+  /*
+   * THE MARK DOES NOT SHRINK. Below 900px the rail is a horizontal strip
+   * (`counter-components.css:344`: `flex-direction:row`), which makes
+   * `.rail__logo` a flex item — and a flex item's default `flex-shrink:1` beats
+   * the 132px `.rail__logo .logo` asks for. Measured at 1440x1000 signed in,
+   * walking the viewport down: 132px at 700, 104px at 600, 4px at 500, and 0
+   * at 430 and 390, i.e. the logo silently disappears on a narrow desk window.
+   *
+   * `flex:none` is the same one-property fix the strip already applies to
+   * `.navbtn` (`white-space:nowrap`) for the same reason: the strip is an
+   * `overflow-x:auto` scroller, so its children are meant to keep their size
+   * and scroll, not to be squeezed into the viewport.
+   */
+  .rail__logo { flex: none }
 }
 
 /*
@@ -769,13 +783,24 @@ button.wkd {
  * `.screen`'s 14px grid gap is what the negative margin and the padding
  * reproduce — the bar has to reach the bottom of the scroll container to sit
  * flush, and it has to keep 14px of air above it while it does.
+ *
+ * `--paper`, NOT `--surface`. This paints the GROUND behind a bar that content
+ * scrolls under, and the ground here is `.ct-root`'s `--paper`
+ * (oklch(96.2% .006 60)); `--surface` (oklch(98.4% .004 66)) is the colour of
+ * the composer CARD sitting on it. Painting the card colour turned the 11px of
+ * padding into a visible white lip below the composer's own bottom border —
+ * measured on the live app at 1440x900, signed in: composer 874->922, dock
+ * 874->941, ground rgb(246,242,238) and the strip rgb(252,249,247). It was
+ * only ever visible on the Ask page, and only since the dock stopped spanning
+ * the full width: a stray band that reaches the screen's edges reads as the
+ * page, one that stops where the answer column stops reads as a mistake.
  */
 .screen > .dock {
   position: sticky;
   bottom: 0;
   margin-bottom: -14px;
   padding-bottom: 11px;
-  background: var(--surface);
+  background: var(--paper);
   z-index: 2;
 }
 /* `.dock` since 2026-09-05: the composer sits inside the dock with the scope
@@ -2538,7 +2563,15 @@ html[data-theme-switching] .ct-root *::after {
  * different colour, so a failed or stopped step shifts nothing.
  */
 .dock{display:grid;gap:8px;position:relative;max-width:840px;width:100%}
-.dock__in{display:grid;gap:8px;position:relative}
+/* `row-gap:0`, not 8px. The dock's second row is the hints, which is collapsed
+   at rest (`max-height:0`) — and a grid ROW GAP is drawn whether or not the row
+   it separates has any height, so 8px of the dock's painted ground showed under
+   the composer on every screen that was not focused. The hints' own
+   `margin-top:-8px` was written to cancel it and cannot: a negative margin
+   moves a grid item inside its area, it does not remove the gutter. The 8px
+   moves onto the hints row itself, below, where it appears and disappears with
+   the thing it is spacing. Column gap stays 8px for anything laid out across. */
+.dock__in{display:grid;gap:8px;row-gap:0;position:relative}
 .scoperow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .scoperow .sp{margin-left:auto;letter-spacing:.04em;text-transform:none}
 .scoperow .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--surface);color:var(--ink-2)}
@@ -2768,9 +2801,12 @@ html[data-theme-switching] .ct-root *::after {
    row has something to say that is not a shortcut (the mic's transcript, a
    running turn — `.hints.on`). Tier 1: seen every question, so 160ms and no
    travel beyond 2px. */
-.dock__in .hints{max-height:0;overflow:hidden;opacity:0;transform:translateY(-2px);margin-top:-8px;
+/* `margin-top` carries the 8px the row gap used to, so the space exists only
+   while the row does — see `.dock__in{row-gap:0}` above for why the gap could
+   not stay where it was. Same two values, same transition, opposite ends. */
+.dock__in .hints{max-height:0;overflow:hidden;opacity:0;transform:translateY(-2px);margin-top:0;
   transition:max-height .2s var(--ease),opacity .16s var(--ease),transform .16s var(--ease),margin-top .2s var(--ease)}
-.dock__in:focus-within .hints,.dock__in .hints.on{max-height:20px;opacity:1;transform:none;margin-top:0}
+.dock__in:focus-within .hints,.dock__in .hints.on{max-height:20px;opacity:1;transform:none;margin-top:8px}
 
 /* Quick / Careful. A segmented pill in the tools slot; the pressed half is
    sunk. `.effort` is new — the mock draws it in place of the model tag. */

@@ -8,11 +8,11 @@ import { NAV_GROUPS, isActive, type NavItem } from "@/lib/counter/nav"
 import { visibleNavGroups } from "@/lib/counter/nav-access"
 import { useReducedMotion } from "@/components/counter/motion/use-reduced-motion"
 import { NAV_ICONS } from "./nav-icons"
-import { Wordmark } from "./wordmark"
+import { Logo } from "./logo"
 import { StoreSwitcher, type SwitchableStore } from "./store-switcher"
 
 /**
- * `.rail` — the left column: wordmark, store switcher, seventeen destinations
+ * `.rail` — the left column: the mark, store switcher, seventeen destinations
  * in five captioned groups, and the account foot. Ported from `rail()` in the
  * prototype (line ~8232); the destinations themselves are declared once in
  * `@/lib/counter/nav`.
@@ -237,8 +237,24 @@ export function Rail({
 
   return (
     <aside className={picking ? "rail is-picking" : "rail"}>
+      {/* THE MARK, not a line of type. The prototype's rail (line 8234) is
+          `<div class="rail__logo"><img class="logo" ...></div>`, and the ported
+          sheet sizes exactly that: `.rail__logo .logo{width:132px}`
+          (counter-components.css:517) had no element in the application to
+          apply to, because this drew the name in Bricolage instead. Same
+          mistake, same tell, and the same fix as the phone's fifth tab — see
+          the note over `.mlogo` in counter-phone-more-client.tsx.
+
+          Note 15 is why it is worth the bytes: "the wordmark is the palette's
+          alibi". Counter's red and signal yellow read as a designer's choice
+          until the real mark sits beside them, and this rail is beside them on
+          every screen in the product.
+
+          `priority={false}`: `Logo` defaults it on because the slots that drew
+          it until now were bare auth pages where the mark is the LCP
+          candidate. Here it is chrome above a nav, on ~50 routes. */}
       <div className="rail__logo">
-        <Wordmark />
+        <Logo width={132} priority={false} />
       </div>
 
       {stores && stores.length > 0 && onSelectStore ? (
