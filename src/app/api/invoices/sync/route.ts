@@ -26,6 +26,24 @@ const PRICE_ALERT_MIN_UNIT_PRICE = 0.5
 
 export const maxDuration = 120
 
+// Per-run work budget. A first sync against an empty Invoice table found 40
+// new emails; 40 PDF extractions on 3 workers never fit in maxDuration, Vercel
+// killed the run before Phase 3 wrote a row, and every 6h run restarted from
+// the same backlog (42 RUNNING JobRun rows, 0 SUCCESS, 2026-09-08 → 09-11).
+// Extraction stops *starting* PDFs once the deadline passes (in-flight ones
+// finish, bounded by the 60s task timeout), which keeps the whole run inside
+// maxDuration with room for the writes; whatever is left is reported as
+// `deferred` and picked up by the next run.
+const MAX_MESSAGES_PER_RUN = 12
+const EXTRACTION_BUDGET_MS = 45_000
+
+/** `deferred` as the previous run left it on its JobRun.metadata, else 0. */
+function readDeferred(metadata: unknown): number {
+  if (!metadata || typeof metadata !== "object") return 0
+  const v = (metadata as Record<string, unknown>).deferred
+  return typeof v === "number" && Number.isFinite(v) ? v : 0
+}
+
 type ProgressEmitter = (event: InvoiceSyncProgressEvent) => void
 
 const PHASE_WEIGHTS = { emails: 0.1, extracting: 0.6, matching: 0.1, writing: 0.2 } as const
@@ -39,19 +57,26 @@ function computeProgress(emailPct: number, extractPct: number, matchPct: number,
   )
 }
 
-/** Run async tasks with a concurrency limit. */
+/**
+ * Run async tasks with a concurrency limit. When `deadlineAt` (epoch ms) is
+ * given, workers stop *starting* tasks once it passes; in-flight tasks still
+ * finish. `unstarted` is the count never launched, so the caller can report
+ * them as deferred rather than failed.
+ */
 async function withConcurrency<T>(
   tasks: (() => Promise<T>)[],
   limit: number,
   taskTimeoutMs: number = 60_000,
-  onProgress?: (completed: number, total: number) => void
-): Promise<T[]> {
+  onProgress?: (completed: number, total: number) => void,
+  deadlineAt?: number,
+): Promise<{ results: T[]; unstarted: number }> {
   const results: T[] = new Array(tasks.length)
   let nextIndex = 0
   let completed = 0
 
   async function worker() {
     while (nextIndex < tasks.length) {
+      if (deadlineAt !== undefined && Date.now() >= deadlineAt) return
       const index = nextIndex++
       try {
         results[index] = await Promise.race([
@@ -74,7 +99,7 @@ async function withConcurrency<T>(
     () => worker()
   )
   await Promise.all(workers)
-  return results
+  return { results, unstarted: tasks.length - nextIndex }
 }
 
 interface SyncResult {
@@ -83,6 +108,8 @@ interface SyncResult {
   created: number
   skipped: number
   errors: number
+  /** New emails this run did not get to (batch cap or time budget). */
+  deferred: number
 }
 
 /**
@@ -228,7 +255,7 @@ async function runSync(
   accountId: string,
   lookbackDaysOverride?: number,
 ): Promise<SyncResult> {
-  const counts = { scanned: 0, created: 0, skipped: 0, errors: 0 }
+  const counts = { scanned: 0, created: 0, skipped: 0, errors: 0, deferred: 0 }
 
   // ─── Phase 1: Fetch emails ───
   emit({
@@ -242,9 +269,13 @@ async function runSync(
   const lastSync = await prisma.jobRun.findFirst({
     where: { jobName: "invoices.email.sync", status: "SUCCESS" },
     orderBy: { startedAt: "desc" },
-    select: { startedAt: true },
+    select: { startedAt: true, metadata: true },
   })
-  const lookbackDays = lookbackDaysOverride ?? (lastSync ? 7 : 30)
+  // A run that hit its budget leaves `deferred > 0` on its JobRun row. Keep
+  // the wide window until a run clears the backlog; otherwise the emails it
+  // deferred age out of the 7-day window and are never synced.
+  const backlogPending = readDeferred(lastSync?.metadata) > 0
+  const lookbackDays = lookbackDaysOverride ?? (lastSync && !backlogPending ? 7 : 30)
   const sinceDate = new Date()
   sinceDate.setDate(sinceDate.getDate() - lookbackDays)
 
@@ -285,13 +316,19 @@ async function runSync(
     select: { emailMessageId: true },
   })
   const processedSet = new Set(existingInvoices.map((i) => i.emailMessageId))
-  const newMessages = messages.filter((m) => !processedSet.has(m.id))
-  counts.skipped = messages.length - newMessages.length
+  const pending = messages
+    .filter((m) => !processedSet.has(m.id))
+    // Oldest first, so a bounded run drains the backlog from the back and the
+    // window shrinks toward steady state instead of re-reading the newest few.
+    .sort((a, b) => a.receivedDateTime.localeCompare(b.receivedDateTime))
+  counts.skipped = messages.length - pending.length
+  const newMessages = pending.slice(0, MAX_MESSAGES_PER_RUN)
+  counts.deferred = pending.length - newMessages.length
 
   emit({
     phase: "extracting", status: "processing",
     totalProgress: computeProgress(100, 0, 0, 0),
-    detail: `${newMessages.length} new emails to process (${counts.skipped} already synced)`, counts,
+    detail: `${newMessages.length} new emails to process (${counts.skipped} already synced, ${counts.deferred} deferred to the next run)`, counts,
   })
 
   if (newMessages.length === 0) {
@@ -357,16 +394,24 @@ async function runSync(
     }
   })
 
-  const extracted = await withConcurrency(extractionTasks, 3, 60_000, (completed, total) => {
-    const pct = (completed / total) * 100
-    emit({
-      phase: "extracting", status: "processing",
-      totalProgress: computeProgress(100, pct, 0, 0),
-      detail: `Extracting invoices (${completed}/${total})...`, counts,
-    })
-  })
+  const { results: extracted, unstarted } = await withConcurrency(
+    extractionTasks,
+    3,
+    60_000,
+    (completed, total) => {
+      const pct = (completed / total) * 100
+      emit({
+        phase: "extracting", status: "processing",
+        totalProgress: computeProgress(100, pct, 0, 0),
+        detail: `Extracting invoices (${completed}/${total})...`, counts,
+      })
+    },
+    Date.now() + EXTRACTION_BUDGET_MS,
+  )
+  counts.deferred += unstarted
 
-  const validExtractions = extracted.filter((e): e is ExtractedInvoice => e !== null)
+  // Holes (never-started tasks) are skipped by filter, nulls are failures.
+  const validExtractions = extracted.filter((e): e is ExtractedInvoice => e != null)
 
   // ─── Phase 2.5: Historical pack-shape priors ───
   // The same (vendor, sku) ships the same physical case every week, but the
@@ -694,7 +739,9 @@ async function runSync(
     }
   }
 
-  const message = `Invoice sync complete: ${counts.created} created, ${counts.skipped} skipped, ${counts.errors} errors`
+  const message =
+    `Invoice sync complete: ${counts.created} created, ${counts.skipped} skipped, ${counts.errors} errors` +
+    (counts.deferred > 0 ? `, ${counts.deferred} deferred to the next run` : "")
   emit({
     phase: "complete", status: "done", totalProgress: 100,
     detail: message, counts,
@@ -708,6 +755,27 @@ async function runSync(
   }
 
   return { message, ...counts }
+}
+
+/**
+ * Leave the leftover count on the JobRun row so the next run's lookback stays
+ * wide (see `readDeferred`). withJobRun only writes metadata at create, so
+ * merge rather than replace. Best-effort: a failed write must not fail a sync
+ * that already committed its invoices.
+ */
+async function recordDeferred(
+  jobRunId: string,
+  base: Record<string, unknown> | undefined,
+  deferred: number,
+): Promise<void> {
+  try {
+    await prisma.jobRun.update({
+      where: { id: jobRunId },
+      data: { metadata: { ...(base ?? {}), deferred } as Prisma.InputJsonValue },
+    })
+  } catch (err) {
+    logger.error("recordDeferred failed:", err)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -766,9 +834,10 @@ export async function POST(request: NextRequest) {
           } catch { /* client disconnected */ }
         }
         try {
-          await withJobRun("invoices.email.sync", jobOpts, async ({ addRows }) => {
+          await withJobRun("invoices.email.sync", jobOpts, async ({ jobRunId, addRows }) => {
             const result = await runSync(emit, userId, accountId, lookbackDaysOverride)
             addRows(result.created)
+            await recordDeferred(jobRunId, jobOpts.metadata, result.deferred)
             return result
           })
         } catch (error) {
@@ -797,9 +866,10 @@ export async function POST(request: NextRequest) {
 
   // JSON path (cron or non-SSE)
   try {
-    const result = await withJobRun("invoices.email.sync", jobOpts, async ({ addRows }) => {
+    const result = await withJobRun("invoices.email.sync", jobOpts, async ({ jobRunId, addRows }) => {
       const r = await runSync(() => {}, userId, accountId, lookbackDaysOverride)
       addRows(r.created)
+      await recordDeferred(jobRunId, jobOpts.metadata, r.deferred)
       return r
     })
     return NextResponse.json(result)
