@@ -34,8 +34,14 @@ export const maxDuration = 120
 // finish, bounded by the 60s task timeout), which keeps the whole run inside
 // maxDuration with room for the writes; whatever is left is reported as
 // `deferred` and picked up by the next run.
-const MAX_MESSAGES_PER_RUN = 12
-const EXTRACTION_BUDGET_MS = 45_000
+//
+// Sizing: measured 2026-09-11 against the us-west-2 dev database, 12 emails
+// took 104–116s end to end with extraction well inside a 45s budget — the
+// balance is Phase 3's per-invoice/per-line writes across regions. The
+// workflow's curl gives up at 115s, so a run must land nearer 60s. Six
+// emails per run still drains a week's ~11 invoices in two 6h cycles.
+const MAX_MESSAGES_PER_RUN = 6
+const EXTRACTION_BUDGET_MS = 30_000
 
 /** `deferred` as the previous run left it on its JobRun.metadata, else 0. */
 function readDeferred(metadata: unknown): number {
