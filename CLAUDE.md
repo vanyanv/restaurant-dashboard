@@ -2,7 +2,7 @@
 
 Multi-store restaurant analytics dashboard. Next.js 16 (App Router, Turbopack), React 19, Prisma 7/Postgres, TanStack Query, shadcn/ui, Tailwind v4, deployed on Vercel.
 
-Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. The whole-project gate is `npm test && npm run tokens && npx tsc --noEmit && npm run build`.
+Note: `next lint` was removed in Next 16 and this repo has no ESLint installed. The whole-project gate is `npm test && npm run tokens && npx tsc --noEmit && npm run typecheck:scripts && npm run build`. The `typecheck:scripts` step matters: `scripts/` is outside the main tsconfig, and on 2026-09-06 a monitoring module was deleted while two cron reporter scripts still imported it. `tsc --noEmit` stayed green, CI caught it and nobody looked (CI on `main` was already red), and every scheduled cron failed for three days.
 
 **That gate cannot see a page that renders the wrong thing** — run
 `npm run fidelity` as well whenever you change what a Counter page RENDERS.
