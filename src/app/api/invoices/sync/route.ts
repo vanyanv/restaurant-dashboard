@@ -290,6 +290,10 @@ async function runSync(
   // Filter out non-invoice emails (weekly statements, order confirmations, etc.)
   const SKIP_PATTERNS = [
     "weekly statement",
+    // Vitco's monthly "Statement for CHRIS N EDDY'S ..." — a statement, not an
+    // invoice; extraction rejected it on every run (1 error/run, 2026-09-11)
+    // and, with no Invoice row to dedupe on, it was re-sent to the LLM every 6h.
+    "statement for",
     "order confirmation",
     "tracking",
     "delivery notification",
