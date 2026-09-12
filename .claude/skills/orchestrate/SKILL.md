@@ -12,6 +12,9 @@ best on a single, sharply bounded task. Your job is to make every task that
 sharp, keep your own context small enough to stay sharp yourself, and never
 take a worker's word for its own work.
 
+> The `references/` paths below are relative to this SKILL.md's own directory
+> (the skill folder), not to the repo you are working in. Read them from there.
+
 Argument received: `$ARGUMENTS` (a task description, or a path to a plan or
 spec). If it is empty, ask the user what to build before doing anything else.
 
